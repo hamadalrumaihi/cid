@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -16,9 +16,9 @@
   <style>
     /* ============================================================
      *  THEME TOKENS — channel triplets consumed by Tailwind colors.
-     *  :root holds the default (dark) theme; html.light overrides it.
+     *  Dark-only palette (no light theme).
      * ============================================================ */
-    :root, html.dark {
+    :root {
       --c-white: 255 255 255;
       --ink-950: 7 11 20;
       --ink-900: 11 18 32;
@@ -39,28 +39,6 @@
       --scroll-thumb: #26385a;
       --scroll-thumb-hover: #34507e;
     }
-    html.light {
-      /* Inverted surfaces: white text becomes near-black; ink surfaces go light */
-      --c-white: 15 23 42;
-      --ink-950: 226 232 240;   /* top bar / deep chrome */
-      --ink-900: 255 255 255;   /* cards & panels */
-      --ink-850: 248 250 252;   /* inputs */
-      --ink-800: 241 245 249;
-      --ink-700: 226 232 240;
-      --ink-600: 203 213 225;
-      --slate-200: 30 41 59;    /* strong text */
-      --slate-300: 51 65 85;    /* body text */
-      --slate-400: 71 85 105;   /* muted */
-      --slate-500: 100 116 139;
-      --slate-600: 148 163 184; /* faint icons */
-      --page-grad-1: rgba(37,99,235,0.10);
-      --page-grad-2: rgba(59,130,246,0.07);
-      --page-base: #eef2f7;
-      --body-fg: #1e293b;
-      --scroll-track: #e2e8f0;
-      --scroll-thumb: #94a3b8;
-      --scroll-thumb-hover: #64748b;
-    }
 
     /* ---- Base aesthetic ---- */
     html, body { height: 100%; }
@@ -70,14 +48,7 @@
         radial-gradient(900px 500px at -10% 110%, var(--page-grad-2), transparent 55%),
         var(--page-base);
       color: var(--body-fg);
-      transition: background-color .3s ease, color .3s ease;
     }
-
-    /* Keep action-button & badge labels white on their colored gradients in light mode */
-    html.light [class*="from-badge-500"],
-    html.light [class*="from-blue-700"],
-    html.light [class*="from-emerald-5"],
-    html.light [class*="from-amber-5"] { color: #fff; }
 
     /* Custom scrollbars to match the intranet feel */
     ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -238,20 +209,12 @@
         </button>
       </nav>
 
-      <!-- Sidebar controls: theme + collapse (desktop) -->
-      <div class="border-t border-white/5 p-3">
-        <div class="flex items-center gap-2">
-          <!-- Theme toggle -->
-          <button id="theme-toggle" class="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white" aria-label="Toggle light or dark theme">
-            <svg id="theme-icon-dark" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-            <svg id="theme-icon-light" class="hidden h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-            <span class="nav-label" id="theme-label">Dark</span>
-          </button>
-          <!-- Collapse toggle (desktop only) -->
-          <button id="collapse-toggle" class="hidden h-9 w-9 flex-shrink-0 place-items-center rounded-lg border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white lg:grid" aria-label="Collapse sidebar" aria-pressed="false">
-            <svg id="collapse-icon" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-          </button>
-        </div>
+      <!-- Sidebar controls: collapse (desktop only) -->
+      <div class="hidden border-t border-white/5 p-3 lg:block">
+        <button id="collapse-toggle" class="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white" aria-label="Collapse sidebar" aria-pressed="false">
+          <svg id="collapse-icon" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          <span class="nav-label">Collapse</span>
+        </button>
       </div>
 
       <!-- Sidebar footer: active officer -->
@@ -965,24 +928,8 @@
     }
 
     /* ------------------------------------------------------------------
-     *  3c. THEME (light / dark) + COLLAPSIBLE SIDEBAR
+     *  3c. COLLAPSIBLE SIDEBAR
      * ---------------------------------------------------------------- */
-    function applyTheme(theme) {
-      const light = theme === 'light';
-      document.documentElement.classList.toggle('light', light);
-      document.documentElement.classList.toggle('dark', !light);
-      $('#theme-icon-dark').classList.toggle('hidden', light);
-      $('#theme-icon-light').classList.toggle('hidden', !light);
-      $('#theme-label').textContent = light ? 'Light' : 'Dark';
-      Store.set('theme', theme);
-    }
-    function wireTheme() {
-      applyTheme(Store.get('theme', 'dark'));
-      $('#theme-toggle').addEventListener('click', () => {
-        applyTheme(document.documentElement.classList.contains('light') ? 'dark' : 'light');
-      });
-    }
-
     function applyCollapse(collapsed) {
       document.body.classList.toggle('nav-collapsed', collapsed);
       const btn = $('#collapse-toggle');
@@ -1761,7 +1708,6 @@
     function init() {
       // Restore persisted runtime state up-front
       Object.assign(caseCounters, Store.get('caseCounters', {}));
-      wireTheme();
       wireCollapse();
       // Dashboard
       renderMetrics();
