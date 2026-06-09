@@ -1,0 +1,1479 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CID Portal — Criminal Investigation Division | State of San Andreas</title>
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Inter typeface -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind runtime configuration -->
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+          },
+          colors: {
+            // Custom slate/blue law-enforcement palette
+            ink: {
+              950: '#070b14',
+              900: '#0b1220',
+              850: '#0f1726',
+              800: '#131c2e',
+              700: '#1b2940',
+              600: '#26385a',
+            },
+            badge: {
+              400: '#60a5fa',
+              500: '#3b82f6',
+              600: '#2563eb',
+            },
+          },
+          boxShadow: {
+            glow: '0 0 0 1px rgba(59,130,246,0.25), 0 8px 30px -8px rgba(37,99,235,0.45)',
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    /* ---- Base aesthetic: secure-terminal dark mode ---- */
+    html, body { height: 100%; }
+    body {
+      background:
+        radial-gradient(1200px 600px at 80% -10%, rgba(37,99,235,0.12), transparent 60%),
+        radial-gradient(900px 500px at -10% 110%, rgba(59,130,246,0.08), transparent 55%),
+        #070b14;
+      color: #e2e8f0;
+    }
+
+    /* Custom scrollbars to match the intranet feel */
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: #0b1220; }
+    ::-webkit-scrollbar-thumb { background: #26385a; border-radius: 8px; border: 2px solid #0b1220; }
+    ::-webkit-scrollbar-thumb:hover { background: #34507e; }
+
+    /* SPA view transitions — fade + lift */
+    .view { display: none; }
+    .view.active { display: block; animation: viewIn .35s cubic-bezier(.16,.84,.44,1) both; }
+    @keyframes viewIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Active sidebar pill highlight */
+    .nav-link.active {
+      background: linear-gradient(90deg, rgba(37,99,235,0.22), rgba(37,99,235,0.04));
+      color: #fff;
+      box-shadow: inset 2px 0 0 0 #3b82f6;
+    }
+    .nav-link.active .nav-icon { filter: drop-shadow(0 0 6px rgba(59,130,246,0.6)); }
+
+    /* Subtle grid texture overlay for the "database" feel */
+    .grid-texture {
+      background-image:
+        linear-gradient(rgba(59,130,246,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59,130,246,0.04) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+
+    /* Modal animation */
+    .modal-backdrop { animation: fadeIn .2s ease both; }
+    .modal-card { animation: popIn .28s cubic-bezier(.16,.84,.44,1) both; }
+    @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+    @keyframes popIn { from { opacity: 0; transform: translateY(16px) scale(.98) } to { opacity: 1; transform: translateY(0) scale(1) } }
+
+    /* Status dot pulse */
+    .pulse-dot { position: relative; }
+    .pulse-dot::after {
+      content: ''; position: absolute; inset: 0; border-radius: 9999px;
+      background: inherit; animation: pulse 1.8s ease-out infinite; opacity: .6;
+    }
+    @keyframes pulse { 0% { transform: scale(1); opacity: .6 } 100% { transform: scale(2.6); opacity: 0 } }
+
+    /* Folder hover lift */
+    .folder-card { transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease; }
+    .folder-card:hover { transform: translateY(-2px); }
+
+    /* Print: only the active printable area */
+    @media print {
+      body { background: #fff !important; color: #000 !important; }
+      .no-print { display: none !important; }
+      .print-area { display: block !important; color: #000 !important; }
+      .print-area * { color: #000 !important; border-color: #999 !important; }
+    }
+
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display: none; }
+    .chev { transition: transform .2s ease; }
+    details[open] .chev { transform: rotate(90deg); }
+
+    input::placeholder, textarea::placeholder { color: #64748b; }
+  </style>
+</head>
+
+<body class="font-sans antialiased selection:bg-blue-500/30">
+
+  <!-- ====================================================== -->
+  <!-- APP SHELL                                              -->
+  <!-- ====================================================== -->
+  <div class="flex min-h-screen">
+
+    <!-- ============== LEFT SIDEBAR ============== -->
+    <aside class="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-white/5 bg-ink-900/80 backdrop-blur-xl">
+
+      <!-- Sidebar header -->
+      <div class="flex items-center gap-3 border-b border-white/5 px-5 py-5">
+        <div class="relative grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-badge-500 to-blue-700 shadow-glow">
+          <!-- Shield badge icon -->
+          <svg class="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
+        </div>
+        <div class="leading-tight">
+          <h1 class="text-base font-bold tracking-tight text-white">CID Portal</h1>
+          <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-blue-300/70">San Andreas</p>
+        </div>
+      </div>
+
+      <!-- Classification banner -->
+      <div class="mx-4 mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+        <p class="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400/90">
+          <span class="pulse-dot inline-block h-2 w-2 rounded-full bg-amber-400"></span>
+          Restricted // CID Eyes Only
+        </p>
+      </div>
+
+      <!-- Navigation -->
+      <nav class="mt-4 flex-1 space-y-1 overflow-y-auto px-3 pb-4" id="sidebar-nav">
+        <p class="px-3 pb-2 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Operations</p>
+
+        <button data-tab="dashboard" class="nav-link active group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
+          <span class="nav-icon text-lg">📊</span><span>Dashboard / Case Assignment</span>
+        </button>
+
+        <button data-tab="sop" class="nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
+          <span class="nav-icon text-lg">📜</span><span>Standard Operating Procedure</span>
+        </button>
+
+        <button data-tab="drive" class="nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
+          <span class="nav-icon text-lg">📁</span><span>CID General</span>
+        </button>
+
+        <button data-tab="forms" class="nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
+          <span class="nav-icon text-lg">📝</span><span>Intake &amp; Report Forms</span>
+        </button>
+
+        <button data-tab="calc" class="nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
+          <span class="nav-icon text-lg">💰</span><span>Seizure &amp; Compensation Calc</span>
+        </button>
+      </nav>
+
+      <!-- Sidebar footer: active officer -->
+      <div class="border-t border-white/5 p-3">
+        <div class="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-2.5">
+          <div class="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-slate-600 to-slate-700 text-xs font-bold text-white">OO</div>
+          <div class="min-w-0 flex-1 leading-tight">
+            <p class="truncate text-sm font-semibold text-white">Det. Oliver Och</p>
+            <p class="truncate text-[11px] text-slate-400">Callsign 915 · MCB</p>
+          </div>
+          <span class="pulse-dot h-2.5 w-2.5 rounded-full bg-emerald-400" title="On duty"></span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ============== MAIN CONTENT ============== -->
+    <main class="grid-texture ml-64 flex-1">
+
+      <!-- Top bar -->
+      <header class="sticky top-0 z-20 flex items-center justify-between border-b border-white/5 bg-ink-950/70 px-8 py-4 backdrop-blur-xl">
+        <div>
+          <h2 id="page-title" class="text-lg font-semibold text-white">Operational Dashboard</h2>
+          <p id="page-subtitle" class="text-xs text-slate-400">Case assignment &amp; intake hub</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <!-- Global search -->
+          <div class="relative hidden md:block">
+            <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input id="global-search" type="text" placeholder="Search records, cases, CIs…" class="w-72 rounded-lg border border-white/10 bg-ink-850 py-2 pl-9 pr-3 text-sm text-slate-200 outline-none transition focus:border-badge-500 focus:ring-2 focus:ring-badge-500/30" />
+          </div>
+          <div class="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-xs font-medium text-slate-300">
+            <span class="pulse-dot h-2 w-2 rounded-full bg-emerald-400"></span>
+            <span id="clock">Secure link active</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- View container -->
+      <div class="p-8">
+
+        <!-- ====================================================== -->
+        <!-- VIEW 1 — DASHBOARD                                     -->
+        <!-- ====================================================== -->
+        <section id="view-dashboard" class="view active">
+
+          <!-- Top metric cards -->
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" id="metrics-grid">
+            <!-- Cards injected by JS -->
+          </div>
+
+          <!-- Intake queue -->
+          <div class="mt-8 overflow-hidden rounded-2xl border border-white/5 bg-ink-900/60">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 px-6 py-4">
+              <div>
+                <h3 class="flex items-center gap-2 text-base font-semibold text-white">
+                  <span class="text-lg">🎫</span> Odyssey Ticket Intake Queue
+                </h3>
+                <p class="text-xs text-slate-400">Incoming tickets awaiting jurisdiction review &amp; case generation</p>
+              </div>
+              <div class="flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300">
+                <span class="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                Live sync: Discord ↔ Drive
+              </div>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm">
+                <thead>
+                  <tr class="border-b border-white/5 text-[11px] uppercase tracking-wider text-slate-400">
+                    <th class="px-6 py-3 font-semibold">Ticket ID</th>
+                    <th class="px-6 py-3 font-semibold">Source</th>
+                    <th class="px-6 py-3 font-semibold">Description</th>
+                    <th class="px-6 py-3 font-semibold">Reported Dept</th>
+                    <th class="px-6 py-3 text-right font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="ticket-tbody" class="divide-y divide-white/5">
+                  <!-- Rows injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Secondary panels -->
+          <div class="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <!-- Recent activity feed -->
+            <div class="rounded-2xl border border-white/5 bg-ink-900/60 p-6 lg:col-span-2">
+              <h3 class="mb-4 flex items-center gap-2 text-base font-semibold text-white"><span>🛰️</span> Division Activity Feed</h3>
+              <ul class="space-y-4" id="activity-feed"></ul>
+            </div>
+            <!-- Bureau load -->
+            <div class="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+              <h3 class="mb-4 flex items-center gap-2 text-base font-semibold text-white"><span>🏛️</span> Bureau Caseload</h3>
+              <div class="space-y-5" id="bureau-load"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================== -->
+        <!-- VIEW 2 — SOP                                           -->
+        <!-- ====================================================== -->
+        <section id="view-sop" class="view">
+          <div class="mx-auto max-w-5xl">
+            <!-- SOP header + search -->
+            <div class="mb-6 flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+              <div>
+                <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-300/70">Document Control · v4.2</p>
+                <h3 class="mt-1 text-2xl font-bold text-white">Standard Operating Procedure</h3>
+                <p class="mt-1 text-sm text-slate-400">Criminal Investigation Division — Comprehensive Field &amp; Administrative Manual</p>
+              </div>
+              <div class="relative">
+                <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <input id="sop-search" type="text" placeholder="Search SOP…" class="w-64 rounded-lg border border-white/10 bg-ink-850 py-2 pl-9 pr-3 text-sm text-slate-200 outline-none transition focus:border-badge-500 focus:ring-2 focus:ring-badge-500/30" />
+              </div>
+            </div>
+
+            <div id="sop-noresults" class="hidden rounded-xl border border-white/5 bg-ink-900/60 p-6 text-center text-sm text-slate-400">No SOP sections match your search.</div>
+
+            <!-- SOP body injected by JS -->
+            <div id="sop-body" class="space-y-4"></div>
+          </div>
+        </section>
+
+        <!-- ====================================================== -->
+        <!-- VIEW 3 — CID GENERAL (Drive simulation)               -->
+        <!-- ====================================================== -->
+        <section id="view-drive" class="view">
+          <!-- Drive toolbar / breadcrumb -->
+          <div class="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 px-6 py-4">
+            <div class="flex items-center gap-2 text-sm">
+              <span class="text-lg">📁</span>
+              <span class="font-semibold text-white">CID General</span>
+              <span class="text-slate-500">/</span>
+              <span id="drive-breadcrumb" class="text-slate-400">My Drive</span>
+            </div>
+            <div class="flex items-center gap-3 text-xs text-slate-400">
+              <span class="rounded-md bg-white/5 px-2.5 py-1">11 folders</span>
+              <span class="rounded-md bg-white/5 px-2.5 py-1">Shared drive</span>
+            </div>
+          </div>
+
+          <!-- Folder grid -->
+          <div id="drive-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"></div>
+        </section>
+
+        <!-- ====================================================== -->
+        <!-- VIEW 4 — FORMS                                         -->
+        <!-- ====================================================== -->
+        <section id="view-forms" class="view">
+          <div class="mx-auto max-w-4xl">
+            <!-- Form selector -->
+            <div class="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+              <div>
+                <h3 class="text-xl font-bold text-white">Interactive Report Forms</h3>
+                <p class="text-sm text-slate-400">Fillable digital versions of official CID templates</p>
+              </div>
+              <div>
+                <label class="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Select Template</label>
+                <select id="form-selector" class="w-72 rounded-lg border border-white/10 bg-ink-850 px-3 py-2.5 text-sm font-medium text-white outline-none transition focus:border-badge-500 focus:ring-2 focus:ring-badge-500/30">
+                  <option value="A">Form A — Detective / Incident Report</option>
+                  <option value="B">Form B — Undercover (UC) Activity Log</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Form A and B injected by JS -->
+            <div id="form-A" class="form-panel"></div>
+            <div id="form-B" class="form-panel hidden"></div>
+          </div>
+        </section>
+
+        <!-- ====================================================== -->
+        <!-- VIEW 5 — SEIZURE CALCULATOR                            -->
+        <!-- ====================================================== -->
+        <section id="view-calc" class="view">
+          <div class="mx-auto max-w-4xl">
+            <div class="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+              <h3 class="text-xl font-bold text-white">💰 Seizure &amp; Compensation Calculator</h3>
+              <p class="text-sm text-slate-400">Computes operation/raid payout splits using the official CID percentage bracket framework.</p>
+            </div>
+
+            <!-- Calculator card -->
+            <div class="grid grid-cols-1 gap-6 lg:grid-cols-5">
+              <!-- Input + brackets -->
+              <div class="rounded-2xl border border-white/5 bg-ink-900/60 p-6 lg:col-span-2">
+                <label class="mb-2 block text-sm font-semibold text-white">Total Seizure Street Value ($)</label>
+                <div class="relative">
+                  <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                  <input id="seizure-input" type="text" inputmode="numeric" placeholder="0" class="w-full rounded-lg border border-white/10 bg-ink-850 py-3 pl-7 pr-3 text-lg font-mono text-white outline-none transition focus:border-badge-500 focus:ring-2 focus:ring-badge-500/30" />
+                </div>
+                <button id="calc-btn" class="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 active:scale-[.99]">
+                  Calculate Split
+                </button>
+
+                <!-- Bracket reference table -->
+                <div class="mt-6">
+                  <p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Bracket Framework</p>
+                  <div class="overflow-hidden rounded-lg border border-white/5" id="bracket-table"></div>
+                </div>
+              </div>
+
+              <!-- Output cards -->
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-1 lg:col-span-3">
+                <div class="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+                  <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Applicable Bracket Percentage</p>
+                  <p id="out-percent" class="mt-2 font-mono text-4xl font-bold text-blue-300">—</p>
+                  <p id="out-bracket-label" class="mt-1 text-xs text-slate-500">Enter a value to compute the bracket.</p>
+                </div>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div class="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-6">
+                    <p class="text-xs font-semibold uppercase tracking-wider text-emerald-300/80">Net Compensation (Lead Det. / CIs)</p>
+                    <p id="out-comp" class="mt-2 font-mono text-2xl font-bold text-emerald-300">$0</p>
+                  </div>
+                  <div class="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6">
+                    <p class="text-xs font-semibold uppercase tracking-wider text-amber-300/80">Retained to Division</p>
+                    <p id="out-retain" class="mt-2 font-mono text-2xl font-bold text-amber-300">$0</p>
+                  </div>
+                </div>
+                <!-- Split bar -->
+                <div class="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+                  <p class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Distribution Split</p>
+                  <div class="flex h-4 w-full overflow-hidden rounded-full bg-ink-800">
+                    <div id="bar-comp" class="h-full bg-emerald-500 transition-all duration-500" style="width:0%"></div>
+                    <div id="bar-retain" class="h-full bg-amber-500 transition-all duration-500" style="width:0%"></div>
+                  </div>
+                  <div class="mt-2 flex justify-between text-[11px] text-slate-400">
+                    <span><span class="inline-block h-2 w-2 rounded-full bg-emerald-500"></span> Compensation</span>
+                    <span>Retained <span class="inline-block h-2 w-2 rounded-full bg-amber-500"></span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Seizure inventory & distribution submission form -->
+            <div class="mt-8 rounded-2xl border border-white/5 bg-ink-900/60 p-6 print-area">
+              <div class="mb-5 flex items-center justify-between">
+                <div>
+                  <h4 class="text-lg font-bold text-white">Seizure Inventory &amp; Valuation</h4>
+                  <p class="text-sm text-slate-400">Authorized Director Distribution Log</p>
+                </div>
+                <span class="rounded-md border border-white/10 bg-ink-850 px-3 py-1 font-mono text-xs text-slate-400">FORM CID-SZ-04</span>
+              </div>
+
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label class="mb-1 block text-xs font-semibold text-slate-300">Operation / Raid Code</label>
+                  <input class="w-full rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="OP-2026-…" />
+                </div>
+                <div>
+                  <label class="mb-1 block text-xs font-semibold text-slate-300">Associated Case Number</label>
+                  <input class="w-full rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="[LSB] Case-1000001" />
+                </div>
+                <div class="md:col-span-2">
+                  <label class="mb-1 block text-xs font-semibold text-slate-300">Inventory &amp; Valuation Notes</label>
+                  <textarea rows="3" class="w-full rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="Itemized seizure: cash, contraband, vehicles, weapons — with estimated street value per item…"></textarea>
+                </div>
+                <div>
+                  <label class="mb-1 block text-xs font-semibold text-slate-300">Lead Detective</label>
+                  <input value="Det. Oliver Och (915)" class="w-full rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
+                </div>
+                <div>
+                  <label class="mb-1 block text-xs font-semibold text-slate-300">Authorizing Director / Deputy</label>
+                  <input class="w-full rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="Director signature required" />
+                </div>
+              </div>
+
+              <!-- Digital signature -->
+              <div class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label class="mb-1 block text-xs font-semibold text-slate-300">Digital Signature (type full name)</label>
+                  <input id="sig-input" class="w-full rounded-lg border border-white/10 bg-ink-850 px-3 py-2 font-[cursive] text-lg text-blue-200 outline-none focus:border-badge-500" placeholder="Sign here…" />
+                </div>
+                <div>
+                  <label class="mb-1 block text-xs font-semibold text-slate-300">Date / Time Stamp</label>
+                  <input id="sig-date" readonly class="w-full rounded-lg border border-white/10 bg-ink-850 px-3 py-2 font-mono text-sm text-slate-300 outline-none" />
+                </div>
+              </div>
+
+              <div class="mt-6 flex flex-wrap gap-3 no-print">
+                <button onclick="window.print()" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">🖨️ Print / Save Log</button>
+                <button id="submit-szlog" class="rounded-lg border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">Submit to Division</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- MODAL ROOT (ticket processing, drive folders, toasts)  -->
+  <!-- ====================================================== -->
+  <div id="modal-root"></div>
+  <div id="toast-root" class="fixed bottom-6 right-6 z-50 flex flex-col gap-3"></div>
+
+  <!-- ====================================================== -->
+  <!-- APPLICATION JAVASCRIPT                                 -->
+  <!-- ====================================================== -->
+  <script>
+  /* ============================================================
+   *  CID PORTAL — Single-Page Application controller
+   *  Vanilla JS. No build step. All state lives in-memory.
+   * ============================================================ */
+  (function () {
+    'use strict';
+
+    /* ------------------------------------------------------------------
+     *  1. DATA MODELS
+     * ---------------------------------------------------------------- */
+
+    // Dashboard metric cards
+    const METRICS = [
+      { label: 'Open Cases',     value: 47,   delta: '+6 this week',  icon: '📂', accent: 'blue' },
+      { label: 'Cold Cases',     value: 18,   delta: '2 wks inactive', icon: '🧊', accent: 'slate' },
+      { label: 'Active CIs',     value: 23,   delta: 'Across 7 handlers', icon: '🕵️', accent: 'violet' },
+      { label: 'Total Seizures', value: '$84.2M', delta: 'FY 2026 to date', icon: '💵', accent: 'emerald' },
+    ];
+
+    // Odyssey ticket intake queue (the operational hub)
+    const TICKETS = [
+      {
+        id: 'ticket-10040',
+        source: 'Discord Ticket',
+        desc: 'Suspect trafficking Class 3 weapons near Legion Square',
+        dept: 'LSPD',
+      },
+      {
+        id: 'ticket-20089',
+        source: 'Discord Ticket',
+        desc: 'Meth lab operation discovered in Sandy Shores trailer',
+        dept: 'BCSO',
+      },
+    ];
+
+    // Case-number prefix logic by bureau
+    const BUREAUS = {
+      LSB: { name: 'Los Santos Bureau',  prefix: 'LSB', seed: 1000001 },
+      BCB: { name: 'Blaine County Bureau', prefix: 'BCB', seed: 2000001 },
+      SAB: { name: 'State Bureau',         prefix: 'SAB', seed: 9000001 },
+    };
+    // Tracks the next sequence number issued per bureau (mock counter)
+    const caseCounters = { LSB: 1000001, BCB: 2000001, SAB: 9000001 };
+
+    // Case assigners available for cross-jurisdiction tagging
+    const ASSIGNERS = [
+      'Lt. Mara Voss — Los Santos Bureau Lead',
+      'Lt. Derek Honce — Blaine County Bureau Lead',
+      'Cmdr. Aria Stone — State Bureau Lead',
+      'Capt. Reyes — Joint Task Force Coordinator',
+    ];
+
+    // Division activity feed
+    const ACTIVITY = [
+      { who: 'Det. Oliver Och', what: 'closed case [LSB] Case-1000044 — Vinewood arson ring', when: '14m ago', dot: 'emerald' },
+      { who: 'System', what: 'synchronized Google Drive folder for [BCB] Case-2000012', when: '38m ago', dot: 'blue' },
+      { who: 'Sr. Det. Hale', what: 'registered new Confidential Informant CI-0093 (handler limit 4/6)', when: '1h ago', dot: 'violet' },
+      { who: 'Director', what: 'authorized GPS tracker deployment on [SAB] Case-9000007', when: '2h ago', dot: 'amber' },
+      { who: 'Det. Munoz', what: 'flagged case [BCB] Case-2000004 as COLD (2 weeks inactive)', when: '5h ago', dot: 'slate' },
+    ];
+
+    // Bureau caseload distribution
+    const BUREAU_LOAD = [
+      { name: 'Los Santos Bureau', pct: 72, color: 'bg-blue-500' },
+      { name: 'Blaine County Bureau', pct: 48, color: 'bg-emerald-500' },
+      { name: 'State Bureau', pct: 61, color: 'bg-violet-500' },
+      { name: 'Joint Task Force', pct: 33, color: 'bg-amber-500' },
+    ];
+
+    /* ---- SOP CONTENT (Titles 1–7) ---- */
+    const SOP = [
+      {
+        id: 't1', title: 'Title 1 | Introduction', tag: 'Foundational',
+        sections: [
+          { h: 'Mission Statement', b: 'The Criminal Investigation Division (CID) exists to investigate serious, organized, and cross-jurisdictional criminal activity within the State of San Andreas. Detectives pursue truth through lawful, evidence-driven investigation — protecting the public while preserving the constitutional rights of every individual.' },
+          { h: 'Hiring Rules — Strict Anti-AI / Anti-Plagiarism Clause', b: 'All applications, written examinations, and case documentation MUST be the original work of the applicant. The use of AI generation tools, ghost-writing, or plagiarism of any kind is strictly prohibited and is grounds for immediate disqualification and permanent blacklisting. Submitted writing samples are subject to authenticity review. Integrity is non-negotiable — a detective who fabricates their application cannot be trusted with a case file.' },
+          { h: 'Bureau Structures', b: 'CID operates as a joint division drawing personnel from partner agencies:\n• LSPD — Los Santos Police Department (urban / metro investigations).\n• BCSO — Blaine County Sheriff\'s Office (rural / county investigations).\n• SAHP — San Andreas Highway Patrol (interdiction, trafficking corridors).\n• Joint Task Force — multi-agency unit for state-wide and overlapping-jurisdiction cases.' },
+        ],
+      },
+      {
+        id: 't2', title: 'Title 2 | Chain of Command', tag: 'Command',
+        sections: [
+          { h: 'Director', b: 'Holds ultimate authority over the Division. Sole final approver (with the Deputy Director) of surveillance tracker deployments and major resource allocation. Sets divisional policy.' },
+          { h: 'Deputy Director', b: 'Second-in-command. Shares written-authorization authority for trackers, manages bureau leads, and assumes Director duties in their absence.' },
+          { h: 'Bureau Leads', b: 'Command their respective bureau (Los Santos, Blaine County, State). Responsible for case assignment, jurisdiction arbitration, and detective oversight.' },
+          { h: 'Senior Detectives', b: 'Experienced investigators who mentor detectives, lead complex cases, and may act as Confidential Informant handlers and operation leads.' },
+          { h: 'Detectives', b: 'Front-line investigators responsible for intake processing, case work, documentation, and field operations under the chain of command.' },
+        ],
+      },
+      {
+        id: 't3', title: 'Title 3 & 4 | Equipment & Patrol', tag: 'Field Ops',
+        sections: [
+          { h: 'Vehicle Rules — UC Unmarked Configuration', b: 'Undercover (UC) vehicles must run an unmarked configuration: civilian-appearance paint, no visible agency livery, concealed/hidden lighting only, civilian-pattern plates. Marked CID interceptors are permitted for overt operations but never during active surveillance or UC contact.' },
+          { h: 'Plainclothes / Tactical Uniform Approvals', b: 'Plainclothes is the standard CID dress for investigation. Tactical loadouts (plate carriers, breaching kit, long guns) require approval from a Bureau Lead or higher prior to deployment, except in exigent/immediate-threat circumstances.' },
+          { h: 'Radio Callsign IDs — "CID" Prefix', b: 'All Division personnel use the "CID" radio prefix followed by their assigned callsign number (e.g., "CID-915"). This identifies the unit as a Criminal Investigation Division asset on shared dispatch channels.' },
+        ],
+      },
+      {
+        id: 't5', title: 'Title 5 | Case Management', tag: 'Case Lifecycle',
+        sections: [
+          { h: 'Open Cases', b: 'A case under active investigation with ongoing leads, documentation, and assigned personnel. Requires regular updates to the case file.' },
+          { h: 'Cold Cases', b: 'A case is reclassified as COLD after 2 weeks (14 days) of inactivity — no new evidence, documentation, or investigative action. Cold cases remain in the system and may be reopened when new leads emerge.' },
+          { h: 'Closed Cases', b: 'A case formally resolved — via arrest/prosecution, exhaustion of all leads, or administrative closure with Bureau Lead approval. Closed files are archived.' },
+          { h: '12-Hour Major Incident Documentation Window', b: 'Any major incident (shooting, large seizure, major arrest, organized-crime event) MUST be documented in the case file within 12 hours of occurrence. Timely documentation preserves evidentiary integrity and chain of custody.' },
+        ],
+      },
+      {
+        id: 't6', title: 'Title 6 & 7 | CI & Surveillance Policies', tag: 'Intelligence',
+        sections: [
+          { h: 'Confidential Informant (CI) Eligibility — 8 Violent Felony Limit', b: 'An individual is ineligible to serve as a Confidential Informant if they have 8 or more violent felony convictions. This protects the integrity of intelligence sourcing and limits divisional exposure to high-risk actors.' },
+          { h: 'Handler Caseload — Max 6 CIs', b: 'A single handler may manage a maximum of 6 Confidential Informants at one time. This ceiling ensures proper oversight, vetting, and operational control of each informant relationship.' },
+          { h: 'Tracker Deployment — Mandatory Written Authorization', b: 'GPS trackers and electronic surveillance devices may ONLY be deployed with written authorization from the Director OR Deputy Director. No single-person approval is permitted — the authorization must be documented, attributable, and tied to a specific case number. Unauthorized tracker deployment is a serious policy violation.' },
+        ],
+      },
+    ];
+
+    /* ---- GOOGLE DRIVE SIMULATION — verbatim directory ---- */
+    // star markers, names, and modified dates kept exactly as specified.
+    const DRIVE_FOLDERS = [
+      { name: '**Joint Task Force Cases', modified: '16/03/2026', star: 2, accent: 'amber',   type: 'cases',
+        files: [
+          { n: 'JTF-Master-Index.sheet', t: 'sheet' },
+          { n: 'Operation Crosshair (active).doc', t: 'doc' },
+          { n: 'Inter-Agency MOU.pdf', t: 'pdf' },
+        ] },
+      { name: '*Blaine County Bureau Cases', modified: '16/03/2026', star: 1, accent: 'emerald', type: 'cases',
+        files: [
+          { n: '[BCB] Case-2000001 — Sandy Shores Meth.doc', t: 'doc' },
+          { n: '[BCB] Case-2000004 (COLD).doc', t: 'doc' },
+          { n: 'BCB Case Log.sheet', t: 'sheet' },
+        ] },
+      { name: '*Los Santos Bureau Cases', modified: '16/03/2026', star: 1, accent: 'blue', type: 'cases',
+        files: [
+          { n: '[LSB] Case-1000001 — Legion Sq Trafficking.doc', t: 'doc' },
+          { n: '[LSB] Case-1000044 — Vinewood Arson (CLOSED).doc', t: 'doc' },
+          { n: 'LSB Case Log.sheet', t: 'sheet' },
+        ] },
+      { name: '*State Bureau Cases', modified: '16/03/2026', star: 1, accent: 'violet', type: 'cases',
+        files: [
+          { n: '[SAB] Case-9000001 — Corridor Interdiction.doc', t: 'doc' },
+          { n: '[SAB] Case-9000007 — Tracker Auth.doc', t: 'doc' },
+          { n: 'SAB Case Log.sheet', t: 'sheet' },
+        ] },
+      { name: 'Archives', modified: '16/03/2026', star: 0, accent: 'slate', type: 'archive',
+        files: [
+          { n: 'Closed Cases 2025.zip', t: 'zip' },
+          { n: 'Retired CI Records.zip', t: 'zip' },
+        ] },
+      { name: 'Case assignment Help??!?', modified: '17/03/2026', star: 0, accent: 'rose', type: 'doc',
+        files: [
+          { n: 'HOW TO ASSIGN A CASE (read me).doc', t: 'doc' },
+          { n: 'Prefix cheat-sheet.sheet', t: 'sheet' },
+        ] },
+      { name: 'Confidential Informant', modified: '18/03/2026', star: 0, accent: 'amber', type: 'gang',
+        files: [
+          { n: 'CI Roster (handler limits).sheet', t: 'sheet' },
+          { n: 'Gang Fact Sheet (template).sheet', t: 'gangsheet' },
+        ] },
+      { name: 'Dirty $- Tracker', modified: '19/03/2026', star: 0, accent: 'emerald', type: 'sheet',
+        files: [
+          { n: 'Seizure Ledger FY26.sheet', t: 'sheet' },
+          { n: 'Distribution Bracket Calc.sheet', t: 'sheet' },
+        ] },
+      { name: 'Forms', modified: '16/03/2026', star: 0, accent: 'blue', type: 'doc',
+        files: [
+          { n: 'Detective Incident Report (template).doc', t: 'doc' },
+          { n: 'UC Activity Log (template).doc', t: 'doc' },
+          { n: 'Seizure Inventory CID-SZ-04.doc', t: 'doc' },
+        ] },
+      { name: 'Resources', modified: '16/03/2026', star: 0, accent: 'slate', type: 'doc',
+        files: [
+          { n: 'Penal Code Quick Reference.pdf', t: 'pdf' },
+          { n: 'Radio Callsign Directory.sheet', t: 'sheet' },
+        ] },
+      { name: 'SOP/Training', modified: '16/03/2026', star: 0, accent: 'violet', type: 'doc',
+        files: [
+          { n: 'CID SOP v4.2.pdf', t: 'pdf' },
+          { n: 'New Detective Onboarding.doc', t: 'doc' },
+        ] },
+    ];
+
+    // The "Gang Fact Sheet" template columns + sample rows
+    const GANG_SHEET = {
+      cols: ['Name', 'Rank', 'Threat Level', 'CCW', 'VCH'],
+      rows: [
+        ['Marcus "Tre" Bell', 'Shot Caller', 'High', 'Yes', '7'],
+        ['Dion Park',         'Lieutenant',  'High', 'Yes', '5'],
+        ['Lena Cruz',         'Enforcer',    'Medium', 'Yes', '3'],
+        ['Omar Reyes',        'Soldier',     'Low',  'No',  '1'],
+      ],
+    };
+
+    // Seizure compensation brackets (inclusive ranges)
+    const BRACKETS = [
+      { min: 1000000,  max: 2499999,  pct: 60, label: '$1,000,000 – $2,499,999' },
+      { min: 2500000,  max: 7499999,  pct: 50, label: '$2,500,000 – $7,499,999' },
+      { min: 7500000,  max: 14999999, pct: 40, label: '$7,500,000 – $14,999,999' },
+      { min: 15000000, max: 24999999, pct: 30, label: '$15,000,000 – $24,999,999' },
+      { min: 25000000, max: Infinity, pct: 20, label: '$25,000,000+' },
+    ];
+
+    /* ------------------------------------------------------------------
+     *  2. SMALL UTILITIES
+     * ---------------------------------------------------------------- */
+    const $  = (sel, ctx = document) => ctx.querySelector(sel);
+    const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
+    const el = (tag, attrs = {}, html = '') => {
+      const node = document.createElement(tag);
+      Object.entries(attrs).forEach(([k, v]) => {
+        if (k === 'class') node.className = v;
+        else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2), v);
+        else node.setAttribute(k, v);
+      });
+      if (html) node.innerHTML = html;
+      return node;
+    };
+    const fmtUSD = (n) => '$' + Math.round(n).toLocaleString('en-US');
+    const escapeHTML = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+    // Toast notifications
+    function toast(message, type = 'info') {
+      const colors = {
+        info:    'border-blue-500/30 bg-blue-500/10 text-blue-200',
+        success: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
+        warn:    'border-amber-500/30 bg-amber-500/10 text-amber-200',
+      };
+      const icons = { info: 'ℹ️', success: '✅', warn: '⚠️' };
+      const t = el('div', {
+        class: `flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium shadow-glow backdrop-blur-xl ${colors[type] || colors.info}`,
+      }, `<span>${icons[type] || icons.info}</span><span>${escapeHTML(message)}</span>`);
+      t.style.animation = 'popIn .25s cubic-bezier(.16,.84,.44,1) both';
+      $('#toast-root').appendChild(t);
+      setTimeout(() => {
+        t.style.transition = 'opacity .3s, transform .3s';
+        t.style.opacity = '0';
+        t.style.transform = 'translateX(20px)';
+        setTimeout(() => t.remove(), 300);
+      }, 3200);
+    }
+
+    /* ------------------------------------------------------------------
+     *  3. SPA ROUTER — tab navigation
+     * ---------------------------------------------------------------- */
+    const PAGE_META = {
+      dashboard: { title: 'Operational Dashboard', sub: 'Case assignment & intake hub' },
+      sop:       { title: 'Standard Operating Procedure', sub: 'CID field & administrative manual' },
+      drive:     { title: 'CID General', sub: 'Shared investigative drive' },
+      forms:     { title: 'Intake & Report Forms', sub: 'Fillable official templates' },
+      calc:      { title: 'Seizure & Compensation Calculator', sub: 'Bracket-based payout splits' },
+    };
+
+    function navigate(tab) {
+      // Toggle views
+      $$('.view').forEach((v) => v.classList.remove('active'));
+      const view = $('#view-' + tab);
+      if (view) view.classList.add('active');
+
+      // Toggle sidebar active state
+      $$('.nav-link').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+
+      // Update header
+      const meta = PAGE_META[tab];
+      if (meta) {
+        $('#page-title').textContent = meta.title;
+        $('#page-subtitle').textContent = meta.sub;
+      }
+
+      // Reflect in URL hash for deep-linking / back button support
+      if (location.hash !== '#' + tab) history.replaceState(null, '', '#' + tab);
+
+      // Scroll content to top on navigation
+      $('main').scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Wire sidebar buttons
+    $$('.nav-link').forEach((btn) => btn.addEventListener('click', () => navigate(btn.dataset.tab)));
+
+    /* ------------------------------------------------------------------
+     *  4. MODAL ENGINE
+     * ---------------------------------------------------------------- */
+    function openModal(contentNode, { wide = false } = {}) {
+      closeModal();
+      const backdrop = el('div', {
+        class: 'modal-backdrop fixed inset-0 z-40 flex items-center justify-center bg-ink-950/80 p-4 backdrop-blur-sm',
+      });
+      const card = el('div', {
+        class: `modal-card relative w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-ink-850 shadow-glow`,
+      });
+      card.appendChild(contentNode);
+      backdrop.appendChild(card);
+      // Click outside to close
+      backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeModal(); });
+      $('#modal-root').appendChild(backdrop);
+      document.addEventListener('keydown', escClose);
+    }
+    function escClose(e) { if (e.key === 'Escape') closeModal(); }
+    function closeModal() {
+      $('#modal-root').innerHTML = '';
+      document.removeEventListener('keydown', escClose);
+    }
+
+    /* ------------------------------------------------------------------
+     *  5. RENDER — DASHBOARD
+     * ---------------------------------------------------------------- */
+    function renderMetrics() {
+      const accentMap = {
+        blue:    'from-blue-500/20 to-blue-700/5 text-blue-300 border-blue-500/20',
+        slate:   'from-slate-500/20 to-slate-700/5 text-slate-300 border-slate-500/20',
+        violet:  'from-violet-500/20 to-violet-700/5 text-violet-300 border-violet-500/20',
+        emerald: 'from-emerald-500/20 to-emerald-700/5 text-emerald-300 border-emerald-500/20',
+      };
+      const grid = $('#metrics-grid');
+      grid.innerHTML = '';
+      METRICS.forEach((m) => {
+        const card = el('div', {
+          class: `group relative overflow-hidden rounded-2xl border bg-gradient-to-br ${accentMap[m.accent]} p-5 transition hover:shadow-glow`,
+        }, `
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">${m.label}</p>
+              <p class="mt-2 text-3xl font-bold text-white">${m.value}</p>
+              <p class="mt-1 text-[11px] text-slate-400">${m.delta}</p>
+            </div>
+            <span class="text-2xl">${m.icon}</span>
+          </div>
+        `);
+        grid.appendChild(card);
+      });
+    }
+
+    function renderTickets() {
+      const tbody = $('#ticket-tbody');
+      tbody.innerHTML = '';
+      TICKETS.forEach((t) => {
+        const tr = el('tr', { class: 'transition hover:bg-white/5', 'data-ticket': t.id });
+        tr.innerHTML = `
+          <td class="px-6 py-4"><span class="rounded-md bg-ink-800 px-2 py-1 font-mono text-xs text-blue-300">${t.id}</span></td>
+          <td class="px-6 py-4">
+            <span class="inline-flex items-center gap-1.5 text-slate-300">
+              <span class="h-1.5 w-1.5 rounded-full bg-indigo-400"></span>${t.source}
+            </span>
+          </td>
+          <td class="px-6 py-4 max-w-md text-slate-300">${escapeHTML(t.desc)}</td>
+          <td class="px-6 py-4"><span class="rounded-md border border-white/10 bg-ink-800 px-2 py-1 text-xs font-semibold text-slate-200">${t.dept}</span></td>
+          <td class="px-6 py-4 text-right">
+            <button class="process-btn rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110 active:scale-95">
+              Process Ticket
+            </button>
+          </td>`;
+        tr.querySelector('.process-btn').addEventListener('click', () => openTicketModal(t));
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderActivity() {
+      const dotColors = { emerald: 'bg-emerald-400', blue: 'bg-blue-400', violet: 'bg-violet-400', amber: 'bg-amber-400', slate: 'bg-slate-400' };
+      const feed = $('#activity-feed');
+      feed.innerHTML = '';
+      ACTIVITY.forEach((a) => {
+        feed.appendChild(el('li', { class: 'flex gap-3' }, `
+          <span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${dotColors[a.dot] || 'bg-slate-400'}"></span>
+          <div class="flex-1">
+            <p class="text-sm text-slate-200"><span class="font-semibold text-white">${escapeHTML(a.who)}</span> ${escapeHTML(a.what)}</p>
+            <p class="text-[11px] text-slate-500">${a.when}</p>
+          </div>`));
+      });
+    }
+
+    function renderBureauLoad() {
+      const wrap = $('#bureau-load');
+      wrap.innerHTML = '';
+      BUREAU_LOAD.forEach((b) => {
+        wrap.appendChild(el('div', {}, `
+          <div class="mb-1.5 flex justify-between text-xs">
+            <span class="font-medium text-slate-300">${b.name}</span>
+            <span class="font-mono text-slate-400">${b.pct}%</span>
+          </div>
+          <div class="h-2 w-full overflow-hidden rounded-full bg-ink-800">
+            <div class="h-full ${b.color} transition-all duration-700" style="width:${b.pct}%"></div>
+          </div>`));
+      });
+    }
+
+    /* ------------------------------------------------------------------
+     *  6. TICKET PROCESSING WORKFLOW (multi-step modal)
+     * ---------------------------------------------------------------- */
+    function openTicketModal(ticket) {
+      // STEP 1 — Jurisdiction Check
+      const node = el('div', { class: 'p-6' });
+
+      const renderStep1 = () => {
+        node.innerHTML = `
+          <div class="mb-5 flex items-center justify-between">
+            <div>
+              <p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">SOP Step 1 of 3</p>
+              <h3 class="text-xl font-bold text-white">Jurisdiction Check</h3>
+            </div>
+            <button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+          </div>
+          <div class="mb-5 rounded-xl border border-white/10 bg-ink-900 p-4 text-sm">
+            <p class="font-mono text-xs text-blue-300">${ticket.id}</p>
+            <p class="mt-1 text-slate-200">${escapeHTML(ticket.desc)}</p>
+            <p class="mt-2 text-xs text-slate-400">Reported by: <span class="font-semibold text-slate-200">${ticket.dept}</span></p>
+          </div>
+          <p class="mb-4 text-sm text-slate-300">Is this within <span class="font-semibold text-white">your department's jurisdiction</span>?</p>
+          <div class="flex gap-3">
+            <button id="jur-yes" class="flex-1 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-700 py-3 text-sm font-semibold text-white transition hover:brightness-110">✓ Yes — Generate Case</button>
+            <button id="jur-no" class="flex-1 rounded-lg border border-white/10 bg-white/5 py-3 text-sm font-semibold text-white transition hover:bg-white/10">✕ No — Reassign</button>
+          </div>`;
+        node.querySelector('.close-x').onclick = closeModal;
+        node.querySelector('#jur-yes').onclick = renderStep2;
+        node.querySelector('#jur-no').onclick = renderReassign;
+      };
+
+      // STEP 1b — Not our jurisdiction → tag a case assigner
+      const renderReassign = () => {
+        node.innerHTML = `
+          <div class="mb-5 flex items-center justify-between">
+            <div>
+              <p class="text-[11px] font-semibold uppercase tracking-wider text-amber-300/70">Out of Jurisdiction</p>
+              <h3 class="text-xl font-bold text-white">Tag Case Assigner</h3>
+            </div>
+            <button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+          </div>
+          <p class="mb-4 text-sm text-slate-300">This ticket falls outside your jurisdiction. Select the appropriate Case Assigner to route it for reassignment.</p>
+          <label class="mb-1 block text-xs font-semibold text-slate-400">Case Assigner</label>
+          <select id="assigner-select" class="mb-5 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">
+            ${ASSIGNERS.map((a) => `<option>${escapeHTML(a)}</option>`).join('')}
+          </select>
+          <div class="flex gap-3">
+            <button id="back-1" class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">← Back</button>
+            <button id="reassign-confirm" class="flex-1 rounded-lg bg-gradient-to-r from-amber-500 to-amber-700 py-3 text-sm font-semibold text-white transition hover:brightness-110">Tag &amp; Reassign Ticket</button>
+          </div>`;
+        node.querySelector('.close-x').onclick = closeModal;
+        node.querySelector('#back-1').onclick = renderStep1;
+        node.querySelector('#reassign-confirm').onclick = () => {
+          const who = node.querySelector('#assigner-select').value;
+          closeModal();
+          toast(`${ticket.id} reassigned → ${who.split('—')[0].trim()}`, 'warn');
+        };
+      };
+
+      // STEP 2 — Case Generation Form
+      const renderStep2 = () => {
+        node.innerHTML = `
+          <div class="mb-5 flex items-center justify-between">
+            <div>
+              <p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">SOP Step 2 of 3</p>
+              <h3 class="text-xl font-bold text-white">Case Generation</h3>
+            </div>
+            <button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+          </div>
+          <label class="mb-1 block text-xs font-semibold text-slate-400">Assign to Bureau (sets case-number prefix)</label>
+          <select id="bureau-select" class="mb-4 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">
+            <option value="LSB">Los Santos Bureau — [LSB] prefix</option>
+            <option value="BCB">Blaine County Bureau — [BCB] prefix</option>
+            <option value="SAB">State Bureau — [SAB] prefix</option>
+          </select>
+
+          <label class="mb-1 block text-xs font-semibold text-slate-400">Next 7-Digit Case Number</label>
+          <div class="mb-2 flex items-center gap-2">
+            <span id="case-prefix" class="rounded-lg bg-ink-800 px-3 py-2.5 font-mono text-sm font-semibold text-blue-300">[LSB] Case-</span>
+            <input id="case-number" class="flex-1 rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 font-mono text-sm text-white outline-none focus:border-badge-500" />
+          </div>
+          <p class="mb-5 text-[11px] text-slate-500">Auto-incremented from bureau sequence. Editable if reissuing.</p>
+
+          <div class="flex gap-3">
+            <button id="back-2" class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">← Back</button>
+            <button id="gen-confirm" class="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white transition hover:brightness-110">Generate Case File →</button>
+          </div>`;
+
+        const sel    = node.querySelector('#bureau-select');
+        const prefix = node.querySelector('#case-prefix');
+        const numIn  = node.querySelector('#case-number');
+
+        const syncBureau = () => {
+          const b = BUREAUS[sel.value];
+          prefix.textContent = `[${b.prefix}] Case-`;
+          numIn.value = String(caseCounters[sel.value]); // next 7-digit number
+        };
+        syncBureau();
+        sel.onchange = syncBureau;
+
+        node.querySelector('.close-x').onclick = closeModal;
+        node.querySelector('#back-2').onclick = renderStep1;
+        node.querySelector('#gen-confirm').onclick = () => {
+          const key = sel.value;
+          const full = `[${BUREAUS[key].prefix}] Case-${numIn.value}`;
+          caseCounters[key] = Number(numIn.value) + 1; // advance sequence
+          renderStep3(full);
+        };
+      };
+
+      // STEP 3 — File generation success + sync
+      const renderStep3 = (caseId) => {
+        node.innerHTML = `
+          <div class="p-2 text-center">
+            <div class="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-full bg-emerald-500/15">
+              <svg class="h-8 w-8 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            </div>
+            <h3 class="text-xl font-bold text-white">Case File Generated</h3>
+            <p class="mt-1 font-mono text-sm text-blue-300">${escapeHTML(caseId)}</p>
+            <div class="mt-5 space-y-3 text-left">
+              <div class="flex items-center gap-3 rounded-lg border border-white/5 bg-ink-900 p-3">
+                <span class="sync-spin h-4 w-4 rounded-full border-2 border-blue-400 border-t-transparent"></span>
+                <span class="text-sm text-slate-200">Synchronizing <b class="text-white">Discord Channel</b> #${caseId.replace(/[^a-z0-9]/gi,'-').toLowerCase()}…</span>
+              </div>
+              <div class="flex items-center gap-3 rounded-lg border border-white/5 bg-ink-900 p-3">
+                <span class="sync-spin h-4 w-4 rounded-full border-2 border-emerald-400 border-t-transparent"></span>
+                <span class="text-sm text-slate-200">Provisioning <b class="text-white">Google Drive folder</b> in matching Bureau Cases…</span>
+              </div>
+            </div>
+            <button id="done-btn" class="mt-6 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Done</button>
+          </div>`;
+        // spinner styling
+        node.querySelectorAll('.sync-spin').forEach((s) => { s.style.animation = 'spin 0.8s linear infinite'; });
+        node.querySelector('#done-btn').onclick = () => {
+          closeModal();
+          toast(`${caseId} created · Discord + Drive synced`, 'success');
+        };
+      };
+
+      renderStep1();
+      openModal(node);
+    }
+
+    /* ------------------------------------------------------------------
+     *  7. RENDER — SOP VIEWER (searchable accordions)
+     * ---------------------------------------------------------------- */
+    function renderSOP() {
+      const body = $('#sop-body');
+      body.innerHTML = '';
+      SOP.forEach((title, i) => {
+        const details = el('details', {
+          class: 'sop-title group overflow-hidden rounded-2xl border border-white/5 bg-ink-900/60',
+        });
+        if (i === 0) details.setAttribute('open', '');
+        details.innerHTML = `
+          <summary class="flex items-center justify-between px-6 py-4">
+            <div class="flex items-center gap-3">
+              <svg class="chev h-4 w-4 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              <h3 class="text-base font-semibold text-white">${title.title}</h3>
+            </div>
+            <span class="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">${title.tag}</span>
+          </summary>
+          <div class="space-y-4 border-t border-white/5 px-6 py-5">
+            ${title.sections.map((s) => `
+              <div class="sop-section">
+                <h4 class="mb-1 text-sm font-semibold text-blue-200">${escapeHTML(s.h)}</h4>
+                <p class="whitespace-pre-line text-sm leading-relaxed text-slate-300">${escapeHTML(s.b)}</p>
+              </div>`).join('')}
+          </div>`;
+        body.appendChild(details);
+      });
+    }
+
+    // SOP live search filter
+    function wireSOPSearch() {
+      const input = $('#sop-search');
+      input.addEventListener('input', () => {
+        const q = input.value.trim().toLowerCase();
+        let anyVisible = false;
+        $$('.sop-title').forEach((title) => {
+          let titleMatch = false;
+          $$('.sop-section', title).forEach((sec) => {
+            const text = sec.textContent.toLowerCase();
+            const hit = !q || text.includes(q);
+            sec.style.display = hit ? '' : 'none';
+            if (hit) titleMatch = true;
+          });
+          // also match on the title heading itself
+          const headingHit = title.querySelector('h3').textContent.toLowerCase().includes(q);
+          const show = !q || titleMatch || headingHit;
+          title.style.display = show ? '' : 'none';
+          if (show) {
+            anyVisible = true;
+            if (q) title.setAttribute('open', ''); // auto-expand matches while searching
+          }
+        });
+        $('#sop-noresults').classList.toggle('hidden', anyVisible);
+      });
+    }
+
+    /* ------------------------------------------------------------------
+     *  8. RENDER — DRIVE (Google Drive simulation)
+     * ---------------------------------------------------------------- */
+    const ACCENTS = {
+      blue:    { tint: 'text-blue-400',    ring: 'hover:border-blue-500/40 hover:bg-blue-500/5' },
+      emerald: { tint: 'text-emerald-400', ring: 'hover:border-emerald-500/40 hover:bg-emerald-500/5' },
+      violet:  { tint: 'text-violet-400',  ring: 'hover:border-violet-500/40 hover:bg-violet-500/5' },
+      amber:   { tint: 'text-amber-400',   ring: 'hover:border-amber-500/40 hover:bg-amber-500/5' },
+      rose:    { tint: 'text-rose-400',    ring: 'hover:border-rose-500/40 hover:bg-rose-500/5' },
+      slate:   { tint: 'text-slate-300',   ring: 'hover:border-slate-400/40 hover:bg-white/5' },
+    };
+
+    function fileIcon(t) {
+      const map = {
+        doc:       '📄', sheet: '📊', pdf: '📕', zip: '🗜️', gangsheet: '📋',
+      };
+      return map[t] || '📄';
+    }
+
+    function renderDrive() {
+      const grid = $('#drive-grid');
+      grid.innerHTML = '';
+      DRIVE_FOLDERS.forEach((f, idx) => {
+        const a = ACCENTS[f.accent] || ACCENTS.slate;
+        const stars = f.star ? '<span class="text-amber-400">' + '★'.repeat(f.star) + '</span> ' : '';
+        const card = el('div', {
+          class: `folder-card cursor-pointer rounded-2xl border border-white/5 bg-ink-900/60 p-4 ${a.ring}`,
+          'data-idx': idx,
+        }, `
+          <div class="flex items-start justify-between">
+            <svg class="h-9 w-9 ${a.tint}" viewBox="0 0 24 24" fill="currentColor" opacity="0.9"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>
+            <svg class="h-4 w-4 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+          </div>
+          <p class="mt-3 truncate text-sm font-semibold text-white" title="${escapeHTML(f.name)}">${stars}${escapeHTML(f.name)}</p>
+          <p class="mt-1 text-[11px] text-slate-500">Modified ${f.modified} · ${f.files.length} items</p>
+        `);
+        card.addEventListener('click', () => openFolderModal(f));
+        grid.appendChild(card);
+      });
+    }
+
+    function openFolderModal(folder) {
+      const a = ACCENTS[folder.accent] || ACCENTS.slate;
+      const node = el('div', { class: 'p-6' });
+
+      // Does this folder contain the Gang Fact Sheet template?
+      const hasGangSheet = folder.files.some((fl) => fl.t === 'gangsheet');
+
+      node.innerHTML = `
+        <div class="mb-5 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg>
+            <div>
+              <h3 class="text-lg font-bold text-white">${escapeHTML(folder.name)}</h3>
+              <p class="text-xs text-slate-400">Modified ${folder.modified} · CID General / Shared</p>
+            </div>
+          </div>
+          <button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+        </div>
+
+        <div class="space-y-2">
+          ${folder.files.map((fl) => `
+            <div class="file-row flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:bg-white/5" data-type="${fl.t}">
+              <span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">${fileIcon(fl.t)}</span>${escapeHTML(fl.n)}</span>
+              <span class="text-[11px] text-slate-500">${fl.t === 'gangsheet' ? 'click to open template' : 'CID shared'}</span>
+            </div>`).join('')}
+        </div>
+
+        ${hasGangSheet ? `<div id="gang-sheet-mount" class="mt-5"></div>` : ''}
+      `;
+      node.querySelector('.close-x').onclick = closeModal;
+
+      // Clicking the gang fact sheet row reveals its columns inline
+      if (hasGangSheet) {
+        const mount = node.querySelector('#gang-sheet-mount');
+        node.querySelectorAll('.file-row').forEach((row) => {
+          if (row.dataset.type === 'gangsheet') {
+            row.addEventListener('click', () => {
+              if (mount.dataset.open === '1') { mount.innerHTML = ''; mount.dataset.open = '0'; return; }
+              mount.dataset.open = '1';
+              mount.innerHTML = `
+                <p class="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Gang Fact Sheet — Template Columns</p>
+                <div class="overflow-hidden rounded-xl border border-white/5">
+                  <table class="w-full text-left text-sm">
+                    <thead><tr class="bg-ink-800 text-[11px] uppercase tracking-wider text-slate-400">
+                      ${GANG_SHEET.cols.map((c) => `<th class="px-3 py-2 font-semibold">${c}</th>`).join('')}
+                    </tr></thead>
+                    <tbody class="divide-y divide-white/5">
+                      ${GANG_SHEET.rows.map((r) => `<tr class="hover:bg-white/5">${r.map((cell, ci) => {
+                        let cls = 'text-slate-300';
+                        if (ci === 2) cls = cell === 'High' ? 'text-rose-400 font-semibold' : cell === 'Medium' ? 'text-amber-400 font-semibold' : 'text-emerald-400 font-semibold';
+                        if (ci === 3) cls = cell === 'Yes' ? 'text-rose-300' : 'text-slate-400';
+                        return `<td class="px-3 py-2 ${cls}">${escapeHTML(cell)}</td>`;
+                      }).join('')}</tr>`).join('')}
+                    </tbody>
+                  </table>
+                </div>
+                <p class="mt-2 text-[11px] text-slate-500">CCW = Carry Concealed Weapon flag · VCH = Violent Conviction History count</p>`;
+            });
+          } else {
+            row.addEventListener('click', () => toast(`Opening "${row.querySelector('span').textContent.trim()}" (mock preview)`, 'info'));
+          }
+        });
+      } else {
+        node.querySelectorAll('.file-row').forEach((row) => {
+          row.addEventListener('click', () => toast(`Opening "${row.querySelector('span').textContent.trim()}" (mock preview)`, 'info'));
+        });
+      }
+
+      openModal(node, { wide: true });
+    }
+
+    /* ------------------------------------------------------------------
+     *  9. RENDER — REPORT FORMS
+     * ---------------------------------------------------------------- */
+    const fieldLabel = (t) => `<label class="mb-1 block text-xs font-semibold text-slate-300">${t}</label>`;
+    const inputCls = 'w-full rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-sm text-white outline-none transition focus:border-badge-500 focus:ring-2 focus:ring-badge-500/30';
+
+    function renderFormA() {
+      $('#form-A').innerHTML = `
+        <div class="rounded-2xl border border-white/5 bg-ink-900/60 p-6 print-area">
+          <div class="mb-5 flex items-center justify-between border-b border-white/5 pb-4">
+            <div>
+              <h4 class="text-lg font-bold text-white">Detective / Incident Report</h4>
+              <p class="text-sm text-slate-400">Official CID case documentation</p>
+            </div>
+            <span class="rounded-md border border-white/10 bg-ink-850 px-3 py-1 font-mono text-xs text-slate-400">FORM CID-IR-01</span>
+          </div>
+
+          <!-- Case number -->
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div>${fieldLabel('Case Number')}<input class="${inputCls} font-mono" placeholder="[LSB] Case-1000001" /></div>
+            <div>${fieldLabel('Date of Incident')}<input type="date" class="${inputCls}" /></div>
+            <div>${fieldLabel('Time of Incident')}<input type="time" class="${inputCls}" /></div>
+          </div>
+
+          <!-- Detective info -->
+          <p class="mb-2 mt-6 text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Detective Information</p>
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div>${fieldLabel('Detective Name')}<input value="Oliver Och" class="${inputCls}" /></div>
+            <div>${fieldLabel('Callsign')}<input value="915" class="${inputCls} font-mono" /></div>
+            <div>${fieldLabel('Bureau / Unit')}<input value="MCB" class="${inputCls}" /></div>
+          </div>
+
+          <!-- Suspect info -->
+          <p class="mb-2 mt-6 text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Suspect Information</p>
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div>${fieldLabel('Suspect Full Name')}<input class="${inputCls}" placeholder="Last, First" /></div>
+            <div>${fieldLabel('Date of Birth')}<input type="date" class="${inputCls}" /></div>
+            <div>${fieldLabel('Known Affiliation')}<input class="${inputCls}" placeholder="Gang / org / none" /></div>
+          </div>
+
+          <!-- Miranda -->
+          <div class="mt-6 rounded-xl border border-white/10 bg-ink-850 p-4">
+            <p class="mb-3 text-sm font-semibold text-white">Miranda Rights</p>
+            <div class="flex flex-wrap gap-6 text-sm text-slate-300">
+              <label class="flex items-center gap-2"><input type="radio" name="miranda" class="accent-blue-500" /> Rights Read &amp; Acknowledged</label>
+              <label class="flex items-center gap-2"><input type="radio" name="miranda" class="accent-blue-500" /> Rights Waived — <span class="text-emerald-300">Yes</span></label>
+              <label class="flex items-center gap-2"><input type="radio" name="miranda" class="accent-blue-500" /> Rights Waived — <span class="text-rose-300">No</span></label>
+            </div>
+          </div>
+
+          <!-- Narrative -->
+          <div class="mt-6">${fieldLabel('Incident Narrative')}
+            <textarea rows="6" class="${inputCls}" placeholder="Provide a factual, chronological account of the incident, observations, evidence collected, and actions taken…"></textarea>
+          </div>
+
+          <!-- Statement of Understanding -->
+          <div class="mt-6 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+            <p class="mb-2 text-xs font-semibold uppercase tracking-wider text-amber-300/80">Statement of Understanding</p>
+            <p class="text-xs leading-relaxed text-slate-300">I declare under penalty of perjury that the foregoing report is true and correct to the best of my knowledge. I understand that this document is an official record of the Criminal Investigation Division of the State of San Andreas, that knowingly false statements are grounds for disciplinary action and criminal prosecution, and that this report was authored solely by me without the use of AI generation or third-party authorship.</p>
+            <label class="mt-3 flex items-center gap-2 text-sm font-medium text-white"><input type="checkbox" class="accent-amber-500" /> I have read and agree to the Statement of Understanding.</label>
+          </div>
+
+          <div class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>${fieldLabel('Digital Signature')}<input class="${inputCls} font-[cursive] text-lg text-blue-200" placeholder="Sign here…" /></div>
+            <div>${fieldLabel('Date Signed')}<input type="date" class="${inputCls}" /></div>
+          </div>
+
+          <div class="mt-6 flex flex-wrap gap-3 no-print">
+            <button class="submit-form rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Submit Report</button>
+            <button onclick="window.print()" class="rounded-lg border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">🖨️ Print</button>
+          </div>
+        </div>`;
+      $('#form-A .submit-form').addEventListener('click', () => toast('Incident report submitted to case file.', 'success'));
+    }
+
+    function renderFormB() {
+      $('#form-B').innerHTML = `
+        <div class="rounded-2xl border border-white/5 bg-ink-900/60 p-6 print-area">
+          <div class="mb-5 flex items-center justify-between border-b border-white/5 pb-4">
+            <div>
+              <h4 class="text-lg font-bold text-white">Undercover (UC) Activity Log</h4>
+              <p class="text-sm text-slate-400">Confidential — surveillance &amp; UC contact record</p>
+            </div>
+            <span class="rounded-md border border-white/10 bg-ink-850 px-3 py-1 font-mono text-xs text-slate-400">FORM CID-UC-02</span>
+          </div>
+
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div>${fieldLabel('Report Type')}
+              <select class="${inputCls}"><option>Initial Contact</option><option>Ongoing Operation</option><option>Buy / Bust</option><option>Surveillance Only</option><option>Closeout</option></select>
+            </div>
+            <div>${fieldLabel('UC Officer Name')}<input class="${inputCls}" placeholder="Alias permitted" /></div>
+            <div>${fieldLabel('Operation Code')}<input class="${inputCls} font-mono" placeholder="OP-2026-…" /></div>
+          </div>
+
+          <!-- Contacts & Interactions matrix -->
+          <p class="mb-2 mt-6 text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Contacts &amp; Interactions Matrix</p>
+          <div class="overflow-hidden rounded-xl border border-white/10">
+            <table class="w-full text-left text-sm">
+              <thead><tr class="bg-ink-850 text-[11px] uppercase tracking-wider text-slate-400">
+                <th class="px-3 py-2 font-semibold">Time</th>
+                <th class="px-3 py-2 font-semibold">Contact / Subject</th>
+                <th class="px-3 py-2 font-semibold">Interaction Type</th>
+                <th class="px-3 py-2 font-semibold">Outcome</th>
+              </tr></thead>
+              <tbody id="uc-matrix" class="divide-y divide-white/5"></tbody>
+            </table>
+          </div>
+          <button id="uc-add-row" class="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 no-print">+ Add Contact Row</button>
+
+          <!-- Intelligence / Evidence -->
+          <div class="mt-6">${fieldLabel('Intelligence / Evidence Observed')}
+            <textarea rows="4" class="${inputCls}" placeholder="Document observed contraband, transactions, vehicles, locations, and any physical/digital evidence noted during the operation…"></textarea>
+          </div>
+
+          <!-- Threat level -->
+          <div class="mt-6 rounded-xl border border-white/10 bg-ink-850 p-4">
+            <p class="mb-3 text-sm font-semibold text-white">Threat Level Assessment</p>
+            <div class="flex flex-wrap gap-3" id="uc-threat">
+              <button data-lvl="Low" class="threat-btn rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-2 text-sm font-semibold text-emerald-300 transition">Low</button>
+              <button data-lvl="Medium" class="threat-btn rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-2 text-sm font-semibold text-amber-300 transition">Medium</button>
+              <button data-lvl="High" class="threat-btn rounded-lg border border-rose-500/30 bg-rose-500/5 px-4 py-2 text-sm font-semibold text-rose-300 transition">High</button>
+            </div>
+            <p class="mt-2 text-[11px] text-slate-500">Selected: <span id="uc-threat-out" class="font-semibold text-slate-300">— none —</span></p>
+          </div>
+
+          <div class="mt-6 flex flex-wrap gap-3 no-print">
+            <button class="submit-form rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Submit UC Log</button>
+            <button onclick="window.print()" class="rounded-lg border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">🖨️ Print</button>
+          </div>
+        </div>`;
+
+      // Contacts matrix rows
+      const matrix = $('#uc-matrix');
+      const addRow = () => {
+        const tr = el('tr', {}, `
+          <td class="px-3 py-2"><input type="time" class="w-full bg-transparent text-sm text-white outline-none" /></td>
+          <td class="px-3 py-2"><input class="w-full bg-transparent text-sm text-white outline-none" placeholder="Subject / alias" /></td>
+          <td class="px-3 py-2"><input class="w-full bg-transparent text-sm text-white outline-none" placeholder="Buy / meet / recon" /></td>
+          <td class="px-3 py-2"><input class="w-full bg-transparent text-sm text-white outline-none" placeholder="Result" /></td>`);
+        matrix.appendChild(tr);
+      };
+      addRow(); addRow(); // seed two rows
+      $('#uc-add-row').addEventListener('click', addRow);
+
+      // Threat level selection
+      $$('#uc-threat .threat-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          $$('#uc-threat .threat-btn').forEach((b) => b.classList.remove('ring-2', 'ring-white/40'));
+          btn.classList.add('ring-2', 'ring-white/40');
+          $('#uc-threat-out').textContent = btn.dataset.lvl;
+        });
+      });
+
+      $('#form-B .submit-form').addEventListener('click', () => toast('UC activity log filed (confidential).', 'success'));
+    }
+
+    function wireFormSelector() {
+      const sel = $('#form-selector');
+      sel.addEventListener('change', () => {
+        const a = sel.value === 'A';
+        $('#form-A').classList.toggle('hidden', !a);
+        $('#form-B').classList.toggle('hidden', a);
+      });
+    }
+
+    /* ------------------------------------------------------------------
+     * 10. SEIZURE & COMPENSATION CALCULATOR
+     * ---------------------------------------------------------------- */
+    function renderBracketTable() {
+      const wrap = $('#bracket-table');
+      wrap.innerHTML = `
+        <table class="w-full text-left text-xs">
+          <thead><tr class="bg-ink-800 uppercase tracking-wider text-slate-400">
+            <th class="px-3 py-2 font-semibold">Street Value</th>
+            <th class="px-3 py-2 text-right font-semibold">% Given</th>
+          </tr></thead>
+          <tbody class="divide-y divide-white/5">
+            ${BRACKETS.map((b) => `<tr class="bracket-row" data-min="${b.min}">
+              <td class="px-3 py-2 font-mono text-slate-300">${b.label}</td>
+              <td class="px-3 py-2 text-right font-mono font-semibold text-blue-300">${b.pct}%</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`;
+    }
+
+    function findBracket(value) {
+      return BRACKETS.find((b) => value >= b.min && value <= b.max) || null;
+    }
+
+    function calcSeizure() {
+      const raw = $('#seizure-input').value.replace(/[^0-9.]/g, '');
+      const value = parseFloat(raw) || 0;
+
+      // Highlight matched bracket row
+      $$('.bracket-row').forEach((r) => r.classList.remove('bg-blue-500/10'));
+
+      if (value < BRACKETS[0].min) {
+        $('#out-percent').textContent = '—';
+        $('#out-bracket-label').textContent = value > 0
+          ? 'Below minimum bracket ($1,000,000). No standard split applies.'
+          : 'Enter a value to compute the bracket.';
+        $('#out-comp').textContent = '$0';
+        $('#out-retain').textContent = '$0';
+        $('#bar-comp').style.width = '0%';
+        $('#bar-retain').style.width = '0%';
+        return;
+      }
+
+      const bracket = findBracket(value);
+      const pct = bracket.pct;
+      const comp = value * (pct / 100);       // net compensation given out
+      const retain = value - comp;            // retained to division
+
+      $('#out-percent').textContent = pct + '%';
+      $('#out-bracket-label').textContent = 'Bracket: ' + bracket.label;
+      $('#out-comp').textContent = fmtUSD(comp);
+      $('#out-retain').textContent = fmtUSD(retain);
+      $('#bar-comp').style.width = pct + '%';
+      $('#bar-retain').style.width = (100 - pct) + '%';
+
+      // highlight active bracket
+      const activeRow = $$('.bracket-row').find((r) => Number(r.dataset.min) === bracket.min);
+      if (activeRow) activeRow.classList.add('bg-blue-500/10');
+    }
+
+    function wireCalculator() {
+      const input = $('#seizure-input');
+      // Live thousands formatting as the detective types
+      input.addEventListener('input', () => {
+        const digits = input.value.replace(/[^0-9]/g, '');
+        input.value = digits ? Number(digits).toLocaleString('en-US') : '';
+        calcSeizure();
+      });
+      $('#calc-btn').addEventListener('click', calcSeizure);
+
+      // Seizure log submission + signature timestamp
+      $('#submit-szlog').addEventListener('click', () => {
+        const sig = $('#sig-input').value.trim();
+        if (!sig) { toast('Digital signature required before submission.', 'warn'); return; }
+        toast('Seizure log submitted for Director distribution.', 'success');
+      });
+      $('#sig-input').addEventListener('input', () => {
+        $('#sig-date').value = new Date().toLocaleString('en-US');
+      });
+    }
+
+    /* ------------------------------------------------------------------
+     * 11. CLOCK
+     * ---------------------------------------------------------------- */
+    function tickClock() {
+      const now = new Date();
+      const t = now.toLocaleTimeString('en-US', { hour12: false });
+      $('#clock').textContent = 'Secure link · ' + t;
+    }
+
+    /* ------------------------------------------------------------------
+     * 12. BOOT
+     * ---------------------------------------------------------------- */
+    function init() {
+      // Dashboard
+      renderMetrics();
+      renderTickets();
+      renderActivity();
+      renderBureauLoad();
+      // SOP
+      renderSOP();
+      wireSOPSearch();
+      // Drive
+      renderDrive();
+      // Forms
+      renderFormA();
+      renderFormB();
+      wireFormSelector();
+      // Calculator
+      renderBracketTable();
+      wireCalculator();
+      // Chrome
+      tickClock();
+      setInterval(tickClock, 1000);
+
+      // Honor deep-link hash on load
+      const hash = (location.hash || '').replace('#', '');
+      if (hash && PAGE_META[hash]) navigate(hash);
+
+      // Global search → routes to relevant tab as a convenience
+      $('#global-search').addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        const q = e.target.value.toLowerCase();
+        if (q.includes('sop') || q.includes('policy')) navigate('sop');
+        else if (q.includes('case') || q.includes('ci') || q.includes('seizure')) navigate('drive');
+        else navigate('dashboard');
+        toast('Searching division records for "' + e.target.value + '"…', 'info');
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  })();
+  </script>
+
+  <!-- keyframe for spinners (outside Tailwind) -->
+  <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+</body>
+</html>
