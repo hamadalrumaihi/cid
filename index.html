@@ -130,8 +130,11 @@
   <!-- ====================================================== -->
   <div class="flex min-h-screen">
 
+    <!-- Mobile sidebar backdrop (below lg) -->
+    <div id="sidebar-backdrop" class="fixed inset-0 z-30 hidden bg-ink-950/70 backdrop-blur-sm lg:hidden"></div>
+
     <!-- ============== LEFT SIDEBAR ============== -->
-    <aside class="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-white/5 bg-ink-900/80 backdrop-blur-xl">
+    <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 flex w-64 -translate-x-full flex-col border-r border-white/5 bg-ink-900/95 backdrop-blur-xl transition-transform duration-300 ease-out lg:translate-x-0 lg:bg-ink-900/80">
 
       <!-- Sidebar header -->
       <div class="flex items-center gap-3 border-b border-white/5 px-5 py-5">
@@ -146,6 +149,10 @@
           <h1 class="text-base font-bold tracking-tight text-white">CID Portal</h1>
           <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-blue-300/70">San Andreas</p>
         </div>
+        <!-- Close drawer (mobile only) -->
+        <button id="menu-close" class="ml-auto grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white lg:hidden" aria-label="Close navigation">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
       </div>
 
       <!-- Classification banner -->
@@ -195,13 +202,19 @@
     </aside>
 
     <!-- ============== MAIN CONTENT ============== -->
-    <main class="grid-texture ml-64 flex-1">
+    <main class="grid-texture min-w-0 flex-1 lg:ml-64">
 
       <!-- Top bar -->
-      <header class="sticky top-0 z-20 flex items-center justify-between border-b border-white/5 bg-ink-950/70 px-8 py-4 backdrop-blur-xl">
-        <div>
-          <h2 id="page-title" class="text-lg font-semibold text-white">Operational Dashboard</h2>
-          <p id="page-subtitle" class="text-xs text-slate-400">Case assignment &amp; intake hub</p>
+      <header class="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-white/5 bg-ink-950/70 px-4 py-3.5 backdrop-blur-xl sm:px-8 sm:py-4">
+        <div class="flex min-w-0 items-center gap-3">
+          <!-- Hamburger (mobile only) -->
+          <button id="menu-toggle" class="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg border border-white/10 bg-ink-850 text-slate-200 transition hover:bg-white/10 lg:hidden" aria-label="Open navigation">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+          </button>
+          <div class="min-w-0">
+            <h2 id="page-title" class="truncate text-base font-semibold text-white sm:text-lg">Operational Dashboard</h2>
+            <p id="page-subtitle" class="truncate text-xs text-slate-400">Case assignment &amp; intake hub</p>
+          </div>
         </div>
         <div class="flex items-center gap-3">
           <!-- Global search -->
@@ -209,15 +222,16 @@
             <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             <input id="global-search" type="text" placeholder="Search records, cases, CIs…" class="w-72 rounded-lg border border-white/10 bg-ink-850 py-2 pl-9 pr-3 text-sm text-slate-200 outline-none transition focus:border-badge-500 focus:ring-2 focus:ring-badge-500/30" />
           </div>
-          <div class="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-xs font-medium text-slate-300">
+          <div class="flex flex-shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-ink-850 px-2.5 py-2 text-xs font-medium text-slate-300 sm:px-3">
             <span class="pulse-dot h-2 w-2 rounded-full bg-emerald-400"></span>
-            <span id="clock">Secure link active</span>
+            <span id="clock" class="hidden sm:inline">Secure link active</span>
+            <span class="sm:hidden">Secure</span>
           </div>
         </div>
       </header>
 
       <!-- View container -->
-      <div class="p-8">
+      <div class="p-4 sm:p-6 lg:p-8">
 
         <!-- ====================================================== -->
         <!-- VIEW 1 — DASHBOARD                                     -->
@@ -750,11 +764,44 @@
       if (location.hash !== '#' + tab) history.replaceState(null, '', '#' + tab);
 
       // Scroll content to top on navigation
-      $('main').scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      // On mobile, collapse the drawer after choosing a destination
+      closeDrawer();
     }
 
     // Wire sidebar buttons
     $$('.nav-link').forEach((btn) => btn.addEventListener('click', () => navigate(btn.dataset.tab)));
+
+    /* ---- Mobile navigation drawer ---- */
+    function openDrawer() {
+      $('#sidebar').classList.remove('-translate-x-full');
+      $('#sidebar-backdrop').classList.remove('hidden');
+      document.body.classList.add('overflow-hidden', 'lg:overflow-auto');
+    }
+    function closeDrawer() {
+      // Only the off-canvas (mobile) state needs collapsing; lg keeps it pinned
+      if (window.matchMedia('(min-width: 1024px)').matches) return;
+      $('#sidebar').classList.add('-translate-x-full');
+      $('#sidebar-backdrop').classList.add('hidden');
+      document.body.classList.remove('overflow-hidden', 'lg:overflow-auto');
+    }
+    function wireDrawer() {
+      $('#menu-toggle').addEventListener('click', openDrawer);
+      $('#menu-close').addEventListener('click', closeDrawer);
+      $('#sidebar-backdrop').addEventListener('click', closeDrawer);
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+      // Reset drawer state when crossing the lg breakpoint
+      window.matchMedia('(min-width: 1024px)').addEventListener('change', (e) => {
+        if (e.matches) {
+          $('#sidebar').classList.remove('-translate-x-full');
+          $('#sidebar-backdrop').classList.add('hidden');
+          document.body.classList.remove('overflow-hidden', 'lg:overflow-auto');
+        } else {
+          $('#sidebar').classList.add('-translate-x-full');
+        }
+      });
+    }
 
     /* ------------------------------------------------------------------
      *  4. MODAL ENGINE
@@ -1451,6 +1498,7 @@
       renderBracketTable();
       wireCalculator();
       // Chrome
+      wireDrawer();
       tickClock();
       setInterval(tickClock, 1000);
 
