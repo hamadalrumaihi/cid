@@ -590,7 +590,8 @@
       { title: 'Meritorious Surveillance Badge', who: 'Det. Lena Voss', icon: '🛰️', tint: 'blue', note: 'Sustained covert tracking on Case-9000007.' },
       { title: 'Task Force Command Citation', who: 'Lt. Aria Stone', icon: '🏅', tint: 'violet', note: 'Joint multi-bureau interdiction op.' },
     ];
-    const MEDIA = Store.get('media', null) || [
+    // Seeded here; hydrated from Store inside init() (Store is defined later, so it must not be referenced during data-model setup).
+    const MEDIA = [
       { title: 'Dashcam — Legion Sq stop', type: 'image', src: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=600', kind: 'Image URL', tags: { case:'[LSB] Case-1000001', gang:'', location:'', person:'' } },
       { title: 'Mugshot — Marcus "Tre" Bell', type: 'image', src: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600', kind: 'Image URL', tags: { case:'[LSB] Case-1000007', gang:'Davis Ballas', location:'', person:'Marcus "Tre" Bell' } },
       { title: 'UC body-cam clip', type: 'video', src: '', kind: 'MP4 Video', tags: { case:'[BCB] Case-2000001', gang:'', location:'Sandy Shores', person:'' } },
@@ -1697,6 +1698,8 @@
       renderBenches(); renderBallisticLog();
       $$('.bench-tab').forEach((b) => b.addEventListener('click', () => { benchType = b.dataset.bench; Store.set('benchType', benchType); renderBenches(); }));
       // Personnel + evidence vault
+      const savedMedia = Store.get('media', null);
+      if (Array.isArray(savedMedia)) { MEDIA.length = 0; savedMedia.forEach((m) => MEDIA.push(m)); }
       renderRoster(); renderCommendations(); renderMediaFilters(); renderMedia();
       $('#add-media').addEventListener('click', openMediaModal);
       // M.O.
