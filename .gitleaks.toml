@@ -9,8 +9,11 @@
 useDefault = true
 
 [allowlist]
-description = "Supabase publishable/anon keys are public by design (RLS protects data)"
+description = "Public client-side keys (Supabase publishable + Google Picker) — safe to commit; RLS / Google Drive permissions protect data"
 regexTarget = "match"
 regexes = [
   '''sb_publishable_[A-Za-z0-9_-]{10,}''',
+  # Google OAuth Web client ID + browser API key for the Case Files picker (public, referrer/origin-restricted)
+  '''[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com''',
+  '''AIza[0-9A-Za-z_-]{35}''',
 ]

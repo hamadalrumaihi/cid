@@ -184,6 +184,9 @@
         <button data-tab="drive" data-label="CID General" class="nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
           <span class="nav-icon flex-shrink-0 text-lg">📁</span><span class="nav-label">CID General</span>
         </button>
+        <button data-tab="case-files" data-label="Case Files" class="nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
+          <span class="nav-icon flex-shrink-0 text-lg">🗂️</span><span class="nav-label">Case Files</span>
+        </button>
         <button data-tab="records" data-label="CID Records (Live)" class="nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
           <span class="nav-icon flex-shrink-0 text-lg">🗃️</span><span class="nav-label">CID Records <span class="ml-1 rounded bg-emerald-500/15 px-1 text-[9px] font-semibold uppercase text-emerald-300">live</span></span>
         </button>
@@ -395,6 +398,26 @@
           <div id="drive-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"></div>
         </section>
 
+        <!-- ===================== VIEW: CASE FILES (Google Drive per case) ===================== -->
+        <section id="view-case-files" class="view">
+          <div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+            <div>
+              <h3 class="text-xl font-bold text-white">🗂️ Case Files</h3>
+              <p class="text-sm text-slate-400">Google Drive files organised per case — shared with signed-in members.</p>
+            </div>
+            <div id="cf-auth" class="flex flex-wrap items-center gap-2"></div>
+          </div>
+          <div id="cf-notice" class="mb-4 hidden rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"></div>
+          <div id="cf-toolbar" class="mb-4 hidden flex-wrap items-center gap-2">
+            <input id="cf-case" list="cf-case-list" placeholder="Case number (e.g. [LSB] Case-1000001)" class="w-72 rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
+            <datalist id="cf-case-list"></datalist>
+            <button id="cf-attach" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Attach from Drive</button>
+            <input id="cf-search" placeholder="Filter cases…" class="ml-auto w-48 rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
+            <p class="w-full text-[11px] text-slate-500">💡 A file opens for teammates only if you’ve shared it in Google Drive.</p>
+          </div>
+          <div id="cf-grid" class="space-y-4"></div>
+        </section>
+
         <!-- ===================== VIEW: GANGS & TURF ===================== -->
         <section id="view-gangs" class="view">
           <div class="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
@@ -497,6 +520,7 @@
     <button data-tab="reports" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">📝</span><span class="text-[10px] font-medium">Reports</span></button>
     <button data-tab="rico" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">⚖️</span><span class="text-[10px] font-medium">RICO</span></button>
     <button data-tab="drive" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">📁</span><span class="text-[10px] font-medium">Drive</span></button>
+    <button data-tab="case-files" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🗂️</span><span class="text-[10px] font-medium">Files</span></button>
     <button data-tab="records" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🗃️</span><span class="text-[10px] font-medium">Records</span></button>
   </nav>
 
@@ -515,6 +539,18 @@
     window.CID_SUPABASE = {
       url: 'https://jhxuflzmqspidkvjckox.supabase.co',
       anonKey: 'sb_publishable_sshJXQoxX0NZqUeU-uBObQ_aSgQaHRa'
+    };
+
+    /* ============================================================================
+     *  GOOGLE PICKER CONFIG — for the Case Files tab. All three are PUBLIC
+     *  client-side values (the API key is referrer-restricted; the OAuth client is
+     *  origin-restricted; RLS + Google Drive sharing protect the actual files).
+     *  See supabase/CASE_FILES_SETUP.md for how to create these.
+     * ========================================================================== */
+    window.CID_GOOGLE = {
+      clientId: 'PASTE_OAUTH_WEB_CLIENT_ID.apps.googleusercontent.com',
+      apiKey:   'PASTE_BROWSER_API_KEY',
+      appId:    'PASTE_GCP_PROJECT_NUMBER'
     };
   </script>
 
@@ -741,6 +777,7 @@
       reports:    { title: 'Report Generation', sub: 'Template-driven reports & supplemental chains' },
       rico:       { title: 'RICO Builder', sub: 'Enterprise & predicate-act element tracker' },
       drive:      { title: 'CID General', sub: 'Shared investigative drive' },
+      'case-files': { title: 'Case Files', sub: 'Google Drive files per case' },
       records:    { title: 'CID Records', sub: 'Live shared records (Supabase)' },
     };
 
@@ -2090,15 +2127,19 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
       { key:'last_seen', label:'Last Seen' }, { key:'mugshot_url', label:'Mugshot URL' },
       { key:'notes', label:'Notes', type:'textarea' },
     ];
-    let sb = null;           // supabase client
-    let recSession = null;   // current auth session
+    let sb = null;           // shared supabase client (records + case files)
+    let recSession = null;   // shared auth session
     let recCache = [];       // last fetched records
     let recChannel = null;
 
-    function recConfigured() {
+    // Shared accessors so other modules (e.g. Case Files) reuse one client + session.
+    function cidClient() { return sb; }
+    function cidSession() { return recSession; }
+    function cidConfigured() {
       const c = window.CID_SUPABASE;
       return !!(window.supabase && c && c.url && c.anonKey && !/PASTE_YOUR/.test(c.anonKey));
     }
+    function recConfigured() { return cidConfigured(); }
     function statusTintRec(s) {
       return s === 'Wanted' ? 'bg-rose-500/15 text-rose-300' : s === 'Open' ? 'bg-blue-500/15 text-blue-300'
            : s === 'Cold' ? 'bg-slate-500/20 text-slate-300' : 'bg-emerald-500/15 text-emerald-300';
@@ -2120,8 +2161,8 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
       }
 
       sb = window.supabase.createClient(window.CID_SUPABASE.url, window.CID_SUPABASE.anonKey);
-      sb.auth.getSession().then(({ data }) => { recSession = data.session; renderAuthBar(); fetchRecords(); });
-      sb.auth.onAuthStateChange((_e, session) => { recSession = session; renderAuthBar(); renderRecords(); });
+      sb.auth.getSession().then(({ data }) => { recSession = data.session; renderAuthBar(); fetchRecords(); cfOnAuthChange(); });
+      sb.auth.onAuthStateChange((_e, session) => { recSession = session; renderAuthBar(); renderRecords(); cfOnAuthChange(); });
 
       // Realtime: re-fetch on any change so all open clients stay in sync.
       recChannel = sb.channel('cid_records_live')
@@ -2229,6 +2270,149 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
       openModal(node, { wide: true });
     }
 
+    /* ============================================================ 12B. CASE FILES (Google Drive per case) ============================================================ */
+    let cfCache = [];          // last fetched case_files rows
+    let cfChannel = null;      // realtime channel
+    let cfGoogleReady = null;  // promise once Google libs are loaded
+    let cfTokenClient = null;  // GIS token client
+    let cfAccessToken = null;  // cached Drive access token
+
+    const fileEmoji = (m = '') => /pdf/.test(m) ? '📕' : /image/.test(m) ? '🖼️' : /sheet|excel|csv/.test(m) ? '📊' : /document|word/.test(m) ? '📄' : /folder/.test(m) ? '📁' : '📎';
+    function cfGoogleConfigured() { const g = window.CID_GOOGLE; return !!(g && g.clientId && g.apiKey && g.appId && !/PASTE_/.test(g.clientId) && !/PASTE_/.test(g.apiKey) && !/PASTE_/.test(g.appId)); }
+
+    // Called by the records auth handlers so Case Files reacts to sign-in/out.
+    function cfOnAuthChange() { renderCaseFilesAuth(); if (cidSession() && cidSession().user) fetchCaseFiles(); else { cfCache = []; renderCaseFiles(); } }
+
+    async function cfCaseOptions() {
+      const set = new Set(ACTIVE_CASES);
+      const c = cidClient();
+      if (c && cidSession() && cidSession().user) {
+        const { data } = await c.from('cid_records').select('case_number');
+        (data || []).forEach((r) => { if (r.case_number) set.add(r.case_number); });
+      }
+      cfCache.forEach((f) => { if (f.case_number) set.add(f.case_number); });
+      const dl = $('#cf-case-list'); if (dl) dl.replaceChildren(...[...set].sort().map((cn) => el('option', { value: cn })));
+    }
+
+    function renderCaseFilesAuth() {
+      const bar = $('#cf-auth'); if (!bar) return;
+      const s = cidSession();
+      if (!cidConfigured()) { bar.replaceChildren(el('span', { class: 'text-xs text-slate-500' }, 'offline / unconfigured')); return; }
+      const signedIn = !!(s && s.user);
+      if (signedIn) {
+        const who = (s.user.user_metadata && (s.user.user_metadata.full_name || s.user.user_metadata.name)) || s.user.email || 'Signed in';
+        bar.replaceChildren(el('span', { class: 'rounded-lg bg-white/5 px-3 py-2 text-xs text-slate-300' }, '👤 ' + esc(who)));
+      } else {
+        bar.replaceChildren(el('span', { class: 'text-xs text-slate-400' }, 'Sign in on the CID Records tab to manage files.'));
+      }
+      const tb = $('#cf-toolbar'); if (tb) { tb.classList.toggle('hidden', !signedIn); tb.classList.toggle('flex', signedIn); }
+    }
+
+    async function fetchCaseFiles() {
+      const c = cidClient(); if (!c) return;
+      if (!(cidSession() && cidSession().user)) { cfCache = []; renderCaseFiles(); return; }
+      const { data, error } = await c.from('case_files').select('*').order('case_number').order('created_at');
+      const notice = $('#cf-notice');
+      if (error) { if (notice) { notice.classList.remove('hidden'); notice.textContent = '⚠️ Could not load case files: ' + error.message; } return; }
+      if (notice) notice.classList.add('hidden');
+      cfCache = data || []; cfCaseOptions(); renderCaseFiles();
+    }
+
+    function renderCaseFiles() {
+      const grid = $('#cf-grid'); if (!grid) return;
+      if (!(cidSession() && cidSession().user)) { grid.replaceChildren(el('p', { class: 'text-sm text-slate-500' }, 'Sign in (CID Records tab) to view case files.')); return; }
+      const q = ($('#cf-search') ? $('#cf-search').value : '').trim().toLowerCase();
+      const groups = {};
+      cfCache.forEach((f) => { (groups[f.case_number] = groups[f.case_number] || []).push(f); });
+      const cases = Object.keys(groups).filter((cn) => !q || cn.toLowerCase().includes(q)).sort();
+      if (!cases.length) { grid.replaceChildren(el('p', { class: 'text-sm text-slate-500' }, cfCache.length ? 'No cases match your filter.' : 'No files yet. Pick a case and “Attach from Drive”.')); return; }
+      const cards = cases.map((cn) => el('div', { class: 'overflow-hidden rounded-2xl border border-white/5 bg-ink-900/60' }, `
+        <div class="flex items-center justify-between border-b border-white/5 px-4 py-3"><span class="flex items-center gap-2 font-semibold text-white"><span class="text-lg">📁</span><span class="font-mono text-sm text-blue-300">${esc(cn)}</span></span><span class="text-[11px] text-slate-500">${groups[cn].length} file(s)</span></div>
+        <div class="divide-y divide-white/5">${groups[cn].map((f) => `
+          <div class="flex items-center justify-between gap-3 px-4 py-2.5">
+            <a href="${esc(safeUrl(f.web_view_link))}" target="_blank" rel="noopener noreferrer" class="flex min-w-0 items-center gap-2 text-sm text-slate-200 hover:text-white"><span class="text-lg">${fileEmoji(f.mime_type)}</span><span class="truncate">${esc(f.name)}</span></a>
+            <button class="cf-del flex-shrink-0 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-300 transition hover:bg-rose-500/10 hover:text-rose-300" data-id="${esc(f.id)}">×</button>
+          </div>`).join('')}</div>`));
+      grid.replaceChildren(...cards);
+      grid.querySelectorAll('.cf-del').forEach((b) => b.onclick = () => cfRemove(b.dataset.id));
+    }
+
+    function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.async = true; s.onload = res; s.onerror = () => rej(new Error('load failed: ' + src)); document.head.appendChild(s); }); }
+    function cfEnsureGoogle() {
+      if (cfGoogleReady) return cfGoogleReady;
+      cfGoogleReady = (async () => {
+        await loadScript('https://accounts.google.com/gsi/client');
+        await loadScript('https://apis.google.com/js/api.js');
+        await new Promise((res) => gapi.load('picker', res));
+        cfTokenClient = google.accounts.oauth2.initTokenClient({ client_id: window.CID_GOOGLE.clientId, scope: 'https://www.googleapis.com/auth/drive.file', callback: () => {} });
+      })().catch((e) => { cfGoogleReady = null; throw e; }); // reset so a later click can retry
+      return cfGoogleReady;
+    }
+    function cfGetToken() {
+      return new Promise((resolve, reject) => {
+        cfTokenClient.callback = (resp) => { if (resp.error) { cfAccessToken = null; return reject(new Error(resp.error)); } cfAccessToken = resp.access_token; resolve(resp.access_token); };
+        cfTokenClient.requestAccessToken({ prompt: cfAccessToken ? '' : 'consent' });
+      });
+    }
+    function cfOpenPicker(token, onPicked) {
+      const view = new google.picker.DocsView(google.picker.ViewId.DOCS).setMode(google.picker.DocsViewMode.LIST);
+      const picker = new google.picker.PickerBuilder()
+        .setAppId(window.CID_GOOGLE.appId).setOAuthToken(token).setDeveloperKey(window.CID_GOOGLE.apiKey)
+        .addView(view).addView(new google.picker.DocsView(google.picker.ViewId.FOLDERS).setSelectFolderEnabled(true))
+        .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+        .setCallback((data) => { if (data[google.picker.Response.ACTION] === google.picker.Action.PICKED) onPicked(data[google.picker.Response.DOCUMENTS]); })
+        .build();
+      picker.setVisible(true);
+    }
+
+    async function cfAttach() {
+      const s = cidSession(); if (!(s && s.user)) { toast('Sign in to attach files.', 'warn'); return; }
+      const caseNo = ($('#cf-case').value || '').trim();
+      if (!caseNo) { toast('Enter or pick a case number first.', 'warn'); return; }
+      const notice = $('#cf-notice');
+      if (!cfGoogleConfigured()) { if (notice) { notice.classList.remove('hidden'); notice.replaceChildren(el('span', {}, '⚙️ Google Picker not configured — add the <code>window.CID_GOOGLE</code> keys (see supabase/CASE_FILES_SETUP.md), then reload.')); } return; }
+      try {
+        await cfEnsureGoogle();
+        const token = await cfGetToken();
+        cfOpenPicker(token, async (docs) => {
+          const cur = cidSession();   // re-check: the picker may have been open a while
+          if (!(cur && cur.user)) { toast('Session expired — sign in again on the CID Records tab.', 'warn'); return; }
+          const rows = docs.map((d) => ({
+            case_number: caseNo,
+            drive_file_id: d[google.picker.Document.ID],
+            name: d[google.picker.Document.NAME],
+            mime_type: d[google.picker.Document.MIME_TYPE] || null,
+            icon_url: d[google.picker.Document.ICON_URL] || null,
+            web_view_link: d[google.picker.Document.URL],
+            added_by: cur.user.id,
+          }));
+          const { error } = await cidClient().from('case_files').insert(rows);
+          if (error) { toast('Attach failed: ' + error.message, 'danger'); return; }
+          toast('Attached ' + rows.length + ' file(s) to ' + caseNo, 'success');
+          fetchCaseFiles();
+        });
+      } catch (e) { toast('Google sign-in / picker error: ' + e.message, 'danger'); }
+    }
+
+    async function cfRemove(id) {
+      if (!(cidSession() && cidSession().user)) { toast('Sign in to remove files.', 'warn'); return; }
+      const { error } = await cidClient().from('case_files').delete().eq('id', id);
+      if (error) { toast('Remove failed: ' + error.message, 'danger'); return; }
+      toast('File removed', 'info'); fetchCaseFiles();
+    }
+
+    function initCaseFiles() {
+      const ab = $('#cf-attach'); if (ab) ab.addEventListener('click', cfAttach);
+      const se = $('#cf-search'); if (se) se.addEventListener('input', renderCaseFiles);
+      renderCaseFilesAuth(); renderCaseFiles();
+      if (!cidConfigured()) { const n = $('#cf-notice'); if (n) { n.classList.remove('hidden'); n.textContent = '⚠️ Live backend not configured; Case Files is unavailable.'; } return; }
+      cfCaseOptions();
+      if (cidSession() && cidSession().user) fetchCaseFiles();
+      cfChannel = cidClient().channel('case_files_live')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'case_files' }, fetchCaseFiles)
+        .subscribe();
+    }
+
     /* ============================================================ 13. CLOCK + BOOT ============================================================ */
     function tickClock() { $('#clock').textContent = 'Secure link · ' + new Date().toLocaleTimeString('en-US', { hour12:false }); }
 
@@ -2266,6 +2450,8 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
       renderDrive();
       // Live CID Records (Supabase)
       initRecords();
+      // Case Files (Google Drive per case)
+      initCaseFiles();
       // Chrome
       tickClock(); setInterval(tickClock, 1000); setInterval(tickTrackers, 1000);
 
@@ -2284,6 +2470,7 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
         else if (/report|warrant|affidavit|supplement/.test(q)) navigate('reports');
         else if (/rico|predicate|enterprise|racket/.test(q)) navigate('rico');
         else if (/record|wanted|suspect|live/.test(q)) navigate('records');
+        else if (/case file|attachment|evidence|google drive/.test(q)) navigate('case-files');
         else if (/folder|drive|file|ci/.test(q)) navigate('drive');
         else navigate('command');
         toast('Searching division records for "' + e.target.value + '"…', 'info');
