@@ -6,14 +6,14 @@ The live data lives in Postgres (never committed to the repo).
 - **Migration:** `supabase/migrations/20260615130000_cid_records.sql`
 - **Frontend:** integrated into `index.html` (new **CID Records** tab), using
   `@supabase/supabase-js@2` from CDN.
-- **Project:** `sahp-rbac` (`nuujdewnkovtdvlbfzdx`) — URL already wired in.
+- **Project:** `cid` (`jhxuflzmqspidkvjckox`) — URL + publishable key already wired in.
 
 ## What you must set (one value)
 In `index.html`, find the `window.CID_SUPABASE` block and replace the key:
 
 ```js
 window.CID_SUPABASE = {
-  url: 'https://nuujdewnkovtdvlbfzdx.supabase.co',   // already set
+  url: 'https://jhxuflzmqspidkvjckox.supabase.co',   // already set
   anonKey: 'PASTE_YOUR_ANON_OR_PUBLISHABLE_KEY_HERE'  // <-- paste here
 };
 ```
@@ -40,7 +40,7 @@ window.CID_SUPABASE = {
    - **Site URL:** your GitHub Pages URL (e.g. `https://<user>.github.io/<repo>/`).
    - **Redirect URLs:** add the same URL (and `http://localhost...` if testing locally).
    - Discord OAuth callback (set in the Discord app's redirect list):
-     `https://nuujdewnkovtdvlbfzdx.supabase.co/auth/v1/callback`
+     `https://jhxuflzmqspidkvjckox.supabase.co/auth/v1/callback`
 6. **Paste the anon key** into `index.html` (above), commit, and push to Pages.
 
 ## Behavior
