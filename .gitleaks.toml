@@ -1,0 +1,16 @@
+# gitleaks configuration for the CID Portal
+#
+# The static site intentionally ships a Supabase *publishable* (anon) key in
+# index.html. Publishable keys are PUBLIC by design — Row Level Security is the
+# actual security boundary — so they are safe to commit. This allowlist exempts
+# ONLY the publishable-key pattern; a real service_role / sb_secret_ key would
+# still be flagged.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Supabase publishable/anon keys are public by design (RLS protects data)"
+regexTarget = "match"
+regexes = [
+  '''sb_publishable_[A-Za-z0-9_-]{10,}''',
+]

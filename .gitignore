@@ -1,0 +1,22 @@
+# Security scan artifacts (gitleaks/semgrep/grype/hadolint/opsera)
+*-report.json
+*-stderr.txt
+npm-audit.json
+package-leakage-report.json
+precommit-scan-*.md
+
+# Secrets / local env
+.env
+.env.*
+*.pem
+*.key
+
+# Dependencies / build output
+node_modules/
+dist/
+build/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
