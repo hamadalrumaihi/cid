@@ -97,6 +97,7 @@
     };
     const fmtUSD = (n) => '$' + Math.round(n).toLocaleString('en-US');
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    const escapeHTML = esc;   // alias: 120+ call sites used escapeHTML(), which was never defined (ReferenceError).
     const isDesktop = () => window.matchMedia('(min-width: 1024px)').matches;
 
     function toast(message, type = 'info') {
@@ -1955,7 +1956,10 @@
         return;
       }
 
-      sb = window.supabase.createClient(window.CID_SUPABASE.url, window.CID_SUPABASE.anonKey);
+      // Reuse the single shared client created in supabase.js (window.CIDDB.client)
+      // to avoid a second GoTrueClient instance racing on session refresh.
+      sb = (window.CIDDB && window.CIDDB.client) ? window.CIDDB.client
+         : window.supabase.createClient(window.CID_SUPABASE.url, window.CID_SUPABASE.anonKey);
       sb.auth.getSession().then(({ data }) => { recSession = data.session; renderAuthBar(); fetchRecords(); });
       sb.auth.onAuthStateChange((_e, session) => { recSession = session; renderAuthBar(); renderRecords(); });
 
@@ -1975,22 +1979,9 @@
         bar.querySelector('#rec-logout').onclick = async () => { await sb.auth.signOut(); toast('Signed out', 'info'); };
         $('#rec-new').classList.remove('hidden');
       } else {
-        bar.innerHTML = `
-          <button id="rec-discord" class="flex items-center gap-2 rounded-lg bg-[#5865F2] px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110">Sign in with Discord</button>
-          <div class="flex items-center gap-1">
-            <input id="rec-email" type="email" placeholder="you@email.com" class="w-40 rounded-lg border border-white/10 bg-ink-850 px-2 py-2 text-xs text-white outline-none focus:border-badge-500" />
-            <button id="rec-magic" class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10">Email link</button>
-          </div>`;
-        bar.querySelector('#rec-discord').onclick = async () => {
-          const { error } = await sb.auth.signInWithOAuth({ provider:'discord', options:{ redirectTo: location.href.split('#')[0] } });
-          if (error) toast('Discord sign-in error: ' + error.message, 'danger');
-        };
-        bar.querySelector('#rec-magic').onclick = async () => {
-          const email = bar.querySelector('#rec-email').value.trim();
-          if (!email) { toast('Enter your email first.', 'warn'); return; }
-          const { error } = await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.href.split('#')[0] } });
-          toast(error ? ('Email error: ' + error.message) : 'Magic link sent — check your inbox.', error ? 'danger' : 'success');
-        };
+        // Auth is handled by the global login gate (auth.js). This bar no longer
+        // renders its own OAuth/magic-link buttons, to avoid a duplicate auth path.
+        bar.innerHTML = '<span class="text-xs text-slate-500">Sign in via the portal login screen.</span>';
         $('#rec-new').classList.add('hidden');
       }
     }
