@@ -220,3 +220,16 @@ CSV/JSON import, full case-packet export.
 - Case picker sources live cases. Verified: node --check; clean jsdom load
   (sign-in notice, no errors); live MCP round-trip on `cid` (deploy pending →
   authorize + 18h expiry window) with cleanup.
+
+## Phase 2 — Module migration #8: RICO (this change)
+- **RICO** migrated off localStorage onto Supabase (`rico_cases` + `predicate_acts`,
+  one rico_case per case, created lazily on first action).
+- Predicates can **link to a case's evidence row** (`evidence_id` dropdown of the
+  case's evidence) or a free-text `evidence_ref`; keeps ≥2-within-10-years
+  validation + live readiness meter (red/amber/green).
+- RBAC: enterprise link + add predicate = active members; predicate delete =
+  Director/Command. Predicate Summary .docx export now reads live data.
+- RICO case select sources live cases (uuid). Verified: node --check; clean jsdom
+  load (sign-in notice, no errors); live MCP round-trip on `cid`
+  (rico_case + enterprise + 2 predicates: one evidence-linked, one ref) with
+  cascade-clean delete.
