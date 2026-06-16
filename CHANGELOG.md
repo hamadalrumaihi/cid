@@ -171,3 +171,14 @@ CSV/JSON import, full case-packet export.
   localStorage for now; links by name).
 - Verified: node --check; clean jsdom load (sign-in notice, no errors); live MCP
   round-trip on `cid` (narcotic→precursor→hotspot insert; cascade-clean delete).
+
+## Phase 2 — Module migration #4: Criminal Places (this change)
+- **Places** migrated off localStorage onto Supabase (`places`). FK links to live
+  gangs (controlling_gang_id), cases (case_id), and **narcotics** (narcotic_id).
+- Drug-lab locations show an auto production process derived from the linked
+  narcotic's precursors/hotspots (cross-referencing the live Narcotics module).
+- CRUD with RBAC (create/edit active; delete Director/Command), empty/sign-in
+  states, realtime. PLACES is now a Supabase cache; Gang Detail's "linked
+  properties" reads live places.
+- Verified: node --check; clean jsdom load; live MCP round-trip on `cid`
+  (place linked to gang+case+narcotic) with cleanup.
