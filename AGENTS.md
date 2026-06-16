@@ -30,18 +30,32 @@ Keep it framework-free and match the surrounding style.
 
 | File | Role |
 |---|---|
-| `index.html` | App shell + **every view** (`<section id="view-*">`), nav (`.nav-link`/`.bnav-link`), Tailwind config, CDN scripts, and `window.CID_SUPABASE` config. ~560 lines. |
-| `app.js` | **The entire app.** One big IIFE (~2470 lines). All module logic, the router, DOM helpers, modals, exports. Exposes `window.CIDApp`. |
+| `index.html` | App shell + **every view** (`<section id="view-*">`), nav (`.nav-link`/`.bnav-link`), Tailwind config, CDN scripts, and `window.CID_SUPABASE` config. |
 | `supabase.js` | The data layer. Builds the Supabase client and exposes **`window.CIDDB`** (auth + thin CRUD + realtime). Loaded first. |
-| `auth.js` | Login gate. Drives `body[data-auth]` (`out`/`in`); shows login / pending-approval / app. Calls `window.CIDApp.onAuthed()` once a user is approved. |
+| **feature `*.js`** | The app, **split by feature** (see below). All are **classic scripts that share one global lexical scope** — `const`/`let`/`function` declared in one are visible in the others. **No bundler; load order matters** (set in `index.html`). |
+| `auth.js` | Login gate. Drives `body[data-auth]` (`out`/`in`); shows login / pending-approval / app. Calls `window.CIDApp.onAuthed()` once a user is approved. Loads **last**. |
 | `styles.css` | Small amount of custom CSS (animations, `data-auth` shell hiding, print rules). |
-| `supabase/migrations/*.sql` | Postgres schema, RLS, triggers, realtime, seed data. |
-| `supabase/*.md`, `README.md`, `SETUP.md`, `CHANGELOG.md`, `docs/` | Human docs. |
+| `supabase/migrations/*.sql` | Postgres schema, RLS, triggers, realtime. |
+| `README.md`, `SETUP.md`, `CHANGELOG.md`, `supabase/*.md`, `docs/` | Human docs. |
 
-**Script load order (`index.html` bottom):** `supabase.js` → `app.js` → `auth.js`.
-`app.js` defines `window.CIDApp.onAuthed`; `auth.js` calls it after approval.
-`app.js`'s own `init()` runs on `DOMContentLoaded` (renders chrome + wires events,
-independent of auth).
+### Feature files (load order — contiguous slices of the former monolith)
+`core.js` (data models, utilities, **bulk-import helpers**, router/shell, modal engine) →
+`command.js` → `narcotics.js` → `ballistics.js` → `personnel.js` (roster/commendations/media) →
+`modus.js` → `drive.js` (CID General) → `persons.js` → `gangs.js` → `places.js` →
+`reports.js` → `rico.js` → `docx.js` (dependency-free OOXML writer) → `records.js` →
+`casefiles.js` (cases + evidence + custody + timeline; declares `casesCache`) →
+`app.js` (notifications/admin/case-packet/search + `window.CIDApp.onAuthed` + `init()` + boot).
+
+**Why this works without a build step:** for non-module scripts, top-level `let`/`const`/`class`
+go into the *shared* global lexical environment and `function`/`var` go onto the global object —
+so every file sees every other file's declarations. The split is a **byte-for-byte contiguous
+slice** of the original single IIFE, loaded in original order, so behavior is identical.
+
+**Rules when editing across files:**
+- **Keep load order = original code order.** Don't reorder `<script>` tags; a top-level statement that runs at load (there are only 3: a nav-wiring line in `core.js`, a global click handler in `personnel.js`, and the `DOMContentLoaded` listener in `app.js`) must not reference a symbol declared in a *later* file.
+- Identifiers are **global** — names must stay unique across all files (no redeclaring).
+- Function-to-function calls across files resolve at **runtime** (after all scripts load), so they're order-independent. Only *load-time* references care about order.
+- `app.js` defines `window.CIDApp.onAuthed`; it must load **before** `auth.js`. `init()` runs on `DOMContentLoaded`.
 
 ---
 
@@ -141,9 +155,11 @@ function onEnterGangs() { if (dbReady()) fetchGangs(); else /* notice */; }  // 
 ```
 
 Wiring points:
-- **Router**: in `navigate(tab)` (~line 150) add `if (tab === 'x') onEnterX();`. Tab name = `data-tab` attribute on the nav button.
-- **onAuthed** (~line 2275): add `fetchX();` and, if the view should live-update, `DB().subscribe('x', fetchX);`.
-- **init** (~bottom): wire button click handlers (`$('#add-x').addEventListener('click', …)`) and call the initial `renderX()`.
+- **Router**: in `navigate(tab)` (in `core.js`) add `if (tab === 'x') onEnterX();`. Tab name = `data-tab` attribute on the nav button.
+- **onAuthed** (in `app.js`): add `fetchX();` and, if the view should live-update, `DB().subscribe('x', fetchX);`.
+- **init** (in `app.js`): wire button click handlers (`$('#add-x').addEventListener('click', …)`) and call the initial `renderX()`.
+- Put the module's functions in the matching feature file (or a new one added to the `index.html` load order in the right position).
+- **Bulk import**: add the module to `wireAllImports()` (in `core.js`) with `{ table, label, allow, required, num/bool/lower/upper, after }` to get a CSV/JSON Import button next to its "+ New" action.
 
 **Cross-entity lookups** resolve FK ids to labels from caches, e.g.
 `caseNumById(id)` (from `casesCache`), `officerName(id)` (from `PROFILES`),
@@ -218,7 +234,7 @@ Severity: 🔴 act soon · 🟡 worth fixing · 🟢 informational / by-design.
 
 ### Code / repo health
 7. 🟡 **Orphaned migration files** not applied to live (see §8) — risk that an agent reads them as truth. Consider deleting or moving to `docs/` to avoid confusion.
-8. 🟢 **`app.js` is a ~2470-line monolith IIFE.** Intentional (no build step) but the single biggest maintainability risk. If it keeps growing, consider splitting into a few `<script>` files sharing `window.CIDApp` — but only with the team's buy-in; don't refactor silently.
+8. 🟢 ~~`app.js` is a ~2470-line monolith~~ **RESOLVED** — split into 16 feature files (shared global scope, no build step). See §2.
 9. 🟢 **A couple of hardcoded display strings in `index.html`** (e.g. the Drive header "11 folders") are not data-driven; harmless but can drift from `FOLDER_META`.
 10. 🟢 **CI Risk Matrix** in the Drive is a *live computed read-only view* from a static `CI_MATRIX` array (no CI table exists). If CIs become real data, add a table and replace the `content.view='matrix'` special-case in `openDocument`.
 
