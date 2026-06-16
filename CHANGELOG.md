@@ -93,3 +93,22 @@ hidden when logged out; `app.js` still initializes; records nav intact.
 - Configure Google + Discord providers in the dashboard to test real sign-in.
 - Then: per-module localStorage→Supabase data layer, Case Detail + Evidence UI,
   RBAC-aware edit affordances, notifications, analytics, PDF, seed removal.
+
+### Applied to the live `cid` project (this turn)
+- Applied `20260616090000_platform.sql` to project `cid` (jhxuflzmqspidkvjckox):
+  27 platform tables created with RLS, alongside the pre-existing `cid_records`
+  (2 rows) + `case_files` — no collisions, no data loss.
+- Ran the Supabase **security advisor**; fixed a real finding: `bootstrap_command`
+  (SECURITY DEFINER, no internal guard) was REST-callable by anon/authenticated —
+  a self-promotion-to-Command hole. Revoked execute from anon/authenticated/public
+  (SQL-editor only). Trimmed `assign_member` from anon (still callable by
+  authenticated Command users; internally guarded).
+- Remaining advisor notes (not addressed here): `case_files.cf_delete USING(true)`
+  is a pre-existing user table (left untouched); leaked-password protection is an
+  auth setting irrelevant to our OAuth + magic-link flow.
+
+### To make auth functional (your dashboard steps)
+1. Authentication → Providers: enable **Google** + **Discord** (creds + the
+   `https://jhxuflzmqspidkvjckox.supabase.co/auth/v1/callback` redirect).
+2. Authentication → URL Configuration: set Site URL + Redirect URLs to your Pages URL.
+3. Sign in once, then SQL editor: `select public.bootstrap_command('<your-login-email>');`

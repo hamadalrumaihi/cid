@@ -427,3 +427,9 @@ create index on public.notifications (user_id, read);
 
 -- RLS helper functions must be callable by the policy evaluator (the caller).
 grant execute on all functions in schema private to authenticated;
+
+-- ---------- Harden SECURITY DEFINER RPCs (advisor 0028/0029) ----------
+-- bootstrap_command has NO internal guard (run from SQL editor / service_role only) -> keep off the API.
+revoke execute on function public.bootstrap_command(text) from anon, authenticated, public;
+-- assign_member is internally guarded by is_command(); just keep anon out.
+revoke execute on function public.assign_member(uuid, public.app_role, public.bureau, boolean) from anon, public;
