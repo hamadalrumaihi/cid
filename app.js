@@ -209,6 +209,7 @@
     const PAGE_META = {
       command:    { title: 'Central Command', sub: 'Case assignment & operational hub' },
       cases:      { title: 'Case Files', sub: 'Live case records, evidence & chain-of-custody' },
+      persons:    { title: 'Persons', sub: 'Suspects & persons of interest (live)' },
       narcotics:  { title: 'Narcotics Intelligence', sub: 'Drug processing & market analytics' },
       ballistics: { title: 'Ballistics & Logistics', sub: 'Weapon benches & component tracing' },
       personnel:  { title: 'Personnel & Roster', sub: 'Commendations & media intake vault' },
@@ -233,6 +234,8 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
       closeDrawer();
       if (tab === 'cases' && typeof onEnterCases === 'function') onEnterCases();
+      if (tab === 'persons' && typeof onEnterPersons === 'function') onEnterPersons();
+      if (tab === 'gangs' && typeof onEnterGangs === 'function') onEnterGangs();
     }
     $$('.nav-link, .bnav-link').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.tab)));
 
@@ -1140,21 +1143,9 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
     const PLACE_TYPES = ['Drug Lab', 'Stash House', 'Dead Drop', 'Front Business', 'Chop Shop'];
     const RICO_PREDICATES = ['Drug Trafficking', 'Extortion', 'Money Laundering', 'Witness Tampering', 'Murder-for-Hire', 'Illegal Firearms Trafficking', 'Bribery', 'Obstruction of Justice', 'Kidnapping', 'Loan Sharking', 'Robbery'];
 
-    let GANGS = Store.get('gangs', null) || [
-      { id:'g1', name:'Davis Ballas', colors:'Purple', threat:'High',
-        turf:[ {block:'Davis Blocks', density:'High', hotspot:'Davis'}, {block:'Strawberry Ave', density:'Medium', hotspot:'Strawberry'} ],
-        members:[
-          {name:'Marcus "Tre" Bell', rank:'Leadership', cs:'—', mug:'', ccw:'Yes', vch:7, felonies:7, status:'At Large'},
-          {name:'Dion Park', rank:'Enforcer', cs:'—', mug:'', ccw:'Yes', vch:5, felonies:5, status:'In Custody'},
-          {name:'Omar Reyes', rank:'Soldier', cs:'—', mug:'', ccw:'No', vch:1, felonies:1, status:'At Large'},
-        ],
-        properties:[ {name:'Forum Dr. stash', type:'Stash House', loc:'Davis', case:'[LSB] Case-1000007'}, {name:'Black Sandking', type:'Vehicle', loc:'Mobile', case:'[LSB] Case-1000001'} ] },
-      { id:'g2', name:'Vagos Cartel Cell', colors:'Yellow', threat:'High',
-        turf:[ {block:'East Vinewood', density:'Medium', hotspot:'Rancho'} ],
-        members:[ {name:'"Ghost"', rank:'Leadership', cs:'—', mug:'', ccw:'Yes', vch:9, felonies:9, status:'At Large'} ],
-        properties:[ {name:'Sandy CNC foundry', type:'Warehouse', loc:'Sandy Shores', case:'[SAB] Case-9000001'} ] },
-    ];
-    const saveGangs = () => Store.set('gangs', GANGS);
+    // Gangs are now Supabase-backed; GANGS is a read cache used by gang/place/media/rico pickers.
+    let GANGS = [];
+    let PERSONS = [];   // Supabase-sourced cache of persons for link pickers
 
     let PLACES = Store.get('places', null) || [
       { id:'p1', name:'Sandy Shores Trailer Lab', type:'Drug Lab', area:'Sandy Shores', gangId:'g2', case:'[BCB] Case-2000001', drug:'Blue Meth' },
@@ -1198,91 +1189,258 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
       return '';
     }
 
-    /* ============================================================ 11A. GANGS & TURF ============================================================ */
-    const threatTint = (t) => t==='High' ? 'text-rose-300 bg-rose-500/10 border-rose-500/20' : t==='Medium' ? 'text-amber-300 bg-amber-500/10 border-amber-500/20' : 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20';
-    function renderGangs() {
-      const grid = $('#gang-grid'); grid.innerHTML = '';
-      if (!GANGS.length) { grid.innerHTML = '<p class="text-sm text-slate-500">No gangs on file. Use “+ New Gang”.</p>'; return; }
-      GANGS.forEach((g) => {
-        const card = el('div', { class:'rounded-2xl border border-white/5 bg-ink-900/60 p-6' });
-        const byRank = RANKS.map((r) => ({ r, list: g.members.filter((m) => m.rank === r) })).filter((x) => x.list.length);
+    /* ============================================================ 11A. PERSONS (Supabase) ============================================================ */
+    const RANK_SUGGEST = ['Leadership', 'Lieutenant', 'Enforcer', 'Soldier', 'Associate', 'CI'];
+    const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+    const threatTint = (t) => t === 'high' ? 'text-rose-300 bg-rose-500/10 border-rose-500/20' : t === 'medium' ? 'text-amber-300 bg-amber-500/10 border-amber-500/20' : 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20';
+    const gangNameById = (id) => { const g = GANGS.find((x) => x.id === id); return g ? g.name : null; };
+
+    function personsNotice(m) { $('#persons-grid').innerHTML = `<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">${m}</div>`; }
+    function onEnterPersons() { if (dbReady()) fetchPersons(); else personsNotice('Live person records require sign-in.'); }
+    async function fetchPersons() {
+      if (!dbReady()) { personsNotice('Live person records require sign-in.'); return; }
+      $('#persons-live').classList.remove('hidden'); $('#persons-live').classList.add('inline-flex');
+      try { PERSONS = await DB().list('persons', { order: 'updated_at', ascending: false }); renderPersons(); }
+      catch (e) { personsNotice('Could not load persons: ' + escapeHTML(e.message || String(e))); }
+    }
+    function renderPersons() {
+      const grid = $('#persons-grid'); if (!grid) return;
+      const q = ($('#person-search') ? $('#person-search').value : '').trim().toLowerCase();
+      const items = PERSONS.filter((p) => !q || JSON.stringify(p).toLowerCase().includes(q));
+      $('#person-new').classList.toggle('hidden', !(DB() && DB().canEdit()));
+      if (!items.length) { personsNotice(PERSONS.length ? 'No persons match your filter.' : 'No persons on file.' + (DB() && DB().canEdit() ? ' Use “+ New Person”.' : '')); return; }
+      grid.innerHTML = '';
+      items.forEach((p) => {
+        const flag = (p.felony_count || 0) >= 8;
+        const card = el('div', { class: 'rounded-2xl border border-white/5 bg-ink-900/60 p-5' });
         card.innerHTML = `
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div><h4 class="text-lg font-bold text-white">${esc(g.name)}</h4><p class="mt-0.5 text-xs text-slate-400">Colors: ${esc(g.colors||'—')} · ${g.members.length} members · ${g.properties.length} properties</p></div>
-            <div class="flex items-center gap-2">
-              <span class="rounded-md border px-2.5 py-1 text-[10px] font-semibold uppercase ${threatTint(g.threat)}">${esc(g.threat)} Threat</span>
-              <button class="g-edit rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>
-              <button class="g-del rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10">✕</button>
-            </div>
+          <div class="flex items-start gap-3">
+            ${p.mugshot_url ? `<img src="${escapeHTML(p.mugshot_url)}" class="h-14 w-14 flex-shrink-0 rounded-lg object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="hidden h-14 w-14 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-xl">👤</div>` : `<div class="grid h-14 w-14 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-xl">👤</div>`}
+            <div class="min-w-0 flex-1"><p class="truncate font-semibold text-white">${escapeHTML(p.name)}${flag ? ' <span title="≥8 violent felonies">🚨</span>' : ''}</p><p class="text-xs text-slate-400">${p.alias ? '“' + escapeHTML(p.alias) + '” · ' : ''}${escapeHTML(p.status || '')}</p>
+              <p class="mt-1 text-[11px] text-slate-500">${p.gang_id ? '🚩 ' + escapeHTML(gangNameById(p.gang_id) || 'Gang') + ' · ' : ''}CCW ${p.ccw ? 'Yes' : 'No'} · VCH ${p.vch || 0} · Felonies ${p.felony_count || 0}</p></div>
+            ${DB() && DB().canEdit() ? '<button class="p-edit rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>' : ''}
           </div>
-          <div class="mt-4 space-y-4">
-            ${byRank.map((grp) => `<div><p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-blue-300/70">${grp.r} (${grp.list.length})</p><div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              ${grp.list.map((m) => `<div class="flex items-center gap-3 rounded-lg border border-white/5 bg-ink-850 p-2.5">
-                ${m.mug ? `<img src="${esc(m.mug)}" class="h-10 w-10 flex-shrink-0 rounded-md object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="hidden h-10 w-10 flex-shrink-0 place-items-center rounded-md bg-ink-700 text-sm">👤</div>` : `<div class="grid h-10 w-10 flex-shrink-0 place-items-center rounded-md bg-ink-700 text-sm">👤</div>`}
-                <div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold text-white">${esc(m.name)}</p><p class="text-[11px] text-slate-400">${esc(m.status)} · CCW ${esc(m.ccw)} · VCH ${m.vch}</p></div>
-                ${m.felonies>=8?'<span class="flex-shrink-0 text-rose-400" title="≥8 violent felonies">🚨</span>':''}
-              </div>`).join('')}
-            </div></div>`).join('')}
-          </div>
-          <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div><p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-blue-300/70">Properties</p><div class="space-y-1.5">${g.properties.map((p)=>`<div class="flex items-center justify-between rounded-lg bg-ink-850 px-3 py-1.5 text-xs"><span class="text-slate-200">${esc(p.name)} <span class="text-slate-500">· ${esc(p.type)}</span></span><span class="font-mono text-[11px] text-blue-300">${esc(p.case||p.loc)}</span></div>`).join('')||'<p class="text-xs text-slate-500">None</p>'}</div></div>
-            <div><p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-blue-300/70">Turf Blocks</p><div class="space-y-1.5">${g.turf.map((t)=>`<div class="flex items-center justify-between rounded-lg bg-ink-850 px-3 py-1.5 text-xs"><span class="text-slate-200">${esc(t.block)}</span><span class="rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${densTint(t.density)}">${esc(t.density)}</span></div>`).join('')||'<p class="text-xs text-slate-500">None</p>'}</div></div>
-          </div>`;
-        card.querySelector('.g-edit').addEventListener('click', () => openGangModal(g));
-        card.querySelector('.g-del').addEventListener('click', () => { if (confirm(`Delete gang "${g.name}"?`)) { GANGS = GANGS.filter((x) => x.id !== g.id); saveGangs(); renderGangs(); toast('Gang record deleted', 'warn'); } });
+          ${p.notes ? `<p class="mt-3 line-clamp-2 text-xs text-slate-400">${escapeHTML(p.notes)}</p>` : ''}`;
+        const eb = card.querySelector('.p-edit'); if (eb) eb.onclick = () => openPersonModal(p);
         grid.appendChild(card);
       });
     }
-    function openGangModal(existing) {
-      const g = existing ? JSON.parse(JSON.stringify(existing)) : { id: uid('g'), name:'', colors:'', threat:'Medium', turf:[], members:[], properties:[] };
-      const node = el('div', { class:'p-6' });
-      const caseOpts = ['', ...ACTIVE_CASES];
-      const memberRow = (m = {name:'',rank:'Soldier',cs:'',mug:'',ccw:'No',vch:0,felonies:0,status:'At Large'}) => `
-        <div class="m-row grid grid-cols-12 gap-2 rounded-lg border border-white/5 bg-ink-900 p-2">
-          <input class="m-name col-span-12 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white sm:col-span-4" placeholder="Name" value="${esc(m.name)}" />
-          <select class="m-rank col-span-6 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white sm:col-span-3">${RANKS.map((r)=>`<option ${r===m.rank?'selected':''}>${r}</option>`).join('')}</select>
-          <input class="m-mug col-span-6 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white sm:col-span-5" placeholder="Mugshot URL" value="${esc(m.mug)}" />
-          <select class="m-ccw col-span-4 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white sm:col-span-3"><option ${m.ccw==='No'?'selected':''}>No</option><option ${m.ccw==='Yes'?'selected':''}>Yes</option></select>
-          <input type="number" class="m-vch col-span-4 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white sm:col-span-2" placeholder="VCH" value="${m.vch}" />
-          <input type="number" class="m-fel col-span-4 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white sm:col-span-2" placeholder="Felonies" value="${m.felonies}" />
-          <input class="m-status col-span-10 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white sm:col-span-4" placeholder="Status" value="${esc(m.status)}" />
-          <button class="m-del col-span-2 rounded bg-white/5 text-xs text-rose-300 transition hover:bg-rose-500/10 sm:col-span-1">✕</button>
-        </div>`;
-      const propRow = (p = {name:'',type:'Stash House',loc:'',case:''}) => `
-        <div class="p-row grid grid-cols-12 gap-2 rounded-lg border border-white/5 bg-ink-900 p-2">
-          <input class="p-name col-span-12 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white sm:col-span-4" placeholder="Property name" value="${esc(p.name)}" />
-          <select class="p-type col-span-6 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white sm:col-span-3">${PROP_TYPES.map((t)=>`<option ${t===p.type?'selected':''}>${t}</option>`).join('')}</select>
-          <input class="p-loc col-span-6 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white sm:col-span-2" placeholder="Location" value="${esc(p.loc)}" />
-          <select class="p-case col-span-10 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white sm:col-span-2">${caseOpts.map((c)=>`<option value="${esc(c)}" ${c===p.case?'selected':''}>${c||'— case —'}</option>`).join('')}</select>
-          <button class="p-del col-span-2 rounded bg-white/5 text-xs text-rose-300 transition hover:bg-rose-500/10 sm:col-span-1">✕</button>
-        </div>`;
+    function openPersonModal(record) {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      const p = record || {};
+      const node = el('div', { class: 'p-6' });
+      const gangOpts = ['<option value="">— no gang —</option>'].concat(GANGS.map((g) => `<option value="${g.id}" ${g.id === p.gang_id ? 'selected' : ''}>${escapeHTML(g.name)}</option>`)).join('');
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${existing?'Edit':'New'} Gang</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div class="sm:col-span-1"><label class="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input id="g-name" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" value="${esc(g.name)}" /></div>
-          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Colors</label><input id="g-colors" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" value="${esc(g.colors)}" /></div>
-          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Threat Level</label><select id="g-threat" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${['Low','Medium','High'].map((t)=>`<option ${t===g.threat?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Person</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input data-k="name" value="${escapeHTML(p.name || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Alias</label><input data-k="alias" value="${escapeHTML(p.alias || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Gang</label><select data-k="gang_id" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${gangOpts}</select></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Status</label><input data-k="status" value="${escapeHTML(p.status || 'Person of Interest')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">CCW</label><select data-k="ccw" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option value="false" ${!p.ccw ? 'selected' : ''}>No</option><option value="true" ${p.ccw ? 'selected' : ''}>Yes</option></select></div>
+          <div class="grid grid-cols-2 gap-3"><div><label class="mb-1 block text-xs font-semibold text-slate-400">VCH</label><input type="number" data-k="vch" value="${p.vch || 0}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div><div><label class="mb-1 block text-xs font-semibold text-slate-400">Felonies</label><input type="number" data-k="felony_count" value="${p.felony_count || 0}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div></div>
+          <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Mugshot URL</label><input data-k="mugshot_url" value="${escapeHTML(p.mugshot_url || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Notes</label><textarea data-k="notes" rows="3" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${escapeHTML(p.notes || '')}</textarea></div>
         </div>
-        <div class="mt-4"><label class="mb-1 block text-xs font-semibold text-slate-400">Turf Blocks <span class="text-slate-500">(one per line — Block | Density | Hotspot)</span></label><textarea id="g-turf" rows="2" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-xs text-white outline-none focus:border-badge-500" placeholder="Davis Blocks | High | Davis">${g.turf.map((t)=>`${t.block} | ${t.density} | ${t.hotspot||''}`).join('\n')}</textarea></div>
-        <div class="mt-4"><div class="mb-2 flex items-center justify-between"><label class="text-xs font-semibold text-slate-400">Members by Rank</label><button id="add-member" class="rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-200 hover:bg-white/10">+ Member</button></div><div id="members" class="space-y-2">${g.members.map(memberRow).join('')}</div></div>
-        <div class="mt-4"><div class="mb-2 flex items-center justify-between"><label class="text-xs font-semibold text-slate-400">Properties</label><button id="add-prop" class="rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-200 hover:bg-white/10">+ Property</button></div><div id="props" class="space-y-2">${g.properties.map(propRow).join('')}</div></div>
-        <button id="g-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save Gang</button>`;
+        <div class="mt-5 flex gap-2">
+          <button id="p-save" class="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">${record ? 'Save changes' : 'Create person'}</button>
+          ${record && DB().canDelete() ? '<button id="p-del" class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>' : ''}
+        </div>`;
       node.querySelector('.close-x').onclick = closeModal;
-      const bind = () => { node.querySelectorAll('.m-del').forEach((b)=>b.onclick=()=>b.closest('.m-row').remove()); node.querySelectorAll('.p-del').forEach((b)=>b.onclick=()=>b.closest('.p-row').remove()); };
-      bind();
-      node.querySelector('#add-member').onclick = () => { node.querySelector('#members').insertAdjacentHTML('beforeend', memberRow()); bind(); };
-      node.querySelector('#add-prop').onclick = () => { node.querySelector('#props').insertAdjacentHTML('beforeend', propRow()); bind(); };
-      node.querySelector('#g-save').onclick = () => {
-        const name = node.querySelector('#g-name').value.trim();
-        if (!name) { toast('Gang name is required.', 'warn'); return; }
-        g.name = name; g.colors = node.querySelector('#g-colors').value.trim(); g.threat = node.querySelector('#g-threat').value;
-        g.turf = node.querySelector('#g-turf').value.split('\n').map((l)=>l.trim()).filter(Boolean).map((l)=>{ const [block,density,hotspot]=l.split('|').map((x)=>(x||'').trim()); return {block, density:density||'Low', hotspot:hotspot||''}; });
-        g.members = $$('.m-row', node).map((r)=>({ name:$('.m-name',r).value.trim(), rank:$('.m-rank',r).value, cs:'', mug:$('.m-mug',r).value.trim(), ccw:$('.m-ccw',r).value, vch:Number($('.m-vch',r).value)||0, felonies:Number($('.m-fel',r).value)||0, status:$('.m-status',r).value.trim()||'Unknown' })).filter((m)=>m.name);
-        g.properties = $$('.p-row', node).map((r)=>({ name:$('.p-name',r).value.trim(), type:$('.p-type',r).value, loc:$('.p-loc',r).value.trim(), case:$('.p-case',r).value })).filter((p)=>p.name);
-        if (existing) { const i = GANGS.findIndex((x)=>x.id===g.id); GANGS[i] = g; } else GANGS.push(g);
-        saveGangs(); renderGangs(); closeModal(); toast(`Gang "${g.name}" saved`, 'success');
+      node.querySelector('#p-save').onclick = async () => {
+        const payload = {}; $$('[data-k]', node).forEach((f) => payload[f.dataset.k] = f.value.trim());
+        if (!payload.name) { toast('Name is required.', 'warn'); return; }
+        payload.ccw = payload.ccw === 'true'; payload.vch = Number(payload.vch) || 0; payload.felony_count = Number(payload.felony_count) || 0;
+        if (!payload.gang_id) payload.gang_id = null;
+        const res = record && record.id ? await DB().update('persons', record.id, payload) : await DB().insert('persons', payload);
+        if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast(record ? 'Person updated' : 'Person created', 'success'); fetchPersons();
+      };
+      const pd = node.querySelector('#p-del'); if (pd) pd.onclick = async () => {
+        if (!confirm('Delete person “' + p.name + '”?')) return;
+        const r = await DB().remove('persons', p.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; }
+        closeModal(); toast('Person deleted', 'warn'); fetchPersons();
       };
       openModal(node, { wide: true });
+    }
+
+    /* ============================================================ 11A2. GANGS & TURF (Supabase) ============================================================ */
+    function gangsNotice(m) { $('#gang-grid').innerHTML = `<div class="xl:col-span-2 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">${m}</div>`; }
+    function showGangsList() { $('#gang-detail').classList.add('hidden'); $('#gangs-list').classList.remove('hidden'); }
+    function onEnterGangs() { showGangsList(); if (dbReady()) fetchGangs(); else gangsNotice('Live gang records require sign-in.'); }
+    async function fetchGangs() {
+      if (!dbReady()) { gangsNotice('Live gang records require sign-in.'); return; }
+      $('#gangs-live').classList.remove('hidden'); $('#gangs-live').classList.add('inline-flex');
+      try { GANGS = await DB().list('gangs', { order: 'name', ascending: true }); renderGangs(); }
+      catch (e) { gangsNotice('Could not load gangs: ' + escapeHTML(e.message || String(e))); }
+    }
+    function renderGangs() {
+      const grid = $('#gang-grid'); if (!grid) return;
+      const q = ($('#gang-search') ? $('#gang-search').value : '').trim().toLowerCase();
+      const items = GANGS.filter((g) => !q || JSON.stringify(g).toLowerCase().includes(q));
+      const addBtn = $('#add-gang'); if (addBtn) addBtn.classList.toggle('hidden', !(DB() && DB().canEdit()));
+      if (!items.length) { gangsNotice(GANGS.length ? 'No gangs match your filter.' : 'No gangs on file.' + (DB() && DB().canEdit() ? ' Use “+ New Gang”.' : '')); return; }
+      grid.innerHTML = '';
+      items.forEach((g) => {
+        const card = el('div', { class: 'cursor-pointer rounded-2xl border border-white/5 bg-ink-900/60 p-6 transition hover:border-blue-500/30 hover:bg-white/5' });
+        card.innerHTML = `
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div><h4 class="text-lg font-bold text-white">${escapeHTML(g.name)}</h4><p class="mt-0.5 text-xs text-slate-400">Colors: ${escapeHTML(g.colors || '—')}</p></div>
+            <span class="rounded-md border px-2.5 py-1 text-[10px] font-semibold uppercase ${threatTint(g.threat_level)}">${escapeHTML(cap(g.threat_level))} Threat</span>
+          </div>
+          ${g.notes ? `<p class="mt-3 line-clamp-2 text-xs text-slate-400">${escapeHTML(g.notes)}</p>` : ''}
+          <p class="mt-3 text-[11px] text-blue-300">View roster &amp; turf →</p>`;
+        card.addEventListener('click', () => openGangDetail(g.id));
+        grid.appendChild(card);
+      });
+    }
+    function openGangModal(record) {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      const g = record || {};
+      const node = el('div', { class: 'p-6' });
+      node.innerHTML = `
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Gang</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input data-k="name" value="${escapeHTML(g.name || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Colors</label><input data-k="colors" value="${escapeHTML(g.colors || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Threat Level</label><select data-k="threat_level" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${['low', 'medium', 'high'].map((t) => `<option value="${t}" ${t === (g.threat_level || 'medium') ? 'selected' : ''}>${cap(t)}</option>`).join('')}</select></div>
+          <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Notes</label><textarea data-k="notes" rows="3" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${escapeHTML(g.notes || '')}</textarea></div>
+        </div>
+        <button id="g-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">${record ? 'Save changes' : 'Create gang'}</button>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#g-save').onclick = async () => {
+        const payload = {}; $$('[data-k]', node).forEach((f) => payload[f.dataset.k] = f.value.trim());
+        if (!payload.name) { toast('Gang name is required.', 'warn'); return; }
+        const res = record && record.id ? await DB().update('gangs', record.id, payload) : await DB().insert('gangs', payload);
+        if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast(record ? 'Gang updated' : 'Gang created', 'success'); fetchGangs();
+        if (record && record.id) openGangDetail(record.id);
+      };
+      openModal(node, { wide: true });
+    }
+    let detailGang = null;
+    async function openGangDetail(id) {
+      if (!dbReady()) { toast('Sign-in required.', 'warn'); return; }
+      try {
+        const rows = await DB().list('gangs', { eq: { id: id } });
+        detailGang = rows[0]; if (!detailGang) { toast('Gang not found.', 'warn'); return; }
+        $('#gangs-list').classList.add('hidden'); $('#gang-detail').classList.remove('hidden');
+        await renderGangDetail();
+      } catch (e) { toast('Load failed: ' + (e.message || e), 'danger'); }
+    }
+    async function renderGangDetail() {
+      const g = detailGang, canEdit = DB() && DB().canEdit(), canDel = DB() && DB().canDelete();
+      let members = [], turf = [], places = [];
+      try {
+        [members, turf, places] = await Promise.all([
+          DB().list('gang_members', { eq: { gang_id: g.id } }),
+          DB().list('gang_turf', { eq: { gang_id: g.id } }),
+          DB().list('places', { eq: { controlling_gang_id: g.id } })
+        ]);
+      } catch (e) {}
+      const ranks = {}; members.forEach((m) => { const r = m.rank || 'Unranked'; (ranks[r] = ranks[r] || []).push(m); });
+      $('#gang-detail').innerHTML = `
+        <button id="gang-back" class="mb-4 inline-flex items-center gap-1 text-sm text-slate-300 transition hover:text-white">← All gangs</button>
+        <div class="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div><h3 class="text-xl font-bold text-white">${escapeHTML(g.name)}</h3><p class="mt-1 text-sm text-slate-400">Colors: ${escapeHTML(g.colors || '—')}</p>${g.notes ? `<p class="mt-1 text-sm text-slate-400">${escapeHTML(g.notes)}</p>` : ''}</div>
+            <div class="flex items-center gap-2">
+              <span class="rounded-md border px-2.5 py-1 text-[10px] font-semibold uppercase ${threatTint(g.threat_level)}">${escapeHTML(cap(g.threat_level))} Threat</span>
+              ${canEdit ? '<button id="gang-edit" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>' : ''}
+              ${canDel ? '<button id="gang-del" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>' : ''}
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div class="lg:col-span-2 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+            <div class="mb-3 flex items-center justify-between"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Roster (${members.length})</h4>${canEdit ? '<button id="member-new" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ Member</button>' : ''}</div>
+            ${members.length ? Object.keys(ranks).map((rk) => `<div class="mb-4"><p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-blue-300/70">${escapeHTML(rk)} (${ranks[rk].length})</p><div class="grid grid-cols-1 gap-2 sm:grid-cols-2">${ranks[rk].map(memberCard).join('')}</div></div>`).join('') : '<p class="text-sm text-slate-500">No members yet.</p>'}
+          </div>
+          <div class="space-y-6">
+            <div class="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+              <div class="mb-3 flex items-center justify-between"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Turf (${turf.length})</h4>${canEdit ? '<button id="turf-new" class="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">+ Turf</button>' : ''}</div>
+              <div class="space-y-2">${turf.length ? turf.map((t) => `<div class="flex items-center justify-between rounded-lg bg-ink-850 px-3 py-1.5 text-xs"><span class="text-slate-200">${escapeHTML(t.block)}${t.hotspot_area ? ' · ' + escapeHTML(t.hotspot_area) : ''}</span><span class="flex items-center gap-2"><span class="rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${densTint(cap(t.density))}">${escapeHTML(cap(t.density))}</span>${canDel ? `<button class="turf-del text-rose-300" data-id="${t.id}">✕</button>` : ''}</span></div>`).join('') : '<p class="text-xs text-slate-500">No turf logged.</p>'}</div>
+            </div>
+            <div class="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+              <h4 class="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">Linked Properties (${places.length})</h4>
+              <div class="space-y-2">${places.length ? places.map((p) => `<div class="rounded-lg bg-ink-850 px-3 py-1.5 text-xs text-slate-200">${escapeHTML(p.name)} <span class="text-slate-500">· ${escapeHTML(p.type)}</span></div>`).join('') : '<p class="text-xs text-slate-500">No linked places. (Set a controlling gang on a Place.)</p>'}</div>
+            </div>
+          </div>
+        </div>`;
+      $('#gang-back').onclick = showGangsList;
+      const ge = $('#gang-edit'); if (ge) ge.onclick = () => openGangModal(detailGang);
+      const gd = $('#gang-del'); if (gd) gd.onclick = async () => {
+        if (!confirm('Delete gang “' + g.name + '”? This removes its members & turf.')) return;
+        const r = await DB().remove('gangs', g.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; }
+        toast('Gang deleted', 'warn'); showGangsList(); fetchGangs();
+      };
+      const mn = $('#member-new'); if (mn) mn.onclick = () => openMemberModal(g.id, null);
+      const tn = $('#turf-new'); if (tn) tn.onclick = () => openTurfModal(g.id);
+      $$('.m-edit', $('#gang-detail')).forEach((b) => b.onclick = () => { const m = members.find((x) => x.id === b.dataset.id); openMemberModal(g.id, m); });
+      $$('.turf-del', $('#gang-detail')).forEach((b) => b.onclick = async () => { await DB().remove('gang_turf', b.dataset.id); renderGangDetail(); });
+    }
+    function memberCard(m) {
+      const flag = (m.felony_count || 0) >= 8, canEdit = DB() && DB().canEdit();
+      return `<div class="flex items-center gap-3 rounded-lg border border-white/5 bg-ink-850 p-2.5">
+        ${m.mugshot_url ? `<img src="${escapeHTML(m.mugshot_url)}" class="h-10 w-10 flex-shrink-0 rounded-md object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="hidden h-10 w-10 flex-shrink-0 place-items-center rounded-md bg-ink-700 text-sm">👤</div>` : `<div class="grid h-10 w-10 flex-shrink-0 place-items-center rounded-md bg-ink-700 text-sm">👤</div>`}
+        <div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold text-white">${escapeHTML(m.name)}${flag ? ' 🚨' : ''}</p><p class="text-[11px] text-slate-400">${escapeHTML(m.status || '')} · CCW ${m.ccw ? 'Yes' : 'No'} · VCH ${m.vch || 0}</p></div>
+        ${canEdit ? `<button class="m-edit flex-shrink-0 rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10" data-id="${m.id}">Edit</button>` : ''}
+      </div>`;
+    }
+    function openMemberModal(gangId, member) {
+      const m = member || {};
+      const node = el('div', { class: 'p-6' });
+      const personOpts = ['<option value="">— link person (optional) —</option>'].concat(PERSONS.map((p) => `<option value="${p.id}" ${p.id === m.person_id ? 'selected' : ''}>${escapeHTML(p.name)}</option>`)).join('');
+      const caseOpts = ['<option value="">— link case (optional) —</option>'].concat(casesCache.map((c) => `<option value="${c.id}" ${c.id === m.case_id ? 'selected' : ''}>${escapeHTML(c.case_number)}</option>`)).join('');
+      node.innerHTML = `
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${member ? 'Edit' : 'Add'} Member</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input data-k="name" value="${escapeHTML(m.name || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Rank</label><input data-k="rank" list="rank-list" value="${escapeHTML(m.rank || 'Soldier')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /><datalist id="rank-list">${RANK_SUGGEST.map((r) => `<option value="${r}">`).join('')}</datalist></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Callsign</label><input data-k="callsign" value="${escapeHTML(m.callsign || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Status</label><input data-k="status" value="${escapeHTML(m.status || 'At Large')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Link Person</label><select data-k="person_id" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${personOpts}</select></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Link Case</label><select data-k="case_id" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${caseOpts}</select></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">CCW</label><select data-k="ccw" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option value="false" ${!m.ccw ? 'selected' : ''}>No</option><option value="true" ${m.ccw ? 'selected' : ''}>Yes</option></select></div>
+          <div class="grid grid-cols-2 gap-3"><div><label class="mb-1 block text-xs font-semibold text-slate-400">VCH</label><input type="number" data-k="vch" value="${m.vch || 0}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div><div><label class="mb-1 block text-xs font-semibold text-slate-400">Felonies</label><input type="number" data-k="felony_count" value="${m.felony_count || 0}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div></div>
+          <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Mugshot URL</label><input data-k="mugshot_url" value="${escapeHTML(m.mugshot_url || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+        </div>
+        <div class="mt-5 flex gap-2">
+          <button id="m-save" class="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">${member ? 'Save' : 'Add member'}</button>
+          ${member && DB().canDelete() ? '<button id="m-del" class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>' : ''}
+        </div>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#m-save').onclick = async () => {
+        const payload = { gang_id: gangId }; $$('[data-k]', node).forEach((f) => payload[f.dataset.k] = f.value.trim());
+        if (!payload.name) { toast('Name is required.', 'warn'); return; }
+        payload.ccw = payload.ccw === 'true'; payload.vch = Number(payload.vch) || 0; payload.felony_count = Number(payload.felony_count) || 0;
+        if (!payload.person_id) payload.person_id = null; if (!payload.case_id) payload.case_id = null;
+        const res = member && member.id ? await DB().update('gang_members', member.id, payload) : await DB().insert('gang_members', payload);
+        if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast('Member saved', 'success'); renderGangDetail();
+      };
+      const md = node.querySelector('#m-del'); if (md) md.onclick = async () => { await DB().remove('gang_members', member.id); closeModal(); toast('Member removed', 'warn'); renderGangDetail(); };
+      openModal(node, { wide: true });
+    }
+    function openTurfModal(gangId) {
+      const node = el('div', { class: 'p-6' });
+      node.innerHTML = `
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Add Turf Block</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="space-y-3">
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Block / Territory *</label><input data-k="block" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Density</label><select data-k="density" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Hotspot Area</label><input data-k="hotspot_area" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+        </div>
+        <button id="t-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Add Turf</button>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#t-save').onclick = async () => {
+        const payload = { gang_id: gangId }; $$('[data-k]', node).forEach((f) => payload[f.dataset.k] = f.value.trim());
+        if (!payload.block) { toast('Block is required.', 'warn'); return; }
+        const res = await DB().insert('gang_turf', payload);
+        if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast('Turf added', 'success'); renderGangDetail();
+      };
+      openModal(node, { wide: false });
     }
 
     /* ============================================================ 11B. CRIMINAL PLACES + PRODUCTION ============================================================ */
@@ -1459,7 +1617,7 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
           <p class="mb-2 text-xs font-semibold uppercase tracking-wider text-blue-300/70">① Enterprise</p>
           <p class="mb-3 text-xs text-slate-400">Link the defined criminal organization (a gang) that constitutes the enterprise.</p>
           <select id="rico-gang" class="w-full rounded-lg border border-white/10 bg-ink-850 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500"><option value="">— select enterprise —</option>${GANGS.map((g)=>`<option value="${g.id}" ${g.id===r.enterpriseGangId?'selected':''}>${esc(g.name)}</option>`).join('')}</select>
-          <div class="mt-3 rounded-lg border ${enterpriseOK?'border-emerald-500/20 bg-emerald-500/5':'border-white/10 bg-ink-850'} p-3 text-xs"><span class="${enterpriseOK?'text-emerald-300':'text-slate-400'}">${enterpriseOK?`✓ Enterprise: ${esc(gang?gang.name:'—')} (${gang?gang.members.length:0} members)`:'✗ No enterprise defined'}</span></div>
+          <div class="mt-3 rounded-lg border ${enterpriseOK?'border-emerald-500/20 bg-emerald-500/5':'border-white/10 bg-ink-850'} p-3 text-xs"><span class="${enterpriseOK?'text-emerald-300':'text-slate-400'}">${enterpriseOK?`✓ Enterprise: ${esc(gang?gang.name:'—')}${gang&&gang.threat_level?` (${cap(gang.threat_level)} threat)`:''}`:'✗ No enterprise defined'}</span></div>
         </div>
         <div class="rounded-2xl border border-white/5 bg-ink-900/60 p-6 lg:col-span-1">
           <div class="mb-2 flex items-center justify-between"><p class="text-xs font-semibold uppercase tracking-wider text-blue-300/70">② Pattern of Racketeering</p><button id="rico-add" class="rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-200 hover:bg-white/10">+ Predicate</button></div>
@@ -1505,7 +1663,7 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
       const caseId = $('#rico-case').value; const r = ricoOf(caseId);
       const gang = GANGS.find((g) => g.id === r.enterpriseGangId);
       const paras = [ {text:'Criminal Investigation Division — State of San Andreas', style:'subtitle'}, {text:'RICO Predicate Summary', style:'title'}, {text:`${caseId}  ·  Prepared ${new Date().toLocaleDateString('en-US')}`, style:'subtitle'}, {text:'', style:'normal'},
-        {text:'Enterprise', style:'heading'}, {text: gang ? `${gang.name} — ${gang.members.length} members, threat ${gang.threat}` : 'Not defined', style:'normal'},
+        {text:'Enterprise', style:'heading'}, {text: gang ? `${gang.name}${gang.threat_level ? ' — threat ' + gang.threat_level : ''}` : 'Not defined', style:'normal'},
         {text:'Pattern of Racketeering — Predicate Acts', style:'heading'} ];
       if (!r.predicates.length) paras.push({text:'No predicate acts logged.', style:'normal'});
       r.predicates.forEach((p, i) => paras.push({text:`${i+1}. ${p.type} — ${p.date||'no date'} — evidence: ${p.evidence||'none'}${p.note?(' — '+p.note):''}`, style:'normal'}));
@@ -1912,8 +2070,12 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
     // Re-fetch when auth resolves (called by auth.js) and subscribe to realtime.
     window.CIDApp = window.CIDApp || {};
     window.CIDApp.onAuthed = function () {
-      fetchCases();
-      if (dbReady()) { DB().subscribe('cases', fetchCases); }
+      fetchCases(); fetchGangs(); fetchPersons();
+      if (dbReady()) {
+        DB().subscribe('cases', fetchCases);
+        DB().subscribe('gangs', fetchGangs);
+        DB().subscribe('persons', fetchPersons);
+      }
     };
 
     /* ============================================================ 13. CLOCK + BOOT ============================================================ */
@@ -1941,8 +2103,13 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
       // M.O.
       $('#mo-run').addEventListener('click', renderMO);
       $('#mo-sample').addEventListener('click', () => { $('#mo-input').value = SAMPLE_MO; renderMO(); });
-      // Gangs
-      renderGangs(); $('#add-gang').addEventListener('click', () => openGangModal(null));
+      // Gangs (Supabase) + Persons (Supabase) — fetch via onAuthed / onEnter*
+      $('#add-gang').addEventListener('click', () => openGangModal(null));
+      $('#gang-refresh').addEventListener('click', fetchGangs);
+      $('#gang-search').addEventListener('input', renderGangs);
+      $('#person-new').addEventListener('click', () => openPersonModal(null));
+      $('#person-refresh').addEventListener('click', fetchPersons);
+      $('#person-search').addEventListener('input', renderPersons);
       // Criminal places
       renderPlaces(); $('#add-place').addEventListener('click', () => openPlaceModal(null));
       // Reports

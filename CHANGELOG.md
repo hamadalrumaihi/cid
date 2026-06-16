@@ -141,3 +141,20 @@ persons/suspects, gangs (+members→persons), places, narcotics/ballistics hotsp
 links, reports (finalize + e-sign + PDF), trackers (server-side + notify), RICO (pull
 predicates from evidence), audit-log feed + analytics on Central Command, seed removal +
 CSV/JSON import, full case-packet export.
+
+## Phase 2 — Module migration #2: Persons + Gangs (this change)
+- Added `gang_turf` table + free-text `gang_members.rank` (migration
+  `20260616093000_gang_turf_member_rank.sql`; applied to project `cid`).
+- **Persons** (new tab, Supabase): suspects/POI CRUD with gang link, CCW/VCH/
+  felony fields (≥8 flag), mugshot, notes; filter + realtime; delete gated to
+  Director/Command.
+- **Gangs** migrated OFF localStorage onto Supabase: list + record CRUD, and a
+  **Gang Detail** with rank-grouped **member** sub-CRUD (members link to a
+  Person and a Case), **turf** sub-CRUD, and read-only **linked properties**
+  (places whose controlling_gang = this gang). `GANGS` is now a Supabase read
+  cache feeding the place/media/RICO gang pickers.
+- Fixed RICO references that used the old localStorage gang shape
+  (`.members`/`.threat`) → now use `threat_level`.
+- Verified: node --check; clean jsdom load (both tabs, proper sign-in notices,
+  no errors); live MCP round-trip on `cid` (gang→person→member(person+case)→turf
+  insert with full FK chain; cascade-clean delete).
