@@ -191,3 +191,18 @@ CSV/JSON import, full case-packet export.
   Director/Command delete); empty/sign-in states; realtime.
 - Verified: node --check; clean jsdom load; live MCP round-trip on `cid`
   (bench with text[] arrays + footprint linked to gang+case) with cleanup.
+
+## Phase 2 — Module migration #6: Reports (this change)
+- **Reports** migrated off localStorage onto Supabase (`reports`): per-case
+  chains (Initial → Supplemental #N → Follow-up #N), server-persisted with
+  jsonb fields; seq computed server-side; case dropdown + RICO select now source
+  live cases (uuid value, case_number label) and refresh after cases load.
+- **Finalize + e-signature**: lock-on-finalize sets `finalized` + `signature`
+  (officer + badge + timestamp); finalized reports show a signature block and the
+  lock badge.
+- **PDF export** via jsPDF (CDN, graceful offline fallback) alongside the existing
+  dependency-free .docx writer; both include the signature block; Print preserved.
+- autoVal now resolves case_number/bureau/detective from live caches.
+- Verified: node --check; clean jsdom load (5 templates, sign-in notice, no
+  errors); live MCP round-trip on `cid` (report insert with jsonb fields +
+  finalize/signature update) with cascade-clean delete.
