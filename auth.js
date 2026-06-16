@@ -7,6 +7,7 @@
 (function () {
   'use strict';
 
+  var lastSession = null;   // retained so the top bar can re-render after LOA toggles
   function setState(s) { document.body.setAttribute('data-auth', s); }
   function gateBody(html) { var b = document.getElementById('gate-body'); if (b) b.innerHTML = html; }
 
@@ -54,16 +55,24 @@
       slot = document.createElement('div'); slot.id = 'auth-slot'; slot.className = 'flex flex-shrink-0 items-center gap-2';
       (header.lastElementChild || header).appendChild(slot);
     }
+    lastSession = session;
     var name = (profile && profile.display_name) || (session.user && session.user.email) || 'Officer';
     var av = profile && profile.avatar_url;
+    var onLoa = !!(profile && profile.loa);
     slot.innerHTML =
       '<span class="hidden items-center gap-2 rounded-lg bg-white/5 px-2.5 py-2 text-xs text-slate-200 sm:flex">' +
         (av ? '<img src="' + av + '" class="h-5 w-5 rounded-full object-cover" alt="" />' : '👤') + ' ' + name +
         (profile ? ' · <span class="uppercase text-blue-300">' + profile.role + '</span>' : '') +
       '</span>' +
+      (onLoa ? '<span class="rounded-lg bg-amber-500/15 px-2 py-2 text-[11px] font-semibold uppercase text-amber-300" title="You are marked On LOA">On LOA</span>' : '') +
+      '<button id="auth-loa" class="rounded-lg border px-2.5 py-2 text-xs font-semibold transition ' + (onLoa ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300 hover:bg-emerald-500/10' : 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10') + '">' + (onLoa ? 'Clear LOA' : 'Set LOA') + '</button>' +
       '<button id="auth-out" class="rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-white/10">Sign out</button>';
+    var loaBtn = document.getElementById('auth-loa');
+    if (loaBtn) loaBtn.onclick = function () { if (window.CIDApp && window.CIDApp.setMyLoa) window.CIDApp.setMyLoa(!onLoa); };
     document.getElementById('auth-out').onclick = function () { window.CIDDB.signOut(); };
   }
+  window.CIDApp = window.CIDApp || {};
+  window.CIDApp.refreshAuthBar = function () { if (window.CIDDB && window.CIDDB.me && lastSession) showApp(window.CIDDB.me, lastSession); };
 
   async function evaluate() {
     if (!window.CIDDB || !window.CIDDB.ready) {

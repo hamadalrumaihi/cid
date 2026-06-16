@@ -100,6 +100,7 @@
     };
     const fmtUSD = (n) => '$' + Math.round(n).toLocaleString('en-US');
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    const escapeHTML = esc;   // alias: feature files use escapeHTML; both share one scope
     const isDesktop = () => window.matchMedia('(min-width: 1024px)').matches;
 
     function toast(message, type = 'info') {

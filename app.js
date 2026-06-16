@@ -5,7 +5,7 @@
 
     /* ============================================================ 15. NOTIFICATIONS / ADMIN / CASE PACKET / SEARCH ============================================================ */
     let NOTIFS = [];
-    const NOTIF_LABEL = { tracker_pending: 'Tracker awaiting co-sign', tracker_authorized: 'Tracker authorized', case_assigned: 'Case assigned', report_finalized: 'Report finalized', rico_ready: 'RICO elements satisfied' };
+    const NOTIF_LABEL = { tracker_pending: 'Tracker awaiting co-sign', tracker_authorized: 'Tracker authorized', case_assigned: 'Case assigned', report_finalized: 'Report finalized', rico_ready: 'RICO elements satisfied', signoff_waiting: 'Case awaiting your sign-off', signoff_approved: 'Case sign-off approved', signoff_denied: 'Case sign-off denied', signoff_changes: 'Sign-off — changes requested', signoff_escalated: 'Case auto-escalated (LOA)', signoff_heads_up: 'Deputy approved a case' };
     async function fetchNotifications() {
       if (!dbReady()) return;
       try { NOTIFS = await DB().list('notifications', { order: 'created_at', ascending: false }); } catch (e) { NOTIFS = []; }
@@ -18,8 +18,20 @@
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
         <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Notifications</h3><div class="flex items-center gap-2">${NOTIFS.some((n) => !n.read) ? '<button id="notif-readall" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 hover:bg-white/10">Mark all read</button>' : ''}<button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
-        <div class="space-y-2">${NOTIFS.length ? NOTIFS.map((n) => `<div class="rounded-lg border ${n.read ? 'border-white/5 bg-ink-900' : 'border-blue-500/20 bg-blue-500/5'} p-3"><div class="flex items-center justify-between"><span class="text-sm font-semibold text-white">${esc(NOTIF_LABEL[n.type] || n.type)}</span><span class="text-[11px] text-slate-500">${timeAgo(n.created_at)}</span></div>${n.payload && (n.payload.tracker_code || n.payload.target) ? `<p class="mt-1 text-xs text-slate-400">${esc([n.payload.tracker_code, n.payload.target].filter(Boolean).join(' · '))}</p>` : ''}</div>`).join('') : '<p class="text-sm text-slate-500">No notifications.</p>'}</div>`;
+        <div class="space-y-2">${NOTIFS.length ? NOTIFS.map((n) => {
+          const p = n.payload || {};
+          const detail = p.case_number || p.tracker_code || p.target;
+          const sub = p.reason || [p.tracker_code, p.target].filter(Boolean).join(' · ');
+          const linkable = !!p.case_id;
+          return `<div data-case="${linkable ? esc(p.case_id) : ''}" class="notif-row rounded-lg border ${n.read ? 'border-white/5 bg-ink-900' : 'border-blue-500/20 bg-blue-500/5'} p-3 ${linkable ? 'cursor-pointer transition hover:border-blue-500/40' : ''}">
+            <div class="flex items-center justify-between gap-2"><span class="text-sm font-semibold text-white">${esc(NOTIF_LABEL[n.type] || n.type)}</span><span class="flex-shrink-0 text-[11px] text-slate-500">${timeAgo(n.created_at)}</span></div>
+            ${detail ? `<p class="mt-0.5 font-mono text-[11px] text-blue-300">${esc(detail)}${p.detective ? ' · ' + esc(p.detective) : ''}</p>` : ''}
+            ${sub ? `<p class="mt-1 text-xs text-slate-400">${esc(sub)}</p>` : ''}
+            ${linkable ? '<p class="mt-1 text-[11px] font-semibold text-blue-300">View case →</p>' : ''}
+          </div>`;
+        }).join('') : '<p class="text-sm text-slate-500">No notifications.</p>'}</div>`;
       node.querySelector('.close-x').onclick = closeModal;
+      node.querySelectorAll('.notif-row[data-case]').forEach((row) => { if (!row.dataset.case) return; row.onclick = () => { closeModal(); if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(row.dataset.case); }; });
       const ra = node.querySelector('#notif-readall');
       if (ra) ra.onclick = async () => { const ids = NOTIFS.filter((n) => !n.read).map((n) => n.id); for (const id of ids) { try { await DB().update('notifications', id, { read: true }); } catch (e) {} } toast('Marked read', 'info'); closeModal(); fetchNotifications(); };
       openModal(node);
@@ -36,7 +48,7 @@
           <h4 class="mb-1 text-sm font-semibold uppercase tracking-wider text-amber-300/80">⚙️ Member Administration (Director / Command)</h4>
           <p class="mb-4 text-xs text-slate-400">Approve and assign officers. New sign-ins are inactive until activated.</p>
           <div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead><tr class="text-[11px] uppercase tracking-wider text-slate-400"><th class="px-3 py-2">Officer</th><th class="px-3 py-2">Role</th><th class="px-3 py-2">Bureau</th><th class="px-3 py-2">Active</th><th class="px-3 py-2"></th></tr></thead>
-          <tbody class="divide-y divide-white/5">${rows.map((p) => `<tr class="${p.active ? '' : 'bg-amber-500/5'}"><td class="px-3 py-2"><p class="text-white">${esc(p.display_name)}</p><p class="text-[11px] text-slate-500">${esc(p.email || '')}</p></td><td class="px-3 py-2 text-slate-300">${esc(p.role)}</td><td class="px-3 py-2 text-slate-300">${esc(p.division)}</td><td class="px-3 py-2">${p.active ? '<span class="text-emerald-300">Yes</span>' : '<span class="text-amber-300">Pending</span>'}</td><td class="px-3 py-2 text-right"><button class="adm-edit rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 hover:bg-white/10" data-id="${p.id}">Manage</button></td></tr>`).join('') || '<tr><td colspan="5" class="px-3 py-3 text-slate-500">No profiles yet.</td></tr>'}</tbody></table></div>
+          <tbody class="divide-y divide-white/5">${rows.map((p) => `<tr class="${p.active ? '' : 'bg-amber-500/5'}"><td class="px-3 py-2"><p class="text-white">${esc(p.display_name)} ${p.loa ? '<span class="ml-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-300">On LOA</span>' : ''}</p><p class="text-[11px] text-slate-500">${esc(p.email || '')}</p></td><td class="px-3 py-2 text-slate-300">${esc(ROLE_LABEL[p.role] || p.role)}</td><td class="px-3 py-2 text-slate-300">${esc(p.division)}</td><td class="px-3 py-2">${p.active ? '<span class="text-emerald-300">Yes</span>' : '<span class="text-amber-300">Pending</span>'}</td><td class="px-3 py-2 text-right"><button class="adm-edit rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 hover:bg-white/10" data-id="${p.id}">Manage</button></td></tr>`).join('') || '<tr><td colspan="5" class="px-3 py-3 text-slate-500">No profiles yet.</td></tr>'}</tbody></table></div>
         </div>`;
       wrap.querySelectorAll('.adm-edit').forEach((b) => b.onclick = () => openAssignModal(PROFILES.find((p) => p.id === b.dataset.id)));
     }
@@ -47,15 +59,18 @@
         <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Manage Officer</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <p class="mb-4 text-sm text-slate-300">${esc(p.display_name)} <span class="text-slate-500">· ${esc(p.email || '')}</span></p>
         <div class="grid grid-cols-2 gap-3">
-          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Role</label><select id="adm-role" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${['detective', 'supervisor', 'command', 'director'].map((r) => `<option ${r === p.role ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Role</label><select id="adm-role" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${['detective', 'senior_detective', 'bureau_lead', 'supervisor', 'deputy_director', 'command', 'director'].map((r) => `<option value="${r}" ${r === p.role ? 'selected' : ''}>${esc(ROLE_LABEL[r] || r)}</option>`).join('')}</select></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Bureau</label><select id="adm-bureau" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${['LSB', 'BCB', 'SAB', 'JTF'].map((b) => `<option ${b === p.division ? 'selected' : ''}>${b}</option>`).join('')}</select></div>
         </div>
         <label class="mt-3 flex items-center gap-2 text-sm text-slate-200"><input id="adm-active" type="checkbox" ${p.active ? 'checked' : ''} class="accent-emerald-500" /> Active (approved for access)</label>
+        <label class="mt-2 flex items-center gap-2 text-sm text-slate-200"><input id="adm-loa" type="checkbox" ${p.loa ? 'checked' : ''} class="accent-amber-500" /> On LOA (Leave of Absence) — informational; auto-routes sign-offs around this officer</label>
         <button id="adm-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save</button>`;
       node.querySelector('.close-x').onclick = closeModal;
       node.querySelector('#adm-save').onclick = async () => {
         const res = await DB().rpc('assign_member', { target: p.id, new_role: node.querySelector('#adm-role').value, new_division: node.querySelector('#adm-bureau').value, set_active: node.querySelector('#adm-active').checked });
         if (res.error) { toast('Update failed: ' + res.error.message, 'danger'); return; }
+        const loaWanted = node.querySelector('#adm-loa').checked;
+        if (loaWanted !== !!p.loa && typeof setOfficerLoa === 'function') { const lr = await setOfficerLoa(p.id, loaWanted); if (lr && lr.error) { toast('Role saved; LOA update failed: ' + lr.error.message, 'warn'); } }
         closeModal(); toast('Member updated', 'success'); fetchProfiles().then(renderAdmin);
       };
       openModal(node);

@@ -1,5 +1,60 @@
 # CHANGELOG — CID Portal → Production Platform
 
+## Phase 5 — Case sign-off workflow + LOA (Tom Wood / 934 workflow)
+Verified first that none of the 7 requested features existed; all were added.
+Also caught and fixed pre-existing split bugs found while wiring this in.
+
+### Bugs fixed (pre-existing, from the monolith→multi-file split)
+- **`casefiles.js` was never added to `index.html`** — so `DB()`, `dbReady()`,
+  `casesCache`, `openCaseDetail`, and the entire `CIDApp.onAuthed` boot/fetch/
+  subscribe routine were undefined. `auth.js` called `CIDApp.onAuthed` with
+  nothing defining it: the authed app never loaded its data. Wired the script in.
+- **`escapeHTML` used 120× across 9 files but never defined** (only `esc`
+  existed). Added `const escapeHTML = esc;` alias in `core.js`. This had been
+  breaking ballistics, gangs, persons, places, narcotics, cases, and trackers.
+
+### Added — features (all were missing)
+- **(1) LOA flag** — `profiles.loa` + `loa_since`. Self-toggle in the top bar
+  (`auth.js`) and on the officer's own Personnel card; admins/Command/Director
+  can set it via the Member Administration modal. Shown as an "On LOA" badge on
+  roster cards and the admin table. LOA never blocks sign-off; it only steers
+  routing.
+- **(2) Sign-off submission UI** — new "Sign-Off" tab in Case Detail. Owners
+  (Detective/Senior Detective) submit; reviewers Approve / Deny / Request
+  changes (with notes). `signoff.js`.
+- **(3) Auto-routing with LOA handling** — Detective → Bureau Lead → Deputy
+  Director → Director. Skips a rank when its only members are on LOA / inactive,
+  prefers the non-LOA officer when several share a rank (same-bureau Bureau Lead
+  preferred), and escalates to the next rank when all are out. Director is final.
+  Auto-escalation writes a history entry and an explaining notification. (Unit-
+  tested across 7 scenarios.)
+- **(4) Sign-off notifications** — `signoff_waiting`, `signoff_approved`,
+  `signoff_denied`, `signoff_changes`, `signoff_escalated`, `signoff_heads_up`.
+  Each carries case number, detective, reason, and `case_id`; the notifications
+  panel now renders the reason and is click-through to the case. Deputy approval
+  sends the Director a heads-up even when no action is required.
+- **(5) Case status tracking** — `cases.signoff_status` (none → awaiting_bureau_
+  lead → awaiting_deputy → approved_deputy → [approved_complete | awaiting_
+  director → ready_doj], plus changes_requested / denied). Shown on case cards,
+  the detail header, the overview, and a live chain-progress strip. Append-only
+  `case_signoff_history` log (who/what/when, with notes). Realtime re-render of
+  open Case Detail + history.
+- **(6) Stop-point option** — after Deputy approval the owner chooses **Mark
+  Approved & Complete** or **Escalate to Director**; the Director can still
+  approve or send back if escalated.
+- **(7) Ownership vs sign-off separation** — ownership stays on
+  `cases.lead_detective_id` (owner selector in the case modal, gated to Bureau
+  Lead / Deputy Director / Director / Command). Sign-off never changes ownership
+  and ownership never auto-escalates; reassignment is explicit only.
+
+### Schema / roles
+- `supabase/migrations/20260616200000_case_signoff_loa.sql` — LOA columns,
+  `cases` sign-off columns, append-only `case_signoff_history` (+RLS +realtime).
+- Per Tom's choice, added dedicated chain roles to `app_role`:
+  `senior_detective`, `bureau_lead`, `deputy_director` (non-breaking ADD VALUE;
+  legacy `supervisor`→Bureau Lead and `command`→Deputy Director still honored by
+  the router). Admin role picker updated with friendly labels.
+
 ## Phase 4 — Official SOPs/forms + Director as supreme role
 ### Added — CID General document library (live `documents` rows, fully editable)
 - `supabase/migrations/20260616180000_sop_templates.sql` seeds the org-standard
