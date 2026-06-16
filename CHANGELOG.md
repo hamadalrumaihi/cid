@@ -1,5 +1,38 @@
 # CHANGELOG — CID Portal → Production Platform
 
+## Phase 4 — Official SOPs/forms + Director as supreme role
+### Added — CID General document library (live `documents` rows, fully editable)
+- `supabase/migrations/20260616180000_sop_templates.sql` seeds the org-standard
+  paperwork and reference material (idempotent upsert on the `(folder,name)` key):
+  - **Forms/**: CID Investigative Report, Raid Seizure Value Distribution &
+    Allocation Form, UC Operation Activity Report (blank, reusable templates).
+  - **SOP/Training/**: CID Standard Operating Procedure (Titles 1–12) and the
+    CID Case Building Playbook.
+  - **Case assignment Help??!?/**: CID Case Assignment Procedure (7 steps).
+  - **Resources/**: CID Roster (CID + FDU) and Gang Fact Sheet.
+  - These are official org documents, not demo case data; they open as editable
+    paperwork and export to .docx like any other Drive file.
+  - Applied live to the `cid` Supabase project (all 8 documents verified present).
+
+### Changed — Director is now the supreme role, above all ranks
+- Per CID SOP Title 2A.1 ("the CID Director is the senior authority within the
+  division"), Director gains full administrative authority equal-or-above Command.
+- `supabase/migrations/20260616190000_director_supreme.sql`: redefines
+  `private.is_command()` to accept `('director','command')`, so every gate that
+  used it (the `profiles_command` policy, `assign_member`, the self-escalation
+  block) now treats Director as a full administrator. Adds a `bootstrap_director`
+  helper. `can_delete()` already included director. Applied live and verified.
+- Client (`supabase.js`): added `isAdmin()` (director **or** command);
+  `canDelete()` now delegates to it.
+- Client (`app.js`): Member Administration panel now shows for Director or
+  Command; role dropdown reordered so **director** reads as the top rank.
+
+### Fixed
+- Restored the split-shell `app.js` after a `main` merge had re-inlined the old
+  monolith on top of the 16 feature files (duplicate init / double routing).
+
+---
+
 ## Phase 1 — Backend foundation (this change)
 Goal: stand up the Supabase backend that every module will migrate onto, with
 real RBAC. No working front-end logic was rewritten in this phase.
