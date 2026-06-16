@@ -39,7 +39,6 @@
 
     /* ---- Personnel ---- */
     // Personnel/media/commendations are Supabase-backed caches (see fetch* in modules).
-    let ROSTER = [];
     let COMMENDATIONS = [];
     let MEDIA = [];
     let mediaFilter = 'all';
@@ -54,24 +53,22 @@
 
 
     /* ---- Drive ---- */
-    const DRIVE_FOLDERS = [
-      { name: '**Joint Task Force Cases', modified: '16/03/2026', star: 2, accent: 'amber', files: [ {n:'JTF-Master-Index.sheet',t:'sheet'}, {n:'Operation Crosshair (active).doc',t:'doc'}, {n:'Inter-Agency MOU.pdf',t:'pdf'} ] },
-      { name: '*Blaine County Bureau Cases', modified: '16/03/2026', star: 1, accent: 'emerald', files: [ {n:'[BCB] Case-2000001 — Sandy Shores Meth.doc',t:'doc'}, {n:'[BCB] Case-2000004 (COLD).doc',t:'doc'}, {n:'BCB Case Log.sheet',t:'sheet'} ] },
-      { name: '*Los Santos Bureau Cases', modified: '16/03/2026', star: 1, accent: 'blue', files: [ {n:'[LSB] Case-1000001 — Legion Sq Trafficking.doc',t:'doc'}, {n:'[LSB] Case-1000044 — Vinewood Arson (CLOSED).doc',t:'doc'}, {n:'LSB Case Log.sheet',t:'sheet'} ] },
-      { name: '*State Bureau Cases', modified: '16/03/2026', star: 1, accent: 'violet', files: [ {n:'[SAB] Case-9000001 — Corridor Interdiction.doc',t:'doc'}, {n:'[SAB] Case-9000007 — Tracker Auth.doc',t:'doc'}, {n:'SAB Case Log.sheet',t:'sheet'} ] },
-      { name: 'Archives', modified: '16/03/2026', star: 0, accent: 'slate', files: [ {n:'Closed Cases 2025.zip',t:'zip'}, {n:'Retired CI Records.zip',t:'zip'} ] },
-      { name: 'Case assignment Help??!?', modified: '17/03/2026', star: 0, accent: 'rose', files: [ {n:'HOW TO ASSIGN A CASE (read me).doc',t:'doc'}, {n:'Prefix cheat-sheet.sheet',t:'sheet'} ] },
-      { name: 'Confidential Informant', modified: '18/03/2026', star: 0, accent: 'amber', special: 'ci', files: [ {n:'CI Risk Matrix (live).sheet',t:'matrix'}, {n:'Gang Fact Sheet (template).sheet',t:'gangsheet'} ] },
-      { name: 'Dirty $- Tracker', modified: '19/03/2026', star: 0, accent: 'emerald', files: [ {n:'Seizure Ledger FY26.sheet',t:'sheet'}, {n:'Distribution Bracket Calc.sheet',t:'sheet'} ] },
-      { name: 'Forms', modified: '16/03/2026', star: 0, accent: 'blue', files: [ {n:'Detective Incident Report (template).doc',t:'doc'}, {n:'UC Activity Log (template).doc',t:'doc'} ] },
-      { name: 'Resources', modified: '16/03/2026', star: 0, accent: 'slate', files: [ {n:'Penal Code Quick Reference.pdf',t:'pdf'}, {n:'Radio Callsign Directory.sheet',t:'sheet'} ] },
-      { name: 'SOP/Training', modified: '16/03/2026', star: 0, accent: 'violet', files: [ {n:'CID SOP v4.2.pdf',t:'pdf'}, {n:'New Detective Onboarding.doc',t:'doc'} ] },
+    /* ---- CID General "Drive" — folder presentation config; files live in the documents table ---- */
+    const FOLDER_META = [
+      { name: 'Joint Task Force Cases', star: 2, accent: 'amber' },
+      { name: 'Blaine County Bureau Cases', star: 1, accent: 'emerald' },
+      { name: 'Los Santos Bureau Cases', star: 1, accent: 'blue' },
+      { name: 'State Bureau Cases', star: 1, accent: 'violet' },
+      { name: 'Archives', star: 0, accent: 'slate' },
+      { name: 'Case assignment Help??!?', star: 0, accent: 'rose' },
+      { name: 'Confidential Informant', star: 0, accent: 'amber' },
+      { name: 'Dirty $- Tracker', star: 0, accent: 'emerald' },
+      { name: 'Forms', star: 0, accent: 'blue' },
+      { name: 'Resources', star: 0, accent: 'slate' },
+      { name: 'SOP/Training', star: 0, accent: 'violet' },
     ];
-    const GANG_SHEET = {
-      cols: ['Name', 'Rank', 'Threat Level', 'CCW', 'VCH'],
-      rows: [ ['Marcus "Tre" Bell','Shot Caller','High','Yes','7'], ['Dion Park','Lieutenant','High','Yes','5'], ['Lena Cruz','Enforcer','Medium','Yes','3'], ['Omar Reyes','Soldier','Low','No','1'] ],
-    };
-    // Confidential Informant risk matrix — alert flag when violent felonies >= 8
+    let DOCS = []; // Supabase-backed cache of the documents library
+    // Confidential Informant risk matrix — alert flag when violent felonies >= 8 (live read-only view)
     const CI_MATRIX = [
       { id: 'CI-0093', handler: 'Sr. Det. Hale', exclusive: true, agreement: 'Active', felonies: 4 },
       { id: 'CI-0088', handler: 'Det. Och', exclusive: true, agreement: 'Active', felonies: 7 },
@@ -162,6 +159,7 @@
       if (tab === 'command' && typeof onEnterCommand === 'function') onEnterCommand();
       if (tab === 'personnel' && typeof onEnterPersonnel === 'function') onEnterPersonnel();
       if (tab === 'modus' && typeof onEnterModus === 'function') onEnterModus();
+      if (tab === 'drive' && typeof onEnterDrive === 'function') onEnterDrive();
     }
     $$('.nav-link, .bnav-link').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.tab)));
 
@@ -1023,304 +1021,79 @@
 
     /* ============================================================ 10. CID GENERAL (Drive) ============================================================ */
     const ACCENTS = { blue:{tint:'text-blue-400',ring:'hover:border-blue-500/40 hover:bg-blue-500/5'}, emerald:{tint:'text-emerald-400',ring:'hover:border-emerald-500/40 hover:bg-emerald-500/5'}, violet:{tint:'text-violet-400',ring:'hover:border-violet-500/40 hover:bg-violet-500/5'}, amber:{tint:'text-amber-400',ring:'hover:border-amber-500/40 hover:bg-amber-500/5'}, rose:{tint:'text-rose-400',ring:'hover:border-rose-500/40 hover:bg-rose-500/5'}, slate:{tint:'text-slate-300',ring:'hover:border-slate-400/40 hover:bg-white/5'} };
-    const fileIcon = (t) => ({ doc:'📄', sheet:'📊', pdf:'📕', zip:'🗜️', gangsheet:'📋', matrix:'🛡️' }[t] || '📄');
+    const fileIcon = (t) => ({ doc:'📄', sheet:'📊', pdf:'📕', zip:'🗜️', matrix:'🛡️' }[t] || '📄');
+    const safeName = (n) => n.replace(/\.[a-z]+$/i,'').replace(/[^a-z0-9]+/gi,'-').replace(/^-+|-+$/g,'').toLowerCase();
+    // Display type drives the icon / sub-label: a sheet flagged content.view='matrix' is the live CI matrix.
+    const docDisplayType = (d) => (d.content && d.content.view === 'matrix') ? 'matrix' : d.kind;
+    const docsInFolder = (name) => DOCS.filter((d) => d.folder === name).sort((a, b) => a.name.localeCompare(b.name));
+
+    async function fetchDocuments() {
+      if (!dbReady()) { renderDrive(); return; }
+      try { DOCS = await DB().list('documents', { order: 'name' }); } catch (e) {}
+      renderDrive();
+    }
+    function onEnterDrive() { if (dbReady()) fetchDocuments(); else renderDrive(); }
+
     function renderDrive() {
-      const grid = $('#drive-grid'); grid.innerHTML = '';
-      DRIVE_FOLDERS.forEach((f) => {
+      const grid = $('#drive-grid'); if (!grid) return;
+      if (!dbReady()) { grid.innerHTML = '<p class="text-sm text-slate-500 sm:col-span-2 lg:col-span-3 xl:col-span-4">Sign in to open the CID General shared drive.</p>'; return; }
+      grid.innerHTML = '';
+      FOLDER_META.forEach((f) => {
         const a = ACCENTS[f.accent] || ACCENTS.slate;
+        const files = docsInFolder(f.name);
         const stars = f.star ? `<span class="text-amber-400">${'★'.repeat(f.star)}</span> ` : '';
         const card = el('div', { class:`folder-card cursor-pointer rounded-2xl border border-white/5 bg-ink-900/60 p-4 ${a.ring}` }, `
           <div class="flex items-start justify-between"><svg class="h-9 w-9 ${a.tint}" viewBox="0 0 24 24" fill="currentColor" opacity="0.9"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><svg class="h-4 w-4 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></div>
           <p class="mt-3 truncate text-sm font-semibold text-white" title="${esc(f.name)}">${stars}${esc(f.name)}</p>
-          <p class="mt-1 text-[11px] text-slate-500">Modified ${f.modified} · ${f.files.length} items</p>`);
+          <p class="mt-1 text-[11px] text-slate-500">${files.length} item${files.length === 1 ? '' : 's'}</p>`);
         card.addEventListener('click', () => openFolder(f));
         grid.appendChild(card);
       });
     }
-    function openFolder(folder) {
-      const a = ACCENTS[folder.accent] || ACCENTS.slate;
+    function openFolder(meta) {
+      const a = ACCENTS[meta.accent] || ACCENTS.slate;
       const node = el('div', { class:'p-6' });
-      const sub = { doc:'open document', pdf:'open document', sheet:'open sheet', zip:'open archive', gangsheet:'open sheet', matrix:'live matrix' };
+      const canEdit = DB() && DB().canEdit();
+      const files = docsInFolder(meta.name);
+      const sub = (d) => { const t = docDisplayType(d); return t === 'matrix' ? 'live matrix' : t === 'sheet' ? 'open sheet' : t === 'zip' ? 'open archive' : 'open document'; };
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><div class="flex items-center gap-3"><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white">${esc(folder.name)}</h3><p class="text-xs text-slate-400">Modified ${folder.modified} · CID General / Shared</p></div></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
-        <div class="space-y-2">${folder.files.map((fl,i)=>`<div class="file-row flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:bg-white/5 hover:border-blue-500/30" data-idx="${i}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">${fileIcon(fl.t)}</span>${esc(fl.n)}</span><span class="text-[11px] text-slate-500">${sub[fl.t]||'open'}</span></div>`).join('')}</div>`;
+        <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white">${esc(meta.name)}</h3><p class="text-xs text-slate-400">CID General / Shared · ${files.length} item${files.length === 1 ? '' : 's'}</p></div></div><div class="flex items-center gap-2">${canEdit ? '<button id="folder-new" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">+ New Document</button>' : ''}<button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
+        <div class="space-y-2" id="folder-files">${files.length ? files.map((d) => `<div class="file-row flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:bg-white/5 hover:border-blue-500/30" data-id="${d.id}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">${fileIcon(docDisplayType(d))}</span>${esc(d.name)}</span><span class="text-[11px] text-slate-500">${sub(d)}</span></div>`).join('') : '<p class="text-sm text-slate-500">Empty folder.</p>'}</div>`;
       node.querySelector('.close-x').onclick = closeModal;
-      node.querySelectorAll('.file-row').forEach((row) => row.addEventListener('click', () => openDocument(folder.files[Number(row.dataset.idx)], folder)));
+      node.querySelectorAll('.file-row').forEach((row) => row.addEventListener('click', () => { const d = DOCS.find((x) => x.id === row.dataset.id); if (d) openDocument(d, meta); }));
+      const nb = node.querySelector('#folder-new'); if (nb) nb.onclick = () => openNewDocModal(meta);
       openModal(node, { wide: true });
+    }
+    function openNewDocModal(meta) {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      const node = el('div', { class:'p-6' });
+      node.innerHTML = `
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">New Document — ${esc(meta.name)}</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="space-y-3">
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">File name *</label><input id="nd-name" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Surveillance Log.doc" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Type</label><select id="nd-kind" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500"><option value="doc">Document</option><option value="sheet">Spreadsheet</option><option value="pdf">Reference (read-only)</option></select></div>
+        </div>
+        <button id="nd-go" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Create</button>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#nd-go').onclick = async () => {
+        const name = node.querySelector('#nd-name').value.trim();
+        if (!name) { toast('A file name is required.', 'warn'); return; }
+        const kind = node.querySelector('#nd-kind').value;
+        const content = kind === 'sheet' ? { cols: ['Date', 'Officer', 'Detail', 'Notes'], rows: [['', '', '', '']] } : { body: name.replace(/\.[a-z]+$/i, '') + '\n\n' };
+        const res = await DB().insert('documents', { folder: meta.name, name, kind, content, modified_label: new Date().toLocaleDateString('en-GB') });
+        if (res.error) { toast('Create failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast('Document created', 'success'); await fetchDocuments(); openFolder(meta);
+      };
+      openModal(node);
     }
 
     /* ============================================================ LIVE CID PAPERWORK ============================================================
-     * Every file in CID General opens as a real, editable, persisted document:
-     *   doc  → editable rich-text document (.docx export)
-     *   sheet→ editable spreadsheet (CSV export)
-     *   pdf  → formatted read-only reference (.docx export)
-     *   zip  → archive listing  ·  matrix → live computed CI risk matrix
-     * Edits persist to Store('cidDocs') keyed by filename.
+     * Every documents-table file opens as live, shared paperwork:
+     *   doc  → editable rich-text (.docx export)   ·  sheet → editable grid (CSV export)
+     *   pdf  → read-only reference (.docx export)   ·  zip  → archive listing
+     *   sheet w/ content.view='matrix' → live computed CI risk matrix (read-only)
+     * Edits persist to the documents table and broadcast via realtime.
      * ---------------------------------------------------------------------------------------------------- */
-    const docKey = (n) => n;
-    const loadDoc = (n) => (Store.get('cidDocs', {}) || {})[docKey(n)];
-    function saveDocStore(n, payload) { const d = Store.get('cidDocs', {}) || {}; d[docKey(n)] = payload; Store.set('cidDocs', d); }
-    function resetDocStore(n) { const d = Store.get('cidDocs', {}) || {}; delete d[docKey(n)]; Store.set('cidDocs', d); }
-    const safeName = (n) => n.replace(/\.[a-z]+$/i,'').replace(/[^a-z0-9]+/gi,'-').replace(/^-+|-+$/g,'').toLowerCase();
-
-    // Seeded paperwork content (used until a user edits & saves).
-    const DOC_SEEDS = {
-      'JTF-Master-Index.sheet': { kind:'sheet', cols:['Operation','Bureaus','Status','Lead'], rows:[
-        ['Operation Crosshair','LSB + SAB','Active','Lt. A. Stone'], ['Operation Dry Harbor','BCB + SAB','Planning','Lt. D. Honce'] ] },
-      'Operation Crosshair (active).doc': { kind:'doc', body:
-`JOINT TASK FORCE — OPERATION CROSSHAIR
-Classification: Restricted // CID Eyes Only
-
-OBJECTIVE
-Dismantle the cross-bureau Class 3 weapons pipeline linking the Vagos Cartel cell (Sandy Shores CNC foundry) to Los Santos street distribution.
-
-PARTICIPATING BUREAUS
-- Los Santos Bureau (LSB) — street interdiction
-- State Bureau (SAB) — corridor surveillance
-
-CURRENT STATUS
-Active. Tracker authorization on file (see [SAB] Case-9000007). Awaiting raid window.
-
-NEXT STEPS
-1. Confirm dual-signature tracker still in window.
-2. Coordinate simultaneous entry with BCSO SWAT.
-3. Stage seizure inventory team for compensation log.` },
-      'Inter-Agency MOU.pdf': { kind:'pdf', body:
-`MEMORANDUM OF UNDERSTANDING
-Between the Los Santos Police Department, Blaine County Sheriff's Office, and San Andreas Highway Patrol
-
-1. PURPOSE
-This MOU governs the joint operation of the Criminal Investigation Division (CID) as a multi-agency body.
-
-2. JURISDICTION
-Each bureau retains primary jurisdiction within its territory. Joint Task Force cases supersede single-bureau assignment where activity crosses boundaries.
-
-3. EVIDENCE SHARING
-All structured records and media are maintained in the shared CID system under role-based access control.
-
-4. CHAIN OF COMMAND
-The Director holds ultimate authority. Tracker deployments require dual written authorization (Director + Deputy Director).` },
-      '[BCB] Case-2000001 — Sandy Shores Meth.doc': { kind:'doc', body:
-`CRIMINAL INVESTIGATION DIVISION — CASE FILE
-Case Number: [BCB] Case-2000001
-Bureau: Blaine County Bureau
-Status: OPEN
-Lead Detective: Det. Oliver Och (915)
-
-SUMMARY
-Meth lab operation discovered in a Sandy Shores trailer. Blue Meth production tied to the Vagos Cartel cell.
-
-NARRATIVE
-Initial tip received via Odyssey ticket-20089. Surveillance confirmed precursor deliveries (pseudoephedrine, anhydrous ammonia).
-
-EVIDENCE LOG
-- Photographs of trailer exterior (see Evidence Vault).
-- Precursor purchase records.
-
-DISPOSITION
-Pending raid coordination under Operation Crosshair.` },
-      '[BCB] Case-2000004 (COLD).doc': { kind:'doc', body:
-`CRIMINAL INVESTIGATION DIVISION — CASE FILE
-Case Number: [BCB] Case-2000004
-Bureau: Blaine County Bureau
-Status: COLD (2 weeks inactive)
-Lead Detective: Det. D. Reyes (930)
-
-SUMMARY
-Grapeseed moonshine distribution ring. Leads exhausted; reclassified COLD pending new intelligence.
-
-REOPEN CRITERIA
-New informant testimony or seizure linking the Paleto Bay distribution node.` },
-      'BCB Case Log.sheet': { kind:'sheet', cols:['Case #','Subject','Status','Lead','Updated'], rows:[
-        ['[BCB] Case-2000001','Sandy Shores Meth','Open','Och','16/03/2026'],
-        ['[BCB] Case-2000004','Grapeseed Moonshine','Cold','Reyes','02/03/2026'] ] },
-      '[LSB] Case-1000001 — Legion Sq Trafficking.doc': { kind:'doc', body:
-`CRIMINAL INVESTIGATION DIVISION — CASE FILE
-Case Number: [LSB] Case-1000001
-Bureau: Los Santos Bureau
-Status: OPEN
-Lead Detective: Det. Oliver Och (915)
-
-SUMMARY
-Suspect trafficking Class 3 weapons near Legion Square. Linked to Davis Ballas distribution.
-
-NARRATIVE
-Originating Odyssey ticket-10040. Ballistic footprint BLSTC-49-B recovered (auto-sear pistol).
-
-EVIDENCE LOG
-- Dashcam — Legion Sq stop (Evidence Vault).
-- Recovered filed-serial pistol.
-
-DISPOSITION
-Active investigation.` },
-      '[LSB] Case-1000044 — Vinewood Arson (CLOSED).doc': { kind:'doc', body:
-`CRIMINAL INVESTIGATION DIVISION — CASE FILE
-Case Number: [LSB] Case-1000044
-Bureau: Los Santos Bureau
-Status: CLOSED
-Lead Detective: Det. Oliver Och (915)
-
-SUMMARY
-Vinewood arson ring dismantled. Three arrests, prosecution complete.
-
-DISPOSITION
-Closed — convictions secured. Distinguished Service Medal awarded.` },
-      'LSB Case Log.sheet': { kind:'sheet', cols:['Case #','Subject','Status','Lead','Updated'], rows:[
-        ['[LSB] Case-1000001','Legion Sq Trafficking','Open','Och','16/03/2026'],
-        ['[LSB] Case-1000007','Davis Ballas Network','Cold','Hale','01/03/2026'],
-        ['[LSB] Case-1000044','Vinewood Arson','Closed','Och','10/02/2026'] ] },
-      '[SAB] Case-9000001 — Corridor Interdiction.doc': { kind:'doc', body:
-`CRIMINAL INVESTIGATION DIVISION — CASE FILE
-Case Number: [SAB] Case-9000001
-Bureau: State Bureau
-Status: OPEN
-Lead Detective: Det. L. Voss (948)
-
-SUMMARY
-Highway trafficking corridor interdiction on Route 68. CNC Class 3 rifles in transit.
-
-EVIDENCE LOG
-- Ballistic footprint BLSTC-12-C (5.56 chamber mark).` },
-      '[SAB] Case-9000007 — Tracker Auth.doc': { kind:'doc', body:
-`CRIMINAL INVESTIGATION DIVISION — TRACKER AUTHORIZATION
-Case Number: [SAB] Case-9000007
-Bureau: State Bureau
-
-AUTHORIZATION
-GPS tracker deployment on target vehicle (Black Sandking, plate 4XYZ).
-Director Signature: A. Stone
-Deputy Director Signature: R. Cole
-Duration: 18 hours.
-
-Per SOP Title 7 — no single-person approval permitted.` },
-      'SAB Case Log.sheet': { kind:'sheet', cols:['Case #','Subject','Status','Lead','Updated'], rows:[
-        ['[SAB] Case-9000001','Corridor Interdiction','Open','Voss','16/03/2026'],
-        ['[SAB] Case-9000007','Tracker Authorization','Open','Stone','15/03/2026'] ] },
-      'Closed Cases 2025.zip': { kind:'zip', items:['[LSB] Case-0900012 — Del Perro Smuggling (CLOSED).doc','[BCB] Case-1900003 — Cattle Theft Ring (CLOSED).doc','2025 Annual Disposition Report.pdf'] },
-      'Retired CI Records.zip': { kind:'zip', items:['CI-0042 (deceased).doc','CI-0051 (relocated).doc','Handler Reassignment Log 2025.sheet'] },
-      'HOW TO ASSIGN A CASE (read me).doc': { kind:'doc', body:
-`HOW TO ASSIGN A CASE — QUICK GUIDE
-
-1. Open Central Command → Odyssey Ticket Intake Queue.
-2. Click "Process Ticket".
-3. STEP 1 — Confirm jurisdiction (LSPD / BCSO / SAHP). If misrouted, the ticket auto-renames (e.g. ticket-2001 → blaine-2001).
-4. STEP 2 — A 7-digit case number is generated from the bureau prefix:
-     Los Santos  → [LSB] Case-1000001
-     Blaine      → [BCB] Case-2000001
-     State       → [SAB] Case-9000001
-5. STEP 3 — Discord channel + Drive folder are provisioned automatically.
-
-QUESTIONS? Ping a Bureau Lead in #cid-command.` },
-      'Detective Incident Report (template).doc': { kind:'doc', body:
-`DETECTIVE / INCIDENT REPORT  (FORM CID-IR-01)
-
-Case Number: __________________________
-Date / Time of Incident: ______________
-Reporting Detective: Oliver Och   Callsign: 915   Unit: MCB
-
-SUSPECT INFORMATION
-Name: ________________________________
-DOB: ____________   Known Affiliation: ____________
-
-MIRANDA: [ ] Read & Acknowledged   [ ] Waived — Yes   [ ] Waived — No
-
-INCIDENT NARRATIVE
-______________________________________________________________
-______________________________________________________________
-
-STATEMENT OF UNDERSTANDING
-I declare under penalty of perjury that the foregoing is true and correct, authored solely by me without AI generation.
-
-Signature: ____________________   Date: ____________` },
-      'UC Activity Log (template).doc': { kind:'doc', body:
-`UNDERCOVER (UC) ACTIVITY LOG  (FORM CID-UC-02)   — CONFIDENTIAL
-
-Report Type: ____________   UC Officer: ____________   Operation Code: ____________
-
-CONTACTS & INTERACTIONS
-Time | Subject | Interaction | Outcome
-____ | _______ | __________ | _______
-
-INTELLIGENCE / EVIDENCE OBSERVED
-______________________________________________________________
-
-THREAT LEVEL: [ ] Low   [ ] Medium   [ ] High` },
-      'Penal Code Quick Reference.pdf': { kind:'pdf', body:
-`SAN ANDREAS PENAL CODE — QUICK REFERENCE
-
-WEAPONS
-- Class 1: Civilian small arms.
-- Class 2: Submachine guns, restricted.
-- Class 3: Military rifles — prohibited; trafficking is a felony.
-
-NARCOTICS
-- Manufacture/distribution of controlled substances: felony.
-- Precursor possession with intent: chargeable.
-
-RICO PREDICATES (sample)
-Drug trafficking, extortion, money laundering, witness tampering, murder-for-hire, illegal firearms trafficking.
-
-Note: ≥2 predicate acts within 10 years required to establish a pattern.` },
-      'CID SOP v4.2.pdf': { kind:'pdf', body:
-`CRIMINAL INVESTIGATION DIVISION — STANDARD OPERATING PROCEDURE (v4.2)
-
-TITLE 1 — INTRODUCTION
-Mission: investigate serious, organized and cross-jurisdictional crime. Strict anti-AI / anti-plagiarism hiring clause.
-
-TITLE 2 — CHAIN OF COMMAND
-Director › Deputy Director › Bureau Leads › Senior Detectives › Detectives.
-
-TITLE 5 — CASE MANAGEMENT
-Open vs. Cold (2 weeks inactive) vs. Closed. Major incidents documented within 12 hours.
-
-TITLE 6 & 7 — CI & SURVEILLANCE
-Max 6 CIs per handler; ineligible at ≥8 violent felonies. Tracker deployment requires written Director + Deputy authorization — no single-person approval.` },
-      'New Detective Onboarding.doc': { kind:'doc', body:
-`NEW DETECTIVE ONBOARDING
-
-WEEK 1
-- Read CID SOP v4.2 (Resources / SOP-Training).
-- Set radio callsign with the "CID" prefix.
-- Shadow a Senior Detective.
-
-WEEK 2
-- Process a live Odyssey ticket end-to-end.
-- File your first Incident Report.
-
-REMEMBER
-Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
-    };
-
-    // Generators for sheets that should reflect current app data.
-    function generatedDoc(name) {
-      if (name === 'Radio Callsign Directory.sheet')
-        return { kind:'sheet', cols:['Callsign','Officer','Unit'], rows: ROSTER.map((p)=>[p.cs, p.name, p.unit]) };
-      if (name === 'Distribution Bracket Calc.sheet')
-        return { kind:'sheet', cols:['Net Seizure Range','% Given'], rows: BRACKETS.map((b)=>[b.label, b.pct + '%']) };
-      if (name === 'Prefix cheat-sheet.sheet')
-        return { kind:'sheet', cols:['Bureau','Prefix','Starting #'], rows:[['Los Santos Bureau','LSB','1000001'],['Blaine County Bureau','BCB','2000001'],['State Bureau','SAB','9000001']] };
-      if (name === 'Seizure Ledger FY26.sheet')
-        return { kind:'sheet', cols:['Date','Case','Item','Street Value','Disposition'], rows:[
-          ['14/03/2026','[LSB] Case-1000001','Class 3 rifle x2','$48,000','Booked'],
-          ['11/03/2026','[BCB] Case-2000001','Blue Meth (2kg)','$2,400,000','Booked'] ] };
-      return null;
-    }
-
-    function getDoc(file) {
-      const n = file.n, t = file.t;
-      if (t === 'matrix') return { kind:'matrix' };
-      const saved = loadDoc(n);
-      if (saved) return saved;
-      if (t === 'gangsheet') return { kind:'sheet', cols: GANG_SHEET.cols.slice(), rows: GANG_SHEET.rows.map((r)=>r.slice()) };
-      const gen = generatedDoc(n); if (gen) return gen;
-      if (DOC_SEEDS[n]) return JSON.parse(JSON.stringify(DOC_SEEDS[n]));
-      // Type-based default
-      if (t === 'sheet') return { kind:'sheet', cols:['Date','Officer','Detail','Notes'], rows:[['','','','']] };
-      if (t === 'zip')   return { kind:'zip', items:['(empty archive)'] };
-      if (t === 'pdf')   return { kind:'pdf', body: n.replace(/\.[a-z]+$/i,'') + '\n\n(Reference document — content pending.)' };
-      return { kind:'doc', body: n.replace(/\.[a-z]+$/i,'') + '\n\n' };
-    }
-
     function exportDocText(title, body, filename) {
       const paras = [{ text:title, style:'title' }].concat(body.split('\n').map((l) => {
         const tr = l.trim();
@@ -1337,91 +1110,101 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
       a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
-    // Open a single file as live, editable paperwork.
-    function openDocument(file, folder) {
-      const d = getDoc(file);
+    // Open a single documents-table file as live, editable paperwork.
+    function openDocument(doc, meta) {
+      const c = doc.content || {};
+      const isMatrix = c.view === 'matrix';
+      const kind = isMatrix ? 'matrix' : doc.kind;
+      const canEdit = DB() && DB().canEdit();
+      const canDel = DB() && DB().canDelete();
       const node = el('div', { class:'p-6' });
-      const editable = d.kind === 'doc' || d.kind === 'sheet';
-      const readonlyDoc = d.kind === 'pdf';
+      const editable = canEdit && (kind === 'doc' || kind === 'sheet');
+      const cols = Array.isArray(c.cols) ? c.cols : ['Date', 'Officer', 'Detail', 'Notes'];
+      const rows = Array.isArray(c.rows) ? c.rows : [['', '', '', '']];
       let bodyHtml = '';
 
-      if (d.kind === 'doc' || d.kind === 'pdf') {
-        bodyHtml = readonlyDoc
-          ? `<div class="doc-page max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-ink-900 p-5 font-sans text-sm leading-relaxed text-slate-200">${esc(d.body)}</div>`
-          : `<textarea id="doc-body" class="h-[55vh] w-full resize-none rounded-lg border border-white/10 bg-ink-900 p-5 font-mono text-sm leading-relaxed text-slate-100 outline-none focus:border-badge-500">${esc(d.body)}</textarea>`;
-      } else if (d.kind === 'sheet') {
+      if (kind === 'doc' || kind === 'pdf') {
+        bodyHtml = !editable
+          ? `<div class="doc-page max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-ink-900 p-5 font-sans text-sm leading-relaxed text-slate-200">${esc(c.body || '')}</div>`
+          : `<textarea id="doc-body" class="h-[55vh] w-full resize-none rounded-lg border border-white/10 bg-ink-900 p-5 font-mono text-sm leading-relaxed text-slate-100 outline-none focus:border-badge-500">${esc(c.body || '')}</textarea>`;
+      } else if (kind === 'sheet') {
+        const ce = editable ? 'true' : 'false';
         bodyHtml = `
           <div class="max-h-[55vh] overflow-auto rounded-lg border border-white/10">
             <table class="w-full text-left text-sm" id="doc-sheet">
-              <thead><tr class="bg-ink-800 text-[11px] uppercase tracking-wider text-slate-400">${d.cols.map((c)=>`<th class="border-b border-white/5 px-3 py-2 font-semibold">${esc(c)}</th>`).join('')}</tr></thead>
-              <tbody class="divide-y divide-white/5">${d.rows.map((r)=>`<tr>${d.cols.map((_,ci)=>`<td contenteditable="true" class="cell border-r border-white/5 px-3 py-2 text-slate-200 outline-none focus:bg-blue-500/10">${esc(r[ci]!=null?r[ci]:'')}</td>`).join('')}</tr>`).join('')}</tbody>
+              <thead><tr class="bg-ink-800 text-[11px] uppercase tracking-wider text-slate-400">${cols.map((col)=>`<th class="border-b border-white/5 px-3 py-2 font-semibold">${esc(col)}</th>`).join('')}</tr></thead>
+              <tbody class="divide-y divide-white/5">${rows.map((r)=>`<tr>${cols.map((_,ci)=>`<td contenteditable="${ce}" class="cell border-r border-white/5 px-3 py-2 text-slate-200 outline-none focus:bg-blue-500/10">${esc(r[ci]!=null?r[ci]:'')}</td>`).join('')}</tr>`).join('')}</tbody>
             </table>
           </div>
-          <button id="add-row" class="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 no-print">+ Add Row</button>`;
-      } else if (d.kind === 'matrix') {
-        const flagged = CI_MATRIX.filter((c)=>c.felonies>=8).length;
+          ${editable ? '<button id="add-row" class="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 no-print">+ Add Row</button>' : ''}`;
+      } else if (kind === 'matrix') {
+        const flagged = CI_MATRIX.filter((x)=>x.felonies>=8).length;
         bodyHtml = `
           <div class="mb-2 flex items-center justify-between"><p class="text-xs font-semibold uppercase tracking-wider text-slate-400">🚨 Confidential Informant Risk Matrix (live)</p>${flagged?`<span class="rounded-md bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-rose-300">${flagged} flagged · ≥8 felonies</span>`:''}</div>
           <div class="overflow-hidden rounded-lg border border-white/5"><table class="w-full text-left text-sm"><thead><tr class="bg-ink-800 text-[11px] uppercase tracking-wider text-slate-400"><th class="px-3 py-2 font-semibold">CI ID</th><th class="px-3 py-2 font-semibold">Handler</th><th class="px-3 py-2 font-semibold">Exclusive</th><th class="px-3 py-2 font-semibold">Agreement</th><th class="px-3 py-2 font-semibold">Violent Felonies</th></tr></thead>
-          <tbody class="divide-y divide-white/5">${CI_MATRIX.map((c)=>{const al=c.felonies>=8;const ag=c.agreement==='Active'?'text-emerald-300':c.agreement==='Pending'?'text-amber-300':'text-slate-400';return `<tr class="${al?'bg-rose-500/5':''}"><td class="px-3 py-2 font-mono text-blue-300">${esc(c.id)}</td><td class="px-3 py-2 text-slate-200">${esc(c.handler)}</td><td class="px-3 py-2">${c.exclusive?'<span class="text-emerald-300">Yes</span>':'<span class="text-rose-300">Shared ⚠</span>'}</td><td class="px-3 py-2 ${ag}">${esc(c.agreement)}</td><td class="px-3 py-2 font-mono ${al?'font-bold text-rose-300':'text-slate-300'}">${c.felonies}${al?' 🚨':''}</td></tr>`;}).join('')}</tbody></table></div>
+          <tbody class="divide-y divide-white/5">${CI_MATRIX.map((x)=>{const al=x.felonies>=8;const ag=x.agreement==='Active'?'text-emerald-300':x.agreement==='Pending'?'text-amber-300':'text-slate-400';return `<tr class="${al?'bg-rose-500/5':''}"><td class="px-3 py-2 font-mono text-blue-300">${esc(x.id)}</td><td class="px-3 py-2 text-slate-200">${esc(x.handler)}</td><td class="px-3 py-2">${x.exclusive?'<span class="text-emerald-300">Yes</span>':'<span class="text-rose-300">Shared ⚠</span>'}</td><td class="px-3 py-2 ${ag}">${esc(x.agreement)}</td><td class="px-3 py-2 font-mono ${al?'font-bold text-rose-300':'text-slate-300'}">${x.felonies}${al?' 🚨':''}</td></tr>`;}).join('')}</tbody></table></div>
           <p class="mt-2 text-[11px] text-slate-500">Policy: max 6 CIs per handler; ineligible at ≥8 violent felony convictions.</p>`;
-      } else if (d.kind === 'zip') {
-        bodyHtml = `<p class="mb-2 text-xs text-slate-400">Archive contents (read-only):</p><div class="space-y-2">${d.items.map((it)=>`<div class="flex items-center gap-3 rounded-lg border border-white/5 bg-ink-900 px-4 py-2.5 text-sm text-slate-300"><span>🗄️</span>${esc(it)}</div>`).join('')}</div>`;
+      } else if (kind === 'zip') {
+        const items = Array.isArray(c.items) ? c.items : [];
+        bodyHtml = `<p class="mb-2 text-xs text-slate-400">Archive contents (read-only):</p><div class="space-y-2">${items.map((it)=>`<div class="flex items-center gap-3 rounded-lg border border-white/5 bg-ink-900 px-4 py-2.5 text-sm text-slate-300"><span>🗄️</span>${esc(it)}</div>`).join('')}</div>`;
       }
 
-      const isSaved = !!loadDoc(file.n);
       node.innerHTML = `
         <div class="mb-4 flex items-start justify-between gap-3 no-print">
-          <div class="flex items-center gap-3"><span class="text-2xl">${fileIcon(file.t)}</span><div><h3 class="text-base font-bold text-white">${esc(file.n)}</h3><p class="text-[11px] text-slate-400">CID General${folder?' / '+esc(folder.name):''}${isSaved?' · <span class="text-emerald-300">edited copy</span>':' · template'}</p></div></div>
+          <div class="flex items-center gap-3"><span class="text-2xl">${fileIcon(kind)}</span><div><h3 class="text-base font-bold text-white">${esc(doc.name)}</h3><p class="text-[11px] text-slate-400">CID General${meta?' / '+esc(meta.name):''}${doc.modified_label?' · '+esc(doc.modified_label):''}${editable?'':' · read-only'}</p></div></div>
           <button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
         </div>
         <div class="print-area">${bodyHtml}</div>
         <div class="mt-4 flex flex-wrap gap-2 no-print">
           ${editable ? `<button id="d-save" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save</button>` : ''}
           <button id="d-print" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">🖨️ Print</button>
-          ${d.kind==='sheet' ? `<button id="d-csv" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">Export .csv</button>` : ''}
-          ${d.kind==='doc'||d.kind==='pdf'||d.kind==='matrix' ? `<button id="d-docx" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">Export .docx</button>` : ''}
-          ${editable && isSaved ? `<button id="d-reset" class="rounded-lg px-3 py-2 text-xs font-medium text-slate-400 transition hover:text-rose-300">Reset to template</button>` : ''}
+          ${kind==='sheet' ? `<button id="d-csv" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">Export .csv</button>` : ''}
+          ${kind==='doc'||kind==='pdf'||kind==='matrix' ? `<button id="d-docx" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">Export .docx</button>` : ''}
+          ${canDel && !isMatrix ? `<button id="d-del" class="ml-auto rounded-lg px-3 py-2 text-xs font-medium text-slate-400 transition hover:text-rose-300">Delete</button>` : ''}
         </div>`;
       node.querySelector('.close-x').onclick = closeModal;
       node.querySelector('#d-print') && (node.querySelector('#d-print').onclick = () => window.print());
 
       // Sheet helpers
-      const readSheet = () => ({ kind:'sheet', cols: d.cols.slice(),
-        rows: $$('#doc-sheet tbody tr', node).map((tr) => $$('.cell', tr).map((td) => td.textContent.trim())) });
-      if (d.kind === 'sheet') {
-        node.querySelector('#add-row').onclick = () => {
-          const tb = node.querySelector('#doc-sheet tbody');
-          tb.insertAdjacentHTML('beforeend', `<tr>${d.cols.map(()=>`<td contenteditable="true" class="cell border-r border-white/5 px-3 py-2 text-slate-200 outline-none focus:bg-blue-500/10"></td>`).join('')}</tr>`);
-        };
-      }
-
-      // Save
-      const saveBtn = node.querySelector('#d-save');
-      if (saveBtn) saveBtn.onclick = () => {
-        if (d.kind === 'doc') saveDocStore(file.n, { kind:'doc', body: node.querySelector('#doc-body').value });
-        else if (d.kind === 'sheet') saveDocStore(file.n, readSheet());
-        toast(`"${file.n}" saved`, 'success');
-        openDocument(file, folder); // re-open to reflect saved state (shows Reset)
+      const readSheet = () => ({ cols: cols.slice(), rows: $$('#doc-sheet tbody tr', node).map((tr) => $$('.cell', tr).map((td) => td.textContent.trim())) });
+      const addRow = node.querySelector('#add-row');
+      if (addRow) addRow.onclick = () => {
+        const tb = node.querySelector('#doc-sheet tbody');
+        tb.insertAdjacentHTML('beforeend', `<tr>${cols.map(()=>`<td contenteditable="true" class="cell border-r border-white/5 px-3 py-2 text-slate-200 outline-none focus:bg-blue-500/10"></td>`).join('')}</tr>`);
       };
-      // Reset
-      const resetBtn = node.querySelector('#d-reset');
-      if (resetBtn) resetBtn.onclick = () => { resetDocStore(file.n); toast('Reverted to template', 'info'); openDocument(file, folder); };
+
+      // Save → documents table
+      const saveBtn = node.querySelector('#d-save');
+      if (saveBtn) saveBtn.onclick = async () => {
+        const content = kind === 'doc' ? { body: node.querySelector('#doc-body').value } : readSheet();
+        const res = await DB().update('documents', doc.id, { content, modified_label: new Date().toLocaleDateString('en-GB') });
+        if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        toast(`"${doc.name}" saved`, 'success');
+        await fetchDocuments();
+        const fresh = DOCS.find((x) => x.id === doc.id); if (fresh) openDocument(fresh, meta);
+      };
+      // Delete
+      const delBtn = node.querySelector('#d-del');
+      if (delBtn) delBtn.onclick = async () => {
+        const res = await DB().remove('documents', doc.id);
+        if (res.error) { toast('Delete failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast('Document deleted', 'warn'); await fetchDocuments(); if (meta) openFolder(meta);
+      };
       // Exports
       const docxBtn = node.querySelector('#d-docx');
       if (docxBtn) docxBtn.onclick = () => {
-        if (d.kind === 'matrix') {
+        if (kind === 'matrix') {
           const paras = [{text:'Confidential Informant Risk Matrix', style:'title'}].concat(
-            CI_MATRIX.map((c)=>({ text:`${c.id} — ${c.handler} — ${c.exclusive?'Exclusive':'Shared'} — ${c.agreement} — ${c.felonies} violent felonies${c.felonies>=8?' (FLAGGED)':''}`, style:'normal' })));
-          exportDocxParas('CI Risk Matrix', paras, safeName(file.n) + '.docx');
+            CI_MATRIX.map((x)=>({ text:`${x.id} — ${x.handler} — ${x.exclusive?'Exclusive':'Shared'} — ${x.agreement} — ${x.felonies} violent felonies${x.felonies>=8?' (FLAGGED)':''}`, style:'normal' })));
+          exportDocxParas('CI Risk Matrix', paras, safeName(doc.name) + '.docx');
         } else {
-          const body = d.kind === 'doc' ? (node.querySelector('#doc-body') ? node.querySelector('#doc-body').value : d.body) : d.body;
-          exportDocText(file.n.replace(/\.[a-z]+$/i,''), body, safeName(file.n) + '.docx');
+          const body = kind === 'doc' && node.querySelector('#doc-body') ? node.querySelector('#doc-body').value : (c.body || '');
+          exportDocText(doc.name.replace(/\.[a-z]+$/i,''), body, safeName(doc.name) + '.docx');
         }
         toast('Exported .docx', 'success');
       };
       const csvBtn = node.querySelector('#d-csv');
-      if (csvBtn) csvBtn.onclick = () => { const s = readSheet(); downloadCsv(safeName(file.n) + '.csv', s.cols, s.rows); toast('Exported .csv', 'success'); };
+      if (csvBtn) csvBtn.onclick = () => { const s = readSheet(); downloadCsv(safeName(doc.name) + '.csv', s.cols, s.rows); toast('Exported .csv', 'success'); };
 
       openModal(node, { wide: true });
     }
@@ -2486,13 +2269,14 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
     window.CIDApp = window.CIDApp || {};
     window.CIDApp.onAuthed = function () {
       fetchProfiles(); fetchCases(); fetchGangs(); fetchPersons(); fetchDrugs(); fetchPlaces(); fetchBenches(); fetchFootprints(); fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); fetchNotifications();
-      fetchCommendations(); fetchMedia(); fetchMoProfiles();
+      fetchCommendations(); fetchMedia(); fetchMoProfiles(); fetchDocuments();
       if (dbReady()) {
         DB().subscribe('cases', () => { fetchCases(); fetchKpis(); renderBureauLoad(); });
         DB().subscribe('profiles', () => { fetchProfiles(); renderRoster(); });
         DB().subscribe('commendations', fetchCommendations);
         DB().subscribe('media', fetchMedia);
         DB().subscribe('mo_profiles', fetchMoProfiles);
+        DB().subscribe('documents', fetchDocuments);
         DB().subscribe('gangs', fetchGangs);
         DB().subscribe('persons', () => { fetchPersons(); renderKPIs(); });
         DB().subscribe('narcotics', fetchDrugs);
