@@ -262,3 +262,45 @@ CSV/JSON import, full case-packet export.
 Personnel roster/commendations, the media/evidence vault, the M.O. detector, and
 the CID General documents are still client-side; plus a per-module CSV/JSON
 importer and their seed removal. These are the last items to migrate.
+
+## Phase 2 — Module migration #9: Personnel, Commendations, Media, M.O. (this change)
+- **Personnel roster** now renders from `profiles` (live), not a seed array.
+- **Commendations** → Supabase `commendations` table (new migration) with full
+  CRUD, edit/delete gating, and realtime.
+- **Evidence/media vault** → `media` table: ingest modal writes rows, "forward to
+  case" updates `case_id`, tag chips resolve case/gang by id; realtime.
+- **M.O. detector** cross-references live `mo_profiles` (per-case indicators);
+  "Save as Case Profile" persists a scan; matching jumps off real cases.
+
+## Phase 2 — Module migration #10: CID General "Drive" (this change)
+- Folders are now presentation config (`FOLDER_META`); every file is a row in the
+  `documents` table. Docs/sheets are editable & shared (realtime); pdf/zip
+  read-only; CI Risk Matrix stays a live computed read-only view.
+- Editors get "+ New Document" and per-folder import; command/director can delete.
+
+## Phase 3 — Seed removal, bulk import, file split, auth fixes (this change)
+### Removed
+- **All baked-in demo content.** Domain tables ship empty with "create first" CTAs.
+  The CID Drive's 26 seeded templates were deleted (live) and the seed migration
+  reduced to a `(folder,name)` unique constraint — the Drive now starts empty.
+- Dead `ACTIVE_CASES` constant and the localStorage `caseCounters` sequence; case
+  numbers are now derived from existing `cases` (`nextCaseNumber`).
+### Added
+- **CSV/JSON bulk import per module** (`core.js`): paste a JSON array or CSV (or
+  upload a file), allow-listed columns + type coercion, batch insert via Supabase
+  (RLS applies), inserted/skipped reporting. "Import" button beside each module's
+  "+ New" action (cases, persons, gangs, narcotics, places, ballistics
+  benches/footprints, trackers, tickets, commendations, media) and per-folder in
+  the Drive.
+### Changed
+- **Front-end split into 16 feature files** (`core, command, narcotics, ballistics,
+  personnel, modus, drive, persons, gangs, places, reports, rico, docx, records,
+  casefiles, app`) — classic scripts sharing one global lexical scope, no build
+  step. Byte-for-byte contiguous slice of the former monolith (verified), loaded
+  in order before `auth.js`.
+- Added `AGENTS.md` — architecture + audit guide for future agents.
+### Fixed
+- **Login blocker:** users created before the profiles trigger existed had no
+  `profiles` row (stuck on "pending approval"). Backfilled profiles for all
+  pre-existing `auth.users`; seated the owner as Command. New sign-ins already get
+  a profile via the `handle_new_user` trigger (verified Google + Discord both work).

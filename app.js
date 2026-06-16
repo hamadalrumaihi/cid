@@ -2398,7 +2398,7 @@
     function tickClock() { $('#clock').textContent = 'Secure link · ' + new Date().toLocaleTimeString('en-US', { hour12:false }); }
 
     function init() {
-      wireDrawer(); wireCollapse();
+      wireDrawer(); wireCollapse(); wireAllImports();
       // Central command
       renderKPIs(); renderTickets(); renderActivity(); renderBureauLoad();
       renderTrackers(); $('#new-tracker').addEventListener('click', openTrackerModal);
@@ -2456,4 +2456,3 @@
       });
     }
     document.addEventListener('DOMContentLoaded', init);
-  })();
