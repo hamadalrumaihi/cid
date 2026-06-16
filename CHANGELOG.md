@@ -233,3 +233,32 @@ CSV/JSON import, full case-packet export.
   load (sign-in notice, no errors); live MCP round-trip on `cid`
   (rico_case + enterprise + 2 predicates: one evidence-linked, one ref) with
   cascade-clean delete.
+
+## Phase 2 — Central Command live + Admin + Notifications + Packet + Search (this change)
+- **CRITICAL FIX:** `index.html` was still running the **stale pre-split monolith
+  inline** and never loaded the external modules — so all prior Phase 2 work was
+  orphaned. Replaced the inline `<script>` with `<script src>` for
+  `supabase.js` → `app.js` → `auth.js`. The platform is now actually wired.
+- **Central Command (live):** KPIs (open/cold cases, persons, total seizures from
+  raid_compensations), Odyssey ticket queue from `tickets` + "+ New Ticket";
+  **Process Ticket wizard now creates a real `cases` row** and marks the ticket
+  processed (with the misroute auto-rename retained); activity feed from
+  `audit_log`; bureau caseload computed from live cases.
+- **Member administration (Command):** in Personnel, list `profiles` and
+  approve/assign role + bureau + active via the `assign_member` RPC — the first
+  in-app way to approve members (previously SQL-only).
+- **Notifications:** top-bar bell + unread badge + panel (mark-all-read); tracker
+  deploy/co-sign already write rows.
+- **Case-packet export:** Case Detail → one `.docx` bundling summary + evidence +
+  reports + RICO.
+- **Global search:** top-bar search now queries Supabase across cases/persons/
+  gangs/places (ilike) with a results modal; case hits jump to Case Detail.
+- Removed dead dashboard seed consts (KPIS/TICKETS/ACTIVITY/BUREAU_LOAD).
+- `supabase.js`: added `rpc()`. Verified: all JS `node --check`; jsdom load
+  exercises external modules — 13/13 tabs activate, CIDDB + CIDApp present, gate
+  works, no errors.
+
+### Still localStorage (final remaining sliver)
+Personnel roster/commendations, the media/evidence vault, the M.O. detector, and
+the CID General documents are still client-side; plus a per-module CSV/JSON
+importer and their seed removal. These are the last items to migrate.

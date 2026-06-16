@@ -5,20 +5,6 @@
 
     const ACTIVE_CASES = ['[LSB] Case-1000001', '[LSB] Case-1000007', '[BCB] Case-2000001', '[BCB] Case-2000004', '[SAB] Case-9000001'];
 
-    const KPIS = [
-      { label: 'Open Cases', value: 47, delta: '+6 this week', icon: '📂', accent: 'blue' },
-      { label: 'Cold Cases', value: 18, delta: '2 wks inactive', icon: '🧊', accent: 'slate' },
-      { label: 'Active CIs', value: 23, delta: 'Across 7 handlers', icon: '🕵️', accent: 'violet' },
-      { label: 'Total Seizures', value: '$84.2M', delta: 'FY 2026 to date', icon: '💵', accent: 'emerald' },
-    ];
-
-    // Tickets — note ticket-2001 is misrouted (belongs to Blaine) to exercise the rename flow
-    const TICKETS = [
-      { id: 'ticket-10040', source: 'Discord Ticket', desc: 'Suspect trafficking Class 3 weapons near Legion Square', dept: 'LSPD' },
-      { id: 'ticket-20089', source: 'Discord Ticket', desc: 'Meth lab operation discovered in Sandy Shores trailer', dept: 'BCSO' },
-      { id: 'ticket-2001',  source: 'Discord Ticket', desc: 'Highway interdiction — trafficking corridor on Route 68 (mislabeled LS)', dept: 'SAHP' },
-    ];
-
     const BUREAUS = {
       LSB: { name: 'Los Santos Bureau', prefix: 'LSB', dept: 'LSPD' },
       BCB: { name: 'Blaine County Bureau', prefix: 'BCB', dept: 'BCSO' },
@@ -31,21 +17,6 @@
       BCSO: { bureau: 'BCB', rename: 'blaine' },
       SAHP: { bureau: 'SAB', rename: 'state' },
     };
-
-    const ACTIVITY = [
-      { who: 'Det. Oliver Och', what: 'closed [LSB] Case-1000044 — Vinewood arson ring', when: '14m ago', dot: 'emerald' },
-      { who: 'System', what: 'synced Google Drive folder for [BCB] Case-2000012', when: '38m ago', dot: 'blue' },
-      { who: 'Sr. Det. Hale', what: 'registered Confidential Informant CI-0093 (handler 4/6)', when: '1h ago', dot: 'violet' },
-      { who: 'Director', what: 'co-signed GPS tracker deployment on [SAB] Case-9000007', when: '2h ago', dot: 'amber' },
-      { who: 'Narcotics', what: 'flagged Blue Meth price spike in Sandy Shores corridor', when: '4h ago', dot: 'rose' },
-    ];
-
-    const BUREAU_LOAD = [
-      { name: 'Los Santos Bureau', pct: 72, color: 'bg-blue-500' },
-      { name: 'Blaine County Bureau', pct: 48, color: 'bg-emerald-500' },
-      { name: 'State Bureau', pct: 61, color: 'bg-violet-500' },
-      { name: 'Joint Task Force', pct: 33, color: 'bg-amber-500' },
-    ];
 
     // Raid compensation brackets (the "given" percentage), then sub-split
     const BRACKETS = [
@@ -210,7 +181,7 @@
       if (tab === 'ballistics' && typeof onEnterBallistics === 'function') onEnterBallistics();
       if (tab === 'reports' && typeof renderReportChain === 'function') renderReportChain();
       if (tab === 'rico' && typeof renderRico === 'function') renderRico();
-      if (tab === 'command' && typeof onEnterTrackers === 'function') onEnterTrackers();
+      if (tab === 'command' && typeof onEnterCommand === 'function') onEnterCommand();
     }
     $$('.nav-link, .bnav-link').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.tab)));
 
@@ -261,48 +232,106 @@
     }
 
     /* ============================================================ 5. CENTRAL COMMAND ============================================================ */
+    /* ---- Central Command (live from Supabase) ---- */
+    let TICKETS_CACHE = [], AUDIT = [], SEIZ_TOTAL = 0;
+    const KPI_ACCENTS = { blue:'from-blue-500/20 to-blue-700/5 text-blue-300 border-blue-500/20', slate:'from-slate-500/20 to-slate-700/5 text-slate-300 border-slate-500/20', violet:'from-violet-500/20 to-violet-700/5 text-violet-300 border-violet-500/20', emerald:'from-emerald-500/20 to-emerald-700/5 text-emerald-300 border-emerald-500/20' };
     function renderKPIs() {
-      const accents = { blue:'from-blue-500/20 to-blue-700/5 text-blue-300 border-blue-500/20', slate:'from-slate-500/20 to-slate-700/5 text-slate-300 border-slate-500/20', violet:'from-violet-500/20 to-violet-700/5 text-violet-300 border-violet-500/20', emerald:'from-emerald-500/20 to-emerald-700/5 text-emerald-300 border-emerald-500/20' };
-      const g = $('#kpi-grid'); g.innerHTML = '';
-      KPIS.forEach((m) => g.appendChild(el('div', { class:`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${accents[m.accent]} p-5 transition hover:shadow-glow` },
+      const g = $('#kpi-grid'); if (!g) return;
+      const live = dbReady();
+      const open = casesCache.filter((c) => c.status === 'open' || c.status === 'active').length;
+      const cold = casesCache.filter((c) => c.status === 'cold').length;
+      const flagged = PERSONS.filter((p) => (p.felony_count || 0) >= 8).length;
+      const cards = [
+        { label:'Open Cases', value: live ? open : '—', delta: `${casesCache.length} total on file`, icon:'📂', accent:'blue' },
+        { label:'Cold Cases', value: live ? cold : '—', delta:'2-week inactivity policy', icon:'🧊', accent:'slate' },
+        { label:'Persons of Interest', value: live ? PERSONS.length : '—', delta: `${flagged} ≥8-felony flagged`, icon:'🧑‍⚖️', accent:'violet' },
+        { label:'Total Seizures', value: live ? fmtUSD(SEIZ_TOTAL) : '—', delta:'logged raid compensation', icon:'💵', accent:'emerald' },
+      ];
+      g.innerHTML = '';
+      cards.forEach((m) => g.appendChild(el('div', { class:`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${KPI_ACCENTS[m.accent]} p-5 transition hover:shadow-glow` },
         `<div class="flex items-start justify-between"><div><p class="text-xs font-semibold uppercase tracking-wider text-slate-400">${m.label}</p><p class="mt-2 text-3xl font-bold text-white">${m.value}</p><p class="mt-1 text-[11px] text-slate-400">${m.delta}</p></div><span class="text-2xl">${m.icon}</span></div>`)));
     }
+    async function fetchKpis() { if (dbReady()) { try { const raids = await DB().list('raid_compensations', {}); SEIZ_TOTAL = raids.reduce((a, b) => a + (Number(b.net_value) || 0), 0); } catch (e) {} } renderKPIs(); }
 
+    async function fetchTickets() { if (!dbReady()) { renderTickets(); return; } try { TICKETS_CACHE = await DB().list('tickets', { order: 'created_at', ascending: false }); } catch (e) {} renderTickets(); }
     function renderTickets() {
-      const tb = $('#ticket-tbody'); tb.innerHTML = '';
-      TICKETS.forEach((t) => {
+      const tb = $('#ticket-tbody'); if (!tb) return;
+      const canEdit = DB() && DB().canEdit();
+      const nb = $('#new-ticket-btn'); if (nb) nb.classList.toggle('hidden', !canEdit);
+      if (!dbReady()) { tb.innerHTML = '<tr><td colspan="5" class="px-6 py-6 text-center text-sm text-slate-500">Sign in to view the intake queue.</td></tr>'; return; }
+      if (!TICKETS_CACHE.length) { tb.innerHTML = `<tr><td colspan="5" class="px-6 py-6 text-center text-sm text-slate-500">No tickets in the queue.${canEdit ? ' Use “+ New Ticket”.' : ''}</td></tr>`; return; }
+      tb.innerHTML = '';
+      TICKETS_CACHE.forEach((t) => {
+        const processed = t.status === 'processed';
         const tr = el('tr', { class: 'transition hover:bg-white/5' });
         tr.innerHTML = `
-          <td class="px-6 py-4"><span class="rounded-md bg-ink-800 px-2 py-1 font-mono text-xs text-blue-300">${esc(t.id)}</span></td>
-          <td class="px-6 py-4"><span class="inline-flex items-center gap-1.5 text-slate-300"><span class="h-1.5 w-1.5 rounded-full bg-indigo-400"></span>${esc(t.source)}</span></td>
-          <td class="px-6 py-4 max-w-md text-slate-300">${esc(t.desc)}</td>
-          <td class="px-6 py-4"><span class="rounded-md border border-white/10 bg-ink-800 px-2 py-1 text-xs font-semibold text-slate-200">${esc(t.dept)}</span></td>
-          <td class="px-6 py-4 text-right"><button class="process-btn rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110 active:scale-95">Process Ticket</button></td>`;
-        tr.querySelector('.process-btn').addEventListener('click', () => openTicketWizard(t));
+          <td class="px-6 py-4"><span class="rounded-md bg-ink-800 px-2 py-1 font-mono text-xs text-blue-300">${esc(t.ticket_code)}</span></td>
+          <td class="px-6 py-4"><span class="inline-flex items-center gap-1.5 text-slate-300"><span class="h-1.5 w-1.5 rounded-full bg-indigo-400"></span>${esc(t.source || 'Discord')}</span></td>
+          <td class="px-6 py-4 max-w-md text-slate-300">${esc(t.description || '')}</td>
+          <td class="px-6 py-4"><span class="rounded-md border border-white/10 bg-ink-800 px-2 py-1 text-xs font-semibold text-slate-200">${esc(t.reported_dept || '—')}</span></td>
+          <td class="px-6 py-4 text-right">${processed ? `<span class="rounded-md bg-emerald-500/10 px-2 py-1 text-[11px] font-mono text-emerald-300">${esc(caseNumById(t.case_id) || 'processed')}</span>` : (canEdit ? '<button class="process-btn rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110 active:scale-95">Process Ticket</button>' : '<span class="text-[11px] text-amber-300">pending</span>')}</td>`;
+        const pb = tr.querySelector('.process-btn'); if (pb) pb.addEventListener('click', () => openTicketWizard(t));
         tb.appendChild(tr);
       });
     }
+    function openNewTicketModal() {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      const node = el('div', { class: 'p-6' });
+      node.innerHTML = `
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">New Intake Ticket</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="space-y-3">
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Ticket Code *</label><input data-k="ticket_code" value="ticket-${Math.floor(10000 + Math.random() * 89999)}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="mb-1 block text-xs font-semibold text-slate-400">Source</label><input data-k="source" value="Discord Ticket" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+            <div><label class="mb-1 block text-xs font-semibold text-slate-400">Reported Dept</label><select data-k="reported_dept" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option>LSPD</option><option>BCSO</option><option>SAHP</option></select></div>
+          </div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Description *</label><textarea data-k="description" rows="3" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"></textarea></div>
+        </div>
+        <button id="tkt-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Add to Queue</button>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#tkt-save').onclick = async () => {
+        const p = { status: 'new' }; $$('[data-k]', node).forEach((f) => p[f.dataset.k] = f.value.trim());
+        if (!p.ticket_code || !p.description) { toast('Ticket code + description required.', 'warn'); return; }
+        const res = await DB().insert('tickets', p);
+        if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast('Ticket queued', 'success'); fetchTickets();
+      };
+      openModal(node);
+    }
 
+    function timeAgo(ts) { const s = (Date.now() - new Date(ts).getTime()) / 1000; if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago'; }
+    async function fetchActivity() { if (dbReady()) { try { AUDIT = (await DB().list('audit_log', { order: 'created_at', ascending: false })).slice(0, 12); } catch (e) {} } renderActivity(); }
     function renderActivity() {
-      const dot = { emerald:'bg-emerald-400', blue:'bg-blue-400', violet:'bg-violet-400', amber:'bg-amber-400', rose:'bg-rose-400', slate:'bg-slate-400' };
-      const f = $('#activity-feed'); f.innerHTML = '';
-      ACTIVITY.forEach((a) => f.appendChild(el('li', { class:'flex gap-3' }, `<span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${dot[a.dot]||'bg-slate-400'}"></span><div class="flex-1"><p class="text-sm text-slate-200"><span class="font-semibold text-white">${esc(a.who)}</span> ${esc(a.what)}</p><p class="text-[11px] text-slate-500">${a.when}</p></div>`)));
+      const f = $('#activity-feed'); if (!f) return;
+      if (!dbReady()) { f.innerHTML = '<li class="text-sm text-slate-500">Sign in to view the division activity feed.</li>'; return; }
+      if (!AUDIT.length) { f.innerHTML = '<li class="text-sm text-slate-500">No recent activity.</li>'; return; }
+      const dot = { INSERT: 'bg-emerald-400', UPDATE: 'bg-blue-400', DELETE: 'bg-rose-400' };
+      const verb = { INSERT: 'created', UPDATE: 'updated', DELETE: 'removed' };
+      f.innerHTML = '';
+      AUDIT.forEach((a) => f.appendChild(el('li', { class: 'flex gap-3' }, `<span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${dot[a.action] || 'bg-slate-400'}"></span><div class="flex-1"><p class="text-sm text-slate-200"><span class="font-semibold text-white">${esc(officerName(a.actor_id) || 'System')}</span> ${verb[a.action] || a.action.toLowerCase()} ${esc((a.entity || '').replace(/_/g, ' '))}</p><p class="text-[11px] text-slate-500">${timeAgo(a.created_at)}</p></div>`)));
     }
     function renderBureauLoad() {
-      const w = $('#bureau-load'); w.innerHTML = '';
-      BUREAU_LOAD.forEach((b) => w.appendChild(el('div', {}, `<div class="mb-1.5 flex justify-between text-xs"><span class="font-medium text-slate-300">${b.name}</span><span class="font-mono text-slate-400">${b.pct}%</span></div><div class="h-2 w-full overflow-hidden rounded-full bg-ink-800"><div class="h-full ${b.color} transition-all duration-700" style="width:${b.pct}%"></div></div>`)));
+      const w = $('#bureau-load'); if (!w) return;
+      const colors = { LSB: 'bg-blue-500', BCB: 'bg-emerald-500', SAB: 'bg-violet-500', JTF: 'bg-amber-500' };
+      const names = { LSB: 'Los Santos Bureau', BCB: 'Blaine County Bureau', SAB: 'State Bureau', JTF: 'Joint Task Force' };
+      const counts = { LSB: 0, BCB: 0, SAB: 0, JTF: 0 };
+      casesCache.forEach((c) => { if (counts[c.bureau] != null) counts[c.bureau]++; });
+      const max = Math.max(1, counts.LSB, counts.BCB, counts.SAB, counts.JTF);
+      w.innerHTML = '';
+      ['LSB', 'BCB', 'SAB', 'JTF'].forEach((k) => w.appendChild(el('div', {}, `<div class="mb-1.5 flex justify-between text-xs"><span class="font-medium text-slate-300">${names[k]}</span><span class="font-mono text-slate-400">${counts[k]} case${counts[k] === 1 ? '' : 's'}</span></div><div class="h-2 w-full overflow-hidden rounded-full bg-ink-800"><div class="h-full ${colors[k]} transition-all duration-700" style="width:${Math.round(counts[k] / max * 100)}%"></div></div>`)));
     }
+    function onEnterCommand() { if (dbReady()) { fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); renderBureauLoad(); } else { renderKPIs(); renderTickets(); renderActivity(); renderBureauLoad(); renderTrackers(); } }
 
     /* ---- Ticket processing wizard ---- */
     function openTicketWizard(ticket) {
       const node = el('div', { class: 'p-6' });
-      let routedDept = ticket.dept;
-      let workingId = ticket.id;
+      let routedDept = ticket.reported_dept || 'LSPD';
+      let workingId = ticket.ticket_code;
 
       const step1 = () => {
         node.innerHTML = `
           <div class="mb-5 flex items-center justify-between"><div><p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Step 1 of 3</p><h3 class="text-xl font-bold text-white">Jurisdictional Routing</h3></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
-          <div class="mb-5 rounded-xl border border-white/10 bg-ink-900 p-4 text-sm"><p class="font-mono text-xs text-blue-300" id="wk-id">${esc(workingId)}</p><p class="mt-1 text-slate-200">${esc(ticket.desc)}</p><p class="mt-2 text-xs text-slate-400">Originally reported: <span class="font-semibold text-slate-200">${esc(ticket.dept)}</span></p></div>
+          <div class="mb-5 rounded-xl border border-white/10 bg-ink-900 p-4 text-sm"><p class="font-mono text-xs text-blue-300" id="wk-id">${esc(workingId)}</p><p class="mt-1 text-slate-200">${esc(ticket.description || '')}</p><p class="mt-2 text-xs text-slate-400">Originally reported: <span class="font-semibold text-slate-200">${esc(ticket.reported_dept || '—')}</span></p></div>
           <label class="mb-1 block text-xs font-semibold text-slate-400">Confirm correct jurisdiction</label>
           <div class="mb-4 grid grid-cols-3 gap-2" id="jur-pick">
             ${['LSPD','BCSO','SAHP'].map((d) => `<button data-dept="${d}" class="jur-btn rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${d===routedDept?'border-badge-500 bg-blue-500/10 text-white':'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}">${d}</button>`).join('')}
@@ -314,12 +343,12 @@
           routedDept = b.dataset.dept;
           node.querySelectorAll('.jur-btn').forEach((x) => x.className = `jur-btn rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${x.dataset.dept===routedDept?'border-badge-500 bg-blue-500/10 text-white':'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}`);
           const mis = node.querySelector('#misroute');
-          if (routedDept !== ticket.dept) {
-            const renamed = ticket.id.replace(/^ticket/i, DEPT_ROUTING[routedDept].rename);
+          if (routedDept !== ticket.reported_dept) {
+            const renamed = ticket.ticket_code.replace(/^ticket/i, DEPT_ROUTING[routedDept].rename);
             workingId = renamed; node.querySelector('#wk-id').textContent = renamed;
             mis.classList.remove('hidden');
-            mis.innerHTML = `⚠️ Misrouted ticket detected. Auto-renaming <span class="font-mono">${esc(ticket.id)}</span> → <span class="font-mono font-bold">${esc(renamed)}</span> and tagging <b>${routedDept}</b>.`;
-          } else { mis.classList.add('hidden'); workingId = ticket.id; node.querySelector('#wk-id').textContent = ticket.id; }
+            mis.innerHTML = `⚠️ Misrouted ticket detected. Auto-renaming <span class="font-mono">${esc(ticket.ticket_code)}</span> → <span class="font-mono font-bold">${esc(renamed)}</span> and tagging <b>${routedDept}</b>.`;
+          } else { mis.classList.add('hidden'); workingId = ticket.ticket_code; node.querySelector('#wk-id').textContent = ticket.ticket_code; }
         }));
         node.querySelector('#to-step2').onclick = step2;
       };
@@ -341,10 +370,21 @@
         sync(); sel.onchange = sync;
         node.querySelector('.close-x').onclick = closeModal;
         node.querySelector('#back1').onclick = step1;
-        node.querySelector('#gen').onclick = () => { const k = sel.value; const full = `[${BUREAUS[k].prefix}] Case-${num.value}`; caseCounters[k] = Number(num.value) + 1; Store.set('caseCounters', caseCounters); step3(full, k); };
+        node.querySelector('#gen').onclick = async () => {
+          const k = sel.value; const full = `[${BUREAUS[k].prefix}] Case-${num.value}`;
+          caseCounters[k] = Number(num.value) + 1; Store.set('caseCounters', caseCounters);
+          let newCaseId = null;
+          if (dbReady()) {
+            const res = await DB().insert('cases', { case_number: full, title: ticket.description || workingId, bureau: k, status: 'open' });
+            if (res.error) { toast('Case create failed: ' + res.error.message, 'danger'); return; }
+            newCaseId = res.data && res.data[0] && res.data[0].id;
+            if (ticket.id) await DB().update('tickets', ticket.id, { status: 'processed', case_id: newCaseId, routed_bureau: k });
+          }
+          step3(full, k, newCaseId);
+        };
       };
 
-      const step3 = (caseId, key) => {
+      const step3 = (caseId, key, newCaseId) => {
         const slug = caseId.replace(/[^a-z0-9]/gi,'-').toLowerCase();
         const drive = `https://drive.cid.sa.gov/${BUREAUS[key].prefix.toLowerCase()}/${slug}`;
         node.innerHTML = `
@@ -359,7 +399,7 @@
             <button id="done" class="mt-6 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Done</button>
           </div>`;
         node.querySelectorAll('.sync-spin').forEach((s) => s.style.animation = 'spin 0.8s linear infinite');
-        node.querySelector('#done').onclick = () => { closeModal(); toast(`${caseId} created · Discord + Drive synced`, 'success'); };
+        node.querySelector('#done').onclick = () => { closeModal(); toast(`${caseId} created` + (newCaseId ? ' · saved to Supabase' : ''), 'success'); fetchTickets(); fetchCases(); fetchKpis(); };
       };
 
       step1(); openModal(node);
@@ -370,7 +410,7 @@
     let trackers = [];
     let PROFILES = [];
     const officerName = (id) => { if (!id) return null; const p = PROFILES.find((x) => x.id === id); if (p) return p.display_name; const me = DB() && DB().me; return (me && me.id === id) ? me.display_name : 'Officer'; };
-    async function fetchProfiles() { if (!dbReady()) return; try { PROFILES = await DB().list('profiles', {}); } catch (e) {} }
+    async function fetchProfiles() { if (!dbReady()) return; try { PROFILES = await DB().list('profiles', {}); } catch (e) {} if (typeof renderAdmin === 'function') renderAdmin(); if (typeof renderActivity === 'function') renderActivity(); }
     function fmtCountdown(ms) {
       if (ms <= 0) return 'EXPIRED';
       const h = Math.floor(ms/3.6e6), m = Math.floor((ms%3.6e6)/6e4), s = Math.floor((ms%6e4)/1000);
@@ -2253,6 +2293,7 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
             <div class="flex items-center gap-2">
               <span class="rounded-md px-2.5 py-1 text-[10px] font-semibold uppercase ${caseStatusTint(c.status)}">${escapeHTML(c.status)}</span>
               <span class="rounded-md bg-white/5 px-2.5 py-1 text-xs text-slate-300">${escapeHTML(c.bureau)}</span>
+              <button id="case-packet" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">📦 Packet .docx</button>
               ${canEdit ? '<button id="case-edit" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>' : ''}
               ${canDel ? '<button id="case-del" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>' : ''}
             </div>
@@ -2263,6 +2304,7 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
         </div>
         <div id="detail-body"><p class="text-sm text-slate-500">Loading…</p></div>`;
       $('#case-back').onclick = showCasesList;
+      const pk = $('#case-packet'); if (pk) pk.onclick = () => exportCasePacket(detailCase);
       const eb = $('#case-edit'); if (eb) eb.onclick = () => openCaseModal(detailCase);
       const db = $('#case-del'); if (db) db.onclick = async () => {
         if (!confirm('Delete case ' + detailCase.case_number + '? This cascades to its evidence/reports.')) return;
@@ -2365,18 +2407,129 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
     // Re-fetch when auth resolves (called by auth.js) and subscribe to realtime.
     window.CIDApp = window.CIDApp || {};
     window.CIDApp.onAuthed = function () {
-      fetchProfiles(); fetchCases(); fetchGangs(); fetchPersons(); fetchDrugs(); fetchPlaces(); fetchBenches(); fetchFootprints(); fetchTrackers();
+      fetchProfiles(); fetchCases(); fetchGangs(); fetchPersons(); fetchDrugs(); fetchPlaces(); fetchBenches(); fetchFootprints(); fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); fetchNotifications();
       if (dbReady()) {
-        DB().subscribe('cases', fetchCases);
+        DB().subscribe('cases', () => { fetchCases(); fetchKpis(); renderBureauLoad(); });
         DB().subscribe('gangs', fetchGangs);
-        DB().subscribe('persons', fetchPersons);
+        DB().subscribe('persons', () => { fetchPersons(); renderKPIs(); });
         DB().subscribe('narcotics', fetchDrugs);
         DB().subscribe('places', fetchPlaces);
         DB().subscribe('ballistics_benches', fetchBenches);
         DB().subscribe('ballistic_footprints', fetchFootprints);
         DB().subscribe('trackers', fetchTrackers);
+        DB().subscribe('tickets', fetchTickets);
+        DB().subscribe('audit_log', fetchActivity);
+        DB().subscribe('notifications', fetchNotifications);
+        renderAdmin();
       }
     };
+
+    /* ============================================================ 15. NOTIFICATIONS / ADMIN / CASE PACKET / SEARCH ============================================================ */
+    let NOTIFS = [];
+    const NOTIF_LABEL = { tracker_pending: 'Tracker awaiting co-sign', tracker_authorized: 'Tracker authorized', case_assigned: 'Case assigned', report_finalized: 'Report finalized', rico_ready: 'RICO elements satisfied' };
+    async function fetchNotifications() {
+      if (!dbReady()) return;
+      try { NOTIFS = await DB().list('notifications', { order: 'created_at', ascending: false }); } catch (e) { NOTIFS = []; }
+      const unread = NOTIFS.filter((n) => !n.read).length;
+      const bell = $('#notif-bell'), badge = $('#notif-badge');
+      if (bell) bell.classList.remove('hidden');
+      if (badge) { badge.textContent = unread > 9 ? '9+' : String(unread); badge.classList.toggle('hidden', unread === 0); }
+    }
+    function openNotifications() {
+      const node = el('div', { class: 'p-6' });
+      node.innerHTML = `
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Notifications</h3><div class="flex items-center gap-2">${NOTIFS.some((n) => !n.read) ? '<button id="notif-readall" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 hover:bg-white/10">Mark all read</button>' : ''}<button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
+        <div class="space-y-2">${NOTIFS.length ? NOTIFS.map((n) => `<div class="rounded-lg border ${n.read ? 'border-white/5 bg-ink-900' : 'border-blue-500/20 bg-blue-500/5'} p-3"><div class="flex items-center justify-between"><span class="text-sm font-semibold text-white">${esc(NOTIF_LABEL[n.type] || n.type)}</span><span class="text-[11px] text-slate-500">${timeAgo(n.created_at)}</span></div>${n.payload && (n.payload.tracker_code || n.payload.target) ? `<p class="mt-1 text-xs text-slate-400">${esc([n.payload.tracker_code, n.payload.target].filter(Boolean).join(' · '))}</p>` : ''}</div>`).join('') : '<p class="text-sm text-slate-500">No notifications.</p>'}</div>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      const ra = node.querySelector('#notif-readall');
+      if (ra) ra.onclick = async () => { const ids = NOTIFS.filter((n) => !n.read).map((n) => n.id); for (const id of ids) { try { await DB().update('notifications', id, { read: true }); } catch (e) {} } toast('Marked read', 'info'); closeModal(); fetchNotifications(); };
+      openModal(node);
+    }
+
+    /* ---- Member administration (Command only) ---- */
+    function renderAdmin() {
+      const wrap = $('#admin-panel'); if (!wrap) return;
+      if (!(DB() && DB().me && DB().me.role === 'command')) { wrap.classList.add('hidden'); return; }
+      wrap.classList.remove('hidden');
+      const rows = PROFILES.slice().sort((a, b) => Number(a.active) - Number(b.active));
+      wrap.innerHTML = `
+        <div class="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+          <h4 class="mb-1 text-sm font-semibold uppercase tracking-wider text-amber-300/80">⚙️ Member Administration (Command)</h4>
+          <p class="mb-4 text-xs text-slate-400">Approve and assign officers. New sign-ins are inactive until activated.</p>
+          <div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead><tr class="text-[11px] uppercase tracking-wider text-slate-400"><th class="px-3 py-2">Officer</th><th class="px-3 py-2">Role</th><th class="px-3 py-2">Bureau</th><th class="px-3 py-2">Active</th><th class="px-3 py-2"></th></tr></thead>
+          <tbody class="divide-y divide-white/5">${rows.map((p) => `<tr class="${p.active ? '' : 'bg-amber-500/5'}"><td class="px-3 py-2"><p class="text-white">${esc(p.display_name)}</p><p class="text-[11px] text-slate-500">${esc(p.email || '')}</p></td><td class="px-3 py-2 text-slate-300">${esc(p.role)}</td><td class="px-3 py-2 text-slate-300">${esc(p.division)}</td><td class="px-3 py-2">${p.active ? '<span class="text-emerald-300">Yes</span>' : '<span class="text-amber-300">Pending</span>'}</td><td class="px-3 py-2 text-right"><button class="adm-edit rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 hover:bg-white/10" data-id="${p.id}">Manage</button></td></tr>`).join('') || '<tr><td colspan="5" class="px-3 py-3 text-slate-500">No profiles yet.</td></tr>'}</tbody></table></div>
+        </div>`;
+      wrap.querySelectorAll('.adm-edit').forEach((b) => b.onclick = () => openAssignModal(PROFILES.find((p) => p.id === b.dataset.id)));
+    }
+    function openAssignModal(p) {
+      if (!p) return;
+      const node = el('div', { class: 'p-6' });
+      node.innerHTML = `
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Manage Officer</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <p class="mb-4 text-sm text-slate-300">${esc(p.display_name)} <span class="text-slate-500">· ${esc(p.email || '')}</span></p>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Role</label><select id="adm-role" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${['detective', 'supervisor', 'director', 'command'].map((r) => `<option ${r === p.role ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Bureau</label><select id="adm-bureau" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${['LSB', 'BCB', 'SAB', 'JTF'].map((b) => `<option ${b === p.division ? 'selected' : ''}>${b}</option>`).join('')}</select></div>
+        </div>
+        <label class="mt-3 flex items-center gap-2 text-sm text-slate-200"><input id="adm-active" type="checkbox" ${p.active ? 'checked' : ''} class="accent-emerald-500" /> Active (approved for access)</label>
+        <button id="adm-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save</button>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#adm-save').onclick = async () => {
+        const res = await DB().rpc('assign_member', { target: p.id, new_role: node.querySelector('#adm-role').value, new_division: node.querySelector('#adm-bureau').value, set_active: node.querySelector('#adm-active').checked });
+        if (res.error) { toast('Update failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast('Member updated', 'success'); fetchProfiles().then(renderAdmin);
+      };
+      openModal(node);
+    }
+
+    /* ---- Full case packet export (.docx) ---- */
+    async function exportCasePacket(c) {
+      if (!c) return;
+      let ev = [], rep = [], cust = [], rico = [], preds = [];
+      try {
+        [ev, rep] = await Promise.all([ DB().list('evidence', { eq: { case_id: c.id } }), DB().list('reports', { order: 'created_at', ascending: true, eq: { case_id: c.id } }) ]);
+        const ricoRows = await DB().list('rico_cases', { eq: { case_id: c.id } }); rico = ricoRows;
+        if (ricoRows[0]) preds = await DB().list('predicate_acts', { eq: { rico_case_id: ricoRows[0].id } });
+      } catch (e) {}
+      const P = [{ text: 'Criminal Investigation Division — State of San Andreas', style: 'subtitle' }, { text: 'CASE PACKET — ' + c.case_number, style: 'title' }, { text: `${c.title || ''} · ${c.bureau} · ${String(c.status).toUpperCase()} · prepared ${new Date().toLocaleString('en-US')}`, style: 'subtitle' }, { text: '', style: 'normal' }];
+      P.push({ text: 'Summary', style: 'heading' }); P.push({ text: c.summary || '—', style: 'normal' });
+      P.push({ text: `Evidence (${ev.length})`, style: 'heading' });
+      ev.length ? ev.forEach((e) => P.push({ text: `• ${(e.item_code ? e.item_code + ' — ' : '') + (e.description || e.type || 'item')} [${e.tamper}]`, style: 'normal' })) : P.push({ text: 'None.', style: 'normal' });
+      P.push({ text: `Reports (${rep.length})`, style: 'heading' });
+      rep.length ? rep.forEach((r) => P.push({ text: `• ${reportTitle(r)}${r.finalized ? ' (finalized)' : ''} — ${new Date(r.created_at).toLocaleDateString('en-US')}`, style: 'normal' })) : P.push({ text: 'None.', style: 'normal' });
+      P.push({ text: 'RICO', style: 'heading' });
+      P.push({ text: rico[0] ? `Enterprise linked; ${preds.length} predicate act(s).` : 'No RICO tracker for this case.', style: 'normal' });
+      P.push({ text: '', style: 'normal' }); P.push({ text: 'Generated by the CID Portal. For internal investigative use.', style: 'subtitle' });
+      downloadDocx('Case Packet — ' + c.case_number, P, c.case_number.replace(/[^a-z0-9]/gi, '-') + '-packet.docx');
+      toast('Case packet exported (.docx)', 'success');
+    }
+
+    /* ---- Global search across Supabase ---- */
+    async function supaSearch(q) {
+      if (!dbReady()) { toast('Sign in to search.', 'warn'); return; }
+      const node = el('div', { class: 'p-6' });
+      node.innerHTML = `<div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Search “${esc(q)}”</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div><div id="search-results" class="space-y-4"><p class="text-sm text-slate-500">Searching…</p></div>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      openModal(node, { wide: true });
+      const like = '%' + q + '%';
+      const run = (tbl, cols, col) => DB().from(tbl).select('*').or(cols.map((c) => `${c}.ilike.${like}`).join(',')).limit(8).then((r) => r.data || []).catch(() => []);
+      const [cases, persons, gangs, places] = await Promise.all([
+        run('cases', ['case_number', 'title', 'summary']),
+        run('persons', ['name', 'alias', 'status']),
+        run('gangs', ['name', 'colors', 'notes']),
+        run('places', ['name', 'area']),
+      ]);
+      const sec = (title, items, fmt) => items.length ? `<div><p class="mb-1 text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">${title} (${items.length})</p><div class="space-y-1">${items.map(fmt).join('')}</div></div>` : '';
+      const box = node.querySelector('#search-results');
+      const html = [
+        sec('Cases', cases, (c) => `<button class="sr sr-case block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-id="${c.id}"><span class="font-mono text-blue-300">${esc(c.case_number)}</span> · ${esc(c.title || '')}</button>`),
+        sec('Persons', persons, (p) => `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm text-slate-200">${esc(p.name)}${p.alias ? ' “' + esc(p.alias) + '”' : ''}</div>`),
+        sec('Gangs', gangs, (g) => `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm text-slate-200">🚩 ${esc(g.name)}</div>`),
+        sec('Places', places, (p) => `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm text-slate-200">📍 ${esc(p.name)} <span class="text-slate-500">${esc(p.area || '')}</span></div>`),
+      ].join('');
+      box.innerHTML = html || '<p class="text-sm text-slate-500">No matches across cases, persons, gangs or places.</p>';
+      box.querySelectorAll('.sr-case').forEach((b) => b.onclick = () => { closeModal(); navigate('cases'); setTimeout(() => openCaseDetail(b.dataset.id), 120); });
+    }
 
     /* ============================================================ 13. CLOCK + BOOT ============================================================ */
     function tickClock() { $('#clock').textContent = 'Secure link · ' + new Date().toLocaleTimeString('en-US', { hour12:false }); }
@@ -2387,6 +2540,7 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
       // Central command
       renderKPIs(); renderTickets(); renderActivity(); renderBureauLoad();
       renderTrackers(); $('#new-tracker').addEventListener('click', openTrackerModal);
+      $('#new-ticket-btn').addEventListener('click', openNewTicketModal);
       renderCompBrackets();
       $('#comp-input').addEventListener('input', () => { const d = $('#comp-input').value.replace(/[^0-9]/g,''); $('#comp-input').value = d ? Number(d).toLocaleString('en-US') : ''; calcComp(); });
       calcComp();
@@ -2426,6 +2580,7 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
       // Case Files (Supabase spine) — fetch happens via onAuthed / onEnterCases
       initCases();
       // Chrome
+      $('#notif-bell').addEventListener('click', openNotifications);
       tickClock(); setInterval(tickClock, 1000); setInterval(tickTrackers, 1000);
 
       const hash = (location.hash || '').replace('#','');
@@ -2433,19 +2588,9 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
 
       $('#global-search').addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
-        const q = e.target.value.toLowerCase();
-        if (/drug|meth|heroin|narc/.test(q)) navigate('narcotics');
-        else if (/weapon|gun|ballist|bench/.test(q)) navigate('ballistics');
-        else if (/officer|roster|medal|media|evidence/.test(q)) navigate('personnel');
-        else if (/m\.?o|profile|suspect/.test(q)) navigate('modus');
-        else if (/gang|turf|member/.test(q)) navigate('gangs');
-        else if (/place|lab|stash|location|production/.test(q)) navigate('places');
-        else if (/report|warrant|affidavit|supplement/.test(q)) navigate('reports');
-        else if (/rico|predicate|enterprise|racket/.test(q)) navigate('rico');
-        else if (/record|wanted|suspect|live/.test(q)) navigate('records');
-        else if (/folder|drive|file|ci/.test(q)) navigate('drive');
-        else navigate('command');
-        toast('Searching division records for "' + e.target.value + '"…', 'info');
+        const q = e.target.value.trim();
+        if (q.length >= 2 && dbReady()) { supaSearch(q); return; }
+        toast('Type at least 2 characters (and sign in) to search.', 'info');
       });
     }
     document.addEventListener('DOMContentLoaded', init);

@@ -55,6 +55,7 @@
     insert(table, row) { return client.from(table).insert(row).select(); },
     update(table, id, patch) { return client.from(table).update(patch).eq('id', id).select(); },
     remove(table, id) { return client.from(table).delete().eq('id', id); },
+    rpc(fn, args) { return client.rpc(fn, args); },
     subscribe(table, cb) {
       if (!client) return null;
       return client.channel('rt_' + table)
