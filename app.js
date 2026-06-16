@@ -126,6 +126,112 @@
       set(k, v) { const d = this._load(); d[k] = v; try { localStorage.setItem(this.KEY, JSON.stringify(d)); } catch (e) {} },
     };
 
+    /* ============================================================ BULK IMPORT (CSV / JSON) ============================================================
+     * One-time per-module importer. Accepts a JSON array of objects, or CSV with
+     * a header row; maps to an allow-listed column set, coerces types, batch-inserts
+     * via Supabase (RLS still applies), and reports inserted/skipped counts. */
+    function parseCSVText(text) {
+      const rows = []; let i = 0, field = '', row = [], inQ = false;
+      while (i < text.length) {
+        const c = text[i];
+        if (inQ) { if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; } else field += c; }
+        else if (c === '"') inQ = true;
+        else if (c === ',') { row.push(field); field = ''; }
+        else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(field); rows.push(row); row = []; field = ''; }
+        else field += c;
+        i++;
+      }
+      if (field.length || row.length) { row.push(field); rows.push(row); }
+      const clean = rows.filter((r) => !(r.length === 1 && r[0].trim() === ''));
+      if (clean.length < 2) return [];
+      const headers = clean[0].map((h) => h.trim());
+      return clean.slice(1).map((r) => { const o = {}; headers.forEach((h, idx) => { o[h] = r[idx] !== undefined ? r[idx] : ''; }); return o; });
+    }
+    function importRows(rawText, cfg) {
+      const t = (rawText || '').trim();
+      if (!t) return { rows: [], skipped: 0, error: 'Nothing to import.' };
+      let raw;
+      if (t[0] === '[' || t[0] === '{') {
+        try { raw = JSON.parse(t); } catch (e) { return { rows: [], skipped: 0, error: 'Invalid JSON: ' + e.message }; }
+        if (!Array.isArray(raw)) raw = [raw];
+      } else raw = parseCSVText(t);
+      const num = cfg.num || [], bool = cfg.bool || [], lower = cfg.lower || [], upper = cfg.upper || [];
+      let skipped = 0; const rows = [];
+      raw.forEach((src) => {
+        if (!src || typeof src !== 'object') { skipped++; return; }
+        const o = {};
+        cfg.allow.forEach((k) => {
+          if (src[k] === undefined || src[k] === null) return;
+          let v = src[k];
+          if (typeof v === 'string') v = v.trim();
+          if (v === '') return;
+          if (num.includes(k)) { v = Number(String(v).replace(/[^0-9.\-]/g, '')); if (isNaN(v)) return; }
+          else if (bool.includes(k)) v = /^(1|true|yes|y)$/i.test(String(v));
+          else if (lower.includes(k)) v = String(v).toLowerCase();
+          else if (upper.includes(k)) v = String(v).toUpperCase();
+          o[k] = v;
+        });
+        if (cfg.coerce) { const r = cfg.coerce(o, src); if (r === null) { skipped++; return; } }
+        if ((cfg.required || []).some((k) => o[k] === undefined || o[k] === '')) { skipped++; return; }
+        rows.push(o);
+      });
+      return { rows, skipped, error: null };
+    }
+    function openImportModal(cfg) {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      const node = el('div', { class: 'p-6' });
+      const cols = cfg.allow.map((k) => k + ((cfg.required || []).includes(k) ? '*' : '')).join(', ');
+      node.innerHTML = `
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Import ${esc(cfg.label)}</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <p class="mb-2 text-xs text-slate-400">Paste a <b>JSON array</b> of objects or <b>CSV</b> with a header row. Columns (<span class="text-rose-300">*</span> required): <span class="font-mono text-blue-300">${esc(cols)}</span></p>
+        <input id="imp-file" type="file" accept=".csv,.json,text/csv,application/json" class="mb-2 block w-full text-xs text-slate-400 file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-white" />
+        <textarea id="imp-text" rows="9" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-xs text-white outline-none focus:border-badge-500" placeholder='[{"key":"value"}]   — or —   col1,col2&#10;val1,val2'></textarea>
+        <div id="imp-msg" class="mt-2 text-xs text-slate-400"></div>
+        <button id="imp-go" class="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Import</button>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      const ta = node.querySelector('#imp-text'), msg = node.querySelector('#imp-msg');
+      node.querySelector('#imp-file').onchange = (e) => { const f = e.target.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => { ta.value = rd.result; }; rd.readAsText(f); };
+      node.querySelector('#imp-go').onclick = async () => {
+        const { rows, skipped, error } = importRows(ta.value, cfg);
+        if (error) { msg.innerHTML = '<span class="text-rose-300">' + esc(error) + '</span>'; return; }
+        if (!rows.length) { msg.innerHTML = '<span class="text-amber-300">No valid rows found' + (skipped ? ' (' + skipped + ' skipped)' : '') + '.</span>'; return; }
+        msg.textContent = 'Importing ' + rows.length + ' row(s)…';
+        const res = await DB().insert(cfg.table, rows);
+        if (res.error) { msg.innerHTML = '<span class="text-rose-300">Import failed: ' + esc(res.error.message) + '</span>'; return; }
+        closeModal();
+        toast('Imported ' + rows.length + ' ' + cfg.label + (skipped ? ' · ' + skipped + ' skipped' : ''), 'success');
+        if (typeof cfg.after === 'function') cfg.after();
+      };
+      openModal(node);
+    }
+    // Inject an "⇪ Import" button next to a module's primary "+ New" action; visibility mirrors it.
+    function wireImport(anchorSel, cfg) {
+      const a = $(anchorSel); if (!a) return null;
+      const btn = el('button', { class: 'imp-btn rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10' }, '⇪ Import');
+      btn.addEventListener('click', () => openImportModal(cfg));
+      a.parentNode.insertBefore(btn, a);
+      const sync = () => btn.classList.toggle('hidden', a.classList.contains('hidden') || !(DB() && DB().canEdit()));
+      sync();
+      try { new MutationObserver(sync).observe(a, { attributes: true, attributeFilter: ['class'] }); } catch (e) {}
+      return btn;
+    }
+    function wireAllImports() {
+      const I = [
+        ['#case-new',      { table:'cases',                label:'cases',         allow:['case_number','title','bureau','status','summary'], required:['case_number'], upper:['bureau'], lower:['status'], after:fetchCases }],
+        ['#person-new',    { table:'persons',              label:'persons',       allow:['name','alias','dob','ccw','vch','felony_count','status','notes'], required:['name'], bool:['ccw'], num:['vch','felony_count'], after:fetchPersons }],
+        ['#add-gang',      { table:'gangs',                label:'gangs',         allow:['name','colors','threat_level','notes'], required:['name'], lower:['threat_level'], after:fetchGangs }],
+        ['#narc-new',      { table:'narcotics',            label:'narcotics',     allow:['name','classification','icon','popularity','street_price','wholesale_price'], required:['name'], num:['popularity','street_price','wholesale_price'], after:fetchDrugs }],
+        ['#add-place',     { table:'places',               label:'places',        allow:['name','type','area','notes'], required:['name','type'], lower:['type'], after:fetchPlaces }],
+        ['#bench-new',     { table:'ballistics_benches',   label:'benches',       allow:['bench_type','name','tier','heat'], required:['bench_type','name'], lower:['bench_type'], after:fetchBenches }],
+        ['#footprint-new', { table:'ballistic_footprints', label:'footprints',    allow:['signature','weapon'], required:['signature'], after:fetchFootprints }],
+        ['#new-tracker',   { table:'trackers',             label:'trackers',      allow:['tracker_code','target','duration_hours'], required:['tracker_code','target'], num:['duration_hours'], after:fetchTrackers }],
+        ['#new-ticket-btn',{ table:'tickets',              label:'tickets',       allow:['ticket_code','source','description','reported_dept'], required:['ticket_code'], after:fetchTickets }],
+        ['#add-commend',   { table:'commendations',        label:'commendations', allow:['title','recipient_name','note','icon','tint'], required:['title'], after:fetchCommendations }],
+        ['#add-media',     { table:'media',                label:'media',         allow:['title','type','external_url','kind'], required:['title','type'], lower:['type'], after:fetchMedia }],
+      ];
+      I.forEach(([sel, cfg]) => wireImport(sel, cfg));
+    }
+
     /* ============================================================ 3. ROUTER / SHELL ============================================================ */
     const PAGE_META = {
       command:    { title: 'Central Command', sub: 'Case assignment & operational hub' },
@@ -1062,11 +1168,17 @@
       const files = docsInFolder(meta.name);
       const sub = (d) => { const t = docDisplayType(d); return t === 'matrix' ? 'live matrix' : t === 'sheet' ? 'open sheet' : t === 'zip' ? 'open archive' : 'open document'; };
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white">${esc(meta.name)}</h3><p class="text-xs text-slate-400">CID General / Shared · ${files.length} item${files.length === 1 ? '' : 's'}</p></div></div><div class="flex items-center gap-2">${canEdit ? '<button id="folder-new" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">+ New Document</button>' : ''}<button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
+        <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white">${esc(meta.name)}</h3><p class="text-xs text-slate-400">CID General / Shared · ${files.length} item${files.length === 1 ? '' : 's'}</p></div></div><div class="flex items-center gap-2">${canEdit ? '<button id="folder-import" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">⇪ Import</button><button id="folder-new" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">+ New Document</button>' : ''}<button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
         <div class="space-y-2" id="folder-files">${files.length ? files.map((d) => `<div class="file-row flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:bg-white/5 hover:border-blue-500/30" data-id="${d.id}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">${fileIcon(docDisplayType(d))}</span>${esc(d.name)}</span><span class="text-[11px] text-slate-500">${sub(d)}</span></div>`).join('') : '<p class="text-sm text-slate-500">Empty folder.</p>'}</div>`;
       node.querySelector('.close-x').onclick = closeModal;
       node.querySelectorAll('.file-row').forEach((row) => row.addEventListener('click', () => { const d = DOCS.find((x) => x.id === row.dataset.id); if (d) openDocument(d, meta); }));
       const nb = node.querySelector('#folder-new'); if (nb) nb.onclick = () => openNewDocModal(meta);
+      const ib = node.querySelector('#folder-import'); if (ib) ib.onclick = () => openImportModal({
+        table: 'documents', label: 'documents into ' + meta.name,
+        allow: ['name', 'kind', 'body'], required: ['name'],
+        coerce: (o) => { o.folder = meta.name; if (!o.kind) o.kind = /\.sheet$/i.test(o.name) ? 'sheet' : /\.pdf$/i.test(o.name) ? 'pdf' : 'doc'; o.content = o.kind === 'sheet' ? { cols: ['Col 1', 'Col 2'], rows: [['', '']] } : { body: o.body || '' }; delete o.body; return o; },
+        after: () => { fetchDocuments(); openFolder(meta); },
+      });
       openModal(node, { wide: true });
     }
     function openNewDocModal(meta) {
@@ -2407,7 +2519,7 @@
     function tickClock() { $('#clock').textContent = 'Secure link · ' + new Date().toLocaleTimeString('en-US', { hour12:false }); }
 
     function init() {
-      wireDrawer(); wireCollapse();
+      wireDrawer(); wireCollapse(); wireAllImports();
       // Central command
       renderKPIs(); renderTickets(); renderActivity(); renderBureauLoad();
       renderTrackers(); $('#new-tracker').addEventListener('click', openTrackerModal);
