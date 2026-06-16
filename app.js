@@ -58,23 +58,8 @@
     const COMP_SPLIT = { 'Primary Detective': 0.5, 'Supporting Units': 0.3, 'Confidential Informants': 0.2 };
 
     /* ---- Narcotics registry ---- */
-    const DRUGS = [
-      { name: 'Blue Meth', cls: 'Synthetic Stimulant', icon: '🔵', pop: 92, street: 1200, wholesale: 450,
-        precursors: [ {n:'Pseudoephedrine', p:80}, {n:'Anhydrous Ammonia', p:65}, {n:'Lithium', p:55}, {n:'Red Phosphorus', p:40} ],
-        hotspots: [ {area:'Sandy Shores', d:'High', case:'[BCB] Case-2000001'}, {area:'Rancho', d:'Medium', case:'[LSB] Case-1000001'} ] },
-      { name: 'Purity Heroin', cls: 'Opioid', icon: '🟤', pop: 74, street: 1800, wholesale: 700,
-        precursors: [ {n:'Morphine Base', p:75}, {n:'Acetic Anhydride', p:60}, {n:'Activated Charcoal', p:35} ],
-        hotspots: [ {area:'Vespucci Beach', d:'Medium', case:'[LSB] Case-1000007'}, {area:'Mirror Park', d:'Low', case:null} ] },
-      { name: 'Crack Cocaine', cls: 'Freebase Stimulant', icon: '⚪', pop: 81, street: 900, wholesale: 300,
-        precursors: [ {n:'Cocaine HCl', p:85}, {n:'Sodium Bicarbonate', p:50}, {n:'Ammonia', p:30} ],
-        hotspots: [ {area:'Davis', d:'High', case:'[LSB] Case-1000007'}, {area:'Strawberry', d:'Medium', case:null} ] },
-      { name: 'Moonshine', cls: 'Illicit Distilled Alcohol', icon: '🥃', pop: 55, street: 120, wholesale: 35,
-        precursors: [ {n:'Corn Mash', p:70}, {n:'Sugar', p:60}, {n:'Yeast', p:45} ],
-        hotspots: [ {area:'Grapeseed', d:'High', case:'[BCB] Case-2000004'}, {area:'Paleto Bay', d:'Medium', case:null} ] },
-      { name: 'Lab-Grade Amphetamine', cls: 'Synthetic Stimulant', icon: '💠', pop: 68, street: 1400, wholesale: 520,
-        precursors: [ {n:'Phenylacetic Acid', p:78}, {n:'Acetic Anhydride', p:55}, {n:'Hydrochloric Acid', p:42} ],
-        hotspots: [ {area:'Murrieta Heights', d:'Medium', case:null}, {area:'La Mesa', d:'Low', case:'[LSB] Case-1000001'} ] },
-    ];
+    // Narcotics are now Supabase-backed; DRUGS is a normalized read cache (see fetchDrugs).
+    let DRUGS = [];
 
     /* ---- Weapon benches ---- */
     const BENCHES = {
@@ -236,6 +221,7 @@
       if (tab === 'cases' && typeof onEnterCases === 'function') onEnterCases();
       if (tab === 'persons' && typeof onEnterPersons === 'function') onEnterPersons();
       if (tab === 'gangs' && typeof onEnterGangs === 'function') onEnterGangs();
+      if (tab === 'narcotics' && typeof onEnterNarcotics === 'function') onEnterNarcotics();
     }
     $$('.nav-link, .bnav-link').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.tab)));
 
@@ -489,7 +475,11 @@
     /* ============================================================ 6. NARCOTICS ============================================================ */
     const densTint = (d) => d==='High' ? 'text-rose-300 bg-rose-500/10' : d==='Medium' ? 'text-amber-300 bg-amber-500/10' : 'text-emerald-300 bg-emerald-500/10';
     function renderDrugs() {
-      const wrap = $('#drug-registry'); wrap.innerHTML = '';
+      const wrap = $('#drug-registry'); if (!wrap) return; wrap.innerHTML = '';
+      const canEdit = DB() && DB().canEdit();
+      const addBtn = $('#narc-new'); if (addBtn) addBtn.classList.toggle('hidden', !canEdit);
+      if (!dbReady()) { wrap.innerHTML = '<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">Live narcotics registry requires sign-in.</div>'; $('#narc-count').textContent = '0'; $('#narc-hotspots').textContent = '0'; return; }
+      if (!DRUGS.length) { wrap.innerHTML = `<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">No narcotics on file.${canEdit ? ' Use “+ New Narcotic”.' : ''}</div>`; $('#narc-count').textContent = '0'; $('#narc-hotspots').textContent = '0'; return; }
       let hot = 0;
       DRUGS.forEach((d, i) => {
         hot += d.hotspots.length;
@@ -522,16 +512,18 @@
               </div>
               <p class="mb-2 mt-5 text-xs font-semibold uppercase tracking-wider text-blue-300/70">Geographic Selling Hotspots</p>
               <div class="space-y-2">
-                ${d.hotspots.map((h)=>`<div class="flex items-center justify-between rounded-lg border border-white/5 bg-ink-850 px-3 py-2 text-sm"><span class="text-slate-200">${esc(h.area)}</span><span class="flex items-center gap-2"><span class="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${densTint(h.d)}">${h.d}</span>${h.case?`<span class="font-mono text-[11px] text-blue-300">${esc(h.case)}</span>`:'<span class="text-[11px] text-slate-500">unlinked</span>'}</span></div>`).join('')}
+                ${d.hotspots.map((h)=>`<div class="flex items-center justify-between rounded-lg border border-white/5 bg-ink-850 px-3 py-2 text-sm"><span class="text-slate-200">${esc(h.area)}</span><span class="flex items-center gap-2"><span class="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${densTint(h.d)}">${h.d}</span>${h.case?`<span class="font-mono text-[11px] text-blue-300">${esc(h.case)}</span>`:'<span class="text-[11px] text-slate-500">unlinked</span>'}</span></div>`).join('')||'<p class="text-xs text-slate-500">No hotspots logged.</p>'}
               </div>
+              ${canEdit ? `<div class="mt-4 text-right"><button class="narc-edit rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10" data-id="${d.id}">Edit narcotic</button></div>` : ''}
             </div>
           </div></div></div>`;
         wrap.appendChild(det);
-        // purity sliders
+        const eb = det.querySelector('.narc-edit'); if (eb) eb.addEventListener('click', () => openNarcoticModal(DRUGS.find((x) => x.id === eb.dataset.id)));
+        // purity sliders (what-if calc; not persisted)
         const baseStreet = d.street;
         const recompute = () => {
           const vals = $$('.prc', det).map((s) => Number(s.value));
-          const avg = vals.reduce((a,b)=>a+b,0) / vals.length;
+          const avg = vals.length ? vals.reduce((a,b)=>a+b,0) / vals.length : 0;
           det.querySelector('.batch-out').textContent = `${Math.round(avg)}% · ${fmtUSD(baseStreet * avg/100)}`;
         };
         $$('.prc', det).forEach((s) => s.addEventListener('input', () => { det.querySelector(`.prc-val[data-pi="${s.dataset.pi}"]`).textContent = s.value + '%'; recompute(); }));
@@ -539,6 +531,78 @@
       });
       $('#narc-count').textContent = DRUGS.length;
       $('#narc-hotspots').textContent = hot;
+    }
+
+    function narcsNotice() { /* handled in renderDrugs */ }
+    function onEnterNarcotics() { if (dbReady()) fetchDrugs(); else renderDrugs(); }
+    async function fetchDrugs() {
+      if (!dbReady()) { renderDrugs(); return; }
+      try {
+        const [narc, prec, hot] = await Promise.all([
+          DB().list('narcotics', { order: 'name', ascending: true }),
+          DB().list('narcotic_precursors', {}),
+          DB().list('narcotic_hotspots', {})
+        ]);
+        const caseNum = (id) => { const c = casesCache.find((x) => x.id === id); return c ? c.case_number : null; };
+        DRUGS = narc.map((n) => ({
+          id: n.id, name: n.name, cls: n.classification || '', icon: n.icon || '💊',
+          pop: n.popularity || 0, street: Number(n.street_price) || 0, wholesale: Number(n.wholesale_price) || 0,
+          precursors: prec.filter((p) => p.narcotic_id === n.id).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)).map((p) => ({ n: p.name, p: p.default_purity || 0 })),
+          hotspots: hot.filter((h) => h.narcotic_id === n.id).map((h) => ({ area: h.area, d: cap(h.density), case: caseNum(h.case_id) })),
+          hotspotsRaw: hot.filter((h) => h.narcotic_id === n.id)
+        }));
+        renderDrugs();
+      } catch (e) { const w = $('#drug-registry'); if (w) w.innerHTML = '<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-rose-300">Could not load narcotics: ' + escapeHTML(e.message || String(e)) + '</div>'; }
+    }
+    function openNarcoticModal(record) {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      const isEdit = !!(record && record.id);
+      const node = el('div', { class: 'p-6' });
+      const caseOpts = (sel) => ['<option value="">— no case —</option>'].concat(casesCache.map((c) => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${escapeHTML(c.case_number)}</option>`)).join('');
+      const precRow = (p) => `<div class="prec-row grid grid-cols-12 gap-2"><input class="pn col-span-8 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white" placeholder="Precursor" value="${escapeHTML(p ? p.n : '')}" /><input type="number" class="pp col-span-3 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white" placeholder="%" value="${p ? p.p : 0}" /><button class="prx col-span-1 rounded bg-white/5 text-xs text-rose-300 hover:bg-rose-500/10">✕</button></div>`;
+      const hotRow = (h) => `<div class="hot-row grid grid-cols-12 gap-2"><input class="ha col-span-5 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white" placeholder="Area" value="${escapeHTML(h ? h.area : '')}" /><select class="hd col-span-3 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white">${['low','medium','high'].map((d)=>`<option value="${d}" ${h && (h.density||'')===d?'selected':''}>${cap(d)}</option>`).join('')}</select><select class="hc col-span-3 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white">${caseOpts(h ? h.case_id : '')}</select><button class="hrx col-span-1 rounded bg-white/5 text-xs text-rose-300 hover:bg-rose-500/10">✕</button></div>`;
+      const d = record || {};
+      node.innerHTML = `
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${isEdit ? 'Edit' : 'New'} Narcotic</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input data-k="name" value="${escapeHTML(d.name || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Icon</label><input data-k="icon" value="${escapeHTML(d.icon || '💊')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div class="sm:col-span-3"><label class="mb-1 block text-xs font-semibold text-slate-400">Classification</label><input data-k="classification" value="${escapeHTML(d.cls || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Popularity</label><input type="number" data-k="popularity" value="${d.pop || 0}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Street $</label><input type="number" data-k="street_price" value="${d.street || 0}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Wholesale $</label><input type="number" data-k="wholesale_price" value="${d.wholesale || 0}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+        </div>
+        <div class="mt-4"><div class="mb-2 flex items-center justify-between"><label class="text-xs font-semibold text-slate-400">Precursors (name + default purity %)</label><button id="prec-add" class="rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-200 hover:bg-white/10">+ Precursor</button></div><div id="precs" class="space-y-2">${(d.precursors || []).map(precRow).join('')}</div></div>
+        <div class="mt-4"><div class="mb-2 flex items-center justify-between"><label class="text-xs font-semibold text-slate-400">Hotspots (area · density · case)</label><button id="hot-add" class="rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-200 hover:bg-white/10">+ Hotspot</button></div><div id="hots" class="space-y-2">${(d.hotspotsRaw || []).map(hotRow).join('')}</div></div>
+        <div class="mt-5 flex gap-2">
+          <button id="n-save" class="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">${isEdit ? 'Save changes' : 'Create narcotic'}</button>
+          ${isEdit && DB().canDelete() ? '<button id="n-del" class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>' : ''}
+        </div>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      const bind = () => { $$('.prx', node).forEach((b) => b.onclick = () => b.closest('.prec-row').remove()); $$('.hrx', node).forEach((b) => b.onclick = () => b.closest('.hot-row').remove()); };
+      bind();
+      node.querySelector('#prec-add').onclick = () => { node.querySelector('#precs').insertAdjacentHTML('beforeend', precRow(null)); bind(); };
+      node.querySelector('#hot-add').onclick = () => { node.querySelector('#hots').insertAdjacentHTML('beforeend', hotRow(null)); bind(); };
+      node.querySelector('#n-save').onclick = async () => {
+        const payload = {}; $$('[data-k]', node).forEach((f) => payload[f.dataset.k] = f.type === 'number' ? (Number(f.value) || 0) : f.value.trim());
+        if (!payload.name) { toast('Name is required.', 'warn'); return; }
+        let nid = record && record.id;
+        let res = nid ? await DB().update('narcotics', nid, payload) : await DB().insert('narcotics', payload);
+        if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        if (!nid) nid = res.data && res.data[0] && res.data[0].id;
+        if (nid) {
+          // replace children
+          await DB().from('narcotic_precursors').delete().eq('narcotic_id', nid);
+          await DB().from('narcotic_hotspots').delete().eq('narcotic_id', nid);
+          const precs = $$('.prec-row', node).map((r, i) => ({ narcotic_id: nid, name: $('.pn', r).value.trim(), default_purity: Number($('.pp', r).value) || 0, sort_order: i })).filter((p) => p.name);
+          const hots = $$('.hot-row', node).map((r) => ({ narcotic_id: nid, area: $('.ha', r).value.trim(), density: $('.hd', r).value, case_id: $('.hc', r).value || null })).filter((h) => h.area);
+          if (precs.length) await DB().from('narcotic_precursors').insert(precs);
+          if (hots.length) await DB().from('narcotic_hotspots').insert(hots);
+        }
+        closeModal(); toast(isEdit ? 'Narcotic updated' : 'Narcotic created', 'success'); fetchDrugs();
+      };
+      const nd = node.querySelector('#n-del'); if (nd) nd.onclick = async () => { if (!confirm('Delete ' + record.name + '?')) return; const r = await DB().remove('narcotics', record.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } closeModal(); toast('Narcotic deleted', 'warn'); fetchDrugs(); };
+      openModal(node, { wide: true });
     }
 
     /* ============================================================ 7. BALLISTICS ============================================================ */
@@ -2070,11 +2134,12 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
     // Re-fetch when auth resolves (called by auth.js) and subscribe to realtime.
     window.CIDApp = window.CIDApp || {};
     window.CIDApp.onAuthed = function () {
-      fetchCases(); fetchGangs(); fetchPersons();
+      fetchCases(); fetchGangs(); fetchPersons(); fetchDrugs();
       if (dbReady()) {
         DB().subscribe('cases', fetchCases);
         DB().subscribe('gangs', fetchGangs);
         DB().subscribe('persons', fetchPersons);
+        DB().subscribe('narcotics', fetchDrugs);
       }
     };
 
@@ -2090,8 +2155,9 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
       renderCompBrackets();
       $('#comp-input').addEventListener('input', () => { const d = $('#comp-input').value.replace(/[^0-9]/g,''); $('#comp-input').value = d ? Number(d).toLocaleString('en-US') : ''; calcComp(); });
       calcComp();
-      // Narcotics
+      // Narcotics (Supabase) — fetch via onAuthed / onEnterNarcotics
       renderDrugs();
+      $('#narc-new').addEventListener('click', () => openNarcoticModal(null));
       // Ballistics
       renderBenches(); renderBallisticLog();
       $$('.bench-tab').forEach((b) => b.addEventListener('click', () => { benchType = b.dataset.bench; Store.set('benchType', benchType); renderBenches(); }));

@@ -158,3 +158,16 @@ CSV/JSON import, full case-packet export.
 - Verified: node --check; clean jsdom load (both tabs, proper sign-in notices,
   no errors); live MCP round-trip on `cid` (gang→person→member(person+case)→turf
   insert with full FK chain; cascade-clean delete).
+
+## Phase 2 — Module migration #3: Narcotics (this change)
+- **Narcotics** migrated off localStorage onto Supabase (narcotics + precursors +
+  hotspots). `DRUGS` is now a normalized read cache; the expandable registry,
+  purity-slider→adjusted-value calc, pricing/popularity bars and case-linked
+  hotspots are preserved (logic unchanged, data live).
+- CRUD: "+ New Narcotic" + per-drug Edit modal (fields + precursor rows + hotspot
+  rows with density + case link); children replaced on save; delete gated to
+  Director/Command. Empty/sign-in states; realtime; recompute guards zero precursors.
+- Places' production-recipe + drug picker read the DRUGS cache (Places remains
+  localStorage for now; links by name).
+- Verified: node --check; clean jsdom load (sign-in notice, no errors); live MCP
+  round-trip on `cid` (narcotic→precursor→hotspot insert; cascade-clean delete).
