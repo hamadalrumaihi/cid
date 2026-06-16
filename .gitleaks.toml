@@ -1,0 +1,19 @@
+# gitleaks configuration for the CID Portal
+#
+# The static site intentionally ships a Supabase *publishable* (anon) key in
+# index.html. Publishable keys are PUBLIC by design — Row Level Security is the
+# actual security boundary — so they are safe to commit. This allowlist exempts
+# ONLY the publishable-key pattern; a real service_role / sb_secret_ key would
+# still be flagged.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public client-side keys (Supabase publishable + Google Picker) — safe to commit; RLS / Google Drive permissions protect data"
+regexTarget = "match"
+regexes = [
+  '''sb_publishable_[A-Za-z0-9_-]{10,}''',
+  # Google OAuth Web client ID + browser API key for the Case Files picker (public, referrer/origin-restricted)
+  '''[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com''',
+  '''AIza[0-9A-Za-z_-]{35}''',
+]

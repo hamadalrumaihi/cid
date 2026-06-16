@@ -6,14 +6,14 @@ The live data lives in Postgres (never committed to the repo).
 - **Migration:** `supabase/migrations/20260615130000_cid_records.sql`
 - **Frontend:** integrated into `index.html` (new **CID Records** tab), using
   `@supabase/supabase-js@2` from CDN.
-- **Project:** `sahp-rbac` (`nuujdewnkovtdvlbfzdx`) — URL already wired in.
+- **Project:** `cid` (`jhxuflzmqspidkvjckox`) — URL + publishable key already wired in.
 
 ## What you must set (one value)
 In `index.html`, find the `window.CID_SUPABASE` block and replace the key:
 
 ```js
 window.CID_SUPABASE = {
-  url: 'https://nuujdewnkovtdvlbfzdx.supabase.co',   // already set
+  url: 'https://jhxuflzmqspidkvjckox.supabase.co',   // already set
   anonKey: 'PASTE_YOUR_ANON_OR_PUBLISHABLE_KEY_HERE'  // <-- paste here
 };
 ```
@@ -40,7 +40,7 @@ window.CID_SUPABASE = {
    - **Site URL:** your GitHub Pages URL (e.g. `https://<user>.github.io/<repo>/`).
    - **Redirect URLs:** add the same URL (and `http://localhost...` if testing locally).
    - Discord OAuth callback (set in the Discord app's redirect list):
-     `https://nuujdewnkovtdvlbfzdx.supabase.co/auth/v1/callback`
+     `https://jhxuflzmqspidkvjckox.supabase.co/auth/v1/callback`
 6. **Paste the anon key** into `index.html` (above), commit, and push to Pages.
 
 ## Behavior
@@ -48,13 +48,20 @@ window.CID_SUPABASE = {
 - **Realtime:** any insert/update broadcasts to all open clients (re-fetch).
 - **Logged-out:** read-only (no New/Edit buttons).
 - **Logged-in (Discord or email):** "+ New Record" and per-card "Edit".
-- Writes are allowed for **any logged-in user** (per current RLS).
+- A signed-in user may create records and edit **only the records they created**
+  (per RLS — see below).
 
-## RLS summary (in the migration)
+## RLS summary (in the migrations)
 - `select` → `anon, authenticated` (public read so the site shows data on load).
   *To restrict to logged-in users, change that policy's role to `authenticated`.*
-- `insert` / `update` → `authenticated`.
+- `insert` → `authenticated`, forced to `created_by = auth.uid()` (no spoofing).
+- `update` → `authenticated`, only where `auth.uid() = created_by` (owner-only).
 - No `delete` policy (deletes blocked) — add one if you want it.
+
+> Owner-scoping comes from `20260615140000_cid_records_owner_update.sql`, which
+> supersedes the open policies in `20260615130000_cid_records.sql`. The 2 NULL-owner
+> seed rows are therefore not editable via the app; that migration includes a
+> commented "owner-or-orphan" variant if you want to allow editing them.
 
 ## Fields
 `name` (required), `callsign`, `case_number`, `charges`, `status`
