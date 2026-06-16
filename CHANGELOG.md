@@ -206,3 +206,17 @@ CSV/JSON import, full case-packet export.
 - Verified: node --check; clean jsdom load (5 templates, sign-in notice, no
   errors); live MCP round-trip on `cid` (report insert with jsonb fields +
   finalize/signature update) with cascade-clean delete.
+
+## Phase 2 — Module migration #7: Trackers (this change)
+- **Trackers** migrated off localStorage onto Supabase (`trackers`): deploy
+  (command/director signs as Director → status pending), **co-sign** by a second
+  command officer (sets deputy_sig + status authorized + expires_at = now +
+  duration) — enforces no single-person approval. Live per-second countdown from
+  expires_at; **auto-expire** flips status to 'expired' (audit-logged).
+- **Notifications**: rows written to `notifications` for the signatories on
+  deploy + authorization (surface in the notifications panel — next).
+- Signer names resolved via a `profiles` cache (`officerName`). RBAC: deploy/
+  co-sign/delete gated to Director/Command; read-only otherwise.
+- Case picker sources live cases. Verified: node --check; clean jsdom load
+  (sign-in notice, no errors); live MCP round-trip on `cid` (deploy pending →
+  authorize + 18h expiry window) with cleanup.

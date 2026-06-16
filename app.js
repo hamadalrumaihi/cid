@@ -210,6 +210,7 @@
       if (tab === 'ballistics' && typeof onEnterBallistics === 'function') onEnterBallistics();
       if (tab === 'reports' && typeof renderReportChain === 'function') renderReportChain();
       if (tab === 'rico' && typeof renderRico === 'function') renderRico();
+      if (tab === 'command' && typeof onEnterTrackers === 'function') onEnterTrackers();
     }
     $$('.nav-link, .bnav-link').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.tab)));
 
@@ -365,74 +366,108 @@
     }
 
     /* ---- Tracker deployment logs (dual signature + countdown) ---- */
-    function defaultTrackers() {
-      const now = Date.now();
-      return [
-        { id: 'TRK-9001', target: 'Black Sandking — plate 4XYZ', case: '[SAB] Case-9000001', director: 'Dir. A. Stone', deputy: 'Dep. R. Cole', end: now + 1000*60*60*18 },
-        { id: 'TRK-9002', target: 'Unmarked Burrito — Vagos cell', case: '[BCB] Case-2000001', director: 'Dir. A. Stone', deputy: '', end: now + 1000*60*60*5 },
-      ];
-    }
-    let trackers = Store.get('trackers', null) || defaultTrackers();
-    function saveTrackers() { Store.set('trackers', trackers); }
+    // Trackers are Supabase-backed; PROFILES cache resolves signer names.
+    let trackers = [];
+    let PROFILES = [];
+    const officerName = (id) => { if (!id) return null; const p = PROFILES.find((x) => x.id === id); if (p) return p.display_name; const me = DB() && DB().me; return (me && me.id === id) ? me.display_name : 'Officer'; };
+    async function fetchProfiles() { if (!dbReady()) return; try { PROFILES = await DB().list('profiles', {}); } catch (e) {} }
     function fmtCountdown(ms) {
       if (ms <= 0) return 'EXPIRED';
       const h = Math.floor(ms/3.6e6), m = Math.floor((ms%3.6e6)/6e4), s = Math.floor((ms%6e4)/1000);
       return `${String(h).padStart(2,'0')}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
     }
+    async function notify(userId, type, payload) { if (!userId || !dbReady()) return; try { await DB().insert('notifications', { user_id: userId, type, payload }); } catch (e) {} }
+    function onEnterTrackers() { if (dbReady()) fetchTrackers(); else renderTrackers(); }
+    async function fetchTrackers() {
+      if (!dbReady()) { renderTrackers(); return; }
+      try { trackers = await DB().list('trackers', { order: 'created_at', ascending: false }); renderTrackers(); }
+      catch (e) { const w = $('#tracker-list'); if (w) w.innerHTML = '<p class="text-sm text-rose-300">Load error: ' + escapeHTML(e.message || e) + '</p>'; }
+    }
+    const _expiring = new Set();
     function renderTrackers() {
-      const wrap = $('#tracker-list'); wrap.innerHTML = '';
-      if (!trackers.length) { wrap.innerHTML = '<p class="text-sm text-slate-500">No active tracker authorizations.</p>'; return; }
+      const wrap = $('#tracker-list'); if (!wrap) return;
+      const canSign = DB() && DB().canDelete();   // command/director sign + deploy
+      const nb = $('#new-tracker'); if (nb) nb.classList.toggle('hidden', !canSign);
+      if (!dbReady()) { wrap.innerHTML = '<p class="text-sm text-slate-500">Sign in to view tracker authorizations.</p>'; return; }
+      if (!trackers.length) { wrap.innerHTML = '<p class="text-sm text-slate-500">No tracker authorizations.' + (canSign ? ' Use “+ Authorize”.' : '') + '</p>'; return; }
+      wrap.innerHTML = '';
       trackers.forEach((t) => {
-        const remaining = t.end - Date.now();
-        const authorized = t.director && t.deputy;
+        const expMs = t.expires_at ? new Date(t.expires_at).getTime() : 0;
+        const remaining = expMs ? expMs - Date.now() : 0;
+        const authorized = t.status === 'authorized' && t.director_sig && t.deputy_sig;
+        const expired = t.status === 'expired' || (authorized && remaining <= 0);
+        const me = DB().me;
         const card = el('div', { class: 'rounded-xl border border-white/10 bg-ink-900 p-4' });
         card.innerHTML = `
           <div class="flex items-start justify-between gap-3">
-            <div><p class="font-mono text-xs text-blue-300">${esc(t.id)}</p><p class="mt-0.5 text-sm font-semibold text-white">${esc(t.target)}</p><p class="text-[11px] text-slate-400">${esc(t.case)}</p></div>
-            <div class="text-right"><p class="text-[10px] uppercase tracking-wider text-slate-400">Remaining</p><p class="cd font-mono text-sm font-bold ${remaining>0?'text-emerald-300':'text-rose-300'}" data-end="${t.end}">${fmtCountdown(remaining)}</p></div>
+            <div><p class="font-mono text-xs text-blue-300">${escapeHTML(t.tracker_code)}</p><p class="mt-0.5 text-sm font-semibold text-white">${escapeHTML(t.target)}</p><p class="text-[11px] text-slate-400">${escapeHTML(caseNumById(t.case_id) || '—')}</p></div>
+            <div class="text-right"><p class="text-[10px] uppercase tracking-wider text-slate-400">${authorized ? 'Remaining' : 'Status'}</p>${authorized ? `<p class="cd font-mono text-sm font-bold ${remaining > 0 ? 'text-emerald-300' : 'text-rose-300'}" data-id="${t.id}" data-end="${expMs}">${fmtCountdown(remaining)}</p>` : `<p class="text-sm font-bold text-amber-300">${expired ? 'EXPIRED' : 'Pending'}</p>`}</div>
           </div>
           <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-            <span class="rounded-md px-2 py-1 ${t.director?'bg-emerald-500/10 text-emerald-300':'bg-white/5 text-slate-400'}">${t.director?('✓ '+esc(t.director)):'Director ✗'}</span>
-            <span class="rounded-md px-2 py-1 ${t.deputy?'bg-emerald-500/10 text-emerald-300':'bg-white/5 text-slate-400'}">${t.deputy?('✓ '+esc(t.deputy)):'Deputy ✗'}</span>
-            <span class="ml-auto rounded-md px-2 py-1 text-[10px] font-semibold uppercase ${authorized?'bg-blue-500/10 text-blue-300':'bg-amber-500/10 text-amber-300'}">${authorized?'Authorized':'Pending dual-sign'}</span>
+            <span class="rounded-md px-2 py-1 ${t.director_sig ? 'bg-emerald-500/10 text-emerald-300' : 'bg-white/5 text-slate-400'}">${t.director_sig ? '✓ ' + escapeHTML(officerName(t.director_sig)) : 'Director ✗'}</span>
+            <span class="rounded-md px-2 py-1 ${t.deputy_sig ? 'bg-emerald-500/10 text-emerald-300' : 'bg-white/5 text-slate-400'}">${t.deputy_sig ? '✓ ' + escapeHTML(officerName(t.deputy_sig)) : 'Deputy ✗'}</span>
+            <span class="ml-auto rounded-md px-2 py-1 text-[10px] font-semibold uppercase ${expired ? 'bg-rose-500/10 text-rose-300' : authorized ? 'bg-blue-500/10 text-blue-300' : 'bg-amber-500/10 text-amber-300'}">${expired ? 'Expired' : authorized ? 'Authorized' : 'Pending dual-sign'}</span>
           </div>
-          ${!authorized ? `<button class="cosign mt-3 w-full rounded-lg border border-white/10 bg-white/5 py-2 text-xs font-semibold text-white transition hover:bg-white/10">Co-sign as Deputy Director</button>` : ''}`;
-        const co = card.querySelector('.cosign');
-        if (co) co.addEventListener('click', () => { t.deputy = 'Dep. R. Cole'; saveTrackers(); renderTrackers(); toast(`${t.id} fully authorized — tracking live`, 'success'); });
+          <div class="mt-3 flex flex-wrap gap-2">
+            ${(!authorized && !expired && canSign) ? '<button class="tk-cosign flex-1 rounded-lg border border-white/10 bg-white/5 py-2 text-xs font-semibold text-white transition hover:bg-white/10">Co-sign as Deputy</button>' : ''}
+            ${canSign ? '<button class="tk-del rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">✕</button>' : ''}
+          </div>`;
+        const co = card.querySelector('.tk-cosign');
+        if (co) co.addEventListener('click', async () => {
+          if (me && t.director_sig === me.id) { toast('A second command officer must co-sign (no single-person approval).', 'warn'); return; }
+          const expires = new Date(Date.now() + (t.duration_hours || 24) * 3.6e6).toISOString();
+          const res = await DB().update('trackers', t.id, { deputy_sig: me.id, status: 'authorized', authorized_at: new Date().toISOString(), expires_at: expires });
+          if (res.error) { toast('Co-sign failed: ' + res.error.message, 'danger'); return; }
+          notify(t.director_sig, 'tracker_authorized', { tracker_code: t.tracker_code, target: t.target });
+          notify(me.id, 'tracker_authorized', { tracker_code: t.tracker_code, target: t.target });
+          toast(`${t.tracker_code} fully authorized — tracking live`, 'success'); fetchTrackers();
+        });
+        const dl = card.querySelector('.tk-del');
+        if (dl) dl.addEventListener('click', async () => { if (!confirm('Remove tracker ' + t.tracker_code + '?')) return; const r = await DB().remove('trackers', t.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } toast('Tracker removed', 'warn'); fetchTrackers(); });
         wrap.appendChild(card);
       });
     }
     function tickTrackers() {
       $$('#tracker-list .cd').forEach((n) => {
-        const r = Number(n.dataset.end) - Date.now();
+        const end = Number(n.dataset.end), r = end - Date.now();
         n.textContent = fmtCountdown(r);
-        n.className = `cd font-mono text-sm font-bold ${r>0?'text-emerald-300':'text-rose-300'}`;
+        n.className = `cd font-mono text-sm font-bold ${r > 0 ? 'text-emerald-300' : 'text-rose-300'}`;
+        if (r <= 0 && n.dataset.id && !_expiring.has(n.dataset.id) && DB() && DB().canDelete()) {
+          _expiring.add(n.dataset.id);
+          DB().update('trackers', n.dataset.id, { status: 'expired' }).then(() => fetchTrackers()).catch(() => {});
+        }
       });
     }
     function openTrackerModal() {
+      if (!(DB() && DB().canDelete())) { toast('Tracker deployment requires command authorization.', 'warn'); return; }
       const node = el('div', { class: 'p-6' });
+      const caseOpts = ['<option value="">— none —</option>'].concat(casesCache.map((c) => `<option value="${c.id}">${escapeHTML(c.case_number)}</option>`)).join('');
+      const me = DB().me || {};
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><div><p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Surveillance Authorization</p><h3 class="text-xl font-bold text-white">Deploy GPS Tracker</h3></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
-        <p class="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">Per SOP Title 7, tracker deployment requires written dual authorization — no single-person approval.</p>
+        <p class="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">Per SOP Title 7, deployment requires dual command authorization. You sign as Director now; a second command officer co-signs to activate.</p>
         <div class="space-y-3">
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Target Vehicle / Subject *</label><input id="tk-target" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Black Sandking — plate 4XYZ" /></div>
-          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Associated Case</label><select id="tk-case" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">${ACTIVE_CASES.map((c)=>`<option>${esc(c)}</option>`).join('')}</select></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Associated Case</label><select id="tk-case" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">${caseOpts}</select></div>
           <div class="grid grid-cols-2 gap-3">
-            <div><label class="mb-1 block text-xs font-semibold text-slate-400">Director Signature *</label><input id="tk-dir" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 font-[cursive] text-blue-200 outline-none focus:border-badge-500" placeholder="Director" /></div>
-            <div><label class="mb-1 block text-xs font-semibold text-slate-400">Deputy Signature *</label><input id="tk-dep" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 font-[cursive] text-blue-200 outline-none focus:border-badge-500" placeholder="Deputy Director" /></div>
+            <div><label class="mb-1 block text-xs font-semibold text-slate-400">Director Signature *</label><input id="tk-dir" value="${escapeHTML(me.display_name || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 font-[cursive] text-blue-200 outline-none focus:border-badge-500" placeholder="Your name" /></div>
+            <div><label class="mb-1 block text-xs font-semibold text-slate-400">Duration (hours)</label><input id="tk-dur" type="number" value="24" min="1" max="168" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" /></div>
           </div>
-          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Authorized Duration (hours)</label><input id="tk-dur" type="number" value="24" min="1" max="168" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" /></div>
         </div>
-        <button id="tk-go" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Deploy Tracker</button>`;
+        <button id="tk-go" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Deploy (awaiting deputy co-sign)</button>`;
       node.querySelector('.close-x').onclick = closeModal;
-      node.querySelector('#tk-go').onclick = () => {
+      node.querySelector('#tk-go').onclick = async () => {
         const target = node.querySelector('#tk-target').value.trim();
         const dir = node.querySelector('#tk-dir').value.trim();
-        const dep = node.querySelector('#tk-dep').value.trim();
-        if (!target || !dir || !dep) { toast('Target + both signatures are required (dual authorization).', 'warn'); return; }
+        if (!target || !dir) { toast('Target + Director signature are required.', 'warn'); return; }
         const dur = Math.max(1, Number(node.querySelector('#tk-dur').value) || 24);
-        trackers.unshift({ id: 'TRK-' + Math.floor(9000 + Math.random()*999), target, case: node.querySelector('#tk-case').value, director: dir, deputy: dep, end: Date.now() + dur*3.6e6 });
-        saveTrackers(); renderTrackers(); closeModal(); toast('Tracker deployed — dual authorization recorded', 'success');
+        const caseId = node.querySelector('#tk-case').value || null;
+        const c = casesCache.find((x) => x.id === caseId);
+        const payload = { tracker_code: 'TRK-' + Math.floor(9000 + Math.random() * 999), target, case_id: caseId, bureau: c ? c.bureau : 'JTF', director_sig: me.id, duration_hours: dur, status: 'pending' };
+        const res = await DB().insert('trackers', payload);
+        if (res.error) { toast('Deploy failed: ' + res.error.message, 'danger'); return; }
+        notify(me.id, 'tracker_pending', { tracker_code: payload.tracker_code, target });
+        closeModal(); toast('Tracker logged — awaiting deputy co-sign', 'success'); fetchTrackers();
       };
       openModal(node);
     }
@@ -2312,7 +2347,7 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
     // Re-fetch when auth resolves (called by auth.js) and subscribe to realtime.
     window.CIDApp = window.CIDApp || {};
     window.CIDApp.onAuthed = function () {
-      fetchCases(); fetchGangs(); fetchPersons(); fetchDrugs(); fetchPlaces(); fetchBenches(); fetchFootprints();
+      fetchProfiles(); fetchCases(); fetchGangs(); fetchPersons(); fetchDrugs(); fetchPlaces(); fetchBenches(); fetchFootprints(); fetchTrackers();
       if (dbReady()) {
         DB().subscribe('cases', fetchCases);
         DB().subscribe('gangs', fetchGangs);
@@ -2321,6 +2356,7 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
         DB().subscribe('places', fetchPlaces);
         DB().subscribe('ballistics_benches', fetchBenches);
         DB().subscribe('ballistic_footprints', fetchFootprints);
+        DB().subscribe('trackers', fetchTrackers);
       }
     };
 
