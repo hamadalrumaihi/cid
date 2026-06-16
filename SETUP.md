@@ -7,7 +7,7 @@ Static front-end (GitHub Pages) + Supabase backend. No custom server, no build s
 > RBAC UI, notifications, analytics) is in progress — see CHANGELOG.
 
 ## 0. Prerequisites
-- Supabase project **`sahp-rbac`** (`nuujdewnkovtdvlbfzdx`). Resume it if paused.
+- Supabase project **`cid`** (`jhxuflzmqspidkvjckox`). Resume it if paused.
 - A Google Cloud project (for Google OAuth) and a Discord application (for Discord OAuth).
 
 ## 1. Run the migrations
@@ -27,12 +27,12 @@ Dashboard → **Authentication → Providers**:
 
 ### Google
 1. Google Cloud Console → APIs & Services → Credentials → **Create OAuth client ID** (Web).
-2. Authorized redirect URI: `https://nuujdewnkovtdvlbfzdx.supabase.co/auth/v1/callback`
+2. Authorized redirect URI: `https://jhxuflzmqspidkvjckox.supabase.co/auth/v1/callback`
 3. Copy **Client ID** + **Client Secret** → paste into Supabase **Google** provider, enable.
 
 ### Discord
 1. https://discord.com/developers → New Application → **OAuth2**.
-2. Redirect: `https://nuujdewnkovtdvlbfzdx.supabase.co/auth/v1/callback`
+2. Redirect: `https://jhxuflzmqspidkvjckox.supabase.co/auth/v1/callback`
 3. Copy **Client ID** + **Client Secret** → paste into Supabase **Discord** provider, enable.
 
 ### URL configuration
@@ -44,7 +44,7 @@ Authentication → **URL Configuration**:
 In the front-end config block (`window.CID_SUPABASE`):
 ```js
 window.CID_SUPABASE = {
-  url: 'https://nuujdewnkovtdvlbfzdx.supabase.co',   // prewired
+  url: 'https://jhxuflzmqspidkvjckox.supabase.co',   // prewired
   anonKey: 'PASTE_ANON_OR_PUBLISHABLE_KEY'           // Settings → API → anon/publishable
 };
 ```

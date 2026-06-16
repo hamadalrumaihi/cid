@@ -62,3 +62,34 @@ The current single-file app stores everything under `localStorage` key
 `cid-portal-v3` (cases, gangs, places, reports, rico, trackers, media, cidDocs,
 caseCounters). Phase 2 ships a one-time importer to load any existing browser
 data into the new tables via the UI; nothing is baked into source.
+
+## Phase 2 — Front-end foundation (this change)
+Target project corrected to **`cid`** (`jhxuflzmqspidkvjckox`, active); `sahp-rbac` was the wrong project.
+
+### Added / changed
+- **Multi-file split** (no build step, still a static SPA):
+  - `index.html` — markup only.
+  - `styles.css` — the precompiled Tailwind + custom CSS (was inlined) + gate CSS.
+  - `app.js` — the existing application logic, moved verbatim (not rewritten).
+  - `supabase.js` — Supabase client + thin data layer (`window.CIDDB`): auth
+    helpers + generic list/insert/update/remove/subscribe. Guarded if unconfigured.
+  - `auth.js` — **login gate**: logged-out users see only the login screen
+    (Google + Discord OAuth + email magic link); signed-in-but-unapproved users
+    see a pending-approval screen; approved (active profile) users get the app +
+    an identity/sign-out chip in the top bar. Drives `body[data-auth]`.
+- Front-end config wired to the real `cid` project URL + publishable key.
+
+### Verified (jsdom, offline)
+Split loads; gate shows by default with the graceful offline notice; app shell
+hidden when logged out; `app.js` still initializes; records nav intact.
+
+### Still pending in Phase 2 (blocked / next)
+- **Schema reconciliation**: the `cid` project already has `cid_records` (2 rows)
+  + `case_files` (0 rows), which diverge from the Phase-1 platform schema
+  (`cases`, `evidence`, …). Need a decision before applying the platform
+  migration / migrating module data layers.
+- Apply the platform migration (creates `profiles` — required for auth approval
+  to actually work) once schema is reconciled.
+- Configure Google + Discord providers in the dashboard to test real sign-in.
+- Then: per-module localStorage→Supabase data layer, Case Detail + Evidence UI,
+  RBAC-aware edit affordances, notifications, analytics, PDF, seed removal.
