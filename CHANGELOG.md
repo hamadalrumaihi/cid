@@ -182,3 +182,12 @@ CSV/JSON import, full case-packet export.
   properties" reads live places.
 - Verified: node --check; clean jsdom load; live MCP round-trip on `cid`
   (place linked to gang+case+narcotic) with cleanup.
+
+## Phase 2 — Module migration #5: Ballistics (this change)
+- **Ballistics** migrated off localStorage onto Supabase: `ballistics_benches`
+  (street/organized toggle, tier, heat, outputs[]/components[] text arrays,
+  case link) and `ballistic_footprints` (signature, weapon, gang link, case link).
+- CRUD: "+ Bench" / "+ Footprint" + per-item Edit; RBAC (active create/edit,
+  Director/Command delete); empty/sign-in states; realtime.
+- Verified: node --check; clean jsdom load; live MCP round-trip on `cid`
+  (bench with text[] arrays + footprint linked to gang+case) with cleanup.
