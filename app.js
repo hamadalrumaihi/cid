@@ -38,42 +38,20 @@
     let FOOTPRINTS = [];
 
     /* ---- Personnel ---- */
-    const ROSTER = [
-      { name: 'Oliver Och', role: 'Lead Detective', cs: '915', unit: 'MCB', init: 'OO', status: 'On Duty' },
-      { name: 'Marcus Hale', role: 'Senior Detective', cs: '922', unit: 'Narcotics', init: 'MH', status: 'On Duty' },
-      { name: 'Dana Reyes', role: 'Detective', cs: '930', unit: 'Ballistics', init: 'DR', status: 'Field' },
-      { name: 'Aria Stone', role: 'Bureau Lead — State', cs: '901', unit: 'Command', init: 'AS', status: 'Off Duty' },
-      { name: 'Derek Honce', role: 'Bureau Lead — Blaine', cs: '903', unit: 'Command', init: 'DH', status: 'On Duty' },
-      { name: 'Lena Voss', role: 'Surveillance Det.', cs: '948', unit: 'Tech Ops', init: 'LV', status: 'Field' },
-    ];
-    const COMMENDATIONS = [
-      { title: 'Distinguished Service Medal', who: 'Det. Oliver Och', icon: '🎖️', tint: 'amber', note: 'Dismantling the Vinewood arson ring.' },
-      { title: 'Meritorious Surveillance Badge', who: 'Det. Lena Voss', icon: '🛰️', tint: 'blue', note: 'Sustained covert tracking on Case-9000007.' },
-      { title: 'Task Force Command Citation', who: 'Lt. Aria Stone', icon: '🏅', tint: 'violet', note: 'Joint multi-bureau interdiction op.' },
-    ];
-    // Seeded here; hydrated from Store inside init() (Store is defined later, so it must not be referenced during data-model setup).
-    const MEDIA = [
-      { title: 'Dashcam — Legion Sq stop', type: 'image', src: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=600', kind: 'Image URL', tags: { case:'[LSB] Case-1000001', gang:'', location:'', person:'' } },
-      { title: 'Mugshot — Marcus "Tre" Bell', type: 'image', src: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600', kind: 'Image URL', tags: { case:'[LSB] Case-1000007', gang:'Davis Ballas', location:'', person:'Marcus "Tre" Bell' } },
-      { title: 'UC body-cam clip', type: 'video', src: '', kind: 'MP4 Video', tags: { case:'[BCB] Case-2000001', gang:'', location:'Sandy Shores', person:'' } },
-      { title: 'Surveillance still (CDN)', type: 'fivemanage', src: 'fm_2f9a1c', kind: 'FiveManage Embed', tags: { case:'[SAB] Case-9000001', gang:'Vagos Cartel Cell', location:'', person:'' } },
-    ];
-    const saveMedia = () => Store.set('media', MEDIA);
+    // Personnel/media/commendations are Supabase-backed caches (see fetch* in modules).
+    let ROSTER = [];
+    let COMMENDATIONS = [];
+    let MEDIA = [];
     let mediaFilter = 'all';
 
-    /* ---- M.O. detector dictionary + case profiles ---- */
+    /* ---- M.O. detector dictionary (config) — matching runs against live mo_profiles ---- */
     const MO_DICT = {
       names:    ['tre', 'marcus', 'dion', 'lena', 'omar', 'reyes', 'ghost', 'switch'],
       entry:    ['lockpick', 'lockpicked', 'thermite', 'breach', 'breached', 'crowbar', 'kicked', 'drilled', 'cut the lock'],
       vehicles: ['black cid suv', 'unmarked burrito', 'burrito', 'black suv', 'sandking', 'motorcycle', 'getaway sedan', 'unmarked'],
       weapons:  ['class 2 ap pistol', 'ap pistol', 'class 3', 'rifle', 'smg', 'switch', 'auto-sear', 'shotgun', '9mm', '5.56'],
     };
-    const MO_CASES = [
-      { id: '[BCB] Case-2000001', status: 'Cold', tags: ['lockpicked','unmarked burrito','class 2 ap pistol','tre','thermite'] },
-      { id: '[LSB] Case-1000001', status: 'Open', tags: ['breached','black cid suv','rifle','marcus','crowbar'] },
-      { id: '[SAB] Case-9000001', status: 'Open', tags: ['class 3','5.56','unmarked','ghost'] },
-      { id: '[LSB] Case-1000007', status: 'Cold', tags: ['switch','9mm','auto-sear','dion','drilled'] },
-    ];
+
 
     /* ---- Drive ---- */
     const DRIVE_FOLDERS = [
@@ -182,6 +160,8 @@
       if (tab === 'reports' && typeof renderReportChain === 'function') renderReportChain();
       if (tab === 'rico' && typeof renderRico === 'function') renderRico();
       if (tab === 'command' && typeof onEnterCommand === 'function') onEnterCommand();
+      if (tab === 'personnel' && typeof onEnterPersonnel === 'function') onEnterPersonnel();
+      if (tab === 'modus' && typeof onEnterModus === 'function') onEnterModus();
     }
     $$('.nav-link, .bnav-link').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.tab)));
 
@@ -789,95 +769,155 @@
     }
 
     /* ============================================================ 8. PERSONNEL ============================================================ */
-    function statusTint(s) { return s === 'On Duty' ? 'bg-emerald-400' : s === 'Field' ? 'bg-blue-400' : 'bg-slate-500'; }
+    /* ---- Personnel roster (from profiles) ---- */
     function renderRoster() {
-      const g = $('#roster-grid'); g.innerHTML = '';
-      ROSTER.forEach((p) => g.appendChild(el('div', { class:'rounded-2xl border border-white/5 bg-ink-900/60 p-5 transition hover:border-white/10' }, `
-        <div class="flex items-center gap-3"><div class="grid h-12 w-12 flex-shrink-0 place-items-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-700 text-sm font-bold text-white">${esc(p.init)}</div>
-          <div class="min-w-0 flex-1"><p class="truncate font-semibold text-white">${esc(p.name)}</p><p class="text-xs text-slate-400">${esc(p.role)}</p></div>
-          <span class="pulse-dot h-2.5 w-2.5 rounded-full ${statusTint(p.status)}" title="${esc(p.status)}"></span></div>
-        <div class="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-          <div class="rounded-lg bg-ink-850 py-2"><p class="font-mono font-bold text-blue-300">${esc(p.cs)}</p><p class="text-[10px] text-slate-500">Callsign</p></div>
-          <div class="rounded-lg bg-ink-850 py-2"><p class="font-semibold text-slate-200">${esc(p.unit)}</p><p class="text-[10px] text-slate-500">Unit</p></div>
-          <div class="rounded-lg bg-ink-850 py-2"><p class="font-semibold text-slate-200">${esc(p.status)}</p><p class="text-[10px] text-slate-500">Status</p></div>
-        </div>`)));
-    }
-    function renderCommendations() {
-      const tints = { amber:'from-amber-500/20 to-amber-700/5 border-amber-500/20', blue:'from-blue-500/20 to-blue-700/5 border-blue-500/20', violet:'from-violet-500/20 to-violet-700/5 border-violet-500/20' };
-      const g = $('#commend-grid'); g.innerHTML = '';
-      COMMENDATIONS.forEach((c, i) => {
-        const card = el('div', { class:`relative rounded-2xl border bg-gradient-to-br ${tints[c.tint]} p-5` });
-        card.innerHTML = `
-          <div class="flex items-start gap-3"><span class="text-3xl">${c.icon}</span><div class="min-w-0"><p class="font-semibold text-white">${esc(c.title)}</p><p class="text-xs text-slate-300">${esc(c.who)}</p></div></div>
-          <p class="mt-3 text-xs text-slate-300">${esc(c.note)}</p>
-          <div class="mt-4 relative">${dropupBtn('commend-'+i)}</div>`;
-        g.appendChild(card);
-        wireDropup(card.querySelector('.dropup'), `Commendation "${c.title}"`);
+      const g = $('#roster-grid'); if (!g) return;
+      if (!dbReady()) { g.innerHTML = '<p class="text-sm text-slate-500 sm:col-span-2 xl:col-span-3">Sign in to view the roster.</p>'; return; }
+      if (!PROFILES.length) { g.innerHTML = '<p class="text-sm text-slate-500 sm:col-span-2 xl:col-span-3">No officers on the roster yet.</p>'; return; }
+      g.innerHTML = '';
+      PROFILES.forEach((p) => {
+        const init = (p.display_name || '?').split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+        g.appendChild(el('div', { class: 'rounded-2xl border border-white/5 bg-ink-900/60 p-5 transition hover:border-white/10' }, `
+          <div class="flex items-center gap-3"><div class="grid h-12 w-12 flex-shrink-0 place-items-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-700 text-sm font-bold text-white">${esc(init)}</div>
+            <div class="min-w-0 flex-1"><p class="truncate font-semibold text-white">${esc(p.display_name)}</p><p class="text-xs text-slate-400">${esc(p.role)}</p></div>
+            <span class="pulse-dot h-2.5 w-2.5 rounded-full ${p.active ? 'bg-emerald-400' : 'bg-slate-500'}" title="${p.active ? 'Active' : 'Pending'}"></span></div>
+          <div class="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
+            <div class="rounded-lg bg-ink-850 py-2"><p class="font-mono font-bold text-blue-300">${esc(p.badge_number || '—')}</p><p class="text-[10px] text-slate-500">Badge</p></div>
+            <div class="rounded-lg bg-ink-850 py-2"><p class="font-semibold text-slate-200">${esc(p.division)}</p><p class="text-[10px] text-slate-500">Bureau</p></div>
+            <div class="rounded-lg bg-ink-850 py-2"><p class="font-semibold text-slate-200">${p.active ? 'Active' : 'Pending'}</p><p class="text-[10px] text-slate-500">Status</p></div>
+          </div>`));
       });
     }
+
+    /* ---- Commendations (Supabase) ---- */
+    const COMM_TINTS = { amber: 'from-amber-500/20 to-amber-700/5 border-amber-500/20', blue: 'from-blue-500/20 to-blue-700/5 border-blue-500/20', violet: 'from-violet-500/20 to-violet-700/5 border-violet-500/20', emerald: 'from-emerald-500/20 to-emerald-700/5 border-emerald-500/20' };
+    async function fetchCommendations() { if (!dbReady()) { renderCommendations(); return; } try { COMMENDATIONS = await DB().list('commendations', { order: 'created_at', ascending: false }); } catch (e) {} renderCommendations(); }
+    function renderCommendations() {
+      const g = $('#commend-grid'); if (!g) return;
+      const canEdit = DB() && DB().canEdit(), canDel = DB() && DB().canDelete();
+      const nb = $('#add-commend'); if (nb) nb.classList.toggle('hidden', !canEdit);
+      if (!dbReady()) { g.innerHTML = '<p class="text-sm text-slate-500 sm:col-span-2 lg:col-span-3">Sign in to view commendations.</p>'; return; }
+      if (!COMMENDATIONS.length) { g.innerHTML = `<p class="text-sm text-slate-500 sm:col-span-2 lg:col-span-3">No commendations.${canEdit ? ' Use “+ Commendation”.' : ''}</p>`; return; }
+      g.innerHTML = '';
+      COMMENDATIONS.forEach((c) => {
+        const card = el('div', { class: `relative rounded-2xl border bg-gradient-to-br ${COMM_TINTS[c.tint] || COMM_TINTS.amber} p-5` });
+        card.innerHTML = `
+          <div class="flex items-start gap-3"><span class="text-3xl">${esc(c.icon || '🎖️')}</span><div class="min-w-0 flex-1"><p class="font-semibold text-white">${esc(c.title)}</p><p class="text-xs text-slate-300">${esc(c.recipient_name || officerName(c.recipient_id) || '—')}</p></div>${canEdit ? '<button class="cm-edit text-[11px] text-slate-400 hover:text-white">edit</button>' : ''}</div>
+          <p class="mt-3 text-xs text-slate-300">${esc(c.note || '')}</p>`;
+        const eb = card.querySelector('.cm-edit'); if (eb) eb.onclick = () => openCommendModal(c);
+        g.appendChild(card);
+      });
+    }
+    function openCommendModal(record) {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      const c = record || {};
+      const node = el('div', { class: 'p-6' });
+      node.innerHTML = `
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Commendation</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="space-y-3">
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Title *</label><input data-k="title" value="${esc(c.title || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Recipient</label><input data-k="recipient_name" value="${esc(c.recipient_name || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="Officer name" /></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="mb-1 block text-xs font-semibold text-slate-400">Icon</label><input data-k="icon" value="${esc(c.icon || '🎖️')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+            <div><label class="mb-1 block text-xs font-semibold text-slate-400">Color</label><select data-k="tint" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${['amber', 'blue', 'violet', 'emerald'].map((t) => `<option ${t === (c.tint || 'amber') ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+          </div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Note</label><textarea data-k="note" rows="2" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${esc(c.note || '')}</textarea></div>
+        </div>
+        <div class="mt-5 flex gap-2"><button id="cm-save" class="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">${record ? 'Save' : 'Award'}</button>${record && DB().canDelete() ? '<button id="cm-del" class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>' : ''}</div>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#cm-save').onclick = async () => {
+        const p = {}; $$('[data-k]', node).forEach((f) => p[f.dataset.k] = f.value.trim());
+        if (!p.title) { toast('Title required.', 'warn'); return; }
+        const res = record && record.id ? await DB().update('commendations', record.id, p) : await DB().insert('commendations', p);
+        if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast(record ? 'Commendation updated' : 'Commendation awarded', 'success'); fetchCommendations();
+      };
+      const cd = node.querySelector('#cm-del'); if (cd) cd.onclick = async () => { const r = await DB().remove('commendations', record.id); if (r.error) { toast('Delete failed', 'danger'); return; } closeModal(); toast('Removed', 'warn'); fetchCommendations(); };
+      openModal(node);
+    }
+
+    /* ---- Evidence/media vault (Supabase) ---- */
+    const mediaSrc = (m) => m.external_url || m.storage_path || '';
     function mediaThumb(m) {
-      if (m.type === 'image' && m.src) return `<img src="${esc(m.src)}" alt="${esc(m.title)}" class="ev-img h-40 w-full cursor-zoom-in object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="hidden h-40 w-full items-center justify-center bg-ink-800 text-4xl">🖼️</div>`;
+      const src = mediaSrc(m);
+      if (m.type === 'image' && src) return `<img src="${esc(src)}" alt="${esc(m.title)}" class="ev-img h-40 w-full cursor-zoom-in object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="hidden h-40 w-full items-center justify-center bg-ink-800 text-4xl">🖼️</div>`;
       if (m.type === 'video') return `<div class="flex h-40 w-full items-center justify-center bg-ink-800 text-4xl">🎬</div>`;
-      return `<div class="flex h-40 w-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-ink-800 to-ink-700"><span class="text-3xl">📡</span><span class="font-mono text-[10px] text-slate-400">${esc(m.src || 'fivemanage')}</span></div>`;
+      return `<div class="flex h-40 w-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-ink-800 to-ink-700"><span class="text-3xl">📡</span><span class="font-mono text-[10px] text-slate-400">${esc(src || 'fivemanage')}</span></div>`;
     }
     function mediaTagChips(m) {
       const t = m.tags || {}; const out = [];
-      if (t.case) out.push(`<span class="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-mono text-blue-300">${esc(t.case)}</span>`);
-      if (t.gang) out.push(`<span class="rounded bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-300">🚩 ${esc(t.gang)}</span>`);
+      const caseNo = caseNumById(m.case_id); if (caseNo) out.push(`<span class="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-mono text-blue-300">${esc(caseNo)}</span>`);
+      const gn = gangNameById(m.gang_id); if (gn) out.push(`<span class="rounded bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-300">🚩 ${esc(gn)}</span>`);
       if (t.location) out.push(`<span class="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-300">📍 ${esc(t.location)}</span>`);
       if (t.person) out.push(`<span class="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-300">👤 ${esc(t.person)}</span>`);
       return out.join(' ');
     }
     function renderMediaFilters() {
       const bar = $('#media-filter'); if (!bar) return;
-      const kinds = [ ['all','All'], ['case','By Case'], ['gang','By Gang'], ['location','By Location'], ['person','Mugshots'] ];
-      bar.innerHTML = kinds.map(([k,l]) => `<button class="mf-chip rounded-full border px-3 py-1 text-xs font-medium transition ${mediaFilter===k?'border-badge-500 bg-blue-500/10 text-white':'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}" data-f="${k}">${l}</button>`).join('');
+      const kinds = [['all', 'All'], ['case', 'By Case'], ['gang', 'By Gang'], ['location', 'By Location'], ['person', 'Mugshots']];
+      bar.innerHTML = kinds.map(([k, l]) => `<button class="mf-chip rounded-full border px-3 py-1 text-xs font-medium transition ${mediaFilter === k ? 'border-badge-500 bg-blue-500/10 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}" data-f="${k}">${l}</button>`).join('');
       bar.querySelectorAll('.mf-chip').forEach((b) => b.addEventListener('click', () => { mediaFilter = b.dataset.f; renderMediaFilters(); renderMedia(); }));
     }
+    async function fetchMedia() { if (!dbReady()) { renderMedia(); return; } try { MEDIA = await DB().list('media', { order: 'created_at', ascending: false }); } catch (e) {} renderMedia(); }
+    function onEnterPersonnel() { renderRoster(); if (dbReady()) { fetchCommendations(); fetchMedia(); } else { renderCommendations(); renderMedia(); } }
+    function mediaMatchesFilter(m) {
+      if (mediaFilter === 'all') return true;
+      if (mediaFilter === 'case') return !!m.case_id;
+      if (mediaFilter === 'gang') return !!m.gang_id;
+      return !!(m.tags && m.tags[mediaFilter]);
+    }
     function renderMedia() {
-      const g = $('#media-grid'); g.innerHTML = '';
-      const items = MEDIA.filter((m) => mediaFilter === 'all' ? true : mediaFilter === 'person' ? !!(m.tags && m.tags.person) : !!(m.tags && m.tags[mediaFilter]));
-      if (!items.length) { g.innerHTML = '<p class="text-sm text-slate-500">No assets match this filter.</p>'; return; }
+      const g = $('#media-grid'); if (!g) return;
+      const canEdit = DB() && DB().canEdit();
+      const ab = $('#add-media'); if (ab) ab.classList.toggle('hidden', !canEdit);
+      if (!dbReady()) { g.innerHTML = '<p class="text-sm text-slate-500">Sign in to view the evidence vault.</p>'; return; }
+      const items = MEDIA.filter(mediaMatchesFilter);
+      if (!items.length) { g.innerHTML = `<p class="text-sm text-slate-500">${MEDIA.length ? 'No assets match this filter.' : 'No media yet.' + (canEdit ? ' Use “+ Ingest Media”.' : '')}</p>`; return; }
+      g.innerHTML = '';
       items.forEach((m) => {
-        const card = el('div', { class:'overflow-hidden rounded-2xl border border-white/5 bg-ink-900/60' });
+        const card = el('div', { class: 'overflow-hidden rounded-2xl border border-white/5 bg-ink-900/60' });
         card.innerHTML = `
           ${mediaThumb(m)}
-          <div class="p-4"><div class="flex items-center justify-between"><p class="truncate text-sm font-semibold text-white">${esc(m.title)}</p><span class="ml-2 flex-shrink-0 rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-slate-400">${esc(m.kind)}</span></div>
+          <div class="p-4"><div class="flex items-center justify-between"><p class="truncate text-sm font-semibold text-white">${esc(m.title)}</p><span class="ml-2 flex-shrink-0 rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-slate-400">${esc(m.kind || m.type)}</span></div>
           <div class="mt-2 flex flex-wrap gap-1">${mediaTagChips(m)}</div>
-          <div class="mt-3 relative">${dropupBtn('media')}</div></div>`;
-        g.appendChild(card);
+          ${canEdit ? '<div class="mt-3 relative">' + dropupBtn() + '</div>' : ''}</div>`;
         const img = card.querySelector('.ev-img'); if (img) img.addEventListener('click', () => openLightbox(m));
-        wireDropup(card.querySelector('.dropup'), `Media "${m.title}"`);
+        const dd = card.querySelector('.dropup'); if (dd) wireDropup(dd, m);
+        g.appendChild(card);
       });
     }
     function openLightbox(m) {
-      const node = el('div', { class:'p-4' });
-      const body = m.type === 'image' && m.src ? `<img src="${esc(m.src)}" alt="${esc(m.title)}" class="max-h-[70vh] w-full rounded-lg object-contain" />` : `<div class="flex h-64 items-center justify-center rounded-lg bg-ink-800 text-5xl">${m.type==='video'?'🎬':'📡'}</div>`;
+      const node = el('div', { class: 'p-4' }); const src = mediaSrc(m);
+      const body = m.type === 'image' && src ? `<img src="${esc(src)}" alt="${esc(m.title)}" class="max-h-[70vh] w-full rounded-lg object-contain" />` : `<div class="flex h-64 items-center justify-center rounded-lg bg-ink-800 text-5xl">${m.type === 'video' ? '🎬' : '📡'}</div>`;
       node.innerHTML = `<div class="mb-3 flex items-center justify-between"><p class="text-sm font-semibold text-white">${esc(m.title)}</p><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>${body}<div class="mt-3 flex flex-wrap gap-1">${mediaTagChips(m)}</div>`;
       node.querySelector('.close-x').onclick = closeModal;
       openModal(node, { wide: true });
     }
-    // "Forward to Case" drop-up menu
-    function dropupBtn(id) {
-      return `<button class="dropup flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 py-2 text-xs font-semibold text-white transition hover:bg-white/10" aria-haspopup="true" aria-expanded="false">↗ Forward to Case</button>`;
-    }
-    function wireDropup(btn, label) {
+    function dropupBtn() { return `<button class="dropup flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 py-2 text-xs font-semibold text-white transition hover:bg-white/10" aria-haspopup="true" aria-expanded="false">↗ Forward to Case</button>`; }
+    function wireDropup(btn, m) {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const existing = btn.parentElement.querySelector('.dropup-menu');
-        document.querySelectorAll('.dropup-menu').forEach((m) => m.remove());
-        if (existing) { btn.setAttribute('aria-expanded','false'); return; }
-        const menu = el('div', { class:'dropup-menu absolute bottom-full left-0 z-20 mb-2 w-full overflow-hidden rounded-lg border border-white/10 bg-ink-800 shadow-glow' });
-        menu.innerHTML = ACTIVE_CASES.map((c)=>`<button class="case-pick block w-full px-3 py-2 text-left text-xs text-slate-200 transition hover:bg-blue-500/15 hover:text-white" data-case="${esc(c)}">${esc(c)}</button>`).join('');
-        btn.parentElement.appendChild(menu);
-        btn.setAttribute('aria-expanded','true');
-        menu.querySelectorAll('.case-pick').forEach((p) => p.addEventListener('click', () => { menu.remove(); btn.setAttribute('aria-expanded','false'); toast(`${label} forwarded → ${p.dataset.case}`, 'success'); }));
+        document.querySelectorAll('.dropup-menu').forEach((x) => x.remove());
+        if (existing) { btn.setAttribute('aria-expanded', 'false'); return; }
+        const menu = el('div', { class: 'dropup-menu absolute bottom-full left-0 z-20 mb-2 max-h-48 w-full overflow-y-auto rounded-lg border border-white/10 bg-ink-800 shadow-glow' });
+        menu.innerHTML = casesCache.length ? casesCache.map((c) => `<button class="case-pick block w-full px-3 py-2 text-left text-xs text-slate-200 transition hover:bg-blue-500/15 hover:text-white" data-id="${c.id}">${esc(c.case_number)}</button>`).join('') : '<p class="px-3 py-2 text-xs text-slate-500">No cases</p>';
+        btn.parentElement.appendChild(menu); btn.setAttribute('aria-expanded', 'true');
+        menu.querySelectorAll('.case-pick').forEach((p) => p.addEventListener('click', async () => {
+          menu.remove(); btn.setAttribute('aria-expanded', 'false');
+          const res = await DB().update('media', m.id, { case_id: p.dataset.id });
+          if (res.error) { toast('Forward failed: ' + res.error.message, 'danger'); return; }
+          toast(`"${m.title}" forwarded → ${caseNumById(p.dataset.id)}`, 'success'); fetchMedia();
+        }));
       });
     }
-    document.addEventListener('click', () => document.querySelectorAll('.dropup-menu').forEach((m) => { m.remove(); const b = m.parentElement && m.parentElement.querySelector('.dropup'); if (b) b.setAttribute('aria-expanded','false'); }));
+    document.addEventListener('click', () => document.querySelectorAll('.dropup-menu').forEach((m) => { m.remove(); const b = m.parentElement && m.parentElement.querySelector('.dropup'); if (b) b.setAttribute('aria-expanded', 'false'); }));
 
     function openMediaModal() {
-      const node = el('div', { class:'p-6' });
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      const node = el('div', { class: 'p-6' });
+      const caseOpts = ['<option value="">— none —</option>'].concat(casesCache.map((c) => `<option value="${c.id}">${esc(c.case_number)}</option>`)).join('');
+      const gangOpts = ['<option value="">— none —</option>'].concat(GANGS.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`)).join('');
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Ingest Media Asset</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="space-y-3">
@@ -886,61 +926,99 @@
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">URL / Embed ID</label><input id="md-src" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 font-mono text-xs text-white outline-none focus:border-badge-500" placeholder="https://… or fm_xxxxx" /></div>
           <p class="pt-1 text-[10px] font-semibold uppercase tracking-wider text-blue-300/70">Evidence Tags</p>
           <div class="grid grid-cols-2 gap-3">
-            <div><label class="mb-1 block text-xs font-semibold text-slate-400">Case</label><select id="md-case" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500"><option value="">— none —</option>${ACTIVE_CASES.map((c)=>`<option>${esc(c)}</option>`).join('')}</select></div>
-            <div><label class="mb-1 block text-xs font-semibold text-slate-400">Gang</label><select id="md-gang" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500"><option value="">— none —</option>${GANGS.map((g)=>`<option>${esc(g.name)}</option>`).join('')}</select></div>
+            <div><label class="mb-1 block text-xs font-semibold text-slate-400">Case</label><select id="md-case" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">${caseOpts}</select></div>
+            <div><label class="mb-1 block text-xs font-semibold text-slate-400">Gang</label><select id="md-gang" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">${gangOpts}</select></div>
             <div><label class="mb-1 block text-xs font-semibold text-slate-400">Location</label><input id="md-loc" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" placeholder="Area / place" /></div>
             <div><label class="mb-1 block text-xs font-semibold text-slate-400">Person (mugshot)</label><input id="md-person" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" placeholder="Subject name" /></div>
           </div>
         </div>
         <button id="md-go" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Add to Vault</button>`;
       node.querySelector('.close-x').onclick = closeModal;
-      node.querySelector('#md-go').onclick = () => {
+      node.querySelector('#md-go').onclick = async () => {
         const title = node.querySelector('#md-title').value.trim();
         if (!title) { toast('A title is required.', 'warn'); return; }
         const type = node.querySelector('#md-type').value;
         const kind = type === 'image' ? 'Image URL' : type === 'video' ? 'MP4 Video' : 'FiveManage Embed';
-        MEDIA.unshift({ title, type, src: node.querySelector('#md-src').value.trim(), kind, tags: { case:node.querySelector('#md-case').value, gang:node.querySelector('#md-gang').value, location:node.querySelector('#md-loc').value.trim(), person:node.querySelector('#md-person').value.trim() } });
-        saveMedia(); renderMedia(); closeModal(); toast('Media ingested into vault', 'success');
+        const payload = { title, type, kind, external_url: node.querySelector('#md-src').value.trim() || null, case_id: node.querySelector('#md-case').value || null, gang_id: node.querySelector('#md-gang').value || null, tags: { location: node.querySelector('#md-loc').value.trim(), person: node.querySelector('#md-person').value.trim() } };
+        const res = await DB().insert('media', payload);
+        if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast('Media ingested into vault', 'success'); fetchMedia();
       };
       openModal(node);
     }
 
-    /* ============================================================ 9. M.O. DETECTOR ============================================================ */
+    /* ============================================================ 9. M.O. DETECTOR ============================================================
+     * Indicators are extracted from a narrative against MO_DICT, then cross-referenced
+     * against live mo_profiles (one profile per case, indicators stored as jsonb).
+     * A profile can be saved straight from a scan and linked to a case. */
     const SAMPLE_MO = "Two suspects in an unmarked black Burrito breached the rear door via lockpick. One matched the alias 'Tre'. A Class 2 AP Pistol casing was recovered, and thermite residue was found on the safe. They fled before our black CID SUV arrived.";
+    let MO_PROFILES = [];
+    let lastMoScan = null;
     function scanMO(text) {
       const lc = text.toLowerCase();
       const found = { names:[], entry:[], vehicles:[], weapons:[] };
       Object.keys(MO_DICT).forEach((cat) => MO_DICT[cat].forEach((term) => { if (lc.includes(term) && !found[cat].includes(term)) found[cat].push(term); }));
       return found;
     }
+    const moFlatten = (ind) => [].concat(...['names','entry','vehicles','weapons'].map((k) => (ind && ind[k]) || []));
+    async function fetchMoProfiles() { if (!dbReady()) { return; } try { MO_PROFILES = await DB().list('mo_profiles', { order: 'created_at', ascending: false }); } catch (e) {} }
+    function onEnterModus() { if (dbReady()) fetchMoProfiles(); }
     function renderMO() {
       const text = $('#mo-input').value.trim();
-      const tagBox = $('#mo-tags'); const matchBox = $('#mo-matches');
+      const tagBox = $('#mo-tags'); const matchBox = $('#mo-matches'); const saveBtn = $('#mo-save');
       if (!text) { toast('Paste an incident narrative first.', 'warn'); return; }
       const found = scanMO(text);
-      const all = [].concat(found.names, found.entry, found.vehicles, found.weapons);
+      const all = moFlatten(found);
+      lastMoScan = { narrative: text, indicators: found };
+      if (saveBtn) saveBtn.classList.toggle('hidden', !(all.length && DB() && DB().canEdit()));
       const catMeta = { names:{l:'Aliases / Names', t:'bg-rose-500/10 text-rose-300 border-rose-500/20'}, entry:{l:'Entry Methods', t:'bg-amber-500/10 text-amber-300 border-amber-500/20'}, vehicles:{l:'Vehicles', t:'bg-blue-500/10 text-blue-300 border-blue-500/20'}, weapons:{l:'Weapons', t:'bg-violet-500/10 text-violet-300 border-violet-500/20'} };
       tagBox.innerHTML = `<p class="mb-2 text-xs font-semibold uppercase tracking-wider text-blue-300/70">Extracted Tactical Indicators (${all.length})</p>` +
         (all.length ? Object.keys(catMeta).filter((c)=>found[c].length).map((c)=>`<div class="mb-2"><p class="mb-1 text-[10px] uppercase tracking-wider text-slate-500">${catMeta[c].l}</p><div class="flex flex-wrap gap-2">${found[c].map((t)=>`<span class="rounded-full border px-2.5 py-1 text-[11px] font-medium ${catMeta[c].t}">${esc(t)}</span>`).join('')}</div></div>`).join('')
         : '<p class="text-sm text-slate-500">No known indicators detected.</p>');
 
-      // Score each case by shared indicators
-      const scored = MO_CASES.map((c) => {
-        const shared = c.tags.filter((tag) => all.includes(tag));
-        const pct = Math.round((shared.length / c.tags.length) * 100);
-        return { ...c, shared, pct };
+      if (!dbReady()) { matchBox.innerHTML = '<p class="text-sm text-slate-500">Sign in to cross-reference against case M.O. profiles.</p>'; return; }
+      // Score each stored case profile by shared indicators
+      const scored = MO_PROFILES.map((p) => {
+        const tags = moFlatten(p.indicators);
+        const shared = tags.filter((tag) => all.includes(tag));
+        const pct = tags.length ? Math.round((shared.length / tags.length) * 100) : 0;
+        const c = casesCache.find((x) => x.id === p.case_id);
+        return { id: (c && c.case_number) || '—', status: c ? (c.status === 'cold' ? 'Cold' : 'Open') : '—', shared, pct };
       }).filter((c) => c.shared.length).sort((a,b) => b.pct - a.pct);
 
       matchBox.innerHTML = scored.length ? scored.map((c) => {
         const tint = c.pct >= 70 ? 'border-rose-500/40 bg-rose-500/5' : c.pct >= 40 ? 'border-amber-500/30 bg-amber-500/5' : 'border-white/10 bg-ink-900';
         const bar = c.pct >= 70 ? 'bg-rose-500' : c.pct >= 40 ? 'bg-amber-500' : 'bg-blue-500';
         return `<div class="rounded-xl border ${tint} p-4">
-          <div class="flex items-center justify-between"><div><span class="font-mono text-sm font-semibold text-white">${esc(c.id)}</span> <span class="ml-2 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${c.status==='Cold'?'bg-slate-500/20 text-slate-300':'bg-emerald-500/15 text-emerald-300'}">${c.status}</span></div><span class="font-mono text-lg font-bold ${c.pct>=70?'text-rose-300':c.pct>=40?'text-amber-300':'text-blue-300'}">${c.pct}%</span></div>
+          <div class="flex items-center justify-between"><div><span class="font-mono text-sm font-semibold text-white">${esc(c.id)}</span> <span class="ml-2 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${c.status==='Cold'?'bg-slate-500/20 text-slate-300':'bg-emerald-500/15 text-emerald-300'}">${esc(c.status)}</span></div><span class="font-mono text-lg font-bold ${c.pct>=70?'text-rose-300':c.pct>=40?'text-amber-300':'text-blue-300'}">${c.pct}%</span></div>
           <p class="mt-1 text-xs text-slate-400">${c.pct}% M.O. match — shared: ${c.shared.map((s)=>esc(s)).join(', ')}</p>
           <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-ink-800"><div class="h-full ${bar}" style="width:${c.pct}%"></div></div>
         </div>`;
-      }).join('') : '<p class="text-sm text-slate-500">No cross-reference matches found for these indicators.</p>';
+      }).join('') : `<p class="text-sm text-slate-500">No cross-reference matches found${MO_PROFILES.length ? '' : ' — no case M.O. profiles saved yet'}.</p>`;
       if (scored.length) toast(`${scored[0].pct}% M.O. match found with ${scored[0].id}`, scored[0].pct >= 70 ? 'danger' : 'info');
+    }
+    function openMoSaveModal() {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      if (!lastMoScan || !moFlatten(lastMoScan.indicators).length) { toast('Run an analysis with detected indicators first.', 'warn'); return; }
+      const node = el('div', { class: 'p-6' });
+      const caseOpts = casesCache.length ? casesCache.map((c) => `<option value="${c.id}">${esc(c.case_number)}</option>`).join('') : '<option value="">— no cases —</option>';
+      const tags = moFlatten(lastMoScan.indicators);
+      node.innerHTML = `
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Save M.O. Profile</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <p class="mb-3 text-xs text-slate-400">Link these ${tags.length} indicators to a case so future scans cross-reference against it.</p>
+        <div class="mb-3 flex flex-wrap gap-2">${tags.map((t) => `<span class="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-200">${esc(t)}</span>`).join('')}</div>
+        <label class="mb-1 block text-xs font-semibold text-slate-400">Case *</label>
+        <select id="mo-case" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">${caseOpts}</select>
+        <button id="mo-go" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save Profile</button>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#mo-go').onclick = async () => {
+        const caseId = node.querySelector('#mo-case').value;
+        if (!caseId) { toast('Select a case.', 'warn'); return; }
+        const res = await DB().insert('mo_profiles', { case_id: caseId, indicators: lastMoScan.indicators, narrative: lastMoScan.narrative });
+        if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast('M.O. profile saved', 'success'); await fetchMoProfiles(); renderMO();
+      };
+      openModal(node);
     }
 
     /* ============================================================ 10. CID GENERAL (Drive) ============================================================ */
@@ -2408,8 +2486,13 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
     window.CIDApp = window.CIDApp || {};
     window.CIDApp.onAuthed = function () {
       fetchProfiles(); fetchCases(); fetchGangs(); fetchPersons(); fetchDrugs(); fetchPlaces(); fetchBenches(); fetchFootprints(); fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); fetchNotifications();
+      fetchCommendations(); fetchMedia(); fetchMoProfiles();
       if (dbReady()) {
         DB().subscribe('cases', () => { fetchCases(); fetchKpis(); renderBureauLoad(); });
+        DB().subscribe('profiles', () => { fetchProfiles(); renderRoster(); });
+        DB().subscribe('commendations', fetchCommendations);
+        DB().subscribe('media', fetchMedia);
+        DB().subscribe('mo_profiles', fetchMoProfiles);
         DB().subscribe('gangs', fetchGangs);
         DB().subscribe('persons', () => { fetchPersons(); renderKPIs(); });
         DB().subscribe('narcotics', fetchDrugs);
@@ -2552,14 +2635,14 @@ Plainclothes is standard. Tactical loadouts require Bureau Lead approval.` },
       $$('.bench-tab').forEach((b) => b.addEventListener('click', () => { benchType = b.dataset.bench; Store.set('benchType', benchType); renderBenches(); }));
       $('#bench-new').addEventListener('click', () => openBenchModal(null));
       $('#footprint-new').addEventListener('click', () => openFootprintModal(null));
-      // Personnel + evidence vault
-      const savedMedia = Store.get('media', null);
-      if (Array.isArray(savedMedia)) { MEDIA.length = 0; savedMedia.forEach((m) => MEDIA.push(m)); }
+      // Personnel + evidence vault (Supabase) — fetch via onAuthed / onEnterPersonnel
       renderRoster(); renderCommendations(); renderMediaFilters(); renderMedia();
       $('#add-media').addEventListener('click', openMediaModal);
-      // M.O.
+      $('#add-commend').addEventListener('click', () => openCommendModal(null));
+      // M.O. (Supabase) — profiles fetched via onAuthed / onEnterModus
       $('#mo-run').addEventListener('click', renderMO);
       $('#mo-sample').addEventListener('click', () => { $('#mo-input').value = SAMPLE_MO; renderMO(); });
+      $('#mo-save').addEventListener('click', openMoSaveModal);
       // Gangs (Supabase) + Persons (Supabase) — fetch via onAuthed / onEnter*
       $('#add-gang').addEventListener('click', () => openGangModal(null));
       $('#gang-refresh').addEventListener('click', fetchGangs);
