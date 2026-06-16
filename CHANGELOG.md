@@ -112,3 +112,32 @@ hidden when logged out; `app.js` still initializes; records nav intact.
    `https://jhxuflzmqspidkvjckox.supabase.co/auth/v1/callback` redirect).
 2. Authentication → URL Configuration: set Site URL + Redirect URLs to your Pages URL.
 3. Sign in once, then SQL editor: `select public.bootstrap_command('<your-login-email>');`
+
+## Phase 2 — Module migration #1: Case Files (this change)
+First module migrated off localStorage onto the live Supabase schema (project `cid`).
+
+### Added
+- **Case Files tab** (sidebar + mobile bar) — Supabase-backed, RBAC-aware, realtime.
+  - List of cases (cards) from `public.cases`, filter + refresh, empty/“create first” states.
+  - Create/Edit case modal (case_number/title/bureau/status/summary) → `CIDDB` insert/update.
+  - **Case Detail** view with tabs: Overview, Evidence, Reports, Timeline.
+  - **Evidence** module: add evidence per case; **chain-of-custody** append-only transfer log.
+  - **Timeline**: merges case-open + evidence collection + report + custody-transfer events.
+  - RBAC affordances: create/edit shown to active members (`CIDDB.canEdit`); **delete** only
+    for Director/Command (`CIDDB.canDelete`); realtime re-fetch via `CIDDB.subscribe('cases')`.
+- `supabase.js`: added `me`/`role()`/`canEdit()`/`canDelete()`; `auth.js` caches the
+  profile + calls `CIDApp.onAuthed()` so modules load once a session is approved.
+
+### Verified
+- All JS passes `node --check`; jsdom load is clean (no window errors; gate works; Cases
+  tab shows its sign-in notice offline).
+- **Live schema round-trip via MCP** on project `cid`: inserted case→evidence→custody,
+  confirmed FK cascade on delete and that audit triggers fired (audit_log += 3); test rows
+  removed (0 leftover).
+- Hardened: guarded `history.replaceState` so restricted/file:// contexts can't break routing.
+
+### Next modules (same pattern)
+persons/suspects, gangs (+members→persons), places, narcotics/ballistics hotspot+footprint
+links, reports (finalize + e-sign + PDF), trackers (server-side + notify), RICO (pull
+predicates from evidence), audit-log feed + analytics on Central Command, seed removal +
+CSV/JSON import, full case-packet export.

@@ -29,6 +29,7 @@
     },
     signOut() { return client.auth.signOut(); },
 
+    me: null,   // cached current profile (set by auth.js once approved)
     async profile(uid) {
       if (!client) return null;
       try {
@@ -36,6 +37,9 @@
         return r.error ? null : r.data;
       } catch (e) { return null; }   // profiles table may not exist yet -> treat as unapproved
     },
+    role() { return this.me ? this.me.role : null; },
+    canDelete() { return !!this.me && (this.me.role === 'director' || this.me.role === 'command'); },
+    canEdit() { return !!this.me && this.me.active; },
 
     // ---- generic data layer (used as modules migrate off localStorage) ----
     from(table) { return client.from(table); },

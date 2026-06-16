@@ -75,8 +75,11 @@
     var session = await window.CIDDB.getSession();
     if (!session) { showLogin(); return; }
     var profile = await window.CIDDB.profile(session.user.id);
-    if (profile && profile.active) showApp(profile, session);
-    else showPending(session);
+    window.CIDDB.me = profile || null;
+    if (profile && profile.active) {
+      showApp(profile, session);
+      if (window.CIDApp && typeof window.CIDApp.onAuthed === 'function') window.CIDApp.onAuthed(profile, session);
+    } else showPending(session);
   }
 
   function boot() {
