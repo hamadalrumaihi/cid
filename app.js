@@ -3,14 +3,20 @@
 
     /* ============================================================ 1. DATA MODELS ============================================================ */
 
-    const ACTIVE_CASES = ['[LSB] Case-1000001', '[LSB] Case-1000007', '[BCB] Case-2000001', '[BCB] Case-2000004', '[SAB] Case-9000001'];
-
     const BUREAUS = {
       LSB: { name: 'Los Santos Bureau', prefix: 'LSB', dept: 'LSPD' },
       BCB: { name: 'Blaine County Bureau', prefix: 'BCB', dept: 'BCSO' },
       SAB: { name: 'State Bureau', prefix: 'SAB', dept: 'SAHP' },
     };
-    const caseCounters = { LSB: 1000001, BCB: 2000001, SAB: 9000001 };
+    // Case numbers are derived from existing cases (Supabase), not a local counter.
+    const CASE_BASE = { LSB: 1000001, BCB: 2000001, SAB: 9000001 };
+    function nextCaseNumber(bureauKey) {
+      const prefix = BUREAUS[bureauKey].prefix;
+      const re = new RegExp('\\[' + prefix + '\\]\\s*Case-(\\d+)');
+      let max = (CASE_BASE[bureauKey] || 1000001) - 1;
+      (typeof casesCache !== 'undefined' ? casesCache : []).forEach((c) => { const m = (c.case_number || '').match(re); if (m) max = Math.max(max, Number(m[1])); });
+      return max + 1;
+    }
     // Map a reporting department to its bureau key / ticket rename prefix
     const DEPT_ROUTING = {
       LSPD: { bureau: 'LSB', rename: 'losangeles' },
@@ -344,13 +350,12 @@
           <div class="mb-5 flex items-center gap-2"><span id="cpre" class="rounded-lg bg-ink-800 px-3 py-2.5 font-mono text-sm font-semibold text-blue-300"></span><input id="cnum" class="flex-1 rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 font-mono text-sm text-white outline-none focus:border-badge-500" /></div>
           <div class="flex gap-3"><button id="back1" class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">← Back</button><button id="gen" class="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white transition hover:brightness-110">Generate Case File →</button></div>`;
         const sel = node.querySelector('#bsel'), pre = node.querySelector('#cpre'), num = node.querySelector('#cnum');
-        const sync = () => { const b = BUREAUS[sel.value]; pre.textContent = `[${b.prefix}] Case-`; num.value = String(caseCounters[sel.value]); };
+        const sync = () => { const b = BUREAUS[sel.value]; pre.textContent = `[${b.prefix}] Case-`; num.value = String(nextCaseNumber(sel.value)); };
         sync(); sel.onchange = sync;
         node.querySelector('.close-x').onclick = closeModal;
         node.querySelector('#back1').onclick = step1;
         node.querySelector('#gen').onclick = async () => {
           const k = sel.value; const full = `[${BUREAUS[k].prefix}] Case-${num.value}`;
-          caseCounters[k] = Number(num.value) + 1; Store.set('caseCounters', caseCounters);
           let newCaseId = null;
           if (dbReady()) {
             const res = await DB().insert('cases', { case_number: full, title: ticket.description || workingId, bureau: k, status: 'open' });
@@ -2402,7 +2407,6 @@
     function tickClock() { $('#clock').textContent = 'Secure link · ' + new Date().toLocaleTimeString('en-US', { hour12:false }); }
 
     function init() {
-      Object.assign(caseCounters, Store.get('caseCounters', {}));
       wireDrawer(); wireCollapse();
       // Central command
       renderKPIs(); renderTickets(); renderActivity(); renderBureauLoad();
