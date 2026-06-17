@@ -5,7 +5,7 @@
 
     /* ============================================================ 15. NOTIFICATIONS / ADMIN / CASE PACKET / SEARCH ============================================================ */
     let NOTIFS = [];
-    const NOTIF_LABEL = { tracker_pending: 'Tracker awaiting co-sign', tracker_authorized: 'Tracker authorized', case_assigned: 'Case assigned', report_finalized: 'Report finalized', rico_ready: 'RICO elements satisfied', signoff_waiting: 'Case awaiting your sign-off', signoff_approved: 'Case sign-off approved', signoff_denied: 'Case sign-off denied', signoff_changes: 'Sign-off — changes requested', signoff_escalated: 'Case auto-escalated (LOA)', signoff_heads_up: 'Deputy approved a case', chat_mention: 'You were mentioned', access_requested: 'Case access requested', access_granted: 'Case access granted', access_denied: 'Case access denied' };
+    const NOTIF_LABEL = { tracker_pending: 'Tracker awaiting co-sign', tracker_authorized: 'Tracker authorized', case_assigned: 'Case assigned', report_finalized: 'Report finalized', rico_ready: 'RICO elements satisfied', signoff_waiting: 'Case awaiting your sign-off', signoff_approved: 'Case sign-off approved', signoff_denied: 'Case sign-off denied', signoff_changes: 'Sign-off — changes requested', signoff_escalated: 'Case auto-escalated (LOA)', signoff_heads_up: 'Deputy approved a case', chat_mention: 'You were mentioned', access_requested: 'Case access requested', access_granted: 'Case access granted', access_denied: 'Case access denied', announcement: '📣 Announcement' };
     async function fetchNotifications() {
       if (!dbReady()) return;
       try { NOTIFS = await DB().list('notifications', { order: 'created_at', ascending: false }); } catch (e) { NOTIFS = []; }

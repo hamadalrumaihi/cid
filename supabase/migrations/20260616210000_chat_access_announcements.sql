@@ -48,6 +48,8 @@ create table if not exists public.announcements (
   body text not null,
   audience text not null default 'all',    -- 'all' | bureau code
   pinned boolean not null default false,
+  links jsonb not null default '[]',       -- [{type,id,label}] record links
+  mentions jsonb not null default '[]',    -- ['all' | 'role:<role>' | <profile uuid>] with labels
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

@@ -6,15 +6,19 @@
     /* ============================================================ 5. CENTRAL COMMAND ============================================================ */
     /* ---- Central Command (live from Supabase) ---- */
     let TICKETS_CACHE = [], AUDIT = [], SEIZ_TOTAL = 0;
-    const KPI_ACCENTS = { blue:'from-blue-500/20 to-blue-700/5 text-blue-300 border-blue-500/20', slate:'from-slate-500/20 to-slate-700/5 text-slate-300 border-slate-500/20', violet:'from-violet-500/20 to-violet-700/5 text-violet-300 border-violet-500/20', emerald:'from-emerald-500/20 to-emerald-700/5 text-emerald-300 border-emerald-500/20' };
+    const KPI_ACCENTS = { blue:'from-blue-500/20 to-blue-700/5 text-blue-300 border-blue-500/20', slate:'from-slate-500/20 to-slate-700/5 text-slate-300 border-slate-500/20', violet:'from-violet-500/20 to-violet-700/5 text-violet-300 border-violet-500/20', emerald:'from-emerald-500/20 to-emerald-700/5 text-emerald-300 border-emerald-500/20', amber:'from-amber-500/20 to-amber-700/5 text-amber-300 border-amber-500/20' };
     function renderKPIs() {
       const g = $('#kpi-grid'); if (!g) return;
       const live = dbReady();
       const open = casesCache.filter((c) => c.status === 'open' || c.status === 'active').length;
       const cold = casesCache.filter((c) => c.status === 'cold').length;
       const flagged = PERSONS.filter((p) => (p.felony_count || 0) >= 8).length;
+      const awaiting = casesCache.filter((c) => /^awaiting_/.test(c.signoff_status || '')).length;
+      const readyDoj = casesCache.filter((c) => c.signoff_status === 'ready_doj' || c.signoff_status === 'approved_complete').length;
       const cards = [
         { label:'Open Cases', value: live ? open : '—', delta: `${casesCache.length} total on file`, icon:'📂', accent:'blue' },
+        { label:'Awaiting Sign-off', value: live ? awaiting : '—', delta:'stuck in the approval chain', icon:'✍️', accent:'amber' },
+        { label:'Ready for DOJ', value: live ? readyDoj : '—', delta:'approved & complete', icon:'⚖️', accent:'emerald' },
         { label:'Cold Cases', value: live ? cold : '—', delta:'2-week inactivity policy', icon:'🧊', accent:'slate' },
         { label:'Persons of Interest', value: live ? PERSONS.length : '—', delta: `${flagged} ≥8-felony flagged`, icon:'🧑‍⚖️', accent:'violet' },
         { label:'Total Seizures', value: live ? fmtUSD(SEIZ_TOTAL) : '—', delta:'logged raid compensation', icon:'💵', accent:'emerald' },

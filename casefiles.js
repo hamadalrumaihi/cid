@@ -145,19 +145,26 @@
         } else if (detailTab === 'chat') {
           await renderChatTab(body, detailCase);
         } else if (detailTab === 'timeline') {
-          const [ev, rep, cust] = await Promise.all([
+          // Auto-generated timeline merging every case event source (#18).
+          const [ev, rep, cust, trk, sho, msg] = await Promise.all([
             DB().list('evidence', { eq: { case_id: cid } }),
             DB().list('reports', { eq: { case_id: cid } }),
-            DB().from('custody_chain').select('*, evidence!inner(case_id)').eq('evidence.case_id', cid).then((r) => r.data || [])
+            DB().from('custody_chain').select('*, evidence!inner(case_id)').eq('evidence.case_id', cid).then((r) => r.data || []),
+            DB().list('trackers', { eq: { case_id: cid } }).catch(() => []),
+            DB().list('case_signoff_history', { eq: { case_id: cid } }).catch(() => []),
+            DB().list('case_messages', { eq: { case_id: cid } }).catch(() => [])
           ]);
           const events = [];
           ev.forEach((e) => events.push({ t: e.collected_at || e.created_at, label: 'Evidence collected: ' + (e.description || e.item_code || 'item'), dot: 'blue' }));
           rep.forEach((r) => events.push({ t: r.created_at, label: 'Report: ' + r.template + (r.finalized ? ' (finalized)' : ''), dot: 'violet' }));
           cust.forEach((c) => events.push({ t: c.at, label: 'Custody transfer: ' + (c.from_officer || '?') + ' → ' + (c.to_officer || '?'), dot: 'amber' }));
+          trk.forEach((t) => { events.push({ t: t.created_at, label: 'Tracker logged: ' + (t.tracker_code || '') + ' → ' + (t.target || ''), dot: 'cyan' }); if (t.authorized_at) events.push({ t: t.authorized_at, label: 'Tracker authorized: ' + (t.tracker_code || ''), dot: 'cyan' }); });
+          sho.forEach((h) => { const v = { submitted: 'submitted for sign-off', approved: 'approved', denied: 'denied', changes_requested: 'requested changes', escalated: 'escalated', auto_routed: 'auto-routed', completed: 'marked complete' }[h.action] || h.action; events.push({ t: h.created_at, label: 'Sign-off: ' + (h.actor_name || 'Officer') + ' ' + v + (h.stage ? ' (' + ((typeof SIGNOFF !== 'undefined' && SIGNOFF.label[h.stage]) || h.stage) + ')' : ''), dot: 'emerald' }); });
+          msg.forEach((m) => events.push({ t: m.created_at, label: 'Chat: ' + (m.author_name || 'Officer') + ' — ' + String(m.body || '').slice(0, 80) + (String(m.body || '').length > 80 ? '…' : ''), dot: 'slate' }));
           events.push({ t: detailCase.created_at, label: 'Case opened', dot: 'emerald' });
           events.sort((a, b) => new Date(b.t) - new Date(a.t));
-          const dot = { blue: 'bg-blue-400', violet: 'bg-violet-400', amber: 'bg-amber-400', emerald: 'bg-emerald-400' };
-          body.innerHTML = `<ul class="space-y-4">${events.map((e) => `<li class="flex gap-3"><span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${dot[e.dot]}"></span><div><p class="text-sm text-slate-200">${escapeHTML(e.label)}</p><p class="text-[11px] text-slate-500">${e.t ? new Date(e.t).toLocaleString('en-US') : '—'}</p></div></li>`).join('')}</ul>`;
+          const dot = { blue: 'bg-blue-400', violet: 'bg-violet-400', amber: 'bg-amber-400', emerald: 'bg-emerald-400', cyan: 'bg-cyan-400', slate: 'bg-slate-400' };
+          body.innerHTML = `<ul class="space-y-4">${events.map((e) => `<li class="flex gap-3"><span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${dot[e.dot] || 'bg-slate-400'}"></span><div><p class="text-sm text-slate-200">${escapeHTML(e.label)}</p><p class="text-[11px] text-slate-500">${e.t ? new Date(e.t).toLocaleString('en-US') : '—'}</p></div></li>`).join('')}</ul>`;
         }
       } catch (e) { body.innerHTML = '<p class="text-sm text-rose-300">Load error: ' + escapeHTML(e.message || String(e)) + '</p>'; }
     }

@@ -1,5 +1,27 @@
 # CHANGELOG — CID Portal → Production Platform
 
+## Phase 7 — Announcements depth, encouragement, KPIs, richer timeline
+Continuation of the master prompt (features #15 full spec, #16–18):
+
+- **#15 Announcements (completed):** posts now carry **record links** (cases) and
+  **@mentions** of individuals *or* rank groups ("@All Detectives", "@All Officers").
+  Posting fires a **platform notification** to the audience (mentioned users get
+  a "you were mentioned" reason). Officers can **dismiss** individual
+  announcements (client-side hide via `Store`, not a delete; "show N dismissed"
+  restores). Clicking an announcement opens a **full-view modal** with body +
+  clickable linked records. Schema: `announcements.links` + `.mentions` jsonb.
+- **#16 Encouragement widget:** non-intrusive rotating tactical phrase on the
+  Central Command dashboard; rotates on load and every 5 min; dismissible for the
+  session (returns on reload, per spec).
+- **#17 Command KPIs:** added **Awaiting Sign-off** (cases stuck in the chain) and
+  **Ready for DOJ** cards to Central Command, alongside the existing open/cold/
+  persons/seizure KPIs, bureau load and audit activity feed. (Central Command is
+  the command/supervisor dashboard; dedicated cross-filter/drill-down views remain
+  a follow-up.)
+- **#18 Case timeline (enriched):** the auto-generated timeline now merges
+  **tracker logged/authorized**, **sign-off history**, and **chat messages** in
+  addition to evidence collection, reports, custody transfers and case-opened.
+
 ## Phase 6 — Collaboration, access control & export (master prompt)
 Checked each master-prompt feature against the build; #1–7 already shipped in
 Phase 5 and were skipped. Added the rest:
