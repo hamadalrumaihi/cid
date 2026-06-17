@@ -70,6 +70,10 @@
       { name: 'Resources', star: 0, accent: 'slate' },
       { name: 'SOP/Training', star: 0, accent: 'violet' },
     ];
+    // Bureau code → its Drive "…Cases" folder. These folders list the bureau's cases;
+    // each case opens to its own files (auto-seeded from the Forms templates on creation).
+    const BUREAU_FOLDER = { LSB: 'Los Santos Bureau Cases', BCB: 'Blaine County Bureau Cases', SAB: 'State Bureau Cases', JTF: 'Joint Task Force Cases' };
+    const isBureauFolder = (name) => Object.keys(BUREAU_FOLDER).some((k) => BUREAU_FOLDER[k] === name);
     let DOCS = []; // Supabase-backed cache of the documents library
     // Confidential Informant risk matrix — alert flag when violent felonies >= 8 (live read-only view)
     const CI_MATRIX = [
