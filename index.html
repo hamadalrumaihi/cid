@@ -81,7 +81,7 @@
           <span class="nav-icon flex-shrink-0 text-lg">🛠️</span><span class="nav-label">Ballistics &amp; Logistics</span>
         </button>
         <button data-tab="personnel" data-label="Personnel &amp; Roster" class="nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
-          <span class="nav-icon flex-shrink-0 text-lg">👥</span><span class="nav-label">Personnel &amp; Commendations</span>
+          <span class="nav-icon flex-shrink-0 text-lg">👥</span><span class="nav-label">Personnel &amp; Commendations <span id="pending-nav-badge" class="ml-1 hidden rounded-full bg-amber-500 px-1.5 text-[9px] font-bold text-white" title="Members awaiting approval"></span></span>
         </button>
         <button data-tab="modus" data-label="M.O. Detector" class="nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
           <span class="nav-icon flex-shrink-0 text-lg">🔍</span><span class="nav-label">M.O. Detector &amp; Profiler</span>
@@ -350,6 +350,9 @@
           <!-- Command-only member administration (Supabase profiles) -->
           <div id="admin-panel" class="mb-8 hidden"></div>
 
+          <!-- Command-only audit log viewer -->
+          <div id="audit-panel" class="mb-8 hidden"></div>
+
           <h4 class="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">Active Roster</h4>
           <div id="roster-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"></div>
 
@@ -569,7 +572,7 @@
     <button data-tab="persons" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🧑‍⚖️</span><span class="text-[10px] font-medium">Persons</span></button>
     <button data-tab="narcotics" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">💊</span><span class="text-[10px] font-medium">Narco</span></button>
     <button data-tab="ballistics" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🛠️</span><span class="text-[10px] font-medium">Arms</span></button>
-    <button data-tab="personnel" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">👥</span><span class="text-[10px] font-medium">Roster</span></button>
+    <button data-tab="personnel" class="bnav-link relative flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">👥</span><span class="text-[10px] font-medium">Roster</span><span id="pending-bnav-badge" class="absolute right-3 top-1 hidden min-w-[16px] rounded-full bg-amber-500 px-1 text-center text-[9px] font-bold text-white"></span></button>
     <button data-tab="modus" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🔍</span><span class="text-[10px] font-medium">M.O.</span></button>
     <button data-tab="gangs" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🚩</span><span class="text-[10px] font-medium">Gangs</span></button>
     <button data-tab="places" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">📍</span><span class="text-[10px] font-medium">Places</span></button>

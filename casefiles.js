@@ -244,11 +244,34 @@
       const body = $('#detail-body'); const cid = detailCase.id; const canEdit = DB() && DB().canEdit();
       try {
         if (detailTab === 'overview') {
-          const [ev, rep] = await Promise.all([ DB().list('evidence', { eq: { case_id: cid } }), DB().list('reports', { eq: { case_id: cid } }) ]);
+          const [ev, rep, asg] = await Promise.all([ DB().list('evidence', { eq: { case_id: cid } }), DB().list('reports', { eq: { case_id: cid } }), DB().list('case_assignments', { eq: { case_id: cid } }).catch(() => []) ]);
           const ownerName = officerName(detailCase.lead_detective_id) || '— unassigned —';
+          const canDel = DB() && DB().canDelete();
+          const profs = (typeof PROFILES !== 'undefined' ? PROFILES : []);
+          const assigned = new Set(asg.map((a) => a.officer_id));
+          const chips = asg.length ? asg.map((a) => `<span class="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200">👤 ${escapeHTML(officerName(a.officer_id) || 'Officer')}${a.role ? ` · <span class="text-slate-400">${escapeHTML(a.role)}</span>` : ''}${canDel ? ` <button class="asg-rm text-rose-300 hover:text-rose-200" data-id="${a.id}" title="Remove assignee">✕</button>` : ''}</span>`).join('') : '<span class="text-sm text-slate-500">No additional assignees — only the lead detective.</span>';
+          const opts = profs.filter((p) => p.active && p.id !== detailCase.lead_detective_id && !assigned.has(p.id)).map((p) => `<option value="${p.id}">${escapeHTML(p.display_name)}</option>`).join('');
           body.innerHTML = `<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
             ${[['Evidence', ev.length], ['Reports', rep.length], ['Lifecycle', detailCase.status], ['Owner (Lead Det.)', ownerName], ['Sign-off', signoffLabel(detailCase.signoff_status || 'none')]].map((k) => `<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-5"><p class="text-xs uppercase tracking-wider text-slate-400">${k[0]}</p><p class="mt-1 text-lg font-bold text-white">${escapeHTML(String(k[1]))}</p></div>`).join('')}
+          </div>
+          <div class="mt-6 rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+            <h4 class="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">Assigned Officers</h4>
+            <div class="flex flex-wrap gap-2">${chips}</div>
+            ${canEdit ? `<div class="mt-4 flex flex-wrap items-center gap-2 border-t border-white/5 pt-4">
+              <select id="asg-officer" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${opts || '<option value="">— no available officers —</option>'}</select>
+              <select id="asg-role" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${['Co-investigator', 'Support', 'Analyst', 'Surveillance', 'Forensics'].map((r) => `<option>${r}</option>`).join('')}</select>
+              <button id="asg-add" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">+ Assign</button>
+            </div>` : ''}
           </div>`;
+          const ab = $('#asg-add'); if (ab) ab.onclick = async () => {
+            const oid = $('#asg-officer').value; if (!oid) { toast('Pick an officer to assign.', 'warn'); return; }
+            const res = await DB().insert('case_assignments', { case_id: cid, officer_id: oid, role: $('#asg-role').value });
+            if (res.error) { toast('Assign failed: ' + res.error.message, 'danger'); return; }
+            toast('Officer assigned', 'success');
+            if (typeof notify === 'function') notify(oid, 'mention', { case_number: detailCase.case_number, reason: 'You were assigned to this case.' });
+            loadDetailTab();
+          };
+          $$('.asg-rm', body).forEach((b) => b.onclick = async () => { const res = await DB().remove('case_assignments', b.dataset.id); if (res && res.error) { toast('Remove failed: ' + res.error.message, 'danger'); return; } toast('Assignee removed', 'info'); loadDetailTab(); });
         } else if (detailTab === 'evidence') {
           const ev = await DB().list('evidence', { order: 'created_at', ascending: false, eq: { case_id: cid } });
           body.innerHTML = `

@@ -282,7 +282,13 @@
     let trackers = [];
     let PROFILES = [];
     const officerName = (id) => { if (!id) return null; const p = PROFILES.find((x) => x.id === id); if (p) return p.display_name; const me = DB() && DB().me; return (me && me.id === id) ? me.display_name : 'Officer'; };
-    async function fetchProfiles() { if (!dbReady()) return; try { PROFILES = await DB().list('profiles', {}); } catch (e) {} if (typeof renderAdmin === 'function') renderAdmin(); if (typeof renderActivity === 'function') renderActivity(); if (typeof populateDetectiveFilter === 'function') populateDetectiveFilter(); }
+    async function fetchProfiles() { if (!dbReady()) return; try { PROFILES = await DB().list('profiles', {}); } catch (e) {} if (typeof renderAdmin === 'function') renderAdmin(); if (typeof renderActivity === 'function') renderActivity(); if (typeof populateDetectiveFilter === 'function') populateDetectiveFilter(); updatePendingBadge(); }
+    // Pending-approval alert badge (admins only): count of inactive profiles.
+    function updatePendingBadge() {
+      const n = (typeof PROFILES !== 'undefined' ? PROFILES : []).filter((p) => !p.active).length;
+      const show = n > 0 && DB() && DB().isAdmin();
+      ['#pending-nav-badge', '#pending-bnav-badge'].forEach((sel) => { const b = $(sel); if (!b) return; b.textContent = String(n); b.classList.toggle('hidden', !show); });
+    }
     function fmtCountdown(ms) {
       if (ms <= 0) return 'EXPIRED';
       const h = Math.floor(ms/3.6e6), m = Math.floor((ms%3.6e6)/6e4), s = Math.floor((ms%6e4)/1000);
