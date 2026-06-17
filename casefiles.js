@@ -91,7 +91,7 @@
     }
     function renderCaseDetailShell() {
       const c = detailCase, canEdit = DB() && DB().canEdit(), canDel = DB() && DB().canDelete();
-      const tabs = ['overview', 'evidence', 'reports', 'signoff', 'timeline'];
+      const tabs = ['overview', 'evidence', 'reports', 'signoff', 'chat', 'timeline'];
       $('#case-detail').innerHTML = `
         <button id="case-back" class="mb-4 inline-flex items-center gap-1 text-sm text-slate-300 transition hover:text-white">← All cases</button>
         <div class="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
@@ -142,6 +142,8 @@
           body.innerHTML = `<div class="space-y-3">${rep.length ? rep.map((r) => `<div class="rounded-xl border border-white/10 bg-ink-900 p-4"><div class="flex items-center justify-between"><span class="text-sm font-semibold text-white">${escapeHTML(r.template)} <span class="text-xs text-slate-400">${escapeHTML(r.kind)}${r.seq ? ' #' + r.seq : ''}</span></span>${r.finalized ? '<span class="rounded bg-emerald-500/15 px-2 py-0.5 text-[10px] uppercase text-emerald-300">finalized</span>' : '<span class="rounded bg-amber-500/15 px-2 py-0.5 text-[10px] uppercase text-amber-300">draft</span>'}</div><p class="mt-1 text-[11px] text-slate-500">${new Date(r.created_at).toLocaleString('en-US')}</p></div>`).join('') : '<p class="text-sm text-slate-500">No reports linked. (Report authoring migrates in the next module.)</p>'}</div>`;
         } else if (detailTab === 'signoff') {
           await renderSignoffTab(body, detailCase);
+        } else if (detailTab === 'chat') {
+          await renderChatTab(body, detailCase);
         } else if (detailTab === 'timeline') {
           const [ev, rep, cust] = await Promise.all([
             DB().list('evidence', { eq: { case_id: cid } }),
@@ -220,9 +222,16 @@
     window.CIDApp.onAuthed = function () {
       fetchProfiles(); fetchCases(); fetchGangs(); fetchPersons(); fetchDrugs(); fetchPlaces(); fetchBenches(); fetchFootprints(); fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); fetchNotifications();
       fetchCommendations(); fetchMedia(); fetchMoProfiles(); fetchDocuments();
+      if (typeof fetchMyGrants === 'function') fetchMyGrants();
+      if (typeof fetchAnnouncements === 'function') fetchAnnouncements();
+      if (typeof renderOfficerCard === 'function') renderOfficerCard();
       if (dbReady()) {
         DB().subscribe('cases', () => { fetchCases(); fetchKpis(); renderBureauLoad(); if (typeof detailCase !== 'undefined' && detailCase && !$('#case-detail').classList.contains('hidden')) { DB().list('cases', { eq: { id: detailCase.id } }).then((r) => { if (r[0]) { detailCase = r[0]; renderCaseDetailShell(); loadDetailTab(); } }).catch(() => {}); } });
-        DB().subscribe('profiles', () => { fetchProfiles(); renderRoster(); });
+        DB().subscribe('profiles', () => { fetchProfiles(); renderRoster(); if (typeof renderOfficerCard === 'function') renderOfficerCard(); });
+        DB().subscribe('announcements', () => { if (typeof fetchAnnouncements === 'function') fetchAnnouncements(); });
+        DB().subscribe('case_access_grants', () => { if (typeof fetchMyGrants === 'function') fetchMyGrants(); });
+        DB().subscribe('case_messages', () => { if (typeof detailCase !== 'undefined' && detailCase && detailTab === 'chat') loadDetailTab(); });
+        DB().subscribe('case_access_requests', () => { if (typeof detailCase !== 'undefined' && detailCase && detailTab === 'chat') loadDetailTab(); });
         DB().subscribe('commendations', fetchCommendations);
         DB().subscribe('media', fetchMedia);
         DB().subscribe('mo_profiles', fetchMoProfiles);
