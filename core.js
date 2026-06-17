@@ -257,7 +257,7 @@
       drive:      { title: 'CID General', sub: 'Shared investigative drive' },
       records:    { title: 'CID Records', sub: 'Live shared records (Supabase)' },
       announce:   { title: 'Announcements', sub: 'Division-wide notices from command staff' },
-      'case-files': { title: 'Case Files — Drive', sub: 'Google Drive files organised per case' },
+      'case-files': { title: 'Case Files — Attachments', sub: 'Files uploaded per case (FiveManage + Supabase)' },
       heatmap:    { title: 'Commander Heatmap', sub: 'Gang turf, places, raids & case concentration by area' },
       shifts:     { title: 'Weekly Shift Reports', sub: 'Detective activity rolled up to bureau leadership' },
     };

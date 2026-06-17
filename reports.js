@@ -6,10 +6,9 @@
     /* ============================================================ 11C. REPORTS (template-driven + chains) ============================================================ */
     function renderTemplateList() {
       const wrap = $('#template-list'); if (!wrap) return; wrap.innerHTML = '';
-      const canEdit = DB() && DB().canEdit();
       REPORT_TEMPLATES.forEach((t) => {
         const b = el('button', { class: 'flex w-full items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-white/10 hover:text-white' }, `<span class="text-lg">${t.icon}</span><span>${esc(t.name)}</span>`);
-        b.addEventListener('click', () => { if (!canEdit) { toast('Sign-in required to author reports.', 'warn'); return; } const cid = $('#report-case').value; if (!cid) { toast('Select a case first (create one in Case Files).', 'warn'); return; } openReportModal(t.id, cid, null, 'initial'); });
+        b.addEventListener('click', () => { if (!(DB() && DB().canEdit())) { toast('Sign-in required to author reports.', 'warn'); return; } const cid = $('#report-case').value; if (!cid) { toast('Select a case first (create one in Case Files).', 'warn'); return; } openReportModal(t.id, cid, null, 'initial'); });
         wrap.appendChild(b);
       });
     }

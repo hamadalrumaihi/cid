@@ -16,4 +16,6 @@ regexes = [
   # Google OAuth Web client ID + browser API key for the Case Files picker (public, referrer/origin-restricted)
   '''[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com''',
   '''AIza[0-9A-Za-z_-]{35}''',
+  # FiveManage client-side upload token (Case Files + Media vault). Referrer-bound on FiveManage's side.
+  '''Z3ctM38GCUw5aPam9xscHYcxjghj8iTE''',
 ]
