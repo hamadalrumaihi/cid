@@ -10,17 +10,23 @@
       if (!dbReady()) { g.innerHTML = '<p class="text-sm text-slate-500 sm:col-span-2 xl:col-span-3">Sign in to view the roster.</p>'; return; }
       if (!PROFILES.length) { g.innerHTML = '<p class="text-sm text-slate-500 sm:col-span-2 xl:col-span-3">No officers on the roster yet.</p>'; return; }
       g.innerHTML = '';
+      const myId = (DB() && DB().me) ? DB().me.id : null;
       PROFILES.forEach((p) => {
         const init = (p.display_name || '?').split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
-        g.appendChild(el('div', { class: 'rounded-2xl border border-white/5 bg-ink-900/60 p-5 transition hover:border-white/10' }, `
+        const isMe = myId && p.id === myId;
+        const roleLabel = (typeof ROLE_LABEL !== 'undefined' && ROLE_LABEL[p.role]) || p.role;
+        const card = el('div', { class: `rounded-2xl border bg-ink-900/60 p-5 transition hover:border-white/10 ${p.loa ? 'border-amber-500/20' : 'border-white/5'}` }, `
           <div class="flex items-center gap-3"><div class="grid h-12 w-12 flex-shrink-0 place-items-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-700 text-sm font-bold text-white">${esc(init)}</div>
-            <div class="min-w-0 flex-1"><p class="truncate font-semibold text-white">${esc(p.display_name)}</p><p class="text-xs text-slate-400">${esc(p.role)}</p></div>
-            <span class="pulse-dot h-2.5 w-2.5 rounded-full ${p.active ? 'bg-emerald-400' : 'bg-slate-500'}" title="${p.active ? 'Active' : 'Pending'}"></span></div>
+            <div class="min-w-0 flex-1"><p class="truncate font-semibold text-white">${esc(p.display_name)}${p.loa ? ' <span class="ml-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-300">On LOA</span>' : ''}</p><p class="text-xs text-slate-400">${esc(roleLabel)}</p></div>
+            <span class="pulse-dot h-2.5 w-2.5 rounded-full ${p.loa ? 'bg-amber-400' : p.active ? 'bg-emerald-400' : 'bg-slate-500'}" title="${p.loa ? 'On LOA' : p.active ? 'Active' : 'Pending'}"></span></div>
           <div class="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
             <div class="rounded-lg bg-ink-850 py-2"><p class="font-mono font-bold text-blue-300">${esc(p.badge_number || '—')}</p><p class="text-[10px] text-slate-500">Badge</p></div>
             <div class="rounded-lg bg-ink-850 py-2"><p class="font-semibold text-slate-200">${esc(p.division)}</p><p class="text-[10px] text-slate-500">Bureau</p></div>
-            <div class="rounded-lg bg-ink-850 py-2"><p class="font-semibold text-slate-200">${p.active ? 'Active' : 'Pending'}</p><p class="text-[10px] text-slate-500">Status</p></div>
-          </div>`));
+            <div class="rounded-lg bg-ink-850 py-2"><p class="font-semibold ${p.loa ? 'text-amber-300' : 'text-slate-200'}">${p.loa ? 'On LOA' : p.active ? 'Active' : 'Pending'}</p><p class="text-[10px] text-slate-500">Status</p></div>
+          </div>
+          ${isMe ? `<button class="loa-self mt-3 w-full rounded-lg border px-3 py-2 text-xs font-semibold transition ${p.loa ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300 hover:bg-emerald-500/10' : 'border-amber-500/30 bg-amber-500/5 text-amber-200 hover:bg-amber-500/10'}">${p.loa ? 'Clear my LOA — return active' : 'Set myself On LOA'}</button>` : ''}`);
+        const lb = card.querySelector('.loa-self'); if (lb && typeof setMyLoa === 'function') lb.onclick = () => setMyLoa(!p.loa);
+        g.appendChild(card);
       });
     }
 

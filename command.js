@@ -5,25 +5,107 @@
 
     /* ============================================================ 5. CENTRAL COMMAND ============================================================ */
     /* ---- Central Command (live from Supabase) ---- */
-    let TICKETS_CACHE = [], AUDIT = [], SEIZ_TOTAL = 0;
-    const KPI_ACCENTS = { blue:'from-blue-500/20 to-blue-700/5 text-blue-300 border-blue-500/20', slate:'from-slate-500/20 to-slate-700/5 text-slate-300 border-slate-500/20', violet:'from-violet-500/20 to-violet-700/5 text-violet-300 border-violet-500/20', emerald:'from-emerald-500/20 to-emerald-700/5 text-emerald-300 border-emerald-500/20' };
+    let TICKETS_CACHE = [], AUDIT = [], SEIZ_TOTAL = 0, RAIDS_CACHE = [], EVIDENCE_CACHE = [];
+    const KPI_ACCENTS = { blue:'from-blue-500/20 to-blue-700/5 text-blue-300 border-blue-500/20', slate:'from-slate-500/20 to-slate-700/5 text-slate-300 border-slate-500/20', violet:'from-violet-500/20 to-violet-700/5 text-violet-300 border-violet-500/20', emerald:'from-emerald-500/20 to-emerald-700/5 text-emerald-300 border-emerald-500/20', amber:'from-amber-500/20 to-amber-700/5 text-amber-300 border-amber-500/20', rose:'from-rose-500/20 to-rose-700/5 text-rose-300 border-rose-500/20', cyan:'from-cyan-500/20 to-cyan-700/5 text-cyan-300 border-cyan-500/20' };
+    // Command filters (#17) — command/supervisors can scope the dashboard.
+    const CMD_ROLES = ['supervisor', 'bureau_lead', 'deputy_director', 'command', 'director'];
+    const CMD_FILTERS = { bureau: '', detective: '', status: '', from: '', to: '' };
+    function cmdCanFilter() { const me = DB() && DB().me; return !!(me && me.active && CMD_ROLES.includes(me.role)); }
+    function cmdFilterActive() { return !!(CMD_FILTERS.bureau || CMD_FILTERS.detective || CMD_FILTERS.status || CMD_FILTERS.from || CMD_FILTERS.to); }
+    function cmdMatch(c) {
+      if (CMD_FILTERS.bureau && c.bureau !== CMD_FILTERS.bureau) return false;
+      if (CMD_FILTERS.detective && c.lead_detective_id !== CMD_FILTERS.detective) return false;
+      if (CMD_FILTERS.status === 'awaiting' && !/^awaiting_/.test(c.signoff_status || '')) return false;
+      else if (CMD_FILTERS.status === 'ready_doj' && !(c.signoff_status === 'ready_doj' || c.signoff_status === 'approved_complete')) return false;
+      else if (CMD_FILTERS.status && !['awaiting', 'ready_doj'].includes(CMD_FILTERS.status) && c.status !== CMD_FILTERS.status) return false;
+      if (CMD_FILTERS.from && new Date(c.created_at) < new Date(CMD_FILTERS.from)) return false;
+      if (CMD_FILTERS.to && new Date(c.created_at) > new Date(CMD_FILTERS.to + 'T23:59:59')) return false;
+      return true;
+    }
+    function cmdFilteredCases() { return (typeof casesCache !== 'undefined' ? casesCache : []).filter(cmdMatch); }
+    const reEvWeapon = /gun|weapon|firearm|pistol|rifle|shotgun|ammo|ammunition|magazine/i;
+    const reEvNarc = /narc|drug|cocaine|coke|meth|heroin|cannabis|weed|marijuana|fentanyl|opi|pill/i;
+    function avgResolutionDays(cases) {
+      const closed = cases.filter((c) => c.closed_at && c.created_at);
+      if (!closed.length) return null;
+      const totalMs = closed.reduce((a, c) => a + (new Date(c.closed_at) - new Date(c.created_at)), 0);
+      return totalMs / closed.length / 86400000;
+    }
     function renderKPIs() {
       const g = $('#kpi-grid'); if (!g) return;
       const live = dbReady();
-      const open = casesCache.filter((c) => c.status === 'open' || c.status === 'active').length;
-      const cold = casesCache.filter((c) => c.status === 'cold').length;
+      const cases = cmdFilteredCases();
+      const caseIds = new Set(cases.map((c) => c.id));
+      const open = cases.filter((c) => c.status === 'open' || c.status === 'active').length;
+      const cold = cases.filter((c) => c.status === 'cold').length;
+      const awaiting = cases.filter((c) => /^awaiting_/.test(c.signoff_status || '')).length;
+      const readyDoj = cases.filter((c) => c.signoff_status === 'ready_doj' || c.signoff_status === 'approved_complete').length;
+      const scoped = cmdFilterActive();
+      const seiz = (scoped ? RAIDS_CACHE.filter((r) => caseIds.has(r.case_id)) : RAIDS_CACHE).reduce((a, b) => a + (Number(b.net_value) || 0), 0);
+      const ev = scoped ? EVIDENCE_CACHE.filter((e) => caseIds.has(e.case_id)) : EVIDENCE_CACHE;
+      const weapons = ev.filter((e) => reEvWeapon.test(e.type || '') || reEvWeapon.test(e.description || '')).length;
+      const narcs = ev.filter((e) => reEvNarc.test(e.type || '') || reEvNarc.test(e.description || '')).length;
+      const avg = avgResolutionDays(cases);
       const flagged = PERSONS.filter((p) => (p.felony_count || 0) >= 8).length;
       const cards = [
-        { label:'Open Cases', value: live ? open : '—', delta: `${casesCache.length} total on file`, icon:'📂', accent:'blue' },
-        { label:'Cold Cases', value: live ? cold : '—', delta:'2-week inactivity policy', icon:'🧊', accent:'slate' },
+        { label:'Open Cases', value: live ? open : '—', delta: `${cases.length} ${scoped ? 'in filter' : 'total on file'}`, icon:'📂', accent:'blue', go:() => setCmdStatus('open') },
+        { label:'Awaiting Sign-off', value: live ? awaiting : '—', delta:'stuck in the approval chain', icon:'✍️', accent:'amber', go:() => setCmdStatus('awaiting') },
+        { label:'Ready for DOJ', value: live ? readyDoj : '—', delta:'approved & complete', icon:'⚖️', accent:'emerald', go:() => setCmdStatus('ready_doj') },
+        { label:'Avg Resolution', value: live ? (avg == null ? '—' : (avg < 1 ? '<1d' : avg.toFixed(1) + 'd')) : '—', delta: avg == null ? 'no closed cases yet' : 'open → closed', icon:'⏱️', accent:'cyan' },
+        { label:'Cold Cases', value: live ? cold : '—', delta:'2-week inactivity policy', icon:'🧊', accent:'slate', go:() => setCmdStatus('cold') },
+        { label:'Seizures (money)', value: live ? fmtUSD(seiz) : '—', delta:'logged raid compensation', icon:'💵', accent:'emerald' },
+        { label:'Narcotics Seized', value: live ? narcs : '—', delta:'evidence items logged', icon:'💊', accent:'violet' },
+        { label:'Weapons Seized', value: live ? weapons : '—', delta:'evidence items logged', icon:'🔫', accent:'rose' },
         { label:'Persons of Interest', value: live ? PERSONS.length : '—', delta: `${flagged} ≥8-felony flagged`, icon:'🧑‍⚖️', accent:'violet' },
-        { label:'Total Seizures', value: live ? fmtUSD(SEIZ_TOTAL) : '—', delta:'logged raid compensation', icon:'💵', accent:'emerald' },
       ];
       g.innerHTML = '';
-      cards.forEach((m) => g.appendChild(el('div', { class:`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${KPI_ACCENTS[m.accent]} p-5 transition hover:shadow-glow` },
-        `<div class="flex items-start justify-between"><div><p class="text-xs font-semibold uppercase tracking-wider text-slate-400">${m.label}</p><p class="mt-2 text-3xl font-bold text-white">${m.value}</p><p class="mt-1 text-[11px] text-slate-400">${m.delta}</p></div><span class="text-2xl">${m.icon}</span></div>`)));
+      cards.forEach((m) => { const card = el('div', { class:`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${KPI_ACCENTS[m.accent]} p-5 transition hover:shadow-glow${m.go ? ' cursor-pointer hover:brightness-110' : ''}` },
+        `<div class="flex items-start justify-between"><div><p class="text-xs font-semibold uppercase tracking-wider text-slate-400">${m.label}</p><p class="mt-2 text-3xl font-bold text-white">${m.value}</p><p class="mt-1 text-[11px] text-slate-400">${m.delta}</p></div><span class="text-2xl">${m.icon}</span></div>`);
+        if (m.go && live) card.onclick = m.go;
+        g.appendChild(card); });
+      renderCmdDrill();
     }
-    async function fetchKpis() { if (dbReady()) { try { const raids = await DB().list('raid_compensations', {}); SEIZ_TOTAL = raids.reduce((a, b) => a + (Number(b.net_value) || 0), 0); } catch (e) {} } renderKPIs(); }
+    function setCmdStatus(s) { CMD_FILTERS.status = (CMD_FILTERS.status === s ? '' : s); syncCmdFilterControls(); refreshCommand(); }
+    function renderCmdDrill() {
+      const box = $('#cmd-drill'); if (!box) return;
+      if (!dbReady() || !cmdFilterActive()) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+      const cases = cmdFilteredCases().slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      box.classList.remove('hidden');
+      const statusPill = (c) => { const s = /^awaiting_/.test(c.signoff_status || '') ? 'awaiting' : (c.signoff_status === 'ready_doj' || c.signoff_status === 'approved_complete' ? 'DOJ-ready' : c.status); const tint = { open:'bg-blue-500/15 text-blue-300', active:'bg-blue-500/15 text-blue-300', cold:'bg-slate-500/15 text-slate-300', closed:'bg-emerald-500/15 text-emerald-300', awaiting:'bg-amber-500/15 text-amber-300', 'DOJ-ready':'bg-emerald-500/15 text-emerald-300' }[s] || 'bg-white/10 text-slate-300'; return `<span class="rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${tint}">${esc(s)}</span>`; };
+      box.innerHTML = `<div class="mb-3 flex items-center justify-between"><h3 class="text-sm font-semibold text-white">Matching cases</h3><span class="text-[11px] text-slate-500">${cases.length} result${cases.length === 1 ? '' : 's'}</span></div>` +
+        (cases.length ? `<div class="space-y-2">${cases.slice(0, 40).map((c) => `<button class="cmd-drill-row flex w-full items-center justify-between gap-3 rounded-lg border border-white/5 bg-ink-900 px-4 py-2.5 text-left transition hover:border-blue-500/30 hover:bg-white/5" data-id="${c.id}"><span class="min-w-0 flex-1"><span class="font-mono text-xs text-blue-300">${esc(c.case_number)}</span> <span class="text-sm text-slate-200">${esc(c.title || '')}</span></span><span class="flex flex-shrink-0 items-center gap-2"><span class="text-[11px] text-slate-500">${esc(c.bureau)}</span>${statusPill(c)}</span></button>`).join('')}</div>${cases.length > 40 ? '<p class="mt-2 text-center text-[11px] text-slate-500">Showing first 40.</p>' : ''}` : '<p class="text-sm text-slate-500">No cases match the current filters.</p>');
+      box.querySelectorAll('.cmd-drill-row').forEach((b) => b.onclick = () => { if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(b.dataset.id); });
+    }
+    function refreshCommand() { renderKPIs(); renderBureauLoad(); const cnt = $('#cmd-f-count'); if (cnt) cnt.textContent = cmdFilterActive() ? cmdFilteredCases().length + ' of ' + (casesCache ? casesCache.length : 0) + ' cases' : ''; }
+    function syncCmdFilterControls() {
+      const b = $('#cmd-f-bureau'), d = $('#cmd-f-detective'), s = $('#cmd-f-status'), f = $('#cmd-f-from'), t = $('#cmd-f-to');
+      if (b) b.value = CMD_FILTERS.bureau; if (d) d.value = CMD_FILTERS.detective; if (s) s.value = CMD_FILTERS.status; if (f) f.value = CMD_FILTERS.from; if (t) t.value = CMD_FILTERS.to;
+    }
+    function populateDetectiveFilter() {
+      const d = $('#cmd-f-detective'); if (!d) return;
+      const officers = (typeof PROFILES !== 'undefined' ? PROFILES : []).filter((p) => p.active).sort((a, b) => (a.display_name || '').localeCompare(b.display_name || ''));
+      d.innerHTML = '<option value="">All detectives</option>' + officers.map((p) => `<option value="${p.id}">${esc(p.display_name)}</option>`).join('');
+      d.value = CMD_FILTERS.detective;
+    }
+    function wireCommandFilters() {
+      const bar = $('#cmd-filterbar'); if (!bar) return;
+      bar.classList.toggle('hidden', !cmdCanFilter());
+      bar.classList.toggle('flex', cmdCanFilter());
+      if (!cmdCanFilter()) { Object.keys(CMD_FILTERS).forEach((k) => CMD_FILTERS[k] = ''); return; }
+      if (bar.dataset.wired) { populateDetectiveFilter(); syncCmdFilterControls(); return; }
+      bar.dataset.wired = '1';
+      populateDetectiveFilter();
+      const on = (id, key) => { const e = $(id); if (e) e.onchange = () => { CMD_FILTERS[key] = e.value; refreshCommand(); }; };
+      on('#cmd-f-bureau', 'bureau'); on('#cmd-f-detective', 'detective'); on('#cmd-f-status', 'status'); on('#cmd-f-from', 'from'); on('#cmd-f-to', 'to');
+      const r = $('#cmd-f-reset'); if (r) r.onclick = () => { Object.keys(CMD_FILTERS).forEach((k) => CMD_FILTERS[k] = ''); syncCmdFilterControls(); refreshCommand(); };
+    }
+    async function fetchKpis() {
+      if (dbReady()) { try {
+        [RAIDS_CACHE, EVIDENCE_CACHE] = await Promise.all([ DB().list('raid_compensations', {}), DB().list('evidence', {}).catch(() => []) ]);
+        SEIZ_TOTAL = RAIDS_CACHE.reduce((a, b) => a + (Number(b.net_value) || 0), 0);
+      } catch (e) {} }
+      renderKPIs();
+    }
 
     async function fetchTickets() { if (!dbReady()) { renderTickets(); return; } try { TICKETS_CACHE = await DB().list('tickets', { order: 'created_at', ascending: false }); } catch (e) {} renderTickets(); }
     function renderTickets() {
@@ -87,12 +169,14 @@
       const colors = { LSB: 'bg-blue-500', BCB: 'bg-emerald-500', SAB: 'bg-violet-500', JTF: 'bg-amber-500' };
       const names = { LSB: 'Los Santos Bureau', BCB: 'Blaine County Bureau', SAB: 'State Bureau', JTF: 'Joint Task Force' };
       const counts = { LSB: 0, BCB: 0, SAB: 0, JTF: 0 };
-      casesCache.forEach((c) => { if (counts[c.bureau] != null) counts[c.bureau]++; });
+      cmdFilteredCases().forEach((c) => { if (counts[c.bureau] != null) counts[c.bureau]++; });
       const max = Math.max(1, counts.LSB, counts.BCB, counts.SAB, counts.JTF);
       w.innerHTML = '';
-      ['LSB', 'BCB', 'SAB', 'JTF'].forEach((k) => w.appendChild(el('div', {}, `<div class="mb-1.5 flex justify-between text-xs"><span class="font-medium text-slate-300">${names[k]}</span><span class="font-mono text-slate-400">${counts[k]} case${counts[k] === 1 ? '' : 's'}</span></div><div class="h-2 w-full overflow-hidden rounded-full bg-ink-800"><div class="h-full ${colors[k]} transition-all duration-700" style="width:${Math.round(counts[k] / max * 100)}%"></div></div>`)));
+      ['LSB', 'BCB', 'SAB', 'JTF'].forEach((k) => { const row = el('div', { class: cmdCanFilter() ? 'cursor-pointer' : '', title: cmdCanFilter() ? 'Filter to ' + names[k] : '' }, `<div class="mb-1.5 flex justify-between text-xs"><span class="font-medium ${CMD_FILTERS.bureau === k ? 'text-white' : 'text-slate-300'}">${names[k]}${CMD_FILTERS.bureau === k ? ' ✓' : ''}</span><span class="font-mono text-slate-400">${counts[k]} case${counts[k] === 1 ? '' : 's'}</span></div><div class="h-2 w-full overflow-hidden rounded-full bg-ink-800"><div class="h-full ${colors[k]} transition-all duration-700" style="width:${Math.round(counts[k] / max * 100)}%"></div></div>`);
+        if (cmdCanFilter()) row.onclick = () => { CMD_FILTERS.bureau = (CMD_FILTERS.bureau === k ? '' : k); syncCmdFilterControls(); refreshCommand(); };
+        w.appendChild(row); });
     }
-    function onEnterCommand() { if (dbReady()) { fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); renderBureauLoad(); } else { renderKPIs(); renderTickets(); renderActivity(); renderBureauLoad(); renderTrackers(); } }
+    function onEnterCommand() { wireCommandFilters(); if (dbReady()) { fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); renderBureauLoad(); } else { renderKPIs(); renderTickets(); renderActivity(); renderBureauLoad(); renderTrackers(); } }
 
     /* ---- Ticket processing wizard ---- */
     function openTicketWizard(ticket) {

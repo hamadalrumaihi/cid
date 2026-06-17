@@ -1,5 +1,170 @@
 # CHANGELOG — CID Portal → Production Platform
 
+## Phase 8 — Command dashboard cross-filter & drill-down (#17 follow-up)
+Completes the part of #17 deferred in Phase 7. Central Command is now a true
+supervisor cockpit:
+
+- **Cross-filters:** a filter bar (visible only to `supervisor`, `bureau_lead`,
+  `deputy_director`, `command`, `director`) scopes the whole dashboard by
+  **bureau, lead detective, status** (incl. *awaiting sign-off* / *ready for DOJ*)
+  **and a created-date range**. Every KPI, the bureau-load chart and the new
+  drill-down all honour the active filter; a live "N of M cases" counter and a
+  Reset control round it out.
+- **Drill-down:** KPI cards (Open / Awaiting / Ready-DOJ / Cold) and the
+  bureau-load bars are clickable — they set the matching filter and reveal a
+  **Matching cases** panel that lists the scoped caseload; clicking a row jumps
+  straight to that case file.
+- **New KPIs:** **Avg Resolution** (mean open→closed time, backed by a new
+  `cases.closed_at` column + trigger) plus seizures split into **money /
+  narcotics / weapons** (the latter two derived from evidence type/description).
+  Seizure & evidence KPIs re-scope to the filtered caseload when a filter is on.
+- **Schema:** `20260617120000_cases_closed_at.sql` adds `cases.closed_at`,
+  backfills existing closed cases, and auto-stamps/clears it via a status trigger.
+
+## Phase 7 — Announcements depth, encouragement, KPIs, richer timeline
+Continuation of the master prompt (features #15 full spec, #16–18):
+
+- **#15 Announcements (completed):** posts now carry **record links** (cases) and
+  **@mentions** of individuals *or* rank groups ("@All Detectives", "@All Officers").
+  Posting fires a **platform notification** to the audience (mentioned users get
+  a "you were mentioned" reason). Officers can **dismiss** individual
+  announcements (client-side hide via `Store`, not a delete; "show N dismissed"
+  restores). Clicking an announcement opens a **full-view modal** with body +
+  clickable linked records. Schema: `announcements.links` + `.mentions` jsonb.
+- **#16 Encouragement widget:** non-intrusive rotating tactical phrase on the
+  Central Command dashboard; rotates on load and every 5 min; dismissible for the
+  session (returns on reload, per spec).
+- **#17 Command KPIs:** added **Awaiting Sign-off** (cases stuck in the chain) and
+  **Ready for DOJ** cards to Central Command, alongside the existing open/cold/
+  persons/seizure KPIs, bureau load and audit activity feed. (Central Command is
+  the command/supervisor dashboard; dedicated cross-filter/drill-down views remain
+  a follow-up.)
+- **#18 Case timeline (enriched):** the auto-generated timeline now merges
+  **tracker logged/authorized**, **sign-off history**, and **chat messages** in
+  addition to evidence collection, reports, custody transfers and case-opened.
+
+## Phase 6 — Collaboration, access control & export (master prompt)
+Checked each master-prompt feature against the build; #1–7 already shipped in
+Phase 5 and were skipped. Added the rest:
+
+- **#8 In-case chat** (`collab.js`, `case_messages`): per-case channel with
+  @mentions (→ notification) and record links (case chips open the case).
+  Access gated to owner / same department / chain-lead roles / granted officers.
+- **#9 Cross-case alert + access control** (`case_access_requests`,
+  `case_access_grants`): the M.O. detector shows matches in inaccessible cases as
+  a locked "flagged in another active investigation" alert (no detail leak) with
+  a Request-access action. Owner/leads approve/deny in the Chat tab; the
+  requester is notified and every request/decision is audited.
+- **#13 Export/Import**: SheetJS added — the per-module import tool now accepts
+  `.xlsx` (and `.xls`) alongside CSV/JSON; the Case Packet exports to **.docx /
+  .pdf / .xlsx** via a chooser with an "Exporting… → Ready" flow, and the packet
+  now bundles evidence + reports + media + RICO predicates. (PDF *import* is not
+  implemented — reliable structured extraction from arbitrary PDFs isn't feasible
+  client-side; CSV/XLSX/JSON cover bulk import.)
+- **#14 Sidebar officer card**: removed the hardcoded "Det. Oliver Och / 915"
+  block; now a live card (name, badge, department, CID rank, avatar, LOA badge,
+  duty dot) that opens a My Profile editor (name/badge + self LOA toggle).
+- **#15 Announcements**: new nav page + `announcements` table. Bureau Lead and
+  above post (audience targeting + pin); all active officers read; unread badge.
+- **#10/#12 polish**: `debounce()` util applied to case/person/gang filter
+  inputs; tabs already lazy-fetch via onEnter*; fonts already use display=swap.
+
+Schema: `20260616210000_chat_access_announcements.sql` (4 tables, 3 SECURITY
+DEFINER helpers, RLS, audit + touch triggers, realtime) — applied live to cid.
+
+Note on #9 secrecy: case rows remain readable platform-wide (dashboards, search,
+KPIs depend on it); access grants gate the case *channel* and collaboration
+surface. Hard row-level case hiding would require a visibility refactor across
+every dashboard/search and is intentionally not flipped here.
+
+## Phase 5 — Case sign-off workflow + LOA (Tom Wood / 934 workflow)
+Verified first that none of the 7 requested features existed; all were added.
+Also caught and fixed pre-existing split bugs found while wiring this in.
+
+### Bugs fixed (pre-existing, from the monolith→multi-file split)
+- **`casefiles.js` was never added to `index.html`** — so `DB()`, `dbReady()`,
+  `casesCache`, `openCaseDetail`, and the entire `CIDApp.onAuthed` boot/fetch/
+  subscribe routine were undefined. `auth.js` called `CIDApp.onAuthed` with
+  nothing defining it: the authed app never loaded its data. Wired the script in.
+- **`escapeHTML` used 120× across 9 files but never defined** (only `esc`
+  existed). Added `const escapeHTML = esc;` alias in `core.js`. This had been
+  breaking ballistics, gangs, persons, places, narcotics, cases, and trackers.
+
+### Added — features (all were missing)
+- **(1) LOA flag** — `profiles.loa` + `loa_since`. Self-toggle in the top bar
+  (`auth.js`) and on the officer's own Personnel card; admins/Command/Director
+  can set it via the Member Administration modal. Shown as an "On LOA" badge on
+  roster cards and the admin table. LOA never blocks sign-off; it only steers
+  routing.
+- **(2) Sign-off submission UI** — new "Sign-Off" tab in Case Detail. Owners
+  (Detective/Senior Detective) submit; reviewers Approve / Deny / Request
+  changes (with notes). `signoff.js`.
+- **(3) Auto-routing with LOA handling** — Detective → Bureau Lead → Deputy
+  Director → Director. Skips a rank when its only members are on LOA / inactive,
+  prefers the non-LOA officer when several share a rank (same-bureau Bureau Lead
+  preferred), and escalates to the next rank when all are out. Director is final.
+  Auto-escalation writes a history entry and an explaining notification. (Unit-
+  tested across 7 scenarios.)
+- **(4) Sign-off notifications** — `signoff_waiting`, `signoff_approved`,
+  `signoff_denied`, `signoff_changes`, `signoff_escalated`, `signoff_heads_up`.
+  Each carries case number, detective, reason, and `case_id`; the notifications
+  panel now renders the reason and is click-through to the case. Deputy approval
+  sends the Director a heads-up even when no action is required.
+- **(5) Case status tracking** — `cases.signoff_status` (none → awaiting_bureau_
+  lead → awaiting_deputy → approved_deputy → [approved_complete | awaiting_
+  director → ready_doj], plus changes_requested / denied). Shown on case cards,
+  the detail header, the overview, and a live chain-progress strip. Append-only
+  `case_signoff_history` log (who/what/when, with notes). Realtime re-render of
+  open Case Detail + history.
+- **(6) Stop-point option** — after Deputy approval the owner chooses **Mark
+  Approved & Complete** or **Escalate to Director**; the Director can still
+  approve or send back if escalated.
+- **(7) Ownership vs sign-off separation** — ownership stays on
+  `cases.lead_detective_id` (owner selector in the case modal, gated to Bureau
+  Lead / Deputy Director / Director / Command). Sign-off never changes ownership
+  and ownership never auto-escalates; reassignment is explicit only.
+
+### Schema / roles
+- `supabase/migrations/20260616200000_case_signoff_loa.sql` — LOA columns,
+  `cases` sign-off columns, append-only `case_signoff_history` (+RLS +realtime).
+- Per Tom's choice, added dedicated chain roles to `app_role`:
+  `senior_detective`, `bureau_lead`, `deputy_director` (non-breaking ADD VALUE;
+  legacy `supervisor`→Bureau Lead and `command`→Deputy Director still honored by
+  the router). Admin role picker updated with friendly labels.
+
+## Phase 4 — Official SOPs/forms + Director as supreme role
+### Added — CID General document library (live `documents` rows, fully editable)
+- `supabase/migrations/20260616180000_sop_templates.sql` seeds the org-standard
+  paperwork and reference material (idempotent upsert on the `(folder,name)` key):
+  - **Forms/**: CID Investigative Report, Raid Seizure Value Distribution &
+    Allocation Form, UC Operation Activity Report (blank, reusable templates).
+  - **SOP/Training/**: CID Standard Operating Procedure (Titles 1–12) and the
+    CID Case Building Playbook.
+  - **Case assignment Help??!?/**: CID Case Assignment Procedure (7 steps).
+  - **Resources/**: CID Roster (CID + FDU) and Gang Fact Sheet.
+  - These are official org documents, not demo case data; they open as editable
+    paperwork and export to .docx like any other Drive file.
+  - Applied live to the `cid` Supabase project (all 8 documents verified present).
+
+### Changed — Director is now the supreme role, above all ranks
+- Per CID SOP Title 2A.1 ("the CID Director is the senior authority within the
+  division"), Director gains full administrative authority equal-or-above Command.
+- `supabase/migrations/20260616190000_director_supreme.sql`: redefines
+  `private.is_command()` to accept `('director','command')`, so every gate that
+  used it (the `profiles_command` policy, `assign_member`, the self-escalation
+  block) now treats Director as a full administrator. Adds a `bootstrap_director`
+  helper. `can_delete()` already included director. Applied live and verified.
+- Client (`supabase.js`): added `isAdmin()` (director **or** command);
+  `canDelete()` now delegates to it.
+- Client (`app.js`): Member Administration panel now shows for Director or
+  Command; role dropdown reordered so **director** reads as the top rank.
+
+### Fixed
+- Restored the split-shell `app.js` after a `main` merge had re-inlined the old
+  monolith on top of the 16 feature files (duplicate init / double routing).
+
+---
+
 ## Phase 1 — Backend foundation (this change)
 Goal: stand up the Supabase backend that every module will migrate onto, with
 real RBAC. No working front-end logic was rewritten in this phase.

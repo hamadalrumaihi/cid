@@ -100,7 +100,10 @@
     };
     const fmtUSD = (n) => '$' + Math.round(n).toLocaleString('en-US');
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    const escapeHTML = esc;   // alias: feature files use escapeHTML; both share one scope
     const isDesktop = () => window.matchMedia('(min-width: 1024px)').matches;
+    // Debounce: collapse rapid input/sync bursts into one call (perf, #10).
+    const debounce = (fn, ms = 200) => { let t; return function () { const a = arguments, c = this; clearTimeout(t); t = setTimeout(() => fn.apply(c, a), ms); }; };
 
     function toast(message, type = 'info') {
       const colors = { info:'border-blue-500/30 bg-blue-500/10 text-blue-200', success:'border-emerald-500/30 bg-emerald-500/10 text-emerald-200', warn:'border-amber-500/30 bg-amber-500/10 text-amber-200', danger:'border-rose-500/30 bg-rose-500/10 text-rose-200' };
@@ -186,14 +189,23 @@
       const cols = cfg.allow.map((k) => k + ((cfg.required || []).includes(k) ? '*' : '')).join(', ');
       node.innerHTML = `
         <div class="mb-4 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Import ${esc(cfg.label)}</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
-        <p class="mb-2 text-xs text-slate-400">Paste a <b>JSON array</b> of objects or <b>CSV</b> with a header row. Columns (<span class="text-rose-300">*</span> required): <span class="font-mono text-blue-300">${esc(cols)}</span></p>
-        <input id="imp-file" type="file" accept=".csv,.json,text/csv,application/json" class="mb-2 block w-full text-xs text-slate-400 file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-white" />
+        <p class="mb-2 text-xs text-slate-400">Paste a <b>JSON array</b> of objects or <b>CSV</b> with a header row, or pick a <b>.csv / .xlsx</b> file. Columns (<span class="text-rose-300">*</span> required): <span class="font-mono text-blue-300">${esc(cols)}</span></p>
+        <input id="imp-file" type="file" accept=".csv,.json,.xlsx,.xls,text/csv,application/json" class="mb-2 block w-full text-xs text-slate-400 file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-white" />
         <textarea id="imp-text" rows="9" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-xs text-white outline-none focus:border-badge-500" placeholder='[{"key":"value"}]   — or —   col1,col2&#10;val1,val2'></textarea>
         <div id="imp-msg" class="mt-2 text-xs text-slate-400"></div>
         <button id="imp-go" class="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Import</button>`;
       node.querySelector('.close-x').onclick = closeModal;
       const ta = node.querySelector('#imp-text'), msg = node.querySelector('#imp-msg');
-      node.querySelector('#imp-file').onchange = (e) => { const f = e.target.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => { ta.value = rd.result; }; rd.readAsText(f); };
+      node.querySelector('#imp-file').onchange = (e) => {
+        const f = e.target.files[0]; if (!f) return;
+        const isXlsx = /\.(xlsx|xls)$/i.test(f.name);
+        if (isXlsx) {
+          if (!window.XLSX) { msg.innerHTML = '<span class="text-rose-300">Excel library unavailable (offline). Use CSV/JSON.</span>'; return; }
+          const rd = new FileReader();
+          rd.onload = () => { try { const wb = window.XLSX.read(rd.result, { type: 'array' }); ta.value = window.XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]); msg.textContent = 'Loaded sheet "' + wb.SheetNames[0] + '" — review then Import.'; } catch (err) { msg.innerHTML = '<span class="text-rose-300">Could not read workbook.</span>'; } };
+          rd.readAsArrayBuffer(f);
+        } else { const rd = new FileReader(); rd.onload = () => { ta.value = rd.result; }; rd.readAsText(f); }
+      };
       node.querySelector('#imp-go').onclick = async () => {
         const { rows, skipped, error } = importRows(ta.value, cfg);
         if (error) { msg.innerHTML = '<span class="text-rose-300">' + esc(error) + '</span>'; return; }
@@ -250,6 +262,7 @@
       rico:       { title: 'RICO Builder', sub: 'Enterprise & predicate-act element tracker' },
       drive:      { title: 'CID General', sub: 'Shared investigative drive' },
       records:    { title: 'CID Records', sub: 'Live shared records (Supabase)' },
+      announce:   { title: 'Announcements', sub: 'Division-wide notices from command staff' },
     };
 
     function navigate(tab) {
@@ -275,6 +288,7 @@
       if (tab === 'personnel' && typeof onEnterPersonnel === 'function') onEnterPersonnel();
       if (tab === 'modus' && typeof onEnterModus === 'function') onEnterModus();
       if (tab === 'drive' && typeof onEnterDrive === 'function') onEnterDrive();
+      if (tab === 'announce' && typeof onEnterAnnounce === 'function') onEnterAnnounce();
     }
     $$('.nav-link, .bnav-link').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.tab)));
 

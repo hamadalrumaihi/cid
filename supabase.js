@@ -38,7 +38,10 @@
       } catch (e) { return null; }   // profiles table may not exist yet -> treat as unapproved
     },
     role() { return this.me ? this.me.role : null; },
-    canDelete() { return !!this.me && (this.me.role === 'director' || this.me.role === 'command'); },
+    // Director is the supreme role (above all ranks, per CID SOP Title 2A.1) and
+    // shares full administrative authority with Command: member administration + deletes.
+    isAdmin() { return !!this.me && this.me.active && (this.me.role === 'director' || this.me.role === 'command'); },
+    canDelete() { return this.isAdmin(); },
     canEdit() { return !!this.me && this.me.active; },
 
     // ---- generic data layer (used as modules migrate off localStorage) ----

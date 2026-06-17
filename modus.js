@@ -39,19 +39,32 @@
         const shared = tags.filter((tag) => all.includes(tag));
         const pct = tags.length ? Math.round((shared.length / tags.length) * 100) : 0;
         const c = casesCache.find((x) => x.id === p.case_id);
-        return { id: (c && c.case_number) || '—', status: c ? (c.status === 'cold' ? 'Cold' : 'Open') : '—', shared, pct };
+        return { caseObj: c, id: (c && c.case_number) || '—', status: c ? (c.status === 'cold' ? 'Cold' : 'Open') : '—', shared, pct };
       }).filter((c) => c.shared.length).sort((a,b) => b.pct - a.pct);
 
+      // #9 — cross-case secrecy: full detail only on cases you can access; others
+      // show a locked "flagged in another active investigation" alert + request.
+      const accessOk = (co) => typeof canAccessCaseClient !== 'function' || !co || canAccessCaseClient(co);
       matchBox.innerHTML = scored.length ? scored.map((c) => {
+        if (!accessOk(c.caseObj)) {
+          const names = c.shared.length ? c.shared.join(', ') : 'A suspect';
+          return `<div class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+            <div class="flex items-center gap-2"><span class="text-lg">🔒</span><span class="text-sm font-semibold text-amber-200">Flagged in another active investigation</span></div>
+            <p class="mt-1 text-xs text-slate-300">Indicators (<span class="text-amber-200">${esc(names)}</span>) match a case you don't have access to. Details are restricted.</p>
+            <button class="mo-request mt-2 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110" data-cid="${c.caseObj ? c.caseObj.id : ''}">Request access</button>
+          </div>`;
+        }
         const tint = c.pct >= 70 ? 'border-rose-500/40 bg-rose-500/5' : c.pct >= 40 ? 'border-amber-500/30 bg-amber-500/5' : 'border-white/10 bg-ink-900';
         const bar = c.pct >= 70 ? 'bg-rose-500' : c.pct >= 40 ? 'bg-amber-500' : 'bg-blue-500';
         return `<div class="rounded-xl border ${tint} p-4">
-          <div class="flex items-center justify-between"><div><span class="font-mono text-sm font-semibold text-white">${esc(c.id)}</span> <span class="ml-2 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${c.status==='Cold'?'bg-slate-500/20 text-slate-300':'bg-emerald-500/15 text-emerald-300'}">${esc(c.status)}</span></div><span class="font-mono text-lg font-bold ${c.pct>=70?'text-rose-300':c.pct>=40?'text-amber-300':'text-blue-300'}">${c.pct}%</span></div>
+          <div class="flex items-center justify-between"><div><button class="mo-open font-mono text-sm font-semibold text-white hover:text-blue-300" data-cid="${c.caseObj ? c.caseObj.id : ''}">${esc(c.id)}</button> <span class="ml-2 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${c.status==='Cold'?'bg-slate-500/20 text-slate-300':'bg-emerald-500/15 text-emerald-300'}">${esc(c.status)}</span></div><span class="font-mono text-lg font-bold ${c.pct>=70?'text-rose-300':c.pct>=40?'text-amber-300':'text-blue-300'}">${c.pct}%</span></div>
           <p class="mt-1 text-xs text-slate-400">${c.pct}% M.O. match — shared: ${c.shared.map((s)=>esc(s)).join(', ')}</p>
           <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-ink-800"><div class="h-full ${bar}" style="width:${c.pct}%"></div></div>
         </div>`;
       }).join('') : `<p class="text-sm text-slate-500">No cross-reference matches found${MO_PROFILES.length ? '' : ' — no case M.O. profiles saved yet'}.</p>`;
-      if (scored.length) toast(`${scored[0].pct}% M.O. match found with ${scored[0].id}`, scored[0].pct >= 70 ? 'danger' : 'info');
+      matchBox.querySelectorAll('.mo-open').forEach((b) => b.onclick = () => { if (!b.dataset.cid) return; if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(b.dataset.cid); });
+      matchBox.querySelectorAll('.mo-request').forEach((b) => b.onclick = () => { const co = casesCache.find((x) => x.id === b.dataset.cid); if (co && typeof requestCaseAccess === 'function') { const reason = prompt('Reason for requesting access (optional):') || ''; requestCaseAccess(co, reason); } });
+      if (scored.length) { const top = scored[0]; toast(accessOk(top.caseObj) ? `${top.pct}% M.O. match found with ${top.id}` : 'Indicators flagged in another active investigation', top.pct >= 70 && accessOk(top.caseObj) ? 'danger' : 'info'); }
     }
     function openMoSaveModal() {
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }

@@ -107,6 +107,9 @@
         <button data-tab="records" data-label="CID Records (Live)" class="nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
           <span class="nav-icon flex-shrink-0 text-lg">🗃️</span><span class="nav-label">CID Records <span class="ml-1 rounded bg-emerald-500/15 px-1 text-[9px] font-semibold uppercase text-emerald-300">live</span></span>
         </button>
+        <button data-tab="announce" data-label="Announcements" class="nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
+          <span class="nav-icon flex-shrink-0 text-lg">📣</span><span class="nav-label">Announcements <span id="ann-nav-badge" class="ml-1 hidden rounded-full bg-rose-500 px-1.5 text-[9px] font-bold text-white"></span></span>
+        </button>
       </nav>
 
       <div class="hidden border-t border-white/5 p-3 lg:block">
@@ -117,14 +120,16 @@
       </div>
 
       <div class="border-t border-white/5 p-3">
-        <div class="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-2.5">
-          <div class="grid h-9 w-9 flex-shrink-0 place-items-center rounded-full bg-gradient-to-br from-slate-600 to-slate-700 text-xs font-bold text-white">OO</div>
+        <button id="officer-card" type="button" class="flex w-full items-center gap-3 rounded-lg bg-white/5 px-3 py-2.5 text-left transition hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-badge-500/60" aria-label="Your profile and status">
+          <div id="oc-avatar" class="grid h-9 w-9 flex-shrink-0 place-items-center rounded-full bg-gradient-to-br from-slate-600 to-slate-700 text-xs font-bold text-white">—</div>
           <div class="sidebar-hide min-w-0 flex-1 leading-tight">
-            <p class="truncate text-sm font-semibold text-white">Det. Oliver Och</p>
-            <p class="truncate text-[11px] text-slate-400">Callsign 915 · MCB</p>
+            <p id="oc-name" class="truncate text-sm font-semibold text-white">Not signed in</p>
+            <p id="oc-sub" class="truncate text-[11px] text-slate-400">—</p>
+            <p id="oc-rank" class="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-wider text-blue-300/80"></p>
           </div>
-          <span class="sidebar-hide pulse-dot h-2.5 w-2.5 rounded-full bg-emerald-400" title="On duty"></span>
-        </div>
+          <span id="oc-loa" class="sidebar-hide hidden flex-shrink-0 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-300" title="On Leave of Absence">LOA</span>
+          <span id="oc-dot" class="sidebar-hide pulse-dot h-2.5 w-2.5 flex-shrink-0 rounded-full bg-slate-500" title="Status"></span>
+        </button>
       </div>
     </aside>
 
@@ -161,7 +166,23 @@
 
         <!-- ===================== VIEW: CENTRAL COMMAND ===================== -->
         <section id="view-command" class="view active">
-          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" id="kpi-grid"></div>
+          <div id="encourage-widget" class="mb-4 hidden items-center gap-3 rounded-xl border border-white/5 bg-gradient-to-r from-blue-500/[0.07] to-transparent px-4 py-2.5">
+            <span class="text-lg" aria-hidden="true">🎯</span>
+            <p id="encourage-text" class="flex-1 text-sm italic text-slate-300"></p>
+            <button id="encourage-dismiss" class="flex-shrink-0 rounded-md px-2 py-1 text-xs text-slate-500 transition hover:text-white" aria-label="Dismiss">✕</button>
+          </div>
+          <!-- Command filters (#17): scope KPIs & caseload by bureau/detective/status/date -->
+          <div id="cmd-filterbar" class="mb-4 hidden flex-wrap items-end gap-3 rounded-2xl border border-white/5 bg-ink-900/60 p-4">
+            <div><label class="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Bureau</label><select id="cmd-f-bureau" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option value="">All bureaus</option><option value="LSB">LSB</option><option value="BCB">BCB</option><option value="SAB">SAB</option><option value="JTF">JTF</option></select></div>
+            <div><label class="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Detective</label><select id="cmd-f-detective" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option value="">All detectives</option></select></div>
+            <div><label class="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Status</label><select id="cmd-f-status" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option value="">Any status</option><option value="open">Open</option><option value="active">Active</option><option value="cold">Cold</option><option value="closed">Closed</option><option value="awaiting">Awaiting sign-off</option><option value="ready_doj">Ready for DOJ</option></select></div>
+            <div><label class="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">From</label><input id="cmd-f-from" type="date" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+            <div><label class="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">To</label><input id="cmd-f-to" type="date" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+            <button id="cmd-f-reset" class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10">Reset</button>
+            <span id="cmd-f-count" class="ml-auto text-xs text-slate-500"></span>
+          </div>
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" id="kpi-grid"></div>
+          <div id="cmd-drill" class="mt-6 hidden rounded-2xl border border-white/5 bg-ink-900/60 p-5"></div>
 
           <div class="mt-8 overflow-hidden rounded-2xl border border-white/5 bg-ink-900/60">
             <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 px-6 py-4">
@@ -499,6 +520,17 @@
           <div id="rec-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"></div>
         </section>
 
+        <section id="view-announce" class="view">
+          <div class="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+            <div>
+              <h3 class="flex items-center gap-2 text-xl font-bold text-white">📣 Announcements</h3>
+              <p class="text-sm text-slate-400">Division-wide notices from CID command staff. Posting is restricted to Bureau Lead and above.</p>
+            </div>
+            <button id="ann-new" class="hidden rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">+ New Announcement</button>
+          </div>
+          <div id="ann-list" class="space-y-4"><p class="text-sm text-slate-500">Sign in to view announcements.</p></div>
+        </section>
+
       </div>
     </main>
   </div>
@@ -519,6 +551,7 @@
     <button data-tab="drive" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">📁</span><span class="text-[10px] font-medium">Drive</span></button>
     <button data-tab="case-files" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🗂️</span><span class="text-[10px] font-medium">Files</span></button>
     <button data-tab="records" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🗃️</span><span class="text-[10px] font-medium">Records</span></button>
+    <button data-tab="announce" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">📣</span><span class="text-[10px] font-medium">News</span></button>
   </nav>
 
   <div id="modal-root"></div>
@@ -528,6 +561,8 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- jsPDF (public CDN) for report PDF export; gracefully optional if offline -->
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <!-- SheetJS (public CDN) for Excel (.xlsx) import/export; gracefully optional if offline -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script>
     /* ============================================================================
      *  SUPABASE CONFIG — public values, safe to commit. Anon/publishable key is
@@ -555,6 +590,7 @@
   <!-- ===== APPLICATION JS (feature-split classic scripts; shared global scope, load order matters) ===== -->
   <script src="supabase.js"></script>
   <script src="core.js"></script>
+  <script src="casefiles.js"></script>
   <script src="command.js"></script>
   <script src="narcotics.js"></script>
   <script src="ballistics.js"></script>
@@ -568,6 +604,8 @@
   <script src="rico.js"></script>
   <script src="docx.js"></script>
   <script src="records.js"></script>
+  <script src="signoff.js"></script>
+  <script src="collab.js"></script>
   <script src="app.js"></script>
   <script src="auth.js"></script>
 
