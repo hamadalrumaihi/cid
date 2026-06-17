@@ -1,5 +1,20 @@
 # CHANGELOG — CID Portal → Production Platform
 
+## Phase 10 — Case Files → Google Drive integration built (2026-06-17)
+Implemented the previously-stubbed Drive feature (design in
+`docs/superpowers/specs/2026-06-15-case-files-drive-design.md`):
+- `casefiles.js`: lazy-loads Google Identity Services + gapi Picker on first
+  attach; OAuth token client scoped to `drive.file` (least privilege); attach via
+  the Picker (multi-select) inserts `case_files` rows (`added_by = auth.uid()`);
+  files render grouped into per-case folder cards with open links; director/command
+  can remove; case-number combobox from `casesCache`; live via realtime
+  subscription on `case_files`; search filter.
+- `index.html`: `window.CID_GOOGLE` populated with the project's public OAuth web
+  client ID, Picker API key, and GCP project number (all referrer/origin-restricted
+  and public by design; allowlisted in `.gitleaks.toml`).
+- Note: the static site has no build step, so these live in `index.html` directly
+  (Vercel env vars are never substituted into the client).
+
 ## Phase 9 — Full logic audit & fixes (2026-06-17)
 Meticulous audit of all 20 JS files (parse + cross-file scope + a 15-view runtime
 smoke test) and the live DB schema. Bugs found and fixed:
@@ -8,9 +23,8 @@ smoke test) and the live DB schema. Bugs found and fixed:
   view) and `#view-case-files` section existed with two nav buttons, but the tab
   was missing from `PAGE_META`, so `navigate()` silently fell back to Command —
   clicking "Case Files" / "Files" opened the dashboard instead. Registered the
-  tab + an `onEnterCaseFiles()` hook that opens the view and shows an honest
-  "Drive not configured" notice (the gapi/OAuth integration is still unbuilt; it
-  needs `window.CID_GOOGLE` credentials). *This was the reported "not working".*
+  tab + an `onEnterCaseFiles()` hook so the view opens (Drive integration itself
+  shipped in Phase 10). *This was the reported "not working".*
 - **🟡 Command "Open Cases" KPI count ≠ drill-down.** Card counted `open+active`
   but drilled to `open` only. Added an `open_active` filter token so the card's
   drill matches its count.
