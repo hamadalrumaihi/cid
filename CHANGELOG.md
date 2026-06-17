@@ -1,5 +1,26 @@
 # CHANGELOG — CID Portal → Production Platform
 
+## Phase 8 — Command dashboard cross-filter & drill-down (#17 follow-up)
+Completes the part of #17 deferred in Phase 7. Central Command is now a true
+supervisor cockpit:
+
+- **Cross-filters:** a filter bar (visible only to `supervisor`, `bureau_lead`,
+  `deputy_director`, `command`, `director`) scopes the whole dashboard by
+  **bureau, lead detective, status** (incl. *awaiting sign-off* / *ready for DOJ*)
+  **and a created-date range**. Every KPI, the bureau-load chart and the new
+  drill-down all honour the active filter; a live "N of M cases" counter and a
+  Reset control round it out.
+- **Drill-down:** KPI cards (Open / Awaiting / Ready-DOJ / Cold) and the
+  bureau-load bars are clickable — they set the matching filter and reveal a
+  **Matching cases** panel that lists the scoped caseload; clicking a row jumps
+  straight to that case file.
+- **New KPIs:** **Avg Resolution** (mean open→closed time, backed by a new
+  `cases.closed_at` column + trigger) plus seizures split into **money /
+  narcotics / weapons** (the latter two derived from evidence type/description).
+  Seizure & evidence KPIs re-scope to the filtered caseload when a filter is on.
+- **Schema:** `20260617120000_cases_closed_at.sql` adds `cases.closed_at`,
+  backfills existing closed cases, and auto-stamps/clears it via a status trigger.
+
 ## Phase 7 — Announcements depth, encouragement, KPIs, richer timeline
 Continuation of the master prompt (features #15 full spec, #16–18):
 

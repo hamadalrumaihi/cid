@@ -171,7 +171,18 @@
             <p id="encourage-text" class="flex-1 text-sm italic text-slate-300"></p>
             <button id="encourage-dismiss" class="flex-shrink-0 rounded-md px-2 py-1 text-xs text-slate-500 transition hover:text-white" aria-label="Dismiss">✕</button>
           </div>
+          <!-- Command filters (#17): scope KPIs & caseload by bureau/detective/status/date -->
+          <div id="cmd-filterbar" class="mb-4 hidden flex-wrap items-end gap-3 rounded-2xl border border-white/5 bg-ink-900/60 p-4">
+            <div><label class="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Bureau</label><select id="cmd-f-bureau" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option value="">All bureaus</option><option value="LSB">LSB</option><option value="BCB">BCB</option><option value="SAB">SAB</option><option value="JTF">JTF</option></select></div>
+            <div><label class="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Detective</label><select id="cmd-f-detective" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option value="">All detectives</option></select></div>
+            <div><label class="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Status</label><select id="cmd-f-status" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option value="">Any status</option><option value="open">Open</option><option value="active">Active</option><option value="cold">Cold</option><option value="closed">Closed</option><option value="awaiting">Awaiting sign-off</option><option value="ready_doj">Ready for DOJ</option></select></div>
+            <div><label class="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">From</label><input id="cmd-f-from" type="date" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+            <div><label class="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">To</label><input id="cmd-f-to" type="date" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+            <button id="cmd-f-reset" class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10">Reset</button>
+            <span id="cmd-f-count" class="ml-auto text-xs text-slate-500"></span>
+          </div>
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" id="kpi-grid"></div>
+          <div id="cmd-drill" class="mt-6 hidden rounded-2xl border border-white/5 bg-ink-900/60 p-5"></div>
 
           <div class="mt-8 overflow-hidden rounded-2xl border border-white/5 bg-ink-900/60">
             <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 px-6 py-4">
