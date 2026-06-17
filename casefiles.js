@@ -161,7 +161,7 @@
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Case</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Case Number *</label><input data-k="case_number" value="${escapeHTML(c.case_number || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-sm text-white outline-none focus:border-badge-500" placeholder="SAB-900023" /><p class="mt-1 text-[11px] text-slate-500">Format <b>BUREAU-NUMBER</b>. LSB→1xxxxx · BCB→2xxxxx · SAB/JTF→9xxxxx. Must be unique.</p></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Case Number *</label><div class="flex items-stretch gap-2"><span id="cn-prefix" class="flex items-center rounded-lg bg-ink-800 px-3 font-mono text-sm font-semibold text-blue-300"></span><input data-k="__casenum" inputmode="numeric" value="${escapeHTML((c.case_number || '').replace(/^[A-Za-z]+-/, ''))}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-sm text-white outline-none focus:border-badge-500" placeholder="9000026" /></div><p class="mt-1 text-[11px] text-slate-500">The bureau prefix is added automatically — just type the number. LSB→1xxxxx · BCB→2xxxxx · SAB/JTF→9xxxxx. Must be unique.</p></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Title</label><input data-k="title" value="${escapeHTML(c.title || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Bureau</label>${sel('bureau', ['LSB', 'BCB', 'SAB', 'JTF'], c.bureau || 'JTF')}</div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Status</label>${sel('status', ['open', 'active', 'cold', 'closed'], c.status || 'open')}</div>
@@ -171,15 +171,20 @@
         </div>
         <button id="case-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">${record ? 'Save changes' : 'Create case'}</button>`;
       node.querySelector('.close-x').onclick = closeModal;
+      // Bureau prefix is shown as a fixed chip and applied automatically; the field
+      // accepts digits only. Combined into BUREAU-NUMBER on save.
+      const leadOf = (k) => ({ LSB: '1', BCB: '2', SAB: '9', JTF: '9' }[k] || '9');
+      const bureauSel = node.querySelector('[data-k="bureau"]'), cnPre = node.querySelector('#cn-prefix'), cnNum = node.querySelector('[data-k="__casenum"]');
+      const syncCn = () => { cnPre.textContent = bureauSel.value + '-'; cnNum.placeholder = leadOf(bureauSel.value) + 'xxxxx'; };
+      syncCn(); bureauSel.onchange = syncCn;
+      cnNum.oninput = () => { cnNum.value = cnNum.value.replace(/[^0-9]/g, ''); };
       node.querySelector('#case-save').onclick = async () => {
         const payload = {}; $$('[data-k]', node).forEach((f) => payload[f.dataset.k] = f.value.trim());
+        const numv = (payload.__casenum || '').trim(); delete payload.__casenum;   // not a column
+        if (!/^\d+$/.test(numv)) { toast('Enter the case number (digits only) — the bureau prefix is added automatically.', 'warn'); return; }
+        if (numv[0] !== leadOf(payload.bureau)) toast(`Note: ${payload.bureau} case numbers usually start with ${leadOf(payload.bureau)} — saving anyway.`, 'warn');
+        payload.case_number = `${payload.bureau}-${numv}`;
         const cn = payload.case_number;
-        if (!cn) { toast('Case Number is required.', 'warn'); return; }
-        const m = cn.match(/^(LSB|BCB|SAB|JTF)-(\d+)$/);
-        if (!m) { toast('Case number must be BUREAU-NUMBER, e.g. SAB-900023 (bureau code + hyphen + digits).', 'warn'); return; }
-        if (m[1] !== payload.bureau) { toast(`Case number prefix “${m[1]}” must match the selected bureau “${payload.bureau}”.`, 'danger'); return; }
-        const leadDigit = { LSB: '1', BCB: '2', SAB: '9', JTF: '9' }[m[1]];
-        if (m[2][0] !== leadDigit) toast(`Note: ${m[1]} case numbers usually start with ${leadDigit} — saving anyway.`, 'warn');
         if ('lead_detective_id' in payload && !payload.lead_detective_id) payload.lead_detective_id = null;
         if ('area' in payload && !payload.area) payload.area = null;
         const res = record && record.id ? await DB().update('cases', record.id, payload) : await DB().insert('cases', payload);
