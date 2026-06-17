@@ -1,5 +1,36 @@
 # CHANGELOG — CID Portal → Production Platform
 
+## Phase 9 — Full logic audit & fixes (2026-06-17)
+Meticulous audit of all 20 JS files (parse + cross-file scope + a 15-view runtime
+smoke test) and the live DB schema. Bugs found and fixed:
+
+- **🔴 Dead "Case Files" nav link.** The `case-files` tab (Google-Drive-per-case
+  view) and `#view-case-files` section existed with two nav buttons, but the tab
+  was missing from `PAGE_META`, so `navigate()` silently fell back to Command —
+  clicking "Case Files" / "Files" opened the dashboard instead. Registered the
+  tab + an `onEnterCaseFiles()` hook that opens the view and shows an honest
+  "Drive not configured" notice (the gapi/OAuth integration is still unbuilt; it
+  needs `window.CID_GOOGLE` credentials). *This was the reported "not working".*
+- **🟡 Command "Open Cases" KPI count ≠ drill-down.** Card counted `open+active`
+  but drilled to `open` only. Added an `open_active` filter token so the card's
+  drill matches its count.
+- **🟡 Command Persons KPIs stuck at 0 / empty detective filter on first land.**
+  `renderKPIs` reads `PERSONS`/`PROFILES` but they were never reloaded/re-rendered
+  on entering Command. `onEnterCommand` now reloads both and re-renders;
+  `fetchProfiles` now repopulates the detective filter.
+- **🟡 Denied case-access requests sent no notification** (deny button missing
+  `data-req`, so `notify(undefined,…)`). Fixed.
+- **🟢 Tracker code range** widened (`TRK-1000…9999`) to cut collisions.
+
+DB (live project cid, migration `20260617130000_audit_security_hardening.sql`):
+- Fixed `case_files.cf_delete` `USING (true)` → `private.can_delete()`.
+- Revoked the `set_case_closed_at()` trigger function from the RPC surface.
+- Security advisor now clean of actionable items.
+
+Verified clean (no bug): all entity modules, the bureau/division access gate
+(`division` stores bureau codes; admins get global access), and all collab inserts
+(server-side `auth.uid()`/default columns).
+
 ## Phase 8 — Command dashboard cross-filter & drill-down (#17 follow-up)
 Completes the part of #17 deferred in Phase 7. Central Command is now a true
 supervisor cockpit:

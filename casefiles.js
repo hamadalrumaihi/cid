@@ -14,6 +14,29 @@
     function showCasesList() { $('#case-detail').classList.add('hidden'); $('#cases-list').classList.remove('hidden'); }
     function onEnterCases() { showCasesList(); if (dbReady()) fetchCases(); else casesNotice('Live case data requires sign-in. Configure Supabase + sign in to load cases.'); }
 
+    /* Case Files — Drive view (per-case Google Drive attachments). The Drive
+       integration (OAuth + picker) is only active once window.CID_GOOGLE is
+       configured; until then this view opens with an honest notice instead of
+       silently bouncing to Command (its tab was previously missing from
+       PAGE_META, so navigate() fell back to 'command'). */
+    function onEnterCaseFiles() {
+      const notice = $('#cf-notice'), toolbar = $('#cf-toolbar'), grid = $('#cf-grid'), auth = $('#cf-auth');
+      const g = (typeof window !== 'undefined' && window.CID_GOOGLE) || {};
+      const configured = !!(g.clientId && !/PASTE_/.test(g.clientId));
+      const dl = $('#cf-case-list');
+      if (dl && typeof casesCache !== 'undefined') dl.innerHTML = casesCache.map((c) => `<option value="${esc(c.case_number)}"></option>`).join('');
+      if (!configured) {
+        if (toolbar) toolbar.classList.add('hidden');
+        if (auth) auth.innerHTML = '';
+        if (grid) grid.innerHTML = '';
+        if (notice) { notice.classList.remove('hidden'); notice.innerHTML = 'Google Drive integration is not configured yet — set <code>window.CID_GOOGLE</code> (OAuth client ID &amp; API key) in <code>index.html</code> to attach per-case Drive files here. Case records, evidence and chain-of-custody are managed under <b>Case Files</b> in the left nav.'; }
+        return;
+      }
+      if (notice) { notice.classList.add('hidden'); notice.innerHTML = ''; }
+      if (toolbar) { toolbar.classList.remove('hidden'); toolbar.classList.add('flex'); }
+      // Drive picker/list initialisation would run here once CID_GOOGLE is set.
+    }
+
     async function fetchCases() {
       if (!dbReady()) { casesNotice('Live case data requires sign-in. Configure Supabase + sign in to load cases.'); return; }
       $('#cases-live').classList.remove('hidden'); $('#cases-live').classList.add('inline-flex');

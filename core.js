@@ -263,6 +263,7 @@
       drive:      { title: 'CID General', sub: 'Shared investigative drive' },
       records:    { title: 'CID Records', sub: 'Live shared records (Supabase)' },
       announce:   { title: 'Announcements', sub: 'Division-wide notices from command staff' },
+      'case-files': { title: 'Case Files — Drive', sub: 'Google Drive files organised per case' },
     };
 
     function navigate(tab) {
@@ -289,6 +290,7 @@
       if (tab === 'modus' && typeof onEnterModus === 'function') onEnterModus();
       if (tab === 'drive' && typeof onEnterDrive === 'function') onEnterDrive();
       if (tab === 'announce' && typeof onEnterAnnounce === 'function') onEnterAnnounce();
+      if (tab === 'case-files' && typeof onEnterCaseFiles === 'function') onEnterCaseFiles();
     }
     $$('.nav-link, .bnav-link').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.tab)));
 

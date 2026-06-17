@@ -17,7 +17,9 @@
       if (CMD_FILTERS.detective && c.lead_detective_id !== CMD_FILTERS.detective) return false;
       if (CMD_FILTERS.status === 'awaiting' && !/^awaiting_/.test(c.signoff_status || '')) return false;
       else if (CMD_FILTERS.status === 'ready_doj' && !(c.signoff_status === 'ready_doj' || c.signoff_status === 'approved_complete')) return false;
-      else if (CMD_FILTERS.status && !['awaiting', 'ready_doj'].includes(CMD_FILTERS.status) && c.status !== CMD_FILTERS.status) return false;
+      // 'open_active' is the drill target for the "Open Cases" KPI card, which counts open+active together.
+      else if (CMD_FILTERS.status === 'open_active' && !(c.status === 'open' || c.status === 'active')) return false;
+      else if (CMD_FILTERS.status && !['awaiting', 'ready_doj', 'open_active'].includes(CMD_FILTERS.status) && c.status !== CMD_FILTERS.status) return false;
       if (CMD_FILTERS.from && new Date(c.created_at) < new Date(CMD_FILTERS.from)) return false;
       if (CMD_FILTERS.to && new Date(c.created_at) > new Date(CMD_FILTERS.to + 'T23:59:59')) return false;
       return true;
@@ -48,7 +50,7 @@
       const avg = avgResolutionDays(cases);
       const flagged = PERSONS.filter((p) => (p.felony_count || 0) >= 8).length;
       const cards = [
-        { label:'Open Cases', value: live ? open : '—', delta: `${cases.length} ${scoped ? 'in filter' : 'total on file'}`, icon:'📂', accent:'blue', go:() => setCmdStatus('open') },
+        { label:'Open Cases', value: live ? open : '—', delta: `${cases.length} ${scoped ? 'in filter' : 'total on file'}`, icon:'📂', accent:'blue', go:() => setCmdStatus('open_active') },
         { label:'Awaiting Sign-off', value: live ? awaiting : '—', delta:'stuck in the approval chain', icon:'✍️', accent:'amber', go:() => setCmdStatus('awaiting') },
         { label:'Ready for DOJ', value: live ? readyDoj : '—', delta:'approved & complete', icon:'⚖️', accent:'emerald', go:() => setCmdStatus('ready_doj') },
         { label:'Avg Resolution', value: live ? (avg == null ? '—' : (avg < 1 ? '<1d' : avg.toFixed(1) + 'd')) : '—', delta: avg == null ? 'no closed cases yet' : 'open → closed', icon:'⏱️', accent:'cyan' },
@@ -176,7 +178,17 @@
         if (cmdCanFilter()) row.onclick = () => { CMD_FILTERS.bureau = (CMD_FILTERS.bureau === k ? '' : k); syncCmdFilterControls(); refreshCommand(); };
         w.appendChild(row); });
     }
-    function onEnterCommand() { wireCommandFilters(); if (dbReady()) { fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); renderBureauLoad(); } else { renderKPIs(); renderTickets(); renderActivity(); renderBureauLoad(); renderTrackers(); } }
+    function onEnterCommand() {
+      wireCommandFilters();
+      if (dbReady()) {
+        fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); renderBureauLoad();
+        // KPIs read PROFILES (activity/detective filter) and PERSONS (persons-of-interest count),
+        // which are loaded by onAuthed elsewhere; reload here and re-render so the dashboard is
+        // never stuck showing 0 / an empty detective list when Command is the first view entered.
+        if (typeof fetchProfiles === 'function') fetchProfiles();
+        if (typeof fetchPersons === 'function') fetchPersons().then(() => renderKPIs());
+      } else { renderKPIs(); renderTickets(); renderActivity(); renderBureauLoad(); renderTrackers(); }
+    }
 
     /* ---- Ticket processing wizard ---- */
     function openTicketWizard(ticket) {
@@ -265,7 +277,7 @@
     let trackers = [];
     let PROFILES = [];
     const officerName = (id) => { if (!id) return null; const p = PROFILES.find((x) => x.id === id); if (p) return p.display_name; const me = DB() && DB().me; return (me && me.id === id) ? me.display_name : 'Officer'; };
-    async function fetchProfiles() { if (!dbReady()) return; try { PROFILES = await DB().list('profiles', {}); } catch (e) {} if (typeof renderAdmin === 'function') renderAdmin(); if (typeof renderActivity === 'function') renderActivity(); }
+    async function fetchProfiles() { if (!dbReady()) return; try { PROFILES = await DB().list('profiles', {}); } catch (e) {} if (typeof renderAdmin === 'function') renderAdmin(); if (typeof renderActivity === 'function') renderActivity(); if (typeof populateDetectiveFilter === 'function') populateDetectiveFilter(); }
     function fmtCountdown(ms) {
       if (ms <= 0) return 'EXPIRED';
       const h = Math.floor(ms/3.6e6), m = Math.floor((ms%3.6e6)/6e4), s = Math.floor((ms%6e4)/1000);
@@ -358,7 +370,7 @@
         const dur = Math.max(1, Number(node.querySelector('#tk-dur').value) || 24);
         const caseId = node.querySelector('#tk-case').value || null;
         const c = casesCache.find((x) => x.id === caseId);
-        const payload = { tracker_code: 'TRK-' + Math.floor(9000 + Math.random() * 999), target, case_id: caseId, bureau: c ? c.bureau : 'JTF', director_sig: me.id, duration_hours: dur, status: 'pending' };
+        const payload = { tracker_code: 'TRK-' + Math.floor(1000 + Math.random() * 9000), target, case_id: caseId, bureau: c ? c.bureau : 'JTF', director_sig: me.id, duration_hours: dur, status: 'pending' };
         const res = await DB().insert('trackers', payload);
         if (res.error) { toast('Deploy failed: ' + res.error.message, 'danger'); return; }
         notify(me.id, 'tracker_pending', { tracker_code: payload.tracker_code, target });
