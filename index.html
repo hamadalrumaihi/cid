@@ -81,7 +81,7 @@
           <span class="nav-icon flex-shrink-0 text-lg">🛠️</span><span class="nav-label">Ballistics &amp; Logistics</span>
         </button>
         <button data-tab="personnel" data-label="Personnel &amp; Roster" class="nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
-          <span class="nav-icon flex-shrink-0 text-lg">👥</span><span class="nav-label">Personnel &amp; Commendations</span>
+          <span class="nav-icon flex-shrink-0 text-lg">👥</span><span class="nav-label">Personnel &amp; Commendations <span id="pending-nav-badge" class="ml-1 hidden rounded-full bg-amber-500 px-1.5 text-[9px] font-bold text-white" title="Members awaiting approval"></span></span>
         </button>
         <button data-tab="modus" data-label="M.O. Detector" class="nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
           <span class="nav-icon flex-shrink-0 text-lg">🔍</span><span class="nav-label">M.O. Detector &amp; Profiler</span>
@@ -115,6 +115,9 @@
         </button>
         <button data-tab="shifts" data-label="Weekly Shift Reports" class="nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
           <span class="nav-icon flex-shrink-0 text-lg">🗓️</span><span class="nav-label">Shift Reports</span>
+        </button>
+        <button data-tab="audit" data-label="Audit Log" class="nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
+          <span class="nav-icon flex-shrink-0 text-lg">🧾</span><span class="nav-label">Audit Log</span>
         </button>
       </nav>
 
@@ -558,6 +561,14 @@
           <div id="shift-list" class="space-y-3"></div>
         </section>
 
+        <section id="view-audit" class="view">
+          <div class="mb-5 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+            <h3 class="text-xl font-bold text-white">🧾 Audit Log</h3>
+            <p class="text-sm text-slate-400">Every create/update/delete across the division, newest first. Restricted to Bureau Lead and above.</p>
+          </div>
+          <div id="audit-panel"></div>
+        </section>
+
       </div>
     </main>
   </div>
@@ -569,7 +580,7 @@
     <button data-tab="persons" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🧑‍⚖️</span><span class="text-[10px] font-medium">Persons</span></button>
     <button data-tab="narcotics" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">💊</span><span class="text-[10px] font-medium">Narco</span></button>
     <button data-tab="ballistics" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🛠️</span><span class="text-[10px] font-medium">Arms</span></button>
-    <button data-tab="personnel" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">👥</span><span class="text-[10px] font-medium">Roster</span></button>
+    <button data-tab="personnel" class="bnav-link relative flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">👥</span><span class="text-[10px] font-medium">Roster</span><span id="pending-bnav-badge" class="absolute right-3 top-1 hidden min-w-[16px] rounded-full bg-amber-500 px-1 text-center text-[9px] font-bold text-white"></span></button>
     <button data-tab="modus" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🔍</span><span class="text-[10px] font-medium">M.O.</span></button>
     <button data-tab="gangs" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🚩</span><span class="text-[10px] font-medium">Gangs</span></button>
     <button data-tab="places" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">📍</span><span class="text-[10px] font-medium">Places</span></button>
@@ -581,6 +592,7 @@
     <button data-tab="announce" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">📣</span><span class="text-[10px] font-medium">News</span></button>
     <button data-tab="heatmap" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🗺️</span><span class="text-[10px] font-medium">Heatmap</span></button>
     <button data-tab="shifts" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🗓️</span><span class="text-[10px] font-medium">Shifts</span></button>
+    <button data-tab="audit" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🧾</span><span class="text-[10px] font-medium">Audit</span></button>
   </nav>
 
   <div id="modal-root"></div>
