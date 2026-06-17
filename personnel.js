@@ -11,6 +11,7 @@
       if (!PROFILES.length) { g.innerHTML = '<p class="text-sm text-slate-500 sm:col-span-2 xl:col-span-3">No officers on the roster yet.</p>'; return; }
       g.innerHTML = '';
       const myId = (DB() && DB().me) ? DB().me.id : null;
+      const admin = DB() && DB().isAdmin();
       PROFILES.forEach((p) => {
         const init = (p.display_name || '?').split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
         const isMe = myId && p.id === myId;
@@ -24,8 +25,11 @@
             <div class="rounded-lg bg-ink-850 py-2"><p class="font-semibold text-slate-200">${esc(p.division)}</p><p class="text-[10px] text-slate-500">Bureau</p></div>
             <div class="rounded-lg bg-ink-850 py-2"><p class="font-semibold ${p.loa ? 'text-amber-300' : 'text-slate-200'}">${p.loa ? 'On LOA' : p.active ? 'Active' : 'Pending'}</p><p class="text-[10px] text-slate-500">Status</p></div>
           </div>
-          ${isMe ? `<button class="loa-self mt-3 w-full rounded-lg border px-3 py-2 text-xs font-semibold transition ${p.loa ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300 hover:bg-emerald-500/10' : 'border-amber-500/30 bg-amber-500/5 text-amber-200 hover:bg-amber-500/10'}">${p.loa ? 'Clear my LOA — return active' : 'Set myself On LOA'}</button>` : ''}`);
+          ${isMe ? `<button class="loa-self mt-3 w-full rounded-lg border px-3 py-2 text-xs font-semibold transition ${p.loa ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300 hover:bg-emerald-500/10' : 'border-amber-500/30 bg-amber-500/5 text-amber-200 hover:bg-amber-500/10'}">${p.loa ? 'Clear my LOA — return active' : 'Set myself On LOA'}</button>` : ''}
+          ${(admin || isMe) ? `<button class="ros-edit mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10">✎ Edit ${isMe && !admin ? 'my profile' : 'officer'}</button>` : ''}`);
         const lb = card.querySelector('.loa-self'); if (lb && typeof setMyLoa === 'function') lb.onclick = () => setMyLoa(!p.loa);
+        const eb = card.querySelector('.ros-edit');
+        if (eb) eb.onclick = () => { if (admin && typeof openAssignModal === 'function') openAssignModal(p); else if (typeof openMyProfile === 'function') openMyProfile(); };
         g.appendChild(card);
       });
     }
