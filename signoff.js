@@ -7,16 +7,15 @@
 "use strict";
 
     /* ============================================================ SIGN-OFF CHAIN ============================================================ */
-    // Chain stages and which roles satisfy each. Legacy 'supervisor' is honored
-    // as a Bureau Lead and legacy 'command' as a Deputy Director.
+    // Chain stages and which roles satisfy each.
     const SIGNOFF = {
       order: ['bureau_lead', 'deputy', 'director'],
-      roles: { bureau_lead: ['bureau_lead', 'supervisor'], deputy: ['deputy_director', 'command'], director: ['director'] },
+      roles: { bureau_lead: ['bureau_lead'], deputy: ['deputy_director'], director: ['director'] },
       label: { bureau_lead: 'Bureau Lead', deputy: 'Deputy Director', director: 'Director' },
       statusOf: { bureau_lead: 'awaiting_bureau_lead', deputy: 'awaiting_deputy', director: 'awaiting_director' },
     };
     const SUBMIT_ROLES = ['detective', 'senior_detective'];
-    const REASSIGN_ROLES = ['bureau_lead', 'supervisor', 'deputy_director', 'command', 'director'];
+    const REASSIGN_ROLES = ['bureau_lead', 'deputy_director', 'director'];
     const SIGNOFF_LABEL = {
       none: 'Open', awaiting_bureau_lead: 'Awaiting Bureau Lead', awaiting_deputy: 'Awaiting Deputy Director',
       approved_deputy: 'Approved by Deputy', approved_complete: 'Approved & Complete',
@@ -30,7 +29,7 @@
       ready_doj: 'bg-emerald-500/15 text-emerald-300', changes_requested: 'bg-orange-500/15 text-orange-300',
       denied: 'bg-rose-500/15 text-rose-300',
     };
-    const ROLE_LABEL = { detective: 'Detective', senior_detective: 'Senior Detective', supervisor: 'Supervisor', bureau_lead: 'Bureau Lead', deputy_director: 'Deputy Director', command: 'Command', director: 'Director' };
+    const ROLE_LABEL = { detective: 'Detective', senior_detective: 'Senior Detective', bureau_lead: 'Bureau Lead', deputy_director: 'Deputy Director', director: 'Director' };
 
     const meProfile = () => (DB() && DB().me) || null;
     const meRole = () => { const m = meProfile(); return m ? m.role : null; };

@@ -57,7 +57,7 @@
     }
 
     /* ============================================================ ACCESS CONTROL (#9) ============================================================ */
-    const LEAD_ROLES = ['bureau_lead', 'supervisor', 'deputy_director', 'command', 'director'];
+    const LEAD_ROLES = ['bureau_lead', 'deputy_director', 'director'];
     let MY_GRANTS = new Set();   // case ids the current user has been granted
     async function fetchMyGrants() {
       if (!dbReady() || !(DB() && DB().me)) { MY_GRANTS = new Set(); return; }
