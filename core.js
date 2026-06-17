@@ -260,6 +260,7 @@
       'case-files': { title: 'Case Files — Attachments', sub: 'Files uploaded per case (FiveManage + Supabase)' },
       heatmap:    { title: 'Commander Heatmap', sub: 'Gang turf, places, raids & case concentration by area' },
       shifts:     { title: 'Weekly Shift Reports', sub: 'Detective activity rolled up to bureau leadership' },
+      audit:      { title: 'Audit Log', sub: 'Division-wide action history (Bureau Lead and above)' },
     };
 
     function navigate(tab) {
@@ -289,6 +290,7 @@
       if (tab === 'case-files' && typeof onEnterCaseFiles === 'function') onEnterCaseFiles();
       if (tab === 'heatmap' && typeof onEnterHeatmap === 'function') onEnterHeatmap();
       if (tab === 'shifts' && typeof onEnterShifts === 'function') onEnterShifts();
+      if (tab === 'audit' && typeof onEnterAudit === 'function') onEnterAudit();
     }
     $$('.nav-link, .bnav-link').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.tab)));
 

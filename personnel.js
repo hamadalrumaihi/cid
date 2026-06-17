@@ -104,7 +104,7 @@
       bar.querySelectorAll('.mf-chip').forEach((b) => b.addEventListener('click', () => { mediaFilter = b.dataset.f; renderMediaFilters(); renderMedia(); }));
     }
     async function fetchMedia() { if (!dbReady()) { renderMedia(); return; } try { MEDIA = await DB().list('media', { order: 'created_at', ascending: false }); } catch (e) {} renderMedia(); }
-    function onEnterPersonnel() { renderRoster(); if (dbReady()) { fetchCommendations(); fetchMedia(); if (typeof fetchAuditLog === 'function') fetchAuditLog(); } else { renderCommendations(); renderMedia(); } }
+    function onEnterPersonnel() { renderRoster(); if (dbReady()) { fetchCommendations(); fetchMedia(); } else { renderCommendations(); renderMedia(); } }
     function mediaMatchesFilter(m) {
       if (mediaFilter === 'all') return true;
       if (mediaFilter === 'case') return !!m.case_id;
