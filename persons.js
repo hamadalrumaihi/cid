@@ -6,7 +6,7 @@
     /* ============================================================ 11. V3 — SHARED STATE ============================================================ */
     const uid = (p) => p + Math.random().toString(36).slice(2, 8);
     const todayISO = () => new Date().toISOString().slice(0, 10);
-    const bureauOf = (caseId) => { const m = (caseId || '').match(/\[(\w+)\]/); const b = m && Object.values(BUREAUS).find((x) => x.prefix === m[1]); return b ? b.name : '—'; };
+    const bureauOf = (caseId) => { const m = (caseId || '').match(/^([A-Z]+)-/) || (caseId || '').match(/\[(\w+)\]/); const b = m && Object.values(BUREAUS).find((x) => x.prefix === m[1] || x.name === m[1]); return b ? b.name : (m ? m[1] : '—'); };
 
     const RANKS = ['Leadership', 'Enforcer', 'Soldier', 'Associate', 'CI'];
     const PROP_TYPES = ['Stash House', 'Front Business', 'Vehicle', 'Safehouse', 'Warehouse'];

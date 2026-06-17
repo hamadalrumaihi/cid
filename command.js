@@ -224,26 +224,31 @@
       const step2 = () => {
         const key = DEPT_ROUTING[routedDept].bureau;
         node.innerHTML = `
-          <div class="mb-5 flex items-center justify-between"><div><p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Step 2 of 3</p><h3 class="text-xl font-bold text-white">Case ID Generation</h3></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+          <div class="mb-5 flex items-center justify-between"><div><p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Step 2 of 3</p><h3 class="text-xl font-bold text-white">Case Number Entry</h3></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
           <div class="mb-4 rounded-lg border border-white/10 bg-ink-900 p-3 text-xs text-slate-400">Source ticket: <span class="font-mono text-blue-300">${esc(workingId)}</span> · Jurisdiction: <span class="font-semibold text-slate-200">${routedDept}</span></div>
           <label class="mb-1 block text-xs font-semibold text-slate-400">Bureau (auto-selected from jurisdiction)</label>
           <select id="bsel" class="mb-4 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">
             ${Object.keys(BUREAUS).map((k) => `<option value="${k}" ${k===key?'selected':''}>${BUREAUS[k].name} — [${BUREAUS[k].prefix}] (${BUREAUS[k].dept})</option>`).join('')}
           </select>
-          <label class="mb-1 block text-xs font-semibold text-slate-400">Generated 7-digit Case ID</label>
-          <div class="mb-5 flex items-center gap-2"><span id="cpre" class="rounded-lg bg-ink-800 px-3 py-2.5 font-mono text-sm font-semibold text-blue-300"></span><input id="cnum" class="flex-1 rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 font-mono text-sm text-white outline-none focus:border-badge-500" /></div>
-          <div class="flex gap-3"><button id="back1" class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">← Back</button><button id="gen" class="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white transition hover:brightness-110">Generate Case File →</button></div>`;
+          <label class="mb-1 block text-xs font-semibold text-slate-400">Case Number — type it (format BUREAU-NUMBER)</label>
+          <div class="mb-2 flex items-center gap-2"><span id="cpre" class="rounded-lg bg-ink-800 px-3 py-2.5 font-mono text-sm font-semibold text-blue-300"></span><input id="cnum" inputmode="numeric" class="flex-1 rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 font-mono text-sm text-white outline-none focus:border-badge-500" /></div>
+          <p class="mb-5 text-[11px] text-slate-500">LSB→1xxxxx · BCB→2xxxxx · SAB/JTF→9xxxxx. Must be unique.</p>
+          <div class="flex gap-3"><button id="back1" class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">← Back</button><button id="gen" class="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white transition hover:brightness-110">Create Case File →</button></div>`;
         const sel = node.querySelector('#bsel'), pre = node.querySelector('#cpre'), num = node.querySelector('#cnum');
-        const sync = () => { const b = BUREAUS[sel.value]; pre.textContent = `[${b.prefix}] Case-`; num.value = String(nextCaseNumber(sel.value)); };
+        const lead = (k) => ({ LSB: '1', BCB: '2', SAB: '9', JTF: '9' }[k] || '9');
+        const sync = () => { pre.textContent = sel.value + '-'; num.placeholder = lead(sel.value) + 'xxxxx'; };
         sync(); sel.onchange = sync;
         node.querySelector('.close-x').onclick = closeModal;
         node.querySelector('#back1').onclick = step1;
         node.querySelector('#gen').onclick = async () => {
-          const k = sel.value; const full = `[${BUREAUS[k].prefix}] Case-${num.value}`;
+          const k = sel.value, numv = num.value.trim();
+          if (!/^\d+$/.test(numv)) { toast('Enter the numeric case number (digits only) — the bureau prefix is added automatically.', 'warn'); return; }
+          if (numv[0] !== lead(k)) toast(`Note: ${k} case numbers usually start with ${lead(k)} — saving anyway.`, 'warn');
+          const full = `${k}-${numv}`;
           let newCaseId = null;
           if (dbReady()) {
             const res = await DB().insert('cases', { case_number: full, title: ticket.description || workingId, bureau: k, status: 'open' });
-            if (res.error) { toast('Case create failed: ' + res.error.message, 'danger'); return; }
+            if (res.error) { const dup = /duplicate|unique|already exists|23505/i.test(res.error.message || ''); toast(dup ? `Case number ${full} already exists — choose a unique number.` : 'Case create failed: ' + res.error.message, 'danger'); return; }
             newCaseId = res.data && res.data[0] && res.data[0].id;
             if (ticket.id) await DB().update('tickets', ticket.id, { status: 'processed', case_id: newCaseId, routed_bureau: k });
           }
