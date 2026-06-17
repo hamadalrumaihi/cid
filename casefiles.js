@@ -215,7 +215,7 @@
     function initCases() {
       $('#case-new').addEventListener('click', () => openCaseModal(null));
       $('#case-refresh').addEventListener('click', fetchCases);
-      $('#case-search').addEventListener('input', renderCases);
+      $('#case-search').addEventListener('input', debounce(renderCases, 180));
     }
     // Re-fetch when auth resolves (called by auth.js) and subscribe to realtime.
     window.CIDApp = window.CIDApp || {};

@@ -1,5 +1,39 @@
 # CHANGELOG — CID Portal → Production Platform
 
+## Phase 6 — Collaboration, access control & export (master prompt)
+Checked each master-prompt feature against the build; #1–7 already shipped in
+Phase 5 and were skipped. Added the rest:
+
+- **#8 In-case chat** (`collab.js`, `case_messages`): per-case channel with
+  @mentions (→ notification) and record links (case chips open the case).
+  Access gated to owner / same department / chain-lead roles / granted officers.
+- **#9 Cross-case alert + access control** (`case_access_requests`,
+  `case_access_grants`): the M.O. detector shows matches in inaccessible cases as
+  a locked "flagged in another active investigation" alert (no detail leak) with
+  a Request-access action. Owner/leads approve/deny in the Chat tab; the
+  requester is notified and every request/decision is audited.
+- **#13 Export/Import**: SheetJS added — the per-module import tool now accepts
+  `.xlsx` (and `.xls`) alongside CSV/JSON; the Case Packet exports to **.docx /
+  .pdf / .xlsx** via a chooser with an "Exporting… → Ready" flow, and the packet
+  now bundles evidence + reports + media + RICO predicates. (PDF *import* is not
+  implemented — reliable structured extraction from arbitrary PDFs isn't feasible
+  client-side; CSV/XLSX/JSON cover bulk import.)
+- **#14 Sidebar officer card**: removed the hardcoded "Det. Oliver Och / 915"
+  block; now a live card (name, badge, department, CID rank, avatar, LOA badge,
+  duty dot) that opens a My Profile editor (name/badge + self LOA toggle).
+- **#15 Announcements**: new nav page + `announcements` table. Bureau Lead and
+  above post (audience targeting + pin); all active officers read; unread badge.
+- **#10/#12 polish**: `debounce()` util applied to case/person/gang filter
+  inputs; tabs already lazy-fetch via onEnter*; fonts already use display=swap.
+
+Schema: `20260616210000_chat_access_announcements.sql` (4 tables, 3 SECURITY
+DEFINER helpers, RLS, audit + touch triggers, realtime) — applied live to cid.
+
+Note on #9 secrecy: case rows remain readable platform-wide (dashboards, search,
+KPIs depend on it); access grants gate the case *channel* and collaboration
+surface. Hard row-level case hiding would require a visibility refactor across
+every dashboard/search and is intentionally not flipped here.
+
 ## Phase 5 — Case sign-off workflow + LOA (Tom Wood / 934 workflow)
 Verified first that none of the 7 requested features existed; all were added.
 Also caught and fixed pre-existing split bugs found while wiring this in.
