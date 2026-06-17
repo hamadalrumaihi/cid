@@ -14,42 +14,46 @@
     function showCasesList() { $('#case-detail').classList.add('hidden'); $('#cases-list').classList.remove('hidden'); }
     function onEnterCases() { showCasesList(); if (dbReady()) fetchCases(); else casesNotice('Live case data requires sign-in. Configure Supabase + sign in to load cases.'); }
 
-    /* ============================================================ CASE FILES — DRIVE (per-case Google Drive attachments, #case-files) ============================================================ */
-    /* Files live in Google Drive; we store only the link + metadata in the
-       case_files table (RLS: read=any member, insert stamps added_by=auth.uid(),
-       delete=director/command). The Google libs load lazily on first attach. */
+    /* ============================================================ CASE FILES — ATTACHMENTS (per-case files via FiveManage + Supabase, #case-files) ============================================================ */
+    /* Files are uploaded to FiveManage (window.CID_FIVEMANAGE); their URL +
+       metadata are stored in the case_files table (Supabase). RLS: read = case
+       bureau, insert stamps added_by = auth.uid(), delete = director/command.
+       Bureau-isolated per case. */
     let CASE_FILES = [];
-    let cfTokenClient = null, cfAccessToken = '', cfGoogleReady = false, cfWired = false;
-    function cfGoogleConfigured() { const g = (typeof window !== 'undefined' && window.CID_GOOGLE) || {}; return !!(g.clientId && g.apiKey && g.appId && !/PASTE_/.test(g.clientId) && !/PASTE_/.test(g.apiKey)); }
-    function cfLoadScript(src) { return new Promise((res, rej) => { if (document.querySelector('script[data-cf="' + src + '"]')) return res(); const s = document.createElement('script'); s.src = src; s.async = true; s.dataset.cf = src; s.onload = () => res(); s.onerror = () => rej(new Error('Failed to load ' + src)); document.head.appendChild(s); }); }
-    async function cfEnsureGoogle() {
-      if (cfGoogleReady) return;
-      await cfLoadScript('https://accounts.google.com/gsi/client');
-      await cfLoadScript('https://apis.google.com/js/api.js');
-      await new Promise((res) => gapi.load('picker', res));
-      cfTokenClient = google.accounts.oauth2.initTokenClient({ client_id: window.CID_GOOGLE.clientId, scope: 'https://www.googleapis.com/auth/drive.file', callback: () => {} });
-      cfGoogleReady = true;
-    }
-    function cfGetToken() {
-      return new Promise((resolve, reject) => {
-        if (!cfTokenClient) return reject(new Error('Google not initialised'));
-        cfTokenClient.callback = (resp) => { if (resp && resp.access_token) { cfAccessToken = resp.access_token; resolve(resp.access_token); } else reject(new Error('Google authorisation cancelled')); };
-        try { cfTokenClient.requestAccessToken({ prompt: cfAccessToken ? '' : 'consent' }); } catch (e) { reject(e); }
-      });
-    }
+    let cfWired = false;
     async function fetchCaseFiles() {
       if (!dbReady()) { CASE_FILES = []; renderCaseFiles(); return; }
       try { CASE_FILES = await DB().list('case_files', { order: 'case_number' }); } catch (e) { CASE_FILES = []; }
       renderCaseFiles(); cfPopulateCaseList();
     }
+    function cfKind(f) { const m = (f.mime_type || '').toLowerCase(); if (m.indexOf('image') === 0) return 'image'; if (m.indexOf('video') === 0) return 'video'; if (m.indexOf('audio') === 0) return 'audio'; if (m.indexOf('pdf') >= 0 || /\.pdf($|\?)/i.test(f.web_view_link || '')) return 'pdf'; return 'file'; }
+    const CF_ICON = { image: '🖼️', video: '🎬', audio: '🔊', pdf: '📄', file: '📎' };
+    function cfThumb(f) {
+      const k = cfKind(f);
+      if (k === 'image') return `<img src="${esc(f.web_view_link)}" alt="" loading="lazy" class="h-10 w-10 flex-shrink-0 rounded object-cover" />`;
+      return `<span class="grid h-10 w-10 flex-shrink-0 place-items-center rounded bg-ink-800 text-lg">${CF_ICON[k]}</span>`;
+    }
+    function cfOpenPreview(f) {
+      if (!f) return; const url = f.web_view_link, k = cfKind(f);
+      const node = el('div', { class: 'p-4' });
+      const body = k === 'image' ? `<img src="${esc(url)}" alt="${esc(f.name)}" class="max-h-[72vh] w-full rounded-lg object-contain" />`
+        : k === 'video' ? `<video src="${esc(url)}" controls autoplay playsinline class="max-h-[72vh] w-full rounded-lg bg-black"></video>`
+        : k === 'audio' ? `<div class="rounded-lg bg-ink-800 p-6"><audio src="${esc(url)}" controls autoplay class="w-full"></audio></div>`
+        : k === 'pdf' ? `<iframe src="${esc(url)}" title="${esc(f.name)}" class="h-[72vh] w-full rounded-lg bg-white"></iframe>`
+        : `<div class="flex h-48 items-center justify-center rounded-lg bg-ink-800 text-sm text-slate-300">No inline preview for this type.</div>`;
+      node.innerHTML = `<div class="mb-3 flex items-center justify-between gap-3"><p class="min-w-0 truncate text-sm font-semibold text-white">${CF_ICON[k]} ${esc(f.name)}</p><button class="close-x flex-shrink-0 text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>${body}<div class="mt-3 text-right"><a href="${esc(url)}" target="_blank" rel="noopener" class="text-xs text-blue-300 underline">Open original ↗</a></div>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      openModal(node, { wide: true });
+    }
     function renderCaseFiles() {
-      const grid = $('#cf-grid'); if (!grid || !cfGoogleConfigured()) return;
+      const grid = $('#cf-grid'); if (!grid) return;
       const q = ($('#cf-search') ? $('#cf-search').value : '').trim().toLowerCase();
       const rows = CASE_FILES.filter((r) => !q || (r.case_number || '').toLowerCase().includes(q) || (r.name || '').toLowerCase().includes(q));
-      if (!rows.length) { grid.innerHTML = `<p class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-500">${CASE_FILES.length ? 'No files match your filter.' : 'No case files attached yet. Pick a case number and use “Attach from Drive”.'}</p>`; return; }
+      if (!rows.length) { grid.innerHTML = `<p class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-500">${CASE_FILES.length ? 'No files match your filter.' : 'No case files attached yet. Pick a case number and use “Attach file”.'}</p>`; return; }
       const canDel = DB() && DB().canDelete();
       const byCase = {}; rows.forEach((r) => { (byCase[r.case_number] = byCase[r.case_number] || []).push(r); });
-      grid.innerHTML = Object.keys(byCase).sort().map((cn) => `<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-5"><div class="mb-3 flex items-center gap-2"><span class="text-lg">🗂️</span><h3 class="font-mono text-sm font-semibold text-blue-300">${esc(cn)}</h3><span class="text-[11px] text-slate-500">${byCase[cn].length} file${byCase[cn].length === 1 ? '' : 's'}</span></div><div class="space-y-2">${byCase[cn].map((f) => `<div class="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-ink-900 px-3 py-2"><a href="${esc(f.web_view_link)}" target="_blank" rel="noopener" class="flex min-w-0 flex-1 items-center gap-2 text-sm text-slate-200 hover:text-white">${f.icon_url ? `<img src="${esc(f.icon_url)}" alt="" class="h-4 w-4 flex-shrink-0" />` : '📄'}<span class="truncate">${esc(f.name)}</span></a>${canDel ? `<button class="cf-rm flex-shrink-0 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-rose-300 hover:bg-rose-500/10" data-id="${f.id}" title="Remove attachment">✕</button>` : ''}</div>`).join('')}</div></div>`).join('');
+      grid.innerHTML = Object.keys(byCase).sort().map((cn) => `<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-5"><div class="mb-3 flex items-center gap-2"><span class="text-lg">🗂️</span><h3 class="font-mono text-sm font-semibold text-blue-300">${esc(cn)}</h3><span class="text-[11px] text-slate-500">${byCase[cn].length} file${byCase[cn].length === 1 ? '' : 's'}</span></div><div class="grid grid-cols-1 gap-2 sm:grid-cols-2">${byCase[cn].map((f) => `<div class="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-ink-900 px-3 py-2"><button class="cf-open flex min-w-0 flex-1 items-center gap-3 text-left text-sm text-slate-200 hover:text-white" data-id="${esc(f.id)}">${cfThumb(f)}<span class="min-w-0"><span class="block truncate">${esc(f.name)}</span><span class="text-[10px] uppercase tracking-wider text-slate-500">${cfKind(f)} · preview</span></span></button>${canDel ? `<button class="cf-rm flex-shrink-0 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-rose-300 hover:bg-rose-500/10" data-id="${esc(f.id)}" title="Remove attachment">✕</button>` : ''}</div>`).join('')}</div></div>`).join('');
+      grid.querySelectorAll('.cf-open').forEach((b) => b.onclick = () => cfOpenPreview(CASE_FILES.find((x) => x.id === b.dataset.id)));
       grid.querySelectorAll('.cf-rm').forEach((b) => b.onclick = () => cfRemove(b.dataset.id));
     }
     async function cfRemove(id) {
@@ -58,34 +62,13 @@
       if (res && res.error) { toast('Remove failed: ' + res.error.message, 'danger'); return; }
       toast('Attachment removed', 'info'); fetchCaseFiles();
     }
-    async function cfAttach() {
-      if (!dbReady() || !(DB() && DB().me)) { toast('Sign in first.', 'warn'); return; }
-      if (!cfGoogleConfigured()) { toast('Google Drive is not configured.', 'warn'); return; }
-      const cn = ($('#cf-case') ? $('#cf-case').value : '').trim();
-      if (!cn) { toast('Enter or pick a case number first.', 'warn'); return; }
-      try {
-        await cfEnsureGoogle();
-        const token = await cfGetToken();
-        const g = window.CID_GOOGLE;
-        const view = new google.picker.DocsView(google.picker.ViewId.DOCS).setIncludeFolders(true).setSelectFolderEnabled(false);
-        new google.picker.PickerBuilder()
-          .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
-          .setOAuthToken(token).setDeveloperKey(g.apiKey).setAppId(String(g.appId))
-          .addView(view)
-          .setCallback((data) => cfPickerCallback(data, cn))
-          .build().setVisible(true);
-      } catch (e) { toast('Drive error: ' + (e.message || e), 'danger'); }
-    }
-    async function cfPickerCallback(data, cn) {
-      if (!data || data[google.picker.Response.ACTION] !== google.picker.Action.PICKED) return;
-      const docs = data[google.picker.Response.DOCUMENTS] || [];
-      let ok = 0;
-      for (const d of docs) {
-        const row = { case_number: cn, drive_file_id: d[google.picker.Document.ID], name: d[google.picker.Document.NAME] || 'Untitled', mime_type: d[google.picker.Document.MIME_TYPE] || null, icon_url: d[google.picker.Document.ICON_URL] || null, web_view_link: d[google.picker.Document.URL], added_by: DB().me.id };
-        const res = await DB().insert('case_files', row);
-        if (res && res.error) toast('Attach failed: ' + res.error.message, 'danger'); else ok++;
-      }
-      if (ok) { toast(ok + ' file' + (ok === 1 ? '' : 's') + ' attached to ' + cn, 'success'); fetchCaseFiles(); }
+    // Upload a single File to FiveManage, then record it in case_files (Supabase).
+    async function cfAttachFile(file, cn) {
+      if (typeof fmUpload !== 'function') throw new Error('FiveManage module unavailable');
+      const out = await fmUpload(file);   // → { url, kind }
+      const row = { case_number: cn, drive_file_id: null, name: file.name, mime_type: file.type || null, icon_url: null, web_view_link: out.url, added_by: DB().me.id };
+      const res = await DB().insert('case_files', row);
+      if (res && res.error) throw new Error(res.error.message);
     }
     function cfPopulateCaseList() {
       const dl = $('#cf-case-list'); if (!dl) return;
@@ -96,26 +79,38 @@
     }
     function onEnterCaseFiles() {
       const notice = $('#cf-notice'), toolbar = $('#cf-toolbar'), grid = $('#cf-grid'), auth = $('#cf-auth');
-      if (!cfGoogleConfigured()) {
-        if (toolbar) toolbar.classList.add('hidden');
-        if (auth) auth.innerHTML = '';
-        if (grid) grid.innerHTML = '';
-        if (notice) { notice.classList.remove('hidden'); notice.innerHTML = 'Google Drive integration is not configured yet — set <code>window.CID_GOOGLE</code> (OAuth client ID &amp; API key) in <code>index.html</code> to attach per-case Drive files here. Case records, evidence and chain-of-custody are managed under <b>Case Files</b> in the left nav.'; }
-        return;
-      }
       if (!dbReady() || !(DB() && DB().me)) {
         if (toolbar) toolbar.classList.add('hidden');
         if (grid) grid.innerHTML = '';
         if (notice) { notice.classList.remove('hidden'); notice.innerHTML = 'Sign in to view and attach case files.'; }
         return;
       }
-      if (notice) { notice.classList.add('hidden'); notice.innerHTML = ''; }
+      const fmReady = (typeof fmConfigured === 'function' && fmConfigured());
+      if (notice) {
+        if (!fmReady) { notice.classList.remove('hidden'); notice.innerHTML = 'File upload not configured — set <code>window.CID_FIVEMANAGE.apiKey</code> in <code>index.html</code> to upload files. Existing attachments are still listed below.'; }
+        else { notice.classList.add('hidden'); notice.innerHTML = ''; }
+      }
       if (toolbar) { toolbar.classList.remove('hidden'); toolbar.classList.add('flex'); }
-      if (auth) auth.innerHTML = '<span class="rounded-lg bg-white/5 px-2.5 py-1.5 text-[11px] text-slate-300">Google Drive connects on first “Attach”.</span>';
+      if (auth) auth.innerHTML = '<span class="rounded-lg bg-white/5 px-2.5 py-1.5 text-[11px] text-slate-300">Files upload to FiveManage; records stored in Supabase.</span>';
       cfPopulateCaseList();
       if (!cfWired) {
         cfWired = true;
-        const at = $('#cf-attach'); if (at) at.onclick = cfAttach;
+        const at = $('#cf-attach'), fileInput = $('#cf-file');
+        if (at) at.onclick = () => {
+          const cn = ($('#cf-case') ? $('#cf-case').value : '').trim();
+          if (!cn) { toast('Enter or pick a case number first.', 'warn'); return; }
+          if (!(typeof fmConfigured === 'function' && fmConfigured())) { toast('FiveManage upload is not configured.', 'warn'); return; }
+          if (fileInput) fileInput.click();
+        };
+        if (fileInput) fileInput.onchange = async () => {
+          const cn = ($('#cf-case') ? $('#cf-case').value : '').trim();
+          const files = Array.prototype.slice.call(fileInput.files || []);
+          if (!cn || !files.length) { fileInput.value = ''; return; }
+          let ok = 0;
+          for (const f of files) { try { await cfAttachFile(f, cn); ok++; } catch (e) { toast('Upload failed: ' + (e.message || e), 'danger'); } }
+          fileInput.value = '';
+          if (ok) { toast(ok + ' file' + (ok === 1 ? '' : 's') + ' attached to ' + cn, 'success'); fetchCaseFiles(); }
+        };
         const se = $('#cf-search'); if (se) se.oninput = (typeof debounce === 'function' ? debounce(renderCaseFiles, 150) : renderCaseFiles);
       }
       fetchCaseFiles();
@@ -356,7 +351,7 @@
       if (typeof fetchMyGrants === 'function') fetchMyGrants();
       if (typeof fetchAnnouncements === 'function') fetchAnnouncements();
       if (typeof renderOfficerCard === 'function') renderOfficerCard();
-      if (typeof cfGoogleConfigured === 'function' && cfGoogleConfigured() && typeof fetchCaseFiles === 'function') fetchCaseFiles();
+      if (typeof fetchCaseFiles === 'function') fetchCaseFiles();
       if (typeof fetchShifts === 'function') fetchShifts();
       if (dbReady()) {
         DB().subscribe('cases', () => { fetchCases(); fetchKpis(); renderBureauLoad(); if (typeof detailCase !== 'undefined' && detailCase && !$('#case-detail').classList.contains('hidden')) { DB().list('cases', { eq: { id: detailCase.id } }).then((r) => { if (r[0]) { detailCase = r[0]; renderCaseDetailShell(); loadDetailTab(); } }).catch(() => {}); } });
@@ -380,7 +375,7 @@
         DB().subscribe('audit_log', fetchActivity);
         DB().subscribe('notifications', fetchNotifications);
         DB().subscribe('case_signoff_history', () => { if (typeof detailCase !== 'undefined' && detailCase && detailTab === 'signoff') loadDetailTab(); });
-        if (typeof cfGoogleConfigured === 'function' && cfGoogleConfigured()) DB().subscribe('case_files', fetchCaseFiles);
+        if (typeof fetchCaseFiles === 'function') DB().subscribe('case_files', fetchCaseFiles);
         if (typeof fetchShifts === 'function') DB().subscribe('shift_reports', fetchShifts);
         renderAdmin();
       }
