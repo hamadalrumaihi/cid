@@ -38,13 +38,19 @@ Keep it framework-free and match the surrounding style.
 | `supabase/migrations/*.sql` | Postgres schema, RLS, triggers, realtime. |
 | `README.md`, `SETUP.md`, `CHANGELOG.md`, `supabase/*.md`, `docs/` | Human docs. |
 
-### Feature files (load order — contiguous slices of the former monolith)
-`core.js` (data models, utilities, **bulk-import helpers**, router/shell, modal engine) →
-`command.js` → `narcotics.js` → `ballistics.js` → `personnel.js` (roster/commendations/media) →
-`modus.js` → `drive.js` (CID General) → `persons.js` → `gangs.js` → `places.js` →
-`reports.js` → `rico.js` → `docx.js` (dependency-free OOXML writer) → `records.js` →
-`casefiles.js` (cases + evidence + custody + timeline; declares `casesCache`) →
-`app.js` (notifications/admin/case-packet/search + `window.CIDApp.onAuthed` + `init()` + boot).
+### Feature files (load order in `index.html` — shared global scope)
+`supabase.js` (IIFE; `window.CIDDB` client + data layer) →
+`core.js` (data models, utilities incl. `esc`/`escapeHTML` alias + `debounce`, **bulk-import helpers** incl. `.xlsx`, router/shell + `PAGE_META`, modal engine) →
+`casefiles.js` (cases + evidence + custody + timeline; declares `DB()`/`dbReady()`/`casesCache`; **defines `window.CIDApp.onAuthed`** = fetch-all + realtime subscriptions) →
+`command.js` (Central Command, trackers, `PROFILES`, `notify`, `officerName`) → `narcotics.js` → `ballistics.js` →
+`personnel.js` (roster/commendations/media) → `modus.js` (M.O. detector + cross-case alert) → `drive.js` (CID General) →
+`persons.js` → `gangs.js` → `places.js` → `reports.js` → `rico.js` → `docx.js` (dependency-free OOXML writer) → `records.js` →
+`signoff.js` (sign-off chain + LOA; `ROLE_LABEL`, routing, `setMyLoa`) →
+`collab.js` (officer info card, in-case chat, case access requests/grants, announcements) →
+`app.js` (notifications/admin/case-packet export + global search + `init()` boot on `DOMContentLoaded`) →
+`auth.js` (IIFE; login gate; calls `window.CIDApp.onAuthed`).
+
+> History note: the split originally (a) dropped `casefiles.js` from `index.html` and (b) referenced `escapeHTML` while only `esc` was defined — both broke the app on this branch and are now fixed (`casefiles.js` is wired; `escapeHTML = esc` alias in `core.js`). Keep `casefiles.js` loaded and before `command.js`.
 
 **Why this works without a build step:** for non-module scripts, top-level `let`/`const`/`class`
 go into the *shared* global lexical environment and `function`/`var` go onto the global object —
@@ -55,7 +61,7 @@ slice** of the original single IIFE, loaded in original order, so behavior is id
 - **Keep load order = original code order.** Don't reorder `<script>` tags; a top-level statement that runs at load (there are only 3: a nav-wiring line in `core.js`, a global click handler in `personnel.js`, and the `DOMContentLoaded` listener in `app.js`) must not reference a symbol declared in a *later* file.
 - Identifiers are **global** — names must stay unique across all files (no redeclaring).
 - Function-to-function calls across files resolve at **runtime** (after all scripts load), so they're order-independent. Only *load-time* references care about order.
-- `app.js` defines `window.CIDApp.onAuthed`; it must load **before** `auth.js`. `init()` runs on `DOMContentLoaded`.
+- `casefiles.js` defines `window.CIDApp.onAuthed` (fetch-all + subscriptions); `collab.js` defines `window.CIDApp.refreshAuthBar`; both must load **before** `auth.js`, which calls `onAuthed`. `app.js` `init()` runs on `DOMContentLoaded`.
 
 ---
 
@@ -197,10 +203,13 @@ Canonical schema is **`20260616090000_platform.sql`** (applied as `platform_sche
 - **People/Orgs:** `persons`, `gangs`, `gang_ranks`, `gang_members`, `gang_turf`.
 - **Domain intel:** `narcotics`, `narcotic_precursors`, `narcotic_hotspots`, `places`, `place_process_steps`, `ballistics_benches`, `ballistic_footprints`, `evidence`, `custody_chain`, `mo_profiles`.
 - **Casework:** `reports`, `trackers`, `rico_cases`, `predicate_acts`, `raid_compensations`, `tickets`.
+- **Sign-off + collab (Phases 5–6):** `case_signoff_history` (append-only; `cases` also carries `signoff_status/stage/assignee/submitted_by/at`), `case_messages` (in-case chat), `case_access_requests` + `case_access_grants` (cross-case access), `announcements`. `profiles` carries `loa/loa_since`.
 - **Content:** `media` (evidence vault — URL/embed based), `documents` (CID General "Drive"; folders are client config in `FOLDER_META`, files are rows keyed `(folder,name)`), `commendations`.
 - **System:** `notifications`, `audit_log`, plus `cid_records` (bespoke "Live Records" module).
 
-Enums: `app_role, bureau (LSB/BCB/SAB/JTF), case_status, report_kind, threat_level, density, location_type, media_type, tracker_status, bench_type, evidence_tamper, doc_kind`.
+Helper fns (security-definer, `search_path=''`): `private.is_active/role/can_delete`, `is_command` (now **director OR command**), `can_access_case`, `can_grant_case`, `can_announce`.
+
+Enums: `app_role` (detective, **senior_detective**, supervisor, **bureau_lead**, **deputy_director**, command, director), `bureau (LSB/BCB/SAB/JTF)`, `case_status, report_kind, threat_level, density, location_type, media_type, tracker_status, bench_type, evidence_tamper, doc_kind`. Sign-off chain maps: Bureau Lead = `bureau_lead`/`supervisor`, Deputy Director = `deputy_director`/`command`, Director = `director`.
 
 ---
 
