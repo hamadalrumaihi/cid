@@ -7,8 +7,8 @@
     /* ---- Central Command (live from Supabase) ---- */
     let TICKETS_CACHE = [], AUDIT = [], SEIZ_TOTAL = 0, RAIDS_CACHE = [], EVIDENCE_CACHE = [];
     const KPI_ACCENTS = { blue:'from-blue-500/20 to-blue-700/5 text-blue-300 border-blue-500/20', slate:'from-slate-500/20 to-slate-700/5 text-slate-300 border-slate-500/20', violet:'from-violet-500/20 to-violet-700/5 text-violet-300 border-violet-500/20', emerald:'from-emerald-500/20 to-emerald-700/5 text-emerald-300 border-emerald-500/20', amber:'from-amber-500/20 to-amber-700/5 text-amber-300 border-amber-500/20', rose:'from-rose-500/20 to-rose-700/5 text-rose-300 border-rose-500/20', cyan:'from-cyan-500/20 to-cyan-700/5 text-cyan-300 border-cyan-500/20' };
-    // Command filters (#17) — command/supervisors can scope the dashboard.
-    const CMD_ROLES = ['supervisor', 'bureau_lead', 'deputy_director', 'command', 'director'];
+    // Command filters (#17) — command staff (bureau lead+) can scope the dashboard.
+    const CMD_ROLES = ['bureau_lead', 'deputy_director', 'director'];
     const CMD_FILTERS = { bureau: '', detective: '', status: '', from: '', to: '' };
     function cmdCanFilter() { const me = DB() && DB().me; return !!(me && me.active && CMD_ROLES.includes(me.role)); }
     function cmdFilterActive() { return !!(CMD_FILTERS.bureau || CMD_FILTERS.detective || CMD_FILTERS.status || CMD_FILTERS.from || CMD_FILTERS.to); }
