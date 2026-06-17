@@ -1,77 +1,82 @@
 # CID Portal — Criminal Investigation Division
 
-A single-file, offline-capable web portal for a **State of San Andreas** roleplay
-Criminal Investigation Division. The entire UI ships as one static `index.html`
-(precompiled Tailwind, no build step) and runs straight off GitHub Pages or any
-static host. An optional Supabase backend powers a **live, two-way records** tab.
+A web portal for a **State of San Andreas** roleplay Criminal Investigation
+Division. The front-end is a **multi-file vanilla-JS single-page app** (precompiled
+Tailwind, **no build step**) served as static files; all data is stored in a
+**Supabase** Postgres backend behind Row-Level Security.
 
 ## Quick start
 
-It's a static page — just open it:
+Static files — just serve the folder:
 
 ```bash
-# any static server works; here's one with Python
-python -m http.server 8000
-# then visit http://localhost:8000
+python -m http.server 8000   # then visit http://localhost:8000
 ```
 
-Or open `index.html` directly in a browser. No install, bundler, or Node required.
+No bundler or Node required. The app loads `index.html`, which pulls in the
+feature scripts in a fixed order (they share one global scope — order matters):
+
+```
+supabase.js   # Supabase client + thin data layer (window.CIDDB)
+roles.js      # shared role/bureau vocabulary (window.CIDRoles)
+core.js       # utilities, navigation, shared constants
+casefiles.js command.js narcotics.js ballistics.js personnel.js modus.js
+drive.js persons.js gangs.js places.js reports.js rico.js docx.js records.js
+signoff.js collab.js heatmap.js shifts.js fivemanage.js
+app.js auth.js
+```
 
 ## What's inside
 
-The portal is a client-side SPA with these tabs (all state persists to
-`localStorage` unless noted):
-
-| Tab | Purpose |
+| Area | Purpose |
 | --- | --- |
-| **Central Command** | KPIs, tickets, activity feed, bureau load, case trackers, raid compensation calculator |
-| **Narcotics** | Drug registry |
-| **Ballistics** | Test benches + ballistic comparison log |
+| **Central Command** | KPIs, tickets, activity feed, bureau load, trackers, raid-compensation calculator |
+| **Case Files** | Cases, attachments, the Drive (bureau → case → fillable forms), sign-off workflow |
+| **Narcotics / Ballistics / Gangs / Criminal Places** | Domain registries |
 | **Personnel** | Officer roster, commendations, evidence/media vault |
 | **M.O.** | Modus-operandi profiler |
-| **Gangs** | Gang/affiliation tracker |
-| **Criminal Places** | Labs, stash houses, production sites |
-| **Reports** | Report templates + warrant/affidavit chains |
+| **Reports** | Template-driven reports + finalize/e-sign |
 | **RICO** | Predicate tracking + `.docx` export |
-| **Drive** | Folder/file organizer |
-| **CID Records** | **Live shared records via Supabase** (see below) — degrades gracefully when unconfigured |
+| **Heatmap / Shifts / Collaboration** | Area analytics, shift reports, chat & announcements |
 
-## Live CID Records (optional Supabase backend)
+A few surfaces are **local-only previews** (computed client-side, not persisted) and
+are labelled "*local preview — not saved*" — e.g. the raid-compensation calculator
+and the sample CI risk matrix.
 
-The **CID Records** tab is the only feature that talks to a server. It uses
-`@supabase/supabase-js` (from CDN) for public reads, Discord / email-magic-link
-auth, and realtime sync across all open clients.
+## Roles & bureaus (RBAC)
 
-- **Unconfigured (default):** the tab shows a setup notice; the rest of the
-  portal is fully functional. The placeholder key in the `window.CID_SUPABASE`
-  block means nothing live happens until you wire it up.
-- **To enable it:** follow [`supabase/CID_RECORDS_SETUP.md`](supabase/CID_RECORDS_SETUP.md)
-  — run the migrations, configure auth, and paste your **anon / publishable**
-  key into the `window.CID_SUPABASE` block in `index.html`.
+Enforced in the database via RLS, off the signed-in user's `profiles` row. Roles
+and bureaus have one canonical definition in `roles.js` (`window.CIDRoles`).
 
-### Access model (RLS)
+- **Roles** (`profiles.role`): `detective` → `senior_detective` → `bureau_lead`
+  → `deputy_director` → `director`. **Command staff = bureau_lead, deputy_director,
+  director** (director is supreme).
+- **Bureaus** (`profiles.division`): `LSB` (Los Santos), `BCB` (Blaine County),
+  `SAB` (State), `JTF` (Joint Task Force).
 
-- **Read:** public (logged-out visitors see records on load).
-- **Create:** any signed-in user; the new row is stamped with their id.
-- **Edit:** a signed-in user may edit **only the records they created**.
-- **Delete:** blocked (no policy).
+Access rules:
 
-> ⚠️ The **anon / publishable** key is public by design and safe to commit.
-> **Never** commit the `service_role` key.
+- **Deny-by-default:** new sign-ins are inactive and see only their own profile
+  until a command user activates them and assigns a role/bureau.
+- **Bureau isolation:** a member sees, edits, **and creates** cases only within
+  their own bureau; JTF and command staff work across bureaus.
+- **Server-authoritative workflows:** the case **sign-off chain** (Detective →
+  Bureau Lead → Deputy Director → Director) and **report finalize/e-sign** run
+  through SECURITY DEFINER RPCs. The client calls the RPCs; it never writes those
+  columns directly, and database triggers reject any attempt to.
+- **Delete:** command staff only.
 
-## Project layout
+> ⚠️ The Supabase **anon / publishable** key in `index.html` is public by design and
+> safe to commit — RLS protects the data. **Never** commit the `service_role` key.
 
-```text
-index.html                  # the entire app (UI + logic + inlined Tailwind)
-README.md                   # this file
-supabase/
-  CID_RECORDS_SETUP.md      # step-by-step setup for the live records tab
-  README.md                 # backend / RBAC design notes
-  migrations/               # SQL migrations (authored; apply via SQL Editor or CLI)
-```
+## Backend
+
+See [`supabase/README.md`](supabase/README.md) for the schema, RBAC helpers, and
+workflow RPCs, and [`SETUP.md`](SETUP.md) to stand up a project. Migrations live in
+`supabase/migrations/` (replayed in filename order by `supabase db reset`).
 
 ## Deployment
 
-Push to a GitHub Pages branch (or any static host) and serve `index.html`. If
-you've enabled live records, set the Supabase **Site URL** and **Redirect URLs**
-to your deployed origin (see the setup guide).
+The site deploys from the **`main`** branch to its static host (Vercel). For a new
+host, set the Supabase **Site URL** and **Redirect URLs** to your deployed origin
+(see `SETUP.md`).

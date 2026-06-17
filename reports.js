@@ -123,18 +123,16 @@
       const me = DB().me || {};
       node.innerHTML = `
         <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Finalize &amp; e-Sign</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
-        <p class="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">Finalizing locks the report against further edits and attaches your electronic signature.</p>
+        <p class="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">Finalizing locks the report against further edits and attaches your electronic signature. The signer is recorded server-side from your CID account — it cannot be changed here.</p>
         <div class="space-y-3">
-          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Officer *</label><input id="fin-officer" value="${esc(me.display_name || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-[cursive] text-base text-blue-200 outline-none focus:border-badge-500" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Officer (from your CID profile)</label><input id="fin-officer" value="${esc(me.display_name || '')}" readonly class="w-full cursor-not-allowed rounded-lg border border-white/10 bg-ink-800 px-3 py-2 font-[cursive] text-base text-blue-200 outline-none" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Badge Number</label><input id="fin-badge" value="${esc(me.badge_number || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
         </div>
         <button id="fin-go" class="mt-5 w-full rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Sign &amp; Lock Report</button>`;
       node.querySelector('.close-x').onclick = closeModal;
       node.querySelector('#fin-go').onclick = async () => {
-        const officer = node.querySelector('#fin-officer').value.trim();
-        if (!officer) { toast('Officer signature required.', 'warn'); return; }
-        const signature = { officer, badge: node.querySelector('#fin-badge').value.trim(), signed_at: new Date().toISOString() };
-        const res = await DB().update('reports', r.id, { finalized: true, signature });
+        const badge = node.querySelector('#fin-badge').value.trim();
+        const res = await DB().rpc('report_finalize', { p_report: r.id, p_badge: badge || null });
         if (res.error) { toast('Finalize failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast('Report finalized & signed', 'success'); renderReportChain();
       };
