@@ -288,7 +288,21 @@
       const h = Math.floor(ms/3.6e6), m = Math.floor((ms%3.6e6)/6e4), s = Math.floor((ms%6e4)/1000);
       return `${String(h).padStart(2,'0')}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
     }
-    async function notify(userId, type, payload) { if (!userId || !dbReady()) return; try { await DB().insert('notifications', { user_id: userId, type, payload }); } catch (e) {} }
+    const NOTIF_TITLES = { access_requested: 'Case access requested', access_granted: 'Case access granted', access_denied: 'Case access denied', member_approved: 'CID access approved', signoff_waiting: 'Sign-off needed', signoff_approved: 'Sign-off approved', signoff_denied: 'Sign-off denied', signoff_changes: 'Changes requested', signoff_escalated: 'Sign-off escalated', announcement: 'New announcement', mention: 'You were mentioned' };
+    function notifTitle(type) { return NOTIF_TITLES[type] || 'CID Portal'; }
+    async function notify(userId, type, payload) {
+      if (!userId || !dbReady()) return;
+      try { await DB().insert('notifications', { user_id: userId, type, payload }); } catch (e) {}
+      // Fire-and-forget Discord DM (Edge Function); never blocks the in-app notification.
+      try {
+        const c = window.CIDDB && window.CIDDB.client;
+        if (c && c.functions) {
+          const p = payload || {};
+          const body = [p.case_number, p.reason || p.detective].filter(Boolean).join(' — ');
+          c.functions.invoke('discord-notify', { body: { user_id: userId, title: notifTitle(type), body: body } }).catch(function () {});
+        }
+      } catch (e) {}
+    }
     function onEnterTrackers() { if (dbReady()) fetchTrackers(); else renderTrackers(); }
     async function fetchTrackers() {
       if (!dbReady()) { renderTrackers(); return; }

@@ -66,7 +66,11 @@
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Manage Officer</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
-        <p class="mb-4 text-sm text-slate-300">${esc(p.display_name)} <span class="text-slate-500">· ${esc(p.email || '')}</span></p>
+        <p class="mb-3 text-[11px] text-slate-500">${esc(p.email || '')}</p>
+        <div class="mb-3 grid grid-cols-2 gap-3">
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Display Name</label><input id="adm-name" value="${esc(p.display_name || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Badge #</label><input id="adm-badge" value="${esc(p.badge_number || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-sm text-white outline-none focus:border-badge-500" /></div>
+        </div>
         <div class="grid grid-cols-2 gap-3">
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Role</label><select id="adm-role" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${['detective', 'senior_detective', 'bureau_lead', 'supervisor', 'deputy_director', 'command', 'director'].map((r) => `<option value="${r}" ${r === p.role ? 'selected' : ''}>${esc(ROLE_LABEL[r] || r)}</option>`).join('')}</select></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Bureau</label><select id="adm-bureau" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${['LSB', 'BCB', 'SAB', 'JTF'].map((b) => `<option ${b === p.division ? 'selected' : ''}>${b}</option>`).join('')}</select></div>
@@ -78,6 +82,11 @@
       node.querySelector('#adm-save').onclick = async () => {
         const res = await DB().rpc('assign_member', { target: p.id, new_role: node.querySelector('#adm-role').value, new_division: node.querySelector('#adm-bureau').value, set_active: node.querySelector('#adm-active').checked });
         if (res.error) { toast('Update failed: ' + res.error.message, 'danger'); return; }
+        const nm = node.querySelector('#adm-name').value.trim(), bd = node.querySelector('#adm-badge').value.trim();
+        if (nm !== (p.display_name || '') || bd !== (p.badge_number || '')) {
+          const pr = await DB().update('profiles', p.id, { display_name: nm || p.display_name, badge_number: bd || null });
+          if (pr.error) toast('Name/badge save failed: ' + pr.error.message, 'warn');
+        }
         const loaWanted = node.querySelector('#adm-loa').checked;
         if (loaWanted !== !!p.loa && typeof setOfficerLoa === 'function') { const lr = await setOfficerLoa(p.id, loaWanted); if (lr && lr.error) { toast('Role saved; LOA update failed: ' + lr.error.message, 'warn'); } }
         closeModal(); toast('Member updated', 'success'); fetchProfiles().then(renderAdmin);
