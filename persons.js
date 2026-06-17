@@ -84,9 +84,16 @@
             <div class="min-w-0 flex-1"><p class="truncate font-semibold text-white">${escapeHTML(p.name)}${flag ? ' <span title="≥8 violent felonies">🚨</span>' : ''}</p><p class="text-xs text-slate-400">${p.alias ? '“' + escapeHTML(p.alias) + '” · ' : ''}${escapeHTML(p.status || '')}</p>
               <p class="mt-1 text-[11px] text-slate-500">${p.gang_id ? '🚩 ' + escapeHTML(gangNameById(p.gang_id) || 'Gang') + ' · ' : ''}CCW ${p.ccw ? 'Yes' : 'No'} · VCH ${p.vch || 0} · Felonies ${p.felony_count || 0}</p></div>
             ${DB() && DB().canEdit() ? '<button class="p-edit rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>' : ''}
+            ${DB() && DB().canDelete() ? '<button class="p-del rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10" title="Delete person (command only)">Delete</button>' : ''}
           </div>
           ${p.notes ? `<p class="mt-3 line-clamp-2 text-xs text-slate-400">${escapeHTML(p.notes)}</p>` : ''}`;
         const eb = card.querySelector('.p-edit'); if (eb) eb.onclick = () => openPersonModal(p);
+        const pdb = card.querySelector('.p-del'); if (pdb) pdb.onclick = async () => {
+          if (!confirm('Delete person "' + (p.name || 'record') + '"? This removes the persons-registry record (not any linked officer account).')) return;
+          const res = await DB().remove('persons', p.id);
+          if (res && res.error) { toast('Delete failed: ' + res.error.message, 'danger'); return; }
+          toast('Person deleted', 'warn'); fetchPersons();
+        };
         grid.appendChild(card);
       });
     }
