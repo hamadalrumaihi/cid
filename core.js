@@ -83,6 +83,148 @@
       { id: 'CI-0066', handler: 'Det. Voss', exclusive: true, agreement: 'Expired', felonies: 2 },
     ];
 
+    /* ---- Fillable CID forms ----
+     * Structured schemas for the standard paperwork. A `documents` row becomes a
+     * fillable form when content.view==='form' OR its name matches a schema below.
+     * Section types: 'kv' (label/field rows), 'grid' (repeatable table), 'textarea', 'note'.
+     * Field types: text | date | money | select (opts) | textarea. Saved as content.values. */
+    const FORM_DEPT_OPTS = ['', 'LSPD', 'BCSO', 'SAHP'];
+    const FORM_BUREAU_OPTS = ['', 'Los Santos Bureau', 'Blaine County Bureau', 'State Bureau', 'Joint Task Force'];
+    const FORM_SCHEMAS = {
+      'cid_investigative_report': {
+        title: 'CID Investigative Report',
+        subtitle: 'Criminal Investigations Department — Major Crimes Bureau — FOR OFFICIAL USE ONLY',
+        sections: [
+          { id: 'details', label: 'Case / Report Details', type: 'kv', fields: [
+            { key: 'case_number', label: 'Case Number', type: 'text' },
+            { key: 'report_type', label: 'Report Type', type: 'select', opts: ['Initial', 'Supplemental', 'Follow-up'] },
+            { key: 'filed_at', label: 'Date / Time Filed', type: 'text' },
+          ] },
+          { id: 'detective', label: 'Detective Information', type: 'kv', fields: [
+            { key: 'det_name', label: 'Name', type: 'text' },
+            { key: 'det_rank', label: 'Rank', type: 'text' },
+            { key: 'det_callsign', label: 'Callsign', type: 'text' },
+            { key: 'det_dept', label: 'Department', type: 'select', opts: FORM_DEPT_OPTS },
+          ] },
+          { id: 'subjects', label: 'Suspect / Witness Information', type: 'grid', cols: [
+            { key: 'name', label: 'Name', type: 'text' },
+            { key: 'phone', label: 'Phone', type: 'text' },
+            { key: 'dob', label: 'DOB', type: 'text' },
+          ] },
+          { id: 'rights', label: 'Rights Advisement', type: 'kv', fields: [
+            { key: 'rights_admin', label: 'Article 31 / Miranda Administered', type: 'select', opts: ['', 'Yes', 'No'] },
+            { key: 'rights_dt', label: 'Date / Time', type: 'text' },
+            { key: 'rights_waived', label: 'Rights Waived?', type: 'select', opts: ['', 'Yes', 'No'] },
+            { key: 'rights_witness', label: 'Rights Witness', type: 'text' },
+          ] },
+          { id: 'incident', label: 'Incident Details', type: 'kv', fields: [
+            { key: 'inc_type', label: 'Type of Incident', type: 'text' },
+            { key: 'inc_dt', label: 'Date / Time of Incident', type: 'text' },
+            { key: 'inc_loc', label: 'Location of Incident', type: 'text' },
+            { key: 'inc_parties', label: 'Involved Parties', type: 'text' },
+            { key: 'inc_class', label: 'MCB Classification', type: 'text' },
+          ] },
+          { id: 'narrative', label: 'Narrative / Statement', type: 'textarea', key: 'narrative' },
+          { id: 'evidence', label: 'Evidence / Property', type: 'kv', fields: [
+            { key: 'ev_items', label: 'Item(s)', type: 'text' },
+            { key: 'ev_collected_by', label: 'Collected by', type: 'text' },
+            { key: 'ev_files', label: 'Files', type: 'text' },
+          ] },
+          { id: 'remarks', label: 'Detective Remarks', type: 'textarea', key: 'remarks' },
+          { id: 'actions', label: 'Investigative Actions', type: 'grid', cols: [
+            { key: 'action', label: 'Action Taken', type: 'text' },
+          ] },
+          { id: 'understanding', label: 'Statement of Understanding', type: 'note', text: 'By completing this report, I understand that I am strictly prohibited from disclosing any information, reports, or materials pertaining to Criminal Investigation Division (CID) matters, whether ongoing, past, or closed, as doing so may jeopardize the integrity of investigative processes, compromise the rights and safety of individuals involved, and undermine the mission of CID. I further acknowledge that any unauthorized disclosure of such information may result in disciplinary, administrative, or criminal consequences under applicable laws and regulations.' },
+        ],
+      },
+      'raid_seizure': {
+        title: 'Raid Seizure Value Distribution & Allocation Form',
+        subtitle: 'Criminal Investigations Department — FOR OFFICIAL USE ONLY',
+        sections: [
+          { id: 'case', label: 'Case Information', type: 'kv', fields: [
+            { key: 'bureau', label: 'Bureau', type: 'select', opts: FORM_BUREAU_OPTS },
+            { key: 'case_number', label: 'Case #', type: 'text' },
+            { key: 'operation', label: 'Operation Name', type: 'text' },
+            { key: 'seizure_date', label: 'Date of Seizure', type: 'text' },
+            { key: 'seizure_loc', label: 'Location of Seizure', type: 'text' },
+          ] },
+          { id: 'inventory', label: 'Seizure Inventory & Valuation', type: 'grid', cols: [
+            { key: 'item', label: 'Item', type: 'text' },
+            { key: 'qty', label: 'Quantity', type: 'text' },
+            { key: 'unit_value', label: 'Unit Street Value', type: 'money' },
+            { key: 'total_value', label: 'Total Street Value', type: 'money' },
+          ] },
+          { id: 'distribution', label: 'Authorized Director Distribution', type: 'kv', fields: [
+            { key: 'net_value', label: 'Total Net Seizure Value ($)', type: 'money' },
+            { key: 'lead_amount', label: 'Amount to Lead Detective ($)', type: 'money' },
+            { key: 'division_amount', label: 'Amount to Division', type: 'money' },
+            { key: 'other_alloc', label: 'Other Allocations (if any)', type: 'text' },
+            { key: 'dir_sig', label: 'Director Signature', type: 'text' },
+            { key: 'dist_date', label: 'Date', type: 'text' },
+          ] },
+          { id: 'lead_alloc', label: 'Lead Detective Allocation', type: 'grid', cols: [
+            { key: 'recipient_type', label: 'Recipient Type', type: 'text' },
+            { key: 'recipient', label: 'Recipient Name / Identifier', type: 'text' },
+            { key: 'allocation', label: 'Allocation ($)', type: 'money' },
+          ] },
+          { id: 'final', label: 'Final Authorization', type: 'kv', fields: [
+            { key: 'final_dir_sig', label: 'Director Signature', type: 'text' },
+            { key: 'final_lead_sig', label: 'Lead Detective Signature', type: 'text' },
+          ] },
+        ],
+      },
+      'uc_operation': {
+        title: 'Undercover Operation Activity Report',
+        subtitle: 'Criminal Investigations Department — FOR OFFICIAL USE ONLY',
+        sections: [
+          { id: 'report', label: 'Report Information', type: 'kv', fields: [
+            { key: 'report_type', label: 'Report Type', type: 'select', opts: ['Initial', 'Supplemental', 'Final'] },
+            { key: 'submitted', label: 'Date Submitted', type: 'text' },
+            { key: 'uc_officer', label: 'UC Officer Name', type: 'text' },
+            { key: 'bureau', label: 'Bureau', type: 'select', opts: FORM_BUREAU_OPTS },
+            { key: 'op_code', label: 'Operation Code / Case ID', type: 'text' },
+          ] },
+          { id: 'overview', label: 'Operation Overview', type: 'kv', fields: [
+            { key: 'activity_dates', label: 'Date(s) of UC Activity', type: 'text' },
+            { key: 'objective', label: 'Primary Objective', type: 'text' },
+          ] },
+          { id: 'summary', label: 'Summary of Activities', type: 'textarea', key: 'summary' },
+          { id: 'contacts', label: 'Contacts & Interactions', type: 'grid', cols: [
+            { key: 'individual', label: 'Individuals Met or Observed', type: 'text' },
+            { key: 'nature', label: 'Nature of Interaction', type: 'text' },
+            { key: 'key_actions', label: 'Key Conversations / Actions', type: 'text' },
+          ] },
+          { id: 'intel', label: 'Intelligence & Evidence', type: 'grid', cols: [
+            { key: 'item', label: 'Items Observed or Discussed', type: 'text' },
+            { key: 'description', label: 'Description of Evidence / Intelligence', type: 'text' },
+          ] },
+          { id: 'media', label: 'Photos / Recordings Captured (attach references)', type: 'textarea', key: 'media_refs' },
+          { id: 'assessment', label: 'Operational Assessment', type: 'kv', fields: [
+            { key: 'threat_level', label: 'Threat Level', type: 'select', opts: ['', 'Low', 'Medium', 'High', 'Critical'] },
+            { key: 'cover_status', label: 'UC Cover Status', type: 'select', opts: ['', 'Intact', 'At Risk', 'Compromised', 'Withdrawn'] },
+          ] },
+          { id: 'notes', label: 'Additional Notes', type: 'textarea', key: 'notes' },
+          { id: 'approval', label: 'Review & Approval', type: 'kv', fields: [
+            { key: 'uc_sig', label: 'UC Officer Signature', type: 'text' },
+            { key: 'lead_sig', label: 'Unit Lead Signature', type: 'text' },
+          ] },
+        ],
+      },
+    };
+    // Map a documents row → its form schema id (by explicit content.form, or by name).
+    const FORM_NAME_MAP = {
+      'cid investigative report': 'cid_investigative_report',
+      'raid seizure value distribution & allocation form': 'raid_seizure',
+      'uc operation activity report': 'uc_operation',
+      'undercover operation activity report': 'uc_operation',
+    };
+    function formSchemaIdFor(doc) {
+      if (!doc) return null;
+      if (doc.content && doc.content.view === 'form' && doc.content.form && FORM_SCHEMAS[doc.content.form]) return doc.content.form;
+      const base = String(doc.name || '').replace(/\.[a-z0-9]+$/i, '').trim().toLowerCase();
+      return FORM_NAME_MAP[base] || null;
+    }
+
     /* ============================================================ 2. UTILITIES ============================================================ */
     const $  = (s, c = document) => c.querySelector(s);
     const $$ = (s, c = document) => Array.from(c.querySelectorAll(s));

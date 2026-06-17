@@ -5,10 +5,11 @@
 
     /* ============================================================ 10. CID GENERAL (Drive) ============================================================ */
     const ACCENTS = { blue:{tint:'text-blue-400',ring:'hover:border-blue-500/40 hover:bg-blue-500/5'}, emerald:{tint:'text-emerald-400',ring:'hover:border-emerald-500/40 hover:bg-emerald-500/5'}, violet:{tint:'text-violet-400',ring:'hover:border-violet-500/40 hover:bg-violet-500/5'}, amber:{tint:'text-amber-400',ring:'hover:border-amber-500/40 hover:bg-amber-500/5'}, rose:{tint:'text-rose-400',ring:'hover:border-rose-500/40 hover:bg-rose-500/5'}, slate:{tint:'text-slate-300',ring:'hover:border-slate-400/40 hover:bg-white/5'} };
-    const fileIcon = (t) => ({ doc:'📄', sheet:'📊', pdf:'📕', zip:'🗜️', matrix:'🛡️' }[t] || '📄');
+    const fileIcon = (t) => ({ doc:'📄', sheet:'📊', pdf:'📕', zip:'🗜️', matrix:'🛡️', form:'📝' }[t] || '📄');
     const safeName = (n) => n.replace(/\.[a-z]+$/i,'').replace(/[^a-z0-9]+/gi,'-').replace(/^-+|-+$/g,'').toLowerCase();
-    // Display type drives the icon / sub-label: a sheet flagged content.view='matrix' is the live CI matrix.
-    const docDisplayType = (d) => (d.content && d.content.view === 'matrix') ? 'matrix' : d.kind;
+    // Display type drives the icon / sub-label: a name/flag matching a fillable form
+    // schema → 'form'; a sheet flagged content.view='matrix' is the live CI matrix.
+    const docDisplayType = (d) => formSchemaIdFor(d) ? 'form' : (d.content && d.content.view === 'matrix') ? 'matrix' : d.kind;
     const docsInFolder = (name) => DOCS.filter((d) => d.folder === name).sort((a, b) => a.name.localeCompare(b.name));
 
     async function fetchDocuments() {
@@ -54,7 +55,7 @@
       const a = ACCENTS[meta.accent] || ACCENTS.slate;
       const canEdit = DB() && DB().canEdit();
       const files = docsForCase(c.id);
-      const sub = (d) => { const t = docDisplayType(d); return t === 'matrix' ? 'live matrix' : t === 'sheet' ? 'open sheet' : t === 'zip' ? 'open archive' : 'open document'; };
+      const sub = (d) => { const t = docDisplayType(d); return t === 'matrix' ? 'live matrix' : t === 'form' ? 'fillable form' : t === 'sheet' ? 'open sheet' : t === 'zip' ? 'open archive' : 'open document'; };
       const node = el('div', { class:'p-6' });
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><button id="case-back" class="text-slate-400 hover:text-white" title="Back to bureau">←</button><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white"><span class="font-mono text-blue-300">${esc(c.case_number)}</span> ${esc(c.title || '')}</h3><p class="text-xs text-slate-400">${esc(meta.name)} · ${files.length} file${files.length === 1 ? '' : 's'}</p></div></div><div class="flex items-center gap-2">${canEdit ? '<button id="cf-new-doc" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">+ New Document</button>' : ''}<button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
@@ -92,7 +93,7 @@
       const node = el('div', { class:'p-6' });
       const canEdit = DB() && DB().canEdit();
       const files = docsInFolder(meta.name);
-      const sub = (d) => { const t = docDisplayType(d); return t === 'matrix' ? 'live matrix' : t === 'sheet' ? 'open sheet' : t === 'zip' ? 'open archive' : 'open document'; };
+      const sub = (d) => { const t = docDisplayType(d); return t === 'matrix' ? 'live matrix' : t === 'form' ? 'fillable form' : t === 'sheet' ? 'open sheet' : t === 'zip' ? 'open archive' : 'open document'; };
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white">${esc(meta.name)}</h3><p class="text-xs text-slate-400">CID General / Shared · ${files.length} item${files.length === 1 ? '' : 's'}</p></div></div><div class="flex items-center gap-2">${canEdit ? '<button id="folder-import" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">⇪ Import</button><button id="folder-new" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">+ New Document</button>' : ''}<button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
         <div class="space-y-2" id="folder-files">${files.length ? files.map((d) => `<div class="file-row flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:bg-white/5 hover:border-blue-500/30" data-id="${d.id}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">${fileIcon(docDisplayType(d))}</span>${esc(d.name)}</span><span class="text-[11px] text-slate-500">${sub(d)}</span></div>`).join('') : '<p class="text-sm text-slate-500">Empty folder.</p>'}</div>`;
@@ -153,8 +154,135 @@
       a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
+    /* ---- Fillable structured forms (FORM_SCHEMAS) ----------------------------
+     * A documents row whose name/flag matches a schema renders as a fillable form:
+     * labelled fields, dropdowns and repeatable tables. Saved to content.values. */
+    function formCellInput(f, val, editable) {
+      const v = val == null ? '' : String(val);
+      const base = 'w-full rounded-md border border-white/10 bg-ink-900 px-2.5 py-1.5 text-sm text-white outline-none focus:border-badge-500';
+      if (!editable) return `<div class="rounded-md border border-white/5 bg-ink-900/60 px-2.5 py-1.5 text-sm text-slate-200 min-h-[34px] whitespace-pre-wrap">${esc(v) || '<span class="text-slate-600">—</span>'}</div>`;
+      if (f.type === 'select') return `<select data-fkey="${f.key}" class="${base}">${(f.opts || []).map((o) => `<option${o === v ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+      if (f.type === 'textarea') return `<textarea data-fkey="${f.key}" rows="4" class="${base} resize-y leading-relaxed">${esc(v)}</textarea>`;
+      const t = f.type === 'date' ? 'date' : 'text';
+      const ph = f.type === 'money' ? ' placeholder="$0"' : '';
+      return `<input type="${t}" data-fkey="${f.key}"${ph} value="${esc(v)}" class="${base}" />`;
+    }
+    function renderFormBody(schema, values, editable) {
+      const V = values || {};
+      return schema.sections.map((s) => {
+        const head = `<p class="mb-2 text-[11px] font-bold uppercase tracking-wider text-blue-300/90">${esc(s.label)}</p>`;
+        if (s.type === 'note') return `<section class="mb-5"><div class="rounded-lg border border-white/10 bg-ink-900/60 p-4">${head}<p class="text-xs leading-relaxed text-slate-400">${esc(s.text)}</p></div></section>`;
+        if (s.type === 'textarea') return `<section class="mb-5">${head}${formCellInput({ key: s.key, type: 'textarea' }, V[s.key], editable)}</section>`;
+        if (s.type === 'kv') return `<section class="mb-5">${head}<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">${s.fields.map((f) => `<div><label class="mb-1 block text-[11px] font-medium text-slate-400">${esc(f.label)}</label>${formCellInput(f, V[f.key], editable)}</div>`).join('')}</div></section>`;
+        // grid: repeatable table
+        const rows = Array.isArray(V[s.id]) && V[s.id].length ? V[s.id] : [{}];
+        const rowHtml = (r) => `<tr>${s.cols.map((col) => `<td class="border-b border-r border-white/5 p-1.5 align-top">${formCellInput({ key: col.key, type: col.type, opts: col.opts }, r[col.key], editable)}</td>`).join('')}${editable ? '<td class="border-b border-white/5 p-1.5 text-center align-middle"><button class="grid-del text-slate-500 hover:text-rose-300" title="Remove row">✕</button></td>' : ''}</tr>`;
+        return `<section class="mb-5">${head}
+          <div class="overflow-x-auto rounded-lg border border-white/10"><table class="w-full text-left text-sm" data-grid="${s.id}">
+            <thead><tr class="bg-ink-800 text-[10px] uppercase tracking-wider text-slate-400">${s.cols.map((col) => `<th class="border-b border-r border-white/5 px-2.5 py-2 font-semibold">${esc(col.label)}</th>`).join('')}${editable ? '<th class="border-b border-white/5 px-2 py-2"></th>' : ''}</tr></thead>
+            <tbody>${rows.map(rowHtml).join('')}</tbody>
+          </table></div>
+          ${editable ? `<button class="grid-add mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 no-print" data-grid-add="${s.id}">+ Add Row</button>` : ''}
+        </section>`;
+      }).join('');
+    }
+    function readForm(node, schema) {
+      const values = {};
+      $$('[data-fkey]', node).forEach((f) => {
+        // Skip inputs that live inside a grid (handled below).
+        if (f.closest('[data-grid]')) return;
+        values[f.dataset.fkey] = f.value;
+      });
+      schema.sections.filter((s) => s.type === 'grid').forEach((s) => {
+        const tb = node.querySelector(`[data-grid="${s.id}"] tbody`);
+        const rows = tb ? $$('tr', tb).map((tr) => {
+          const obj = {}; let any = false;
+          s.cols.forEach((col) => { const inp = tr.querySelector(`[data-fkey="${col.key}"]`); const v = inp ? inp.value.trim() : ''; obj[col.key] = v; if (v) any = true; });
+          return any ? obj : null;
+        }).filter(Boolean) : [];
+        values[s.id] = rows;
+      });
+      return values;
+    }
+    function formToText(schema, values) {
+      const V = values || {}; const lines = [];
+      schema.sections.forEach((s) => {
+        lines.push(s.label.toUpperCase());
+        if (s.type === 'note') { lines.push(s.text); }
+        else if (s.type === 'textarea') { lines.push(V[s.key] || '—'); }
+        else if (s.type === 'kv') { s.fields.forEach((f) => lines.push(`${f.label}: ${V[f.key] || '—'}`)); }
+        else { const rows = Array.isArray(V[s.id]) ? V[s.id] : []; lines.push(s.cols.map((c) => c.label).join(' | ')); if (!rows.length) lines.push('—'); rows.forEach((r) => lines.push(s.cols.map((c) => r[c.key] || '').join(' | '))); }
+        lines.push('');
+      });
+      return lines.join('\n');
+    }
+    function openFormDocument(doc, meta, schemaId) {
+      const schema = FORM_SCHEMAS[schemaId];
+      const c = doc.content || {};
+      // Hydrate values: prefer saved form values; ignore legacy body text.
+      const values = (c.view === 'form' && c.values) ? c.values : {};
+      const canEdit = DB() && DB().canEdit();
+      const canDel = DB() && DB().canDelete();
+      const editable = canEdit;
+      const node = el('div', { class:'p-6' });
+      node.innerHTML = `
+        <div class="mb-4 flex items-start justify-between gap-3 no-print">
+          <div class="flex items-center gap-3"><span class="text-2xl">📝</span><div><h3 class="text-base font-bold text-white">${esc(doc.name)}</h3><p class="text-[11px] text-slate-400">Fillable form${meta ? ' · ' + esc(meta.name) : ''}${doc.modified_label ? ' · ' + esc(doc.modified_label) : ''}${editable ? '' : ' · read-only'}</p></div></div>
+          <button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+        </div>
+        <div class="print-area max-h-[68vh] overflow-y-auto pr-1">
+          <div class="mb-4 border-b border-white/10 pb-3"><h2 class="text-lg font-bold text-white">${esc(schema.title)}</h2><p class="text-[11px] text-slate-500">${esc(schema.subtitle)}</p></div>
+          <div id="form-body">${renderFormBody(schema, values, editable)}</div>
+        </div>
+        <div class="mt-4 flex flex-wrap gap-2 no-print">
+          ${editable ? `<button id="d-save" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save</button>` : ''}
+          <button id="d-print" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">🖨️ Print</button>
+          <button id="d-docx" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">Export .docx</button>
+          ${canDel ? `<button id="d-del" class="ml-auto rounded-lg px-3 py-2 text-xs font-medium text-slate-400 transition hover:text-rose-300">Delete</button>` : ''}
+        </div>`;
+      const body = node.querySelector('#form-body');
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#d-print').onclick = () => window.print();
+      // Grid add / remove (event delegation on the form body).
+      body.addEventListener('click', (e) => {
+        const add = e.target.closest('[data-grid-add]');
+        if (add) {
+          const sid = add.dataset.gridAdd; const sec = schema.sections.find((s) => s.id === sid);
+          const tb = body.querySelector(`[data-grid="${sid}"] tbody`);
+          const cellHtml = sec.cols.map((col) => `<td class="border-b border-r border-white/5 p-1.5 align-top">${formCellInput({ key: col.key, type: col.type, opts: col.opts }, '', true)}</td>`).join('');
+          tb.insertAdjacentHTML('beforeend', `<tr>${cellHtml}<td class="border-b border-white/5 p-1.5 text-center align-middle"><button class="grid-del text-slate-500 hover:text-rose-300" title="Remove row">✕</button></td></tr>`);
+          return;
+        }
+        const del = e.target.closest('.grid-del');
+        if (del) { const tr = del.closest('tr'); const tb = tr.parentElement; if (tb.children.length > 1) tr.remove(); else $$('[data-fkey]', tr).forEach((i) => { i.value = ''; }); }
+      });
+      const saveBtn = node.querySelector('#d-save');
+      if (saveBtn) saveBtn.onclick = async () => {
+        const content = { view: 'form', form: schemaId, values: readForm(node, schema) };
+        const res = await DB().update('documents', doc.id, { content, modified_label: new Date().toLocaleDateString('en-GB') });
+        if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        toast(`"${doc.name}" saved`, 'success');
+        await fetchDocuments();
+        const fresh = DOCS.find((x) => x.id === doc.id); if (fresh) openFormDocument(fresh, meta, schemaId);
+      };
+      const delBtn = node.querySelector('#d-del');
+      if (delBtn) delBtn.onclick = async () => {
+        const res = await DB().remove('documents', doc.id);
+        if (res.error) { toast('Delete failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast('Document deleted', 'warn'); await fetchDocuments(); if (meta) openFolder(meta);
+      };
+      node.querySelector('#d-docx').onclick = () => {
+        const vals = editable ? readForm(node, schema) : values;
+        exportDocText(schema.title, formToText(schema, vals), safeName(doc.name) + '.docx');
+        toast('Exported .docx', 'success');
+      };
+      openModal(node, { wide: true });
+    }
+
     // Open a single documents-table file as live, editable paperwork.
     function openDocument(doc, meta) {
+      const formId = formSchemaIdFor(doc);
+      if (formId) return openFormDocument(doc, meta, formId);
       const c = doc.content || {};
       const isMatrix = c.view === 'matrix';
       const kind = isMatrix ? 'matrix' : doc.kind;
