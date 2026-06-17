@@ -1,5 +1,79 @@
 # CHANGELOG — CID Portal → Production Platform
 
+## Phase 11 — Gap-close patch: numbering, isolation, FiveManage, heatmap, shifts (2026-06-17)
+- **§1 Case numbering** — manual, unique, bureau-prefixed `BUREAU-NUMBER` (e.g.
+  `SAB-900023`). Auto-gen removed (`nextCaseNumber`). UI validates the pattern,
+  **enforces** the prefix matches the case's bureau, **warns** (not blocks) on the
+  leading-digit convention (LSB→1 BCB→2 SAB/JTF→9). DB unique index on
+  `cases.case_number`; duplicate → clear inline error. Ticket→case wizard now manual.
+- **§2 Bureau isolation (RLS)** — cases + casework children (evidence, custody,
+  reports, signoff, assignments, raid-comp, M.O., RICO, predicate acts, trackers,
+  case_files) are visible only to the case's bureau. **JTF is shared**; only
+  command/director cross-cut; owner/lead/grants still apply. **Chat-visibility rule
+  changed**: the old "same-department can read case chat" is superseded by full
+  bureau isolation (chat already keyed off `can_access_case`, so it tightened with
+  it). M.O. cross-bureau secrecy preserved via a `mo_crossref` SECURITY DEFINER RPC
+  (returns case number + shared tags only → "flagged elsewhere, request access").
+- **§3 FiveManage** — real upload module (`fivemanage.js`, `window.CID_FIVEMANAGE`)
+  wired into the Media vault: upload photo/video → FiveManage → store URL+metadata
+  in `media` (case/gang/location/person tags, view, delete by RBAC). Graceful guard
+  when unconfigured. **Google Drive stub left intact** (separate `case-files` tab).
+- **§4 Commander Heatmap** — new tab: case/turf/place/raid concentration by area,
+  driven by live data, bureau-scoped (uses RLS-filtered caches). Added `cases.area`.
+- **§5 Weekly shift reports** — `shift_reports` table (RLS rollup to bureau
+  leadership + command, realtime) + `shifts.js` tab (file weekly report; leads/
+  command see their scope).
+- **§6 Tailwind** — already precompiled into `styles.css` (no CDN, no warning,
+  offline). Added self-contained CSS for the new heatmap tiles + file uploader so
+  they don't depend on the precompiled scan; no change to the existing theme.
+- Migrations `20260617140000/140100/140200`; security advisor clean (only by-design
+  definer RPCs + N/A leaked-password).
+
+## Phase 10 — Case Files → Google Drive integration built (2026-06-17)
+Implemented the previously-stubbed Drive feature (design in
+`docs/superpowers/specs/2026-06-15-case-files-drive-design.md`):
+- `casefiles.js`: lazy-loads Google Identity Services + gapi Picker on first
+  attach; OAuth token client scoped to `drive.file` (least privilege); attach via
+  the Picker (multi-select) inserts `case_files` rows (`added_by = auth.uid()`);
+  files render grouped into per-case folder cards with open links; director/command
+  can remove; case-number combobox from `casesCache`; live via realtime
+  subscription on `case_files`; search filter.
+- `index.html`: `window.CID_GOOGLE` populated with the project's public OAuth web
+  client ID, Picker API key, and GCP project number (all referrer/origin-restricted
+  and public by design; allowlisted in `.gitleaks.toml`).
+- Note: the static site has no build step, so these live in `index.html` directly
+  (Vercel env vars are never substituted into the client).
+
+## Phase 9 — Full logic audit & fixes (2026-06-17)
+Meticulous audit of all 20 JS files (parse + cross-file scope + a 15-view runtime
+smoke test) and the live DB schema. Bugs found and fixed:
+
+- **🔴 Dead "Case Files" nav link.** The `case-files` tab (Google-Drive-per-case
+  view) and `#view-case-files` section existed with two nav buttons, but the tab
+  was missing from `PAGE_META`, so `navigate()` silently fell back to Command —
+  clicking "Case Files" / "Files" opened the dashboard instead. Registered the
+  tab + an `onEnterCaseFiles()` hook so the view opens (Drive integration itself
+  shipped in Phase 10). *This was the reported "not working".*
+- **🟡 Command "Open Cases" KPI count ≠ drill-down.** Card counted `open+active`
+  but drilled to `open` only. Added an `open_active` filter token so the card's
+  drill matches its count.
+- **🟡 Command Persons KPIs stuck at 0 / empty detective filter on first land.**
+  `renderKPIs` reads `PERSONS`/`PROFILES` but they were never reloaded/re-rendered
+  on entering Command. `onEnterCommand` now reloads both and re-renders;
+  `fetchProfiles` now repopulates the detective filter.
+- **🟡 Denied case-access requests sent no notification** (deny button missing
+  `data-req`, so `notify(undefined,…)`). Fixed.
+- **🟢 Tracker code range** widened (`TRK-1000…9999`) to cut collisions.
+
+DB (live project cid, migration `20260617130000_audit_security_hardening.sql`):
+- Fixed `case_files.cf_delete` `USING (true)` → `private.can_delete()`.
+- Revoked the `set_case_closed_at()` trigger function from the RPC surface.
+- Security advisor now clean of actionable items.
+
+Verified clean (no bug): all entity modules, the bureau/division access gate
+(`division` stores bureau codes; admins get global access), and all collab inserts
+(server-side `auth.uid()`/default columns).
+
 ## Phase 8 — Command dashboard cross-filter & drill-down (#17 follow-up)
 Completes the part of #17 deferred in Phase 7. Central Command is now a true
 supervisor cockpit:

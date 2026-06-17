@@ -150,7 +150,7 @@
       body.innerHTML = `
         ${pending.length ? `<div class="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
           <p class="mb-2 text-xs font-semibold uppercase tracking-wider text-amber-300">Pending access requests (${pending.length})</p>
-          <div class="space-y-2">${pending.map((r) => `<div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2"><div><p class="text-sm text-white">${esc(r.requester_name || 'Officer')}</p>${r.reason ? `<p class="text-[11px] text-slate-400">“${esc(r.reason)}”</p>` : ''}</div><div class="flex gap-2"><button class="ar-approve rounded-md bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25" data-id="${r.id}" data-req="${r.requester_id}">Approve</button><button class="ar-deny rounded-md border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-rose-300 hover:bg-rose-500/10" data-id="${r.id}">Deny</button></div></div>`).join('')}</div>
+          <div class="space-y-2">${pending.map((r) => `<div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2"><div><p class="text-sm text-white">${esc(r.requester_name || 'Officer')}</p>${r.reason ? `<p class="text-[11px] text-slate-400">“${esc(r.reason)}”</p>` : ''}</div><div class="flex gap-2"><button class="ar-approve rounded-md bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/25" data-id="${r.id}" data-req="${r.requester_id}">Approve</button><button class="ar-deny rounded-md border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-rose-300 hover:bg-rose-500/10" data-id="${r.id}" data-req="${r.requester_id}">Deny</button></div></div>`).join('')}</div>
         </div>` : ''}
         <div id="chat-scroll" class="max-h-[48vh] space-y-4 overflow-y-auto rounded-2xl border border-white/5 bg-ink-900/40 p-4">${msgs.length ? msgs.map(renderChatMessage).join('') : '<p class="py-8 text-center text-sm text-slate-500">No messages yet. Start the case discussion below.</p>'}</div>
         <div class="mt-3 rounded-2xl border border-white/10 bg-ink-900/60 p-3">
@@ -168,7 +168,7 @@
       const scroll = body.querySelector('#chat-scroll'); if (scroll) scroll.scrollTop = scroll.scrollHeight;
       body.querySelectorAll('.chat-link').forEach((b) => b.onclick = () => { if (b.dataset.type === 'case') { if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(b.dataset.id); } else if (typeof navigate === 'function') navigate((REC_LINK[b.dataset.type] || {}).tab || 'cases'); });
       body.querySelectorAll('.ar-approve').forEach((b) => b.onclick = () => decideAccessRequest({ id: b.dataset.id, requester_id: b.dataset.req, case_id: c.id }, c, true));
-      body.querySelectorAll('.ar-deny').forEach((b) => b.onclick = () => decideAccessRequest({ id: b.dataset.id, case_id: c.id }, c, false));
+      body.querySelectorAll('.ar-deny').forEach((b) => b.onclick = () => decideAccessRequest({ id: b.dataset.id, requester_id: b.dataset.req, case_id: c.id }, c, false));
 
       // composer state
       const pendingMentions = []; const pendingLinks = [];

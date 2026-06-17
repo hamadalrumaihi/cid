@@ -11,15 +11,9 @@
       BCB: { name: 'Blaine County Bureau', prefix: 'BCB', dept: 'BCSO' },
       SAB: { name: 'State Bureau', prefix: 'SAB', dept: 'SAHP' },
     };
-    // Case numbers are derived from existing cases (Supabase), not a local counter.
-    const CASE_BASE = { LSB: 1000001, BCB: 2000001, SAB: 9000001 };
-    function nextCaseNumber(bureauKey) {
-      const prefix = BUREAUS[bureauKey].prefix;
-      const re = new RegExp('\\[' + prefix + '\\]\\s*Case-(\\d+)');
-      let max = (CASE_BASE[bureauKey] || 1000001) - 1;
-      (typeof casesCache !== 'undefined' ? casesCache : []).forEach((c) => { const m = (c.case_number || '').match(re); if (m) max = Math.max(max, Number(m[1])); });
-      return max + 1;
-    }
+    // Case numbers are typed manually by the detective (format BUREAU-NUMBER,
+    // e.g. SAB-900023), validated + uniqueness-enforced at the UI and DB. No
+    // auto-generation (removed in the 2026-06-17 patch).
     // Map a reporting department to its bureau key / ticket rename prefix
     const DEPT_ROUTING = {
       LSPD: { bureau: 'LSB', rename: 'losangeles' },
@@ -232,7 +226,7 @@
     }
     function wireAllImports() {
       const I = [
-        ['#case-new',      { table:'cases',                label:'cases',         allow:['case_number','title','bureau','status','summary'], required:['case_number'], upper:['bureau'], lower:['status'], after:fetchCases }],
+        ['#case-new',      { table:'cases',                label:'cases',         allow:['case_number','title','bureau','status','summary','area'], required:['case_number'], upper:['bureau'], lower:['status'], after:fetchCases }],
         ['#person-new',    { table:'persons',              label:'persons',       allow:['name','alias','dob','ccw','vch','felony_count','status','notes'], required:['name'], bool:['ccw'], num:['vch','felony_count'], after:fetchPersons }],
         ['#add-gang',      { table:'gangs',                label:'gangs',         allow:['name','colors','threat_level','notes'], required:['name'], lower:['threat_level'], after:fetchGangs }],
         ['#narc-new',      { table:'narcotics',            label:'narcotics',     allow:['name','classification','icon','popularity','street_price','wholesale_price'], required:['name'], num:['popularity','street_price','wholesale_price'], after:fetchDrugs }],
@@ -263,6 +257,9 @@
       drive:      { title: 'CID General', sub: 'Shared investigative drive' },
       records:    { title: 'CID Records', sub: 'Live shared records (Supabase)' },
       announce:   { title: 'Announcements', sub: 'Division-wide notices from command staff' },
+      'case-files': { title: 'Case Files — Drive', sub: 'Google Drive files organised per case' },
+      heatmap:    { title: 'Commander Heatmap', sub: 'Gang turf, places, raids & case concentration by area' },
+      shifts:     { title: 'Weekly Shift Reports', sub: 'Detective activity rolled up to bureau leadership' },
     };
 
     function navigate(tab) {
@@ -289,6 +286,9 @@
       if (tab === 'modus' && typeof onEnterModus === 'function') onEnterModus();
       if (tab === 'drive' && typeof onEnterDrive === 'function') onEnterDrive();
       if (tab === 'announce' && typeof onEnterAnnounce === 'function') onEnterAnnounce();
+      if (tab === 'case-files' && typeof onEnterCaseFiles === 'function') onEnterCaseFiles();
+      if (tab === 'heatmap' && typeof onEnterHeatmap === 'function') onEnterHeatmap();
+      if (tab === 'shifts' && typeof onEnterShifts === 'function') onEnterShifts();
     }
     $$('.nav-link, .bnav-link').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.tab)));
 

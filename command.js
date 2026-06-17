@@ -17,7 +17,9 @@
       if (CMD_FILTERS.detective && c.lead_detective_id !== CMD_FILTERS.detective) return false;
       if (CMD_FILTERS.status === 'awaiting' && !/^awaiting_/.test(c.signoff_status || '')) return false;
       else if (CMD_FILTERS.status === 'ready_doj' && !(c.signoff_status === 'ready_doj' || c.signoff_status === 'approved_complete')) return false;
-      else if (CMD_FILTERS.status && !['awaiting', 'ready_doj'].includes(CMD_FILTERS.status) && c.status !== CMD_FILTERS.status) return false;
+      // 'open_active' is the drill target for the "Open Cases" KPI card, which counts open+active together.
+      else if (CMD_FILTERS.status === 'open_active' && !(c.status === 'open' || c.status === 'active')) return false;
+      else if (CMD_FILTERS.status && !['awaiting', 'ready_doj', 'open_active'].includes(CMD_FILTERS.status) && c.status !== CMD_FILTERS.status) return false;
       if (CMD_FILTERS.from && new Date(c.created_at) < new Date(CMD_FILTERS.from)) return false;
       if (CMD_FILTERS.to && new Date(c.created_at) > new Date(CMD_FILTERS.to + 'T23:59:59')) return false;
       return true;
@@ -48,7 +50,7 @@
       const avg = avgResolutionDays(cases);
       const flagged = PERSONS.filter((p) => (p.felony_count || 0) >= 8).length;
       const cards = [
-        { label:'Open Cases', value: live ? open : '—', delta: `${cases.length} ${scoped ? 'in filter' : 'total on file'}`, icon:'📂', accent:'blue', go:() => setCmdStatus('open') },
+        { label:'Open Cases', value: live ? open : '—', delta: `${cases.length} ${scoped ? 'in filter' : 'total on file'}`, icon:'📂', accent:'blue', go:() => setCmdStatus('open_active') },
         { label:'Awaiting Sign-off', value: live ? awaiting : '—', delta:'stuck in the approval chain', icon:'✍️', accent:'amber', go:() => setCmdStatus('awaiting') },
         { label:'Ready for DOJ', value: live ? readyDoj : '—', delta:'approved & complete', icon:'⚖️', accent:'emerald', go:() => setCmdStatus('ready_doj') },
         { label:'Avg Resolution', value: live ? (avg == null ? '—' : (avg < 1 ? '<1d' : avg.toFixed(1) + 'd')) : '—', delta: avg == null ? 'no closed cases yet' : 'open → closed', icon:'⏱️', accent:'cyan' },
@@ -176,7 +178,17 @@
         if (cmdCanFilter()) row.onclick = () => { CMD_FILTERS.bureau = (CMD_FILTERS.bureau === k ? '' : k); syncCmdFilterControls(); refreshCommand(); };
         w.appendChild(row); });
     }
-    function onEnterCommand() { wireCommandFilters(); if (dbReady()) { fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); renderBureauLoad(); } else { renderKPIs(); renderTickets(); renderActivity(); renderBureauLoad(); renderTrackers(); } }
+    function onEnterCommand() {
+      wireCommandFilters();
+      if (dbReady()) {
+        fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); renderBureauLoad();
+        // KPIs read PROFILES (activity/detective filter) and PERSONS (persons-of-interest count),
+        // which are loaded by onAuthed elsewhere; reload here and re-render so the dashboard is
+        // never stuck showing 0 / an empty detective list when Command is the first view entered.
+        if (typeof fetchProfiles === 'function') fetchProfiles();
+        if (typeof fetchPersons === 'function') fetchPersons().then(() => renderKPIs());
+      } else { renderKPIs(); renderTickets(); renderActivity(); renderBureauLoad(); renderTrackers(); }
+    }
 
     /* ---- Ticket processing wizard ---- */
     function openTicketWizard(ticket) {
@@ -212,26 +224,31 @@
       const step2 = () => {
         const key = DEPT_ROUTING[routedDept].bureau;
         node.innerHTML = `
-          <div class="mb-5 flex items-center justify-between"><div><p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Step 2 of 3</p><h3 class="text-xl font-bold text-white">Case ID Generation</h3></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+          <div class="mb-5 flex items-center justify-between"><div><p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Step 2 of 3</p><h3 class="text-xl font-bold text-white">Case Number Entry</h3></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
           <div class="mb-4 rounded-lg border border-white/10 bg-ink-900 p-3 text-xs text-slate-400">Source ticket: <span class="font-mono text-blue-300">${esc(workingId)}</span> · Jurisdiction: <span class="font-semibold text-slate-200">${routedDept}</span></div>
           <label class="mb-1 block text-xs font-semibold text-slate-400">Bureau (auto-selected from jurisdiction)</label>
           <select id="bsel" class="mb-4 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">
             ${Object.keys(BUREAUS).map((k) => `<option value="${k}" ${k===key?'selected':''}>${BUREAUS[k].name} — [${BUREAUS[k].prefix}] (${BUREAUS[k].dept})</option>`).join('')}
           </select>
-          <label class="mb-1 block text-xs font-semibold text-slate-400">Generated 7-digit Case ID</label>
-          <div class="mb-5 flex items-center gap-2"><span id="cpre" class="rounded-lg bg-ink-800 px-3 py-2.5 font-mono text-sm font-semibold text-blue-300"></span><input id="cnum" class="flex-1 rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 font-mono text-sm text-white outline-none focus:border-badge-500" /></div>
-          <div class="flex gap-3"><button id="back1" class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">← Back</button><button id="gen" class="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white transition hover:brightness-110">Generate Case File →</button></div>`;
+          <label class="mb-1 block text-xs font-semibold text-slate-400">Case Number — type it (format BUREAU-NUMBER)</label>
+          <div class="mb-2 flex items-center gap-2"><span id="cpre" class="rounded-lg bg-ink-800 px-3 py-2.5 font-mono text-sm font-semibold text-blue-300"></span><input id="cnum" inputmode="numeric" class="flex-1 rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 font-mono text-sm text-white outline-none focus:border-badge-500" /></div>
+          <p class="mb-5 text-[11px] text-slate-500">LSB→1xxxxx · BCB→2xxxxx · SAB/JTF→9xxxxx. Must be unique.</p>
+          <div class="flex gap-3"><button id="back1" class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">← Back</button><button id="gen" class="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white transition hover:brightness-110">Create Case File →</button></div>`;
         const sel = node.querySelector('#bsel'), pre = node.querySelector('#cpre'), num = node.querySelector('#cnum');
-        const sync = () => { const b = BUREAUS[sel.value]; pre.textContent = `[${b.prefix}] Case-`; num.value = String(nextCaseNumber(sel.value)); };
+        const lead = (k) => ({ LSB: '1', BCB: '2', SAB: '9', JTF: '9' }[k] || '9');
+        const sync = () => { pre.textContent = sel.value + '-'; num.placeholder = lead(sel.value) + 'xxxxx'; };
         sync(); sel.onchange = sync;
         node.querySelector('.close-x').onclick = closeModal;
         node.querySelector('#back1').onclick = step1;
         node.querySelector('#gen').onclick = async () => {
-          const k = sel.value; const full = `[${BUREAUS[k].prefix}] Case-${num.value}`;
+          const k = sel.value, numv = num.value.trim();
+          if (!/^\d+$/.test(numv)) { toast('Enter the numeric case number (digits only) — the bureau prefix is added automatically.', 'warn'); return; }
+          if (numv[0] !== lead(k)) toast(`Note: ${k} case numbers usually start with ${lead(k)} — saving anyway.`, 'warn');
+          const full = `${k}-${numv}`;
           let newCaseId = null;
           if (dbReady()) {
             const res = await DB().insert('cases', { case_number: full, title: ticket.description || workingId, bureau: k, status: 'open' });
-            if (res.error) { toast('Case create failed: ' + res.error.message, 'danger'); return; }
+            if (res.error) { const dup = /duplicate|unique|already exists|23505/i.test(res.error.message || ''); toast(dup ? `Case number ${full} already exists — choose a unique number.` : 'Case create failed: ' + res.error.message, 'danger'); return; }
             newCaseId = res.data && res.data[0] && res.data[0].id;
             if (ticket.id) await DB().update('tickets', ticket.id, { status: 'processed', case_id: newCaseId, routed_bureau: k });
           }
@@ -265,7 +282,7 @@
     let trackers = [];
     let PROFILES = [];
     const officerName = (id) => { if (!id) return null; const p = PROFILES.find((x) => x.id === id); if (p) return p.display_name; const me = DB() && DB().me; return (me && me.id === id) ? me.display_name : 'Officer'; };
-    async function fetchProfiles() { if (!dbReady()) return; try { PROFILES = await DB().list('profiles', {}); } catch (e) {} if (typeof renderAdmin === 'function') renderAdmin(); if (typeof renderActivity === 'function') renderActivity(); }
+    async function fetchProfiles() { if (!dbReady()) return; try { PROFILES = await DB().list('profiles', {}); } catch (e) {} if (typeof renderAdmin === 'function') renderAdmin(); if (typeof renderActivity === 'function') renderActivity(); if (typeof populateDetectiveFilter === 'function') populateDetectiveFilter(); }
     function fmtCountdown(ms) {
       if (ms <= 0) return 'EXPIRED';
       const h = Math.floor(ms/3.6e6), m = Math.floor((ms%3.6e6)/6e4), s = Math.floor((ms%6e4)/1000);
@@ -358,7 +375,7 @@
         const dur = Math.max(1, Number(node.querySelector('#tk-dur').value) || 24);
         const caseId = node.querySelector('#tk-case').value || null;
         const c = casesCache.find((x) => x.id === caseId);
-        const payload = { tracker_code: 'TRK-' + Math.floor(9000 + Math.random() * 999), target, case_id: caseId, bureau: c ? c.bureau : 'JTF', director_sig: me.id, duration_hours: dur, status: 'pending' };
+        const payload = { tracker_code: 'TRK-' + Math.floor(1000 + Math.random() * 9000), target, case_id: caseId, bureau: c ? c.bureau : 'JTF', director_sig: me.id, duration_hours: dur, status: 'pending' };
         const res = await DB().insert('trackers', payload);
         if (res.error) { toast('Deploy failed: ' + res.error.message, 'danger'); return; }
         notify(me.id, 'tracker_pending', { tracker_code: payload.tracker_code, target });
