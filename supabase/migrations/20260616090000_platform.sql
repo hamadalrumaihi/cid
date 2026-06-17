@@ -1,6 +1,6 @@
 -- ============================================================================
 -- ODYSSEY CID PLATFORM — full backend (schema + RBAC RLS + triggers + realtime)
--- Project: sahp-rbac (nuujdewnkovtdvlbfzdx)
+-- Project: cid (jhxuflzmqspidkvjckox)
 --
 -- Decisions baked in:
 --   * READ model: APPROVED MEMBERS ONLY. New OAuth sign-ins get an inactive

@@ -1,6 +1,6 @@
 -- ============================================================================
 -- CID RECORDS — live two-way records for the static GitHub Pages site
--- Project: sahp-rbac (nuujdewnkovtdvlbfzdx)
+-- Project: cid (jhxuflzmqspidkvjckox)
 --
 -- Read:  PUBLIC (anon + authenticated) so the site shows data on load for
 --        everyone, with a read-only view for logged-out visitors.

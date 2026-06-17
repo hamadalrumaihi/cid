@@ -424,6 +424,7 @@
         </div>
         <div class="rounded-lg border border-white/5 bg-ink-850 p-3"><p class="mb-2 text-[10px] uppercase tracking-wider text-slate-400">Automated Payout Split</p>
           ${Object.entries(COMP_SPLIT).map(([role,frac])=>`<div class="mb-1.5 flex items-center justify-between text-sm"><span class="text-slate-300">${role}</span><span class="font-mono font-semibold text-white">${fmtUSD(given*frac)}<span class="ml-1 text-[10px] text-slate-500">(${frac*100}%)</span></span></div>`).join('')}
-        </div>`;
+        </div>
+        <p class="text-center text-[10px] italic text-slate-500">Local preview — not saved. Record the authorized split on the Raid Seizure Allocation form.</p>`;
     }
 

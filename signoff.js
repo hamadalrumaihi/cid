@@ -38,42 +38,13 @@
     const signoffTint = (s) => SIGNOFF_TINT[s] || SIGNOFF_TINT.none;
     function canReassign() { const m = meProfile(); return !!(m && m.active && REASSIGN_ROLES.includes(m.role)); }
 
-    /* ---- Feature 3: routing with LOA handling ---- */
-    function stageCandidates(stage, bureau) {
-      const roles = SIGNOFF.roles[stage] || [];
-      let cands = (typeof PROFILES !== 'undefined' ? PROFILES : []).filter((p) => p.active && roles.includes(p.role));
-      if (stage === 'bureau_lead' && bureau) { const same = cands.filter((p) => p.division === bureau); if (same.length) cands = same; }
-      return cands;
-    }
-    // Pick the available (non-LOA) candidate; if all on LOA -> signal escalation.
-    function pickForStage(stage, bureau) {
-      const cands = stageCandidates(stage, bureau);
-      if (!cands.length) return { assignee: null, reason: 'none' };
-      const free = cands.filter((p) => !p.loa);
-      if (free.length) return { assignee: free[0] };
-      return { assignee: null, reason: 'all_loa' };
-    }
-    // Walk the chain from startIdx, skipping ranks with no available signer.
-    function routeFrom(startIdx, bureau) {
-      const skipped = [];
-      for (let i = startIdx; i < SIGNOFF.order.length; i++) {
-        const stage = SIGNOFF.order[i];
-        const r = pickForStage(stage, bureau);
-        if (r.assignee) return { stage, assignee: r.assignee, skipped };
-        skipped.push({ stage, reason: r.reason });
-      }
-      return { stage: null, assignee: null, skipped };
-    }
-    function skipWhy(skipped) {
-      return skipped.map((s) => SIGNOFF.label[s.stage] + (s.reason === 'all_loa' ? ' on LOA' : ' unavailable')).join(', ');
-    }
+    /* ---- Server-authoritative workflow ----
+     * Submission, decisions, and the owner stop-point all run through SECURITY
+     * DEFINER RPCs (signoff_submit / signoff_decide / signoff_owner_action). The
+     * server does the LOA-aware routing AND writes case_signoff_history, so the
+     * client no longer patches cases.signoff_* directly or logs history. Each RPC
+     * returns the updated case row, which drives the (client-side) notifications. */
 
-    /* ---- History (append-only) + notifications ---- */
-    async function logSignoff(caseId, action, stage, toStatus, note) {
-      if (!dbReady()) return;
-      const m = meProfile() || {};
-      try { await DB().insert('case_signoff_history', { case_id: caseId, actor_name: m.display_name || null, action, stage: stage || null, to_status: toStatus || null, note: note || null }); } catch (e) {}
-    }
     // Feature 4: rich notification (case #, detective, reason, link via case_id).
     async function notifySignoff(userId, type, c, reason, extra) {
       if (!userId || typeof notify !== 'function') return;
@@ -88,88 +59,73 @@
       if (typeof detailCase !== 'undefined' && detailCase && detailCase.id === id && typeof renderCaseDetailShell === 'function') { renderCaseDetailShell(); loadDetailTab(); }
     }
 
-    /* ---- Feature 2: submit for review ---- */
+    /* ---- Feature 2: submit for review (RPC: signoff_submit) ---- */
     async function submitForSignoff(c) {
       if (!dbReady()) { toast('Sign-in required.', 'warn'); return; }
-      const route = routeFrom(0, c.bureau);
-      if (!route.stage) { toast('No active reviewers in the chain. Add a Bureau Lead / Deputy / Director or clear an LOA.', 'warn'); return; }
-      const patch = { signoff_status: SIGNOFF.statusOf[route.stage], signoff_stage: route.stage, signoff_assignee_id: route.assignee.id, signoff_submitted_by: meId(), signoff_submitted_at: new Date().toISOString() };
-      const res = await DB().update('cases', c.id, patch);
+      const res = await DB().rpc('signoff_submit', { p_case: c.id });
       if (res.error) { toast('Submit failed: ' + res.error.message, 'danger'); return; }
-      await logSignoff(c.id, 'submitted', route.stage, patch.signoff_status, null);
-      let reason = 'New case submitted for your sign-off.';
-      if (route.skipped.length) {
-        const why = skipWhy(route.skipped);
-        reason = 'Sent to you because ' + why + '.';
-        await logSignoff(c.id, 'auto_routed', route.stage, patch.signoff_status, why);
-        await notifySignoff(meId(), 'signoff_escalated', c, 'Auto-escalated to ' + SIGNOFF.label[route.stage] + ' because ' + why + '.', { stage: route.stage });
-      }
-      await notifySignoff(route.assignee.id, 'signoff_waiting', c, reason, { stage: route.stage, escalation: route.skipped.length > 0 });
-      toast('Submitted → ' + SIGNOFF.label[route.stage] + (route.skipped.length ? ' (auto-escalated, LOA)' : ''), 'success');
+      const c2 = res.data || c;
+      const stage = c2.signoff_stage;
+      if (c2.signoff_assignee_id) await notifySignoff(c2.signoff_assignee_id, 'signoff_waiting', c2, 'New case submitted for your sign-off.', { stage });
+      toast('Submitted → ' + (SIGNOFF.label[stage] || 'review'), 'success');
       refreshCaseDetail(c.id);
     }
 
-    /* ---- Feature 2/3/6: approve at the current stage ---- */
+    /* ---- Feature 2/3/6: approve at the current stage (RPC: signoff_decide) ---- */
     async function approveSignoff(c, note) {
-      const stage = c.signoff_stage;
-      if (stage === 'bureau_lead') {
-        const route = routeFrom(1, c.bureau);   // deputy, else director
-        if (!route.stage) {   // no deputy/director at all -> bureau lead approval completes it
-          await DB().update('cases', c.id, { signoff_status: 'approved_complete', signoff_stage: null, signoff_assignee_id: null });
-          await logSignoff(c.id, 'approved', 'bureau_lead', 'approved_complete', note);
-          await notifySignoff(ownerNotifyTarget(c), 'signoff_approved', c, 'Bureau Lead approved — no higher reviewer available, case complete.', { stage: 'bureau_lead' });
-          toast('Approved (complete)', 'success'); refreshCaseDetail(c.id); return;
-        }
-        const patch = { signoff_status: SIGNOFF.statusOf[route.stage], signoff_stage: route.stage, signoff_assignee_id: route.assignee.id };
-        await DB().update('cases', c.id, patch);
-        await logSignoff(c.id, 'approved', 'bureau_lead', patch.signoff_status, note);
-        await notifySignoff(ownerNotifyTarget(c), 'signoff_approved', c, 'Bureau Lead approved your case — now with the ' + SIGNOFF.label[route.stage] + '.', { stage: 'bureau_lead' });
-        let reason = 'Bureau Lead approved — case now awaiting your sign-off.';
-        if (route.skipped.length) { const why = skipWhy(route.skipped); reason = 'Sent to you because ' + why + '.'; await logSignoff(c.id, 'auto_routed', route.stage, patch.signoff_status, why); }
-        await notifySignoff(route.assignee.id, 'signoff_waiting', c, reason, { stage: route.stage, escalation: route.skipped.length > 0 });
-        toast('Approved → ' + SIGNOFF.label[route.stage], 'success'); refreshCaseDetail(c.id);
-      } else if (stage === 'deputy') {
+      const prevStage = c.signoff_stage;
+      const res = await DB().rpc('signoff_decide', { p_case: c.id, p_decision: 'approve', p_note: note || null });
+      if (res.error) { toast('Approve failed: ' + res.error.message, 'danger'); return; }
+      const c2 = res.data || c;
+      const status = c2.signoff_status;
+      if (status === 'awaiting_deputy' || status === 'awaiting_director') {
+        await notifySignoff(ownerNotifyTarget(c2), 'signoff_approved', c2, SIGNOFF.label[prevStage] + ' approved your case — now with the ' + SIGNOFF.label[c2.signoff_stage] + '.', { stage: prevStage });
+        if (c2.signoff_assignee_id) await notifySignoff(c2.signoff_assignee_id, 'signoff_waiting', c2, SIGNOFF.label[prevStage] + ' approved — case now awaiting your sign-off.', { stage: c2.signoff_stage });
+        toast('Approved → ' + SIGNOFF.label[c2.signoff_stage], 'success');
+      } else if (status === 'approved_deputy') {
         // STOP POINT (Feature 6): Deputy approval can finish here.
-        await DB().update('cases', c.id, { signoff_status: 'approved_deputy', signoff_stage: null, signoff_assignee_id: null });
-        await logSignoff(c.id, 'approved', 'deputy', 'approved_deputy', note);
-        await notifySignoff(ownerNotifyTarget(c), 'signoff_approved', c, 'Deputy Director approved your case. You can finish here or escalate to the Director.', { stage: 'deputy' });
-        // Director heads-up even though no action is required.
+        await notifySignoff(ownerNotifyTarget(c2), 'signoff_approved', c2, 'Deputy Director approved your case. You can finish here or escalate to the Director.', { stage: 'deputy' });
         const dirs = (typeof PROFILES !== 'undefined' ? PROFILES : []).filter((p) => p.active && p.role === 'director');
-        for (const d of dirs) await notifySignoff(d.id, 'signoff_heads_up', c, 'Deputy Director approved this case (no action required unless the detective escalates).', { stage: 'deputy' });
-        toast('Approved by Deputy (stop-point reached)', 'success'); refreshCaseDetail(c.id);
-      } else if (stage === 'director') {
-        await DB().update('cases', c.id, { signoff_status: 'ready_doj', signoff_stage: null, signoff_assignee_id: null });
-        await logSignoff(c.id, 'approved', 'director', 'ready_doj', note);
-        await notifySignoff(ownerNotifyTarget(c), 'signoff_approved', c, 'Director approved your case — Ready for DOJ.', { stage: 'director' });
-        toast('Approved by Director — Ready for DOJ', 'success'); refreshCaseDetail(c.id);
+        for (const d of dirs) await notifySignoff(d.id, 'signoff_heads_up', c2, 'Deputy Director approved this case (no action required unless the detective escalates).', { stage: 'deputy' });
+        toast('Approved by Deputy (stop-point reached)', 'success');
+      } else if (status === 'ready_doj') {
+        await notifySignoff(ownerNotifyTarget(c2), 'signoff_approved', c2, 'Director approved your case — Ready for DOJ.', { stage: 'director' });
+        toast('Approved by Director — Ready for DOJ', 'success');
+      } else if (status === 'approved_complete') {
+        await notifySignoff(ownerNotifyTarget(c2), 'signoff_approved', c2, SIGNOFF.label[prevStage] + ' approved — no higher reviewer available, case complete.', { stage: prevStage });
+        toast('Approved (complete)', 'success');
+      } else {
+        toast('Approved', 'success');
       }
+      refreshCaseDetail(c.id);
     }
     async function denySignoff(c, note) {
       const stage = c.signoff_stage;
-      await DB().update('cases', c.id, { signoff_status: 'denied', signoff_stage: null, signoff_assignee_id: null });
-      await logSignoff(c.id, 'denied', stage, 'denied', note);
-      await notifySignoff(ownerNotifyTarget(c), 'signoff_denied', c, note ? ('Denied by ' + SIGNOFF.label[stage] + ': ' + note) : ('Denied by ' + SIGNOFF.label[stage] + '.'), { stage });
+      const res = await DB().rpc('signoff_decide', { p_case: c.id, p_decision: 'deny', p_note: note || null });
+      if (res.error) { toast('Deny failed: ' + res.error.message, 'danger'); return; }
+      const c2 = res.data || c;
+      await notifySignoff(ownerNotifyTarget(c2), 'signoff_denied', c2, note ? ('Denied by ' + SIGNOFF.label[stage] + ': ' + note) : ('Denied by ' + SIGNOFF.label[stage] + '.'), { stage });
       toast('Case denied', 'warn'); refreshCaseDetail(c.id);
     }
     async function requestChangesSignoff(c, note) {
       const stage = c.signoff_stage;
-      await DB().update('cases', c.id, { signoff_status: 'changes_requested', signoff_stage: null, signoff_assignee_id: null });
-      await logSignoff(c.id, 'changes_requested', stage, 'changes_requested', note);
-      await notifySignoff(ownerNotifyTarget(c), 'signoff_changes', c, note ? ('Changes requested by ' + SIGNOFF.label[stage] + ': ' + note) : ('Changes requested by ' + SIGNOFF.label[stage] + '.'), { stage });
+      const res = await DB().rpc('signoff_decide', { p_case: c.id, p_decision: 'changes', p_note: note || null });
+      if (res.error) { toast('Request changes failed: ' + res.error.message, 'danger'); return; }
+      const c2 = res.data || c;
+      await notifySignoff(ownerNotifyTarget(c2), 'signoff_changes', c2, note ? ('Changes requested by ' + SIGNOFF.label[stage] + ': ' + note) : ('Changes requested by ' + SIGNOFF.label[stage] + '.'), { stage });
       toast('Changes requested', 'info'); refreshCaseDetail(c.id);
     }
-    /* ---- Feature 6: owner stop / escalate after Deputy approval ---- */
+    /* ---- Feature 6: owner stop / escalate after Deputy approval (RPC: signoff_owner_action) ---- */
     async function completeAtDeputy(c) {
-      await DB().update('cases', c.id, { signoff_status: 'approved_complete' });
-      await logSignoff(c.id, 'completed', 'deputy', 'approved_complete', null);
+      const res = await DB().rpc('signoff_owner_action', { p_case: c.id, p_action: 'complete' });
+      if (res.error) { toast('Action failed: ' + res.error.message, 'danger'); return; }
       toast('Marked Approved & Complete', 'success'); refreshCaseDetail(c.id);
     }
     async function escalateToDirector(c) {
-      const route = routeFrom(2, c.bureau);   // director only
-      if (!route.stage) { toast('No active Director available to escalate to.', 'warn'); return; }
-      await DB().update('cases', c.id, { signoff_status: 'awaiting_director', signoff_stage: 'director', signoff_assignee_id: route.assignee.id });
-      await logSignoff(c.id, 'escalated', 'director', 'awaiting_director', null);
-      await notifySignoff(route.assignee.id, 'signoff_waiting', c, 'Detective escalated this case to you after Deputy approval.', { stage: 'director' });
+      const res = await DB().rpc('signoff_owner_action', { p_case: c.id, p_action: 'escalate' });
+      if (res.error) { toast('Escalation failed: ' + res.error.message, 'danger'); return; }
+      const c2 = res.data || c;
+      if (c2.signoff_assignee_id) await notifySignoff(c2.signoff_assignee_id, 'signoff_waiting', c2, 'Detective escalated this case to you after Deputy approval.', { stage: 'director' });
       toast('Escalated to Director', 'success'); refreshCaseDetail(c.id);
     }
 

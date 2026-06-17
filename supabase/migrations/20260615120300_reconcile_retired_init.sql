@@ -1,0 +1,27 @@
+-- Reconcile note — retired init/storage/seed-catalog migrations.
+-- ----------------------------------------------------------------------------
+-- The original sahp-rbac project shipped three early migrations that were
+-- SUPERSEDED before the live `cid` (jhxuflzmqspidkvjckox) schema was built and
+-- were NEVER applied to production:
+--
+--   20260615120000_init_schema_rls.sql   (old officer_rank RBAC; replaced by
+--                                          the app_role model in platform.sql)
+--   20260615120100_storage.sql           (Supabase Storage buckets/policies)
+--   20260615120200_seed_catalogs.sql     (report_templates + rico_predicate_catalog)
+--
+-- They now live in supabase/migrations/archive/ (the CLI does not replay
+-- subdirectories), so `supabase db reset` reproduces production exactly.
+--
+-- Nothing from storage.sql or seed_catalogs.sql needed rebasing onto the live
+-- schema, verified against production + the client:
+--   * No storage buckets exist in production; media is stored as external
+--     (FiveManage) URLs in media.external_url / media.storage_path. The client
+--     never calls supabase.storage.* — so no buckets/policies are required.
+--   * report_templates and rico_predicate_catalog do NOT exist in production.
+--     The app ships these as client-side constants (REPORT_TEMPLATES and
+--     RICO_PREDICATES in persons.js). RICO predicate data lives in the live
+--     rico_cases + predicate_acts tables created by platform.sql.
+--
+-- This migration is intentionally a no-op: it only records the reconciliation
+-- in the lineage. The real base schema is 20260616090000_platform.sql.
+select 1;

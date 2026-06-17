@@ -1,67 +1,68 @@
-# Odyssey CID Portal — Supabase backend
+# CID Portal — Supabase backend
 
-Migration of the single-file CID Portal (kept at `/legacy`) into a multi-user
-Next.js + Supabase app. **Postgres-only** (no Google Drive); images live in
-Supabase Storage gated by the same RLS rules as the data.
+Backend for the **CID Portal** single-page app (vanilla JS, no build step — see the
+root `README.md`). **Postgres-only:** all data lives in Supabase Postgres behind
+Row-Level Security; media is stored as **external (FiveManage) URLs**, not in
+Supabase Storage.
 
-> Target project: **`sahp-rbac`** (`nuujdewnkovtdvlbfzdx`). Status: review pending —
-> migrations below are authored but **not yet applied** (awaiting explicit
-> authorization to resume the paused project and apply).
+> Live project: **`cid`** (`jhxuflzmqspidkvjckox`). The migrations in
+> `migrations/` are applied and reflect production.
 
 ## RBAC model
-Two axes enforced in the database via RLS:
+Two axes enforced in the database via RLS, off the caller's `profiles` row:
 
-- **Rank** — `director`, `deputy_director`, `lead_detective`, `detective`, `analyst`
-- **Bureau** — `LSB`, `BCB`, `SAB`, `JTF`
+- **Role** (`profiles.role`, enum `app_role`) — `detective`, `senior_detective`,
+  `bureau_lead`, `deputy_director`, `director`
+- **Bureau** (`profiles.division`, enum `bureau`) — `LSB`, `BCB`, `SAB`, `JTF`
 
 Key rules:
-- **Deny-by-default:** new Discord sign-ins land as `analyst` / `JTF` with
-  `active=false` → they see only their own profile and **no data** until a
-  command user assigns rank/bureau and sets `active=true`.
-- **Command = Director + Deputy + Bureau Lead.** Director/Deputy are global;
-  Lead Detective is command **within their own bureau** (and on global
-  gang/location resources). Command gates: ticket routing, tracker co-sign,
-  RICO export, gang/location create-edit-delete, JTF media promotion.
-- **Bureau-scoped data:** cases, case_reports, trackers, raid_compensations,
-  case-linked media. Detective sees own bureau (+ `view_all` override); JTF and
-  command see all.
-- **Global/shared data:** gangs, gang_ranks/members/turf, narcotics, locations,
-  ballistics — readable by any active member; create/edit/delete = command.
-- **Media JTF rule:** case-linked media defaults to the case's bureau; promoting
-  it to `JTF` (all-visible) requires command.
+- **Deny-by-default:** new sign-ins land inactive (`active=false`) and see only
+  their own profile until a command user activates them and sets role/bureau.
+- **Command = Bureau Lead + Deputy Director + Director.** Deputy/Director are
+  global; Bureau Lead is command **within their own bureau**. `director` is the
+  supreme role.
+- **Bureau-scoped data:** cases (and everything hanging off a case) are gated by
+  `private.can_access_case_row(...)`. A member sees/edits their own bureau; JTF
+  and command see across bureaus (`20260617180000_command_staff_cross_bureau.sql`).
+- **Write-side isolation:** `cases_ins` requires `private.can_create_case(bureau)`
+  — you may only open a case in your own bureau, JTF, or as command
+  (`20260617190000_cases_write_bureau_isolation.sql`).
+- **Server-authoritative workflows:** the case **sign-off chain** and **report
+  finalize** run through SECURITY DEFINER RPCs (see below); the client never
+  patches those columns directly, and a lockdown trigger enforces it.
 
 All `security definer` functions pin `set search_path = ''` and schema-qualify
-references.
+references. RBAC helper functions live in the `private` schema.
 
-## Migrations
-1. `…_init_schema_rls.sql` — enums, profiles, helpers, all tables, RLS, triggers.
-2. `…_storage.sql` — `evidence` / `mugshots` / `backups` buckets + path-encoded
-   bureau RLS (`{BUREAU}/{entity}/{uuid.ext}`).
-3. `…_seed_catalogs.sql` — report templates, RICO predicate catalog, narcotics
-   registry, demo gangs/benches, and `bootstrap_director()`.
+## Workflow RPCs (server-authoritative)
+| RPC | Purpose | Migration |
+|-----|---------|-----------|
+| `public.signoff_submit(p_case)` | Submit a case into the chain (LOA-aware routing). | `20260617190100_signoff_server_side_rpcs.sql` |
+| `public.signoff_decide(p_case, p_decision, p_note)` | Reviewer approve / deny / changes at the current stage. | same |
+| `public.signoff_owner_action(p_case, p_action)` | Owner `complete` or `escalate` at the Deputy stop-point. | same |
+| `public.report_finalize(p_report, p_badge)` | Finalize + e-sign a report; `signature.signer_id = auth.uid()`. | `20260617190200_report_finalize_rpc.sql` |
 
-## Apply order (once authorized + credentials wired via MCP/env)
-1. Resume the project (it is free-tier paused).
-2. Apply migrations 1 → 2 → 3.
-3. Configure the **Discord auth provider** (client id + secret via env/MCP, never
-   in chat). Redirect URL: `https://nuujdewnkovtdvlbfzdx.supabase.co/auth/v1/callback`.
-4. Sign in once with Discord, then run `select public.bootstrap_director('<your_discord_id>');`
-5. Use the in-app admin UI to assign a **second command user** (no single point of failure).
+History rows in `case_signoff_history` are written **inside** the RPCs, so the
+client no longer logs them.
 
-## Data migration from the legacy app
-Existing data lives in the old app's `localStorage` (browser-side), so it can't be
-read server-side. The Next.js app will ship a **command-only importer**: export
-JSON from the legacy app (key `cid-portal-v3`) → upload → upsert into the new
-tables (cases, gangs, drugs, benches, ballistic signatures, personnel,
-commendations, media, M.O. profiles, CIs, trackers).
+### Lockdown trigger (apply AFTER the RPC client is live)
+`20260617190300_workflow_write_lockdown.sql` adds `before update` triggers on
+`cases` and `reports` that reject direct changes to the sign-off / finalize
+columns by `authenticated`/`anon`. The RPCs (SECURITY DEFINER) pass through.
+**Ordering matters:** applying the lockdown before the new client is deployed
+breaks in-flight sign-offs that still use the direct-write path.
 
-## Backups (free-tier — no automatic backups)
-- Command-only **Export JSON** (full relational dump) + restore importer.
-- Optional weekly Vercel Cron snapshot → private `backups` bucket.
-- `supabase db dump` for full SQL backups.
+## Migration lineage
+`supabase db reset` replays `migrations/*.sql` in filename order; the real base
+schema is `20260616090000_platform.sql` (live `platform_schema_rls`). The three
+original `sahp-rbac` init/storage/seed-catalog migrations were superseded and
+were never applied to this project — they are parked in `migrations/archive/`
+(not replayed). See `migrations/archive/README.md` and
+`20260615120300_reconcile_retired_init.sql`.
 
-## RLS test matrix (before trusting policies)
-Seed one throwaway user per **rank × bureau (20 combos)** and assert **both**
-allow and **deny** paths — e.g. a Detective in BCB must get **empty** results for
-LSB cases (a policy that passes its own bureau but fails to block others looks
-identical to a correct one until the breach is checked).
+## Notes
+- **No Supabase Storage.** Media references are external URLs; there are no
+  buckets or storage policies.
+- **Report templates / RICO predicates** are client-side constants
+  (`REPORT_TEMPLATES` / `RICO_PREDICATES` in `persons.js`); the live RICO data
+  lives in `rico_cases` + `predicate_acts`.
