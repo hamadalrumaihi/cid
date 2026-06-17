@@ -188,6 +188,18 @@
           toast(dup ? `Case number ${cn} already exists — choose a unique number.` : 'Save failed: ' + res.error.message, 'danger');
           return;
         }
+        // New case → seed it with copies of the Forms templates, filed under its bureau folder.
+        if (!record) {
+          const newId = res.data && res.data[0] && res.data[0].id;
+          if (newId) {
+            try {
+              const tpls = await DB().list('documents', { eq: { folder: 'Forms' } });
+              const fname = (typeof BUREAU_FOLDER !== 'undefined' && BUREAU_FOLDER[payload.bureau]) || 'Archives';
+              for (const t of tpls) await DB().insert('documents', { folder: fname, name: t.name, kind: t.kind, content: t.content, case_id: newId, modified_label: new Date().toLocaleDateString('en-GB') });
+            } catch (e) {}
+            if (typeof fetchDocuments === 'function') fetchDocuments();
+          }
+        }
         closeModal(); toast(record ? 'Case updated' : 'Case created', 'success'); fetchCases();
         if (record && record.id) openCaseDetail(record.id);
       };

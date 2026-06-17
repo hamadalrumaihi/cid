@@ -24,17 +24,70 @@
       grid.innerHTML = '';
       FOLDER_META.forEach((f) => {
         const a = ACCENTS[f.accent] || ACCENTS.slate;
-        const files = docsInFolder(f.name);
+        const bureauF = isBureauFolder(f.name);
+        const count = bureauF ? (typeof casesCache !== 'undefined' ? casesCache : []).filter((c) => BUREAU_FOLDER[c.bureau] === f.name).length : docsInFolder(f.name).length;
+        const noun = bureauF ? 'case' : 'item';
         const stars = f.star ? `<span class="text-amber-400">${'★'.repeat(f.star)}</span> ` : '';
         const card = el('div', { class:`folder-card cursor-pointer rounded-2xl border border-white/5 bg-ink-900/60 p-4 ${a.ring}` }, `
           <div class="flex items-start justify-between"><svg class="h-9 w-9 ${a.tint}" viewBox="0 0 24 24" fill="currentColor" opacity="0.9"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><svg class="h-4 w-4 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></div>
           <p class="mt-3 truncate text-sm font-semibold text-white" title="${esc(f.name)}">${stars}${esc(f.name)}</p>
-          <p class="mt-1 text-[11px] text-slate-500">${files.length} item${files.length === 1 ? '' : 's'}</p>`);
+          <p class="mt-1 text-[11px] text-slate-500">${count} ${noun}${count === 1 ? '' : 's'}</p>`);
         card.addEventListener('click', () => openFolder(f));
         grid.appendChild(card);
       });
     }
+    const docsForCase = (id) => DOCS.filter((d) => d.case_id === id);
+    // Bureau folder → list that bureau's cases; each opens to its own files.
+    function openBureauFolder(meta) {
+      const a = ACCENTS[meta.accent] || ACCENTS.slate;
+      const node = el('div', { class:'p-6' });
+      const cases = (typeof casesCache !== 'undefined' ? casesCache : []).filter((c) => BUREAU_FOLDER[c.bureau] === meta.name).slice().sort((x, y) => (x.case_number || '').localeCompare(y.case_number || ''));
+      node.innerHTML = `
+        <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white">${esc(meta.name)}</h3><p class="text-xs text-slate-400">${cases.length} case${cases.length === 1 ? '' : 's'} · open a case to see its files</p></div></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="space-y-2">${cases.length ? cases.map((c) => `<div class="case-row flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:bg-white/5 hover:border-blue-500/30" data-id="${c.id}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">🗂️</span><span><span class="font-mono text-blue-300">${esc(c.case_number)}</span> <span class="text-slate-300">${esc(c.title || '')}</span></span></span><span class="text-[11px] text-slate-500">${docsForCase(c.id).length} file${docsForCase(c.id).length === 1 ? '' : 's'} ›</span></div>`).join('') : '<p class="text-sm text-slate-500">No cases in this bureau yet. Create one in Case Files.</p>'}</div>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelectorAll('.case-row').forEach((row) => row.addEventListener('click', () => { const c = casesCache.find((x) => x.id === row.dataset.id); if (c) openCaseFolder(c, meta); }));
+      openModal(node, { wide: true });
+    }
+    // A single case's file folder (documents linked by case_id).
+    function openCaseFolder(c, meta) {
+      const a = ACCENTS[meta.accent] || ACCENTS.slate;
+      const canEdit = DB() && DB().canEdit();
+      const files = docsForCase(c.id);
+      const sub = (d) => { const t = docDisplayType(d); return t === 'matrix' ? 'live matrix' : t === 'sheet' ? 'open sheet' : t === 'zip' ? 'open archive' : 'open document'; };
+      const node = el('div', { class:'p-6' });
+      node.innerHTML = `
+        <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><button id="case-back" class="text-slate-400 hover:text-white" title="Back to bureau">←</button><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white"><span class="font-mono text-blue-300">${esc(c.case_number)}</span> ${esc(c.title || '')}</h3><p class="text-xs text-slate-400">${esc(meta.name)} · ${files.length} file${files.length === 1 ? '' : 's'}</p></div></div><div class="flex items-center gap-2">${canEdit ? '<button id="cf-new-doc" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">+ New Document</button>' : ''}<button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
+        <div class="space-y-2" id="case-files-rows">${files.length ? files.map((d) => `<div class="file-row flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:bg-white/5 hover:border-blue-500/30" data-id="${d.id}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">${fileIcon(docDisplayType(d))}</span>${esc(d.name)}</span><span class="text-[11px] text-slate-500">${sub(d)}</span></div>`).join('') : '<p class="text-sm text-slate-500">No files for this case yet.</p>'}</div>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#case-back').onclick = () => openBureauFolder(meta);
+      node.querySelectorAll('.file-row').forEach((row) => row.addEventListener('click', () => { const d = DOCS.find((x) => x.id === row.dataset.id); if (d) openDocument(d, meta); }));
+      const nb = node.querySelector('#cf-new-doc'); if (nb) nb.onclick = () => openNewCaseDoc(c, meta);
+      openModal(node, { wide: true });
+    }
+    function openNewCaseDoc(c, meta) {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      const node = el('div', { class:'p-6' });
+      node.innerHTML = `
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">New Document — ${esc(c.case_number)}</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="space-y-3">
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">File name *</label><input id="ncd-name" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Surveillance Log.doc" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Type</label><select id="ncd-kind" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500"><option value="doc">Document</option><option value="sheet">Spreadsheet</option></select></div>
+        </div>
+        <button id="ncd-go" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Create</button>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#ncd-go').onclick = async () => {
+        const name = node.querySelector('#ncd-name').value.trim(); if (!name) { toast('A file name is required.', 'warn'); return; }
+        const kind = node.querySelector('#ncd-kind').value;
+        const content = kind === 'sheet' ? { cols: ['Date', 'Officer', 'Detail', 'Notes'], rows: [['', '', '', '']] } : { body: name.replace(/\.[a-z]+$/i, '') + '\n\n' };
+        const res = await DB().insert('documents', { folder: meta.name, name, kind, content, case_id: c.id, modified_label: new Date().toLocaleDateString('en-GB') });
+        if (res.error) { toast('Create failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast('Document added to case', 'success'); await fetchDocuments(); openCaseFolder(c, meta);
+      };
+      openModal(node);
+    }
     function openFolder(meta) {
+      if (isBureauFolder(meta.name)) return openBureauFolder(meta);
       const a = ACCENTS[meta.accent] || ACCENTS.slate;
       const node = el('div', { class:'p-6' });
       const canEdit = DB() && DB().canEdit();
