@@ -258,6 +258,8 @@
       records:    { title: 'CID Records', sub: 'Live shared records (Supabase)' },
       announce:   { title: 'Announcements', sub: 'Division-wide notices from command staff' },
       'case-files': { title: 'Case Files — Drive', sub: 'Google Drive files organised per case' },
+      heatmap:    { title: 'Commander Heatmap', sub: 'Gang turf, places, raids & case concentration by area' },
+      shifts:     { title: 'Weekly Shift Reports', sub: 'Detective activity rolled up to bureau leadership' },
     };
 
     function navigate(tab) {
@@ -285,6 +287,8 @@
       if (tab === 'drive' && typeof onEnterDrive === 'function') onEnterDrive();
       if (tab === 'announce' && typeof onEnterAnnounce === 'function') onEnterAnnounce();
       if (tab === 'case-files' && typeof onEnterCaseFiles === 'function') onEnterCaseFiles();
+      if (tab === 'heatmap' && typeof onEnterHeatmap === 'function') onEnterHeatmap();
+      if (tab === 'shifts' && typeof onEnterShifts === 'function') onEnterShifts();
     }
     $$('.nav-link, .bnav-link').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.tab)));
 

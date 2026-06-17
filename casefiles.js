@@ -352,6 +352,7 @@
       if (typeof fetchAnnouncements === 'function') fetchAnnouncements();
       if (typeof renderOfficerCard === 'function') renderOfficerCard();
       if (typeof cfGoogleConfigured === 'function' && cfGoogleConfigured() && typeof fetchCaseFiles === 'function') fetchCaseFiles();
+      if (typeof fetchShifts === 'function') fetchShifts();
       if (dbReady()) {
         DB().subscribe('cases', () => { fetchCases(); fetchKpis(); renderBureauLoad(); if (typeof detailCase !== 'undefined' && detailCase && !$('#case-detail').classList.contains('hidden')) { DB().list('cases', { eq: { id: detailCase.id } }).then((r) => { if (r[0]) { detailCase = r[0]; renderCaseDetailShell(); loadDetailTab(); } }).catch(() => {}); } });
         DB().subscribe('profiles', () => { fetchProfiles(); renderRoster(); if (typeof renderOfficerCard === 'function') renderOfficerCard(); });
@@ -375,6 +376,7 @@
         DB().subscribe('notifications', fetchNotifications);
         DB().subscribe('case_signoff_history', () => { if (typeof detailCase !== 'undefined' && detailCase && detailTab === 'signoff') loadDetailTab(); });
         if (typeof cfGoogleConfigured === 'function' && cfGoogleConfigured()) DB().subscribe('case_files', fetchCaseFiles);
+        if (typeof fetchShifts === 'function') DB().subscribe('shift_reports', fetchShifts);
         renderAdmin();
       }
     };

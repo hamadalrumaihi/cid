@@ -174,6 +174,7 @@
           </div>
         </div>
         <button id="md-go" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Add to Vault</button>`;
+      if (typeof fmInjectUploader === 'function') fmInjectUploader(node);
       node.querySelector('.close-x').onclick = closeModal;
       node.querySelector('#md-go').onclick = async () => {
         const title = node.querySelector('#md-title').value.trim();

@@ -1,5 +1,34 @@
 # CHANGELOG — CID Portal → Production Platform
 
+## Phase 11 — Gap-close patch: numbering, isolation, FiveManage, heatmap, shifts (2026-06-17)
+- **§1 Case numbering** — manual, unique, bureau-prefixed `BUREAU-NUMBER` (e.g.
+  `SAB-900023`). Auto-gen removed (`nextCaseNumber`). UI validates the pattern,
+  **enforces** the prefix matches the case's bureau, **warns** (not blocks) on the
+  leading-digit convention (LSB→1 BCB→2 SAB/JTF→9). DB unique index on
+  `cases.case_number`; duplicate → clear inline error. Ticket→case wizard now manual.
+- **§2 Bureau isolation (RLS)** — cases + casework children (evidence, custody,
+  reports, signoff, assignments, raid-comp, M.O., RICO, predicate acts, trackers,
+  case_files) are visible only to the case's bureau. **JTF is shared**; only
+  command/director cross-cut; owner/lead/grants still apply. **Chat-visibility rule
+  changed**: the old "same-department can read case chat" is superseded by full
+  bureau isolation (chat already keyed off `can_access_case`, so it tightened with
+  it). M.O. cross-bureau secrecy preserved via a `mo_crossref` SECURITY DEFINER RPC
+  (returns case number + shared tags only → "flagged elsewhere, request access").
+- **§3 FiveManage** — real upload module (`fivemanage.js`, `window.CID_FIVEMANAGE`)
+  wired into the Media vault: upload photo/video → FiveManage → store URL+metadata
+  in `media` (case/gang/location/person tags, view, delete by RBAC). Graceful guard
+  when unconfigured. **Google Drive stub left intact** (separate `case-files` tab).
+- **§4 Commander Heatmap** — new tab: case/turf/place/raid concentration by area,
+  driven by live data, bureau-scoped (uses RLS-filtered caches). Added `cases.area`.
+- **§5 Weekly shift reports** — `shift_reports` table (RLS rollup to bureau
+  leadership + command, realtime) + `shifts.js` tab (file weekly report; leads/
+  command see their scope).
+- **§6 Tailwind** — already precompiled into `styles.css` (no CDN, no warning,
+  offline). Added self-contained CSS for the new heatmap tiles + file uploader so
+  they don't depend on the precompiled scan; no change to the existing theme.
+- Migrations `20260617140000/140100/140200`; security advisor clean (only by-design
+  definer RPCs + N/A leaked-password).
+
 ## Phase 10 — Case Files → Google Drive integration built (2026-06-17)
 Implemented the previously-stubbed Drive feature (design in
 `docs/superpowers/specs/2026-06-15-case-files-drive-design.md`):
