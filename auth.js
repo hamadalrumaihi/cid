@@ -87,6 +87,16 @@
     window.CIDDB.me = profile || null;
     if (profile && profile.active) {
       showApp(profile, session);
+      // Capture the Discord user id (for DM notifications) from a Discord OAuth identity.
+      try {
+        var ids = (session.user && session.user.identities) || [];
+        var disc = ids.filter(function (i) { return i.provider === 'discord'; })[0];
+        var did = disc && ((disc.identity_data && (disc.identity_data.provider_id || disc.identity_data.sub)) || disc.id);
+        if (did && !profile.discord_id && window.CIDDB.from) {
+          window.CIDDB.from('profiles').update({ discord_id: String(did) }).eq('id', profile.id).then(function () {});
+          profile.discord_id = String(did); if (window.CIDDB.me) window.CIDDB.me.discord_id = String(did);
+        }
+      } catch (e) {}
       if (window.CIDApp && typeof window.CIDApp.onAuthed === 'function') window.CIDApp.onAuthed(profile, session);
     } else showPending(session);
   }
