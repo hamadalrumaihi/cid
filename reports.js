@@ -70,6 +70,21 @@
     function reloadCaseReports() {
       if (typeof detailCase !== 'undefined' && detailCase && typeof detailTab !== 'undefined' && detailTab === 'reports' && typeof loadDetailTab === 'function') loadDetailTab();
     }
+    // QoL: pre-fill the report header from the case + the signed-in detective's
+    // profile so they're not re-typing case number / name / rank / date each time.
+    function reportSeed(templateId, caseId, kind) {
+      if (templateId !== 'cid_investigative_report') return {};
+      const c = (typeof casesCache !== 'undefined') ? casesCache.find((x) => x.id === caseId) : null;
+      const me = DB() && DB().me;
+      const seed = { report_type: kind === 'supplemental' ? 'Supplemental' : kind === 'followup' ? 'Follow-up' : 'Initial', filed_at: todayISO() };
+      if (c) seed.case_number = c.case_number;
+      if (me) {
+        seed.det_name = me.display_name || '';
+        seed.det_rank = (typeof ROLE_LABEL !== 'undefined' && ROLE_LABEL[me.role]) || me.role || '';
+        seed.det_callsign = me.badge_number || '';
+      }
+      return seed;
+    }
     async function openReportModal(templateId, caseId, parentId, kind) {
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
       const tpl = tplById(templateId); if (!tpl || !tpl.schema) return;
@@ -80,7 +95,7 @@
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><div><p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">${esc(tpl.name)}</p><h3 class="text-xl font-bold text-white">${esc(heading)}</h3></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         ${parentId ? `<p class="mb-4 rounded-lg border border-white/10 bg-ink-900 p-2.5 text-xs text-slate-400">↳ Linked as ${kind} to a prior report on <span class="font-mono text-blue-300">${esc(caseNumById(caseId) || caseId)}</span>.</p>` : ''}
-        <div class="max-h-[60vh] overflow-y-auto pr-1" id="r-form">${renderFormBody(tpl.schema, {}, true)}</div>
+        <div class="max-h-[60vh] overflow-y-auto pr-1" id="r-form">${renderFormBody(tpl.schema, reportSeed(templateId, caseId, kind), true)}</div>
         <button id="r-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save Report to Case</button>`;
       node.querySelector('.close-x').onclick = closeModal;
       wireFormBody(node.querySelector('#r-form'), tpl.schema);
