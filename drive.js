@@ -38,6 +38,16 @@
       });
     }
     const docsForCase = (id) => DOCS.filter((d) => d.case_id === id);
+    // Step back from an open file to the folder that contains it (case folder for a
+    // case-linked doc, otherwise its shared folder) rather than exiting the Drive.
+    function backToFolder(doc, meta) {
+      return () => {
+        const c = doc.case_id && typeof casesCache !== 'undefined' ? casesCache.find((x) => x.id === doc.case_id) : null;
+        if (c) return openCaseFolder(c, meta);
+        if (meta) return openFolder(meta);
+        closeModal();
+      };
+    }
     // Bureau folder → list that bureau's cases; each opens to its own files.
     function openBureauFolder(meta) {
       const a = ACCENTS[meta.accent] || ACCENTS.slate;
@@ -48,7 +58,7 @@
         <div class="space-y-2">${cases.length ? cases.map((c) => `<div class="case-row flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:bg-white/5 hover:border-blue-500/30" data-id="${c.id}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">🗂️</span><span><span class="font-mono text-blue-300">${esc(c.case_number)}</span> <span class="text-slate-300">${esc(c.title || '')}</span></span></span><span class="text-[11px] text-slate-500">${docsForCase(c.id).length} file${docsForCase(c.id).length === 1 ? '' : 's'} ›</span></div>`).join('') : '<p class="text-sm text-slate-500">No cases in this bureau yet. Create one in Case Files.</p>'}</div>`;
       node.querySelector('.close-x').onclick = closeModal;
       node.querySelectorAll('.case-row').forEach((row) => row.addEventListener('click', () => { const c = casesCache.find((x) => x.id === row.dataset.id); if (c) openCaseFolder(c, meta); }));
-      openModal(node, { wide: true });
+      openModal(node, { wide: true, dismissible: false });
     }
     // A single case's file folder (documents linked by case_id).
     function openCaseFolder(c, meta) {
@@ -60,11 +70,12 @@
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><button id="case-back" class="text-slate-400 hover:text-white" title="Back to bureau">←</button><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white"><span class="font-mono text-blue-300">${esc(c.case_number)}</span> ${esc(c.title || '')}</h3><p class="text-xs text-slate-400">${esc(meta.name)} · ${files.length} file${files.length === 1 ? '' : 's'}</p></div></div><div class="flex items-center gap-2">${canEdit ? '<button id="cf-new-doc" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">+ New Document</button>' : ''}<button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
         <div class="space-y-2" id="case-files-rows">${files.length ? files.map((d) => `<div class="file-row flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:bg-white/5 hover:border-blue-500/30" data-id="${d.id}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">${fileIcon(docDisplayType(d))}</span>${esc(d.name)}</span><span class="text-[11px] text-slate-500">${sub(d)}</span></div>`).join('') : '<p class="text-sm text-slate-500">No files for this case yet.</p>'}</div>`;
-      node.querySelector('.close-x').onclick = closeModal;
-      node.querySelector('#case-back').onclick = () => openBureauFolder(meta);
+      const back = () => openBureauFolder(meta);
+      node.querySelector('.close-x').onclick = back;
+      node.querySelector('#case-back').onclick = back;
       node.querySelectorAll('.file-row').forEach((row) => row.addEventListener('click', () => { const d = DOCS.find((x) => x.id === row.dataset.id); if (d) openDocument(d, meta); }));
       const nb = node.querySelector('#cf-new-doc'); if (nb) nb.onclick = () => openNewCaseDoc(c, meta);
-      openModal(node, { wide: true });
+      openModal(node, { wide: true, dismissible: false, onClose: back });
     }
     function openNewCaseDoc(c, meta) {
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
@@ -76,7 +87,8 @@
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Type</label><select id="ncd-kind" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500"><option value="doc">Document</option><option value="sheet">Spreadsheet</option></select></div>
         </div>
         <button id="ncd-go" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Create</button>`;
-      node.querySelector('.close-x').onclick = closeModal;
+      const back = () => openCaseFolder(c, meta);
+      node.querySelector('.close-x').onclick = back;
       node.querySelector('#ncd-go').onclick = async () => {
         const name = node.querySelector('#ncd-name').value.trim(); if (!name) { toast('A file name is required.', 'warn'); return; }
         const kind = node.querySelector('#ncd-kind').value;
@@ -85,7 +97,7 @@
         if (res.error) { toast('Create failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast('Document added to case', 'success'); await fetchDocuments(); openCaseFolder(c, meta);
       };
-      openModal(node);
+      openModal(node, { dismissible: false, onClose: back });
     }
     function openFolder(meta) {
       if (isBureauFolder(meta.name)) return openBureauFolder(meta);
@@ -106,7 +118,7 @@
         coerce: (o) => { o.folder = meta.name; if (!o.kind) o.kind = /\.sheet$/i.test(o.name) ? 'sheet' : /\.pdf$/i.test(o.name) ? 'pdf' : 'doc'; o.content = o.kind === 'sheet' ? { cols: ['Col 1', 'Col 2'], rows: [['', '']] } : { body: o.body || '' }; delete o.body; return o; },
         after: () => { fetchDocuments(); openFolder(meta); },
       });
-      openModal(node, { wide: true });
+      openModal(node, { wide: true, dismissible: false });
     }
     function openNewDocModal(meta) {
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
@@ -118,7 +130,8 @@
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Type</label><select id="nd-kind" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500"><option value="doc">Document</option><option value="sheet">Spreadsheet</option><option value="pdf">Reference (read-only)</option></select></div>
         </div>
         <button id="nd-go" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Create</button>`;
-      node.querySelector('.close-x').onclick = closeModal;
+      const back = () => openFolder(meta);
+      node.querySelector('.close-x').onclick = back;
       node.querySelector('#nd-go').onclick = async () => {
         const name = node.querySelector('#nd-name').value.trim();
         if (!name) { toast('A file name is required.', 'warn'); return; }
@@ -128,7 +141,7 @@
         if (res.error) { toast('Create failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast('Document created', 'success'); await fetchDocuments(); openFolder(meta);
       };
-      openModal(node);
+      openModal(node, { dismissible: false, onClose: back });
     }
 
     /* ============================================================ LIVE CID PAPERWORK ============================================================
@@ -258,7 +271,8 @@
           ${canDel ? `<button id="d-del" class="ml-auto rounded-lg px-3 py-2 text-xs font-medium text-slate-400 transition hover:text-rose-300">Delete</button>` : ''}
         </div>`;
       const body = node.querySelector('#form-body');
-      node.querySelector('.close-x').onclick = closeModal;
+      const back = backToFolder(doc, meta);
+      node.querySelector('.close-x').onclick = back;
       node.querySelector('#d-print').onclick = () => window.print();
       wireFormBody(body, schema);
       const saveBtn = node.querySelector('#d-save');
@@ -281,7 +295,7 @@
         exportDocText(schema.title, formToText(schema, vals), safeName(doc.name) + '.docx');
         toast('Exported .docx', 'success');
       };
-      openModal(node, { wide: true });
+      openModal(node, { wide: true, dismissible: false, onClose: back });
     }
 
     // Open a single documents-table file as live, editable paperwork.
@@ -338,7 +352,8 @@
           ${kind==='doc'||kind==='pdf'||kind==='matrix' ? `<button id="d-docx" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">Export .docx</button>` : ''}
           ${canDel && !isMatrix ? `<button id="d-del" class="ml-auto rounded-lg px-3 py-2 text-xs font-medium text-slate-400 transition hover:text-rose-300">Delete</button>` : ''}
         </div>`;
-      node.querySelector('.close-x').onclick = closeModal;
+      const back = backToFolder(doc, meta);
+      node.querySelector('.close-x').onclick = back;
       node.querySelector('#d-print') && (node.querySelector('#d-print').onclick = () => window.print());
 
       // Sheet helpers
@@ -382,7 +397,7 @@
       const csvBtn = node.querySelector('#d-csv');
       if (csvBtn) csvBtn.onclick = () => { const s = readSheet(); downloadCsv(safeName(doc.name) + '.csv', s.cols, s.rows); toast('Exported .csv', 'success'); };
 
-      openModal(node, { wide: true });
+      openModal(node, { wide: true, dismissible: false, onClose: back });
     }
     function exportDocxParas(title, paras, filename) { downloadDocx(title, paras, filename); }
 
