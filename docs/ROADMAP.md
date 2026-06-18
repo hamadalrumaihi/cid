@@ -12,11 +12,11 @@
 - Preserve the dark theme and all working logic. Respect server-authoritative sign-off triggers + bureau-isolation RLS.
 - Build order: Wave 0 → Cases → Intel → Command → Reports.
 
-## WAVE 0 — Security & foundation ✅ (Phase / Wave 0 commits)
-- Pin supabase-js to an exact latest-stable 2.x (replace floating `@2`).
-- xlsx: self-host the CURRENT patched SheetJS from cdn.sheetjs.com (remove npm 0.18.5 CDN; do NOT vendor 0.18.5). Keep full import/export. jsPDF + fonts stay on CDN.
-- Run Supabase security + performance advisors; fix mechanical issues, escalate design-level ones.
-- Reconcile Live Records: lock `cid_records` behind auth (active-member RLS, replacing anon SELECT) AND route `records.js` through the MAIN Supabase client — same migration + commit (no read-gap window). Existing rows preserved.
+## WAVE 0 — Security & foundation ⚠️ PARTIAL
+- ❌ **OUTSTANDING:** Pin supabase-js to an exact latest-stable 2.x (still floating `@2` in index.html:558).
+- ❌ **OUTSTANDING:** xlsx — self-host the CURRENT patched SheetJS from cdn.sheetjs.com (still on vulnerable npm `0.18.5` CDN at index.html:562; do NOT vendor 0.18.5). Keep full import/export. jsPDF + fonts stay on CDN.
+- ⏳ Run Supabase security + performance advisors; fix mechanical issues, escalate design-level ones. _(not yet re-run this pass)_
+- ✅ Reconcile Live Records: `cid_records` locked behind auth + `records.js` routed through the MAIN client — `25680d7`.
 
 ## WAVE 1 — Cases & sign-off ✅
 - **Sign-off inbox**: Oversight sub-tab + count badge on Command. Cases awaiting my decision (reviewer), cases I submitted in-flight, cases bounced back to me (changes_requested/denied). Overdue pinned to top with age. — `1d55606`
