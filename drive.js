@@ -216,6 +216,23 @@
       });
       return lines.join('\n');
     }
+    // Attach grid add/remove-row delegation to a rendered form body (shared by the
+    // Drive form viewer and the in-case Reports authoring flow).
+    function wireFormBody(body, schema) {
+      if (!body) return;
+      body.addEventListener('click', (e) => {
+        const add = e.target.closest('[data-grid-add]');
+        if (add) {
+          const sid = add.dataset.gridAdd; const sec = schema.sections.find((s) => s.id === sid);
+          const tb = body.querySelector(`[data-grid="${sid}"] tbody`);
+          const cellHtml = sec.cols.map((col) => `<td class="border-b border-r border-white/5 p-1.5 align-top">${formCellInput({ key: col.key, type: col.type, opts: col.opts }, '', true)}</td>`).join('');
+          tb.insertAdjacentHTML('beforeend', `<tr>${cellHtml}<td class="border-b border-white/5 p-1.5 text-center align-middle"><button class="grid-del text-slate-500 hover:text-rose-300" title="Remove row">✕</button></td></tr>`);
+          return;
+        }
+        const del = e.target.closest('.grid-del');
+        if (del) { const tr = del.closest('tr'); const tb = tr.parentElement; if (tb.children.length > 1) tr.remove(); else $$('[data-fkey]', tr).forEach((i) => { i.value = ''; }); }
+      });
+    }
     function openFormDocument(doc, meta, schemaId) {
       const schema = FORM_SCHEMAS[schemaId];
       const c = doc.content || {};
@@ -243,19 +260,7 @@
       const body = node.querySelector('#form-body');
       node.querySelector('.close-x').onclick = closeModal;
       node.querySelector('#d-print').onclick = () => window.print();
-      // Grid add / remove (event delegation on the form body).
-      body.addEventListener('click', (e) => {
-        const add = e.target.closest('[data-grid-add]');
-        if (add) {
-          const sid = add.dataset.gridAdd; const sec = schema.sections.find((s) => s.id === sid);
-          const tb = body.querySelector(`[data-grid="${sid}"] tbody`);
-          const cellHtml = sec.cols.map((col) => `<td class="border-b border-r border-white/5 p-1.5 align-top">${formCellInput({ key: col.key, type: col.type, opts: col.opts }, '', true)}</td>`).join('');
-          tb.insertAdjacentHTML('beforeend', `<tr>${cellHtml}<td class="border-b border-white/5 p-1.5 text-center align-middle"><button class="grid-del text-slate-500 hover:text-rose-300" title="Remove row">✕</button></td></tr>`);
-          return;
-        }
-        const del = e.target.closest('.grid-del');
-        if (del) { const tr = del.closest('tr'); const tb = tr.parentElement; if (tb.children.length > 1) tr.remove(); else $$('[data-fkey]', tr).forEach((i) => { i.value = ''; }); }
-      });
+      wireFormBody(body, schema);
       const saveBtn = node.querySelector('#d-save');
       if (saveBtn) saveBtn.onclick = async () => {
         const content = { view: 'form', form: schemaId, values: readForm(node, schema) };
