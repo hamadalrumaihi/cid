@@ -217,12 +217,17 @@
       const box = node.querySelector('#search-results');
       const html = [
         sec('Cases', cases, (c) => `<button class="sr sr-case block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-id="${c.id}"><span class="font-mono text-blue-300">${esc(c.case_number)}</span> · ${esc(c.title || '')}</button>`),
-        sec('Persons', persons, (p) => `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm text-slate-200">${esc(p.name)}${p.alias ? ' “' + esc(p.alias) + '”' : ''}</div>`),
-        sec('Gangs', gangs, (g) => `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm text-slate-200">🚩 ${esc(g.name)}</div>`),
-        sec('Places', places, (p) => `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm text-slate-200">📍 ${esc(p.name)} <span class="text-slate-500">${esc(p.area || '')}</span></div>`),
+        sec('Persons', persons, (p) => `<button class="sr sr-goto block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-tab="persons" data-term="${esc(p.name || '')}">${esc(p.name)}${p.alias ? ' “' + esc(p.alias) + '”' : ''}</button>`),
+        sec('Gangs', gangs, (g) => `<button class="sr sr-goto block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-tab="gangs" data-term="${esc(g.name || '')}">🚩 ${esc(g.name)}</button>`),
+        sec('Places', places, (p) => `<button class="sr sr-goto block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-tab="places" data-term="${esc(p.name || '')}">📍 ${esc(p.name)} <span class="text-slate-500">${esc(p.area || '')}</span></button>`),
       ].join('');
       box.innerHTML = html || '<p class="text-sm text-slate-500">No matches across cases, persons, gangs or places.</p>';
       box.querySelectorAll('.sr-case').forEach((b) => b.onclick = () => { closeModal(); navigate('cases'); setTimeout(() => openCaseDetail(b.dataset.id), 120); });
+      box.querySelectorAll('.sr-goto').forEach((b) => b.onclick = () => {
+        closeModal(); navigate(b.dataset.tab);
+        const sel = { persons: '#person-search', gangs: '#gang-search' }[b.dataset.tab];
+        if (sel && b.dataset.term) setTimeout(() => { const inp = $(sel); if (inp) { inp.value = b.dataset.term; inp.dispatchEvent(new Event('input', { bubbles: true })); } }, 140);
+      });
     }
 
     /* ============================================================ 13. CLOCK + BOOT ============================================================ */
@@ -275,14 +280,28 @@
       $('#notif-bell').addEventListener('click', openNotifications);
       tickClock(); setInterval(tickClock, 1000); setInterval(tickTrackers, 1000);
 
-      const hash = (location.hash || '').replace('#','');
-      navigate(PAGE_META[hash] ? hash : Store.get('tab', 'command'));
+      // Deep-link support: #case=<id> opens that case directly; otherwise route to the tab.
+      function openFromHash() {
+        const raw = (location.hash || '').replace('#', '');
+        const m = /^case=(.+)$/.exec(raw);
+        if (m) { if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(decodeURIComponent(m[1])); return true; }
+        return false;
+      }
+      if (!openFromHash()) { const hash = (location.hash || '').replace('#', ''); navigate(PAGE_META[hash] ? hash : Store.get('tab', 'command')); }
+      window.addEventListener('hashchange', openFromHash);
 
       $('#global-search').addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
         const q = e.target.value.trim();
         if (q.length >= 2 && dbReady()) { supaSearch(q); return; }
         toast('Type at least 2 characters (and sign in) to search.', 'info');
+      });
+      // QoL: press "/" anywhere (outside a field) to jump to global search.
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+        const t = e.target, tag = t && t.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+        const box = $('#global-search'); if (box) { e.preventDefault(); box.focus(); box.select(); }
       });
     }
     document.addEventListener('DOMContentLoaded', init);

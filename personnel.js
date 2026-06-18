@@ -91,7 +91,7 @@
     }
     function mediaTagChips(m) {
       const t = m.tags || {}; const out = [];
-      const caseNo = caseNumById(m.case_id); if (caseNo) out.push(`<span class="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-mono text-blue-300">${esc(caseNo)}</span>`);
+      const caseNo = caseNumById(m.case_id); if (caseNo) out.push(`<button class="media-case-link rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-mono text-blue-300 transition hover:bg-blue-500/20 hover:text-white" data-case="${esc(m.case_id)}" title="Open ${esc(caseNo)}">${esc(caseNo)}</button>`);
       const gn = gangNameById(m.gang_id); if (gn) out.push(`<span class="rounded bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-300">🚩 ${esc(gn)}</span>`);
       if (t.location) out.push(`<span class="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-300">📍 ${esc(t.location)}</span>`);
       if (t.person) out.push(`<span class="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-300">👤 ${esc(t.person)}</span>`);
@@ -129,6 +129,7 @@
           <div class="mt-2 flex flex-wrap gap-1">${mediaTagChips(m)}</div>
           ${canEdit ? '<div class="mt-3 relative">' + dropupBtn() + '</div>' : ''}</div>`;
         const img = card.querySelector('.ev-img'); if (img) img.addEventListener('click', () => openLightbox(m));
+        const cl = card.querySelector('.media-case-link'); if (cl) cl.addEventListener('click', (e) => { e.stopPropagation(); if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(cl.dataset.case); });
         const dd = card.querySelector('.dropup'); if (dd) wireDropup(dd, m);
         g.appendChild(card);
       });

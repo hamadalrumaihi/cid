@@ -146,6 +146,8 @@
             <p id="encourage-text" class="flex-1 text-sm italic text-slate-300"></p>
             <button id="encourage-dismiss" class="flex-shrink-0 rounded-md px-2 py-1 text-xs text-slate-500 transition hover:text-white" aria-label="Dismiss">✕</button>
           </div>
+          <!-- QoL: recently opened + pinned cases — one click back into active work -->
+          <div id="jump-back" class="mb-4 hidden"></div>
           <!-- Command filters (#17): scope KPIs & caseload by bureau/detective/status/date -->
           <div id="cmd-filterbar" class="mb-4 hidden flex-wrap items-end gap-3 rounded-2xl border border-white/5 bg-ink-900/60 p-4">
             <div><label class="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Bureau</label><select id="cmd-f-bureau" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option value="">All bureaus</option><option value="LSB">LSB</option><option value="BCB">BCB</option><option value="SAB">SAB</option><option value="JTF">JTF</option></select></div>
@@ -235,6 +237,10 @@
               <div class="relative min-w-[12rem] flex-1">
                 <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
                 <input id="case-search" type="text" placeholder="Filter cases…" class="w-full rounded-lg border border-white/10 bg-ink-850 py-2 pl-9 pr-3 text-sm text-slate-200 outline-none transition focus:border-badge-500 focus:ring-2 focus:ring-badge-500/30" />
+              </div>
+              <div id="case-scope" class="flex flex-shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-ink-850 p-1">
+                <button data-scope="mine" class="cs-chip rounded-md px-3 py-1.5 text-xs font-semibold transition">My Cases</button>
+                <button data-scope="all" class="cs-chip rounded-md px-3 py-1.5 text-xs font-semibold transition">All</button>
               </div>
               <button id="case-refresh" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">↻ Refresh</button>
             </div>

@@ -180,6 +180,7 @@
     }
     function onEnterCommand() {
       wireCommandFilters();
+      if (typeof renderJumpBack === 'function') renderJumpBack();
       if (dbReady()) {
         fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); renderBureauLoad();
         // KPIs read PROFILES (activity/detective filter) and PERSONS (persons-of-interest count),
