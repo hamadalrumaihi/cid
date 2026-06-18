@@ -459,20 +459,23 @@
     function wireCollapse() { applyCollapse(Store.get('collapsed', false)); $('#collapse-toggle').addEventListener('click', () => applyCollapse(!document.body.classList.contains('nav-collapsed'))); }
 
     /* ============================================================ 4. MODAL ENGINE (focus-trapped) ============================================================ */
-    let lastFocused = null;
-    function openModal(node, { wide = false } = {}) {
-      closeModal(); lastFocused = document.activeElement;
+    let lastFocused = null, modalOnClose = null;
+    // dismissible:false → a tap on the backdrop no longer closes the modal (use the
+    // × button). onClose → handler the × / Escape route through (e.g. step back to the
+    // parent page instead of exiting); defaults to a full close.
+    function openModal(node, { wide = false, dismissible = true, onClose = null } = {}) {
+      closeModal(); lastFocused = document.activeElement; modalOnClose = onClose;
       const backdrop = el('div', { class: 'modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-ink-950/80 p-4 backdrop-blur-sm' });
       const card = el('div', { class: `modal-card relative w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-ink-850 shadow-glow`, role:'dialog', 'aria-modal':'true', tabindex:'-1' });
       card.appendChild(node); backdrop.appendChild(card);
-      backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeModal(); });
+      if (dismissible) backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeModal(); });
       $('#modal-root').appendChild(backdrop); document.body.classList.add('overflow-hidden');
       document.addEventListener('keydown', modalKey);
       (focusable(card)[0] || card).focus();
     }
     function focusable(c) { return $$('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])', c).filter((n) => n.offsetParent !== null); }
     function modalKey(e) {
-      if (e.key === 'Escape') return closeModal();
+      if (e.key === 'Escape') { e.preventDefault(); return modalOnClose ? modalOnClose() : closeModal(); }
       if (e.key !== 'Tab') return;
       const card = $('.modal-card'); if (!card) return; const f = focusable(card); if (!f.length) return;
       const first = f[0], last = f[f.length - 1];
@@ -480,6 +483,7 @@
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
     function closeModal() {
+      modalOnClose = null;
       $('#modal-root').innerHTML = ''; document.removeEventListener('keydown', modalKey);
       if ($('#sidebar').classList.contains('-translate-x-full') || isDesktop()) document.body.classList.remove('overflow-hidden');
       if (lastFocused && document.contains(lastFocused)) lastFocused.focus(); lastFocused = null;
