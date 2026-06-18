@@ -284,6 +284,8 @@
       initRecords();
       // Case Files (Supabase spine) — fetch happens via onAuthed / onEnterCases
       initCases();
+      // Sign-off Inbox (Oversight) — badge + per-user case buckets
+      initInbox();
       // Chrome
       $('#notif-bell').addEventListener('click', openNotifications);
       tickClock(); setInterval(tickClock, 1000); setInterval(tickTrackers, 1000);

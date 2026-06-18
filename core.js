@@ -407,6 +407,7 @@
       announce:   { title: 'Announcements', sub: 'Division-wide notices from command staff' },
       'case-files': { title: 'Case Files — Attachments', sub: 'Files uploaded per case (FiveManage + Supabase)' },
       heatmap:    { title: 'Commander Heatmap', sub: 'Gang turf, places, raids & case concentration by area' },
+      inbox:      { title: 'Sign-off Inbox', sub: 'Cases awaiting your decision, your submissions & changes requested' },
       shifts:     { title: 'Weekly Shift Reports', sub: 'Detective activity rolled up to bureau leadership' },
       audit:      { title: 'Audit Log', sub: 'Division-wide action history (Bureau Lead and above)' },
     };
@@ -419,13 +420,13 @@
       { id: 'cases',     label: 'Cases',        tabs: ['cases', 'case-files', 'rico'] },
       { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'gangs', 'places', 'narcotics', 'ballistics', 'modus', 'media'] },
       { id: 'drive',     label: 'Drive',        tabs: ['drive', 'records'] },
-      { id: 'oversight', label: 'Oversight',    tabs: ['shifts', 'audit'] },
+      { id: 'oversight', label: 'Oversight',    tabs: ['inbox', 'shifts', 'audit'] },
     ];
     const TAB_LABEL = {
       command: 'Dashboard', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
       cases: 'Case Files', 'case-files': 'Attachments', rico: 'RICO',
       persons: 'Persons', gangs: 'Gangs', places: 'Places', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector', media: 'Media Vault',
-      drive: 'CID General', records: 'Records', shifts: 'Shift Reports', audit: 'Audit Log',
+      drive: 'CID General', records: 'Records', inbox: 'Sign-off Inbox', shifts: 'Shift Reports', audit: 'Audit Log',
     };
     const TAB_CATEGORY = {}; NAV_CATEGORIES.forEach((c) => c.tabs.forEach((t) => { TAB_CATEGORY[t] = c.id; }));
     const CAT_DEFAULT = {}; NAV_CATEGORIES.forEach((c) => { CAT_DEFAULT[c.id] = c.tabs[0]; });
@@ -469,6 +470,7 @@
       if (tab === 'announce' && typeof onEnterAnnounce === 'function') onEnterAnnounce();
       if (tab === 'case-files' && typeof onEnterCaseFiles === 'function') onEnterCaseFiles();
       if (tab === 'heatmap' && typeof onEnterHeatmap === 'function') onEnterHeatmap();
+      if (tab === 'inbox' && typeof onEnterInbox === 'function') onEnterInbox();
       if (tab === 'shifts' && typeof onEnterShifts === 'function') onEnterShifts();
       if (tab === 'audit' && typeof onEnterAudit === 'function') onEnterAudit();
     }

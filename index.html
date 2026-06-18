@@ -68,7 +68,8 @@
         <button data-cat="command" data-label="Command" aria-current="page" class="nav-cat nav-link active group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
           <span class="nav-icon flex-shrink-0 text-lg">📊</span><span class="nav-label">Command
             <span id="pending-nav-badge" class="ml-1 hidden rounded-full bg-amber-500 px-1.5 text-[9px] font-bold text-white" title="Members awaiting approval"></span>
-            <span id="ann-nav-badge" class="ml-1 hidden rounded-full bg-rose-500 px-1.5 text-[9px] font-bold text-white" title="Unread announcements"></span></span>
+            <span id="ann-nav-badge" class="ml-1 hidden rounded-full bg-rose-500 px-1.5 text-[9px] font-bold text-white" title="Unread announcements"></span>
+            <span id="signoff-nav-badge" class="ml-1 hidden rounded-full bg-badge-500 px-1.5 text-[9px] font-bold text-white" title="Sign-off actions awaiting you"></span></span>
         </button>
         <button data-cat="cases" data-label="Cases" class="nav-cat nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
           <span class="nav-icon flex-shrink-0 text-lg">🗂️</span><span class="nav-label">Cases <span class="ml-1 rounded bg-emerald-500/15 px-1 text-[9px] font-semibold uppercase text-emerald-300">live</span></span>
@@ -507,6 +508,15 @@
           <p id="hm-legend" class="mt-4 text-[11px] text-slate-500"></p>
         </section>
 
+        <section id="view-inbox" class="view">
+          <div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+            <div><h3 class="text-xl font-bold text-white">✅ Sign-off Inbox</h3><p class="text-sm text-slate-400">Cases awaiting your decision, your in-flight submissions, and anything sent back to you.</p></div>
+            <button id="inbox-refresh" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10">↻ Refresh</button>
+          </div>
+          <div id="inbox-notice" class="mb-4 hidden rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"></div>
+          <div id="inbox-body" class="space-y-6"></div>
+        </section>
+
         <section id="view-shifts" class="view">
           <div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
             <div><h3 class="text-xl font-bold text-white">🗓️ Weekly Shift Reports</h3><p class="text-sm text-slate-400">Log your weekly activity (cases worked, arrests, evidence). Rolls up to your Bureau Lead &amp; Command.</p></div>
@@ -530,7 +540,7 @@
 
   <!-- ============== MOBILE BOTTOM TAB BAR ============== -->
   <nav id="bottom-nav" class="fixed inset-x-0 bottom-0 z-30 flex items-stretch overflow-x-auto border-t border-white/10 bg-ink-950/90 backdrop-blur-xl lg:hidden" aria-label="Primary navigation (mobile)">
-    <button data-cat="command" class="bnav-link relative flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">📊</span><span class="text-[10px] font-medium">Command</span><span id="pending-bnav-badge" class="absolute right-3 top-1 hidden min-w-[16px] rounded-full bg-amber-500 px-1 text-center text-[9px] font-bold text-white"></span></button>
+    <button data-cat="command" class="bnav-link relative flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">📊</span><span class="text-[10px] font-medium">Command</span><span id="pending-bnav-badge" class="absolute right-3 top-1 hidden min-w-[16px] rounded-full bg-amber-500 px-1 text-center text-[9px] font-bold text-white"></span><span id="signoff-bnav-badge" class="absolute left-3 top-1 hidden min-w-[16px] rounded-full bg-badge-500 px-1 text-center text-[9px] font-bold text-white" title="Sign-off actions awaiting you"></span></button>
     <button data-cat="cases" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🗂️</span><span class="text-[10px] font-medium">Cases</span></button>
     <button data-cat="intel" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">🧠</span><span class="text-[10px] font-medium">Intel</span></button>
     <button data-cat="drive" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="text-lg leading-none">📁</span><span class="text-[10px] font-medium">Drive</span></button>
@@ -589,6 +599,7 @@
   <script src="docx.js"></script>
   <script src="records.js"></script>
   <script src="signoff.js"></script>
+  <script src="inbox.js"></script>
   <script src="collab.js"></script>
   <script src="heatmap.js"></script>
   <script src="shifts.js"></script>
