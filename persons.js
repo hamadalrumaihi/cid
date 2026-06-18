@@ -23,27 +23,20 @@
 
     // RICO is now Supabase-backed (rico_cases + predicate_acts); fetched per-case on demand.
 
-    const REPORT_TEMPLATES = [
-      { id:'incident', name:'Initial Incident Report', icon:'📄', sections:[
-        {key:'caseId',label:'Case Number',type:'auto'}, {key:'bureau',label:'Bureau',type:'auto'}, {key:'detective',label:'Reporting Detective',type:'auto'},
-        {key:'datetime',label:'Date of Incident',type:'date'}, {key:'location',label:'Location',type:'text'},
-        {key:'classification',label:'Offense Classification',type:'select',opts:['Trafficking','Weapons','Narcotics Manufacture','Homicide','Robbery','Other']},
-        {key:'narrative',label:'Incident Narrative',type:'textarea'} ] },
-      { id:'arrest', name:'Arrest / Booking Report', icon:'🔗', sections:[
-        {key:'caseId',label:'Case Number',type:'auto'}, {key:'detective',label:'Arresting Detective',type:'auto'},
-        {key:'suspect',label:'Suspect Name',type:'text'}, {key:'charges',label:'Charges',type:'textarea'},
-        {key:'miranda',label:'Miranda Advised',type:'select',opts:['Yes','No','Waived']}, {key:'datetime',label:'Date of Arrest',type:'date'} ] },
-      { id:'warrant', name:'Search Warrant Affidavit', icon:'📜', sections:[
-        {key:'caseId',label:'Case Number',type:'auto'}, {key:'affiant',label:'Affiant',type:'auto'},
-        {key:'premises',label:'Premises to be Searched',type:'text'}, {key:'probable',label:'Statement of Probable Cause',type:'textarea'},
-        {key:'items',label:'Items Sought',type:'textarea'} ] },
-      { id:'surveillance', name:'Surveillance Log', icon:'🛰️', sections:[
-        {key:'caseId',label:'Case Number',type:'auto'}, {key:'detective',label:'Observing Detective',type:'auto'},
-        {key:'target',label:'Target / Subject',type:'text'}, {key:'datetime',label:'Date',type:'date'}, {key:'observations',label:'Observations',type:'textarea'} ] },
-      { id:'rico_summary', name:'RICO Predicate Summary', icon:'⚖️', sections:[
-        {key:'caseId',label:'Case Number',type:'auto'}, {key:'enterprise',label:'Enterprise',type:'text'},
-        {key:'pattern',label:'Pattern Summary',type:'textarea'} ] },
-    ];
+    // Official CID report templates — the single source of truth is FORM_SCHEMAS
+    // (core.js). The three fillable CID forms ARE the canonical report templates:
+    // CID Investigative Report (default initial), Raid Seizure Allocation, and
+    // UC Operation Activity Report. Each carries its FORM_SCHEMAS `schema` so the
+    // report authoring/preview/export reuse the shared form renderer (drive.js).
+    const REPORT_TEMPLATES = (typeof FORM_SCHEMAS !== 'undefined' ? [
+      { id:'cid_investigative_report', icon:'📄', default:true },
+      { id:'raid_seizure',             icon:'💰' },
+      { id:'uc_operation',             icon:'🕶️' },
+    ].filter((t) => FORM_SCHEMAS[t.id]).map((t) => ({
+      id: t.id, icon: t.icon, default: !!t.default,
+      name: FORM_SCHEMAS[t.id].title, schema: FORM_SCHEMAS[t.id],
+    })) : []);
+    const DEFAULT_REPORT_TEMPLATE = (REPORT_TEMPLATES.find((t) => t.default) || REPORT_TEMPLATES[0] || {}).id;
     const tplById = (id) => REPORT_TEMPLATES.find((t) => t.id === id);
     function autoVal(key, caseId) {
       const c = casesCache.find((x) => x.id === caseId);
@@ -84,9 +77,16 @@
             <div class="min-w-0 flex-1"><p class="truncate font-semibold text-white">${escapeHTML(p.name)}${flag ? ' <span title="≥8 violent felonies">🚨</span>' : ''}</p><p class="text-xs text-slate-400">${p.alias ? '“' + escapeHTML(p.alias) + '” · ' : ''}${escapeHTML(p.status || '')}</p>
               <p class="mt-1 text-[11px] text-slate-500">${p.gang_id ? '🚩 ' + escapeHTML(gangNameById(p.gang_id) || 'Gang') + ' · ' : ''}CCW ${p.ccw ? 'Yes' : 'No'} · VCH ${p.vch || 0} · Felonies ${p.felony_count || 0}</p></div>
             ${DB() && DB().canEdit() ? '<button class="p-edit rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>' : ''}
+            ${DB() && DB().canDelete() ? '<button class="p-del rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10" title="Delete person (command only)">Delete</button>' : ''}
           </div>
           ${p.notes ? `<p class="mt-3 line-clamp-2 text-xs text-slate-400">${escapeHTML(p.notes)}</p>` : ''}`;
         const eb = card.querySelector('.p-edit'); if (eb) eb.onclick = () => openPersonModal(p);
+        const pdb = card.querySelector('.p-del'); if (pdb) pdb.onclick = async () => {
+          if (!confirm('Delete person "' + (p.name || 'record') + '"? This removes the persons-registry record (not any linked officer account).')) return;
+          const res = await DB().remove('persons', p.id);
+          if (res && res.error) { toast('Delete failed: ' + res.error.message, 'danger'); return; }
+          toast('Person deleted', 'warn'); fetchPersons();
+        };
         grid.appendChild(card);
       });
     }

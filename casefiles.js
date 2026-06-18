@@ -292,8 +292,7 @@
           const nb = $('#ev-new'); if (nb) nb.onclick = () => openEvidenceModal(cid);
           $$('.ev-custody', body).forEach((b) => b.onclick = () => openCustody(b.dataset.id));
         } else if (detailTab === 'reports') {
-          const rep = await DB().list('reports', { order: 'created_at', ascending: false, eq: { case_id: cid } });
-          body.innerHTML = `<div class="space-y-3">${rep.length ? rep.map((r) => `<div class="rounded-xl border border-white/10 bg-ink-900 p-4"><div class="flex items-center justify-between"><span class="text-sm font-semibold text-white">${escapeHTML(r.template)} <span class="text-xs text-slate-400">${escapeHTML(r.kind)}${r.seq ? ' #' + r.seq : ''}</span></span>${r.finalized ? '<span class="rounded bg-emerald-500/15 px-2 py-0.5 text-[10px] uppercase text-emerald-300">finalized</span>' : '<span class="rounded bg-amber-500/15 px-2 py-0.5 text-[10px] uppercase text-amber-300">draft</span>'}</div><p class="mt-1 text-[11px] text-slate-500">${new Date(r.created_at).toLocaleString('en-US')}</p></div>`).join('') : '<p class="text-sm text-slate-500">No reports linked. (Report authoring migrates in the next module.)</p>'}</div>`;
+          await renderCaseReports(body, cid);
         } else if (detailTab === 'signoff') {
           await renderSignoffTab(body, detailCase);
         } else if (detailTab === 'chat') {

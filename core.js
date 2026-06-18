@@ -426,7 +426,6 @@
       if (tab === 'narcotics' && typeof onEnterNarcotics === 'function') onEnterNarcotics();
       if (tab === 'places' && typeof onEnterPlaces === 'function') onEnterPlaces();
       if (tab === 'ballistics' && typeof onEnterBallistics === 'function') onEnterBallistics();
-      if (tab === 'reports' && typeof renderReportChain === 'function') renderReportChain();
       if (tab === 'rico' && typeof renderRico === 'function') renderRico();
       if (tab === 'command' && typeof onEnterCommand === 'function') onEnterCommand();
       if (tab === 'personnel' && typeof onEnterPersonnel === 'function') onEnterPersonnel();

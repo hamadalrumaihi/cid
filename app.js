@@ -262,8 +262,7 @@
       $('#person-search').addEventListener('input', debounce(renderPersons, 180));
       // Criminal places (Supabase) — fetch via onAuthed / onEnterPlaces
       renderPlaces(); $('#add-place').addEventListener('click', () => openPlaceModal(null));
-      // Reports
-      renderTemplateList(); fillCaseSelect($('#report-case')); $('#report-case').addEventListener('change', renderReportChain); renderReportChain();
+      // Reports authoring now lives inside each case's Reports tab (Case Files).
       // RICO
       fillCaseSelect($('#rico-case')); $('#rico-case').addEventListener('change', renderRico); $('#rico-export').addEventListener('click', exportRicoDocx); renderRico();
       // Drive

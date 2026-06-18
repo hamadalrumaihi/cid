@@ -4,14 +4,9 @@
 "use strict";
 
     /* ============================================================ 11C. REPORTS (template-driven + chains) ============================================================ */
-    function renderTemplateList() {
-      const wrap = $('#template-list'); if (!wrap) return; wrap.innerHTML = '';
-      REPORT_TEMPLATES.forEach((t) => {
-        const b = el('button', { class: 'flex w-full items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-white/10 hover:text-white' }, `<span class="text-lg">${t.icon}</span><span>${esc(t.name)}</span>`);
-        b.addEventListener('click', () => { if (!(DB() && DB().canEdit())) { toast('Sign-in required to author reports.', 'warn'); return; } const cid = $('#report-case').value; if (!cid) { toast('Select a case first (create one in Case Files).', 'warn'); return; } openReportModal(t.id, cid, null, 'initial'); });
-        wrap.appendChild(b);
-      });
-    }
+    // Report authoring lives inside each case's Reports tab (renderCaseReports);
+    // there is no standalone Reports view. fillCaseSelect/refreshCaseSelects remain
+    // for the RICO Builder's case picker.
     // Populate a <select> with live cases (value = uuid, label = case_number), preserving selection.
     function fillCaseSelect(sel) {
       if (!sel) return; const prev = sel.value;
@@ -19,7 +14,6 @@
       if (prev && casesCache.some((c) => c.id === prev)) sel.value = prev;
     }
     function refreshCaseSelects() {
-      if ($('#report-case')) { fillCaseSelect($('#report-case')); if ($('#view-reports').classList.contains('active')) renderReportChain(); }
       if ($('#rico-case')) { fillCaseSelect($('#rico-case')); if ($('#view-rico').classList.contains('active')) renderRico(); }
     }
     function reportKindBadge(r) {
@@ -27,16 +21,11 @@
       const label = r.kind === 'initial' ? 'Initial' : r.kind === 'supplemental' ? `Supplemental #${r.seq}` : `Follow-up #${r.seq}`;
       return `<span class="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${map[r.kind] || ''}">${label}</span>`;
     }
-    async function renderReportChain() {
-      const caseId = $('#report-case').value;
-      const wrap = $('#report-chain'); if (!wrap) return;
-      if (!dbReady()) { wrap.innerHTML = '<p class="text-sm text-slate-500">Sign in to view case reports.</p>'; $('#chain-count').textContent = '0 reports'; return; }
-      if (!caseId) { wrap.innerHTML = '<p class="text-sm text-slate-500">No case selected. Create a case in Case Files first.</p>'; $('#chain-count').textContent = '0 reports'; return; }
-      let list = [];
-      try { list = await DB().list('reports', { order: 'created_at', ascending: true, eq: { case_id: caseId } }); } catch (e) { wrap.innerHTML = '<p class="text-sm text-rose-300">Load error: ' + escapeHTML(e.message || e) + '</p>'; return; }
-      $('#chain-count').textContent = `${list.length} report${list.length === 1 ? '' : 's'}`;
-      const canEdit = DB() && DB().canEdit();
-      if (!list.length) { wrap.innerHTML = '<p class="text-sm text-slate-500">No reports for this case yet.' + (canEdit ? ' Pick a template to generate the initial report.' : '') + '</p>'; return; }
+    // Render the report-chain cards for one case into `wrap`. Shared by the
+    // in-case Reports tab (renderCaseReports).
+    function renderChainInto(wrap, list, caseId, canEdit) {
+      if (!wrap) return;
+      if (!list.length) { wrap.innerHTML = '<p class="text-sm text-slate-500">No reports for this case yet.' + (canEdit ? ' Pick a template above to author the initial report.' : '') + '</p>'; return; }
       wrap.innerHTML = '';
       list.forEach((r) => {
         const tpl = tplById(r.template);
@@ -61,9 +50,29 @@
         wrap.appendChild(card);
       });
     }
+    // In-case Reports tab: official-template launcher + this case's report chain.
+    async function renderCaseReports(body, caseId) {
+      if (!body) return;
+      const canEdit = DB() && DB().canEdit();
+      if (!dbReady()) { body.innerHTML = '<p class="text-sm text-slate-500">Sign in to view case reports.</p>'; return; }
+      let list = [];
+      try { list = await DB().list('reports', { order: 'created_at', ascending: true, eq: { case_id: caseId } }); }
+      catch (e) { body.innerHTML = '<p class="text-sm text-rose-300">Load error: ' + escapeHTML(e.message || e) + '</p>'; return; }
+      const tplBtns = REPORT_TEMPLATES.map((t) => `<button class="rpt-tpl flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/10 hover:text-white" data-tpl="${t.id}"><span class="text-lg">${t.icon}</span><span>${esc(t.name)}${t.default ? ' · default' : ''}</span></button>`).join('');
+      body.innerHTML = `
+        ${canEdit ? `<div class="mb-4 rounded-2xl border border-white/5 bg-ink-900/60 p-4"><p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">New report — official templates</p><div class="flex flex-wrap gap-2">${tplBtns}</div></div>` : ''}
+        <div class="mb-2 flex items-center justify-between"><h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Report chain</h4><span class="text-[11px] text-slate-500">${list.length} report${list.length === 1 ? '' : 's'}</span></div>
+        <div id="case-report-chain" class="space-y-3"></div>`;
+      body.querySelectorAll('.rpt-tpl').forEach((b) => { b.onclick = () => openReportModal(b.dataset.tpl, caseId, null, 'initial'); });
+      renderChainInto(body.querySelector('#case-report-chain'), list, caseId, canEdit);
+    }
+    // After saving/finalizing a report, refresh the in-case Reports tab if open.
+    function reloadCaseReports() {
+      if (typeof detailCase !== 'undefined' && detailCase && typeof detailTab !== 'undefined' && detailTab === 'reports' && typeof loadDetailTab === 'function') loadDetailTab();
+    }
     async function openReportModal(templateId, caseId, parentId, kind) {
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
-      const tpl = tplById(templateId); if (!tpl) return;
+      const tpl = tplById(templateId); if (!tpl || !tpl.schema) return;
       let seq = 0;
       if (kind !== 'initial') { try { const ex = await DB().list('reports', { eq: { case_id: caseId, kind: kind } }); seq = ex.length + 1; } catch (e) { seq = 1; } }
       const heading = kind === 'initial' ? tpl.name : kind === 'supplemental' ? `Supplemental #${seq}` : `Follow-up #${seq}`;
@@ -71,26 +80,19 @@
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><div><p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">${esc(tpl.name)}</p><h3 class="text-xl font-bold text-white">${esc(heading)}</h3></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         ${parentId ? `<p class="mb-4 rounded-lg border border-white/10 bg-ink-900 p-2.5 text-xs text-slate-400">↳ Linked as ${kind} to a prior report on <span class="font-mono text-blue-300">${esc(caseNumById(caseId) || caseId)}</span>.</p>` : ''}
-        <div class="space-y-3">
-          ${tpl.sections.map((s) => {
-            const av = s.type === 'auto' ? autoVal(s.key, caseId) : '';
-            if (s.type === 'auto') return `<div><label class="mb-1 block text-xs font-semibold text-slate-400">${esc(s.label)}</label><input data-key="${s.key}" readonly value="${esc(av)}" class="w-full rounded-lg border border-white/10 bg-ink-800 px-3 py-2 text-sm text-slate-300 outline-none" /></div>`;
-            if (s.type === 'textarea') return `<div><label class="mb-1 block text-xs font-semibold text-slate-400">${esc(s.label)}</label><textarea data-key="${s.key}" rows="4" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"></textarea></div>`;
-            if (s.type === 'select') return `<div><label class="mb-1 block text-xs font-semibold text-slate-400">${esc(s.label)}</label><select data-key="${s.key}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${s.opts.map((o) => `<option>${esc(o)}</option>`).join('')}</select></div>`;
-            return `<div><label class="mb-1 block text-xs font-semibold text-slate-400">${esc(s.label)}</label><input type="${s.type === 'date' ? 'date' : 'text'}" data-key="${s.key}" ${s.type === 'date' ? `value="${todayISO()}"` : ''} class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>`;
-          }).join('')}
-        </div>
+        <div class="max-h-[60vh] overflow-y-auto pr-1" id="r-form">${renderFormBody(tpl.schema, {}, true)}</div>
         <button id="r-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save Report to Case</button>`;
       node.querySelector('.close-x').onclick = closeModal;
+      wireFormBody(node.querySelector('#r-form'), tpl.schema);
       node.querySelector('#r-save').onclick = async () => {
-        const fields = {}; $$('[data-key]', node).forEach((f) => fields[f.dataset.key] = f.value);
+        const fields = readForm(node, tpl.schema);
         const payload = { case_id: caseId, template: templateId, kind: kind, seq: seq, parent_id: parentId || null, fields: fields };
         if (DB().me) payload.author_id = DB().me.id;
         const res = await DB().insert('reports', payload);
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
-        closeModal(); toast(`${heading} saved`, 'success'); renderReportChain();
+        closeModal(); toast(`${heading} saved`, 'success'); reloadCaseReports();
       };
-      openModal(node);
+      openModal(node, { wide: true });
     }
     function reportTitle(r) { const tpl = tplById(r.template); return `${tpl ? tpl.name : 'Report'}${r.kind !== 'initial' ? ' — ' + (r.kind === 'supplemental' ? 'Supplemental #' + r.seq : 'Follow-up #' + r.seq) : ''}`; }
     function viewReport(r) {
@@ -103,7 +105,7 @@
           <p class="text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-300/70">Criminal Investigation Division — State of San Andreas</p>
           <h2 class="mt-1 text-center text-xl font-bold text-white">${esc(reportTitle(r))}</h2>
           <p class="mt-1 text-center text-xs text-slate-400">${esc(caseNo)} · ${new Date(r.created_at).toLocaleString('en-US')}${r.finalized ? ' · 🔒 FINALIZED' : ' · DRAFT'}</p>
-          <div class="mt-5 space-y-3">${tpl.sections.map((s) => { const v = (r.fields && r.fields[s.key]) || '—'; return `<div><p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">${esc(s.label)}</p><p class="mt-0.5 whitespace-pre-line text-sm text-slate-200">${esc(v)}</p></div>`; }).join('')}</div>
+          <div class="mt-5 space-y-3">${renderFormBody(tpl.schema, r.fields || {}, false)}</div>
           ${sig ? `<div class="mt-6 border-t border-white/10 pt-4 text-xs text-slate-300"><p class="font-semibold uppercase tracking-wider text-emerald-300/80">Electronically signed</p><p class="mt-1 font-[cursive] text-base text-blue-200">${esc(sig.officer)}</p><p class="text-[11px] text-slate-500">Badge ${esc(sig.badge || '—')} · ${sig.signed_at ? new Date(sig.signed_at).toLocaleString('en-US') : ''}</p></div>` : ''}
         </div>
         <div class="mt-5 flex flex-wrap gap-3 no-print">
@@ -134,14 +136,19 @@
         const badge = node.querySelector('#fin-badge').value.trim();
         const res = await DB().rpc('report_finalize', { p_report: r.id, p_badge: badge || null });
         if (res.error) { toast('Finalize failed: ' + res.error.message, 'danger'); return; }
-        closeModal(); toast('Report finalized & signed', 'success'); renderReportChain();
+        closeModal(); toast('Report finalized & signed', 'success'); reloadCaseReports();
       };
       openModal(node);
     }
     function reportParas(r) {
       const tpl = tplById(r.template); const caseNo = caseNumById(r.case_id) || r.case_id;
       const paras = [{ text: 'Criminal Investigation Division — State of San Andreas', style: 'subtitle' }, { text: reportTitle(r), style: 'title' }, { text: `${caseNo}  ·  ${new Date(r.created_at).toLocaleString('en-US')}${r.finalized ? '  ·  FINALIZED' : ''}`, style: 'subtitle' }, { text: '', style: 'normal' }];
-      tpl.sections.forEach((s) => { paras.push({ text: s.label, style: 'heading' }); paras.push({ text: (r.fields && r.fields[s.key]) || '—', style: 'normal' }); });
+      // Schema-backed templates render through the shared form serializer.
+      formToText(tpl.schema, r.fields || {}).split('\n').forEach((ln) => {
+        const tr = ln.trim();
+        const heading = tr.length > 0 && tr.length <= 52 && tr === tr.toUpperCase() && /[A-Z]/.test(tr);
+        paras.push({ text: ln, style: heading ? 'heading' : 'normal' });
+      });
       if (r.signature) { paras.push({ text: '', style: 'normal' }); paras.push({ text: 'Electronically signed', style: 'heading' }); paras.push({ text: `${r.signature.officer} — Badge ${r.signature.badge || '—'} — ${r.signature.signed_at ? new Date(r.signature.signed_at).toLocaleString('en-US') : ''}`, style: 'normal' }); }
       return paras;
     }
@@ -162,7 +169,11 @@
       line(reportTitle(r), { center: true, bold: true, size: 16 }); y += 4;
       line(`${caseNumById(r.case_id) || r.case_id} · ${new Date(r.created_at).toLocaleString('en-US')}${r.finalized ? ' · FINALIZED' : ' · DRAFT'}`, { center: true, size: 9 }); y += 10;
       const tpl = tplById(r.template);
-      tpl.sections.forEach((s) => { line(s.label.toUpperCase(), { bold: true, size: 10 }); line((r.fields && r.fields[s.key]) || '—', { size: 11 }); y += 4; });
+      formToText(tpl.schema, r.fields || {}).split('\n').forEach((ln) => {
+        const tr = ln.trim(); if (!tr) { y += 3; return; }
+        const heading = tr.length <= 52 && tr === tr.toUpperCase() && /[A-Z]/.test(tr);
+        line(ln, heading ? { bold: true, size: 10 } : { size: 11 });
+      });
       if (r.signature) { y += 10; line('ELECTRONICALLY SIGNED', { bold: true, size: 10 }); line(`${r.signature.officer} — Badge ${r.signature.badge || '—'} — ${r.signature.signed_at ? new Date(r.signature.signed_at).toLocaleString('en-US') : ''}`, { size: 10 }); }
       doc.save(`${(caseNumById(r.case_id) || 'case').replace(/[^a-z0-9]/gi, '-')}-${r.kind}-${r.seq || 0}.pdf`);
       toast('Report exported as .pdf', 'success');

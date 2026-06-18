@@ -27,7 +27,9 @@
       const grid = $('#hm-grid'), notice = $('#hm-notice'), legend = $('#hm-legend'); if (!grid) return;
       if (!dbReady()) { if (notice) { notice.classList.remove('hidden'); notice.textContent = 'Sign in to view the Commander Heatmap.'; } grid.innerHTML = ''; if (legend) legend.textContent = ''; return; }
       if (notice) notice.classList.add('hidden');
-      const norm = (s) => (s || '').trim();
+      // Defensive: strip a trailing ".0" on bare numbers (e.g. legacy imports where
+      // a postal/area like "21" came through as "21.0") before grouping/display.
+      const norm = (s) => String(s || '').replace(/(\d)\.0\b/g, '$1').trim();
       const areas = {};
       const bump = (area, key) => { const a = norm(area); if (!a) return; (areas[a] = areas[a] || { cases: 0, places: 0, turf: 0, raids: 0 })[key] += 1; };
       const cases = (typeof casesCache !== 'undefined' ? casesCache : []);
