@@ -295,7 +295,7 @@
       const h = Math.floor(ms/3.6e6), m = Math.floor((ms%3.6e6)/6e4), s = Math.floor((ms%6e4)/1000);
       return `${String(h).padStart(2,'0')}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
     }
-    const NOTIF_TITLES = { access_requested: 'Case access requested', access_granted: 'Case access granted', access_denied: 'Case access denied', member_approved: 'CID access approved', signoff_waiting: 'Sign-off needed', signoff_approved: 'Sign-off approved', signoff_denied: 'Sign-off denied', signoff_changes: 'Changes requested', signoff_escalated: 'Sign-off escalated', announcement: 'New announcement', mention: 'You were mentioned' };
+    const NOTIF_TITLES = { access_requested: 'Case access requested', access_granted: 'Case access granted', access_denied: 'Case access denied', member_approved: 'CID access approved', signoff_waiting: 'Sign-off needed', signoff_approved: 'Sign-off approved', signoff_denied: 'Sign-off denied', signoff_changes: 'Changes requested', signoff_escalated: 'Sign-off escalated', announcement: 'New announcement', mention: 'You were mentioned', case_stale: 'Case needs attention' };
     function notifTitle(type) { return NOTIF_TITLES[type] || 'CID Portal'; }
     async function notify(userId, type, payload) {
       if (!userId || !dbReady()) return;

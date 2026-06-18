@@ -203,6 +203,44 @@
       const d = caseStaleDays(c); if (d < 14) return '';
       return `<span class="flex-shrink-0 rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300" title="No updates in ${d} days">⏳ ${d}d stale</span>`;
     }
+
+    // Wave 1: auto-escalate cases gone quiet ≥14d. Runs once per load. The first
+    // authorized viewer to spot a stale case pings its lead detective + bureau
+    // command and stamps it (last_stale_notified_at — which does NOT bump
+    // updated_at), so nobody else re-fires until it goes stale again ~14d later.
+    const STALE_RENOTIFY_MS = 14 * 86400000;
+    let _staleEscalated = false;
+    async function escalateStaleCases() {
+      if (_staleEscalated || !dbReady()) return;
+      const m = (typeof meProfile === 'function') ? meProfile() : (DB() && DB().me);
+      if (!m || !m.active) return;
+      _staleEscalated = true;
+      const now = Date.now();
+      const stale = (casesCache || []).filter((c) => {
+        if (c.status === 'closed' || c.status === 'cold') return false;
+        if (caseStaleDays(c) < 14) return false;
+        if (!c.last_stale_notified_at) return true;
+        return (now - new Date(c.last_stale_notified_at).getTime()) >= STALE_RENOTIFY_MS;
+      });
+      if (!stale.length) return;
+      const profs = (typeof PROFILES !== 'undefined' ? PROFILES : []);
+      for (const c of stale) {
+        // Stamp first; if another viewer beat us (or RLS blocks the write), skip.
+        const res = await DB().update('cases', c.id, { last_stale_notified_at: new Date().toISOString() });
+        if (res && res.error) continue;
+        c.last_stale_notified_at = new Date().toISOString();
+        const reason = 'No activity in ' + caseStaleDays(c) + ' days — needs an update or a status change.';
+        const targets = new Set();
+        if (c.lead_detective_id) targets.add(c.lead_detective_id);
+        profs.filter((p) => p.active && p.role === 'bureau_lead' && p.bureau === c.bureau).forEach((p) => targets.add(p.id));
+        // No bureau lead covering this bureau? escalate to the deputy directors.
+        if (![...targets].some((id) => id !== c.lead_detective_id)) {
+          profs.filter((p) => p.active && p.role === 'deputy_director').forEach((p) => targets.add(p.id));
+        }
+        for (const uid of targets) { if (typeof notify === 'function') await notify(uid, 'case_stale', { case_id: c.id, case_number: c.case_number, reason }); }
+      }
+      if (typeof renderCases === 'function') renderCases();
+    }
     // QoL: read-only lifecycle strip for the case Overview (advance via Sign-off tab).
     function caseStageStrip(c) {
       const s = c.signoff_status || 'none', closed = c.status === 'closed';
@@ -581,6 +619,9 @@
       if (typeof renderOfficerCard === 'function') renderOfficerCard();
       if (typeof fetchCaseFiles === 'function') fetchCaseFiles();
       if (typeof fetchShifts === 'function') fetchShifts();
+      // Give cases + roster a moment to load, then run the once-per-session
+      // stale-case escalation (self-guarded against re-runs).
+      if (dbReady()) setTimeout(escalateStaleCases, 6000);
       if (dbReady()) {
         DB().subscribe('cases', () => { fetchCases(); fetchKpis(); renderBureauLoad(); if (typeof detailCase !== 'undefined' && detailCase && !$('#case-detail').classList.contains('hidden')) { DB().list('cases', { eq: { id: detailCase.id } }).then((r) => { if (r[0]) { detailCase = r[0]; renderCaseDetailShell(); loadDetailTab(); } }).catch(() => {}); } });
         DB().subscribe('profiles', () => { fetchProfiles(); renderRoster(); if (typeof renderOfficerCard === 'function') renderOfficerCard(); });
