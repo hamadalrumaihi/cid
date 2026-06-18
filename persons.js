@@ -63,10 +63,19 @@
     }
     function renderPersons() {
       const grid = $('#persons-grid'); if (!grid) return;
-      const q = ($('#person-search') ? $('#person-search').value : '').trim().toLowerCase();
+      const raw = ($('#person-search') ? $('#person-search').value : '').trim();
+      const q = raw.toLowerCase();
       const items = PERSONS.filter((p) => !q || JSON.stringify(p).toLowerCase().includes(q));
       $('#person-new').classList.toggle('hidden', !(DB() && DB().canEdit()));
-      if (!items.length) { personsNotice(PERSONS.length ? 'No persons match your filter.' : 'No persons on file.' + (DB() && DB().canEdit() ? ' Use “+ New Person”.' : '')); return; }
+      if (!items.length) {
+        // QoL: inline create — if a name was typed and isn't on file, offer to add it.
+        if (raw && DB() && DB().canEdit()) {
+          $('#persons-grid').innerHTML = `<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center"><p class="text-sm text-slate-400">No persons match “${escapeHTML(raw)}”.</p><button id="person-quickadd" class="mt-3 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">➕ Add “${escapeHTML(raw)}” to registry</button></div>`;
+          const qa = $('#person-quickadd'); if (qa) qa.onclick = () => openPersonModal(null, { name: raw });
+          return;
+        }
+        personsNotice(PERSONS.length ? 'No persons match your filter.' : 'No persons on file.' + (DB() && DB().canEdit() ? ' Use “+ New Person”.' : '')); return;
+      }
       grid.innerHTML = '';
       items.forEach((p) => {
         const flag = (p.felony_count || 0) >= 8;
@@ -79,8 +88,10 @@
             ${DB() && DB().canEdit() ? '<button class="p-edit rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>' : ''}
             ${DB() && DB().canDelete() ? '<button class="p-del rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10" title="Delete person (command only)">Delete</button>' : ''}
           </div>
+          ${DB() && DB().canEdit() ? '<button class="p-tocase mt-3 w-full rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-blue-200 transition hover:bg-white/10">📎 Attach to case</button>' : ''}
           ${p.notes ? `<p class="mt-3 line-clamp-2 text-xs text-slate-400">${escapeHTML(p.notes)}</p>` : ''}`;
         const eb = card.querySelector('.p-edit'); if (eb) eb.onclick = () => openPersonModal(p);
+        const tc = card.querySelector('.p-tocase'); if (tc && typeof attachIntelToCase === 'function') tc.onclick = () => attachIntelToCase(`Person — ${p.name}${p.alias ? ' “' + p.alias + '”' : ''} · ${p.status || 'POI'}${p.felony_count ? ', ' + p.felony_count + ' felonies' : ''}`);
         const pdb = card.querySelector('.p-del'); if (pdb) pdb.onclick = async () => {
           if (!confirm('Delete person "' + (p.name || 'record') + '"? This removes the persons-registry record (not any linked officer account).')) return;
           const res = await DB().remove('persons', p.id);
@@ -90,9 +101,9 @@
         grid.appendChild(card);
       });
     }
-    function openPersonModal(record) {
+    function openPersonModal(record, prefill) {
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
-      const p = record || {};
+      const p = record || prefill || {};
       const node = el('div', { class: 'p-6' });
       const gangOpts = ['<option value="">— no gang —</option>'].concat(GANGS.map((g) => `<option value="${g.id}" ${g.id === p.gang_id ? 'selected' : ''}>${escapeHTML(g.name)}</option>`)).join('');
       node.innerHTML = `

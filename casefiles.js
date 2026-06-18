@@ -36,6 +36,29 @@
       wrap.querySelectorAll('.jb-chip').forEach((b) => b.onclick = () => { if (typeof navigate === 'function') navigate('cases'); openCaseDetail(b.dataset.id); });
     }
 
+    // QoL: link an intel record (person/gang/place) to a case by posting a reference
+    // into that case's channel — keeps the intel on the case record without a schema change.
+    function attachIntelToCase(label) {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      if (!dbReady() || !casesCache.length) { toast('No cases available to attach to.', 'warn'); return; }
+      const node = el('div', { class: 'p-6' });
+      const opts = casesCache.slice().sort((a, b) => (a.case_number || '').localeCompare(b.case_number || '')).map((c) => `<option value="${c.id}">${escapeHTML(c.case_number)} · ${escapeHTML(c.title || '')}</option>`).join('');
+      node.innerHTML = `
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Attach to case</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <p class="mb-3 text-sm text-slate-400">Posts a reference to <span class="text-white">${escapeHTML(label)}</span> into the case channel.</p>
+        <select id="atc-case" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">${opts}</select>
+        <button id="atc-go" class="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Attach reference</button>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#atc-go').onclick = async () => {
+        const cid = node.querySelector('#atc-case').value; if (!cid) return;
+        const res = await DB().insert('case_messages', { case_id: cid, author_name: (DB().me && DB().me.display_name) || 'CID', body: '🔗 Intel reference — ' + label, mentions: [], links: [] });
+        if (res && res.error) { toast('Attach failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast('Reference posted to ' + ((typeof caseNumById === 'function' && caseNumById(cid)) || 'case') + ' channel', 'success');
+        if (typeof detailCase !== 'undefined' && detailCase && detailCase.id === cid && typeof detailTab !== 'undefined' && detailTab === 'chat' && typeof loadDetailTab === 'function') loadDetailTab();
+      };
+      openModal(node);
+    }
+
     function casesNotice(msg) { $('#cases-grid').innerHTML = `<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">${msg}</div>`; }
 
     function showCasesList() { $('#case-detail').classList.add('hidden'); $('#cases-list').classList.remove('hidden'); }
@@ -118,6 +141,7 @@
         else { notice.classList.add('hidden'); notice.innerHTML = ''; }
       }
       if (toolbar) { toolbar.classList.remove('hidden'); toolbar.classList.add('flex'); }
+      const drop = $('#cf-drop'); if (drop) drop.classList.toggle('hidden', !fmReady);
       if (auth) auth.innerHTML = '<span class="rounded-lg bg-white/5 px-2.5 py-1.5 text-[11px] text-slate-300">Files upload to FiveManage; records stored in Supabase.</span>';
       cfPopulateCaseList();
       if (!cfWired) {
@@ -139,6 +163,22 @@
           if (ok) { toast(ok + ' file' + (ok === 1 ? '' : 's') + ' attached to ' + cn, 'success'); fetchCaseFiles(); }
         };
         const se = $('#cf-search'); if (se) se.oninput = (typeof debounce === 'function' ? debounce(renderCaseFiles, 150) : renderCaseFiles);
+        // QoL: bulk drag-drop attach to the case number in #cf-case.
+        const drop = $('#cf-drop');
+        if (drop) {
+          const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+          ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { stop(e); drop.classList.add('border-blue-500/50', 'bg-blue-500/5'); }));
+          ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { stop(e); drop.classList.remove('border-blue-500/50', 'bg-blue-500/5'); }));
+          drop.addEventListener('drop', async (e) => {
+            const cn = ($('#cf-case') ? $('#cf-case').value : '').trim();
+            if (!cn) { toast('Enter or pick a case number first.', 'warn'); return; }
+            if (!(typeof fmConfigured === 'function' && fmConfigured())) { toast('FiveManage upload is not configured.', 'warn'); return; }
+            const files = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []);
+            if (!files.length) return;
+            let ok = 0; for (const f of files) { try { await cfAttachFile(f, cn); ok++; } catch (err) { toast('Upload failed: ' + (err.message || err), 'danger'); } }
+            if (ok) { toast(ok + ' file' + (ok === 1 ? '' : 's') + ' attached to ' + cn, 'success'); fetchCaseFiles(); }
+          });
+        }
       }
       fetchCaseFiles();
     }
