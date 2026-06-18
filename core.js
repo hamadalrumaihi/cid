@@ -395,7 +395,8 @@
       persons:    { title: 'Persons', sub: 'Suspects & persons of interest (live)' },
       narcotics:  { title: 'Narcotics Intelligence', sub: 'Drug processing & market analytics' },
       ballistics: { title: 'Ballistics & Logistics', sub: 'Weapon benches & component tracing' },
-      personnel:  { title: 'Personnel & Roster', sub: 'Commendations & media intake vault' },
+      personnel:  { title: 'Personnel & Roster', sub: 'Roster & digital commendations' },
+      media:      { title: 'Media Vault', sub: 'Universal media-to-case intake (all detectives)' },
       modus:      { title: 'M.O. Detector', sub: 'Tactical profiling & cross-reference' },
       gangs:      { title: 'Gangs & Turf', sub: 'Organizations, ranks, properties & territory' },
       places:     { title: 'Criminal Places', sub: 'Locations & production processes' },
@@ -410,12 +411,44 @@
       audit:      { title: 'Audit Log', sub: 'Division-wide action history (Bureau Lead and above)' },
     };
 
+    // ---- Two-tier navigation: 5 top-level categories, each a set of tool tabs ----
+    // The router still navigates to leaf tabs (hash, onEnter, #view-* unchanged);
+    // categories + the sub-tab strip are a grouping layer over the same leaves.
+    const NAV_CATEGORIES = [
+      { id: 'command',   label: 'Command',      tabs: ['command', 'announce', 'heatmap', 'personnel'] },
+      { id: 'cases',     label: 'Cases',        tabs: ['cases', 'case-files', 'rico'] },
+      { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'gangs', 'places', 'narcotics', 'ballistics', 'modus', 'media'] },
+      { id: 'drive',     label: 'Drive',        tabs: ['drive', 'records'] },
+      { id: 'oversight', label: 'Oversight',    tabs: ['shifts', 'audit'] },
+    ];
+    const TAB_LABEL = {
+      command: 'Dashboard', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
+      cases: 'Case Files', 'case-files': 'Attachments', rico: 'RICO',
+      persons: 'Persons', gangs: 'Gangs', places: 'Places', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector', media: 'Media Vault',
+      drive: 'CID General', records: 'Records', shifts: 'Shift Reports', audit: 'Audit Log',
+    };
+    const TAB_CATEGORY = {}; NAV_CATEGORIES.forEach((c) => c.tabs.forEach((t) => { TAB_CATEGORY[t] = c.id; }));
+    const CAT_DEFAULT = {}; NAV_CATEGORIES.forEach((c) => { CAT_DEFAULT[c.id] = c.tabs[0]; });
+    function renderSubtabs(activeTab, cat) {
+      const bar = $('#subtabs'); if (!bar) return;
+      const def = NAV_CATEGORIES.find((c) => c.id === cat);
+      if (!def) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
+      bar.classList.remove('hidden');
+      bar.innerHTML = def.tabs.map((t) => {
+        const on = t === activeTab;
+        return `<button class="subtab flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition ${on ? 'bg-blue-500/15 text-white shadow-[inset_0_-2px_0_0_#3b82f6]' : 'text-slate-400 hover:bg-white/5 hover:text-white'}" data-tab="${t}" role="tab" aria-selected="${on}">${esc(TAB_LABEL[t] || t)}</button>`;
+      }).join('');
+      bar.querySelectorAll('.subtab').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.tab)));
+    }
+
     function navigate(tab) {
       if (!PAGE_META[tab]) tab = 'command';
       $$('.view').forEach((v) => v.classList.remove('active'));
       const view = $('#view-' + tab); if (view) view.classList.add('active');
-      $$('.nav-link').forEach((b) => { const on = b.dataset.tab === tab; b.classList.toggle('active', on); on ? b.setAttribute('aria-current','page') : b.removeAttribute('aria-current'); });
-      $$('.bnav-link').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+      const cat = TAB_CATEGORY[tab] || 'command';
+      $$('.nav-cat').forEach((b) => { const on = b.dataset.cat === cat; b.classList.toggle('active', on); on ? b.setAttribute('aria-current','page') : b.removeAttribute('aria-current'); });
+      $$('.bnav-link').forEach((b) => b.classList.toggle('active', b.dataset.cat === cat));
+      renderSubtabs(tab, cat);
       const m = PAGE_META[tab]; if (m) { $('#page-title').textContent = m.title; $('#page-subtitle').textContent = m.sub; }
       if (location.hash !== '#' + tab) { try { history.replaceState(null, '', '#' + tab); } catch (e) {} }
       Store.set('tab', tab);
@@ -430,6 +463,7 @@
       if (tab === 'rico' && typeof renderRico === 'function') renderRico();
       if (tab === 'command' && typeof onEnterCommand === 'function') onEnterCommand();
       if (tab === 'personnel' && typeof onEnterPersonnel === 'function') onEnterPersonnel();
+      if (tab === 'media' && typeof onEnterMedia === 'function') onEnterMedia();
       if (tab === 'modus' && typeof onEnterModus === 'function') onEnterModus();
       if (tab === 'drive' && typeof onEnterDrive === 'function') onEnterDrive();
       if (tab === 'announce' && typeof onEnterAnnounce === 'function') onEnterAnnounce();
@@ -438,7 +472,7 @@
       if (tab === 'shifts' && typeof onEnterShifts === 'function') onEnterShifts();
       if (tab === 'audit' && typeof onEnterAudit === 'function') onEnterAudit();
     }
-    $$('.nav-link, .bnav-link').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.tab)));
+    $$('.nav-cat, .bnav-link').forEach((b) => b.addEventListener('click', () => navigate(CAT_DEFAULT[b.dataset.cat] || 'command')));
 
     function openDrawer() { $('#sidebar').classList.remove('-translate-x-full'); $('#sidebar-backdrop').classList.remove('hidden'); document.body.classList.add('overflow-hidden','lg:overflow-auto'); $('#menu-toggle').setAttribute('aria-expanded','true'); }
     function closeDrawer() { if (isDesktop()) return; $('#sidebar').classList.add('-translate-x-full'); $('#sidebar-backdrop').classList.add('hidden'); document.body.classList.remove('overflow-hidden','lg:overflow-auto'); $('#menu-toggle').setAttribute('aria-expanded','false'); }
