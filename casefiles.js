@@ -8,6 +8,8 @@
     const dbReady = () => { const d = DB(); return !!(d && d.ready); };
     const caseStatusTint = (s) => s === 'closed' ? 'bg-slate-500/20 text-slate-300' : s === 'cold' ? 'bg-blue-500/15 text-blue-300' : s === 'active' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300';
     let casesCache = [];
+    let CASE_TEMPLATES = [];   // command-editable quick-create presets (case_templates)
+    async function fetchCaseTemplates() { if (!dbReady()) return; try { CASE_TEMPLATES = await DB().list('case_templates', { order: 'sort_order', ascending: true }); } catch (e) { CASE_TEMPLATES = []; } }
     // QoL: list scope (mine/all) + recently-opened & pinned cases (persisted via Store).
     let casesScope = (typeof Store !== 'undefined') ? Store.get('casesScope', 'mine') : 'all';
     const myId = () => (DB() && DB().me) ? DB().me.id : null;
@@ -256,6 +258,10 @@
       const sel = (k, opts, v) => `<select data-k="${k}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${opts.map((o) => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Case</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        ${!record ? `<div class="mb-4 rounded-xl border border-white/5 bg-ink-900/60 p-3">
+          <div class="mb-2 flex items-center justify-between"><p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Quick-create from template</p>${canReassign() ? '<button id="tpl-manage" type="button" class="text-[11px] font-semibold text-blue-300 transition hover:text-blue-200">Manage templates</button>' : ''}</div>
+          <div id="tpl-chips" class="flex flex-wrap gap-2"></div>
+        </div>` : ''}
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Case Number *</label><div class="flex items-stretch gap-2"><span id="cn-prefix" class="flex items-center rounded-lg bg-ink-800 px-3 font-mono text-sm font-semibold text-blue-300"></span><input data-k="__casenum" inputmode="numeric" value="${escapeHTML((c.case_number || '').replace(/^[A-Za-z]+-/, ''))}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-sm text-white outline-none focus:border-badge-500" placeholder="9000026" /></div><p class="mt-1 text-[11px] text-slate-500">The bureau prefix is added automatically — just type the number. LSB→1xxxxx · BCB→2xxxxx · SAB/JTF→9xxxxx. Must be unique.</p></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Title</label><input data-k="title" value="${escapeHTML(c.title || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
@@ -274,6 +280,28 @@
       const syncCn = () => { cnPre.textContent = bureauSel.value + '-'; cnNum.placeholder = leadOf(bureauSel.value) + 'xxxxx'; };
       syncCn(); bureauSel.onchange = syncCn;
       cnNum.oninput = () => { cnNum.value = cnNum.value.replace(/[^0-9]/g, ''); };
+      // Quick-create template picker (new cases only): chips prefill the form.
+      if (!record) {
+        const chips = node.querySelector('#tpl-chips');
+        const setV = (k, v) => { const f = node.querySelector(`[data-k="${k}"]`); if (f != null && v != null) f.value = v; };
+        const applyTpl = (t) => {
+          if (t) { setV('title', t.title || ''); if (t.bureau) bureauSel.value = t.bureau; setV('status', t.status || 'open'); setV('area', t.area || ''); setV('summary', t.summary || ''); syncCn(); }
+          else { setV('title', ''); setV('area', ''); setV('summary', ''); }
+        };
+        const renderChips = () => {
+          if (!chips) return;
+          chips.innerHTML = `<button type="button" class="tpl-chip rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-white/10" data-tpl="">🗂️ Blank</button>` +
+            CASE_TEMPLATES.filter((t) => t.active !== false).map((t) => `<button type="button" class="tpl-chip rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-white/10" data-tpl="${t.id}">${esc(t.icon || '🗂️')} ${escapeHTML(t.name)}</button>`).join('');
+          chips.querySelectorAll('.tpl-chip').forEach((b) => b.onclick = () => {
+            chips.querySelectorAll('.tpl-chip').forEach((x) => x.classList.remove('ring-1', 'ring-badge-500', 'bg-white/10'));
+            b.classList.add('ring-1', 'ring-badge-500', 'bg-white/10');
+            applyTpl(CASE_TEMPLATES.find((t) => t.id === b.dataset.tpl) || null);
+          });
+        };
+        renderChips();
+        if (!CASE_TEMPLATES.length) fetchCaseTemplates().then(renderChips);
+        const mng = node.querySelector('#tpl-manage'); if (mng) mng.onclick = () => openTemplateManager();
+      }
       node.querySelector('#case-save').onclick = async () => {
         const payload = {}; $$('[data-k]', node).forEach((f) => payload[f.dataset.k] = f.value.trim());
         const numv = (payload.__casenum || '').trim(); delete payload.__casenum;   // not a column
@@ -304,6 +332,59 @@
         closeModal(); toast(record ? 'Case updated' : 'Case created', 'success'); fetchCases();
         if (record && record.id) openCaseDetail(record.id);
       };
+      openModal(node, { wide: true });
+    }
+
+    // Command-editable case templates (Wave 1). Bureau Lead+ add / edit / remove.
+    async function openTemplateManager() {
+      if (!canReassign()) { toast('Command staff only.', 'warn'); return; }
+      await fetchCaseTemplates();
+      const node = el('div', { class: 'p-6' });
+      const inp = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500';
+      const opt = (arr, v) => arr.map((o) => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('');
+      const blank = () => ({ icon: '🗂️', name: '', bureau: '', title: '', status: 'open', summary: '' });
+      const rowHtml = (t) => {
+        const isNew = !t.id;
+        return `<div class="rounded-xl border ${isNew ? 'border-dashed border-white/15' : 'border-white/10'} bg-ink-900 p-3" data-id="${t.id || ''}">
+          <div class="grid grid-cols-1 gap-2 sm:grid-cols-6">
+            <input data-tk="icon" value="${escapeHTML(t.icon || '')}" placeholder="🗂️" class="${inp} sm:col-span-1" />
+            <input data-tk="name" value="${escapeHTML(t.name || '')}" placeholder="Template name *" class="${inp} sm:col-span-3" />
+            <select data-tk="bureau" class="${inp} sm:col-span-1"><option value="">(any)</option>${opt(['LSB', 'BCB', 'SAB', 'JTF'], t.bureau || '')}</select>
+            <select data-tk="status" class="${inp} sm:col-span-1">${opt(['open', 'active', 'cold', 'closed'], t.status || 'open')}</select>
+            <input data-tk="title" value="${escapeHTML(t.title || '')}" placeholder="Prefilled title (e.g. 'Narcotics raid — ')" class="${inp} sm:col-span-6" />
+            <textarea data-tk="summary" rows="2" placeholder="Prefilled summary skeleton" class="${inp} sm:col-span-6">${escapeHTML(t.summary || '')}</textarea>
+          </div>
+          <div class="mt-2 flex gap-2">
+            <button class="tm-save rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-110">${isNew ? '+ Add template' : 'Save'}</button>
+            ${isNew ? '' : '<button class="tm-del rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>'}
+          </div>
+        </div>`;
+      };
+      const collect = (rowEl) => { const o = {}; rowEl.querySelectorAll('[data-tk]').forEach((f) => o[f.dataset.tk] = f.value.trim()); o.bureau = o.bureau || null; return o; };
+      const render = () => {
+        node.innerHTML = `
+          <div class="mb-4 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Case Templates</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+          <p class="mb-3 text-xs text-slate-400">Presets offered when creating a new case. Visible to all detectives; editable by command staff.</p>
+          <div class="max-h-[55vh] space-y-3 overflow-y-auto pr-1">${CASE_TEMPLATES.map(rowHtml).join('')}${rowHtml(blank())}</div>`;
+        node.querySelector('.close-x').onclick = closeModal;
+        node.querySelectorAll('[data-id]').forEach((rowEl) => {
+          const id = rowEl.dataset.id;
+          const sv = rowEl.querySelector('.tm-save'); if (sv) sv.onclick = async () => {
+            const o = collect(rowEl);
+            if (!o.name) { toast('Template name is required.', 'warn'); return; }
+            const res = id ? await DB().update('case_templates', id, o) : await DB().insert('case_templates', o);
+            if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+            toast('Template saved', 'success'); await fetchCaseTemplates(); render();
+          };
+          const dl = rowEl.querySelector('.tm-del'); if (dl) dl.onclick = async () => {
+            if (!confirm('Delete this template?')) return;
+            const res = await DB().remove('case_templates', id);
+            if (res.error) { toast('Delete failed: ' + res.error.message, 'danger'); return; }
+            toast('Template deleted', 'warn'); await fetchCaseTemplates(); render();
+          };
+        });
+      };
+      render();
       openModal(node, { wide: true });
     }
 
@@ -494,6 +575,7 @@
     window.CIDApp.onAuthed = function () {
       fetchProfiles(); fetchCases(); fetchGangs(); fetchPersons(); fetchDrugs(); fetchPlaces(); fetchBenches(); fetchFootprints(); fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); fetchNotifications();
       fetchCommendations(); fetchMedia(); fetchMoProfiles(); fetchDocuments();
+      fetchCaseTemplates();
       if (typeof fetchMyGrants === 'function') fetchMyGrants();
       if (typeof fetchAnnouncements === 'function') fetchAnnouncements();
       if (typeof renderOfficerCard === 'function') renderOfficerCard();
@@ -521,6 +603,7 @@
         DB().subscribe('audit_log', fetchActivity);
         DB().subscribe('notifications', fetchNotifications);
         DB().subscribe('case_signoff_history', () => { if (typeof detailCase !== 'undefined' && detailCase && detailTab === 'signoff') loadDetailTab(); });
+        DB().subscribe('case_templates', fetchCaseTemplates);
         if (typeof fetchCaseFiles === 'function') DB().subscribe('case_files', fetchCaseFiles);
         if (typeof fetchShifts === 'function') DB().subscribe('shift_reports', fetchShifts);
         renderAdmin();
