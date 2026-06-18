@@ -110,6 +110,7 @@
             { key: 'name', label: 'Name', type: 'text' },
             { key: 'phone', label: 'Phone', type: 'text' },
             { key: 'dob', label: 'DOB', type: 'text' },
+            { key: 'affiliation', label: 'Affiliation', type: 'text' },
           ] },
           { id: 'rights', label: 'Rights Advisement', type: 'kv', fields: [
             { key: 'rights_admin', label: 'Article 31 / Miranda Administered', type: 'select', opts: ['', 'Yes', 'No'] },
