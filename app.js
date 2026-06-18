@@ -23,7 +23,7 @@
           const detail = p.case_number || p.tracker_code || p.target;
           const sub = p.reason || [p.tracker_code, p.target].filter(Boolean).join(' · ');
           const linkable = !!p.case_id;
-          return `<div data-case="${linkable ? esc(p.case_id) : ''}" class="notif-row rounded-lg border ${n.read ? 'border-white/5 bg-ink-900' : 'border-blue-500/20 bg-blue-500/5'} p-3 ${linkable ? 'cursor-pointer transition hover:border-blue-500/40' : ''}">
+          return `<div data-id="${esc(n.id)}" data-read="${n.read ? '1' : ''}" data-case="${linkable ? esc(p.case_id) : ''}" class="notif-row cursor-pointer rounded-lg border ${n.read ? 'border-white/5 bg-ink-900' : 'border-blue-500/20 bg-blue-500/5'} p-3 transition hover:border-blue-500/40">
             <div class="flex items-center justify-between gap-2"><span class="text-sm font-semibold text-white">${esc(NOTIF_LABEL[n.type] || n.type)}</span><span class="flex-shrink-0 text-[11px] text-slate-500">${timeAgo(n.created_at)}</span></div>
             ${detail ? `<p class="mt-0.5 font-mono text-[11px] text-blue-300">${esc(detail)}${p.detective ? ' · ' + esc(p.detective) : ''}</p>` : ''}
             ${sub ? `<p class="mt-1 text-xs text-slate-400">${esc(sub)}</p>` : ''}
@@ -31,7 +31,15 @@
           </div>`;
         }).join('') : '<p class="text-sm text-slate-500">No notifications.</p>'}</div>`;
       node.querySelector('.close-x').onclick = closeModal;
-      node.querySelectorAll('.notif-row[data-case]').forEach((row) => { if (!row.dataset.case) return; row.onclick = () => { closeModal(); if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(row.dataset.case); }; });
+      node.querySelectorAll('.notif-row').forEach((row) => {
+        row.onclick = async () => {
+          if (row.dataset.id && !row.dataset.read) {
+            row.dataset.read = '1'; row.classList.remove('border-blue-500/20', 'bg-blue-500/5'); row.classList.add('border-white/5', 'bg-ink-900');
+            try { await DB().update('notifications', row.dataset.id, { read: true }); } catch (e) {} fetchNotifications();
+          }
+          if (row.dataset.case) { closeModal(); if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(row.dataset.case); }
+        };
+      });
       const ra = node.querySelector('#notif-readall');
       if (ra) ra.onclick = async () => { const ids = NOTIFS.filter((n) => !n.read).map((n) => n.id); for (const id of ids) { try { await DB().update('notifications', id, { read: true }); } catch (e) {} } toast('Marked read', 'info'); closeModal(); fetchNotifications(); };
       openModal(node);

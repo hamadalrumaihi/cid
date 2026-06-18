@@ -194,6 +194,33 @@
       } catch (e) { casesNotice('Could not load cases: ' + escapeHTML(e.message || String(e))); }
     }
 
+    // QoL: days since a case last moved; flag open/active cases gone quiet (≥14d).
+    function caseStaleDays(c) { return Math.floor((Date.now() - new Date(c.updated_at).getTime()) / 86400000); }
+    function staleBadge(c) {
+      if (c.status === 'closed' || c.status === 'cold') return '';
+      const d = caseStaleDays(c); if (d < 14) return '';
+      return `<span class="flex-shrink-0 rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300" title="No updates in ${d} days">⏳ ${d}d stale</span>`;
+    }
+    // QoL: read-only lifecycle strip for the case Overview (advance via Sign-off tab).
+    function caseStageStrip(c) {
+      const s = c.signoff_status || 'none', closed = c.status === 'closed';
+      const inSignoff = ['awaiting_bureau_lead', 'awaiting_deputy', 'approved_deputy', 'awaiting_director', 'changes_requested', 'denied'].includes(s);
+      const approved = ['approved_complete'].includes(s);
+      const doj = s === 'ready_doj';
+      const attn = s === 'changes_requested' || s === 'denied';
+      const steps = [
+        { label: 'Investigation', done: true, active: !inSignoff && !approved && !doj && !closed },
+        { label: 'Sign-off', done: inSignoff || approved || doj || closed, active: inSignoff },
+        { label: 'DOJ-Ready', done: doj || closed, active: doj },
+        { label: 'Closed', done: closed, active: closed },
+      ];
+      const pill = (st) => {
+        const cls = st.active ? (attn && st.label === 'Sign-off' ? 'border-orange-500/40 bg-orange-500/10 text-orange-200' : 'border-blue-500/40 bg-blue-500/10 text-white') : st.done ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300' : 'border-white/10 bg-white/5 text-slate-500';
+        return `<span class="flex-shrink-0 rounded-full border px-3 py-1 text-[11px] font-semibold ${cls}">${st.done && !st.active ? '✓ ' : ''}${st.label}</span>`;
+      };
+      return `<div class="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-4"><p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Case lifecycle</p><div class="flex items-center gap-2 overflow-x-auto">${steps.map((st, i) => pill(st) + (i < steps.length - 1 ? '<span class="flex-shrink-0 text-slate-600">→</span>' : '')).join('')}</div><p class="mt-2 text-[11px] text-slate-500">Advance the case through sign-off &amp; DOJ from the <span class="text-slate-300">Sign-off</span> tab.</p></div>`;
+    }
+
     function renderCases() {
       const grid = $('#cases-grid'); if (!grid) return;
       const q = ($('#case-search') ? $('#case-search').value : '').trim().toLowerCase();
@@ -212,7 +239,7 @@
         card.innerHTML = `
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0"><p class="truncate font-mono text-sm font-semibold text-blue-300">${escapeHTML(c.case_number)}</p><p class="mt-0.5 truncate text-sm text-white">${escapeHTML(c.title || 'Untitled case')}</p></div>
-            <span class="flex-shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${caseStatusTint(c.status)}">${escapeHTML(c.status)}</span>
+            <div class="flex flex-shrink-0 items-center gap-1.5">${staleBadge(c)}<span class="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${caseStatusTint(c.status)}">${escapeHTML(c.status)}</span></div>
           </div>
           <p class="mt-2 line-clamp-2 text-xs text-slate-400">${escapeHTML(c.summary || 'No summary.')}</p>
           ${c.signoff_status && c.signoff_status !== 'none' ? `<div class="mt-2"><span class="rounded px-2 py-0.5 text-[10px] font-semibold ${signoffTint(c.signoff_status)}">${escapeHTML(signoffLabel(c.signoff_status))}</span></div>` : ''}
@@ -234,7 +261,7 @@
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Title</label><input data-k="title" value="${escapeHTML(c.title || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Bureau</label>${sel('bureau', ['LSB', 'BCB', 'SAB', 'JTF'], c.bureau || 'JTF')}</div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Status</label>${sel('status', ['open', 'active', 'cold', 'closed'], c.status || 'open')}</div>
-          <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Area / Region</label><input data-k="area" value="${escapeHTML(c.area || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Vinewood, Sandy Shores, Mirror Park" /><p class="mt-1 text-[11px] text-slate-500">Used by the Commander Heatmap to plot case concentration.</p></div>
+          <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Area / Region</label><input data-k="area" list="area-list" value="${escapeHTML(c.area || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Vinewood, Sandy Shores, Mirror Park" /><p class="mt-1 text-[11px] text-slate-500">Used by the Commander Heatmap to plot case concentration.</p></div>
           ${canReassign() ? `<div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Owner — Lead Detective</label><select data-k="lead_detective_id" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option value="">— unassigned —</option>${(typeof PROFILES !== 'undefined' ? PROFILES : []).filter((p) => p.active).map((p) => `<option value="${p.id}" ${p.id === c.lead_detective_id ? 'selected' : ''}>${escapeHTML(p.display_name)} · ${escapeHTML(ROLE_LABEL[p.role] || p.role)}</option>`).join('')}</select><p class="mt-1 text-[11px] text-slate-500">Ownership is separate from the sign-off chain; reassigning does not change sign-off progress.</p></div>` : ''}
           <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Summary</label><textarea data-k="summary" rows="4" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${escapeHTML(c.summary || '')}</textarea></div>
         </div>
@@ -346,7 +373,7 @@
           const assigned = new Set(asg.map((a) => a.officer_id));
           const chips = asg.length ? asg.map((a) => `<span class="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200">👤 ${escapeHTML(officerName(a.officer_id) || 'Officer')}${a.role ? ` · <span class="text-slate-400">${escapeHTML(a.role)}</span>` : ''}${canDel ? ` <button class="asg-rm text-rose-300 hover:text-rose-200" data-id="${a.id}" title="Remove assignee">✕</button>` : ''}</span>`).join('') : '<span class="text-sm text-slate-500">No additional assignees — only the lead detective.</span>';
           const opts = profs.filter((p) => p.active && p.id !== detailCase.lead_detective_id && !assigned.has(p.id)).map((p) => `<option value="${p.id}">${escapeHTML(p.display_name)}</option>`).join('');
-          body.innerHTML = `<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          body.innerHTML = `${caseStageStrip(detailCase)}<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
             ${[['Evidence', ev.length], ['Reports', rep.length], ['Lifecycle', detailCase.status], ['Owner (Lead Det.)', ownerName], ['Sign-off', signoffLabel(detailCase.signoff_status || 'none')]].map((k) => `<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-5"><p class="text-xs uppercase tracking-wider text-slate-400">${k[0]}</p><p class="mt-1 text-lg font-bold text-white">${escapeHTML(String(k[1]))}</p></div>`).join('')}
           </div>
           <div class="mt-6 rounded-2xl border border-white/5 bg-ink-900/60 p-5">

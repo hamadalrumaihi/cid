@@ -64,7 +64,7 @@
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input data-k="name" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" value="${escapeHTML(p.name || '')}" /></div>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="mb-1 block text-xs font-semibold text-slate-400">Type</label><select data-k="type" id="pl-type" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${LOC_TYPES.map((t) => `<option value="${t[0]}" ${t[0] === (p.type || 'drug_lab') ? 'selected' : ''}>${t[1]}</option>`).join('')}</select></div>
-            <div><label class="mb-1 block text-xs font-semibold text-slate-400">Area</label><input data-k="area" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" value="${escapeHTML(p.area || '')}" /></div>
+            <div><label class="mb-1 block text-xs font-semibold text-slate-400">Area</label><input data-k="area" list="area-list" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" value="${escapeHTML(p.area || '')}" /></div>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="mb-1 block text-xs font-semibold text-slate-400">Controlling Gang</label><select data-k="controlling_gang_id" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${gangOpts}</select></div>
