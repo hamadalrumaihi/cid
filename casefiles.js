@@ -8,6 +8,56 @@
     const dbReady = () => { const d = DB(); return !!(d && d.ready); };
     const caseStatusTint = (s) => s === 'closed' ? 'bg-slate-500/20 text-slate-300' : s === 'cold' ? 'bg-blue-500/15 text-blue-300' : s === 'active' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300';
     let casesCache = [];
+    // QoL: list scope (mine/all) + recently-opened & pinned cases (persisted via Store).
+    let casesScope = (typeof Store !== 'undefined') ? Store.get('casesScope', 'mine') : 'all';
+    const myId = () => (DB() && DB().me) ? DB().me.id : null;
+    const recentCaseIds = () => (typeof Store !== 'undefined' ? Store.get('recentCases', []) : []);
+    const pinnedCaseIds = () => (typeof Store !== 'undefined' ? Store.get('pinnedCases', []) : []);
+    function pushRecentCase(id) { if (!id || typeof Store === 'undefined') return; const r = recentCaseIds().filter((x) => x !== id); r.unshift(id); Store.set('recentCases', r.slice(0, 8)); }
+    function isPinned(id) { return pinnedCaseIds().includes(id); }
+    function togglePinCase(id) { if (typeof Store === 'undefined') return; const p = pinnedCaseIds(); const i = p.indexOf(id); if (i >= 0) p.splice(i, 1); else p.unshift(id); Store.set('pinnedCases', p.slice(0, 12)); }
+    function renderScopeChips() {
+      $$('#case-scope .cs-chip').forEach((b) => {
+        const on = b.dataset.scope === casesScope;
+        b.classList.toggle('bg-blue-500/15', on); b.classList.toggle('text-white', on); b.classList.toggle('text-slate-400', !on);
+        b.onclick = () => { casesScope = b.dataset.scope; if (typeof Store !== 'undefined') Store.set('casesScope', casesScope); renderCases(); };
+      });
+    }
+    // "Jump back in" strip on Command: pinned + recently-opened cases.
+    function renderJumpBack() {
+      const wrap = $('#jump-back'); if (!wrap) return;
+      const pinnedIds = pinnedCaseIds();
+      const pinned = pinnedIds.map((id) => casesCache.find((c) => c.id === id)).filter(Boolean);
+      const recent = recentCaseIds().map((id) => casesCache.find((c) => c.id === id)).filter(Boolean).filter((c) => !pinnedIds.includes(c.id));
+      if (!dbReady() || (!pinned.length && !recent.length)) { wrap.classList.add('hidden'); wrap.innerHTML = ''; return; }
+      const chips = (list, icon) => list.map((c) => `<button class="jb-chip inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-ink-900 px-3 py-1.5 text-xs text-slate-200 transition hover:border-blue-500/40 hover:bg-white/5" data-id="${c.id}"><span>${icon}</span><span class="font-mono text-blue-300">${escapeHTML(c.case_number)}</span><span class="max-w-[10rem] truncate text-slate-400">${escapeHTML(c.title || '')}</span></button>`).join('');
+      wrap.classList.remove('hidden');
+      wrap.innerHTML = `<p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Jump back in</p><div class="flex flex-wrap gap-2">${chips(pinned, '📌')}${chips(recent, '🕘')}</div>`;
+      wrap.querySelectorAll('.jb-chip').forEach((b) => b.onclick = () => { if (typeof navigate === 'function') navigate('cases'); openCaseDetail(b.dataset.id); });
+    }
+
+    // QoL: link an intel record (person/gang/place) to a case by posting a reference
+    // into that case's channel — keeps the intel on the case record without a schema change.
+    function attachIntelToCase(label) {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      if (!dbReady() || !casesCache.length) { toast('No cases available to attach to.', 'warn'); return; }
+      const node = el('div', { class: 'p-6' });
+      const opts = casesCache.slice().sort((a, b) => (a.case_number || '').localeCompare(b.case_number || '')).map((c) => `<option value="${c.id}">${escapeHTML(c.case_number)} · ${escapeHTML(c.title || '')}</option>`).join('');
+      node.innerHTML = `
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Attach to case</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <p class="mb-3 text-sm text-slate-400">Posts a reference to <span class="text-white">${escapeHTML(label)}</span> into the case channel.</p>
+        <select id="atc-case" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">${opts}</select>
+        <button id="atc-go" class="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Attach reference</button>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#atc-go').onclick = async () => {
+        const cid = node.querySelector('#atc-case').value; if (!cid) return;
+        const res = await DB().insert('case_messages', { case_id: cid, author_name: (DB().me && DB().me.display_name) || 'CID', body: '🔗 Intel reference — ' + label, mentions: [], links: [] });
+        if (res && res.error) { toast('Attach failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast('Reference posted to ' + ((typeof caseNumById === 'function' && caseNumById(cid)) || 'case') + ' channel', 'success');
+        if (typeof detailCase !== 'undefined' && detailCase && detailCase.id === cid && typeof detailTab !== 'undefined' && detailTab === 'chat' && typeof loadDetailTab === 'function') loadDetailTab();
+      };
+      openModal(node);
+    }
 
     function casesNotice(msg) { $('#cases-grid').innerHTML = `<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">${msg}</div>`; }
 
@@ -91,6 +141,7 @@
         else { notice.classList.add('hidden'); notice.innerHTML = ''; }
       }
       if (toolbar) { toolbar.classList.remove('hidden'); toolbar.classList.add('flex'); }
+      const drop = $('#cf-drop'); if (drop) drop.classList.toggle('hidden', !fmReady);
       if (auth) auth.innerHTML = '<span class="rounded-lg bg-white/5 px-2.5 py-1.5 text-[11px] text-slate-300">Files upload to FiveManage; records stored in Supabase.</span>';
       cfPopulateCaseList();
       if (!cfWired) {
@@ -112,6 +163,22 @@
           if (ok) { toast(ok + ' file' + (ok === 1 ? '' : 's') + ' attached to ' + cn, 'success'); fetchCaseFiles(); }
         };
         const se = $('#cf-search'); if (se) se.oninput = (typeof debounce === 'function' ? debounce(renderCaseFiles, 150) : renderCaseFiles);
+        // QoL: bulk drag-drop attach to the case number in #cf-case.
+        const drop = $('#cf-drop');
+        if (drop) {
+          const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+          ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { stop(e); drop.classList.add('border-blue-500/50', 'bg-blue-500/5'); }));
+          ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { stop(e); drop.classList.remove('border-blue-500/50', 'bg-blue-500/5'); }));
+          drop.addEventListener('drop', async (e) => {
+            const cn = ($('#cf-case') ? $('#cf-case').value : '').trim();
+            if (!cn) { toast('Enter or pick a case number first.', 'warn'); return; }
+            if (!(typeof fmConfigured === 'function' && fmConfigured())) { toast('FiveManage upload is not configured.', 'warn'); return; }
+            const files = Array.prototype.slice.call((e.dataTransfer && e.dataTransfer.files) || []);
+            if (!files.length) return;
+            let ok = 0; for (const f of files) { try { await cfAttachFile(f, cn); ok++; } catch (err) { toast('Upload failed: ' + (err.message || err), 'danger'); } }
+            if (ok) { toast(ok + ' file' + (ok === 1 ? '' : 's') + ' attached to ' + cn, 'success'); fetchCaseFiles(); }
+          });
+        }
       }
       fetchCaseFiles();
     }
@@ -122,23 +189,57 @@
       try {
         casesCache = await DB().list('cases', { order: 'updated_at', ascending: false });
         renderCases();
+        renderJumpBack();
         if (typeof refreshCaseSelects === 'function') refreshCaseSelects();
       } catch (e) { casesNotice('Could not load cases: ' + escapeHTML(e.message || String(e))); }
+    }
+
+    // QoL: days since a case last moved; flag open/active cases gone quiet (≥14d).
+    function caseStaleDays(c) { return Math.floor((Date.now() - new Date(c.updated_at).getTime()) / 86400000); }
+    function staleBadge(c) {
+      if (c.status === 'closed' || c.status === 'cold') return '';
+      const d = caseStaleDays(c); if (d < 14) return '';
+      return `<span class="flex-shrink-0 rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300" title="No updates in ${d} days">⏳ ${d}d stale</span>`;
+    }
+    // QoL: read-only lifecycle strip for the case Overview (advance via Sign-off tab).
+    function caseStageStrip(c) {
+      const s = c.signoff_status || 'none', closed = c.status === 'closed';
+      const inSignoff = ['awaiting_bureau_lead', 'awaiting_deputy', 'approved_deputy', 'awaiting_director', 'changes_requested', 'denied'].includes(s);
+      const approved = ['approved_complete'].includes(s);
+      const doj = s === 'ready_doj';
+      const attn = s === 'changes_requested' || s === 'denied';
+      const steps = [
+        { label: 'Investigation', done: true, active: !inSignoff && !approved && !doj && !closed },
+        { label: 'Sign-off', done: inSignoff || approved || doj || closed, active: inSignoff },
+        { label: 'DOJ-Ready', done: doj || closed, active: doj },
+        { label: 'Closed', done: closed, active: closed },
+      ];
+      const pill = (st) => {
+        const cls = st.active ? (attn && st.label === 'Sign-off' ? 'border-orange-500/40 bg-orange-500/10 text-orange-200' : 'border-blue-500/40 bg-blue-500/10 text-white') : st.done ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300' : 'border-white/10 bg-white/5 text-slate-500';
+        return `<span class="flex-shrink-0 rounded-full border px-3 py-1 text-[11px] font-semibold ${cls}">${st.done && !st.active ? '✓ ' : ''}${st.label}</span>`;
+      };
+      return `<div class="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-4"><p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Case lifecycle</p><div class="flex items-center gap-2 overflow-x-auto">${steps.map((st, i) => pill(st) + (i < steps.length - 1 ? '<span class="flex-shrink-0 text-slate-600">→</span>' : '')).join('')}</div><p class="mt-2 text-[11px] text-slate-500">Advance the case through sign-off &amp; DOJ from the <span class="text-slate-300">Sign-off</span> tab.</p></div>`;
     }
 
     function renderCases() {
       const grid = $('#cases-grid'); if (!grid) return;
       const q = ($('#case-search') ? $('#case-search').value : '').trim().toLowerCase();
-      const items = casesCache.filter((c) => !q || JSON.stringify(c).toLowerCase().includes(q));
+      renderScopeChips();
+      const mine = myId();
+      let items = casesCache.filter((c) => !q || JSON.stringify(c).toLowerCase().includes(q));
+      if (casesScope === 'mine' && mine) items = items.filter((c) => c.lead_detective_id === mine);
       $('#case-new').classList.toggle('hidden', !(DB() && DB().canEdit()));
-      if (!items.length) { casesNotice(casesCache.length ? 'No cases match your filter.' : 'No case files yet.' + (DB() && DB().canEdit() ? ' Use “+ New Case” to create the first.' : '')); return; }
+      if (!items.length) {
+        const scopedEmpty = casesScope === 'mine' && mine && casesCache.length;
+        casesNotice(scopedEmpty ? 'No cases led by you. Switch to “All” to see every case.' : (casesCache.length ? 'No cases match your filter.' : 'No case files yet.' + (DB() && DB().canEdit() ? ' Use “+ New Case” to create the first.' : ''))); return;
+      }
       grid.innerHTML = '';
       items.forEach((c) => {
         const card = el('div', { class: 'cursor-pointer rounded-2xl border border-white/5 bg-ink-900/60 p-5 transition hover:border-blue-500/30 hover:bg-white/5' });
         card.innerHTML = `
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0"><p class="truncate font-mono text-sm font-semibold text-blue-300">${escapeHTML(c.case_number)}</p><p class="mt-0.5 truncate text-sm text-white">${escapeHTML(c.title || 'Untitled case')}</p></div>
-            <span class="flex-shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${caseStatusTint(c.status)}">${escapeHTML(c.status)}</span>
+            <div class="flex flex-shrink-0 items-center gap-1.5">${staleBadge(c)}<span class="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${caseStatusTint(c.status)}">${escapeHTML(c.status)}</span></div>
           </div>
           <p class="mt-2 line-clamp-2 text-xs text-slate-400">${escapeHTML(c.summary || 'No summary.')}</p>
           ${c.signoff_status && c.signoff_status !== 'none' ? `<div class="mt-2"><span class="rounded px-2 py-0.5 text-[10px] font-semibold ${signoffTint(c.signoff_status)}">${escapeHTML(signoffLabel(c.signoff_status))}</span></div>` : ''}
@@ -160,7 +261,7 @@
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Title</label><input data-k="title" value="${escapeHTML(c.title || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Bureau</label>${sel('bureau', ['LSB', 'BCB', 'SAB', 'JTF'], c.bureau || 'JTF')}</div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Status</label>${sel('status', ['open', 'active', 'cold', 'closed'], c.status || 'open')}</div>
-          <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Area / Region</label><input data-k="area" value="${escapeHTML(c.area || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Vinewood, Sandy Shores, Mirror Park" /><p class="mt-1 text-[11px] text-slate-500">Used by the Commander Heatmap to plot case concentration.</p></div>
+          <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Area / Region</label><input data-k="area" list="area-list" value="${escapeHTML(c.area || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Vinewood, Sandy Shores, Mirror Park" /><p class="mt-1 text-[11px] text-slate-500">Used by the Commander Heatmap to plot case concentration.</p></div>
           ${canReassign() ? `<div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Owner — Lead Detective</label><select data-k="lead_detective_id" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option value="">— unassigned —</option>${(typeof PROFILES !== 'undefined' ? PROFILES : []).filter((p) => p.active).map((p) => `<option value="${p.id}" ${p.id === c.lead_detective_id ? 'selected' : ''}>${escapeHTML(p.display_name)} · ${escapeHTML(ROLE_LABEL[p.role] || p.role)}</option>`).join('')}</select><p class="mt-1 text-[11px] text-slate-500">Ownership is separate from the sign-off chain; reassigning does not change sign-off progress.</p></div>` : ''}
           <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Summary</label><textarea data-k="summary" rows="4" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${escapeHTML(c.summary || '')}</textarea></div>
         </div>
@@ -214,6 +315,7 @@
         const rows = await DB().list('cases', { eq: { id: id } });
         detailCase = rows[0]; if (!detailCase) { toast('Case not found.', 'warn'); return; }
         detailTab = 'overview';
+        pushRecentCase(detailCase.id); renderJumpBack();
         $('#cases-list').classList.add('hidden');
         $('#case-detail').classList.remove('hidden');
         renderCaseDetailShell();
@@ -232,6 +334,8 @@
               <span class="rounded-md px-2.5 py-1 text-[10px] font-semibold uppercase ${caseStatusTint(c.status)}">${escapeHTML(c.status)}</span>
               ${c.signoff_status && c.signoff_status !== 'none' ? `<span class="rounded-md px-2.5 py-1 text-[10px] font-semibold ${signoffTint(c.signoff_status)}" title="Sign-off status">${escapeHTML(signoffLabel(c.signoff_status))}</span>` : ''}
               <span class="rounded-md bg-white/5 px-2.5 py-1 text-xs text-slate-300">${escapeHTML(c.bureau)}</span>
+              <button id="case-pin" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold transition hover:bg-white/10 ${isPinned(c.id) ? 'text-amber-300' : 'text-slate-200'}" title="Pin to Jump-back">${isPinned(c.id) ? '📌 Pinned' : '📌 Pin'}</button>
+              <button id="case-link" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10" title="Copy a deep link to this case">🔗 Link</button>
               <button id="case-packet" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">📦 Packet .docx</button>
               ${canEdit ? '<button id="case-edit" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>' : ''}
               ${canDel ? '<button id="case-del" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>' : ''}
@@ -243,6 +347,12 @@
         </div>
         <div id="detail-body"><p class="text-sm text-slate-500">Loading…</p></div>`;
       $('#case-back').onclick = showCasesList;
+      const pin = $('#case-pin'); if (pin) pin.onclick = () => { togglePinCase(detailCase.id); renderCaseDetailShell(); renderJumpBack(); };
+      const lk = $('#case-link'); if (lk) lk.onclick = () => {
+        const url = location.origin + location.pathname + '#case=' + detailCase.id;
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(() => toast('Case link copied', 'success'), () => toast(url, 'info'));
+        else toast(url, 'info');
+      };
       const pk = $('#case-packet'); if (pk) pk.onclick = () => exportCasePacket(detailCase);
       const eb = $('#case-edit'); if (eb) eb.onclick = () => openCaseModal(detailCase);
       const db = $('#case-del'); if (db) db.onclick = async () => {
@@ -263,7 +373,7 @@
           const assigned = new Set(asg.map((a) => a.officer_id));
           const chips = asg.length ? asg.map((a) => `<span class="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200">👤 ${escapeHTML(officerName(a.officer_id) || 'Officer')}${a.role ? ` · <span class="text-slate-400">${escapeHTML(a.role)}</span>` : ''}${canDel ? ` <button class="asg-rm text-rose-300 hover:text-rose-200" data-id="${a.id}" title="Remove assignee">✕</button>` : ''}</span>`).join('') : '<span class="text-sm text-slate-500">No additional assignees — only the lead detective.</span>';
           const opts = profs.filter((p) => p.active && p.id !== detailCase.lead_detective_id && !assigned.has(p.id)).map((p) => `<option value="${p.id}">${escapeHTML(p.display_name)}</option>`).join('');
-          body.innerHTML = `<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          body.innerHTML = `${caseStageStrip(detailCase)}<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
             ${[['Evidence', ev.length], ['Reports', rep.length], ['Lifecycle', detailCase.status], ['Owner (Lead Det.)', ownerName], ['Sign-off', signoffLabel(detailCase.signoff_status || 'none')]].map((k) => `<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-5"><p class="text-xs uppercase tracking-wider text-slate-400">${k[0]}</p><p class="mt-1 text-lg font-bold text-white">${escapeHTML(String(k[1]))}</p></div>`).join('')}
           </div>
           <div class="mt-6 rounded-2xl border border-white/5 bg-ink-900/60 p-5">
@@ -339,11 +449,13 @@
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Location</label><input data-k="location" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Tamper Status</label><select data-k="tamper" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option>intact</option><option>compromised</option><option>released</option><option>destroyed</option></select></div>
         </div>
+        <p class="mt-3 text-[11px] text-slate-500">Auto-stamped on log: <span class="text-slate-300">collected by ${escapeHTML((DB() && DB().me && DB().me.display_name) || 'you')}</span> · ${new Date().toLocaleDateString('en-US')}.</p>
         <button id="ev-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Log Evidence</button>`;
       node.querySelector('.close-x').onclick = closeModal;
       node.querySelector('#ev-save').onclick = async () => {
         const payload = { case_id: caseId }; $$('[data-k]', node).forEach((f) => payload[f.dataset.k] = f.value.trim() || null);
         if (!payload.description) { toast('Description is required.', 'warn'); return; }
+        if (DB() && DB().me) payload.collected_by = DB().me.id;   // QoL: default collector = you
         const res = await DB().insert('evidence', payload);
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast('Evidence logged', 'success'); loadDetailTab();

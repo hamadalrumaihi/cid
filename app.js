@@ -23,7 +23,7 @@
           const detail = p.case_number || p.tracker_code || p.target;
           const sub = p.reason || [p.tracker_code, p.target].filter(Boolean).join(' · ');
           const linkable = !!p.case_id;
-          return `<div data-case="${linkable ? esc(p.case_id) : ''}" class="notif-row rounded-lg border ${n.read ? 'border-white/5 bg-ink-900' : 'border-blue-500/20 bg-blue-500/5'} p-3 ${linkable ? 'cursor-pointer transition hover:border-blue-500/40' : ''}">
+          return `<div data-id="${esc(n.id)}" data-read="${n.read ? '1' : ''}" data-case="${linkable ? esc(p.case_id) : ''}" class="notif-row cursor-pointer rounded-lg border ${n.read ? 'border-white/5 bg-ink-900' : 'border-blue-500/20 bg-blue-500/5'} p-3 transition hover:border-blue-500/40">
             <div class="flex items-center justify-between gap-2"><span class="text-sm font-semibold text-white">${esc(NOTIF_LABEL[n.type] || n.type)}</span><span class="flex-shrink-0 text-[11px] text-slate-500">${timeAgo(n.created_at)}</span></div>
             ${detail ? `<p class="mt-0.5 font-mono text-[11px] text-blue-300">${esc(detail)}${p.detective ? ' · ' + esc(p.detective) : ''}</p>` : ''}
             ${sub ? `<p class="mt-1 text-xs text-slate-400">${esc(sub)}</p>` : ''}
@@ -31,7 +31,15 @@
           </div>`;
         }).join('') : '<p class="text-sm text-slate-500">No notifications.</p>'}</div>`;
       node.querySelector('.close-x').onclick = closeModal;
-      node.querySelectorAll('.notif-row[data-case]').forEach((row) => { if (!row.dataset.case) return; row.onclick = () => { closeModal(); if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(row.dataset.case); }; });
+      node.querySelectorAll('.notif-row').forEach((row) => {
+        row.onclick = async () => {
+          if (row.dataset.id && !row.dataset.read) {
+            row.dataset.read = '1'; row.classList.remove('border-blue-500/20', 'bg-blue-500/5'); row.classList.add('border-white/5', 'bg-ink-900');
+            try { await DB().update('notifications', row.dataset.id, { read: true }); } catch (e) {} fetchNotifications();
+          }
+          if (row.dataset.case) { closeModal(); if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(row.dataset.case); }
+        };
+      });
       const ra = node.querySelector('#notif-readall');
       if (ra) ra.onclick = async () => { const ids = NOTIFS.filter((n) => !n.read).map((n) => n.id); for (const id of ids) { try { await DB().update('notifications', id, { read: true }); } catch (e) {} } toast('Marked read', 'info'); closeModal(); fetchNotifications(); };
       openModal(node);
@@ -217,12 +225,17 @@
       const box = node.querySelector('#search-results');
       const html = [
         sec('Cases', cases, (c) => `<button class="sr sr-case block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-id="${c.id}"><span class="font-mono text-blue-300">${esc(c.case_number)}</span> · ${esc(c.title || '')}</button>`),
-        sec('Persons', persons, (p) => `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm text-slate-200">${esc(p.name)}${p.alias ? ' “' + esc(p.alias) + '”' : ''}</div>`),
-        sec('Gangs', gangs, (g) => `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm text-slate-200">🚩 ${esc(g.name)}</div>`),
-        sec('Places', places, (p) => `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm text-slate-200">📍 ${esc(p.name)} <span class="text-slate-500">${esc(p.area || '')}</span></div>`),
+        sec('Persons', persons, (p) => `<button class="sr sr-goto block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-tab="persons" data-term="${esc(p.name || '')}">${esc(p.name)}${p.alias ? ' “' + esc(p.alias) + '”' : ''}</button>`),
+        sec('Gangs', gangs, (g) => `<button class="sr sr-goto block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-tab="gangs" data-term="${esc(g.name || '')}">🚩 ${esc(g.name)}</button>`),
+        sec('Places', places, (p) => `<button class="sr sr-goto block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-tab="places" data-term="${esc(p.name || '')}">📍 ${esc(p.name)} <span class="text-slate-500">${esc(p.area || '')}</span></button>`),
       ].join('');
       box.innerHTML = html || '<p class="text-sm text-slate-500">No matches across cases, persons, gangs or places.</p>';
       box.querySelectorAll('.sr-case').forEach((b) => b.onclick = () => { closeModal(); navigate('cases'); setTimeout(() => openCaseDetail(b.dataset.id), 120); });
+      box.querySelectorAll('.sr-goto').forEach((b) => b.onclick = () => {
+        closeModal(); navigate(b.dataset.tab);
+        const sel = { persons: '#person-search', gangs: '#gang-search' }[b.dataset.tab];
+        if (sel && b.dataset.term) setTimeout(() => { const inp = $(sel); if (inp) { inp.value = b.dataset.term; inp.dispatchEvent(new Event('input', { bubbles: true })); } }, 140);
+      });
     }
 
     /* ============================================================ 13. CLOCK + BOOT ============================================================ */
@@ -275,14 +288,28 @@
       $('#notif-bell').addEventListener('click', openNotifications);
       tickClock(); setInterval(tickClock, 1000); setInterval(tickTrackers, 1000);
 
-      const hash = (location.hash || '').replace('#','');
-      navigate(PAGE_META[hash] ? hash : Store.get('tab', 'command'));
+      // Deep-link support: #case=<id> opens that case directly; otherwise route to the tab.
+      function openFromHash() {
+        const raw = (location.hash || '').replace('#', '');
+        const m = /^case=(.+)$/.exec(raw);
+        if (m) { if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(decodeURIComponent(m[1])); return true; }
+        return false;
+      }
+      if (!openFromHash()) { const hash = (location.hash || '').replace('#', ''); navigate(PAGE_META[hash] ? hash : Store.get('tab', 'command')); }
+      window.addEventListener('hashchange', openFromHash);
 
       $('#global-search').addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
         const q = e.target.value.trim();
         if (q.length >= 2 && dbReady()) { supaSearch(q); return; }
         toast('Type at least 2 characters (and sign in) to search.', 'info');
+      });
+      // QoL: press "/" anywhere (outside a field) to jump to global search.
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+        const t = e.target, tag = t && t.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+        const box = $('#global-search'); if (box) { e.preventDefault(); box.focus(); box.select(); }
       });
     }
     document.addEventListener('DOMContentLoaded', init);

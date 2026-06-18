@@ -30,6 +30,17 @@
       list.querySelectorAll('.sh-edit').forEach((b) => b.onclick = () => openShiftModal(SHIFTS.find((x) => x.id === b.dataset.id)));
     }
 
+    // QoL: roll up the week's activity (cases you lead that moved + evidence you
+    // collected) so the detective isn't reconstructing their week from memory.
+    async function rollupShift(weekStart) {
+      const me = DB() && DB().me; if (!me) return { cases_worked: '', evidence_count: 0 };
+      const start = new Date(weekStart + 'T00:00:00'); const end = new Date(start); end.setDate(end.getDate() + 7);
+      const inWeek = (d) => { if (!d) return false; const t = new Date(d); return t >= start && t < end; };
+      const cases = (typeof casesCache !== 'undefined' ? casesCache : []).filter((c) => c.lead_detective_id === me.id && inWeek(c.updated_at));
+      let evidence_count = 0;
+      try { const ev = await DB().list('evidence', { eq: { collected_by: me.id } }); evidence_count = ev.filter((e) => inWeek(e.collected_at || e.created_at)).length; } catch (e) {}
+      return { cases_worked: cases.map((c) => c.case_number).join(', '), evidence_count: evidence_count };
+    }
     function openShiftModal(record) {
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
       const me = DB().me, s = record || {};
@@ -37,7 +48,8 @@
       const inp = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500';
       const lbl = 'mb-1 block text-xs font-semibold text-slate-400';
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Weekly Report</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Weekly Report</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-4"><button id="shift-rollup" type="button" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-blue-200 transition hover:bg-white/10">↻ Auto-fill from my activity</button><span class="ml-2 text-[11px] text-slate-500">fills cases you led + evidence you collected this week</span></div>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div><label class="${lbl}">Week starting (Mon)</label><input data-k="week_start" type="date" value="${esc(s.week_start || mondayOf(new Date()))}" class="${inp}" /></div>
           <div><label class="${lbl}">Arrests</label><input data-k="arrests" type="number" min="0" value="${s.arrests != null ? s.arrests : 0}" class="${inp}" /></div>
@@ -47,6 +59,16 @@
         </div>
         <button id="shift-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">${record ? 'Save changes' : 'Submit report'}</button>`;
       node.querySelector('.close-x').onclick = closeModal;
+      const rb = node.querySelector('#shift-rollup');
+      if (rb) rb.onclick = async () => {
+        rb.disabled = true; const prev = rb.textContent; rb.textContent = 'Computing…';
+        const ws = node.querySelector('[data-k="week_start"]').value || mondayOf(new Date());
+        const r = await rollupShift(ws);
+        node.querySelector('[data-k="cases_worked"]').value = r.cases_worked;
+        node.querySelector('[data-k="evidence_count"]').value = r.evidence_count;
+        rb.disabled = false; rb.textContent = prev;
+        toast(r.cases_worked || r.evidence_count ? 'Filled from your activity — review before submitting.' : 'No matching activity found for that week.', r.cases_worked || r.evidence_count ? 'success' : 'info');
+      };
       node.querySelector('#shift-save').onclick = async () => {
         const p = {}; $$('[data-k]', node).forEach((f) => p[f.dataset.k] = f.value.trim());
         if (!p.week_start) { toast('Week is required.', 'warn'); return; }

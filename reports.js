@@ -70,6 +70,14 @@
     function reloadCaseReports() {
       if (typeof detailCase !== 'undefined' && detailCase && typeof detailTab !== 'undefined' && detailTab === 'reports' && typeof loadDetailTab === 'function') loadDetailTab();
     }
+    // QoL: reusable boilerplate snippets a detective can drop into report prose.
+    const REPORT_SNIPPETS = [
+      { label: 'Miranda', text: 'The subject was advised of their Miranda rights per Article 31 and indicated understanding prior to questioning. ' },
+      { label: 'Chain of custody', text: 'All recovered items were photographed, sealed, and entered into the chain of custody at the time of recovery. ' },
+      { label: 'Positive ID', text: 'A positive identification was made via comparison of the subject against their DOC booking photograph. ' },
+      { label: 'Vehicle stop', text: 'A traffic stop was initiated; the operator was identified via the vehicle registration return. ' },
+      { label: 'Use of force', text: 'No use of force was applied during this contact. ' },
+    ];
     // QoL: pre-fill the report header from the case + the signed-in detective's
     // profile so they're not re-typing case number / name / rank / date each time.
     function reportSeed(templateId, caseId, kind) {
@@ -95,10 +103,20 @@
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><div><p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">${esc(tpl.name)}</p><h3 class="text-xl font-bold text-white">${esc(heading)}</h3></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         ${parentId ? `<p class="mb-4 rounded-lg border border-white/10 bg-ink-900 p-2.5 text-xs text-slate-400">↳ Linked as ${kind} to a prior report on <span class="font-mono text-blue-300">${esc(caseNumById(caseId) || caseId)}</span>.</p>` : ''}
+        <div class="mb-3 flex flex-wrap items-center gap-1.5"><span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Insert snippet:</span>${REPORT_SNIPPETS.map((s, i) => `<button type="button" class="rpt-snippet rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 transition hover:bg-white/10" data-i="${i}">${esc(s.label)}</button>`).join('')}</div>
         <div class="max-h-[60vh] overflow-y-auto pr-1" id="r-form">${renderFormBody(tpl.schema, reportSeed(templateId, caseId, kind), true)}</div>
         <button id="r-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save Report to Case</button>`;
       node.querySelector('.close-x').onclick = closeModal;
       wireFormBody(node.querySelector('#r-form'), tpl.schema);
+      // Snippet insertion targets the last-focused textarea (defaults to Narrative).
+      let lastTextarea = node.querySelector('#r-form textarea[data-fkey="narrative"]') || node.querySelector('#r-form textarea');
+      node.querySelectorAll('#r-form textarea').forEach((ta) => ta.addEventListener('focus', () => { lastTextarea = ta; }));
+      node.querySelectorAll('.rpt-snippet').forEach((b) => b.onclick = () => {
+        const s = REPORT_SNIPPETS[+b.dataset.i]; const ta = lastTextarea; if (!s || !ta) { toast('Tap a text box first, then insert.', 'info'); return; }
+        const start = ta.selectionStart != null ? ta.selectionStart : ta.value.length, end = ta.selectionEnd != null ? ta.selectionEnd : ta.value.length;
+        ta.value = ta.value.slice(0, start) + s.text + ta.value.slice(end);
+        const pos = start + s.text.length; ta.focus(); try { ta.setSelectionRange(pos, pos); } catch (e) {}
+      });
       node.querySelector('#r-save').onclick = async () => {
         const fields = readForm(node, tpl.schema);
         const payload = { case_id: caseId, template: templateId, kind: kind, seq: seq, parent_id: parentId || null, fields: fields };

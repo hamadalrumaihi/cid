@@ -85,6 +85,7 @@
             <div><h3 class="text-xl font-bold text-white">${escapeHTML(g.name)}</h3><p class="mt-1 text-sm text-slate-400">Colors: ${escapeHTML(g.colors || '—')}</p>${g.notes ? `<p class="mt-1 text-sm text-slate-400">${escapeHTML(g.notes)}</p>` : ''}</div>
             <div class="flex items-center gap-2">
               <span class="rounded-md border px-2.5 py-1 text-[10px] font-semibold uppercase ${threatTint(g.threat_level)}">${escapeHTML(cap(g.threat_level))} Threat</span>
+              ${canEdit ? '<button id="gang-tocase" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-white/10">📎 Attach to case</button>' : ''}
               ${canEdit ? '<button id="gang-edit" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>' : ''}
               ${canDel ? '<button id="gang-del" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>' : ''}
             </div>
@@ -107,6 +108,7 @@
           </div>
         </div>`;
       $('#gang-back').onclick = showGangsList;
+      const gtc = $('#gang-tocase'); if (gtc && typeof attachIntelToCase === 'function') gtc.onclick = () => attachIntelToCase(`Gang — ${detailGang.name}${detailGang.colors ? ' (' + detailGang.colors + ')' : ''} · ${cap(detailGang.threat_level)} threat`);
       const ge = $('#gang-edit'); if (ge) ge.onclick = () => openGangModal(detailGang);
       const gd = $('#gang-del'); if (gd) gd.onclick = async () => {
         if (!confirm('Delete gang “' + g.name + '”? This removes its members & turf.')) return;
