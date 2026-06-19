@@ -13,10 +13,11 @@
 - Build order: Wave 0 → Cases → Intel → Command → Reports.
 
 ## WAVE 0 — Security & foundation ⚠️ PARTIAL
-- ❌ **OUTSTANDING:** Pin supabase-js to an exact latest-stable 2.x (still floating `@2` in index.html:558).
-- ❌ **OUTSTANDING:** xlsx — self-host the CURRENT patched SheetJS from cdn.sheetjs.com (still on vulnerable npm `0.18.5` CDN at index.html:562; do NOT vendor 0.18.5). Keep full import/export. jsPDF + fonts stay on CDN.
-- ⏳ Run Supabase security + performance advisors; fix mechanical issues, escalate design-level ones. _(not yet re-run this pass)_
-- ✅ Reconcile Live Records: `cid_records` locked behind auth + `records.js` routed through the MAIN client — `25680d7`.
+- ✅ Pin supabase-js to an exact latest-stable 2.x — pinned to `2.108.2` in index.html.
+- ⛔ **BLOCKED:** xlsx — self-host the CURRENT patched SheetJS. cdn.sheetjs.com / jsdelivr / unpkg / git.sheetjs.com are all blocked by this environment's network policy, and GitHub's mirror is frozen at the still-vulnerable 0.18.12. Needs the host allow-listed OR the `xlsx.full.min.js` file supplied. Still on vulnerable `0.18.5` CDN meanwhile. Do NOT vendor 0.18.5/0.18.12. Keep full import/export.
+- ⏳ Supabase advisors run (this pass). Mechanical fixes prepared in `20260619020000_wave0_advisor_followup.sql` (touch_cases search_path + drop duplicate cases index) — **awaiting approval to apply to live `cid` project**. By-design/escalated items documented in commit message + below.
+- ⚠️ **CRITICAL — found this pass:** `20260618120000_cid_records_lock.sql` was committed (25680d7) and marked ✅ below, but the applied-migration history shows it was **never applied to the live `cid` project**. Live `cid_records` still has anon SELECT + un-hardened owner policies. The existing lock migration needs applying (fixes anon-read, is_active gating, and the auth_rls_initplan lint in one shot).
+- ⚠️ Reconcile Live Records: `records.js` routed through the MAIN client — `25680d7` (code shipped; **DB lock migration still unapplied — see above**).
 
 ## WAVE 1 — Cases & sign-off ✅
 - **Sign-off inbox**: Oversight sub-tab + count badge on Command. Cases awaiting my decision (reviewer), cases I submitted in-flight, cases bounced back to me (changes_requested/denied). Overdue pinned to top with age. — `1d55606`
