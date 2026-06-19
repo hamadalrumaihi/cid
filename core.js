@@ -421,6 +421,7 @@
       modus:      { title: 'M.O. Detector', sub: 'Tactical profiling & cross-reference' },
       gangs:      { title: 'Gangs & Turf', sub: 'Organizations, ranks, properties & territory' },
       places:     { title: 'Criminal Places', sub: 'Locations & production processes' },
+      network:    { title: 'Relationship Network', sub: 'Gangs, members & properties as a navigable graph' },
       reports:    { title: 'Report Generation', sub: 'Template-driven reports & supplemental chains' },
       rico:       { title: 'RICO Builder', sub: 'Enterprise & predicate-act element tracker' },
       drive:      { title: 'CID General', sub: 'Shared investigative drive' },
@@ -439,14 +440,14 @@
     const NAV_CATEGORIES = [
       { id: 'command',   label: 'Command',      tabs: ['command', 'announce', 'heatmap', 'personnel'] },
       { id: 'cases',     label: 'Cases',        tabs: ['cases', 'case-files', 'rico'] },
-      { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'gangs', 'places', 'narcotics', 'ballistics', 'modus', 'media'] },
+      { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'gangs', 'places', 'network', 'narcotics', 'ballistics', 'modus', 'media'] },
       { id: 'drive',     label: 'Drive',        tabs: ['drive', 'records'] },
       { id: 'oversight', label: 'Oversight',    tabs: ['inbox', 'shifts', 'audit'] },
     ];
     const TAB_LABEL = {
       command: 'Dashboard', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
       cases: 'Case Files', 'case-files': 'Attachments', rico: 'RICO',
-      persons: 'Persons', gangs: 'Gangs', places: 'Places', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector', media: 'Media Vault',
+      persons: 'Persons', gangs: 'Gangs', places: 'Places', network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector', media: 'Media Vault',
       drive: 'CID General', records: 'Records', inbox: 'Sign-off Inbox', shifts: 'Shift Reports', audit: 'Audit Log',
     };
     const TAB_CATEGORY = {}; NAV_CATEGORIES.forEach((c) => c.tabs.forEach((t) => { TAB_CATEGORY[t] = c.id; }));
@@ -481,6 +482,7 @@
       if (tab === 'gangs' && typeof onEnterGangs === 'function') onEnterGangs();
       if (tab === 'narcotics' && typeof onEnterNarcotics === 'function') onEnterNarcotics();
       if (tab === 'places' && typeof onEnterPlaces === 'function') onEnterPlaces();
+      if (tab === 'network' && typeof onEnterNetwork === 'function') onEnterNetwork();
       if (tab === 'ballistics' && typeof onEnterBallistics === 'function') onEnterBallistics();
       if (tab === 'rico' && typeof renderRico === 'function') renderRico();
       if (tab === 'command' && typeof onEnterCommand === 'function') onEnterCommand();

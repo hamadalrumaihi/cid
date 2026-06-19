@@ -27,8 +27,10 @@
 - ✅ **Cross-intel global search**: extend existing global search to persons, gangs, places, narcotics, ballistics, and cases; typed, clickable results. — `8bc44a8`
 - ✅ **Unified intel profiles**: slide-over panel from any person/gang card, rolling up linked cases, media, evidence, gang members, and places. — `d97f216`
 - ✅ **Bulk CSV import**: existing per-module importer (CSV/JSON/XLSX) extended with downloadable per-entity CSV templates, skip-duplicates-by-name (vs. existing rows + within the batch), and a breakdown import summary (imported · duplicates · invalid). Gang rosters bulk-import per-gang from the gang detail (`#member-new`), deduped by name within the gang.
-- **Relationship graph**: in-house SVG (no new dependency) on a new Intelligence "Network" sub-tab, also openable centered on a person/gang; pan/zoom/click-through. **TIMEBOX — lowest priority**; if hand-rolled layout/pan-zoom gets disproportionately fiddly, fall back to the simple linked-tree view or defer. ← NEXT (lowest priority)
+- ✅ **Relationship graph**: hand-rolled SVG (no new dependency) on the Intelligence "Network" sub-tab — gangs as hubs, members/places orbiting; ego/overview layouts, drag-pan, wheel/+/− zoom, click-to-recentre, click-centre to open the intel profile. Also openable centred on a person/gang via `openIntelGraph()` (🕸 button on the intel profile slide-over). Scope: persons/gangs/places relationships (cases deferred — kept the layout clean per the timebox).
 - _No migration for Wave 2._
+
+**WAVE 2 COMPLETE** ✅ — all four items shipped.
 
 ## WAVE 3 — Command & Heatmap
 - **Server-side filtering**: move status/bureau/lead/sign-off/text filters into Supabase queries; load-more / infinite scroll at 50/page. [migration: indexes on bureau, status, lead_detective_id, signoff_status, created_at — verified against the queries]

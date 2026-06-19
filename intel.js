@@ -45,10 +45,14 @@
       node.innerHTML = `
         <div class="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-white/10 bg-ink-850 px-6 py-4">
           <div class="min-w-0"><p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Intel profile</p><h3 id="ip-title" class="truncate text-xl font-bold text-white">Loading…</h3><p id="ip-sub" class="text-xs text-slate-400"></p></div>
-          <button class="close-x flex-shrink-0 text-2xl leading-none text-slate-400 hover:text-white">&times;</button>
+          <div class="flex flex-shrink-0 items-center gap-2">
+            <button id="ip-network" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10" title="View in relationship network">🕸 Network</button>
+            <button class="close-x text-2xl leading-none text-slate-400 hover:text-white">&times;</button>
+          </div>
         </div>
         <div id="ip-body" class="flex-1 space-y-6 px-6 py-5"><p class="text-sm text-slate-500">Building rollup…</p></div>`;
       node.querySelector('.close-x').onclick = closeModal;
+      const ipn = node.querySelector('#ip-network'); if (ipn) ipn.onclick = () => { closeModal(); if (typeof openIntelGraph === 'function') openIntelGraph(type, id); };
       openModal(node, { slide: true });
       try {
         if (type === 'person') await buildPersonProfile(id, node);
