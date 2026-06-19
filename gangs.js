@@ -122,6 +122,14 @@
         toast('Gang deleted', 'warn'); showGangsList(); fetchGangs();
       };
       const mn = $('#member-new'); if (mn) mn.onclick = () => openMemberModal(g.id, null);
+      // Bulk-import a roster straight into this gang; dedupe by name within the gang.
+      if (mn && typeof wireImport === 'function') wireImport('#member-new', {
+        table: 'gang_members', label: 'members',
+        allow: ['name', 'rank', 'callsign', 'status', 'ccw', 'vch', 'felony_count', 'mugshot_url'],
+        required: ['name'], bool: ['ccw'], num: ['vch', 'felony_count'],
+        dedupe: 'name', dedupeFilter: { gang_id: g.id },
+        coerce: (o) => { o.gang_id = g.id; return o; }, after: renderGangDetail,
+      });
       const tn = $('#turf-new'); if (tn) tn.onclick = () => openTurfModal(g.id);
       $$('.m-edit', $('#gang-detail')).forEach((b) => b.onclick = () => { const m = members.find((x) => x.id === b.dataset.id); openMemberModal(g.id, m); });
       $$('.turf-del', $('#gang-detail')).forEach((b) => b.onclick = async () => { await DB().remove('gang_turf', b.dataset.id); renderGangDetail(); });

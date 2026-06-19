@@ -24,10 +24,10 @@
 - **Auto-escalate stale cases**: client-side on app load, 14-day threshold. Notify assignee + command, visual overdue flag, pin in sign-off inbox. No auto-routing. Lazy (fires on app open), not scheduled — accepted tradeoff; scheduled fn is future upgrade. — `3d5ef71`
 
 ## WAVE 2 — Intelligence  ← CURRENT
-- **Cross-intel global search**: extend existing global search to persons, gangs, places, narcotics, ballistics, and cases; typed, clickable results.
-- **Unified intel profiles**: slide-over panel from any person/gang card, rolling up linked cases, media, evidence, gang members, and places.
-- **Relationship graph**: in-house SVG (no new dependency) on a new Intelligence "Network" sub-tab, also openable centered on a person/gang; pan/zoom/click-through. **TIMEBOX — lowest priority**; if hand-rolled layout/pan-zoom gets disproportionately fiddly, fall back to the simple linked-tree view or defer.
-- **Bulk CSV import**: Persons, Gangs+members, Places, Narcotics. Per-entity CSV templates; skip duplicates by name with an import summary.
+- ✅ **Cross-intel global search**: extend existing global search to persons, gangs, places, narcotics, ballistics, and cases; typed, clickable results. — `8bc44a8`
+- ✅ **Unified intel profiles**: slide-over panel from any person/gang card, rolling up linked cases, media, evidence, gang members, and places. — `d97f216`
+- ✅ **Bulk CSV import**: existing per-module importer (CSV/JSON/XLSX) extended with downloadable per-entity CSV templates, skip-duplicates-by-name (vs. existing rows + within the batch), and a breakdown import summary (imported · duplicates · invalid). Gang rosters bulk-import per-gang from the gang detail (`#member-new`), deduped by name within the gang.
+- **Relationship graph**: in-house SVG (no new dependency) on a new Intelligence "Network" sub-tab, also openable centered on a person/gang; pan/zoom/click-through. **TIMEBOX — lowest priority**; if hand-rolled layout/pan-zoom gets disproportionately fiddly, fall back to the simple linked-tree view or defer. ← NEXT (lowest priority)
 - _No migration for Wave 2._
 
 ## WAVE 3 — Command & Heatmap

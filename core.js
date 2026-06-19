@@ -331,12 +331,14 @@
       node.innerHTML = `
         <div class="mb-4 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Import ${esc(cfg.label)}</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <p class="mb-2 text-xs text-slate-400">Paste a <b>JSON array</b> of objects or <b>CSV</b> with a header row, or pick a <b>.csv / .xlsx</b> file. Columns (<span class="text-rose-300">*</span> required): <span class="font-mono text-blue-300">${esc(cols)}</span></p>
+        <button id="imp-tpl" class="mb-2 text-xs font-semibold text-blue-300 transition hover:text-blue-200">⬇ Download CSV template</button>
         <input id="imp-file" type="file" accept=".csv,.json,.xlsx,.xls,text/csv,application/json" class="mb-2 block w-full text-xs text-slate-400 file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-white" />
         <textarea id="imp-text" rows="9" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-xs text-white outline-none focus:border-badge-500" placeholder='[{"key":"value"}]   — or —   col1,col2&#10;val1,val2'></textarea>
         <div id="imp-msg" class="mt-2 text-xs text-slate-400"></div>
         <button id="imp-go" class="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Import</button>`;
       node.querySelector('.close-x').onclick = closeModal;
       const ta = node.querySelector('#imp-text'), msg = node.querySelector('#imp-msg');
+      const tpl = node.querySelector('#imp-tpl'); if (tpl) tpl.onclick = () => { if (typeof downloadCsv === 'function') downloadCsv(String(cfg.label).replace(/\s+/g, '-') + '-template.csv', cfg.allow, []); };
       node.querySelector('#imp-file').onchange = (e) => {
         const f = e.target.files[0]; if (!f) return;
         const isXlsx = /\.(xlsx|xls)$/i.test(f.name);
@@ -351,11 +353,30 @@
         const { rows, skipped, error } = importRows(ta.value, cfg);
         if (error) { msg.innerHTML = '<span class="text-rose-300">' + esc(error) + '</span>'; return; }
         if (!rows.length) { msg.innerHTML = '<span class="text-amber-300">No valid rows found' + (skipped ? ' (' + skipped + ' skipped)' : '') + '.</span>'; return; }
-        msg.textContent = 'Importing ' + rows.length + ' row(s)…';
-        const res = await DB().insert(cfg.table, rows);
+        // Skip duplicates on a natural key (name where present) — checked against existing
+        // rows AND within the pasted batch. RLS-scoped, so the dup check only sees rows the user can.
+        const dedupe = cfg.dedupe || (cfg.allow.includes('name') ? 'name' : (cfg.required || [])[0]);
+        let toInsert = rows, dupes = 0;
+        if (dedupe) {
+          msg.textContent = 'Checking for duplicates…';
+          const seen = new Set();
+          try { (await DB().list(cfg.table, { select: dedupe, eq: cfg.dedupeFilter || undefined })).forEach((r) => { if (r[dedupe] != null) seen.add(String(r[dedupe]).trim().toLowerCase()); }); } catch (e) {}
+          toInsert = rows.filter((o) => {
+            const key = o[dedupe] != null ? String(o[dedupe]).trim().toLowerCase() : '';
+            if (!key) return true;
+            if (seen.has(key)) { dupes++; return false; }
+            seen.add(key); return true;
+          });
+        }
+        if (!toInsert.length) { msg.innerHTML = '<span class="text-amber-300">Nothing new to import — ' + dupes + ' duplicate(s) skipped.</span>'; return; }
+        msg.textContent = 'Importing ' + toInsert.length + ' row(s)…';
+        const res = await DB().insert(cfg.table, toInsert);
         if (res.error) { msg.innerHTML = '<span class="text-rose-300">Import failed: ' + esc(res.error.message) + '</span>'; return; }
         closeModal();
-        toast('Imported ' + rows.length + ' ' + cfg.label + (skipped ? ' · ' + skipped + ' skipped' : ''), 'success');
+        const parts = ['Imported ' + toInsert.length + ' ' + cfg.label];
+        if (dupes) parts.push(dupes + ' duplicate' + (dupes > 1 ? 's' : '') + ' skipped');
+        if (skipped) parts.push(skipped + ' invalid skipped');
+        toast(parts.join(' · '), 'success');
         if (typeof cfg.after === 'function') cfg.after();
       };
       openModal(node);
