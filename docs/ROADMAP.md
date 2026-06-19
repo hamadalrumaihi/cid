@@ -12,12 +12,16 @@
 - Preserve the dark theme and all working logic. Respect server-authoritative sign-off triggers + bureau-isolation RLS.
 - Build order: Wave 0 → Cases → Intel → Command → Reports.
 
-## WAVE 0 — Security & foundation ⚠️ PARTIAL
+## WAVE 0 — Security & foundation ⚠️ NEARLY DONE (1 blocked)
 - ✅ Pin supabase-js to an exact latest-stable 2.x — pinned to `2.108.2` in index.html.
-- ⛔ **BLOCKED:** xlsx — self-host the CURRENT patched SheetJS. cdn.sheetjs.com / jsdelivr / unpkg / git.sheetjs.com are all blocked by this environment's network policy, and GitHub's mirror is frozen at the still-vulnerable 0.18.12. Needs the host allow-listed OR the `xlsx.full.min.js` file supplied. Still on vulnerable `0.18.5` CDN meanwhile. Do NOT vendor 0.18.5/0.18.12. Keep full import/export.
-- ⏳ Supabase advisors run (this pass). Mechanical fixes prepared in `20260619020000_wave0_advisor_followup.sql` (touch_cases search_path + drop duplicate cases index) — **awaiting approval to apply to live `cid` project**. By-design/escalated items documented in commit message + below.
-- ⚠️ **CRITICAL — found this pass:** `20260618120000_cid_records_lock.sql` was committed (25680d7) and marked ✅ below, but the applied-migration history shows it was **never applied to the live `cid` project**. Live `cid_records` still has anon SELECT + un-hardened owner policies. The existing lock migration needs applying (fixes anon-read, is_active gating, and the auth_rls_initplan lint in one shot).
-- ⚠️ Reconcile Live Records: `records.js` routed through the MAIN client — `25680d7` (code shipped; **DB lock migration still unapplied — see above**).
+- ⛔ **BLOCKED:** xlsx — self-host the CURRENT patched SheetJS. cdn.sheetjs.com / jsdelivr / unpkg / git.sheetjs.com are all denied by this environment's network policy, and GitHub's mirror is frozen at the still-vulnerable 0.18.12. User opted to allow-list cdn.sheetjs.com; pending the policy update taking effect (may need a fresh session), then: fetch 0.20.x → vendor into repo → point index.html at the local copy. Still on vulnerable `0.18.5` CDN meanwhile. Do NOT vendor 0.18.5/0.18.12.
+- ✅ Supabase advisors run + remediated (this pass), applied to live `cid`:
+    - `cid_records_lock` (the never-applied migration, see below) — anon SELECT closed; read now gated on `private.is_active()`; owner/command update; command-only delete.
+    - `20260619020000_wave0_advisor_followup` — re-pinned `private.touch_cases` search_path; dropped duplicate `cases_case_number_uniq` index.
+    - Re-ran both advisors: `function_search_path_mutable`, `auth_rls_initplan` (cid_records), and `duplicate_index` (cases) all CLEARED.
+    - Left by design / deferred: 6 server-authoritative SECURITY DEFINER RPCs (intentional); leaked-password protection (Auth dashboard toggle — recommend enabling); 63 unindexed-FK INFO lints → Wave 3's query-verified index pass; 2 unused-index INFO lints (recently-added, leave); 3 `multiple_permissive_policies` on announcements/profiles (intentional layered RLS — escalate before consolidating).
+- ✅ **(Was CRITICAL)** `cid_records_lock` had been committed (25680d7) but never applied to live `cid` — fixed this pass by applying it. NOTE: applied via MCP under a fresh version, so `supabase db push` may re-run the repo file `20260618120000_cid_records_lock.sql`; it is idempotent (drop-if-exists + recreate).
+- ✅ Reconcile Live Records: `records.js` on the MAIN client (`25680d7`) + DB lock now applied.
 
 ## WAVE 1 — Cases & sign-off ✅
 - **Sign-off inbox**: Oversight sub-tab + count badge on Command. Cases awaiting my decision (reviewer), cases I submitted in-flight, cases bounced back to me (changes_requested/denied). Overdue pinned to top with age. — `1d55606`
