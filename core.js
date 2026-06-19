@@ -500,10 +500,13 @@
     // dismissible:false → a tap on the backdrop no longer closes the modal (use the
     // × button). onClose → handler the × / Escape route through (e.g. step back to the
     // parent page instead of exiting); defaults to a full close.
-    function openModal(node, { wide = false, dismissible = true, onClose = null } = {}) {
+    function openModal(node, { wide = false, dismissible = true, onClose = null, slide = false } = {}) {
       closeModal(); lastFocused = document.activeElement; modalOnClose = onClose;
-      const backdrop = el('div', { class: 'modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-ink-950/80 p-4 backdrop-blur-sm' });
-      const card = el('div', { class: `modal-card relative w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-ink-850 shadow-glow`, role:'dialog', 'aria-modal':'true', tabindex:'-1' });
+      const backdrop = el('div', { class: `modal-backdrop fixed inset-0 z-50 flex bg-ink-950/80 backdrop-blur-sm ${slide ? 'items-stretch justify-end' : 'items-center justify-center p-4'}` });
+      // slide → right-anchored full-height drawer; otherwise the centered card.
+      const card = el('div', { class: slide
+        ? 'modal-card modal-slide relative ml-auto flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-white/10 bg-ink-850 shadow-glow'
+        : `modal-card relative w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-ink-850 shadow-glow`, role:'dialog', 'aria-modal':'true', tabindex:'-1' });
       card.appendChild(node); backdrop.appendChild(card);
       if (dismissible) backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeModal(); });
       $('#modal-root').appendChild(backdrop); document.body.classList.add('overflow-hidden');

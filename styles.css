@@ -98,6 +98,10 @@
     /* Drop-up menu */
     .dropup-menu { animation: popIn .18s ease both; }
 
+    /* Intel profile slide-over (Wave 2) — right-anchored drawer */
+    .modal-slide { animation: slideInRight .22s ease both; }
+    @keyframes slideInRight { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: translateX(0); } }
+
     @media print {
       body { background: #fff !important; color: #000 !important; }
       .no-print { display: none !important; }
