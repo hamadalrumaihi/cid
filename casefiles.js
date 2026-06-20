@@ -514,12 +514,25 @@
           };
           $$('.asg-rm', body).forEach((b) => b.onclick = async () => { const res = await DB().remove('case_assignments', b.dataset.id); if (res && res.error) { toast('Remove failed: ' + res.error.message, 'danger'); return; } toast('Assignee removed', 'info'); loadDetailTab(); });
         } else if (detailTab === 'evidence') {
-          const ev = await DB().list('evidence', { order: 'created_at', ascending: false, eq: { case_id: cid } });
+          const [ev, med] = await Promise.all([
+            DB().list('evidence', { order: 'created_at', ascending: false, eq: { case_id: cid } }),
+            DB().list('media', { order: 'created_at', ascending: false, eq: { case_id: cid } }).catch(() => []),
+          ]);
           body.innerHTML = `
             <div class="mb-3 flex items-center justify-between"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Evidence (${ev.length})</h4>${canEdit ? '<button id="ev-new" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ Add Evidence</button>' : ''}</div>
-            <div class="space-y-3">${ev.length ? ev.map(evidenceCard).join('') : '<p class="text-sm text-slate-500">No evidence logged.</p>'}</div>`;
+            <div class="space-y-3">${ev.length ? ev.map(evidenceCard).join('') : '<p class="text-sm text-slate-500">No evidence logged.</p>'}</div>
+            <div class="mt-8 mb-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-6"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Linked Media (${med.length})</h4>${canEdit ? '<div class="flex gap-2"><button id="cmedia-attach" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">📎 Attach from Vault</button><button id="cmedia-add" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ Add link</button></div>' : ''}</div>
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">${med.length ? med.map((m) => caseMediaCard(m, canEdit)).join('') : '<p class="text-sm text-slate-500">No media linked to this case. Add a link or attach one from the Media Vault.</p>'}</div>`;
           const nb = $('#ev-new'); if (nb) nb.onclick = () => openEvidenceModal(cid);
           $$('.ev-custody', body).forEach((b) => b.onclick = () => openCustody(b.dataset.id));
+          const ma = $('#cmedia-add'); if (ma) ma.onclick = () => openCaseMediaLink(cid);
+          const mt = $('#cmedia-attach'); if (mt) mt.onclick = () => openAttachMedia(cid);
+          $$('.cmedia-detach', body).forEach((b) => b.onclick = async () => {
+            if (!confirm('Detach this media from the case? It stays in the Media Vault.')) return;
+            const res = await DB().update('media', b.dataset.id, { case_id: null });
+            if (res.error) { toast('Detach failed: ' + res.error.message, 'danger'); return; }
+            toast('Media detached', 'info'); if (typeof fetchMedia === 'function') fetchMedia(); loadDetailTab();
+          });
         } else if (detailTab === 'reports') {
           await renderCaseReports(body, cid);
         } else if (detailTab === 'signoff') {
@@ -579,6 +592,80 @@
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast('Evidence logged', 'success'); loadDetailTab();
       };
+      openModal(node, { wide: true });
+    }
+
+    /* ---- Case-linked media (Evidence tab) -------------------------------------
+     * Media is a one-case-per-asset model (media.case_id). The Evidence tab shows
+     * the case's media with thumbnails — an image URL renders as a preview, anything
+     * else falls back to a type icon. You can add a link inline or attach an existing
+     * vault asset (which moves it onto this case). No schema change. */
+    const CASE_MEDIA_ICON = { image: '🖼️', video: '🎞️', fivemanage: '📹', document: '📄', audio: '🎧' };
+    function caseMediaCard(m, canEdit) {
+      const icon = CASE_MEDIA_ICON[m.type] || '📎';
+      const url = m.external_url || '';
+      const looksImg = m.type === 'image' || /\.(png|jpe?g|gif|webp|bmp|avif)(\?|#|$)/i.test(url);
+      const fallback = `<div class="grid h-32 w-full place-items-center rounded-lg bg-ink-800 text-3xl">${icon}</div>`;
+      const thumb = (url && looksImg)
+        ? `<img src="${escapeHTML(url)}" alt="" loading="lazy" class="h-32 w-full rounded-lg object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'" /><div class="hidden h-32 w-full place-items-center rounded-lg bg-ink-800 text-3xl">${icon}</div>`
+        : fallback;
+      return `<div class="overflow-hidden rounded-xl border border-white/10 bg-ink-900">
+        ${thumb}
+        <div class="p-3">
+          <p class="truncate text-sm font-semibold text-white" title="${escapeHTML(m.title || '')}">${escapeHTML(m.title || 'Untitled')}</p>
+          <p class="mt-0.5 text-[11px] text-slate-400">${escapeHTML(m.kind || m.type || 'media')}</p>
+          <div class="mt-2 flex items-center gap-2">
+            ${url ? `<a href="${escapeHTML(url)}" target="_blank" rel="noopener" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10">open ↗</a>` : ''}
+            ${canEdit ? `<button class="cmedia-detach rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-rose-300 transition hover:bg-rose-500/10" data-id="${m.id}">Detach</button>` : ''}
+          </div>
+        </div>
+      </div>`;
+    }
+    function openCaseMediaLink(caseId) {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      const node = el('div', { class: 'p-6' });
+      node.innerHTML = `
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Add Media Link</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="space-y-3">
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Title *</label><input id="cm-title" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Dashcam — Vinewood pursuit" /></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Type</label><select id="cm-type" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500"><option value="image">Direct Image URL</option><option value="video">MP4 Video Link</option><option value="fivemanage">FiveManage CDN Embed</option></select></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">URL / Embed ID</label><input id="cm-url" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 font-mono text-xs text-white outline-none focus:border-badge-500" placeholder="https://… or fm_xxxxx" /></div>
+        </div>
+        <p class="mt-2 text-[11px] text-slate-500">Linked to this case and added to the Media Vault. An image URL shows a thumbnail.</p>
+        <button id="cm-go" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Add media</button>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#cm-go').onclick = async () => {
+        const title = node.querySelector('#cm-title').value.trim();
+        if (!title) { toast('A title is required.', 'warn'); return; }
+        const type = node.querySelector('#cm-type').value;
+        const kind = type === 'image' ? 'Image URL' : type === 'video' ? 'MP4 Video' : 'FiveManage Embed';
+        const res = await DB().insert('media', { title, type, kind, external_url: node.querySelector('#cm-url').value.trim() || null, case_id: caseId });
+        if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast('Media linked to case', 'success'); if (typeof fetchMedia === 'function') fetchMedia(); loadDetailTab();
+      };
+      openModal(node);
+    }
+    function openAttachMedia(caseId) {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      const pool = (typeof MEDIA !== 'undefined' ? MEDIA : []).filter((m) => m.case_id !== caseId);
+      const node = el('div', { class: 'p-6' });
+      const rows = pool.map((m) => {
+        const cn = m.case_id && typeof caseNumById === 'function' ? caseNumById(m.case_id) : null;
+        const where = cn ? ` <span class="text-[11px] text-amber-300/80">· moves from ${escapeHTML(cn)}</span>` : '';
+        return `<div class="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-ink-900 px-3 py-2">
+          <span class="flex min-w-0 items-center gap-2 text-sm text-slate-200"><span class="text-lg">${CASE_MEDIA_ICON[m.type] || '📎'}</span><span class="truncate">${escapeHTML(m.title || 'Untitled')}${where}</span></span>
+          <button class="cm-attach flex-shrink-0 rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-white/10" data-id="${m.id}">Attach</button>
+        </div>`;
+      }).join('');
+      node.innerHTML = `
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Attach Media from Vault</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        ${pool.length ? `<p class="mb-3 text-[11px] text-slate-500">Media belongs to one case — attaching moves it onto this case.</p><div class="max-h-[60vh] space-y-2 overflow-y-auto">${rows}</div>` : '<p class="text-sm text-slate-500">No other media in the vault. Use “+ Add link” to create one.</p>'}`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelectorAll('.cm-attach').forEach((b) => b.onclick = async () => {
+        const res = await DB().update('media', b.dataset.id, { case_id: caseId });
+        if (res.error) { toast('Attach failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast('Media attached to case', 'success'); if (typeof fetchMedia === 'function') fetchMedia(); loadDetailTab();
+      });
       openModal(node, { wide: true });
     }
     async function openCustody(evidenceId) {
