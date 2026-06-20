@@ -1,5 +1,17 @@
 # CHANGELOG — CID Portal → Production Platform
 
+## SheetJS upgrade — 0.18.5 → 0.20.3, off npm CDN (2026-06-20)
+- The Excel (`.xlsx`) import/export library now loads the latest SheetJS
+  Community Edition (**0.20.3**) from the **official** `cdn.sheetjs.com` instead
+  of npm's `xlsx@0.18.5` via jsdelivr. npm's 0.18.5 is the last release the
+  SheetJS team published to npm; it is no longer maintained there and carries
+  known advisories (**CVE-2023-30533** prototype pollution + a ReDoS). The
+  current build is published only on the authoritative SheetJS CDN.
+- Drop-in swap: all call sites (`XLSX.utils.book_new`, `book_append_sheet`,
+  `aoa_to_sheet`, `json_to_sheet`, `writeFile`, `read`, `sheet_to_csv` in
+  `app.js` / `core.js`) are unchanged — the public API is stable across the
+  upgrade. The existing offline guard (`if (!window.XLSX)`) still applies.
+
 ## Phase 11 — Gap-close patch: numbering, isolation, FiveManage, heatmap, shifts (2026-06-17)
 - **§1 Case numbering** — manual, unique, bureau-prefixed `BUREAU-NUMBER` (e.g.
   `SAB-900023`). Auto-gen removed (`nextCaseNumber`). UI validates the pattern,
