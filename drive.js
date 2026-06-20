@@ -16,8 +16,42 @@
       if (!dbReady()) { renderDrive(); return; }
       try { DOCS = await DB().list('documents', { order: 'name' }); } catch (e) {}
       renderDrive();
+      const s = $('#drive-search'); if (s && s.value.trim()) renderDriveSearch(s.value);   // keep results fresh during search
     }
-    function onEnterDrive() { if (dbReady()) fetchDocuments(); else renderDrive(); }
+    function onEnterDrive() { if (dbReady()) fetchDocuments(); else renderDrive(); wireDriveSearch(); }
+
+    /* Wave 4: cross-drive search — matches a document's name, folder, linked case
+       number, and content (body / sheet cells / form values). Client-side over the
+       already-RLS-scoped DOCS cache; results click straight through to the file. */
+    function wireDriveSearch() {
+      const s = $('#drive-search'); if (!s) return;
+      s.oninput = debounce(() => renderDriveSearch(s.value), 150);
+    }
+    function driveSearchText(d) {
+      const parts = [d.name || '', d.folder || ''];
+      if (d.case_id && typeof caseNumById === 'function') { const cn = caseNumById(d.case_id); if (cn) parts.push(cn); }
+      try { parts.push(JSON.stringify(d.content || {})); } catch (e) {}
+      return parts.join(' ').toLowerCase();
+    }
+    function renderDriveSearch(q) {
+      const grid = $('#drive-grid'), box = $('#drive-results'); if (!grid || !box) return;
+      q = (q || '').trim().toLowerCase();
+      if (!q) { box.classList.add('hidden'); box.innerHTML = ''; grid.classList.remove('hidden'); return; }
+      grid.classList.add('hidden'); box.classList.remove('hidden');
+      const hits = (typeof DOCS !== 'undefined' ? DOCS : []).filter((d) => driveSearchText(d).includes(q)).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      if (!hits.length) { box.innerHTML = `<p class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-500">No documents match “${esc(q)}”.</p>`; return; }
+      box.innerHTML = `<p class="mb-2 text-[11px] text-slate-500">${hits.length} document${hits.length === 1 ? '' : 's'} match “${esc(q)}”</p>
+        <div class="space-y-2">${hits.map((d) => {
+          const cn = d.case_id && typeof caseNumById === 'function' ? caseNumById(d.case_id) : null;
+          const where = cn ? '🗂️ ' + cn : d.folder;
+          return `<div class="drive-hit flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:border-blue-500/30 hover:bg-white/5" data-id="${d.id}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">${fileIcon(docDisplayType(d))}</span>${esc(d.name)}</span><span class="text-[11px] text-slate-500">${esc(where || '')}</span></div>`;
+        }).join('')}</div>`;
+      box.querySelectorAll('.drive-hit').forEach((row) => row.onclick = () => {
+        const d = DOCS.find((x) => x.id === row.dataset.id); if (!d) return;
+        const meta = (typeof FOLDER_META !== 'undefined' ? FOLDER_META : []).find((f) => f.name === d.folder) || null;
+        openDocument(d, meta);
+      });
+    }
 
     function renderDrive() {
       const grid = $('#drive-grid'); if (!grid) return;
@@ -267,6 +301,7 @@
         <div class="mt-4 flex flex-wrap gap-2 no-print">
           ${editable ? `<button id="d-save" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save</button>` : ''}
           <button id="d-print" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">🖨️ Print</button>
+          <button id="d-hist" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">🕘 History</button>
           <button id="d-docx" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">Export .docx</button>
           ${canDel ? `<button id="d-del" class="ml-auto rounded-lg px-3 py-2 text-xs font-medium text-slate-400 transition hover:text-rose-300">Delete</button>` : ''}
         </div>`;
@@ -274,12 +309,15 @@
       const back = backToFolder(doc, meta);
       node.querySelector('.close-x').onclick = back;
       node.querySelector('#d-print').onclick = () => window.print();
+      const fHist = node.querySelector('#d-hist'); if (fHist) fHist.onclick = () => openDocHistory(doc, meta);
       wireFormBody(body, schema);
       const saveBtn = node.querySelector('#d-save');
       if (saveBtn) saveBtn.onclick = async () => {
         const content = { view: 'form', form: schemaId, values: readForm(node, schema) };
-        const res = await DB().update('documents', doc.id, { content, modified_label: new Date().toLocaleDateString('en-GB') });
+        const label = new Date().toLocaleDateString('en-GB');
+        const res = await DB().update('documents', doc.id, { content, modified_label: label });
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        await captureDocVersion(doc.id, { name: doc.name, kind: doc.kind, content, modified_label: label });
         toast(`"${doc.name}" saved`, 'success');
         await fetchDocuments();
         const fresh = DOCS.find((x) => x.id === doc.id); if (fresh) openFormDocument(fresh, meta, schemaId);
@@ -295,6 +333,59 @@
         exportDocText(schema.title, formToText(schema, vals), safeName(doc.name) + '.docx');
         toast('Exported .docx', 'success');
       };
+      openModal(node, { wide: true, dismissible: false, onClose: back });
+    }
+
+    /* ---- Wave 4: document version history (documents_versions) ----------------
+     * Every successful save snapshots the saved state; any prior version can be
+     * restored. Defensive: if the migration hasn't been applied yet, capture
+     * silently no-ops and the History view shows a friendly message. */
+    async function captureDocVersion(docId, snap) {
+      if (!docId || !dbReady()) return;
+      try { await DB().from('documents_versions').insert({ document_id: docId, name: snap.name, kind: snap.kind, content: snap.content, modified_label: snap.modified_label }); } catch (e) {}
+    }
+    function docSavedByName(id) {
+      if (!id) return 'Unknown';
+      const p = (typeof PROFILES !== 'undefined' ? PROFILES : []).find((x) => x.id === id);
+      return p ? (p.display_name || 'Officer') : 'Officer';
+    }
+    // Reopen a doc in the right viewer (fillable form vs plain doc/sheet).
+    function reopenDoc(doc, meta) { const fid = (typeof formSchemaIdFor === 'function') && formSchemaIdFor(doc); if (fid) return openFormDocument(doc, meta, fid); return openDocument(doc, meta); }
+    async function openDocHistory(doc, meta) {
+      if (!dbReady()) { toast('Sign-in required.', 'warn'); return; }
+      const canEdit = DB() && DB().canEdit();
+      let versions = [], unavailable = false;
+      try { const r = await DB().from('documents_versions').select('*').eq('document_id', doc.id).order('saved_at', { ascending: false }); if (r.error) throw r.error; versions = r.data || []; }
+      catch (e) { unavailable = true; }
+      const node = el('div', { class: 'p-6' });
+      const back = () => reopenDoc(doc, meta);
+      const rowsHtml = versions.map((v, i) => {
+        const when = esc(new Date(v.saved_at).toLocaleString('en-GB'));
+        const latest = i === 0 ? ' <span class="text-[10px] font-semibold uppercase text-emerald-300">· latest</span>' : '';
+        const btn = (canEdit && i !== 0) ? `<button class="ver-restore flex-shrink-0 rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-white/10" data-id="${v.id}">Restore</button>` : '';
+        return `<div class="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-ink-900 px-4 py-2.5"><div class="min-w-0"><p class="text-sm text-slate-200">${when}${latest}</p><p class="text-[11px] text-slate-500">saved by ${esc(docSavedByName(v.saved_by))}</p></div>${btn}</div>`;
+      }).join('');
+      const bodyHtml = unavailable
+        ? '<p class="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200">Version history isn’t enabled yet (the documents_versions migration hasn’t been applied to this project).</p>'
+        : (!versions.length
+          ? '<p class="rounded-lg border border-white/5 bg-ink-900/60 p-6 text-center text-sm text-slate-500">No saved versions yet. Edits you save from now on are recorded here.</p>'
+          : `<div class="max-h-[60vh] space-y-2 overflow-y-auto">${rowsHtml}</div>`);
+      node.innerHTML = `
+        <div class="mb-4 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><button id="hist-back" class="text-slate-400 hover:text-white" title="Back to document">←</button><div><h3 class="text-base font-bold text-white">Version history</h3><p class="text-[11px] text-slate-400">${esc(doc.name)}</p></div></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        ${bodyHtml}`;
+      node.querySelector('.close-x').onclick = back;
+      node.querySelector('#hist-back').onclick = back;
+      node.querySelectorAll('.ver-restore').forEach((b) => b.onclick = async () => {
+        const v = versions.find((x) => x.id === b.dataset.id); if (!v) return;
+        if (!confirm('Restore this version? It becomes the current content and is added as a new history entry.')) return;
+        const label = new Date().toLocaleDateString('en-GB');
+        const res = await DB().update('documents', doc.id, { content: v.content, modified_label: label });
+        if (res.error) { toast('Restore failed: ' + res.error.message, 'danger'); return; }
+        await captureDocVersion(doc.id, { name: doc.name, kind: doc.kind, content: v.content, modified_label: label });
+        toast('Version restored', 'success');
+        await fetchDocuments();
+        reopenDoc(DOCS.find((x) => x.id === doc.id) || doc, meta);
+      });
       openModal(node, { wide: true, dismissible: false, onClose: back });
     }
 
@@ -348,6 +439,7 @@
         <div class="mt-4 flex flex-wrap gap-2 no-print">
           ${editable ? `<button id="d-save" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save</button>` : ''}
           <button id="d-print" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">🖨️ Print</button>
+          ${(kind==='doc'||kind==='sheet') ? `<button id="d-hist" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">🕘 History</button>` : ''}
           ${kind==='sheet' ? `<button id="d-csv" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">Export .csv</button>` : ''}
           ${kind==='doc'||kind==='pdf'||kind==='matrix' ? `<button id="d-docx" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">Export .docx</button>` : ''}
           ${canDel && !isMatrix ? `<button id="d-del" class="ml-auto rounded-lg px-3 py-2 text-xs font-medium text-slate-400 transition hover:text-rose-300">Delete</button>` : ''}
@@ -355,6 +447,7 @@
       const back = backToFolder(doc, meta);
       node.querySelector('.close-x').onclick = back;
       node.querySelector('#d-print') && (node.querySelector('#d-print').onclick = () => window.print());
+      const histBtn = node.querySelector('#d-hist'); if (histBtn) histBtn.onclick = () => openDocHistory(doc, meta);
 
       // Sheet helpers
       const readSheet = () => ({ cols: cols.slice(), rows: $$('#doc-sheet tbody tr', node).map((tr) => $$('.cell', tr).map((td) => td.textContent.trim())) });
@@ -368,8 +461,10 @@
       const saveBtn = node.querySelector('#d-save');
       if (saveBtn) saveBtn.onclick = async () => {
         const content = kind === 'doc' ? { body: node.querySelector('#doc-body').value } : readSheet();
-        const res = await DB().update('documents', doc.id, { content, modified_label: new Date().toLocaleDateString('en-GB') });
+        const label = new Date().toLocaleDateString('en-GB');
+        const res = await DB().update('documents', doc.id, { content, modified_label: label });
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        await captureDocVersion(doc.id, { name: doc.name, kind: doc.kind, content, modified_label: label });
         toast(`"${doc.name}" saved`, 'success');
         await fetchDocuments();
         const fresh = DOCS.find((x) => x.id === doc.id); if (fresh) openDocument(fresh, meta);

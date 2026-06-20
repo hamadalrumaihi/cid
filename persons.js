@@ -85,12 +85,14 @@
             ${p.mugshot_url ? `<img src="${escapeHTML(p.mugshot_url)}" class="h-14 w-14 flex-shrink-0 rounded-lg object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="hidden h-14 w-14 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-xl">👤</div>` : `<div class="grid h-14 w-14 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-xl">👤</div>`}
             <div class="min-w-0 flex-1"><p class="truncate font-semibold text-white">${escapeHTML(p.name)}${flag ? ' <span title="≥8 violent felonies">🚨</span>' : ''}</p><p class="text-xs text-slate-400">${p.alias ? '“' + escapeHTML(p.alias) + '” · ' : ''}${escapeHTML(p.status || '')}</p>
               <p class="mt-1 text-[11px] text-slate-500">${p.gang_id ? '🚩 ' + escapeHTML(gangNameById(p.gang_id) || 'Gang') + ' · ' : ''}CCW ${p.ccw ? 'Yes' : 'No'} · VCH ${p.vch || 0} · Felonies ${p.felony_count || 0}</p></div>
+            <button class="p-profile rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-white/10" title="Unified intel profile">🔎 Profile</button>
             ${DB() && DB().canEdit() ? '<button class="p-edit rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>' : ''}
             ${DB() && DB().canDelete() ? '<button class="p-del rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10" title="Delete person (command only)">Delete</button>' : ''}
           </div>
           ${DB() && DB().canEdit() ? '<button class="p-tocase mt-3 w-full rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-blue-200 transition hover:bg-white/10">📎 Attach to case</button>' : ''}
           ${p.notes ? `<p class="mt-3 line-clamp-2 text-xs text-slate-400">${escapeHTML(p.notes)}</p>` : ''}`;
         const eb = card.querySelector('.p-edit'); if (eb) eb.onclick = () => openPersonModal(p);
+        const pf = card.querySelector('.p-profile'); if (pf && typeof openIntelProfile === 'function') pf.onclick = () => openIntelProfile('person', p.id);
         const tc = card.querySelector('.p-tocase'); if (tc && typeof attachIntelToCase === 'function') tc.onclick = () => attachIntelToCase(`Person — ${p.name}${p.alias ? ' “' + p.alias + '”' : ''} · ${p.status || 'POI'}${p.felony_count ? ', ' + p.felony_count + ' felonies' : ''}`);
         const pdb = card.querySelector('.p-del'); if (pdb) pdb.onclick = async () => {
           if (!confirm('Delete person "' + (p.name || 'record') + '"? This removes the persons-registry record (not any linked officer account).')) return;

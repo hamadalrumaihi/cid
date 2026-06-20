@@ -162,7 +162,8 @@
       const doc = new J({ unit: 'pt', format: 'letter' }); const M = 54; let y = M;
       const W = doc.internal.pageSize.getWidth() - M * 2;
       const line = (t, sz, bold) => { doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(sz); const lines = doc.splitTextToSize(String(t), W); lines.forEach((ln) => { if (y > doc.internal.pageSize.getHeight() - M) { doc.addPage(); y = M; } doc.text(ln, M, y); y += sz + 4; }); };
-      line('CRIMINAL INVESTIGATION DIVISION', 9, false); line('CASE PACKET — ' + c.case_number, 16, true);
+      if (typeof pdfLetterhead === 'function') y = pdfLetterhead(doc, M);
+      line('CASE PACKET — ' + c.case_number, 16, true);
       line(`${c.title || ''} · ${c.bureau} · ${String(c.status).toUpperCase()} · ${new Date().toLocaleString('en-US')}`, 9, false); y += 6;
       line('Summary', 12, true); line(c.summary || '—', 10, false); y += 4;
       line(`Evidence (${d.ev.length})`, 12, true); d.ev.length ? d.ev.forEach((e) => line(`• ${(e.item_code ? e.item_code + ' — ' : '') + (e.description || e.type || 'item')} [${e.tamper}]`, 10, false)) : line('None.', 10, false); y += 4;
@@ -215,21 +216,30 @@
       openModal(node, { wide: true });
       const like = '%' + q + '%';
       const run = (tbl, cols, col) => DB().from(tbl).select('*').or(cols.map((c) => `${c}.ilike.${like}`).join(',')).limit(8).then((r) => r.data || []).catch(() => []);
-      const [cases, persons, gangs, places] = await Promise.all([
+      const [cases, persons, gangs, places, narcotics, benches, footprints] = await Promise.all([
         run('cases', ['case_number', 'title', 'summary']),
         run('persons', ['name', 'alias', 'status']),
         run('gangs', ['name', 'colors', 'notes']),
         run('places', ['name', 'area']),
+        run('narcotics', ['name', 'classification']),
+        run('ballistics_benches', ['name']),
+        run('ballistic_footprints', ['signature', 'weapon']),
       ]);
+      // Benches + footprints share the Ballistics section, distinguished by icon.
+      const ballistics = benches.map((b) => ({ kind: 'bench', label: b.name, sub: b.tier ? 'Tier ' + b.tier + ' bench' : 'Weapon bench' }))
+        .concat(footprints.map((f) => ({ kind: 'footprint', label: f.signature, sub: [f.weapon].filter(Boolean).join(' · ') || 'Ballistic footprint' })));
       const sec = (title, items, fmt) => items.length ? `<div><p class="mb-1 text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">${title} (${items.length})</p><div class="space-y-1">${items.map(fmt).join('')}</div></div>` : '';
+      const goto = (tab, term, inner) => `<button class="sr sr-goto block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-tab="${tab}"${term ? ` data-term="${esc(term)}"` : ''}>${inner}</button>`;
       const box = node.querySelector('#search-results');
       const html = [
         sec('Cases', cases, (c) => `<button class="sr sr-case block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-id="${c.id}"><span class="font-mono text-blue-300">${esc(c.case_number)}</span> · ${esc(c.title || '')}</button>`),
-        sec('Persons', persons, (p) => `<button class="sr sr-goto block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-tab="persons" data-term="${esc(p.name || '')}">${esc(p.name)}${p.alias ? ' “' + esc(p.alias) + '”' : ''}</button>`),
-        sec('Gangs', gangs, (g) => `<button class="sr sr-goto block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-tab="gangs" data-term="${esc(g.name || '')}">🚩 ${esc(g.name)}</button>`),
-        sec('Places', places, (p) => `<button class="sr sr-goto block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-tab="places" data-term="${esc(p.name || '')}">📍 ${esc(p.name)} <span class="text-slate-500">${esc(p.area || '')}</span></button>`),
+        sec('Persons', persons, (p) => goto('persons', p.name, `${esc(p.name)}${p.alias ? ' “' + esc(p.alias) + '”' : ''}`)),
+        sec('Gangs', gangs, (g) => goto('gangs', g.name, `🚩 ${esc(g.name)}`)),
+        sec('Places', places, (p) => goto('places', p.name, `📍 ${esc(p.name)} <span class="text-slate-500">${esc(p.area || '')}</span>`)),
+        sec('Narcotics', narcotics, (n) => goto('narcotics', n.name, `💊 ${esc(n.name)}${n.classification ? ' <span class="text-slate-500">' + esc(n.classification) + '</span>' : ''}`)),
+        sec('Ballistics', ballistics, (b) => goto('ballistics', '', `${b.kind === 'bench' ? '🔫' : '🧬'} ${esc(b.label || '')} <span class="text-slate-500">${esc(b.sub || '')}</span>`)),
       ].join('');
-      box.innerHTML = html || '<p class="text-sm text-slate-500">No matches across cases, persons, gangs or places.</p>';
+      box.innerHTML = html || '<p class="text-sm text-slate-500">No matches across cases, persons, gangs, places, narcotics or ballistics.</p>';
       box.querySelectorAll('.sr-case').forEach((b) => b.onclick = () => { closeModal(); navigate('cases'); setTimeout(() => openCaseDetail(b.dataset.id), 120); });
       box.querySelectorAll('.sr-goto').forEach((b) => b.onclick = () => {
         closeModal(); navigate(b.dataset.tab);
@@ -284,6 +294,8 @@
       initRecords();
       // Case Files (Supabase spine) — fetch happens via onAuthed / onEnterCases
       initCases();
+      // Sign-off Inbox (Oversight) — badge + per-user case buckets
+      initInbox();
       // Chrome
       $('#notif-bell').addEventListener('click', openNotifications);
       tickClock(); setInterval(tickClock, 1000); setInterval(tickTrackers, 1000);

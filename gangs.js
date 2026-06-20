@@ -25,11 +25,15 @@
         card.innerHTML = `
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div><h4 class="text-lg font-bold text-white">${escapeHTML(g.name)}</h4><p class="mt-0.5 text-xs text-slate-400">Colors: ${escapeHTML(g.colors || '—')}</p></div>
-            <span class="rounded-md border px-2.5 py-1 text-[10px] font-semibold uppercase ${threatTint(g.threat_level)}">${escapeHTML(cap(g.threat_level))} Threat</span>
+            <div class="flex flex-shrink-0 items-center gap-2">
+              <span class="rounded-md border px-2.5 py-1 text-[10px] font-semibold uppercase ${threatTint(g.threat_level)}">${escapeHTML(cap(g.threat_level))} Threat</span>
+              <button class="g-profile rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10" title="Unified intel profile">🔎</button>
+            </div>
           </div>
           ${g.notes ? `<p class="mt-3 line-clamp-2 text-xs text-slate-400">${escapeHTML(g.notes)}</p>` : ''}
           <p class="mt-3 text-[11px] text-blue-300">View roster &amp; turf →</p>`;
         card.addEventListener('click', () => openGangDetail(g.id));
+        const gp = card.querySelector('.g-profile'); if (gp && typeof openIntelProfile === 'function') gp.onclick = (e) => { e.stopPropagation(); openIntelProfile('gang', g.id); };
         grid.appendChild(card);
       });
     }
@@ -85,6 +89,7 @@
             <div><h3 class="text-xl font-bold text-white">${escapeHTML(g.name)}</h3><p class="mt-1 text-sm text-slate-400">Colors: ${escapeHTML(g.colors || '—')}</p>${g.notes ? `<p class="mt-1 text-sm text-slate-400">${escapeHTML(g.notes)}</p>` : ''}</div>
             <div class="flex items-center gap-2">
               <span class="rounded-md border px-2.5 py-1 text-[10px] font-semibold uppercase ${threatTint(g.threat_level)}">${escapeHTML(cap(g.threat_level))} Threat</span>
+              <button id="gang-profile" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-white/10">🔎 Intel profile</button>
               ${canEdit ? '<button id="gang-tocase" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-white/10">📎 Attach to case</button>' : ''}
               ${canEdit ? '<button id="gang-edit" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>' : ''}
               ${canDel ? '<button id="gang-del" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>' : ''}
@@ -108,6 +113,7 @@
           </div>
         </div>`;
       $('#gang-back').onclick = showGangsList;
+      const gpf = $('#gang-profile'); if (gpf && typeof openIntelProfile === 'function') gpf.onclick = () => openIntelProfile('gang', g.id);
       const gtc = $('#gang-tocase'); if (gtc && typeof attachIntelToCase === 'function') gtc.onclick = () => attachIntelToCase(`Gang — ${detailGang.name}${detailGang.colors ? ' (' + detailGang.colors + ')' : ''} · ${cap(detailGang.threat_level)} threat`);
       const ge = $('#gang-edit'); if (ge) ge.onclick = () => openGangModal(detailGang);
       const gd = $('#gang-del'); if (gd) gd.onclick = async () => {
@@ -116,6 +122,14 @@
         toast('Gang deleted', 'warn'); showGangsList(); fetchGangs();
       };
       const mn = $('#member-new'); if (mn) mn.onclick = () => openMemberModal(g.id, null);
+      // Bulk-import a roster straight into this gang; dedupe by name within the gang.
+      if (mn && typeof wireImport === 'function') wireImport('#member-new', {
+        table: 'gang_members', label: 'members',
+        allow: ['name', 'rank', 'callsign', 'status', 'ccw', 'vch', 'felony_count', 'mugshot_url'],
+        required: ['name'], bool: ['ccw'], num: ['vch', 'felony_count'],
+        dedupe: 'name', dedupeFilter: { gang_id: g.id },
+        coerce: (o) => { o.gang_id = g.id; return o; }, after: renderGangDetail,
+      });
       const tn = $('#turf-new'); if (tn) tn.onclick = () => openTurfModal(g.id);
       $$('.m-edit', $('#gang-detail')).forEach((b) => b.onclick = () => { const m = members.find((x) => x.id === b.dataset.id); openMemberModal(g.id, m); });
       $$('.turf-del', $('#gang-detail')).forEach((b) => b.onclick = async () => { await DB().remove('gang_turf', b.dataset.id); renderGangDetail(); });

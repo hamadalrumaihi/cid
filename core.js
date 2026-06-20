@@ -331,12 +331,14 @@
       node.innerHTML = `
         <div class="mb-4 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Import ${esc(cfg.label)}</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <p class="mb-2 text-xs text-slate-400">Paste a <b>JSON array</b> of objects or <b>CSV</b> with a header row, or pick a <b>.csv / .xlsx</b> file. Columns (<span class="text-rose-300">*</span> required): <span class="font-mono text-blue-300">${esc(cols)}</span></p>
+        <button id="imp-tpl" class="mb-2 text-xs font-semibold text-blue-300 transition hover:text-blue-200">⬇ Download CSV template</button>
         <input id="imp-file" type="file" accept=".csv,.json,.xlsx,.xls,text/csv,application/json" class="mb-2 block w-full text-xs text-slate-400 file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-white" />
         <textarea id="imp-text" rows="9" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-xs text-white outline-none focus:border-badge-500" placeholder='[{"key":"value"}]   — or —   col1,col2&#10;val1,val2'></textarea>
         <div id="imp-msg" class="mt-2 text-xs text-slate-400"></div>
         <button id="imp-go" class="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Import</button>`;
       node.querySelector('.close-x').onclick = closeModal;
       const ta = node.querySelector('#imp-text'), msg = node.querySelector('#imp-msg');
+      const tpl = node.querySelector('#imp-tpl'); if (tpl) tpl.onclick = () => { if (typeof downloadCsv === 'function') downloadCsv(String(cfg.label).replace(/\s+/g, '-') + '-template.csv', cfg.allow, []); };
       node.querySelector('#imp-file').onchange = (e) => {
         const f = e.target.files[0]; if (!f) return;
         const isXlsx = /\.(xlsx|xls)$/i.test(f.name);
@@ -351,11 +353,30 @@
         const { rows, skipped, error } = importRows(ta.value, cfg);
         if (error) { msg.innerHTML = '<span class="text-rose-300">' + esc(error) + '</span>'; return; }
         if (!rows.length) { msg.innerHTML = '<span class="text-amber-300">No valid rows found' + (skipped ? ' (' + skipped + ' skipped)' : '') + '.</span>'; return; }
-        msg.textContent = 'Importing ' + rows.length + ' row(s)…';
-        const res = await DB().insert(cfg.table, rows);
+        // Skip duplicates on a natural key (name where present) — checked against existing
+        // rows AND within the pasted batch. RLS-scoped, so the dup check only sees rows the user can.
+        const dedupe = cfg.dedupe || (cfg.allow.includes('name') ? 'name' : (cfg.required || [])[0]);
+        let toInsert = rows, dupes = 0;
+        if (dedupe) {
+          msg.textContent = 'Checking for duplicates…';
+          const seen = new Set();
+          try { (await DB().list(cfg.table, { select: dedupe, eq: cfg.dedupeFilter || undefined })).forEach((r) => { if (r[dedupe] != null) seen.add(String(r[dedupe]).trim().toLowerCase()); }); } catch (e) {}
+          toInsert = rows.filter((o) => {
+            const key = o[dedupe] != null ? String(o[dedupe]).trim().toLowerCase() : '';
+            if (!key) return true;
+            if (seen.has(key)) { dupes++; return false; }
+            seen.add(key); return true;
+          });
+        }
+        if (!toInsert.length) { msg.innerHTML = '<span class="text-amber-300">Nothing new to import — ' + dupes + ' duplicate(s) skipped.</span>'; return; }
+        msg.textContent = 'Importing ' + toInsert.length + ' row(s)…';
+        const res = await DB().insert(cfg.table, toInsert);
         if (res.error) { msg.innerHTML = '<span class="text-rose-300">Import failed: ' + esc(res.error.message) + '</span>'; return; }
         closeModal();
-        toast('Imported ' + rows.length + ' ' + cfg.label + (skipped ? ' · ' + skipped + ' skipped' : ''), 'success');
+        const parts = ['Imported ' + toInsert.length + ' ' + cfg.label];
+        if (dupes) parts.push(dupes + ' duplicate' + (dupes > 1 ? 's' : '') + ' skipped');
+        if (skipped) parts.push(skipped + ' invalid skipped');
+        toast(parts.join(' · '), 'success');
         if (typeof cfg.after === 'function') cfg.after();
       };
       openModal(node);
@@ -400,6 +421,7 @@
       modus:      { title: 'M.O. Detector', sub: 'Tactical profiling & cross-reference' },
       gangs:      { title: 'Gangs & Turf', sub: 'Organizations, ranks, properties & territory' },
       places:     { title: 'Criminal Places', sub: 'Locations & production processes' },
+      network:    { title: 'Relationship Network', sub: 'Gangs, members & properties as a navigable graph' },
       reports:    { title: 'Report Generation', sub: 'Template-driven reports & supplemental chains' },
       rico:       { title: 'RICO Builder', sub: 'Enterprise & predicate-act element tracker' },
       drive:      { title: 'CID General', sub: 'Shared investigative drive' },
@@ -407,6 +429,7 @@
       announce:   { title: 'Announcements', sub: 'Division-wide notices from command staff' },
       'case-files': { title: 'Case Files — Attachments', sub: 'Files uploaded per case (FiveManage + Supabase)' },
       heatmap:    { title: 'Commander Heatmap', sub: 'Gang turf, places, raids & case concentration by area' },
+      inbox:      { title: 'Sign-off Inbox', sub: 'Cases awaiting your decision, your submissions & changes requested' },
       shifts:     { title: 'Weekly Shift Reports', sub: 'Detective activity rolled up to bureau leadership' },
       audit:      { title: 'Audit Log', sub: 'Division-wide action history (Bureau Lead and above)' },
     };
@@ -417,15 +440,15 @@
     const NAV_CATEGORIES = [
       { id: 'command',   label: 'Command',      tabs: ['command', 'announce', 'heatmap', 'personnel'] },
       { id: 'cases',     label: 'Cases',        tabs: ['cases', 'case-files', 'rico'] },
-      { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'gangs', 'places', 'narcotics', 'ballistics', 'modus', 'media'] },
+      { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'gangs', 'places', 'network', 'narcotics', 'ballistics', 'modus', 'media'] },
       { id: 'drive',     label: 'Drive',        tabs: ['drive', 'records'] },
-      { id: 'oversight', label: 'Oversight',    tabs: ['shifts', 'audit'] },
+      { id: 'oversight', label: 'Oversight',    tabs: ['inbox', 'shifts', 'audit'] },
     ];
     const TAB_LABEL = {
       command: 'Dashboard', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
       cases: 'Case Files', 'case-files': 'Attachments', rico: 'RICO',
-      persons: 'Persons', gangs: 'Gangs', places: 'Places', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector', media: 'Media Vault',
-      drive: 'CID General', records: 'Records', shifts: 'Shift Reports', audit: 'Audit Log',
+      persons: 'Persons', gangs: 'Gangs', places: 'Places', network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector', media: 'Media Vault',
+      drive: 'CID General', records: 'Records', inbox: 'Sign-off Inbox', shifts: 'Shift Reports', audit: 'Audit Log',
     };
     const TAB_CATEGORY = {}; NAV_CATEGORIES.forEach((c) => c.tabs.forEach((t) => { TAB_CATEGORY[t] = c.id; }));
     const CAT_DEFAULT = {}; NAV_CATEGORIES.forEach((c) => { CAT_DEFAULT[c.id] = c.tabs[0]; });
@@ -459,6 +482,7 @@
       if (tab === 'gangs' && typeof onEnterGangs === 'function') onEnterGangs();
       if (tab === 'narcotics' && typeof onEnterNarcotics === 'function') onEnterNarcotics();
       if (tab === 'places' && typeof onEnterPlaces === 'function') onEnterPlaces();
+      if (tab === 'network' && typeof onEnterNetwork === 'function') onEnterNetwork();
       if (tab === 'ballistics' && typeof onEnterBallistics === 'function') onEnterBallistics();
       if (tab === 'rico' && typeof renderRico === 'function') renderRico();
       if (tab === 'command' && typeof onEnterCommand === 'function') onEnterCommand();
@@ -469,6 +493,7 @@
       if (tab === 'announce' && typeof onEnterAnnounce === 'function') onEnterAnnounce();
       if (tab === 'case-files' && typeof onEnterCaseFiles === 'function') onEnterCaseFiles();
       if (tab === 'heatmap' && typeof onEnterHeatmap === 'function') onEnterHeatmap();
+      if (tab === 'inbox' && typeof onEnterInbox === 'function') onEnterInbox();
       if (tab === 'shifts' && typeof onEnterShifts === 'function') onEnterShifts();
       if (tab === 'audit' && typeof onEnterAudit === 'function') onEnterAudit();
     }
@@ -498,10 +523,13 @@
     // dismissible:false → a tap on the backdrop no longer closes the modal (use the
     // × button). onClose → handler the × / Escape route through (e.g. step back to the
     // parent page instead of exiting); defaults to a full close.
-    function openModal(node, { wide = false, dismissible = true, onClose = null } = {}) {
+    function openModal(node, { wide = false, dismissible = true, onClose = null, slide = false } = {}) {
       closeModal(); lastFocused = document.activeElement; modalOnClose = onClose;
-      const backdrop = el('div', { class: 'modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-ink-950/80 p-4 backdrop-blur-sm' });
-      const card = el('div', { class: `modal-card relative w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-ink-850 shadow-glow`, role:'dialog', 'aria-modal':'true', tabindex:'-1' });
+      const backdrop = el('div', { class: `modal-backdrop fixed inset-0 z-50 flex bg-ink-950/80 backdrop-blur-sm ${slide ? 'items-stretch justify-end' : 'items-center justify-center p-4'}` });
+      // slide → right-anchored full-height drawer; otherwise the centered card.
+      const card = el('div', { class: slide
+        ? 'modal-card modal-slide relative ml-auto flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-white/10 bg-ink-850 shadow-glow'
+        : `modal-card relative w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-ink-850 shadow-glow`, role:'dialog', 'aria-modal':'true', tabindex:'-1' });
       card.appendChild(node); backdrop.appendChild(card);
       if (dismissible) backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeModal(); });
       $('#modal-root').appendChild(backdrop); document.body.classList.add('overflow-hidden');
