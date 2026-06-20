@@ -78,7 +78,7 @@
         (cases.length ? `<div class="space-y-2">${cases.slice(0, 40).map((c) => `<button class="cmd-drill-row flex w-full items-center justify-between gap-3 rounded-lg border border-white/5 bg-ink-900 px-4 py-2.5 text-left transition hover:border-blue-500/30 hover:bg-white/5" data-id="${c.id}"><span class="min-w-0 flex-1"><span class="font-mono text-xs text-blue-300">${esc(c.case_number)}</span> <span class="text-sm text-slate-200">${esc(c.title || '')}</span></span><span class="flex flex-shrink-0 items-center gap-2"><span class="text-[11px] text-slate-500">${esc(c.bureau)}</span>${statusPill(c)}</span></button>`).join('')}</div>${cases.length > 40 ? '<p class="mt-2 text-center text-[11px] text-slate-500">Showing first 40.</p>' : ''}` : '<p class="text-sm text-slate-500">No cases match the current filters.</p>');
       box.querySelectorAll('.cmd-drill-row').forEach((b) => b.onclick = () => { if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(b.dataset.id); });
     }
-    function refreshCommand() { renderKPIs(); renderBureauLoad(); const cnt = $('#cmd-f-count'); if (cnt) cnt.textContent = cmdFilterActive() ? cmdFilteredCases().length + ' of ' + (casesCache ? casesCache.length : 0) + ' cases' : ''; }
+    function refreshCommand() { renderKPIs(); renderBureauLoad(); renderBureauScorecards(); const cnt = $('#cmd-f-count'); if (cnt) cnt.textContent = cmdFilterActive() ? cmdFilteredCases().length + ' of ' + (casesCache ? casesCache.length : 0) + ' cases' : ''; }
     function syncCmdFilterControls() {
       const b = $('#cmd-f-bureau'), d = $('#cmd-f-detective'), s = $('#cmd-f-status'), f = $('#cmd-f-from'), t = $('#cmd-f-to');
       if (b) b.value = CMD_FILTERS.bureau; if (d) d.value = CMD_FILTERS.detective; if (s) s.value = CMD_FILTERS.status; if (f) f.value = CMD_FILTERS.from; if (t) t.value = CMD_FILTERS.to;
@@ -178,17 +178,54 @@
         if (cmdCanFilter()) row.onclick = () => { CMD_FILTERS.bureau = (CMD_FILTERS.bureau === k ? '' : k); syncCmdFilterControls(); refreshCommand(); };
         w.appendChild(row); });
     }
+    // Wave 3: per-bureau performance scorecards. Director/deputy see all bureaus;
+    // a bureau lead sees only their own. Computed from the RLS-scoped casesCache,
+    // so a viewer never sees numbers for a bureau they aren't cleared for. Standing
+    // view (independent of the transient dashboard filters).
+    const BUREAU_FULL_NAMES = { LSB: 'Los Santos Bureau', BCB: 'Blaine County Bureau', SAB: 'State Bureau', JTF: 'Joint Task Force' };
+    function bureauScore(cases) {
+      const open = cases.filter((c) => c.status === 'open' || c.status === 'active').length;
+      const closed = cases.filter((c) => c.status === 'closed').length;
+      const total = cases.length;
+      return { open, closed, total, clearance: total ? Math.round(closed / total * 100) : null, avg: avgResolutionDays(cases) };
+    }
+    function renderBureauScorecards() {
+      const w = $('#bureau-scorecards'); if (!w) return;
+      const me = DB() && DB().me;
+      const isCommand = !!(me && me.active && CMD_ROLES.includes(me.role));
+      if (!dbReady() || !isCommand) { w.classList.add('hidden'); w.innerHTML = ''; return; }
+      let keys = ['LSB', 'BCB', 'SAB', 'JTF'];
+      if (me.role === 'bureau_lead' && me.bureau) keys = [me.bureau];
+      const all = (typeof casesCache !== 'undefined' ? casesCache : []);
+      w.classList.remove('hidden');
+      w.innerHTML = `<div class="mb-3 flex items-center justify-between"><h3 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Bureau scorecards</h3><span class="text-[11px] text-slate-500">${me.role === 'bureau_lead' ? 'your bureau' : 'all bureaus'} · performance</span></div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2${keys.length > 2 ? ' xl:grid-cols-4' : ''}">${keys.map((k) => {
+          const s = bureauScore(all.filter((c) => c.bureau === k));
+          const clr = s.clearance == null ? '—' : s.clearance + '%';
+          const clrTint = s.clearance == null ? 'text-slate-400' : s.clearance >= 60 ? 'text-emerald-300' : s.clearance >= 30 ? 'text-amber-300' : 'text-rose-300';
+          const avg = s.avg == null ? '—' : (s.avg < 1 ? '<1d' : s.avg.toFixed(1) + 'd');
+          return `<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-4">
+            <p class="text-sm font-bold text-white">${esc(BUREAU_FULL_NAMES[k] || k)}</p>
+            <p class="mt-0.5 text-[11px] text-slate-500">${s.total} case${s.total === 1 ? '' : 's'} on file</p>
+            <div class="mt-3 grid grid-cols-3 gap-2 text-center">
+              <div><p class="text-2xl font-bold text-white">${s.open}</p><p class="text-[10px] uppercase tracking-wider text-slate-500">Active load</p></div>
+              <div><p class="text-2xl font-bold ${clrTint}">${clr}</p><p class="text-[10px] uppercase tracking-wider text-slate-500">Clearance</p></div>
+              <div><p class="text-2xl font-bold text-white">${avg}</p><p class="text-[10px] uppercase tracking-wider text-slate-500">Avg close</p></div>
+            </div>
+          </div>`;
+        }).join('')}</div>`;
+    }
     function onEnterCommand() {
       wireCommandFilters();
       if (typeof renderJumpBack === 'function') renderJumpBack();
       if (dbReady()) {
-        fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); renderBureauLoad();
+        fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); renderBureauLoad(); renderBureauScorecards();
         // KPIs read PROFILES (activity/detective filter) and PERSONS (persons-of-interest count),
         // which are loaded by onAuthed elsewhere; reload here and re-render so the dashboard is
         // never stuck showing 0 / an empty detective list when Command is the first view entered.
         if (typeof fetchProfiles === 'function') fetchProfiles();
         if (typeof fetchPersons === 'function') fetchPersons().then(() => renderKPIs());
-      } else { renderKPIs(); renderTickets(); renderActivity(); renderBureauLoad(); renderTrackers(); }
+      } else { renderKPIs(); renderTickets(); renderActivity(); renderBureauLoad(); renderBureauScorecards(); renderTrackers(); }
     }
 
     /* ---- Ticket processing wizard ---- */

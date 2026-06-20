@@ -623,7 +623,7 @@
       // stale-case escalation (self-guarded against re-runs).
       if (dbReady()) setTimeout(escalateStaleCases, 6000);
       if (dbReady()) {
-        DB().subscribe('cases', () => { fetchCases(); fetchKpis(); renderBureauLoad(); if (typeof detailCase !== 'undefined' && detailCase && !$('#case-detail').classList.contains('hidden')) { DB().list('cases', { eq: { id: detailCase.id } }).then((r) => { if (r[0]) { detailCase = r[0]; renderCaseDetailShell(); loadDetailTab(); } }).catch(() => {}); } });
+        DB().subscribe('cases', () => { fetchCases(); fetchKpis(); renderBureauLoad(); if (typeof renderBureauScorecards === 'function') renderBureauScorecards(); if (typeof detailCase !== 'undefined' && detailCase && !$('#case-detail').classList.contains('hidden')) { DB().list('cases', { eq: { id: detailCase.id } }).then((r) => { if (r[0]) { detailCase = r[0]; renderCaseDetailShell(); loadDetailTab(); } }).catch(() => {}); } });
         DB().subscribe('profiles', () => { fetchProfiles(); renderRoster(); if (typeof renderOfficerCard === 'function') renderOfficerCard(); });
         DB().subscribe('announcements', () => { if (typeof fetchAnnouncements === 'function') fetchAnnouncements(); });
         DB().subscribe('case_access_grants', () => { if (typeof fetchMyGrants === 'function') fetchMyGrants(); });
