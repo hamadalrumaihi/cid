@@ -87,7 +87,7 @@
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast(record ? 'Bench updated' : 'Bench created', 'success'); fetchBenches();
       };
-      const bd = node.querySelector('#b-del'); if (bd) bd.onclick = async () => { if (!confirm('Delete bench?')) return; const r = await DB().remove('ballistics_benches', record.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } closeModal(); toast('Bench deleted', 'warn'); fetchBenches(); };
+      const bd = node.querySelector('#b-del'); if (bd) bd.onclick = async () => { if (!(await uiConfirm('Delete this bench?', { confirmText: 'Delete' }))) return; const r = await DB().remove('ballistics_benches', record.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } closeModal(); toast('Bench deleted', 'warn'); fetchBenches(); };
       openModal(node, { wide: true });
     }
     function openFootprintModal(record) {
@@ -119,7 +119,7 @@
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast(record ? 'Footprint updated' : 'Footprint logged', 'success'); fetchFootprints();
       };
-      const fd = node.querySelector('#f-del'); if (fd) fd.onclick = async () => { if (!confirm('Delete footprint?')) return; const r = await DB().remove('ballistic_footprints', record.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } closeModal(); toast('Footprint deleted', 'warn'); fetchFootprints(); };
+      const fd = node.querySelector('#f-del'); if (fd) fd.onclick = async () => { if (!(await uiConfirm('Delete this footprint?', { confirmText: 'Delete' }))) return; const r = await DB().remove('ballistic_footprints', record.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } closeModal(); toast('Footprint deleted', 'warn'); fetchFootprints(); };
       openModal(node);
     }
 

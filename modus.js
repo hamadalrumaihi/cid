@@ -54,7 +54,7 @@
         </div>`;
       const wireMoButtons = (scope) => {
         scope.querySelectorAll('.mo-open').forEach((b) => b.onclick = () => { if (!b.dataset.cid) return; if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(b.dataset.cid); });
-        scope.querySelectorAll('.mo-request').forEach((b) => b.onclick = () => { const co = casesCache.find((x) => x.id === b.dataset.cid) || { id: b.dataset.cid, case_number: b.dataset.cnum }; if (typeof requestCaseAccess === 'function') { const reason = prompt('Reason for requesting access (optional):') || ''; requestCaseAccess(co, reason); } });
+        scope.querySelectorAll('.mo-request').forEach((b) => b.onclick = async () => { const co = casesCache.find((x) => x.id === b.dataset.cid) || { id: b.dataset.cid, case_number: b.dataset.cnum }; if (typeof requestCaseAccess === 'function') { const reason = (await uiPrompt('Reason for requesting access (optional):', { title: 'Request case access' })) || ''; requestCaseAccess(co, reason); } });
       };
       const accCards = scored.map((c) => {
         if (!accessOk(c.caseObj)) return lockedCard(c.shared.join(', '), c.caseObj ? c.caseObj.id : '', c.id);

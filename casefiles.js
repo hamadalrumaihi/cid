@@ -415,7 +415,7 @@
             toast('Template saved', 'success'); await fetchCaseTemplates(); render();
           };
           const dl = rowEl.querySelector('.tm-del'); if (dl) dl.onclick = async () => {
-            if (!confirm('Delete this template?')) return;
+            if (!(await uiConfirm('Delete this template?', { confirmText: 'Delete' }))) return;
             const res = await DB().remove('case_templates', id);
             if (res.error) { toast('Delete failed: ' + res.error.message, 'danger'); return; }
             toast('Template deleted', 'warn'); await fetchCaseTemplates(); render();
@@ -475,7 +475,7 @@
       const pk = $('#case-packet'); if (pk) pk.onclick = () => exportCasePacket(detailCase);
       const eb = $('#case-edit'); if (eb) eb.onclick = () => openCaseModal(detailCase);
       const db = $('#case-del'); if (db) db.onclick = async () => {
-        if (!confirm('Delete case ' + detailCase.case_number + '? This cascades to its evidence/reports.')) return;
+        if (!(await uiConfirm('Delete case ' + detailCase.case_number + '? This cascades to its evidence/reports.', { confirmText: 'Delete case' }))) return;
         const r = await DB().remove('cases', detailCase.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; }
         toast('Case deleted', 'warn'); showCasesList(); fetchCases();
       };
@@ -528,7 +528,7 @@
           const ma = $('#cmedia-add'); if (ma) ma.onclick = () => openCaseMediaLink(cid);
           const mt = $('#cmedia-attach'); if (mt) mt.onclick = () => openAttachMedia(cid);
           $$('.cmedia-detach', body).forEach((b) => b.onclick = async () => {
-            if (!confirm('Detach this media from the case? It stays in the Media Vault.')) return;
+            if (!(await uiConfirm('Detach this media from the case? It stays in the Media Vault.', { danger: false, confirmText: 'Detach' }))) return;
             const res = await DB().update('media', b.dataset.id, { case_id: null });
             if (res.error) { toast('Detach failed: ' + res.error.message, 'danger'); return; }
             toast('Media detached', 'info'); if (typeof fetchMedia === 'function') fetchMedia(); loadDetailTab();

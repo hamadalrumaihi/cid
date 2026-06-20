@@ -138,7 +138,7 @@
               : `<button id="chat-request" class="mt-4 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Request access</button>`}
           </div>`;
         const rb = body.querySelector('#chat-request');
-        if (rb) rb.onclick = () => { const reason = prompt('Reason for requesting access (optional):') || ''; requestCaseAccess(c, reason); };
+        if (rb) rb.onclick = async () => { const reason = (await uiPrompt('Reason for requesting access (optional):', { title: 'Request case access' })) || ''; requestCaseAccess(c, reason); };
         return;
       }
 
@@ -315,7 +315,7 @@
         closeModal(); toast(record ? 'Announcement updated' : 'Announcement posted', 'success'); fetchAnnouncements();
       };
       const del = node.querySelector('#an-del');
-      if (del) del.onclick = async () => { if (!confirm('Delete this announcement?')) return; const r = await DB().remove('announcements', record.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } closeModal(); toast('Deleted', 'warn'); fetchAnnouncements(); };
+      if (del) del.onclick = async () => { if (!(await uiConfirm('Delete this announcement?', { confirmText: 'Delete' }))) return; const r = await DB().remove('announcements', record.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } closeModal(); toast('Deleted', 'warn'); fetchAnnouncements(); };
       openModal(node);
     }
 

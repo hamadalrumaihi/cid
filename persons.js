@@ -95,7 +95,7 @@
         const pf = card.querySelector('.p-profile'); if (pf && typeof openIntelProfile === 'function') pf.onclick = () => openIntelProfile('person', p.id);
         const tc = card.querySelector('.p-tocase'); if (tc && typeof attachIntelToCase === 'function') tc.onclick = () => attachIntelToCase(`Person — ${p.name}${p.alias ? ' “' + p.alias + '”' : ''} · ${p.status || 'POI'}${p.felony_count ? ', ' + p.felony_count + ' felonies' : ''}`);
         const pdb = card.querySelector('.p-del'); if (pdb) pdb.onclick = async () => {
-          if (!confirm('Delete person "' + (p.name || 'record') + '"? This removes the persons-registry record (not any linked officer account).')) return;
+          if (!(await uiConfirm('Delete person "' + (p.name || 'record') + '"? This removes the persons-registry record (not any linked officer account).', { confirmText: 'Delete' }))) return;
           const res = await DB().remove('persons', p.id);
           if (res && res.error) { toast('Delete failed: ' + res.error.message, 'danger'); return; }
           toast('Person deleted', 'warn'); fetchPersons();
@@ -135,7 +135,7 @@
         closeModal(); toast(record ? 'Person updated' : 'Person created', 'success'); fetchPersons();
       };
       const pd = node.querySelector('#p-del'); if (pd) pd.onclick = async () => {
-        if (!confirm('Delete person “' + p.name + '”?')) return;
+        if (!(await uiConfirm('Delete person “' + p.name + '”?', { confirmText: 'Delete' }))) return;
         const r = await DB().remove('persons', p.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; }
         closeModal(); toast('Person deleted', 'warn'); fetchPersons();
       };

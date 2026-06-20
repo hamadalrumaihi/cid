@@ -117,7 +117,7 @@
       const gtc = $('#gang-tocase'); if (gtc && typeof attachIntelToCase === 'function') gtc.onclick = () => attachIntelToCase(`Gang — ${detailGang.name}${detailGang.colors ? ' (' + detailGang.colors + ')' : ''} · ${cap(detailGang.threat_level)} threat`);
       const ge = $('#gang-edit'); if (ge) ge.onclick = () => openGangModal(detailGang);
       const gd = $('#gang-del'); if (gd) gd.onclick = async () => {
-        if (!confirm('Delete gang “' + g.name + '”? This removes its members & turf.')) return;
+        if (!(await uiConfirm('Delete gang “' + g.name + '”? This removes its members & turf.', { confirmText: 'Delete' }))) return;
         const r = await DB().remove('gangs', g.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; }
         toast('Gang deleted', 'warn'); showGangsList(); fetchGangs();
       };

@@ -556,3 +556,37 @@
       if (lastFocused && document.contains(lastFocused)) lastFocused.focus(); lastFocused = null;
     }
 
+    /* Themed replacements for the native window.confirm / window.prompt (which
+     * can't be styled). Promise-based; rendered as a top-layer overlay (inline
+     * z-index above the modal at z-50) so they stack over an open modal without
+     * disturbing it. uiConfirm → boolean; uiPrompt → string|null (matches native). */
+    function uiDialog({ title, message, input, confirmText, cancelText, danger }) {
+      return new Promise((resolve) => {
+        const back = el('div', { class: 'fixed inset-0 flex items-center justify-center bg-ink-950/70 p-4 backdrop-blur-sm', style: 'z-index:70' });
+        const card = el('div', { class: 'w-full max-w-sm rounded-2xl border border-white/10 bg-ink-850 p-6 shadow-glow', role: 'dialog', 'aria-modal': 'true' });
+        const okCls = danger ? 'bg-rose-600 hover:bg-rose-500' : 'bg-gradient-to-r from-badge-500 to-blue-700 hover:brightness-110';
+        card.innerHTML = `
+          ${title ? `<h3 class="text-base font-bold text-white">${esc(title)}</h3>` : ''}
+          ${message ? `<p class="mt-1 whitespace-pre-wrap text-sm text-slate-300">${esc(message)}</p>` : ''}
+          ${input ? `<input id="ui-dlg-input" class="mt-3 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="${esc(input.placeholder || '')}" value="${esc(input.value || '')}" />` : ''}
+          <div class="mt-5 flex justify-end gap-2">
+            <button id="ui-dlg-cancel" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10">${esc(cancelText || 'Cancel')}</button>
+            <button id="ui-dlg-ok" class="rounded-lg ${okCls} px-4 py-2 text-sm font-semibold text-white shadow-glow transition">${esc(confirmText || (input ? 'OK' : 'Confirm'))}</button>
+          </div>`;
+        back.appendChild(card); document.body.appendChild(back);
+        const inp = card.querySelector('#ui-dlg-input');
+        const finish = (val) => { document.removeEventListener('keydown', onKey); back.remove(); resolve(val); };
+        const cancelVal = input ? null : false;
+        const okFn = () => finish(input ? (inp ? inp.value.trim() : '') : true);
+        const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); finish(cancelVal); } else if (e.key === 'Enter') { e.preventDefault(); okFn(); } };
+        card.querySelector('#ui-dlg-ok').onclick = okFn;
+        card.querySelector('#ui-dlg-cancel').onclick = () => finish(cancelVal);
+        back.addEventListener('mousedown', (e) => { if (e.target === back) finish(cancelVal); });
+        document.addEventListener('keydown', onKey);
+        setTimeout(() => { (inp || card.querySelector('#ui-dlg-ok')).focus(); }, 30);
+      });
+    }
+    const uiConfirm = (message, opts = {}) => uiDialog({ message, title: opts.title || 'Please confirm', confirmText: opts.confirmText || 'Confirm', cancelText: opts.cancelText, danger: opts.danger !== false });
+    const uiPrompt = (message, opts = {}) => uiDialog({ message, title: opts.title || '', input: { placeholder: opts.placeholder || '', value: opts.value || '' }, confirmText: opts.confirmText || 'OK' });
+
+
