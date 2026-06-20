@@ -14,7 +14,7 @@
 
 ## WAVE 0 — Security & foundation ⚠️ NEARLY DONE (1 blocked)
 - ✅ Pin supabase-js to an exact latest-stable 2.x — pinned to `2.108.2` in index.html.
-- ⛔ **BLOCKED:** xlsx — self-host the CURRENT patched SheetJS. cdn.sheetjs.com / jsdelivr / unpkg / git.sheetjs.com are all denied by this environment's network policy, and GitHub's mirror is frozen at the still-vulnerable 0.18.12. User opted to allow-list cdn.sheetjs.com; pending the policy update taking effect (may need a fresh session), then: fetch 0.20.x → vendor into repo → point index.html at the local copy. Still on vulnerable `0.18.5` CDN meanwhile. Do NOT vendor 0.18.5/0.18.12.
+- ✅ xlsx — upgraded 0.18.5 → **0.20.3** off the official `cdn.sheetjs.com` (PR #30, merged to main then merged into cid-rebuild `1e25ece`). Resolves CVE-2023-30533 + the ReDoS. NOTE: this is a version-pinned vendor-CDN reference, not a repo-vendored self-host — the CVEs are resolved either way; vendoring into the repo remains an optional future hardening if you want to drop the external dependency entirely.
 - ✅ Supabase advisors run + remediated (this pass), applied to live `cid`:
     - `cid_records_lock` (the never-applied migration, see below) — anon SELECT closed; read now gated on `private.is_active()`; owner/command update; command-only delete.
     - `20260619020000_wave0_advisor_followup` — re-pinned `private.touch_cases` search_path; dropped duplicate `cases_case_number_uniq` index.
