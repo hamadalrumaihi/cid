@@ -531,6 +531,12 @@
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">${med.length ? med.map((m) => caseMediaCard(m, canEdit)).join('') : '<p class="text-sm text-slate-500">No media linked to this case. Upload photos, add a link, or attach one from the Media Vault.</p>'}</div>`;
           const nb = $('#ev-new'); if (nb) nb.onclick = () => openEvidenceModal(cid);
           $$('.ev-custody', body).forEach((b) => b.onclick = () => openCustody(b.dataset.id));
+          $$('.ev-del', body).forEach((b) => b.onclick = async () => {
+            if (!(await uiConfirm('Delete this evidence item? This also removes its chain-of-custody history.', { confirmText: 'Delete' }))) return;
+            const res = await DB().remove('evidence', b.dataset.id);
+            if (res.error) { toast('Delete failed: ' + res.error.message, 'danger'); return; }
+            toast('Evidence deleted', 'warn'); loadDetailTab();
+          });
           const ma = $('#cmedia-add'); if (ma) ma.onclick = () => openCaseMediaLink(cid);
           const mt = $('#cmedia-attach'); if (mt) mt.onclick = () => openAttachMedia(cid);
           const mu = $('#cmedia-upload'); if (mu) mu.onclick = () => openCaseMediaUpload(cid);
@@ -574,7 +580,7 @@
       const tint = e.tamper === 'intact' ? 'text-emerald-300' : e.tamper === 'compromised' ? 'text-rose-300' : 'text-amber-300';
       return `<div class="rounded-xl border border-white/10 bg-ink-900 p-4">
         <div class="flex items-start justify-between gap-2"><div><p class="text-sm font-semibold text-white">${escapeHTML(e.description || e.item_code || 'Evidence')}</p><p class="text-[11px] text-slate-400">${escapeHTML(e.type || '—')}${e.item_code ? ' · ' + escapeHTML(e.item_code) : ''} · collected ${e.collected_at ? new Date(e.collected_at).toLocaleDateString('en-US') : '—'}</p></div><span class="rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${tint}">${escapeHTML(e.tamper)}</span></div>
-        <div class="mt-2 flex gap-2"><button class="ev-custody rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10" data-id="${e.id}">Chain of custody</button></div>
+        <div class="mt-2 flex gap-2"><button class="ev-custody rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10" data-id="${e.id}">Chain of custody</button>${(DB() && DB().canDelete()) ? `<button class="ev-del rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10" data-id="${e.id}">Delete</button>` : ''}</div>
       </div>`;
     }
     function openEvidenceModal(caseId) {
