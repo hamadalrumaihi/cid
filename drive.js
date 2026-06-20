@@ -16,8 +16,42 @@
       if (!dbReady()) { renderDrive(); return; }
       try { DOCS = await DB().list('documents', { order: 'name' }); } catch (e) {}
       renderDrive();
+      const s = $('#drive-search'); if (s && s.value.trim()) renderDriveSearch(s.value);   // keep results fresh during search
     }
-    function onEnterDrive() { if (dbReady()) fetchDocuments(); else renderDrive(); }
+    function onEnterDrive() { if (dbReady()) fetchDocuments(); else renderDrive(); wireDriveSearch(); }
+
+    /* Wave 4: cross-drive search — matches a document's name, folder, linked case
+       number, and content (body / sheet cells / form values). Client-side over the
+       already-RLS-scoped DOCS cache; results click straight through to the file. */
+    function wireDriveSearch() {
+      const s = $('#drive-search'); if (!s) return;
+      s.oninput = debounce(() => renderDriveSearch(s.value), 150);
+    }
+    function driveSearchText(d) {
+      const parts = [d.name || '', d.folder || ''];
+      if (d.case_id && typeof caseNumById === 'function') { const cn = caseNumById(d.case_id); if (cn) parts.push(cn); }
+      try { parts.push(JSON.stringify(d.content || {})); } catch (e) {}
+      return parts.join(' ').toLowerCase();
+    }
+    function renderDriveSearch(q) {
+      const grid = $('#drive-grid'), box = $('#drive-results'); if (!grid || !box) return;
+      q = (q || '').trim().toLowerCase();
+      if (!q) { box.classList.add('hidden'); box.innerHTML = ''; grid.classList.remove('hidden'); return; }
+      grid.classList.add('hidden'); box.classList.remove('hidden');
+      const hits = (typeof DOCS !== 'undefined' ? DOCS : []).filter((d) => driveSearchText(d).includes(q)).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      if (!hits.length) { box.innerHTML = `<p class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-500">No documents match “${esc(q)}”.</p>`; return; }
+      box.innerHTML = `<p class="mb-2 text-[11px] text-slate-500">${hits.length} document${hits.length === 1 ? '' : 's'} match “${esc(q)}”</p>
+        <div class="space-y-2">${hits.map((d) => {
+          const cn = d.case_id && typeof caseNumById === 'function' ? caseNumById(d.case_id) : null;
+          const where = cn ? '🗂️ ' + cn : d.folder;
+          return `<div class="drive-hit flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:border-blue-500/30 hover:bg-white/5" data-id="${d.id}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">${fileIcon(docDisplayType(d))}</span>${esc(d.name)}</span><span class="text-[11px] text-slate-500">${esc(where || '')}</span></div>`;
+        }).join('')}</div>`;
+      box.querySelectorAll('.drive-hit').forEach((row) => row.onclick = () => {
+        const d = DOCS.find((x) => x.id === row.dataset.id); if (!d) return;
+        const meta = (typeof FOLDER_META !== 'undefined' ? FOLDER_META : []).find((f) => f.name === d.folder) || null;
+        openDocument(d, meta);
+      });
+    }
 
     function renderDrive() {
       const grid = $('#drive-grid'); if (!grid) return;
