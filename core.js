@@ -351,6 +351,10 @@
           const rd = new FileReader();
           rd.onload = () => { try { const wb = window.XLSX.read(rd.result, { type: 'array' }); ta.value = window.XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]); msg.textContent = 'Loaded sheet "' + wb.SheetNames[0] + '" — review then Import.'; } catch (err) { msg.innerHTML = '<span class="text-rose-300">Could not read workbook.</span>'; } };
           rd.readAsArrayBuffer(f);
+        } else if (/^(image|video|audio)\//.test(f.type)) {
+          // A media file read as text becomes mojibake — steer to the right tool.
+          msg.innerHTML = '<span class="text-amber-300">That looks like a media file (' + esc(f.type) + '), not CSV/JSON data. To add photos, open the case → <b>Evidence → Upload photos</b>.</span>';
+          e.target.value = '';
         } else { const rd = new FileReader(); rd.onload = () => { ta.value = rd.result; }; rd.readAsText(f); }
       };
       node.querySelector('#imp-go').onclick = async () => {
