@@ -518,15 +518,22 @@
             DB().list('evidence', { order: 'created_at', ascending: false, eq: { case_id: cid } }),
             DB().list('media', { order: 'created_at', ascending: false, eq: { case_id: cid } }).catch(() => []),
           ]);
+          const canUpload = canEdit && typeof fmConfigured === 'function' && fmConfigured();
+          const mediaActions = canEdit ? `<div class="flex flex-wrap gap-2">
+            ${canUpload ? '<button id="cmedia-upload" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">⬆ Upload photos</button>' : ''}
+            <button id="cmedia-attach" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">📎 Attach from Vault</button>
+            <button id="cmedia-add" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ Add link</button>
+          </div>` : '';
           body.innerHTML = `
             <div class="mb-3 flex items-center justify-between"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Evidence (${ev.length})</h4>${canEdit ? '<button id="ev-new" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ Add Evidence</button>' : ''}</div>
             <div class="space-y-3">${ev.length ? ev.map(evidenceCard).join('') : '<p class="text-sm text-slate-500">No evidence logged.</p>'}</div>
-            <div class="mt-8 mb-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-6"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Linked Media (${med.length})</h4>${canEdit ? '<div class="flex gap-2"><button id="cmedia-attach" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">📎 Attach from Vault</button><button id="cmedia-add" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ Add link</button></div>' : ''}</div>
-            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">${med.length ? med.map((m) => caseMediaCard(m, canEdit)).join('') : '<p class="text-sm text-slate-500">No media linked to this case. Add a link or attach one from the Media Vault.</p>'}</div>`;
+            <div class="mt-8 mb-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-6"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Linked Media (${med.length})</h4>${mediaActions}</div>
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">${med.length ? med.map((m) => caseMediaCard(m, canEdit)).join('') : '<p class="text-sm text-slate-500">No media linked to this case. Upload photos, add a link, or attach one from the Media Vault.</p>'}</div>`;
           const nb = $('#ev-new'); if (nb) nb.onclick = () => openEvidenceModal(cid);
           $$('.ev-custody', body).forEach((b) => b.onclick = () => openCustody(b.dataset.id));
           const ma = $('#cmedia-add'); if (ma) ma.onclick = () => openCaseMediaLink(cid);
           const mt = $('#cmedia-attach'); if (mt) mt.onclick = () => openAttachMedia(cid);
+          const mu = $('#cmedia-upload'); if (mu) mu.onclick = () => openCaseMediaUpload(cid);
           $$('.cmedia-detach', body).forEach((b) => b.onclick = async () => {
             if (!(await uiConfirm('Detach this media from the case? It stays in the Media Vault.', { danger: false, confirmText: 'Detach' }))) return;
             const res = await DB().update('media', b.dataset.id, { case_id: null });
@@ -642,6 +649,39 @@
         const res = await DB().insert('media', { title, type, kind, external_url: node.querySelector('#cm-url').value.trim() || null, case_id: caseId });
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast('Media linked to case', 'success'); if (typeof fetchMedia === 'function') fetchMedia(); loadDetailTab();
+      };
+      openModal(node);
+    }
+    // Multi-photo upload → FiveManage → one media row per file, linked to the case.
+    function openCaseMediaUpload(caseId) {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      if (typeof fmConfigured !== 'function' || !fmConfigured()) { toast('Direct upload isn’t configured — use “+ Add link” to paste a URL.', 'warn'); return; }
+      const node = el('div', { class: 'p-6' });
+      node.innerHTML = `
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Upload Photos / Video</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <p class="mb-3 text-xs text-slate-400">Pick one or more files — each is uploaded to FiveManage and linked to this case. Images show a thumbnail automatically.</p>
+        <input id="cmu-files" type="file" accept="image/*,video/*" multiple class="block w-full text-xs text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-white" />
+        <div id="cmu-status" class="mt-3 text-xs text-slate-400"></div>
+        <button id="cmu-go" class="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Upload &amp; link</button>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#cmu-go').onclick = async () => {
+        const files = Array.from((node.querySelector('#cmu-files').files) || []);
+        if (!files.length) { toast('Choose at least one file.', 'warn'); return; }
+        const status = node.querySelector('#cmu-status'); const goBtn = node.querySelector('#cmu-go'); goBtn.disabled = true;
+        let ok = 0, fail = 0;
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i];
+          status.textContent = `Uploading ${i + 1}/${files.length}: ${f.name}…`;
+          try {
+            const out = await fmUpload(f);
+            const isVid = out.kind === 'video';
+            const res = await DB().insert('media', { title: f.name.replace(/\.[^.]+$/, ''), type: isVid ? 'video' : 'image', kind: isVid ? 'MP4 Video' : 'Image URL', external_url: out.url, case_id: caseId });
+            if (res.error) fail++; else ok++;
+          } catch (e) { fail++; }
+        }
+        closeModal();
+        toast(`Uploaded ${ok} file${ok === 1 ? '' : 's'}${fail ? ` · ${fail} failed` : ''}`, fail && !ok ? 'danger' : 'success');
+        if (typeof fetchMedia === 'function') fetchMedia(); loadDetailTab();
       };
       openModal(node);
     }

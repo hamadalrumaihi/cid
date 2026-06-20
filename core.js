@@ -351,6 +351,10 @@
           const rd = new FileReader();
           rd.onload = () => { try { const wb = window.XLSX.read(rd.result, { type: 'array' }); ta.value = window.XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]); msg.textContent = 'Loaded sheet "' + wb.SheetNames[0] + '" — review then Import.'; } catch (err) { msg.innerHTML = '<span class="text-rose-300">Could not read workbook.</span>'; } };
           rd.readAsArrayBuffer(f);
+        } else if (/^(image|video|audio)\//.test(f.type)) {
+          // A media file read as text becomes mojibake — steer to the right tool.
+          msg.innerHTML = '<span class="text-amber-300">That looks like a media file (' + esc(f.type) + '), not CSV/JSON data. To add photos, open the case → <b>Evidence → Upload photos</b>.</span>';
+          e.target.value = '';
         } else { const rd = new FileReader(); rd.onload = () => { ta.value = rd.result; }; rd.readAsText(f); }
       };
       node.querySelector('#imp-go').onclick = async () => {
@@ -563,7 +567,7 @@
     function uiDialog({ title, message, input, confirmText, cancelText, danger }) {
       return new Promise((resolve) => {
         const back = el('div', { class: 'fixed inset-0 flex items-center justify-center bg-ink-950/70 p-4 backdrop-blur-sm', style: 'z-index:70' });
-        const card = el('div', { class: 'w-full max-w-sm rounded-2xl border border-white/10 bg-ink-850 p-6 shadow-glow', role: 'dialog', 'aria-modal': 'true' });
+        const card = el('div', { class: 'rounded-2xl border border-white/10 bg-ink-850 p-6 shadow-glow', style: 'width:100%;max-width:26rem', role: 'dialog', 'aria-modal': 'true' });
         const okCls = danger ? 'bg-rose-600 hover:bg-rose-500' : 'bg-gradient-to-r from-badge-500 to-blue-700 hover:brightness-110';
         card.innerHTML = `
           ${title ? `<h3 class="text-base font-bold text-white">${esc(title)}</h3>` : ''}
