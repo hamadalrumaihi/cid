@@ -563,7 +563,7 @@
     function uiDialog({ title, message, input, confirmText, cancelText, danger }) {
       return new Promise((resolve) => {
         const back = el('div', { class: 'fixed inset-0 flex items-center justify-center bg-ink-950/70 p-4 backdrop-blur-sm', style: 'z-index:70' });
-        const card = el('div', { class: 'w-full max-w-sm rounded-2xl border border-white/10 bg-ink-850 p-6 shadow-glow', role: 'dialog', 'aria-modal': 'true' });
+        const card = el('div', { class: 'rounded-2xl border border-white/10 bg-ink-850 p-6 shadow-glow', style: 'width:100%;max-width:26rem', role: 'dialog', 'aria-modal': 'true' });
         const okCls = danger ? 'bg-rose-600 hover:bg-rose-500' : 'bg-gradient-to-r from-badge-500 to-blue-700 hover:brightness-110';
         card.innerHTML = `
           ${title ? `<h3 class="text-base font-bold text-white">${esc(title)}</h3>` : ''}
