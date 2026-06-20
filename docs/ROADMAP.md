@@ -40,7 +40,7 @@
 ## WAVE 3 — Command & Heatmap  ← CURRENT
 > Sequencing note (Free tier): `casesCache` is a load-bearing full-load cache (KPIs, bureau load, heatmap, Drive folders, every case dropdown, id→number lookups read it). At this app's scale, full server-side pagination is a high-risk/low-payoff refactor that fights that architecture — so the additive wins (scorecards, heatmap) go first, and server-side filtering is reconsidered/deferred unless data volume actually demands it.
 - ✅ **Bureau scorecards**: per-bureau active load, clearance rate, avg time-to-close on the Command dashboard. Director/deputy see all four bureaus; a bureau lead sees only their own. Computed from the RLS-scoped `casesCache` (no migration). — this pass
-- **Heatmap upgrades**: enhanced AREA-based (no geo map); time-range slider on `created_at`; toggleable layers (cases / gang turf / places / raids) + intensity. ← NEXT
+- ✅ **Heatmap upgrades**: AREA-based intensity now has toggleable layers (cases / raids / turf / places) that re-weight the score live, and a `created_at` time-range slider (all-time / year / 90d / 30d / 7d). Per-tile breakdown + legend reflect the active layers and window. Untimestamped standing intel stays in-range. — this pass
 - **Server-side filtering** (RECONSIDERED — likely defer): move status/bureau/lead/sign-off/text filters into Supabase queries; load-more / infinite scroll at 50/page. Only worth it once case volume is large enough to feel the client-side filter; would need a slim-projection cache for the cross-cutting consumers + lean indexes (bureau, status, lead_detective_id, signoff_status, created_at — verified against queries). Not started.
 
 ## WAVE 4 — Reports & Drive
