@@ -43,9 +43,11 @@
 - ✅ **Heatmap upgrades**: AREA-based intensity now has toggleable layers (cases / raids / turf / places) that re-weight the score live, and a `created_at` time-range slider (all-time / year / 90d / 30d / 7d). Per-tile breakdown + legend reflect the active layers and window. Untimestamped standing intel stays in-range. — this pass
 - **Server-side filtering** (RECONSIDERED — likely defer): move status/bureau/lead/sign-off/text filters into Supabase queries; load-more / infinite scroll at 50/page. Only worth it once case volume is large enough to feel the client-side filter; would need a slim-projection cache for the cross-cutting consumers + lean indexes (bureau, status, lead_detective_id, signoff_status, created_at — verified against queries). Not started.
 
-## WAVE 4 — Reports & Drive
-- **Branded export**: text letterhead ("Criminal Investigation Division — State of San Andreas") with image slot for a logo/seal (supplied later); "LAW ENFORCEMENT SENSITIVE" banner; applies to .pdf (jsPDF) and .docx (docx.js).
-- **Drive search & versions**: search by name/folder/content; new `documents_versions` table keeping ALL versions with restore-any. [migration]
+## WAVE 4 — Reports & Drive  ← CURRENT
+- ✅ **Branded export**: shared agency letterhead (Criminal Investigation Division · State of San Andreas) + "LAW ENFORCEMENT SENSITIVE" banner on every PDF (`pdfLetterhead`) and .docx (`brandParas`, auto-prepended in `downloadDocx`) — covers report exports, case packets, and RICO summaries. Centralized in `docx.js` with a `LETTERHEAD.logoDataUrl` image slot (PDF renders a supplied seal via `addImage`; DOCX image embedding is a future step). — this pass
+- **Drive search & versions**: search by name/folder/content; new `documents_versions` table keeping ALL versions with restore-any. [migration] ← NEXT (needs migration + approval to apply to live)
+
+> Deferred/blocked items (SheetJS vendoring, server-side filtering, Pro-gated hardening) are tracked in `DEFERRED.md`.
 
 ## Migrations summary
 1. `cid_records` RLS lock + records.js client switch (one commit) — Wave 0 ✅

@@ -162,7 +162,8 @@
       const doc = new J({ unit: 'pt', format: 'letter' }); const M = 54; let y = M;
       const W = doc.internal.pageSize.getWidth() - M * 2;
       const line = (t, sz, bold) => { doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(sz); const lines = doc.splitTextToSize(String(t), W); lines.forEach((ln) => { if (y > doc.internal.pageSize.getHeight() - M) { doc.addPage(); y = M; } doc.text(ln, M, y); y += sz + 4; }); };
-      line('CRIMINAL INVESTIGATION DIVISION', 9, false); line('CASE PACKET — ' + c.case_number, 16, true);
+      if (typeof pdfLetterhead === 'function') y = pdfLetterhead(doc, M);
+      line('CASE PACKET — ' + c.case_number, 16, true);
       line(`${c.title || ''} · ${c.bureau} · ${String(c.status).toUpperCase()} · ${new Date().toLocaleString('en-US')}`, 9, false); y += 6;
       line('Summary', 12, true); line(c.summary || '—', 10, false); y += 4;
       line(`Evidence (${d.ev.length})`, 12, true); d.ev.length ? d.ev.forEach((e) => line(`• ${(e.item_code ? e.item_code + ' — ' : '') + (e.description || e.type || 'item')} [${e.tamper}]`, 10, false)) : line('None.', 10, false); y += 4;

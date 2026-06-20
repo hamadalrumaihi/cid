@@ -198,7 +198,7 @@
         const wrapped = doc.splitTextToSize(String(txt), W - M * 2);
         wrapped.forEach((ln) => { if (y > 740) { doc.addPage(); y = M; } doc.text(ln, opts.center ? W / 2 : M, y, opts.center ? { align: 'center' } : undefined); y += (opts.size || 11) + 5; });
       };
-      line('CRIMINAL INVESTIGATION DIVISION — STATE OF SAN ANDREAS', { center: true, size: 9 });
+      y = (typeof pdfLetterhead === 'function') ? pdfLetterhead(doc, M) : y;
       line(reportTitle(r), { center: true, bold: true, size: 16 }); y += 4;
       line(`${caseNumById(r.case_id) || r.case_id} · ${new Date(r.created_at).toLocaleString('en-US')}${r.finalized ? ' · FINALIZED' : ' · DRAFT'}`, { center: true, size: 9 }); y += 10;
       const tpl = tplById(r.template);
