@@ -393,7 +393,7 @@
           toast(`${t.tracker_code} fully authorized — tracking live`, 'success'); fetchTrackers();
         });
         const dl = card.querySelector('.tk-del');
-        if (dl) dl.addEventListener('click', async () => { if (!confirm('Remove tracker ' + t.tracker_code + '?')) return; const r = await DB().remove('trackers', t.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } toast('Tracker removed', 'warn'); fetchTrackers(); });
+        if (dl) dl.addEventListener('click', async () => { if (!(await uiConfirm('Remove tracker ' + t.tracker_code + '?', { confirmText: 'Remove' }))) return; const r = await DB().remove('trackers', t.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } toast('Tracker removed', 'warn'); fetchTrackers(); });
         wrap.appendChild(card);
       });
     }

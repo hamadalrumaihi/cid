@@ -377,7 +377,7 @@
       node.querySelector('#hist-back').onclick = back;
       node.querySelectorAll('.ver-restore').forEach((b) => b.onclick = async () => {
         const v = versions.find((x) => x.id === b.dataset.id); if (!v) return;
-        if (!confirm('Restore this version? It becomes the current content and is added as a new history entry.')) return;
+        if (!(await uiConfirm('Restore this version? It becomes the current content and is added as a new history entry.', { danger: false, confirmText: 'Restore' }))) return;
         const label = new Date().toLocaleDateString('en-GB');
         const res = await DB().update('documents', doc.id, { content: v.content, modified_label: label });
         if (res.error) { toast('Restore failed: ' + res.error.message, 'danger'); return; }

@@ -132,7 +132,7 @@
         }
         closeModal(); toast(isEdit ? 'Narcotic updated' : 'Narcotic created', 'success'); fetchDrugs();
       };
-      const nd = node.querySelector('#n-del'); if (nd) nd.onclick = async () => { if (!confirm('Delete ' + record.name + '?')) return; const r = await DB().remove('narcotics', record.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } closeModal(); toast('Narcotic deleted', 'warn'); fetchDrugs(); };
+      const nd = node.querySelector('#n-del'); if (nd) nd.onclick = async () => { if (!(await uiConfirm('Delete ' + record.name + '?', { confirmText: 'Delete' }))) return; const r = await DB().remove('narcotics', record.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } closeModal(); toast('Narcotic deleted', 'warn'); fetchDrugs(); };
       openModal(node, { wide: true });
     }
 

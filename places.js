@@ -47,7 +47,7 @@
           ${recipe.length ? `<div class="mt-4"><p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-blue-300/70">Production Process</p><div class="space-y-1.5">${recipe.map((s, i) => `<div class="flex items-center gap-2 text-xs text-slate-300"><span class="grid h-5 w-5 flex-shrink-0 place-items-center rounded-full bg-blue-500/15 font-mono text-[10px] text-blue-300">${i + 1}</span>${escapeHTML(s)}</div>`).join('')}</div></div>` : ''}`;
         const ptc = card.querySelector('.pl-tocase'); if (ptc && typeof attachIntelToCase === 'function') ptc.addEventListener('click', () => attachIntelToCase(`Place — ${p.name} (${locLabel(p.type)})${p.area ? ' · ' + p.area : ''}`));
         const eb = card.querySelector('.pl-edit'); if (eb) eb.addEventListener('click', () => openPlaceModal(p));
-        const db = card.querySelector('.pl-del'); if (db) db.addEventListener('click', async () => { if (!confirm(`Delete location "${p.name}"?`)) return; const r = await DB().remove('places', p.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } toast('Location deleted', 'warn'); fetchPlaces(); });
+        const db = card.querySelector('.pl-del'); if (db) db.addEventListener('click', async () => { if (!(await uiConfirm(`Delete location "${p.name}"?`, { confirmText: 'Delete' }))) return; const r = await DB().remove('places', p.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } toast('Location deleted', 'warn'); fetchPlaces(); });
         grid.appendChild(card);
       });
     }
@@ -91,7 +91,7 @@
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast(record ? 'Location updated' : 'Location created', 'success'); fetchPlaces();
       };
-      const pd = node.querySelector('#pl-del2'); if (pd) pd.onclick = async () => { if (!confirm('Delete “' + p.name + '”?')) return; const r = await DB().remove('places', p.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } closeModal(); toast('Location deleted', 'warn'); fetchPlaces(); };
+      const pd = node.querySelector('#pl-del2'); if (pd) pd.onclick = async () => { if (!(await uiConfirm('Delete “' + p.name + '”?', { confirmText: 'Delete' }))) return; const r = await DB().remove('places', p.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } closeModal(); toast('Location deleted', 'warn'); fetchPlaces(); };
       openModal(node);
     }
 
