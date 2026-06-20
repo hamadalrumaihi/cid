@@ -26,10 +26,19 @@
             <div class="rounded-lg bg-ink-850 py-2"><p class="font-semibold ${p.loa ? 'text-amber-300' : 'text-slate-200'}">${p.loa ? 'On LOA' : p.active ? 'Active' : 'Pending'}</p><p class="text-[10px] text-slate-500">Status</p></div>
           </div>
           ${isMe ? `<button class="loa-self mt-3 w-full rounded-lg border px-3 py-2 text-xs font-semibold transition ${p.loa ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300 hover:bg-emerald-500/10' : 'border-amber-500/30 bg-amber-500/5 text-amber-200 hover:bg-amber-500/10'}">${p.loa ? 'Clear my LOA — return active' : 'Set myself On LOA'}</button>` : ''}
-          ${(admin || isMe) ? `<button class="ros-edit mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10">✎ Edit ${isMe && !admin ? 'my profile' : 'officer'}</button>` : ''}`);
+          ${(admin || isMe) ? `<button class="ros-edit mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10">✎ Edit ${isMe && !admin ? 'my profile' : 'officer'}</button>` : ''}
+          ${(admin && !isMe && p.active) ? `<button class="ros-remove mt-2 w-full rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Remove from roster</button>` : ''}`);
         const lb = card.querySelector('.loa-self'); if (lb && typeof setMyLoa === 'function') lb.onclick = () => setMyLoa(!p.loa);
         const eb = card.querySelector('.ros-edit');
         if (eb) eb.onclick = () => { if (admin && typeof openAssignModal === 'function') openAssignModal(p); else if (typeof openMyProfile === 'function') openMyProfile(); };
+        const rb = card.querySelector('.ros-remove');
+        if (rb) rb.onclick = async () => {
+          if (!(await uiConfirm('Remove ' + (p.display_name || 'this officer') + ' from the active roster? They keep their account but can’t act until reactivated.', { confirmText: 'Deactivate' }))) return;
+          const res = await DB().rpc('assign_member', { target: p.id, new_role: p.role, new_division: p.division || null, set_active: false });
+          if (res && res.error) { toast('Remove failed: ' + res.error.message, 'danger'); return; }
+          toast((p.display_name || 'Officer') + ' removed from active roster', 'warn');
+          if (typeof fetchProfiles === 'function') fetchProfiles().then(() => { renderRoster(); if (typeof renderAdmin === 'function') renderAdmin(); }); else renderRoster();
+        };
         g.appendChild(card);
       });
     }
