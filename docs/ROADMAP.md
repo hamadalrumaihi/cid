@@ -46,7 +46,9 @@
 ## WAVE 4 — Reports & Drive  ← CURRENT
 - ✅ **Branded export**: shared agency letterhead (Criminal Investigation Division · State of San Andreas) + "LAW ENFORCEMENT SENSITIVE" banner on every PDF (`pdfLetterhead`) and .docx (`brandParas`, auto-prepended in `downloadDocx`) — covers report exports, case packets, and RICO summaries. Centralized in `docx.js` with a `LETTERHEAD.logoDataUrl` image slot (PDF renders a supplied seal via `addImage`; DOCX image embedding is a future step). — this pass
 - ✅ **Drive search**: search box on the CID General drive matching a document's name, folder, linked case number, and content (body / sheet cells / form values) across the RLS-scoped DOCS cache; results click through to the file. Client-side, no migration. — this pass
-- 🟡 **Drive versions**: `documents_versions` append-only history (migration `20260620120000_documents_versions.sql`). Client wired — every save snapshots; a 🕘 History view per doc/sheet/form lists versions (time + author) with restore-any. Code is defensive (no-ops if the table is absent). **Migration NOT yet applied to live `cid` — awaiting approval.**
+- ✅ **Drive versions**: `documents_versions` append-only history (migration `20260620120000_documents_versions.sql` — **applied to live `cid`**, RLS + history index verified, advisors clean). Every save snapshots; a 🕘 History view per doc/sheet/form lists versions (time + author) with restore-any.
+
+**WAVE 4 COMPLETE** ✅ — branded export + Drive search & versions shipped.
 
 > Deferred/blocked items (SheetJS vendoring, server-side filtering, Pro-gated hardening) are tracked in `DEFERRED.md`.
 
