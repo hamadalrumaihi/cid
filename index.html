@@ -567,8 +567,10 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.108.2"></script>
   <!-- jsPDF (public CDN) for report PDF export; gracefully optional if offline -->
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-  <!-- SheetJS (public CDN) for Excel (.xlsx) import/export; gracefully optional if offline -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- SheetJS (official CDN) for Excel (.xlsx) import/export; gracefully optional if offline.
+       Served from cdn.sheetjs.com, the authoritative source — npm's xlsx@0.18.5 is no longer
+       maintained and carries known advisories (CVE-2023-30533 prototype pollution + ReDoS). -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script>
     /* ============================================================================
      *  SUPABASE CONFIG — public values, safe to commit. Anon/publishable key is
