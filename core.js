@@ -223,7 +223,11 @@
       if (!doc) return null;
       if (doc.content && doc.content.view === 'form' && doc.content.form && FORM_SCHEMAS[doc.content.form]) return doc.content.form;
       const base = String(doc.name || '').replace(/\.[a-z0-9]+$/i, '').trim().toLowerCase();
-      return FORM_NAME_MAP[base] || null;
+      if (FORM_NAME_MAP[base]) return FORM_NAME_MAP[base];
+      // Tolerate per-subject/per-case prefixes or suffixes (e.g. "Drake - Raid
+      // Seizure …") by matching a known form title anywhere in the document name.
+      for (const key in FORM_NAME_MAP) { if (base.includes(key)) return FORM_NAME_MAP[key]; }
+      return null;
     }
 
     /* ============================================================ 2. UTILITIES ============================================================ */
