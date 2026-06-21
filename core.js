@@ -211,6 +211,93 @@
           ] },
         ],
       },
+      'arrest_warrant': {
+        title: 'Arrest Warrant Request',
+        subtitle: 'State of San Andreas — FOR OFFICIAL USE ONLY',
+        sections: [
+          { id: 'hdr', label: 'Request', type: 'kv', fields: [
+            { key: 'case_number', label: 'Case Number', type: 'text' },
+            { key: 'detective', label: 'Requesting Detective', type: 'text' },
+            { key: 'department', label: 'Department', type: 'select', opts: ['', 'LSPD', 'BCSO', 'SAHP'] },
+            { key: 'date', label: 'Date', type: 'text' },
+          ] },
+          { id: 'suspect', label: 'Suspect Information', type: 'kv', fields: [
+            { key: 'full_name', label: 'Full Name', type: 'text' },
+            { key: 'dob', label: 'DOB', type: 'text' },
+            { key: 'address', label: 'Known Address', type: 'text' },
+          ] },
+          { id: 'charges', label: 'Charges Requested', type: 'textarea', key: 'charges' },
+          { id: 'summary', label: 'Summary of Incident', type: 'textarea', key: 'summary' },
+          { id: 'pc', label: 'Probable Cause Statement', type: 'textarea', key: 'probable_cause' },
+          { id: 'evidence', label: 'Supporting Evidence', type: 'kv', fields: [
+            { key: 'supporting_evidence', label: 'Evidence', type: 'checks', opts: ['Witness Statements', 'Surveillance Footage', 'Bodycam Footage', 'Physical Evidence', 'Other'] },
+          ] },
+          { id: 'affirm', label: 'Detective Affirmation', type: 'note', text: 'I affirm that probable cause exists for the arrest of the above-named individual.' },
+          { id: 'sign', label: 'Authorization', type: 'kv', fields: [
+            { key: 'detective_sig', label: 'Detective Signature', type: 'text' },
+            { key: 'supervisor_approval', label: 'Supervisor Approval', type: 'text' },
+            { key: 'judge_approval', label: 'Judge Approval', type: 'text' },
+          ] },
+        ],
+      },
+      'search_warrant': {
+        title: 'Search Warrant Affidavit',
+        subtitle: 'State of San Andreas — FOR OFFICIAL USE ONLY',
+        sections: [
+          { id: 'hdr', label: 'Affidavit', type: 'kv', fields: [
+            { key: 'case_number', label: 'Case Number', type: 'text' },
+            { key: 'affiant', label: 'Affiant (Detective)', type: 'text' },
+            { key: 'department', label: 'Department', type: 'select', opts: ['', 'LSPD', 'BCSO', 'SAHP'] },
+            { key: 'date', label: 'Date', type: 'text' },
+          ] },
+          { id: 'location', label: 'Location to be Searched', type: 'textarea', key: 'location' },
+          { id: 'persons', label: 'Person(s) Involved', type: 'textarea', key: 'persons_involved' },
+          { id: 'items', label: 'Items to be Seized', type: 'kv', fields: [
+            { key: 'items_to_seize', label: 'Items', type: 'checks', opts: ['Narcotics', 'Firearms (Class 2 / Class 3)', 'Currency / Proceeds', 'Documents / Records', 'Electronic Devices', 'Other'] },
+          ] },
+          { id: 'pc', label: 'Probable Cause Narrative', type: 'textarea', key: 'probable_cause' },
+          { id: 'basis', label: 'Basis of Information', type: 'kv', fields: [
+            { key: 'basis', label: 'Basis', type: 'checks', opts: ['Officer Observations', 'Witness Statements', 'Confidential Informant', 'Surveillance', 'Other'] },
+          ] },
+          { id: 'affirm', label: 'Detective Affirmation', type: 'note', text: 'I affirm that the information provided is true and accurate to the best of my knowledge.' },
+          { id: 'sign', label: 'Authorization', type: 'kv', fields: [
+            { key: 'detective_sig', label: 'Detective Signature', type: 'text' },
+            { key: 'supervisor_approval', label: 'Supervisor Approval', type: 'text' },
+            { key: 'judge_approval', label: 'Judge Approval', type: 'text' },
+          ] },
+        ],
+      },
+      'wiretap_warrant': {
+        title: 'Wiretap / Electronic Surveillance Request',
+        subtitle: 'State of San Andreas — FOR OFFICIAL USE ONLY',
+        sections: [
+          { id: 'hdr', label: 'Request', type: 'kv', fields: [
+            { key: 'case_number', label: 'Case Number', type: 'text' },
+            { key: 'detective', label: 'Requesting Detective', type: 'text' },
+            { key: 'department', label: 'Department', type: 'select', opts: ['', 'LSPD', 'BCSO', 'SAHP'] },
+            { key: 'date', label: 'Date', type: 'text' },
+          ] },
+          { id: 'target', label: 'Target Information', type: 'kv', fields: [
+            { key: 'name_alias', label: 'Name / Alias', type: 'text' },
+            { key: 'phone_device', label: 'Phone Number / Device', type: 'text' },
+          ] },
+          { id: 'type', label: 'Type of Surveillance Requested', type: 'kv', fields: [
+            { key: 'surveillance_type', label: 'Type', type: 'checks', opts: ['Phone Intercept', 'Text Message Monitoring', 'Electronic Communication Monitoring', 'Other'] },
+          ] },
+          { id: 'details', label: 'Investigation Details', type: 'textarea', key: 'investigation_details' },
+          { id: 'pc', label: 'Probable Cause', type: 'textarea', key: 'probable_cause' },
+          { id: 'necessity', label: 'Necessity Statement', type: 'textarea', key: 'necessity' },
+          { id: 'duration', label: 'Duration Requested', type: 'kv', fields: [
+            { key: 'duration', label: 'Duration', type: 'select', opts: ['', '24 Hours', '48 Hours', '72 Hours', 'Other'] },
+          ] },
+          { id: 'affirm', label: 'Detective Affirmation', type: 'note', text: 'I affirm that this request is necessary for the investigation and supported by probable cause.' },
+          { id: 'sign', label: 'Authorization', type: 'kv', fields: [
+            { key: 'detective_sig', label: 'Detective Signature', type: 'text' },
+            { key: 'supervisor_approval', label: 'Supervisor Approval', type: 'text' },
+            { key: 'judge_approval', label: 'Judge Approval', type: 'text' },
+          ] },
+        ],
+      },
     };
     // Map a documents row → its form schema id (by explicit content.form, or by name).
     const FORM_NAME_MAP = {
@@ -218,6 +305,10 @@
       'raid seizure value distribution & allocation form': 'raid_seizure',
       'uc operation activity report': 'uc_operation',
       'undercover operation activity report': 'uc_operation',
+      'arrest warrant request': 'arrest_warrant',
+      'search warrant affidavit': 'search_warrant',
+      'wiretap / electronic surveillance request': 'wiretap_warrant',
+      'electronic surveillance request': 'wiretap_warrant',
     };
     function formSchemaIdFor(doc) {
       if (!doc) return null;

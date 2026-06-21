@@ -81,16 +81,22 @@
     // QoL: pre-fill the report header from the case + the signed-in detective's
     // profile so they're not re-typing case number / name / rank / date each time.
     function reportSeed(templateId, caseId, kind) {
-      if (templateId !== 'cid_investigative_report') return {};
       const c = (typeof casesCache !== 'undefined') ? casesCache.find((x) => x.id === caseId) : null;
       const me = DB() && DB().me;
-      const seed = { report_type: kind === 'supplemental' ? 'Supplemental' : kind === 'followup' ? 'Follow-up' : 'Initial', filed_at: todayISO() };
-      if (c) seed.case_number = c.case_number;
-      if (me) {
-        seed.det_name = me.display_name || '';
-        seed.det_rank = (typeof ROLE_LABEL !== 'undefined' && ROLE_LABEL[me.role]) || me.role || '';
-        seed.det_callsign = me.badge_number || '';
+      if (templateId === 'cid_investigative_report') {
+        const seed = { report_type: kind === 'supplemental' ? 'Supplemental' : kind === 'followup' ? 'Follow-up' : 'Initial', filed_at: todayISO() };
+        if (c) seed.case_number = c.case_number;
+        if (me) {
+          seed.det_name = me.display_name || '';
+          seed.det_rank = (typeof ROLE_LABEL !== 'undefined' && ROLE_LABEL[me.role]) || me.role || '';
+          seed.det_callsign = me.badge_number || '';
+        }
+        return seed;
       }
+      // Warrants & other forms: prefill the common header (case #, detective/affiant, date).
+      const seed = { date: todayISO() };
+      if (c) seed.case_number = c.case_number;
+      if (me) { const who = (me.display_name || 'CID Detective') + (me.badge_number ? ' · ' + me.badge_number : ''); seed.detective = who; seed.affiant = who; }
       return seed;
     }
     async function openReportModal(templateId, caseId, parentId, kind) {
