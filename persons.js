@@ -66,8 +66,29 @@
       try { PERSONS = await DB().list('persons', { order: 'updated_at', ascending: false }); renderPersons(); }
       catch (e) { personsNotice('Could not load persons: ' + escapeHTML(e.message || String(e))); }
     }
+    // Bulk multi-select delete (command-gated).
+    let personSel = new Set();
+    function updatePersonBulkBar() {
+      const grid = $('#persons-grid'); if (!grid) return;
+      let bar = document.getElementById('person-bulkbar');
+      if (!personSel.size) { if (bar) bar.remove(); return; }
+      if (!bar) { bar = el('div', { id: 'person-bulkbar', class: 'sm:col-span-2 xl:col-span-3 sticky top-2 z-10 mb-1 flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 backdrop-blur' }); grid.insertBefore(bar, grid.firstChild); }
+      bar.innerHTML = `<span class="text-sm font-semibold text-rose-200">${personSel.size} selected</span><span class="flex gap-2"><button id="psel-del" class="rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500">Delete selected</button><button id="psel-clear" class="rounded-md border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Clear</button></span>`;
+      bar.querySelector('#psel-del').onclick = deleteSelectedPersons;
+      bar.querySelector('#psel-clear').onclick = () => { personSel.clear(); renderPersons(); };
+    }
+    async function deleteSelectedPersons() {
+      const ids = [...personSel]; if (!ids.length) return;
+      if (!(await uiConfirm('Delete ' + ids.length + ' selected person' + (ids.length > 1 ? 's' : '') + '? This removes the registry records (not any linked officer accounts).', { confirmText: 'Delete ' + ids.length }))) return;
+      let ok = 0, fail = 0;
+      for (const id of ids) { const r = await DB().remove('persons', id); if (r && r.error) fail++; else ok++; }
+      personSel.clear();
+      toast('Deleted ' + ok + ' person' + (ok === 1 ? '' : 's') + (fail ? ' · ' + fail + ' failed' : ''), fail && !ok ? 'danger' : 'warn');
+      fetchPersons();
+    }
     function renderPersons() {
       const grid = $('#persons-grid'); if (!grid) return;
+      { const have = new Set(PERSONS.map((p) => p.id)); [...personSel].forEach((id) => { if (!have.has(id)) personSel.delete(id); }); }
       const raw = ($('#person-search') ? $('#person-search').value : '').trim();
       const q = raw.toLowerCase();
       const items = PERSONS.filter((p) => !q || JSON.stringify(p).toLowerCase().includes(q));
@@ -92,6 +113,7 @@
               <p class="mt-1 text-[11px] text-slate-500">${p.gang_id ? '🚩 ' + escapeHTML(gangNameById(p.gang_id) || 'Gang') + ' · ' : ''}CCW ${p.ccw ? 'Yes' : 'No'} · VCH ${p.vch || 0} · Felonies ${p.felony_count || 0}</p></div>
             <button class="p-profile rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-white/10" title="Unified intel profile">🔎 Profile</button>
             ${DB() && DB().canEdit() ? '<button class="p-edit rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>' : ''}
+            ${DB() && DB().canDelete() ? `<label class="flex flex-shrink-0 items-center pl-1" title="Select for bulk delete"><input type="checkbox" class="p-check h-4 w-4 accent-rose-500" data-id="${p.id}"${personSel.has(p.id) ? ' checked' : ''}></label>` : ''}
             ${DB() && DB().canDelete() ? '<button class="p-del rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10" title="Delete person (command only)">Delete</button>' : ''}
           </div>
           ${DB() && DB().canEdit() ? '<button class="p-tocase mt-3 w-full rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-blue-200 transition hover:bg-white/10">📎 Attach to case</button>' : ''}
@@ -105,8 +127,10 @@
           if (res && res.error) { toast('Delete failed: ' + res.error.message, 'danger'); return; }
           toast('Person deleted', 'warn'); fetchPersons();
         };
+        const chk = card.querySelector('.p-check'); if (chk) chk.onchange = () => { if (chk.checked) personSel.add(p.id); else personSel.delete(p.id); updatePersonBulkBar(); };
         grid.appendChild(card);
       });
+      updatePersonBulkBar();
     }
     function openPersonModal(record, prefill) {
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
