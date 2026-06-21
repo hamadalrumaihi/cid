@@ -1,29 +1,28 @@
-# Feature Backlog — CID Portal (requested 2026-06-21)
+# Feature Backlog — CID Portal
 
-Selected via triage. Shipping incrementally on `claude/cid-rebuild`. Status keys:
-✅ done · 🟡 in progress · ⛔ blocked · ⬜ todo.
+Shipping incrementally on `claude/cid-rebuild`. ✅ done · 🟡 in progress · ⛔ blocked · ⬜ todo.
 
-## Big features
-- ⬜ **RICO tab in each case** — embed the RICO builder (rico_cases + predicate_acts, already per-case in Supabase) as a tab inside case detail. Likely **no migration**. Keep the standalone RICO tab or redirect it.
-- 🟡 **Subpoena fillable template** — same engine as the warrants. (this batch)
-- ⬜ **Player properties on profiles** — owned properties on a person; surface in Search/Subpoena warrants. **Needs migration** (persons.properties jsonb, or a `person_properties` table).
-- ⛔ **Penal-code charges system** — charges catalog + attach-to-case (`case_charges`) + "recommended charges" + RICO link. **BLOCKED: need the actual charges list.** The CSV provided was only the Information/definitions tab, not the offense table (names, class, fine, sentence). Re-request the Penal Code sheet.
+## Done this session
+- ✅ **Warrant templates** — Arrest, Search, Wiretap (fillable; added a `checks` checkbox field type).
+- ✅ **Subpoena template** (fillable).
+- ✅ **Surveillance Report template** (fillable).
+- ✅ **Penal-code charges system** — `penal.js` catalog (Titles 1–4); Charges tab per case with picker, stacking, totals (sentence/fines/RICO), recommendations. Migration `case_charges` **applied to live**.
 
-## Quick wins (no migration)
-- ⬜ **Delete chat mentions / linked-case chips** — let author/command remove a mention or linked-case chip from a message.
-- ⬜ **Edit & delete chat messages** — authors edit/delete own; command removes any.
-- ⬜ **Bulk multi-select delete** — checkbox-select multiple persons/gangs/places/etc., delete in one action (command-gated).
-- ⬜ **Quick status change on case cards/header** — open→active→closed/cold without the full edit modal.
+## Next up (no migration)
+- ⬜ **Name autocomplete in reports** — typing a name suggests matching persons from the DB (partial match); option to **auto-create** the person if new when the report is saved.
+- ⬜ **Media tags** — tag media (e.g. "Mugshot", "Scene", "Weapon"); filter by tag in case media + the Media Vault. (`media.tags` jsonb already exists.)
+- ⬜ **Tag/reference reports inside other reports** — link a report to other reports in the same case (cross-reference chips).
+- ⬜ **Delete chat mentions / linked-case chips**; **edit & delete chat messages**.
+- ⬜ **Quick status change** on case cards/header; **Copy buttons** (case #, phone, badge).
+- ⬜ **Bulk multi-select delete** on lists.
+- ⬜ **Link intel (person/gang/place) directly to a case**.
 
-## Polish
-- ⬜ **Copy buttons** — one-click copy for case #, phone, badge #, etc.
-- ⬜ **Link intel directly to a case** — attach person/gang/place to a case from its detail (case ↔ intel links). May reuse existing attach flows or need a links table.
-- ⬜ **Undo on delete** — soft-delete + 5s "Undo" toast instead of immediate permanent delete (cross-cutting).
+## Bigger / refactor
+- ⬜ **RICO tab in each case** — embed the RICO builder per case (Charges tab already surfaces RICO predicates + links to it).
+- ⬜ **Undo on delete** — soft-delete + 5s "Undo" toast (cross-cutting).
 
-## Suggested sequence
-1. Subpoena template (cheap) → 2. Quick status change + Copy buttons (cheap, visible) →
-3. Chat: delete mentions/links + edit/delete messages → 4. Bulk multi-select delete →
-5. RICO-in-case (refactor) → 6. Link intel to case → 7. Undo on delete →
-8. Player properties (migration) → 9. Penal-code charges (needs data + migration).
+## Needs a migration (prep .sql + approval)
+- ⬜ **Player properties on profiles** — owned properties on a person; surface in Search/Subpoena warrants. (persons.properties jsonb or person_properties table.)
 
-_Charges + properties need migrations (apply to live `cid` with approval, per the established flow)._
+## Notes
+- Penal code: only Titles 1–4 (crimes) are in `penal.js`; Titles 5/6 are classifications (firearm/drug). Add Title 7+/traffic/drug-charge tables if you send them.
