@@ -32,6 +32,11 @@
       { id:'cid_investigative_report', icon:'📄', default:true },
       { id:'raid_seizure',             icon:'💰' },
       { id:'uc_operation',             icon:'🕶️' },
+      { id:'arrest_warrant',           icon:'⚖️' },
+      { id:'search_warrant',           icon:'🔍' },
+      { id:'wiretap_warrant',          icon:'📡' },
+      { id:'subpoena',                 icon:'📜' },
+      { id:'surveillance_report',      icon:'🛰️' },
     ].filter((t) => FORM_SCHEMAS[t.id]).map((t) => ({
       id: t.id, icon: t.icon, default: !!t.default,
       name: FORM_SCHEMAS[t.id].title, schema: FORM_SCHEMAS[t.id],

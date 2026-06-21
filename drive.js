@@ -205,6 +205,11 @@
      * A documents row whose name/flag matches a schema renders as a fillable form:
      * labelled fields, dropdowns and repeatable tables. Saved to content.values. */
     function formCellInput(f, val, editable) {
+      if (f.type === 'checks') {
+        const set = new Set(Array.isArray(val) ? val : (val ? String(val).split(/\s*,\s*/) : []));
+        if (!editable) { const txt = [...set].join(', '); return `<div class="rounded-md border border-white/5 bg-ink-900/60 px-2.5 py-1.5 text-sm text-slate-200 min-h-[34px]">${txt ? esc(txt) : '<span class="text-slate-600">—</span>'}</div>`; }
+        return `<div class="flex flex-wrap gap-x-4 gap-y-1.5 py-1" data-checks="${f.key}">${(f.opts || []).map((o) => `<label class="inline-flex items-center gap-1.5 text-sm text-slate-200"><input type="checkbox" data-checkval="${esc(o)}"${set.has(o) ? ' checked' : ''} class="h-3.5 w-3.5 accent-blue-500" />${esc(o)}</label>`).join('')}</div>`;
+      }
       const v = val == null ? '' : String(val);
       const base = 'w-full rounded-md border border-white/10 bg-ink-900 px-2.5 py-1.5 text-sm text-white outline-none focus:border-badge-500';
       if (!editable) return `<div class="rounded-md border border-white/5 bg-ink-900/60 px-2.5 py-1.5 text-sm text-slate-200 min-h-[34px] whitespace-pre-wrap">${esc(v) || '<span class="text-slate-600">—</span>'}</div>`;
@@ -240,6 +245,11 @@
         if (f.closest('[data-grid]')) return;
         values[f.dataset.fkey] = f.value;
       });
+      // Checkbox-group fields → array of checked option values.
+      $$('[data-checks]', node).forEach((grp) => {
+        if (grp.closest('[data-grid]')) return;
+        values[grp.dataset.checks] = $$('input[type="checkbox"]', grp).filter((c) => c.checked).map((c) => c.dataset.checkval);
+      });
       schema.sections.filter((s) => s.type === 'grid').forEach((s) => {
         const tb = node.querySelector(`[data-grid="${s.id}"] tbody`);
         const rows = tb ? $$('tr', tb).map((tr) => {
@@ -257,7 +267,7 @@
         lines.push(s.label.toUpperCase());
         if (s.type === 'note') { lines.push(s.text); }
         else if (s.type === 'textarea') { lines.push(V[s.key] || '—'); }
-        else if (s.type === 'kv') { s.fields.forEach((f) => lines.push(`${f.label}: ${V[f.key] || '—'}`)); }
+        else if (s.type === 'kv') { s.fields.forEach((f) => { const raw = V[f.key]; const val = Array.isArray(raw) ? raw.join(', ') : (raw || ''); lines.push(`${f.label}: ${val || '—'}`); }); }
         else { const rows = Array.isArray(V[s.id]) ? V[s.id] : []; lines.push(s.cols.map((c) => c.label).join(' | ')); if (!rows.length) lines.push('—'); rows.forEach((r) => lines.push(s.cols.map((c) => r[c.key] || '').join(' | '))); }
         lines.push('');
       });
