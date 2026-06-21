@@ -448,9 +448,9 @@
         <button id="case-back" class="mb-4 inline-flex items-center gap-1 text-sm text-slate-300 transition hover:text-white">← All cases</button>
         <div class="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
           <div class="flex flex-wrap items-start justify-between gap-3">
-            <div><p class="font-mono text-sm text-blue-300">${escapeHTML(c.case_number)}</p><h3 class="text-xl font-bold text-white">${escapeHTML(c.title || 'Untitled case')}</h3><p class="mt-1 text-sm text-slate-400">${escapeHTML(c.summary || '')}</p></div>
+            <div><p class="flex items-center gap-1.5 font-mono text-sm text-blue-300">${escapeHTML(c.case_number)}<button id="case-copy" class="text-slate-500 transition hover:text-white" title="Copy case number">📋</button></p><h3 class="text-xl font-bold text-white">${escapeHTML(c.title || 'Untitled case')}</h3><p class="mt-1 text-sm text-slate-400">${escapeHTML(c.summary || '')}</p></div>
             <div class="flex items-center gap-2">
-              <span class="rounded-md px-2.5 py-1 text-[10px] font-semibold uppercase ${caseStatusTint(c.status)}">${escapeHTML(c.status)}</span>
+              ${canEdit ? `<select id="case-status" class="rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-[10px] font-semibold uppercase outline-none ${caseStatusTint(c.status)}" title="Quick status change">${['open', 'active', 'cold', 'closed'].map((s) => `<option value="${s}"${s === c.status ? ' selected' : ''}>${s}</option>`).join('')}</select>` : `<span class="rounded-md px-2.5 py-1 text-[10px] font-semibold uppercase ${caseStatusTint(c.status)}">${escapeHTML(c.status)}</span>`}
               ${c.signoff_status && c.signoff_status !== 'none' ? `<span class="rounded-md px-2.5 py-1 text-[10px] font-semibold ${signoffTint(c.signoff_status)}" title="Sign-off status">${escapeHTML(signoffLabel(c.signoff_status))}</span>` : ''}
               <span class="rounded-md bg-white/5 px-2.5 py-1 text-xs text-slate-300">${escapeHTML(c.bureau)}</span>
               <button id="case-pin" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold transition hover:bg-white/10 ${isPinned(c.id) ? 'text-amber-300' : 'text-slate-200'}" title="Pin to Jump-back">${isPinned(c.id) ? '📌 Pinned' : '📌 Pin'}</button>
@@ -466,6 +466,14 @@
         </div>
         <div id="detail-body"><p class="text-sm text-slate-500">Loading…</p></div>`;
       $('#case-back').onclick = showCasesList;
+      const cc = $('#case-copy'); if (cc) cc.onclick = () => copyText(detailCase.case_number, 'Case number');
+      const ss = $('#case-status'); if (ss) ss.onchange = async () => {
+        const patch = { status: ss.value };
+        if (ss.value === 'closed' && !detailCase.closed_at) patch.closed_at = new Date().toISOString();
+        const res = await DB().update('cases', detailCase.id, patch);
+        if (res.error) { toast('Status update failed: ' + res.error.message, 'danger'); ss.value = detailCase.status; return; }
+        Object.assign(detailCase, patch); toast('Status → ' + ss.value, 'success'); renderCaseDetailShell(); fetchCases();
+      };
       const pin = $('#case-pin'); if (pin) pin.onclick = () => { togglePinCase(detailCase.id); renderCaseDetailShell(); renderJumpBack(); };
       const lk = $('#case-link'); if (lk) lk.onclick = () => {
         const url = location.origin + location.pathname + '#case=' + detailCase.id;

@@ -103,17 +103,21 @@
     /* ============================================================ IN-CASE CHAT (#8) ============================================================ */
     const REC_LINK = { case: { icon: '🗂️', tab: 'cases' }, person: { icon: '🧑‍⚖️', tab: 'persons' }, evidence: { icon: '🧾', tab: 'cases' }, report: { icon: '📝', tab: 'reports' } };
     function renderChatMessage(m) {
-      const mine = DB() && DB().me && m.author_id === DB().me.id;
+      const me = DB() && DB().me;
+      const mine = me && m.author_id === me.id;
+      const canMod = !!(mine || (DB() && DB().isAdmin && DB().isAdmin()));
       const links = Array.isArray(m.links) ? m.links : [];
-      const linkChips = links.map((l) => `<button class="chat-link rounded bg-blue-500/10 px-1.5 py-0.5 text-[11px] font-medium text-blue-300 hover:bg-blue-500/20" data-type="${esc(l.type)}" data-id="${esc(l.id)}">${(REC_LINK[l.type] || {}).icon || '🔗'} ${esc(l.label || l.id)}</button>`).join(' ');
-      // highlight @mentions in the body
+      const mentions = Array.isArray(m.mentions) ? m.mentions : [];
       const bodyHtml = esc(m.body).replace(/(@[\w.\-]+(?:\s[\w.\-]+)?)/g, '<span class="text-blue-300">$1</span>');
-      return `<div class="flex gap-3 ${mine ? 'flex-row-reverse text-right' : ''}">
+      const mentionChips = mentions.map((x, i) => `<span class="inline-flex items-center gap-1 rounded bg-blue-500/10 px-1.5 py-0.5 text-[11px] text-blue-300">@${esc(mentionLabel(x.target || x))}${canMod ? `<button class="cm-rm-mention text-blue-300/60 hover:text-rose-300" data-id="${esc(m.id)}" data-i="${i}" title="Remove mention">✕</button>` : ''}</span>`).join(' ');
+      const linkChips = links.map((l, i) => `<span class="inline-flex items-center gap-1 rounded bg-blue-500/10 px-1.5 py-0.5 text-[11px] text-blue-300"><button class="chat-link font-medium hover:underline" data-type="${esc(l.type)}" data-id="${esc(l.id)}">${(REC_LINK[l.type] || {}).icon || '🔗'} ${esc(l.label || l.id)}</button>${canMod ? `<button class="cm-rm-link text-blue-300/60 hover:text-rose-300" data-id="${esc(m.id)}" data-i="${i}" title="Remove link">✕</button>` : ''}</span>`).join(' ');
+      return `<div class="group flex gap-3 ${mine ? 'flex-row-reverse text-right' : ''}" data-mid="${esc(m.id)}">
         <div class="grid h-8 w-8 flex-shrink-0 place-items-center rounded-full bg-gradient-to-br from-slate-600 to-slate-700 text-[10px] font-bold text-white">${esc(initials(m.author_name))}</div>
         <div class="min-w-0 max-w-[80%]">
           <p class="text-[11px] text-slate-500">${esc(m.author_name || 'Officer')} · ${new Date(m.created_at).toLocaleString('en-US')}</p>
-          <div class="mt-1 inline-block rounded-2xl ${mine ? 'bg-badge-500/15' : 'bg-ink-800'} px-3 py-2 text-sm text-slate-100 whitespace-pre-wrap break-words">${bodyHtml}</div>
-          ${linkChips ? `<div class="mt-1 flex flex-wrap gap-1 ${mine ? 'justify-end' : ''}">${linkChips}</div>` : ''}
+          <div class="cm-bubble mt-1 inline-block rounded-2xl ${mine ? 'bg-badge-500/15' : 'bg-ink-800'} px-3 py-2 text-sm text-slate-100 whitespace-pre-wrap break-words">${bodyHtml}</div>
+          ${(mentionChips || linkChips) ? `<div class="mt-1 flex flex-wrap gap-1 ${mine ? 'justify-end' : ''}">${mentionChips}${mentionChips && linkChips ? ' ' : ''}${linkChips}</div>` : ''}
+          ${canMod ? `<div class="mt-1 flex gap-3 ${mine ? 'justify-end' : ''} text-[11px] text-slate-500 opacity-0 transition group-hover:opacity-100"><button class="cm-edit hover:text-white" data-id="${esc(m.id)}">Edit</button><button class="cm-del hover:text-rose-300" data-id="${esc(m.id)}">Delete</button></div>` : ''}
         </div>
       </div>`;
     }
@@ -167,6 +171,38 @@
 
       const scroll = body.querySelector('#chat-scroll'); if (scroll) scroll.scrollTop = scroll.scrollHeight;
       body.querySelectorAll('.chat-link').forEach((b) => b.onclick = () => { if (b.dataset.type === 'case') { if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(b.dataset.id); } else if (typeof navigate === 'function') navigate((REC_LINK[b.dataset.type] || {}).tab || 'cases'); });
+      // Edit / delete messages + remove mention/link chips (RLS: author or command).
+      const reloadChat = () => { if (typeof detailCase !== 'undefined' && detailCase && detailCase.id === c.id) loadDetailTab(); };
+      const updateMsg = async (id, patch) => { const res = await DB().update('case_messages', id, patch); if (res && res.error) { toast('Update failed: ' + res.error.message, 'danger'); return false; } return true; };
+      body.querySelectorAll('.cm-del').forEach((b) => b.onclick = async () => {
+        if (!(await uiConfirm('Delete this message?', { confirmText: 'Delete' }))) return;
+        const res = await DB().remove('case_messages', b.dataset.id);
+        if (res && res.error) { toast('Delete failed: ' + res.error.message, 'danger'); return; }
+        toast('Message deleted', 'warn'); reloadChat();
+      });
+      body.querySelectorAll('.cm-rm-link').forEach((b) => b.onclick = async () => {
+        const m = msgs.find((x) => x.id === b.dataset.id); if (!m) return;
+        const links = (Array.isArray(m.links) ? m.links : []).filter((_, i) => i !== +b.dataset.i);
+        if (await updateMsg(m.id, { links })) reloadChat();
+      });
+      body.querySelectorAll('.cm-rm-mention').forEach((b) => b.onclick = async () => {
+        const m = msgs.find((x) => x.id === b.dataset.id); if (!m) return;
+        const mentions = (Array.isArray(m.mentions) ? m.mentions : []).filter((_, i) => i !== +b.dataset.i);
+        if (await updateMsg(m.id, { mentions })) reloadChat();
+      });
+      body.querySelectorAll('.cm-edit').forEach((b) => b.onclick = () => {
+        const m = msgs.find((x) => x.id === b.dataset.id); if (!m) return;
+        const wrap = b.closest('[data-mid]'); const bubble = wrap && wrap.querySelector('.cm-bubble'); if (!bubble) return;
+        const ta = document.createElement('textarea');
+        ta.value = m.body; ta.rows = 2;
+        ta.className = 'mt-1 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500';
+        ta.title = 'Enter to save · Esc to cancel';
+        bubble.replaceWith(ta); ta.focus(); try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
+        ta.addEventListener('keydown', async (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const v = ta.value.trim(); if (!v) { toast('Message can’t be empty — use Delete instead.', 'warn'); return; } if (await updateMsg(m.id, { body: v })) { toast('Message updated', 'success'); reloadChat(); } }
+          else if (e.key === 'Escape') { e.preventDefault(); reloadChat(); }
+        });
+      });
       body.querySelectorAll('.ar-approve').forEach((b) => b.onclick = () => decideAccessRequest({ id: b.dataset.id, requester_id: b.dataset.req, case_id: c.id }, c, true));
       body.querySelectorAll('.ar-deny').forEach((b) => b.onclick = () => decideAccessRequest({ id: b.dataset.id, requester_id: b.dataset.req, case_id: c.id }, c, false));
 

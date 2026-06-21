@@ -408,6 +408,13 @@
     const fmtUSD = (n) => '$' + Math.round(n).toLocaleString('en-US');
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
     const escapeHTML = esc;   // alias: feature files use escapeHTML; both share one scope
+    // One-click copy to clipboard with a confirmation toast.
+    function copyText(text, label) {
+      const t = String(text == null ? '' : text);
+      const done = () => toast((label || 'Value') + ' copied', 'success');
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => toast(t, 'info'));
+      else { try { const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done(); } catch (e) { toast(t, 'info'); } }
+    }
     const isDesktop = () => window.matchMedia('(min-width: 1024px)').matches;
     // Debounce: collapse rapid input/sync bursts into one call (perf, #10).
     const debounce = (fn, ms = 200) => { let t; return function () { const a = arguments, c = this; clearTimeout(t); t = setTimeout(() => fn.apply(c, a), ms); }; };
