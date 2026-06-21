@@ -217,10 +217,21 @@
       if (f.type === 'textarea') return `<textarea data-fkey="${f.key}" rows="4" class="${base} resize-y leading-relaxed">${esc(v)}</textarea>`;
       const t = f.type === 'date' ? 'date' : 'text';
       const ph = f.type === 'money' ? ' placeholder="$0"' : '';
-      return `<input type="${t}" data-fkey="${f.key}"${ph} value="${esc(v)}" class="${base}" />`;
+      // Person-name fields get autocomplete against the live Persons registry.
+      const person = f.person ? ' data-person="1" list="dl-persons" autocomplete="off"' : '';
+      return `<input type="${t}" data-fkey="${f.key}"${person}${ph} value="${esc(v)}" class="${base}" />`;
+    }
+    // Shared <datalist> of known person names/aliases, refreshed from PERSONS.
+    function ensurePersonsDatalist() {
+      let dl = document.getElementById('dl-persons');
+      if (!dl) { dl = document.createElement('datalist'); dl.id = 'dl-persons'; document.body.appendChild(dl); }
+      const names = new Set();
+      (typeof PERSONS !== 'undefined' ? PERSONS : []).forEach((p) => { if (p.name) names.add(p.name); if (p.alias) names.add(p.alias); });
+      dl.innerHTML = [...names].sort().map((n) => `<option value="${esc(n)}"></option>`).join('');
     }
     function renderFormBody(schema, values, editable) {
       const V = values || {};
+      if (editable) ensurePersonsDatalist();
       return schema.sections.map((s) => {
         const head = `<p class="mb-2 text-[11px] font-bold uppercase tracking-wider text-blue-300/90">${esc(s.label)}</p>`;
         if (s.type === 'note') return `<section class="mb-5"><div class="rounded-lg border border-white/10 bg-ink-900/60 p-4">${head}<p class="text-xs leading-relaxed text-slate-400">${esc(s.text)}</p></div></section>`;

@@ -107,7 +107,7 @@
             { key: 'det_dept', label: 'Department', type: 'select', opts: FORM_DEPT_OPTS },
           ] },
           { id: 'subjects', label: 'Suspect / Witness Information', type: 'grid', cols: [
-            { key: 'name', label: 'Name', type: 'text' },
+            { key: 'name', label: 'Name', type: 'text', person: true },
             { key: 'phone', label: 'Phone', type: 'text' },
             { key: 'dob', label: 'DOB', type: 'text' },
             { key: 'affiliation', label: 'Affiliation', type: 'text' },
@@ -222,7 +222,7 @@
             { key: 'date', label: 'Date', type: 'text' },
           ] },
           { id: 'suspect', label: 'Suspect Information', type: 'kv', fields: [
-            { key: 'full_name', label: 'Full Name', type: 'text' },
+            { key: 'full_name', label: 'Full Name', type: 'text', person: true },
             { key: 'dob', label: 'DOB', type: 'text' },
             { key: 'address', label: 'Known Address', type: 'text' },
           ] },
@@ -278,7 +278,7 @@
             { key: 'date', label: 'Date', type: 'text' },
           ] },
           { id: 'target', label: 'Target Information', type: 'kv', fields: [
-            { key: 'name_alias', label: 'Name / Alias', type: 'text' },
+            { key: 'name_alias', label: 'Name / Alias', type: 'text', person: true },
             { key: 'phone_device', label: 'Phone Number / Device', type: 'text' },
           ] },
           { id: 'type', label: 'Type of Surveillance Requested', type: 'kv', fields: [
@@ -312,7 +312,7 @@
             { key: 'subpoena_type', label: 'Type', type: 'checks', opts: ['Records (Duces Tecum)', 'Witness Testimony (Ad Testificandum)', 'Financial / Bank Records', 'Phone / Communications Records', 'Other'] },
           ] },
           { id: 'recipient', label: 'Recipient / Custodian', type: 'kv', fields: [
-            { key: 'recipient_name', label: 'Name / Business', type: 'text' },
+            { key: 'recipient_name', label: 'Name / Business', type: 'text', person: true },
             { key: 'recipient_address', label: 'Address', type: 'text' },
           ] },
           { id: 'records', label: 'Records / Items / Testimony Requested', type: 'textarea', key: 'records_requested' },
@@ -340,7 +340,7 @@
             { key: 'date', label: 'Date', type: 'text' },
           ] },
           { id: 'op', label: 'Operation Details', type: 'kv', fields: [
-            { key: 'subject', label: 'Subject / Target', type: 'text' },
+            { key: 'subject', label: 'Subject / Target', type: 'text', person: true },
             { key: 'location', label: 'Location / Area', type: 'text' },
             { key: 'start_time', label: 'Start Date / Time', type: 'text' },
             { key: 'end_time', label: 'End Date / Time', type: 'text' },
@@ -350,7 +350,7 @@
           ] },
           { id: 'observations', label: 'Observations / Activity Log', type: 'textarea', key: 'observations' },
           { id: 'persons', label: 'Persons Observed', type: 'grid', cols: [
-            { key: 'name', label: 'Name / Description', type: 'text' },
+            { key: 'name', label: 'Name / Description', type: 'text', person: true },
             { key: 'role', label: 'Role / Activity', type: 'text' },
           ] },
           { id: 'vehicles', label: 'Vehicles Observed', type: 'grid', cols: [
