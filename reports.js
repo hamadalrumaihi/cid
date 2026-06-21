@@ -99,6 +99,37 @@
       if (me) { const who = (me.display_name || 'CID Detective') + (me.badge_number ? ' · ' + me.badge_number : ''); seed.detective = who; seed.affiant = who; }
       return seed;
     }
+    // Pull the person-flagged field values out of a filled form.
+    function collectPersonNames(schema, fields) {
+      const names = [];
+      (schema.sections || []).forEach((s) => {
+        if (s.type === 'kv') (s.fields || []).forEach((f) => { if (f.person && fields[f.key]) names.push(String(fields[f.key]).trim()); });
+        else if (s.type === 'grid') (Array.isArray(fields[s.id]) ? fields[s.id] : []).forEach((row) => (s.cols || []).forEach((col) => { if (col.person && row[col.key]) names.push(String(row[col.key]).trim()); }));
+      });
+      return names.filter(Boolean);
+    }
+    // People already associated with a case: linked gang members, tagged media, and
+    // names from this case's prior reports — used to recommend suspects in new reports.
+    async function gatherCasePeople(caseId) {
+      const out = new Map();
+      const addP = (p) => { if (p && p.name) { const k = p.name.toLowerCase(); if (!out.has(k)) out.set(k, { name: p.name, dob: p.dob || '', alias: p.alias || '' }); } };
+      const byId = {}; (typeof PERSONS !== 'undefined' ? PERSONS : []).forEach((p) => { byId[p.id] = p; });
+      try {
+        const [gm, md] = await Promise.all([
+          DB().list('gang_members', { eq: { case_id: caseId } }).catch(() => []),
+          DB().list('media', { eq: { case_id: caseId } }).catch(() => []),
+        ]);
+        const ids = new Set();
+        gm.forEach((m) => { if (m.person_id) ids.add(m.person_id); else if (m.name) addP({ name: m.name }); });
+        md.forEach((m) => { if (m.person_id) ids.add(m.person_id); });
+        ids.forEach((id) => addP(byId[id]));
+      } catch (e) {}
+      try {
+        const reps = await DB().list('reports', { eq: { case_id: caseId } });
+        reps.forEach((r) => { const tpl = tplById(r.template); if (tpl && tpl.schema) collectPersonNames(tpl.schema, r.fields || {}).forEach((n) => addP({ name: n })); });
+      } catch (e) {}
+      return [...out.values()];
+    }
     async function openReportModal(templateId, caseId, parentId, kind) {
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
       const tpl = tplById(templateId); if (!tpl || !tpl.schema) return;
@@ -110,10 +141,38 @@
         <div class="mb-5 flex items-center justify-between"><div><p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">${esc(tpl.name)}</p><h3 class="text-xl font-bold text-white">${esc(heading)}</h3></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         ${parentId ? `<p class="mb-4 rounded-lg border border-white/10 bg-ink-900 p-2.5 text-xs text-slate-400">↳ Linked as ${kind} to a prior report on <span class="font-mono text-blue-300">${esc(caseNumById(caseId) || caseId)}</span>.</p>` : ''}
         <div class="mb-3 flex flex-wrap items-center gap-1.5"><span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Insert snippet:</span>${REPORT_SNIPPETS.map((s, i) => `<button type="button" class="rpt-snippet rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 transition hover:bg-white/10" data-i="${i}">${esc(s.label)}</button>`).join('')}</div>
+        <div id="r-people" class="mb-3 hidden"></div>
+        <div id="r-refs" class="mb-3 hidden"></div>
         <div class="max-h-[60vh] overflow-y-auto pr-1" id="r-form">${renderFormBody(tpl.schema, reportSeed(templateId, caseId, kind), true)}</div>
-        <button id="r-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save Report to Case</button>`;
+        <label class="mt-4 flex items-center gap-2 text-xs text-slate-300"><input id="r-addppl" type="checkbox" checked class="h-3.5 w-3.5 accent-blue-500" /> Add any new names to the Persons registry on save</label>
+        <button id="r-save" class="mt-3 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save Report to Case</button>`;
       node.querySelector('.close-x').onclick = closeModal;
       wireFormBody(node.querySelector('#r-form'), tpl.schema);
+      // Person-name fields: track focus + recommend this case's known suspects.
+      let lastPerson = node.querySelector('#r-form input[data-person]');
+      node.querySelectorAll('#r-form input[data-person]').forEach((i) => i.addEventListener('focus', () => { lastPerson = i; }));
+      const fillPerson = (p) => {
+        const inp = (lastPerson && node.contains(lastPerson)) ? lastPerson : node.querySelector('#r-form input[data-person]');
+        if (!inp) { toast('This report has no name field.', 'info'); return; }
+        inp.value = p.name;
+        if (p.dob) { const scope = inp.closest('tr') || inp.closest('section') || node; const dob = scope.querySelector('input[data-fkey*="dob" i]') || node.querySelector('#r-form input[data-fkey*="dob" i]'); if (dob && !dob.value) dob.value = p.dob; }
+        inp.focus();
+      };
+      gatherCasePeople(caseId).then((people) => {
+        const box = node.querySelector('#r-people'); if (!box || !people.length) return;
+        box.classList.remove('hidden');
+        box.innerHTML = `<p class="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Suspects on this case · tap to fill the focused name field</p><div class="flex flex-wrap gap-1.5">${people.map((p, i) => `<button type="button" class="r-person rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 transition hover:bg-white/10" data-i="${i}">👤 ${esc(p.name)}${p.dob ? ` <span class="text-slate-500">· ${esc(p.dob)}</span>` : ''}</button>`).join('')}</div>`;
+        box.querySelectorAll('.r-person').forEach((b) => b.onclick = () => fillPerson(people[+b.dataset.i]));
+      });
+      // Cross-reference other reports in this case.
+      const selectedRefs = new Set();
+      DB().list('reports', { eq: { case_id: caseId } }).then((reps) => {
+        const others = (reps || []).filter((x) => x.id && x.id !== parentId);
+        const box = node.querySelector('#r-refs'); if (!box || !others.length) return;
+        box.classList.remove('hidden');
+        box.innerHTML = `<p class="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">🔗 Reference other reports in this case · tap to link</p><div class="flex flex-wrap gap-1.5">${others.map((x) => `<button type="button" class="r-ref rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 transition hover:bg-white/10" data-id="${esc(x.id)}">${esc(reportTitle(x))} · ${new Date(x.created_at).toLocaleDateString('en-US')}</button>`).join('')}</div>`;
+        box.querySelectorAll('.r-ref').forEach((b) => b.onclick = () => { const id = b.dataset.id; if (selectedRefs.has(id)) { selectedRefs.delete(id); b.classList.remove('border-badge-500', 'bg-blue-500/10', 'text-white'); } else { selectedRefs.add(id); b.classList.add('border-badge-500', 'bg-blue-500/10', 'text-white'); } });
+      }).catch(() => {});
       // Snippet insertion targets the last-focused textarea (defaults to Narrative).
       let lastTextarea = node.querySelector('#r-form textarea[data-fkey="narrative"]') || node.querySelector('#r-form textarea');
       node.querySelectorAll('#r-form textarea').forEach((ta) => ta.addEventListener('focus', () => { lastTextarea = ta; }));
@@ -125,10 +184,21 @@
       });
       node.querySelector('#r-save').onclick = async () => {
         const fields = readForm(node, tpl.schema);
+        if (selectedRefs.size) fields._refs = [...selectedRefs];
         const payload = { case_id: caseId, template: templateId, kind: kind, seq: seq, parent_id: parentId || null, fields: fields };
         if (DB().me) payload.author_id = DB().me.id;
         const res = await DB().insert('reports', payload);
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        // Auto-add any new person-field names to the Persons registry.
+        const addEl = node.querySelector('#r-addppl');
+        if (addEl && addEl.checked) {
+          const existing = new Set();
+          (typeof PERSONS !== 'undefined' ? PERSONS : []).forEach((p) => { if (p.name) existing.add(p.name.toLowerCase()); if (p.alias) existing.add(p.alias.toLowerCase()); });
+          const fresh = [...new Set(collectPersonNames(tpl.schema, fields))].filter((n) => n && !existing.has(n.toLowerCase()));
+          let added = 0;
+          for (const n of fresh) { const r = await DB().insert('persons', { name: n, status: 'POI', notes: 'Auto-added from a report on ' + (caseNumById(caseId) || 'a case') + '.' }); if (!(r && r.error)) added++; }
+          if (added) { if (typeof fetchPersons === 'function') fetchPersons(); toast(added + ' new person' + (added === 1 ? '' : 's') + ' added to the registry', 'info'); }
+        }
         closeModal(); toast(`${heading} saved`, 'success'); reloadCaseReports();
       };
       openModal(node, { wide: true });
@@ -145,6 +215,7 @@
           <h2 class="mt-1 text-center text-xl font-bold text-white">${esc(reportTitle(r))}</h2>
           <p class="mt-1 text-center text-xs text-slate-400">${esc(caseNo)} · ${new Date(r.created_at).toLocaleString('en-US')}${r.finalized ? ' · 🔒 FINALIZED' : ' · DRAFT'}</p>
           <div class="mt-5 space-y-3">${renderFormBody(tpl.schema, r.fields || {}, false)}</div>
+          <div id="vr-refs"></div>
           ${sig ? `<div class="mt-6 border-t border-white/10 pt-4 text-xs text-slate-300"><p class="font-semibold uppercase tracking-wider text-emerald-300/80">Electronically signed</p><p class="mt-1 font-[cursive] text-base text-blue-200">${esc(sig.officer)}</p><p class="text-[11px] text-slate-500">Badge ${esc(sig.badge || '—')} · ${sig.signed_at ? new Date(sig.signed_at).toLocaleString('en-US') : ''}</p></div>` : ''}
         </div>
         <div class="mt-5 flex flex-wrap gap-3 no-print">
@@ -154,6 +225,16 @@
           ${canFinalize ? '<button id="v-final" class="rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-700 px-5 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">🔏 Finalize &amp; Sign</button>' : ''}
         </div>`;
       node.querySelector('.close-x').onclick = closeModal;
+      const refIds = (r.fields && Array.isArray(r.fields._refs)) ? r.fields._refs : [];
+      if (refIds.length) {
+        DB().list('reports', { eq: { case_id: r.case_id } }).then((reps) => {
+          const box = node.querySelector('#vr-refs'); if (!box) return;
+          const refs = (reps || []).filter((x) => refIds.indexOf(x.id) !== -1);
+          if (!refs.length) return;
+          box.innerHTML = `<div class="mt-6 border-t border-white/10 pt-4"><p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">🔗 Referenced reports</p><div class="mt-1.5 flex flex-wrap gap-1.5 no-print">${refs.map((x) => `<button class="vr-ref rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-blue-200 transition hover:bg-white/10" data-id="${esc(x.id)}">${esc(reportTitle(x))}</button>`).join('')}</div><div class="hidden print:block text-[11px] text-slate-400">${refs.map((x) => esc(reportTitle(x))).join(' · ')}</div></div>`;
+          box.querySelectorAll('.vr-ref').forEach((b) => b.onclick = () => { const tgt = refs.find((x) => x.id === b.dataset.id); if (tgt) { closeModal(); viewReport(tgt); } });
+        }).catch(() => {});
+      }
       node.querySelector('#v-docx').onclick = () => exportReportDocx(r);
       node.querySelector('#v-pdf').onclick = () => exportReportPdf(r);
       const vf = node.querySelector('#v-final'); if (vf) vf.onclick = () => openFinalizeModal(r);

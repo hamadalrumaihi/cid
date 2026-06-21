@@ -104,11 +104,24 @@
       const gn = gangNameById(m.gang_id); if (gn) out.push(`<span class="rounded bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-300">🚩 ${esc(gn)}</span>`);
       if (t.location) out.push(`<span class="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-300">📍 ${esc(t.location)}</span>`);
       if (t.person) out.push(`<span class="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-300">👤 ${esc(t.person)}</span>`);
+      mediaLabels(m).forEach((l) => out.push(`<span class="rounded bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] text-fuchsia-300">🏷️ ${esc(l)}</span>`));
       return out.join(' ');
+    }
+    // Free-text media labels (m.tags.labels) — tag mugshots, scenes, weapons, etc.
+    const PRESET_MEDIA_TAGS = ['Mugshot', 'Scene', 'Weapon', 'Surveillance', 'Document', 'Vehicle', 'Evidence'];
+    const mediaLabels = (m) => { const t = m && m.tags; return Array.isArray(t && t.labels) ? t.labels : []; };
+    const parseTags = (str) => [...new Set(String(str || '').split(',').map((s) => s.trim()).filter(Boolean))];
+    function mediaTagsFieldHTML(id, labels) {
+      return `<div><label class="mb-1 block text-xs font-semibold text-slate-400">Tags</label>
+        <input id="${id}" value="${esc((labels || []).join(', '))}" placeholder="Mugshot, Scene, Weapon…" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" />
+        <div class="mt-1.5 flex flex-wrap gap-1">${PRESET_MEDIA_TAGS.map((t) => `<button type="button" class="mt-preset rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-slate-300 transition hover:bg-white/10" data-for="${id}" data-tag="${esc(t)}">+ ${esc(t)}</button>`).join('')}</div></div>`;
+    }
+    function wireMediaTagsField(node) {
+      $$('.mt-preset', node).forEach((b) => b.onclick = () => { const inp = node.querySelector('#' + b.dataset.for); if (!inp) return; const set = parseTags(inp.value); if (!set.some((s) => s.toLowerCase() === b.dataset.tag.toLowerCase())) set.push(b.dataset.tag); inp.value = set.join(', '); });
     }
     function renderMediaFilters() {
       const bar = $('#media-filter'); if (!bar) return;
-      const kinds = [['all', 'All'], ['case', 'By Case'], ['gang', 'By Gang'], ['location', 'By Location'], ['person', 'Mugshots']];
+      const kinds = [['all', 'All'], ['case', 'By Case'], ['gang', 'By Gang']].concat(PRESET_MEDIA_TAGS.map((t) => ['tag:' + t, '🏷️ ' + t]));
       bar.innerHTML = kinds.map(([k, l]) => `<button class="mf-chip rounded-full border px-3 py-1 text-xs font-medium transition ${mediaFilter === k ? 'border-badge-500 bg-blue-500/10 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}" data-f="${k}">${l}</button>`).join('');
       bar.querySelectorAll('.mf-chip').forEach((b) => b.addEventListener('click', () => { mediaFilter = b.dataset.f; renderMediaFilters(); renderMedia(); }));
     }
@@ -120,6 +133,12 @@
       if (mediaFilter === 'all') return true;
       if (mediaFilter === 'case') return !!m.case_id;
       if (mediaFilter === 'gang') return !!m.gang_id;
+      if (mediaFilter && mediaFilter.indexOf('tag:') === 0) {
+        const want = mediaFilter.slice(4).toLowerCase();
+        if (mediaLabels(m).some((l) => l.toLowerCase() === want)) return true;
+        if (want === 'mugshot' && m.tags && m.tags.person) return true;   // legacy mugshots
+        return false;
+      }
       return !!(m.tags && m.tags[mediaFilter]);
     }
     function renderMedia() {
@@ -194,16 +213,18 @@
             <div><label class="mb-1 block text-xs font-semibold text-slate-400">Location</label><input id="md-loc" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" placeholder="Area / place" /></div>
             <div><label class="mb-1 block text-xs font-semibold text-slate-400">Person (mugshot)</label><input id="md-person" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" placeholder="Subject name" /></div>
           </div>
+          ${mediaTagsFieldHTML('md-tags', [])}
         </div>
         <button id="md-go" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Add to Vault</button>`;
       if (typeof fmInjectUploader === 'function') fmInjectUploader(node);
+      wireMediaTagsField(node);
       node.querySelector('.close-x').onclick = closeModal;
       node.querySelector('#md-go').onclick = async () => {
         const title = node.querySelector('#md-title').value.trim();
         if (!title) { toast('A title is required.', 'warn'); return; }
         const type = node.querySelector('#md-type').value;
         const kind = type === 'image' ? 'Image URL' : type === 'video' ? 'MP4 Video' : 'FiveManage Embed';
-        const payload = { title, type, kind, external_url: node.querySelector('#md-src').value.trim() || null, case_id: node.querySelector('#md-case').value || null, gang_id: node.querySelector('#md-gang').value || null, tags: { location: node.querySelector('#md-loc').value.trim(), person: node.querySelector('#md-person').value.trim() } };
+        const payload = { title, type, kind, external_url: node.querySelector('#md-src').value.trim() || null, case_id: node.querySelector('#md-case').value || null, gang_id: node.querySelector('#md-gang').value || null, tags: { location: node.querySelector('#md-loc').value.trim(), person: node.querySelector('#md-person').value.trim(), labels: parseTags(node.querySelector('#md-tags').value) } };
         const res = await DB().insert('media', payload);
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast('Media ingested into vault', 'success'); fetchMedia();
