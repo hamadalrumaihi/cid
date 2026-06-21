@@ -329,6 +329,43 @@
           ] },
         ],
       },
+      'surveillance_report': {
+        title: 'Surveillance Report',
+        subtitle: 'Criminal Investigations Department — FOR OFFICIAL USE ONLY',
+        sections: [
+          { id: 'hdr', label: 'Report', type: 'kv', fields: [
+            { key: 'case_number', label: 'Case Number', type: 'text' },
+            { key: 'detective', label: 'Reporting Detective', type: 'text' },
+            { key: 'department', label: 'Department', type: 'select', opts: ['', 'LSPD', 'BCSO', 'SAHP'] },
+            { key: 'date', label: 'Date', type: 'text' },
+          ] },
+          { id: 'op', label: 'Operation Details', type: 'kv', fields: [
+            { key: 'subject', label: 'Subject / Target', type: 'text' },
+            { key: 'location', label: 'Location / Area', type: 'text' },
+            { key: 'start_time', label: 'Start Date / Time', type: 'text' },
+            { key: 'end_time', label: 'End Date / Time', type: 'text' },
+          ] },
+          { id: 'method', label: 'Method of Surveillance', type: 'kv', fields: [
+            { key: 'method', label: 'Method', type: 'checks', opts: ['Static / Stationary', 'Vehicle (Mobile)', 'Foot', 'Electronic / Camera', 'Aerial', 'Other'] },
+          ] },
+          { id: 'observations', label: 'Observations / Activity Log', type: 'textarea', key: 'observations' },
+          { id: 'persons', label: 'Persons Observed', type: 'grid', cols: [
+            { key: 'name', label: 'Name / Description', type: 'text' },
+            { key: 'role', label: 'Role / Activity', type: 'text' },
+          ] },
+          { id: 'vehicles', label: 'Vehicles Observed', type: 'grid', cols: [
+            { key: 'vehicle', label: 'Vehicle', type: 'text' },
+            { key: 'plate', label: 'Plate', type: 'text' },
+            { key: 'notes', label: 'Notes', type: 'text' },
+          ] },
+          { id: 'media', label: 'Photos / Recordings Captured (attach references)', type: 'textarea', key: 'media_refs' },
+          { id: 'assessment', label: 'Assessment / Findings', type: 'textarea', key: 'assessment' },
+          { id: 'sign', label: 'Review', type: 'kv', fields: [
+            { key: 'detective_sig', label: 'Detective Signature', type: 'text' },
+            { key: 'supervisor_sig', label: 'Supervisor Signature', type: 'text' },
+          ] },
+        ],
+      },
     };
     // Map a documents row → its form schema id (by explicit content.form, or by name).
     const FORM_NAME_MAP = {
@@ -342,6 +379,7 @@
       'electronic surveillance request': 'wiretap_warrant',
       'subpoena — records / witness': 'subpoena',
       'subpoena': 'subpoena',
+      'surveillance report': 'surveillance_report',
     };
     function formSchemaIdFor(doc) {
       if (!doc) return null;
