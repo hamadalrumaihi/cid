@@ -35,6 +35,7 @@
       { id:'arrest_warrant',           icon:'⚖️' },
       { id:'search_warrant',           icon:'🔍' },
       { id:'wiretap_warrant',          icon:'📡' },
+      { id:'subpoena',                 icon:'📜' },
     ].filter((t) => FORM_SCHEMAS[t.id]).map((t) => ({
       id: t.id, icon: t.icon, default: !!t.default,
       name: FORM_SCHEMAS[t.id].title, schema: FORM_SCHEMAS[t.id],

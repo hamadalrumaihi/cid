@@ -298,6 +298,37 @@
           ] },
         ],
       },
+      'subpoena': {
+        title: 'Subpoena — Records / Witness',
+        subtitle: 'State of San Andreas — FOR OFFICIAL USE ONLY',
+        sections: [
+          { id: 'hdr', label: 'Issuance', type: 'kv', fields: [
+            { key: 'case_number', label: 'Case Number', type: 'text' },
+            { key: 'detective', label: 'Requesting Detective', type: 'text' },
+            { key: 'department', label: 'Department', type: 'select', opts: ['', 'LSPD', 'BCSO', 'SAHP'] },
+            { key: 'date', label: 'Date', type: 'text' },
+          ] },
+          { id: 'type', label: 'Subpoena Type', type: 'kv', fields: [
+            { key: 'subpoena_type', label: 'Type', type: 'checks', opts: ['Records (Duces Tecum)', 'Witness Testimony (Ad Testificandum)', 'Financial / Bank Records', 'Phone / Communications Records', 'Other'] },
+          ] },
+          { id: 'recipient', label: 'Recipient / Custodian', type: 'kv', fields: [
+            { key: 'recipient_name', label: 'Name / Business', type: 'text' },
+            { key: 'recipient_address', label: 'Address', type: 'text' },
+          ] },
+          { id: 'records', label: 'Records / Items / Testimony Requested', type: 'textarea', key: 'records_requested' },
+          { id: 'relevance', label: 'Relevance to the Investigation', type: 'textarea', key: 'relevance' },
+          { id: 'return', label: 'Return / Compliance', type: 'kv', fields: [
+            { key: 'return_date', label: 'Return Date', type: 'text' },
+            { key: 'return_location', label: 'Deliver To', type: 'text' },
+          ] },
+          { id: 'affirm', label: 'Detective Affirmation', type: 'note', text: 'I affirm that the records or testimony sought are relevant and necessary to an active investigation.' },
+          { id: 'sign', label: 'Authorization', type: 'kv', fields: [
+            { key: 'detective_sig', label: 'Detective Signature', type: 'text' },
+            { key: 'supervisor_approval', label: 'Supervisor Approval', type: 'text' },
+            { key: 'judge_approval', label: 'Judge / DA Approval', type: 'text' },
+          ] },
+        ],
+      },
     };
     // Map a documents row → its form schema id (by explicit content.form, or by name).
     const FORM_NAME_MAP = {
@@ -309,6 +340,8 @@
       'search warrant affidavit': 'search_warrant',
       'wiretap / electronic surveillance request': 'wiretap_warrant',
       'electronic surveillance request': 'wiretap_warrant',
+      'subpoena — records / witness': 'subpoena',
+      'subpoena': 'subpoena',
     };
     function formSchemaIdFor(doc) {
       if (!doc) return null;
