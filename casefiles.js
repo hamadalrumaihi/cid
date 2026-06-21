@@ -629,6 +629,7 @@
         <div class="p-3">
           <p class="truncate text-sm font-semibold text-white" title="${escapeHTML(m.title || '')}">${escapeHTML(m.title || 'Untitled')}</p>
           <p class="mt-0.5 text-[11px] text-slate-400">${escapeHTML(m.kind || m.type || 'media')}</p>
+          ${(typeof mediaLabels === 'function' && mediaLabels(m).length) ? `<div class="mt-1.5 flex flex-wrap gap-1">${mediaLabels(m).map((l) => `<span class="rounded bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] text-fuchsia-300">🏷️ ${escapeHTML(l)}</span>`).join('')}</div>` : ''}
           <div class="mt-2 flex items-center gap-2">
             ${url ? `<a href="${escapeHTML(url)}" target="_blank" rel="noopener" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10">open ↗</a>` : ''}
             ${canEdit ? `<button class="cmedia-detach rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-rose-300 transition hover:bg-rose-500/10" data-id="${m.id}">Detach</button>` : ''}
@@ -645,16 +646,19 @@
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Title *</label><input id="cm-title" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Dashcam — Vinewood pursuit" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Type</label><select id="cm-type" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500"><option value="image">Direct Image URL</option><option value="video">MP4 Video Link</option><option value="fivemanage">FiveManage CDN Embed</option></select></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">URL / Embed ID</label><input id="cm-url" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 font-mono text-xs text-white outline-none focus:border-badge-500" placeholder="https://… or fm_xxxxx" /></div>
+          ${typeof mediaTagsFieldHTML === 'function' ? mediaTagsFieldHTML('cm-tags', []) : ''}
         </div>
         <p class="mt-2 text-[11px] text-slate-500">Linked to this case and added to the Media Vault. An image URL shows a thumbnail.</p>
         <button id="cm-go" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Add media</button>`;
       node.querySelector('.close-x').onclick = closeModal;
+      if (typeof wireMediaTagsField === 'function') wireMediaTagsField(node);
       node.querySelector('#cm-go').onclick = async () => {
         const title = node.querySelector('#cm-title').value.trim();
         if (!title) { toast('A title is required.', 'warn'); return; }
         const type = node.querySelector('#cm-type').value;
         const kind = type === 'image' ? 'Image URL' : type === 'video' ? 'MP4 Video' : 'FiveManage Embed';
-        const res = await DB().insert('media', { title, type, kind, external_url: node.querySelector('#cm-url').value.trim() || null, case_id: caseId });
+        const labels = typeof parseTags === 'function' ? parseTags(node.querySelector('#cm-tags') && node.querySelector('#cm-tags').value) : [];
+        const res = await DB().insert('media', { title, type, kind, external_url: node.querySelector('#cm-url').value.trim() || null, case_id: caseId, tags: { labels } });
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast('Media linked to case', 'success'); if (typeof fetchMedia === 'function') fetchMedia(); loadDetailTab();
       };
@@ -669,12 +673,15 @@
         <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Upload Photos / Video</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <p class="mb-3 text-xs text-slate-400">Pick one or more files — each is uploaded to FiveManage and linked to this case. Images show a thumbnail automatically.</p>
         <input id="cmu-files" type="file" accept="image/*,video/*" multiple class="block w-full text-xs text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-white" />
+        <div class="mt-3">${typeof mediaTagsFieldHTML === 'function' ? mediaTagsFieldHTML('cmu-tags', []) : ''}</div>
         <div id="cmu-status" class="mt-3 text-xs text-slate-400"></div>
         <button id="cmu-go" class="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Upload &amp; link</button>`;
       node.querySelector('.close-x').onclick = closeModal;
+      if (typeof wireMediaTagsField === 'function') wireMediaTagsField(node);
       node.querySelector('#cmu-go').onclick = async () => {
         const files = Array.from((node.querySelector('#cmu-files').files) || []);
         if (!files.length) { toast('Choose at least one file.', 'warn'); return; }
+        const labels = typeof parseTags === 'function' ? parseTags(node.querySelector('#cmu-tags') && node.querySelector('#cmu-tags').value) : [];
         const status = node.querySelector('#cmu-status'); const goBtn = node.querySelector('#cmu-go'); goBtn.disabled = true;
         let ok = 0, fail = 0;
         for (let i = 0; i < files.length; i++) {
@@ -683,7 +690,7 @@
           try {
             const out = await fmUpload(f);
             const isVid = out.kind === 'video';
-            const res = await DB().insert('media', { title: f.name.replace(/\.[^.]+$/, ''), type: isVid ? 'video' : 'image', kind: isVid ? 'MP4 Video' : 'Image URL', external_url: out.url, case_id: caseId });
+            const res = await DB().insert('media', { title: f.name.replace(/\.[^.]+$/, ''), type: isVid ? 'video' : 'image', kind: isVid ? 'MP4 Video' : 'Image URL', external_url: out.url, case_id: caseId, tags: { labels } });
             if (res.error) fail++; else ok++;
           } catch (e) { fail++; }
         }
