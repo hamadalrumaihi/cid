@@ -171,8 +171,8 @@
         : m.type === 'image' ? `<img src="${esc(src)}" alt="${esc(m.title)}" class="max-h-[70vh] w-full rounded-lg object-contain" />`
         : isVid ? `<video src="${esc(src)}" controls autoplay playsinline class="max-h-[70vh] w-full rounded-lg bg-black"></video>`
         : isAud ? `<div class="rounded-lg bg-ink-800 p-6"><audio src="${esc(src)}" controls autoplay class="w-full"></audio></div>`
-        : `<iframe src="${esc(src)}" title="${esc(m.title)}" class="h-[70vh] w-full rounded-lg bg-black"></iframe>`;
-      node.innerHTML = `<div class="mb-3 flex items-center justify-between"><p class="text-sm font-semibold text-white">${esc(m.title)}</p><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>${body}<div class="mt-3 flex items-center justify-between gap-2"><div class="flex flex-wrap gap-1">${mediaTagChips(m)}</div>${src ? `<a href="${esc(src)}" target="_blank" rel="noopener" class="flex-shrink-0 text-xs text-blue-300 underline">Open ↗</a>` : ''}</div>`;
+        : `<iframe src="${esc(safeUrl(src))}" title="${esc(m.title)}" class="h-[70vh] w-full rounded-lg bg-black"></iframe>`;
+      node.innerHTML = `<div class="mb-3 flex items-center justify-between"><p class="text-sm font-semibold text-white">${esc(m.title)}</p><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>${body}<div class="mt-3 flex items-center justify-between gap-2"><div class="flex flex-wrap gap-1">${mediaTagChips(m)}</div>${src ? `<a href="${esc(safeUrl(src))}" target="_blank" rel="noopener" class="flex-shrink-0 text-xs text-blue-300 underline">Open ↗</a>` : ''}</div>`;
       node.querySelector('.close-x').onclick = closeModal;
       openModal(node, { wide: true });
     }

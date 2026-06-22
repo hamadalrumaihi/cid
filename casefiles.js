@@ -106,9 +106,9 @@
       const body = k === 'image' ? `<img src="${esc(url)}" alt="${esc(f.name)}" class="max-h-[72vh] w-full rounded-lg object-contain" />`
         : k === 'video' ? `<video src="${esc(url)}" controls autoplay playsinline class="max-h-[72vh] w-full rounded-lg bg-black"></video>`
         : k === 'audio' ? `<div class="rounded-lg bg-ink-800 p-6"><audio src="${esc(url)}" controls autoplay class="w-full"></audio></div>`
-        : k === 'pdf' ? `<iframe src="${esc(url)}" title="${esc(f.name)}" class="h-[72vh] w-full rounded-lg bg-white"></iframe>`
+        : k === 'pdf' ? `<iframe src="${esc(safeUrl(url))}" title="${esc(f.name)}" class="h-[72vh] w-full rounded-lg bg-white"></iframe>`
         : `<div class="flex h-48 items-center justify-center rounded-lg bg-ink-800 text-sm text-slate-300">No inline preview for this type.</div>`;
-      node.innerHTML = `<div class="mb-3 flex items-center justify-between gap-3"><p class="min-w-0 truncate text-sm font-semibold text-white">${CF_ICON[k]} ${esc(f.name)}</p><button class="close-x flex-shrink-0 text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>${body}<div class="mt-3 text-right"><a href="${esc(url)}" target="_blank" rel="noopener" class="text-xs text-blue-300 underline">Open original ↗</a></div>`;
+      node.innerHTML = `<div class="mb-3 flex items-center justify-between gap-3"><p class="min-w-0 truncate text-sm font-semibold text-white">${CF_ICON[k]} ${esc(f.name)}</p><button class="close-x flex-shrink-0 text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>${body}<div class="mt-3 text-right"><a href="${esc(safeUrl(url))}" target="_blank" rel="noopener" class="text-xs text-blue-300 underline">Open original ↗</a></div>`;
       node.querySelector('.close-x').onclick = closeModal;
       openModal(node, { wide: true });
     }
@@ -736,7 +736,7 @@
           <p class="mt-0.5 text-[11px] text-slate-400">${escapeHTML(m.kind || m.type || 'media')}</p>
           ${(typeof mediaLabels === 'function' && mediaLabels(m).length) ? `<div class="mt-1.5 flex flex-wrap gap-1">${mediaLabels(m).map((l) => `<span class="rounded bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] text-fuchsia-300">🏷️ ${escapeHTML(l)}</span>`).join('')}</div>` : ''}
           <div class="mt-2 flex items-center gap-2">
-            ${url ? `<a href="${escapeHTML(url)}" target="_blank" rel="noopener" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10">open ↗</a>` : ''}
+            ${url ? `<a href="${escapeHTML(safeUrl(url))}" target="_blank" rel="noopener" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10">open ↗</a>` : ''}
             ${canEdit ? `<button class="cmedia-tags rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-fuchsia-200 transition hover:bg-white/10" data-id="${m.id}" title="Edit tags">🏷️</button>` : ''}
             ${canEdit ? `<button class="cmedia-detach rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-rose-300 transition hover:bg-rose-500/10" data-id="${m.id}">Detach</button>` : ''}
           </div>

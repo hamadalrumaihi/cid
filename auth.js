@@ -38,7 +38,7 @@
 
   function showPending(session) {
     setState('out');
-    var who = (session.user && session.user.email) || 'Your account';
+    var who = escapeHTML((session.user && session.user.email) || 'Your account');
     gateBody(
       '<div class="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200">⏳ <b>' + who + '</b> is signed in but not yet approved. A Command/Director must activate your profile before you can access the portal.</div>' +
       '<button id="g-out" class="mt-4 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">Sign out</button>'
@@ -68,8 +68,8 @@
     })[profile && profile.role] || 'Active member access.';
     slot.innerHTML =
       '<span title="Your access: ' + roleCapsText.replace(/"/g, '&quot;') + '" class="hidden cursor-help items-center gap-2 rounded-lg bg-white/5 px-2.5 py-2 text-xs text-slate-200 sm:flex">' +
-        (av ? '<img src="' + av + '" class="h-5 w-5 rounded-full object-cover" alt="" />' : '👤') + ' ' + name +
-        (profile ? ' · <span class="uppercase text-blue-300">' + profile.role + '</span>' : '') +
+        (av ? '<img src="' + escapeHTML(safeUrl(av)) + '" class="h-5 w-5 rounded-full object-cover" alt="" />' : '👤') + ' ' + escapeHTML(name) +
+        (profile ? ' · <span class="uppercase text-blue-300">' + escapeHTML(profile.role) + '</span>' : '') +
       '</span>' +
       (onLoa ? '<span class="rounded-lg bg-amber-500/15 px-2 py-2 text-[11px] font-semibold uppercase text-amber-300" title="You are marked On LOA">On LOA</span>' : '') +
       '<button id="auth-loa" class="rounded-lg border px-2.5 py-2 text-xs font-semibold transition ' + (onLoa ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300 hover:bg-emerald-500/10' : 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10') + '">' + (onLoa ? 'Clear LOA' : 'Set LOA') + '</button>' +

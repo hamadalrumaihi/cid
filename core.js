@@ -413,6 +413,17 @@
     const fmtUSD = (n) => '$' + Math.round(n).toLocaleString('en-US');
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
     const escapeHTML = esc;   // alias: feature files use escapeHTML; both share one scope
+    // Allow-list URL schemes for href/src so a user-supplied URL can't smuggle a
+    // javascript:/data:/vbscript: payload into a link or iframe. Returns '' if unsafe.
+    // Always combine with esc() for attribute-quote safety: esc(safeUrl(url)).
+    const safeUrl = (u) => {
+      const s = String(u == null ? '' : u).trim();
+      if (!s) return '';
+      for (let i = 0; i < s.length; i++) { if (s.charCodeAt(i) < 32) return ''; }
+      const m = s.match(/^([a-z][a-z0-9+.-]*):/i);
+      if (m) { const sch = m[1].toLowerCase(); return (sch === 'http' || sch === 'https' || sch === 'mailto') ? s : ''; }
+      return s; // protocol-relative (//host) or relative path is safe
+    };
     // One-click copy to clipboard with a confirmation toast.
     function copyText(text, label) {
       const t = String(text == null ? '' : text);
