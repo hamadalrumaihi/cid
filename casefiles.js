@@ -460,7 +460,7 @@
       const c = detailCase, canEdit = DB() && DB().canEdit(), canDel = DB() && DB().canDelete();
       const tabs = ['overview', 'evidence', 'charges', 'rico', 'intel', 'reports', 'signoff', 'chat', 'timeline'];
       $('#case-detail').innerHTML = `
-        <button id="case-back" class="mb-4 inline-flex items-center gap-1 text-sm text-slate-300 transition hover:text-white">← All cases</button>
+        <div class="mb-4 flex items-center gap-1.5 text-sm text-slate-400"><button id="case-back" class="inline-flex items-center gap-1 text-slate-300 transition hover:text-white">← Cases</button><span class="text-slate-600">/</span><span class="font-mono text-blue-300">${escapeHTML(c.case_number)}</span><span class="text-slate-600">/</span><span class="capitalize text-slate-300">${escapeHTML(detailTab)}</span></div>
         <div class="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div><p class="flex items-center gap-1.5 font-mono text-sm text-blue-300">${escapeHTML(c.case_number)}<button id="case-copy" class="text-slate-500 transition hover:text-white" title="Copy case number">📋</button></p><h3 class="text-xl font-bold text-white">${escapeHTML(c.title || 'Untitled case')}</h3><p class="mt-1 text-sm text-slate-400">${escapeHTML(c.summary || '')}</p></div>
