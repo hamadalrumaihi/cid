@@ -443,7 +443,7 @@
     }
     function renderCaseDetailShell() {
       const c = detailCase, canEdit = DB() && DB().canEdit(), canDel = DB() && DB().canDelete();
-      const tabs = ['overview', 'evidence', 'charges', 'intel', 'reports', 'signoff', 'chat', 'timeline'];
+      const tabs = ['overview', 'evidence', 'charges', 'rico', 'intel', 'reports', 'signoff', 'chat', 'timeline'];
       $('#case-detail').innerHTML = `
         <button id="case-back" class="mb-4 inline-flex items-center gap-1 text-sm text-slate-300 transition hover:text-white">← All cases</button>
         <div class="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
@@ -556,6 +556,9 @@
           });
         } else if (detailTab === 'charges') {
           renderCaseCharges(body);
+        } else if (detailTab === 'rico') {
+          if (typeof renderRicoInto === 'function') await renderRicoInto(cid, body);
+          else body.innerHTML = '<p class="text-sm text-slate-500">RICO module unavailable.</p>';
         } else if (detailTab === 'intel') {
           await renderCaseIntel(body, cid);
         } else if (detailTab === 'reports') {
@@ -778,7 +781,7 @@
       $$('.ch-inc', body).forEach((b) => b.onclick = async () => { const next = caseCharges().map((x) => x.code === b.dataset.code ? { code: x.code, count: Math.max(1, (x.count || 1) + 1) } : x); if (await saveCaseCharges(next)) renderCaseCharges(body); });
       $$('.ch-dec', body).forEach((b) => b.onclick = async () => { const next = caseCharges().map((x) => x.code === b.dataset.code ? { code: x.code, count: Math.max(1, (x.count || 1) - 1) } : x); if (await saveCaseCharges(next)) renderCaseCharges(body); });
       $$('.ch-rec', body).forEach((b) => b.onclick = async () => { if (await addCharge(b.dataset.code)) renderCaseCharges(body); });
-      const rico = $('#ch-rico', body); if (rico) rico.onclick = () => { if (typeof navigate === 'function') navigate('rico'); };
+      const rico = $('#ch-rico', body); if (rico) rico.onclick = () => { detailTab = 'rico'; renderCaseDetailShell(); loadDetailTab(); };
     }
     function openChargePicker() {
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
