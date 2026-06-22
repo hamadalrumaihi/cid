@@ -654,6 +654,7 @@
       inbox:      { title: 'My Desk', sub: 'Everything waiting on you — sign-off, overdue cases, mentions & draft reports' },
       shifts:     { title: 'Weekly Shift Reports', sub: 'Detective activity rolled up to bureau leadership' },
       audit:      { title: 'Audit Log', sub: 'Division-wide action history (Bureau Lead and above)' },
+      feedback:   { title: 'Feedback', sub: 'Suggest a feature or report a bug' },
     };
 
     // ---- Two-tier navigation: 5 top-level categories, each a set of tool tabs ----
@@ -694,6 +695,10 @@
       $$('.nav-cat').forEach((b) => { const on = b.dataset.cat === cat; b.classList.toggle('active', on); on ? b.setAttribute('aria-current','page') : b.removeAttribute('aria-current'); });
       $$('.bnav-link').forEach((b) => b.classList.toggle('active', b.dataset.cat === cat));
       renderSubtabs(tab, cat);
+      // Standalone owner-only leaf (Feedback) sits outside the category model:
+      // highlight its own nav button and hide the sub-tab strip when active.
+      const fbBtn = $('#nav-feedback'); if (fbBtn) fbBtn.classList.toggle('active', tab === 'feedback');
+      if (tab === 'feedback') { $$('.nav-cat').forEach((b) => { b.classList.remove('active'); b.removeAttribute('aria-current'); }); const sb = $('#subtabs'); if (sb) { sb.classList.add('hidden'); sb.innerHTML = ''; } }
       const m = PAGE_META[tab]; if (m) { $('#page-title').textContent = m.title; $('#page-subtitle').textContent = m.sub; }
       if (location.hash !== '#' + tab) { try { history.replaceState(null, '', '#' + tab); } catch (e) {} }
       Store.set('tab', tab);
@@ -718,6 +723,7 @@
       if (tab === 'inbox' && typeof onEnterInbox === 'function') onEnterInbox();
       if (tab === 'shifts' && typeof onEnterShifts === 'function') onEnterShifts();
       if (tab === 'audit' && typeof onEnterAudit === 'function') onEnterAudit();
+      if (tab === 'feedback' && typeof onEnterFeedback === 'function') onEnterFeedback();
     }
     $$('.nav-cat, .bnav-link').forEach((b) => b.addEventListener('click', () => navigate(CAT_DEFAULT[b.dataset.cat] || 'command')));
 
