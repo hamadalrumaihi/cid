@@ -60,8 +60,24 @@
     }
 
     /* ---- Feature 2: submit for review (RPC: signoff_submit) ---- */
+    // Soft completeness check before a case goes up the chain — non-blocking, so
+    // the detective can still submit, but never anxiously submits half-finished.
+    async function caseCompletenessGaps(c) {
+      const gaps = [];
+      if (!c.summary || !String(c.summary).trim()) gaps.push('No case summary written');
+      if (!(Array.isArray(c.charges) ? c.charges : []).length) gaps.push('No charges attached');
+      if (!c.lead_detective_id) gaps.push('No lead detective assigned');
+      try { const ev = await DB().list('evidence', { eq: { case_id: c.id } }); if (!ev.length) gaps.push('No evidence logged'); } catch (e) {}
+      try { const reps = await DB().list('reports', { eq: { case_id: c.id } }); if (!reps.some((r) => r.finalized)) gaps.push('No finalized report'); } catch (e) {}
+      return gaps;
+    }
     async function submitForSignoff(c) {
       if (!dbReady()) { toast('Sign-in required.', 'warn'); return; }
+      const gaps = await caseCompletenessGaps(c);
+      if (gaps.length) {
+        const ok = await uiConfirm('Before this goes up for sign-off, a quick check found:\n\n• ' + gaps.join('\n• ') + '\n\nYou can still submit — reviewers may send it back if these matter.', { title: 'Completeness check', confirmText: 'Submit anyway', cancelText: 'Go fix it', danger: false });
+        if (!ok) return;
+      }
       const res = await DB().rpc('signoff_submit', { p_case: c.id });
       if (res.error) { toast('Submit failed: ' + res.error.message, 'danger'); return; }
       const c2 = res.data || c;

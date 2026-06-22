@@ -544,6 +544,9 @@
             DB().list('evidence', { order: 'created_at', ascending: false, eq: { case_id: cid } }),
             DB().list('media', { order: 'created_at', ascending: false, eq: { case_id: cid } }).catch(() => []),
           ]);
+          // Which evidence items have a chain-of-custody entry (integrity hint).
+          let hasCustody = new Set();
+          if (ev.length) { try { const cust = await DB().from('custody_chain').select('evidence_id').in('evidence_id', ev.map((e) => e.id)).then((r) => r.data || []); hasCustody = new Set(cust.map((x) => x.evidence_id)); } catch (e) {} }
           const canUpload = canEdit && typeof fmConfigured === 'function' && fmConfigured();
           const mediaActions = canEdit ? `<div class="flex flex-wrap gap-2">
             ${canUpload ? '<button id="cmedia-upload" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">⬆ Upload photos</button>' : ''}
@@ -552,7 +555,7 @@
           </div>` : '';
           body.innerHTML = `
             <div class="mb-3 flex items-center justify-between"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Evidence (${ev.length})</h4>${canEdit ? '<button id="ev-new" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ Add Evidence</button>' : ''}</div>
-            <div class="space-y-3">${ev.length ? ev.map(evidenceCard).join('') : '<p class="text-sm text-slate-500">No evidence logged.</p>'}</div>
+            <div class="space-y-3">${ev.length ? ev.map((e) => evidenceCard(e, hasCustody.has(e.id))).join('') : '<p class="text-sm text-slate-500">No evidence logged.</p>'}</div>
             <div class="mt-8 mb-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-6"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Linked Media (${med.length})</h4>${mediaActions}</div>
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">${med.length ? med.map((m) => caseMediaCard(m, canEdit)).join('') : '<p class="text-sm text-slate-500">No media linked to this case. Upload photos, add a link, or attach one from the Media Vault.</p>'}</div>`;
           const nb = $('#ev-new'); if (nb) nb.onclick = () => openEvidenceModal(cid);
@@ -609,10 +612,16 @@
         }
       } catch (e) { body.innerHTML = '<p class="text-sm text-rose-300">Load error: ' + escapeHTML(e.message || String(e)) + '</p>'; }
     }
-    function evidenceCard(e) {
+    function evidenceCard(e, hasCustody) {
       const tint = e.tamper === 'intact' ? 'text-emerald-300' : e.tamper === 'compromised' ? 'text-rose-300' : 'text-amber-300';
-      return `<div class="rounded-xl border border-white/10 bg-ink-900 p-4">
-        <div class="flex items-start justify-between gap-2"><div><p class="text-sm font-semibold text-white">${escapeHTML(e.description || e.item_code || 'Evidence')}</p><p class="text-[11px] text-slate-400">${escapeHTML(e.type || '—')}${e.item_code ? ' · ' + escapeHTML(e.item_code) : ''} · collected ${e.collected_at ? new Date(e.collected_at).toLocaleDateString('en-US') : '—'}</p></div><span class="rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${tint}">${escapeHTML(e.tamper)}</span></div>
+      // Integrity hints: flag a broken/unknown tamper state or a missing
+      // chain-of-custody so gaps are caught before DOJ, not after.
+      const risks = [];
+      if (e.tamper && e.tamper !== 'intact') risks.push(e.tamper === 'compromised' ? 'tamper: compromised' : 'tamper: ' + e.tamper);
+      if (hasCustody === false) risks.push('no chain-of-custody logged');
+      const riskChip = risks.length ? `<span class="rounded bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300" title="Integrity check">⚠ ${escapeHTML(risks.join(' · '))}</span>` : '';
+      return `<div class="rounded-xl border ${risks.length ? 'border-amber-500/25' : 'border-white/10'} bg-ink-900 p-4">
+        <div class="flex items-start justify-between gap-2"><div><p class="text-sm font-semibold text-white">${escapeHTML(e.description || e.item_code || 'Evidence')}</p><p class="text-[11px] text-slate-400">${escapeHTML(e.type || '—')}${e.item_code ? ' · ' + escapeHTML(e.item_code) : ''} · collected ${e.collected_at ? new Date(e.collected_at).toLocaleDateString('en-US') : '—'}</p>${riskChip ? '<div class="mt-1.5">' + riskChip + '</div>' : ''}</div><span class="rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${tint}">${escapeHTML(e.tamper)}</span></div>
         <div class="mt-2 flex gap-2"><button class="ev-custody rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10" data-id="${e.id}">Chain of custody</button>${(DB() && DB().canDelete()) ? `<button class="ev-del rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10" data-id="${e.id}">Delete</button>` : ''}</div>
       </div>`;
     }
