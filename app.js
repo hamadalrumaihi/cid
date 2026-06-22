@@ -364,6 +364,8 @@
       initCases();
       // Sign-off Inbox (Oversight) — badge + per-user case buckets
       initInbox();
+      // Private owner-only Feedback tab
+      if (typeof initFeedback === 'function') initFeedback();
       // Chrome
       $('#notif-bell').addEventListener('click', openNotifications);
       tickClock(); setInterval(tickClock, 1000); setInterval(tickTrackers, 1000);
