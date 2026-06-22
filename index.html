@@ -5,7 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <!-- Render native controls (select popups, scrollbars, pickers) in dark mode -->
   <meta name="color-scheme" content="dark" />
-  <style>:root{color-scheme:dark}</style>
+  <style>
+    :root{color-scheme:dark}
+    /* Make every native <select> render consistently: dark control, a single
+       custom caret (no flaky/invisible native arrow), and a dark options popup. */
+    select{
+      -webkit-appearance:none;-moz-appearance:none;appearance:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 20 20' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 7.5l5 5 5-5'/%3E%3C/svg%3E");
+      background-repeat:no-repeat;
+      background-position:right .6rem center;
+      background-size:1.05rem;
+      padding-right:2.1rem!important;
+    }
+    select::-ms-expand{display:none}
+    select option,select optgroup{background-color:#0b1220;color:#f8fafc}
+  </style>
   <title>CID Portal — Criminal Investigation Division | State of San Andreas</title>
 
   <!-- Tailwind CSS — precompiled & inlined (production-safe, offline, no runtime warning) -->
@@ -564,8 +578,8 @@
           <div class="mb-5 rounded-2xl border border-white/5 bg-ink-900/60 p-5">
             <div class="flex flex-wrap items-center gap-3">
               <select id="fb-kind" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">
-                <option value="feature" style="background-color:#0f172a;color:#fff">💡 Feature</option>
-                <option value="bug" style="background-color:#0f172a;color:#fff">🐞 Bug</option>
+                <option value="feature">💡 Feature</option>
+                <option value="bug">🐞 Bug</option>
               </select>
               <input id="fb-title" placeholder="Short title…" class="min-w-[14rem] flex-1 rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" />
             </div>
