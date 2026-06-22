@@ -14,6 +14,7 @@
 "use strict";
 
     const INBOX_STALE_DAYS = 14;
+    const INBOX_NUDGE_DAYS = 7;   // pre-overdue: surface aging items before they tip over
     let INBOX_CACHE = { review: [], bounced: [], mine: [] };
 
     function inboxAwaiting(s) { return s === 'awaiting_bureau_lead' || s === 'awaiting_deputy' || s === 'awaiting_director'; }
@@ -82,7 +83,7 @@
             <div class="flex items-center gap-2">
               <p class="font-mono text-sm text-blue-300">${escapeHTML(c.case_number || '—')}</p>
               <span class="rounded-md px-2 py-0.5 text-[10px] font-semibold ${signoffTint(st)}">${escapeHTML(signoffLabel(st))}</span>
-              ${overdue ? `<span class="rounded-md bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-300" title="No movement in ${age} days">⏳ ${age}d overdue</span>` : ''}
+              ${overdue ? `<span class="rounded-md bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-300" title="No movement in ${age} days">⏳ ${age}d overdue</span>` : (age >= INBOX_NUDGE_DAYS ? `<span class="rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300" title="Approaching the ${INBOX_STALE_DAYS}-day overdue mark — nudge it along">⏳ ${age}d in queue</span>` : '')}
             </div>
             <p class="mt-1 truncate font-semibold text-white">${escapeHTML(c.title || 'Untitled case')}</p>
             <p class="mt-0.5 text-xs text-slate-400">${who} · ${escapeHTML(c.bureau || '')}${age ? ' · ' + age + 'd' : ''}</p>
