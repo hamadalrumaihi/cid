@@ -59,8 +59,15 @@
     var name = (profile && profile.display_name) || (session.user && session.user.email) || 'Officer';
     var av = profile && profile.avatar_url;
     var onLoa = !!(profile && profile.loa);
+    var roleCapsText = ({
+      detective: 'View & edit records, log evidence, author reports, submit cases for sign-off.',
+      senior_detective: 'View & edit records, log evidence, author reports, submit cases for sign-off.',
+      bureau_lead: 'All detective actions + review/approve sign-offs, delete records, manage announcements (your bureau).',
+      deputy_director: 'Bureau-lead actions + cross-bureau oversight and command tools.',
+      director: 'Full command: cross-bureau oversight, sign-offs, deletes, roster & announcements.',
+    })[profile && profile.role] || 'Active member access.';
     slot.innerHTML =
-      '<span class="hidden items-center gap-2 rounded-lg bg-white/5 px-2.5 py-2 text-xs text-slate-200 sm:flex">' +
+      '<span title="Your access: ' + roleCapsText.replace(/"/g, '&quot;') + '" class="hidden cursor-help items-center gap-2 rounded-lg bg-white/5 px-2.5 py-2 text-xs text-slate-200 sm:flex">' +
         (av ? '<img src="' + av + '" class="h-5 w-5 rounded-full object-cover" alt="" />' : '👤') + ' ' + name +
         (profile ? ' · <span class="uppercase text-blue-300">' + profile.role + '</span>' : '') +
       '</span>' +
