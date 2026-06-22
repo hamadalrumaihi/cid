@@ -79,7 +79,7 @@
     function casesNotice(msg) { $('#cases-grid').innerHTML = `<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">${msg}</div>`; }
 
     function showCasesList() { $('#case-detail').classList.add('hidden'); $('#cases-list').classList.remove('hidden'); }
-    function onEnterCases() { showCasesList(); if (dbReady()) fetchCases(); else casesNotice('Live case data requires sign-in. Configure Supabase + sign in to load cases.'); }
+    function onEnterCases() { showCasesList(); if (dbReady()) fetchCases(); else casesNotice('Sign in to load live case data.'); }
 
     /* ============================================================ CASE FILES — ATTACHMENTS (per-case files via FiveManage + Supabase, #case-files) ============================================================ */
     /* Files are uploaded to FiveManage (window.CID_FIVEMANAGE); their URL +
@@ -159,7 +159,7 @@
       }
       if (toolbar) { toolbar.classList.remove('hidden'); toolbar.classList.add('flex'); }
       const drop = $('#cf-drop'); if (drop) drop.classList.toggle('hidden', !fmReady);
-      if (auth) auth.innerHTML = '<span class="rounded-lg bg-white/5 px-2.5 py-1.5 text-[11px] text-slate-300">Files upload to FiveManage; records stored in Supabase.</span>';
+      if (auth) auth.innerHTML = '<span class="rounded-lg bg-white/5 px-2.5 py-1.5 text-[11px] text-slate-300">Attachments are uploaded and linked to the case.</span>';
       cfPopulateCaseList();
       if (!cfWired) {
         cfWired = true;
@@ -201,7 +201,7 @@
     }
 
     async function fetchCases() {
-      if (!dbReady()) { casesNotice('Live case data requires sign-in. Configure Supabase + sign in to load cases.'); return; }
+      if (!dbReady()) { casesNotice('Sign in to load live case data.'); return; }
       $('#cases-live').classList.remove('hidden'); $('#cases-live').classList.add('inline-flex');
       try {
         // Auto-retry once on a transient blip before surfacing an error.
@@ -675,7 +675,7 @@
           const dot = { blue: 'bg-blue-400', violet: 'bg-violet-400', amber: 'bg-amber-400', emerald: 'bg-emerald-400', cyan: 'bg-cyan-400', slate: 'bg-slate-400' };
           body.innerHTML = `<div class="mb-4 flex items-start gap-2 rounded-lg border border-white/5 bg-ink-900/60 px-3 py-2 text-[11px] text-slate-400"><span>🛡</span><span>Every action on this case (evidence, reports, custody, sign-off, chat) is recorded with who and when. This trail is your accountability record — it protects you as much as it documents the case.</span></div><ul class="space-y-4">${events.map((e) => `<li class="flex gap-3"><span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${dot[e.dot] || 'bg-slate-400'}"></span><div><p class="text-sm text-slate-200">${escapeHTML(e.label)}</p><p class="text-[11px] text-slate-500">${e.t ? new Date(e.t).toLocaleString('en-US') : '—'}</p></div></li>`).join('')}</ul>`;
         }
-      } catch (e) { body.innerHTML = '<p class="text-sm text-rose-300">Load error: ' + escapeHTML(e.message || String(e)) + '</p>'; }
+      } catch (e) { body.innerHTML = '<p class="text-sm text-rose-300">Couldn’t load — ' + escapeHTML(e.message || String(e)) + '</p>'; }
     }
     function evidenceCard(e, hasCustody) {
       const tint = e.tamper === 'intact' ? 'text-emerald-300' : e.tamper === 'compromised' ? 'text-rose-300' : 'text-amber-300';

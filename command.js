@@ -351,7 +351,7 @@
     async function fetchTrackers() {
       if (!dbReady()) { renderTrackers(); return; }
       try { trackers = await DB().list('trackers', { order: 'created_at', ascending: false }); renderTrackers(); }
-      catch (e) { const w = $('#tracker-list'); if (w) w.innerHTML = '<p class="text-sm text-rose-300">Load error: ' + escapeHTML(e.message || e) + '</p>'; }
+      catch (e) { const w = $('#tracker-list'); if (w) w.innerHTML = '<p class="text-sm text-rose-300">Couldn’t load — ' + escapeHTML(e.message || e) + '</p>'; }
     }
     const _expiring = new Set();
     function renderTrackers() {

@@ -57,7 +57,7 @@
       if (!dbReady()) { body.innerHTML = '<p class="text-sm text-slate-500">Sign in to view case reports.</p>'; return; }
       let list = [];
       try { list = await DB().list('reports', { order: 'created_at', ascending: true, eq: { case_id: caseId } }); }
-      catch (e) { body.innerHTML = '<p class="text-sm text-rose-300">Load error: ' + escapeHTML(e.message || e) + '</p>'; return; }
+      catch (e) { body.innerHTML = '<p class="text-sm text-rose-300">Couldn’t load — ' + escapeHTML(e.message || e) + '</p>'; return; }
       const tplBtns = REPORT_TEMPLATES.map((t) => `<button class="rpt-tpl flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/10 hover:text-white" data-tpl="${t.id}"><span class="text-lg">${t.icon}</span><span>${esc(t.name)}${t.default ? ' · default' : ''}</span></button>`).join('');
       body.innerHTML = `
         ${canEdit ? `<div class="mb-4 rounded-2xl border border-white/5 bg-ink-900/60 p-4"><p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">New report — official templates</p><div class="flex flex-wrap gap-2">${tplBtns}</div></div>` : ''}
