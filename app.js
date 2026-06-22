@@ -364,8 +364,9 @@
       initCases();
       // Sign-off Inbox (Oversight) — badge + per-user case buckets
       initInbox();
-      // Private owner-only Feedback tab
-      if (typeof initFeedback === 'function') initFeedback();
+      // Feedback tab — temporarily disabled to A/B whether its global hooks
+      // affect the rest of the app. Re-enable this one line to restore it.
+      // if (typeof initFeedback === 'function') initFeedback();
       // Chrome
       $('#notif-bell').addEventListener('click', openNotifications);
       tickClock(); setInterval(tickClock, 1000); setInterval(tickTrackers, 1000);
