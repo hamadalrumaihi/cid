@@ -125,7 +125,7 @@
       bar.innerHTML = kinds.map(([k, l]) => `<button class="mf-chip rounded-full border px-3 py-1 text-xs font-medium transition ${mediaFilter === k ? 'border-badge-500 bg-blue-500/10 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}" data-f="${k}">${l}</button>`).join('');
       bar.querySelectorAll('.mf-chip').forEach((b) => b.addEventListener('click', () => { mediaFilter = b.dataset.f; renderMediaFilters(); renderMedia(); }));
     }
-    async function fetchMedia() { if (!dbReady()) { renderMedia(); return; } try { MEDIA = await DB().list('media', { order: 'created_at', ascending: false }); } catch (e) {} renderMedia(); }
+    async function fetchMedia() { if (!dbReady()) { renderMedia(); return; } try { MEDIA = await (typeof withRetry === 'function' ? withRetry(() => DB().list('media', { order: 'created_at', ascending: false })) : DB().list('media', { order: 'created_at', ascending: false })); } catch (e) { toast('Could not load the media vault — check your connection.', 'danger'); } renderMedia(); }
     // Roster + commendations live under Command; the media vault is its own tab under Intelligence.
     function onEnterPersonnel() { renderRoster(); if (dbReady()) { fetchCommendations(); } else { renderCommendations(); } }
     function onEnterMedia() { renderMediaFilters(); if (dbReady()) { fetchMedia(); } else { renderMedia(); } }

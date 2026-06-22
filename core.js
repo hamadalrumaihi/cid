@@ -651,7 +651,7 @@
       announce:   { title: 'Announcements', sub: 'Division-wide notices from command staff' },
       'case-files': { title: 'Case Files — Attachments', sub: 'Files uploaded per case (FiveManage + Supabase)' },
       heatmap:    { title: 'Commander Heatmap', sub: 'Gang turf, places, raids & case concentration by area' },
-      inbox:      { title: 'Sign-off Inbox', sub: 'Cases awaiting your decision, your submissions & changes requested' },
+      inbox:      { title: 'My Desk', sub: 'Everything waiting on you — sign-off, overdue cases, mentions & draft reports' },
       shifts:     { title: 'Weekly Shift Reports', sub: 'Detective activity rolled up to bureau leadership' },
       audit:      { title: 'Audit Log', sub: 'Division-wide action history (Bureau Lead and above)' },
     };
@@ -670,7 +670,7 @@
       command: 'Dashboard', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
       cases: 'Case Files', 'case-files': 'Attachments', rico: 'RICO',
       persons: 'Persons', gangs: 'Gangs', places: 'Places', network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector', media: 'Media Vault',
-      drive: 'CID General', records: 'Records', inbox: 'Sign-off Inbox', shifts: 'Shift Reports', audit: 'Audit Log',
+      drive: 'CID General', records: 'Records', inbox: 'My Desk', shifts: 'Shift Reports', audit: 'Audit Log',
     };
     const TAB_CATEGORY = {}; NAV_CATEGORIES.forEach((c) => c.tabs.forEach((t) => { TAB_CATEGORY[t] = c.id; }));
     const CAT_DEFAULT = {}; NAV_CATEGORIES.forEach((c) => { CAT_DEFAULT[c.id] = c.tabs[0]; });
@@ -753,14 +753,14 @@
         ? 'modal-card modal-slide relative ml-auto flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-white/10 bg-ink-850 shadow-glow'
         : `modal-card relative w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-ink-850 shadow-glow`, role:'dialog', 'aria-modal':'true', tabindex:'-1' });
       card.appendChild(node); backdrop.appendChild(card);
-      if (dismissible) backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeModal(); });
+      if (dismissible) backdrop.addEventListener('click', (e) => { if (e.target === backdrop) requestCloseModal(); });
       $('#modal-root').appendChild(backdrop); document.body.classList.add('overflow-hidden');
       document.addEventListener('keydown', modalKey);
       (focusable(card)[0] || card).focus();
     }
     function focusable(c) { return $$('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])', c).filter((n) => n.offsetParent !== null); }
     function modalKey(e) {
-      if (e.key === 'Escape') { e.preventDefault(); return modalOnClose ? modalOnClose() : closeModal(); }
+      if (e.key === 'Escape') { e.preventDefault(); requestCloseModal(true); return; }
       if (e.key !== 'Tab') return;
       const card = $('.modal-card'); if (!card) return; const f = focusable(card); if (!f.length) return;
       const first = f[0], last = f[f.length - 1];
@@ -768,10 +768,54 @@
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
     function closeModal() {
-      modalOnClose = null;
+      modalOnClose = null; Guard.clear();
       $('#modal-root').innerHTML = ''; document.removeEventListener('keydown', modalKey);
       if ($('#sidebar').classList.contains('-translate-x-full') || isDesktop()) document.body.classList.remove('overflow-hidden');
       if (lastFocused && document.contains(lastFocused)) lastFocused.focus(); lastFocused = null;
+    }
+
+    /* ---- Never-lose-work layer (Cluster 1) -----------------------------------
+     * Drafts: namespaced localStorage stash for in-progress forms/chat, so a
+     * crash or accidental close can be recovered. Guard: a single "is the open
+     * editor dirty?" check that gates modal close (× / Esc / backdrop) and the
+     * browser unload, prompting before unsaved work is lost. */
+    const Drafts = {
+      _k(key) { return 'cid-draft:' + key; },
+      save(key, data) { try { localStorage.setItem(this._k(key), JSON.stringify({ at: Date.now(), data })); } catch (e) {} },
+      load(key) { try { return JSON.parse(localStorage.getItem(this._k(key)) || 'null'); } catch (e) { return null; } },
+      clear(key) { try { localStorage.removeItem(this._k(key)); } catch (e) {} },
+    };
+    const Guard = {
+      _fn: null,
+      set(fn) { this._fn = typeof fn === 'function' ? fn : null; },
+      clear() { this._fn = null; },
+      dirty() { try { return !!(this._fn && this._fn()); } catch (e) { return false; } },
+      confirmDiscard() { return this.dirty() ? uiConfirm('You have unsaved changes here. Leave without saving?', { title: 'Unsaved changes', confirmText: 'Discard changes', cancelText: 'Keep editing' }) : Promise.resolve(true); },
+    };
+    window.addEventListener('beforeunload', (e) => { if (Guard.dirty()) { e.preventDefault(); e.returnValue = ''; } });
+    // Guarded close used by the backdrop / Esc paths: prompt if dirty, else close.
+    function requestCloseModal(viaOnClose) {
+      Guard.confirmDiscard().then((ok) => { if (!ok) return; Guard.clear(); if (viaOnClose && modalOnClose) modalOnClose(); else closeModal(); });
+    }
+
+    /* ---- Calm-under-pressure layer (Cluster 7) -------------------------------
+     * A persistent "offline — reconnecting…" banner so a dropped connection reads
+     * as a known state rather than a broken app, and withRetry() for one silent
+     * retry on transient (network-blip) failures. */
+    function setupConnectionWatch() {
+      const show = (online) => {
+        let b = document.getElementById('conn-banner');
+        if (online) { if (b) b.remove(); return; }
+        if (!b) { b = el('div', { id: 'conn-banner', class: 'fixed bottom-4 left-1/2 z-[80] -translate-x-1/2 rounded-full border border-amber-500/30 bg-amber-500/15 px-4 py-2 text-xs font-semibold text-amber-200 shadow-glow backdrop-blur' }, '⚠ Offline — reconnecting…'); document.body.appendChild(b); }
+      };
+      window.addEventListener('online', () => { show(true); toast('Back online', 'success'); });
+      window.addEventListener('offline', () => show(false));
+      if (!navigator.onLine) show(false);
+    }
+    async function withRetry(fn, tries = 2, delay = 600) {
+      let last;
+      for (let i = 0; i < tries; i++) { try { return await fn(); } catch (e) { last = e; if (i < tries - 1) await new Promise((r) => setTimeout(r, delay * (i + 1))); } }
+      throw last;
     }
 
     /* Themed replacements for the native window.confirm / window.prompt (which

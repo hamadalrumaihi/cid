@@ -7,6 +7,21 @@
     const DB = () => window.CIDDB;
     const dbReady = () => { const d = DB(); return !!(d && d.ready); };
     const caseStatusTint = (s) => s === 'closed' ? 'bg-slate-500/20 text-slate-300' : s === 'cold' ? 'bg-blue-500/15 text-blue-300' : s === 'active' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300';
+    // Plain-English "whose court is it in" for the case header — derived from the
+    // server-authoritative sign-off state + the viewer (no workflow change).
+    function caseCourtHint(c) {
+      const me = (DB() && DB().me) ? DB().me.id : null; const st = c.signoff_status || 'none';
+      const awaiting = st === 'awaiting_bureau_lead' || st === 'awaiting_deputy' || st === 'awaiting_director';
+      const iAmOwner = me && (c.signoff_submitted_by === me || c.lead_detective_id === me);
+      const stageLabel = (typeof SIGNOFF !== 'undefined' && SIGNOFF.label && SIGNOFF.label[c.signoff_stage]) || 'reviewer';
+      if (st === 'none') return null;
+      if (awaiting && me && c.signoff_assignee_id === me) return { t: '⚖️ Awaiting your decision', c: 'bg-blue-500/15 text-blue-300' };
+      if (st === 'approved_deputy' && iAmOwner) return { t: '⚖️ Your call — complete or escalate', c: 'bg-blue-500/15 text-blue-300' };
+      if ((st === 'changes_requested' || st === 'denied') && iAmOwner) return { t: '↩️ Sent back to you — revise & resubmit', c: 'bg-rose-500/15 text-rose-300' };
+      if (awaiting) return { t: '⏳ Waiting on ' + (officerName(c.signoff_assignee_id) || stageLabel), c: 'bg-amber-500/15 text-amber-300' };
+      if (st === 'approved' || st === 'completed') return { t: '✅ Approved', c: 'bg-emerald-500/15 text-emerald-300' };
+      return null;
+    }
     let casesCache = [];
     let CASE_TEMPLATES = [];   // command-editable quick-create presets (case_templates)
     async function fetchCaseTemplates() { if (!dbReady()) return; try { CASE_TEMPLATES = await DB().list('case_templates', { order: 'sort_order', ascending: true }); } catch (e) { CASE_TEMPLATES = []; } }
@@ -189,11 +204,12 @@
       if (!dbReady()) { casesNotice('Live case data requires sign-in. Configure Supabase + sign in to load cases.'); return; }
       $('#cases-live').classList.remove('hidden'); $('#cases-live').classList.add('inline-flex');
       try {
-        casesCache = await DB().list('cases', { order: 'updated_at', ascending: false });
+        // Auto-retry once on a transient blip before surfacing an error.
+        casesCache = await (typeof withRetry === 'function' ? withRetry(() => DB().list('cases', { order: 'updated_at', ascending: false })) : DB().list('cases', { order: 'updated_at', ascending: false }));
         renderCases();
         renderJumpBack();
         if (typeof refreshCaseSelects === 'function') refreshCaseSelects();
-      } catch (e) { casesNotice('Could not load cases: ' + escapeHTML(e.message || String(e))); }
+      } catch (e) { casesNotice('Could not load cases — check your connection and retry. (' + escapeHTML(e.message || String(e)) + ')'); }
     }
 
     // QoL: days since a case last moved; flag open/active cases gone quiet (≥14d).
@@ -445,7 +461,7 @@
       const c = detailCase, canEdit = DB() && DB().canEdit(), canDel = DB() && DB().canDelete();
       const tabs = ['overview', 'evidence', 'charges', 'rico', 'intel', 'reports', 'signoff', 'chat', 'timeline'];
       $('#case-detail').innerHTML = `
-        <button id="case-back" class="mb-4 inline-flex items-center gap-1 text-sm text-slate-300 transition hover:text-white">← All cases</button>
+        <div class="mb-4 flex items-center gap-1.5 text-sm text-slate-400"><button id="case-back" class="inline-flex items-center gap-1 text-slate-300 transition hover:text-white">← Cases</button><span class="text-slate-600">/</span><span class="font-mono text-blue-300">${escapeHTML(c.case_number)}</span><span class="text-slate-600">/</span><span class="capitalize text-slate-300">${escapeHTML(detailTab)}</span></div>
         <div class="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div><p class="flex items-center gap-1.5 font-mono text-sm text-blue-300">${escapeHTML(c.case_number)}<button id="case-copy" class="text-slate-500 transition hover:text-white" title="Copy case number">📋</button></p><h3 class="text-xl font-bold text-white">${escapeHTML(c.title || 'Untitled case')}</h3><p class="mt-1 text-sm text-slate-400">${escapeHTML(c.summary || '')}</p></div>
@@ -453,13 +469,16 @@
               ${canEdit ? `<select id="case-status" class="rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-[10px] font-semibold uppercase outline-none ${caseStatusTint(c.status)}" title="Quick status change">${['open', 'active', 'cold', 'closed'].map((s) => `<option value="${s}"${s === c.status ? ' selected' : ''}>${s}</option>`).join('')}</select>` : `<span class="rounded-md px-2.5 py-1 text-[10px] font-semibold uppercase ${caseStatusTint(c.status)}">${escapeHTML(c.status)}</span>`}
               ${c.signoff_status && c.signoff_status !== 'none' ? `<span class="rounded-md px-2.5 py-1 text-[10px] font-semibold ${signoffTint(c.signoff_status)}" title="Sign-off status">${escapeHTML(signoffLabel(c.signoff_status))}</span>` : ''}
               <span class="rounded-md bg-white/5 px-2.5 py-1 text-xs text-slate-300">${escapeHTML(c.bureau)}</span>
+              ${!canEdit ? '<span class="rounded-md bg-white/5 px-2.5 py-1 text-[10px] font-semibold uppercase text-slate-400" title="Your role can view this case but not edit it. Editing is limited to active members with write access.">👁 Read-only</span>' : ''}
               <button id="case-pin" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold transition hover:bg-white/10 ${isPinned(c.id) ? 'text-amber-300' : 'text-slate-200'}" title="Pin to Jump-back">${isPinned(c.id) ? '📌 Pinned' : '📌 Pin'}</button>
               <button id="case-link" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10" title="Copy a deep link to this case">🔗 Link</button>
+              ${(() => { const fu = c.follow_up_at; const due = fu && fu <= todayISO(); return `<button id="case-followup" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold transition hover:bg-white/10 ${due ? 'text-amber-300' : 'text-slate-200'}" title="Set a follow-up date for this case">📅 ${fu ? 'Follow-up ' + escapeHTML(fu) : 'Follow-up'}</button>`; })()}
               <button id="case-packet" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">📦 Packet .docx</button>
               ${canEdit ? '<button id="case-edit" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>' : ''}
               ${canDel ? '<button id="case-del" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>' : ''}
             </div>
           </div>
+          ${(() => { const h = caseCourtHint(c); return h ? `<div class="mt-3"><span class="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold ${h.c}">${h.t}</span></div>` : ''; })()}
           <div class="mt-5 flex gap-1 overflow-x-auto border-b border-white/5" id="detail-tabs">
             ${tabs.map((t) => `<button data-dt="${t}" class="detail-tab flex-shrink-0 border-b-2 px-4 py-2 text-sm font-medium capitalize transition ${t === detailTab ? 'border-badge-500 text-white' : 'border-transparent text-slate-400 hover:text-white'}">${t}</button>`).join('')}
           </div>
@@ -481,6 +500,7 @@
         else toast(url, 'info');
       };
       const pk = $('#case-packet'); if (pk) pk.onclick = () => exportCasePacket(detailCase);
+      const fub = $('#case-followup'); if (fub) fub.onclick = () => openFollowUpModal(detailCase);
       const eb = $('#case-edit'); if (eb) eb.onclick = () => openCaseModal(detailCase);
       const db = $('#case-del'); if (db) db.onclick = async () => {
         if (!(await uiConfirm('Delete case ' + detailCase.case_number + '? This cascades to its evidence/reports.', { confirmText: 'Delete case' }))) return;
@@ -488,6 +508,26 @@
         toast('Case deleted', 'warn'); showCasesList(); fetchCases();
       };
       $$('.detail-tab', $('#case-detail')).forEach((b) => b.onclick = () => { detailTab = b.dataset.dt; renderCaseDetailShell(); loadDetailTab(); });
+    }
+    // Per-case follow-up date (cases.follow_up_at) — surfaces on My Desk when due.
+    function openFollowUpModal(c) {
+      const canEdit = DB() && DB().canEdit();
+      const node = el('div', { class: 'p-6' });
+      node.innerHTML = `
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Follow-up date</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <p class="mb-3 text-xs text-slate-400">Set a date to revisit <span class="font-mono text-blue-300">${escapeHTML(c.case_number)}</span>. It appears on your My Desk when due, so you don't have to remember it.</p>
+        <input id="fu-date" type="date" value="${escapeHTML(c.follow_up_at || '')}" ${canEdit ? '' : 'disabled'} class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" />
+        ${canEdit ? `<div class="mt-5 flex gap-2"><button id="fu-save" class="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save</button>${c.follow_up_at ? '<button id="fu-clear" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Clear</button>' : ''}</div>` : ''}`;
+      node.querySelector('.close-x').onclick = closeModal;
+      const save = async (val) => {
+        const res = await DB().update('cases', c.id, { follow_up_at: val });
+        if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        c.follow_up_at = val; if (detailCase && detailCase.id === c.id) detailCase.follow_up_at = val;
+        closeModal(); toast(val ? 'Follow-up set for ' + val : 'Follow-up cleared', 'success'); renderCaseDetailShell(); if (typeof fetchCases === 'function') fetchCases();
+      };
+      const sv = node.querySelector('#fu-save'); if (sv) sv.onclick = () => save(node.querySelector('#fu-date').value || null);
+      const cl = node.querySelector('#fu-clear'); if (cl) cl.onclick = () => save(null);
+      openModal(node);
     }
     async function loadDetailTab() {
       const body = $('#detail-body'); const cid = detailCase.id; const canEdit = DB() && DB().canEdit();
@@ -526,6 +566,9 @@
             DB().list('evidence', { order: 'created_at', ascending: false, eq: { case_id: cid } }),
             DB().list('media', { order: 'created_at', ascending: false, eq: { case_id: cid } }).catch(() => []),
           ]);
+          // Which evidence items have a chain-of-custody entry (integrity hint).
+          let hasCustody = new Set();
+          if (ev.length) { try { const cust = await DB().from('custody_chain').select('evidence_id').in('evidence_id', ev.map((e) => e.id)).then((r) => r.data || []); hasCustody = new Set(cust.map((x) => x.evidence_id)); } catch (e) {} }
           const canUpload = canEdit && typeof fmConfigured === 'function' && fmConfigured();
           const mediaActions = canEdit ? `<div class="flex flex-wrap gap-2">
             ${canUpload ? '<button id="cmedia-upload" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">⬆ Upload photos</button>' : ''}
@@ -534,7 +577,7 @@
           </div>` : '';
           body.innerHTML = `
             <div class="mb-3 flex items-center justify-between"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Evidence (${ev.length})</h4>${canEdit ? '<button id="ev-new" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ Add Evidence</button>' : ''}</div>
-            <div class="space-y-3">${ev.length ? ev.map(evidenceCard).join('') : '<p class="text-sm text-slate-500">No evidence logged.</p>'}</div>
+            <div class="space-y-3">${ev.length ? ev.map((e) => evidenceCard(e, hasCustody.has(e.id))).join('') : '<p class="text-sm text-slate-500">No evidence logged.</p>'}</div>
             <div class="mt-8 mb-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-6"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Linked Media (${med.length})</h4>${mediaActions}</div>
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">${med.length ? med.map((m) => caseMediaCard(m, canEdit)).join('') : '<p class="text-sm text-slate-500">No media linked to this case. Upload photos, add a link, or attach one from the Media Vault.</p>'}</div>`;
           const nb = $('#ev-new'); if (nb) nb.onclick = () => openEvidenceModal(cid);
@@ -587,14 +630,20 @@
           events.push({ t: detailCase.created_at, label: 'Case opened', dot: 'emerald' });
           events.sort((a, b) => new Date(b.t) - new Date(a.t));
           const dot = { blue: 'bg-blue-400', violet: 'bg-violet-400', amber: 'bg-amber-400', emerald: 'bg-emerald-400', cyan: 'bg-cyan-400', slate: 'bg-slate-400' };
-          body.innerHTML = `<ul class="space-y-4">${events.map((e) => `<li class="flex gap-3"><span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${dot[e.dot] || 'bg-slate-400'}"></span><div><p class="text-sm text-slate-200">${escapeHTML(e.label)}</p><p class="text-[11px] text-slate-500">${e.t ? new Date(e.t).toLocaleString('en-US') : '—'}</p></div></li>`).join('')}</ul>`;
+          body.innerHTML = `<div class="mb-4 flex items-start gap-2 rounded-lg border border-white/5 bg-ink-900/60 px-3 py-2 text-[11px] text-slate-400"><span>🛡</span><span>Every action on this case (evidence, reports, custody, sign-off, chat) is recorded with who and when. This trail is your accountability record — it protects you as much as it documents the case.</span></div><ul class="space-y-4">${events.map((e) => `<li class="flex gap-3"><span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${dot[e.dot] || 'bg-slate-400'}"></span><div><p class="text-sm text-slate-200">${escapeHTML(e.label)}</p><p class="text-[11px] text-slate-500">${e.t ? new Date(e.t).toLocaleString('en-US') : '—'}</p></div></li>`).join('')}</ul>`;
         }
       } catch (e) { body.innerHTML = '<p class="text-sm text-rose-300">Load error: ' + escapeHTML(e.message || String(e)) + '</p>'; }
     }
-    function evidenceCard(e) {
+    function evidenceCard(e, hasCustody) {
       const tint = e.tamper === 'intact' ? 'text-emerald-300' : e.tamper === 'compromised' ? 'text-rose-300' : 'text-amber-300';
-      return `<div class="rounded-xl border border-white/10 bg-ink-900 p-4">
-        <div class="flex items-start justify-between gap-2"><div><p class="text-sm font-semibold text-white">${escapeHTML(e.description || e.item_code || 'Evidence')}</p><p class="text-[11px] text-slate-400">${escapeHTML(e.type || '—')}${e.item_code ? ' · ' + escapeHTML(e.item_code) : ''} · collected ${e.collected_at ? new Date(e.collected_at).toLocaleDateString('en-US') : '—'}</p></div><span class="rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${tint}">${escapeHTML(e.tamper)}</span></div>
+      // Integrity hints: flag a broken/unknown tamper state or a missing
+      // chain-of-custody so gaps are caught before DOJ, not after.
+      const risks = [];
+      if (e.tamper && e.tamper !== 'intact') risks.push(e.tamper === 'compromised' ? 'tamper: compromised' : 'tamper: ' + e.tamper);
+      if (hasCustody === false) risks.push('no chain-of-custody logged');
+      const riskChip = risks.length ? `<span class="rounded bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300" title="Integrity check">⚠ ${escapeHTML(risks.join(' · '))}</span>` : '';
+      return `<div class="rounded-xl border ${risks.length ? 'border-amber-500/25' : 'border-white/10'} bg-ink-900 p-4">
+        <div class="flex items-start justify-between gap-2"><div><p class="text-sm font-semibold text-white">${escapeHTML(e.description || e.item_code || 'Evidence')}</p><p class="text-[11px] text-slate-400">${escapeHTML(e.type || '—')}${e.item_code ? ' · ' + escapeHTML(e.item_code) : ''} · collected ${e.collected_at ? new Date(e.collected_at).toLocaleDateString('en-US') : '—'}</p>${riskChip ? '<div class="mt-1.5">' + riskChip + '</div>' : ''}</div><span class="rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${tint}">${escapeHTML(e.tamper)}</span></div>
         <div class="mt-2 flex gap-2"><button class="ev-custody rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10" data-id="${e.id}">Chain of custody</button>${(DB() && DB().canDelete()) ? `<button class="ev-del rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10" data-id="${e.id}">Delete</button>` : ''}</div>
       </div>`;
     }

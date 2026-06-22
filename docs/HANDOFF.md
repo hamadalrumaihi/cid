@@ -40,8 +40,20 @@
 
 ## Migrations applied to live `cid`
 - Earlier: `cid_records_lock`, `wave0_advisor_followup`, `documents_versions`, `case_charges`, `case_messages_edit_delete`.
-- This session: **`20260622120000_case_intel_links`** (polymorphic case↔intel join, RLS on `can_access_case`) · **`20260622130000_persons_properties`** (additive jsonb, inherits persons RLS).
+- This session: **`20260622120000_case_intel_links`** (polymorphic case↔intel join, RLS on `can_access_case`) · **`20260622130000_persons_properties`** (additive jsonb, inherits persons RLS) · **`20260622150000_cases_follow_up_at`** (additive date, inherits cases RLS).
 - In-repo **not yet applied:** none pending.
+
+## "Ease of mind" pass (claude/cid-rebuild — 9 commits, planned via 7-dimension AskUserQuestion)
+20 enhancements built across 7 peace-of-mind dimensions. Shared layers in core.js: `Drafts` (namespaced localStorage), `Guard` + `requestCloseModal` + `beforeunload` (unsaved-changes), `setupConnectionWatch` + `withRetry` (resilience).
+- **Never lose work:** form/report autosave + recovery banner, unsaved-changes guard, chat draft persistence, save-state feedback (drive.js/reports.js/collab.js).
+- **Know where you stand:** the inbox leaf is now **My Desk** (sign-off + overdue + due follow-ups + needs-attention + mentions + draft reports), whose-court header hint, broadened My Desk badge.
+- **Done right:** pre-sign-off completeness check (signoff.js), evidence integrity hints, report finalize validation (sensible-default required fields).
+- **Low cognitive load:** **Cmd/Ctrl-K command palette** (app.js `openPalette`), deep search extended to Drive docs + charges, case breadcrumb.
+- **Has your back:** pre-overdue aging chip, per-case follow-up dates, "Needs attention" nudges on My Desk.
+- **Won't get in trouble:** audit-transparency note on the timeline, read-only chip + role-capabilities tooltip (auth.js).
+- **Calm under pressure:** offline banner + auto-retry, friendlier load errors.
+- **Skipped by owner:** server-side report autosave, always-on readiness card, personal audit view, optimistic-UI.
+- **Tracked follow-ups:** full empty-state CTA audit (D4·c partial), full silent-`catch` sweep (D7·a partial — high-traffic loads done), optional pre-overdue *notification* (visual indicator shipped).
 
 ## Workflow that's been working
 - Build on a `claude/*` branch → commit per feature → push → owner opens/merges the PR to `main`. Production reflects `main`.

@@ -13,6 +13,7 @@
       const bell = $('#notif-bell'), badge = $('#notif-badge');
       if (bell) bell.classList.remove('hidden');
       if (badge) { badge.textContent = unread > 9 ? '9+' : String(unread); badge.classList.toggle('hidden', unread === 0); }
+      if (typeof updateSignoffBadge === 'function') updateSignoffBadge();   // My Desk badge counts unread mentions too
     }
     function openNotifications() {
       const node = el('div', { class: 'p-6' });
@@ -216,7 +217,7 @@
       openModal(node, { wide: true });
       const like = '%' + q + '%';
       const run = (tbl, cols, col) => DB().from(tbl).select('*').or(cols.map((c) => `${c}.ilike.${like}`).join(',')).limit(8).then((r) => r.data || []).catch(() => []);
-      const [cases, persons, gangs, places, narcotics, benches, footprints] = await Promise.all([
+      const [cases, persons, gangs, places, narcotics, benches, footprints, docs] = await Promise.all([
         run('cases', ['case_number', 'title', 'summary']),
         run('persons', ['name', 'alias', 'status']),
         run('gangs', ['name', 'colors', 'notes']),
@@ -224,7 +225,10 @@
         run('narcotics', ['name', 'classification']),
         run('ballistics_benches', ['name']),
         run('ballistic_footprints', ['signature', 'weapon']),
+        run('documents', ['name']),
       ]);
+      // Charges are static reference data — filter the in-memory penal catalog.
+      const charges = (typeof PENAL_CODE !== 'undefined' ? PENAL_CODE : []).filter((c) => (c.code + ' ' + c.title + ' ' + c.level + ' ' + (c.desc || '')).toLowerCase().includes(q.toLowerCase())).slice(0, 10);
       // Benches + footprints share the Ballistics section, distinguished by icon.
       const ballistics = benches.map((b) => ({ kind: 'bench', label: b.name, sub: b.tier ? 'Tier ' + b.tier + ' bench' : 'Weapon bench' }))
         .concat(footprints.map((f) => ({ kind: 'footprint', label: f.signature, sub: [f.weapon].filter(Boolean).join(' · ') || 'Ballistic footprint' })));
@@ -238,8 +242,10 @@
         sec('Places', places, (p) => goto('places', p.name, `📍 ${esc(p.name)} <span class="text-slate-500">${esc(p.area || '')}</span>`)),
         sec('Narcotics', narcotics, (n) => goto('narcotics', n.name, `💊 ${esc(n.name)}${n.classification ? ' <span class="text-slate-500">' + esc(n.classification) + '</span>' : ''}`)),
         sec('Ballistics', ballistics, (b) => goto('ballistics', '', `${b.kind === 'bench' ? '🔫' : '🧬'} ${esc(b.label || '')} <span class="text-slate-500">${esc(b.sub || '')}</span>`)),
+        sec('Drive documents', docs, (d) => goto('drive', '', `📄 ${esc(d.name)}`)),
+        sec('Charges', charges, (c) => `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm text-slate-200">⚖️ <span class="font-mono text-blue-300">${esc(c.code)}</span> ${esc(c.title)} <span class="text-slate-500">· ${esc(c.level)} · ${penalSentence(c.jail)}${c.fine != null ? ' · ' + fmtUSD(c.fine) : ''}</span></div>`),
       ].join('');
-      box.innerHTML = html || '<p class="text-sm text-slate-500">No matches across cases, persons, gangs, places, narcotics or ballistics.</p>';
+      box.innerHTML = html || '<p class="text-sm text-slate-500">No matches across cases, persons, gangs, places, narcotics, ballistics, Drive docs or charges.</p>';
       box.querySelectorAll('.sr-case').forEach((b) => b.onclick = () => { closeModal(); navigate('cases'); setTimeout(() => openCaseDetail(b.dataset.id), 120); });
       box.querySelectorAll('.sr-goto').forEach((b) => b.onclick = () => {
         closeModal(); navigate(b.dataset.tab);
@@ -248,10 +254,72 @@
       });
     }
 
+    /* ---- Command palette (Cmd/Ctrl-K): instant, keyboard-driven jump to any
+     * case / person / gang / place / narcotic / Drive doc / charge across the
+     * in-memory caches; recent cases when empty. Complements the deep server
+     * search on the top bar (Enter). ------------------------------------------ */
+    let palItems = [], palSel = 0;
+    function openPaletteCase(id) { closePalette(); navigate('cases'); setTimeout(() => openCaseDetail(id), 120); }
+    function paletteSources(q) {
+      const ql = q.toLowerCase(); const out = [];
+      const cc = (typeof casesCache !== 'undefined' ? casesCache : []);
+      const match = (s) => s && String(s).toLowerCase().includes(ql);
+      const push = (arr, max, fn) => arr.filter(Boolean).slice(0, max).forEach((x) => out.push(fn(x)));
+      if (!ql) {
+        const ids = [...new Set([...(typeof pinnedCaseIds === 'function' ? pinnedCaseIds() : []), ...(typeof recentCaseIds === 'function' ? recentCaseIds() : [])])];
+        push(ids.map((id) => cc.find((c) => c.id === id)), 8, (c) => ({ icon: '📁', label: c.case_number + ' · ' + (c.title || ''), sub: 'Recent case', act: () => openPaletteCase(c.id) }));
+        return out;
+      }
+      push(cc.filter((c) => match(c.case_number) || match(c.title) || match(c.summary)), 6, (c) => ({ icon: '📁', label: c.case_number + ' · ' + (c.title || ''), sub: 'Case', act: () => openPaletteCase(c.id) }));
+      push((typeof PERSONS !== 'undefined' ? PERSONS : []).filter((p) => match(p.name) || match(p.alias)), 6, (p) => ({ icon: '👤', label: p.name + (p.alias ? ' “' + p.alias + '”' : ''), sub: 'Person', act: () => { closePalette(); if (typeof openIntelProfile === 'function') openIntelProfile('person', p.id); } }));
+      push((typeof GANGS !== 'undefined' ? GANGS : []).filter((g) => match(g.name)), 5, (g) => ({ icon: '🚩', label: g.name, sub: 'Gang', act: () => { closePalette(); if (typeof openIntelProfile === 'function') openIntelProfile('gang', g.id); } }));
+      push((typeof PLACES !== 'undefined' ? PLACES : []).filter((p) => match(p.name) || match(p.area)), 5, (p) => ({ icon: '📍', label: p.name, sub: 'Place' + (p.area ? ' · ' + p.area : ''), act: () => { closePalette(); navigate('places'); } }));
+      push((typeof DRUGS !== 'undefined' ? DRUGS : []).filter((d) => match(d.name) || match(d.classification)), 4, (d) => ({ icon: '💊', label: d.name, sub: 'Narcotic', act: () => { closePalette(); navigate('narcotics'); } }));
+      push((typeof DOCS !== 'undefined' ? DOCS : []).filter((d) => match(d.name)), 5, (d) => ({ icon: '📄', label: d.name, sub: 'Drive document', act: () => { closePalette(); navigate('drive'); } }));
+      push((typeof PENAL_CODE !== 'undefined' ? PENAL_CODE : []).filter((c) => match(c.code) || match(c.title)), 6, (c) => ({ icon: '⚖️', label: c.code + ' · ' + c.title, sub: 'Charge · ' + c.level, act: () => { closePalette(); toast(c.code + ' ' + c.title + ' — ' + c.level + ' · ' + penalSentence(c.jail) + (c.fine != null ? ' · ' + fmtUSD(c.fine) : ''), 'info'); } }));
+      push((typeof BENCHES_CACHE !== 'undefined' ? BENCHES_CACHE : []).filter((b) => match(b.name)), 3, (b) => ({ icon: '🔫', label: b.name, sub: 'Ballistics bench', act: () => { closePalette(); navigate('ballistics'); } }));
+      return out;
+    }
+    function renderPalette(q) {
+      palItems = paletteSources(q); palSel = 0;
+      const list = $('#cmdk-list'); if (!list) return;
+      list.innerHTML = palItems.length
+        ? palItems.map((it, i) => `<button class="cmdk-row flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${i === palSel ? 'bg-blue-500/15 text-white' : 'text-slate-200 hover:bg-white/5'}" data-i="${i}"><span>${it.icon}</span><span class="min-w-0 flex-1 truncate">${esc(it.label)}</span><span class="flex-shrink-0 text-[11px] text-slate-500">${esc(it.sub || '')}</span></button>`).join('')
+        : `<p class="px-3 py-6 text-center text-sm text-slate-500">${q ? 'No matches.' : 'Type to search, or open a recent case.'}</p>`;
+      $$('.cmdk-row', list).forEach((b) => b.onclick = () => { const it = palItems[+b.dataset.i]; if (it) it.act(); });
+    }
+    function palMove(d) {
+      if (!palItems.length) return; palSel = (palSel + d + palItems.length) % palItems.length;
+      const list = $('#cmdk-list'); $$('.cmdk-row', list).forEach((b, i) => { b.classList.toggle('bg-blue-500/15', i === palSel); b.classList.toggle('text-white', i === palSel); });
+      const sel = list.querySelector(`.cmdk-row[data-i="${palSel}"]`); if (sel) sel.scrollIntoView({ block: 'nearest' });
+    }
+    function closePalette() { const c = $('#cmdk'); if (c) c.remove(); }
+    function openPalette() {
+      if ($('#cmdk')) return;
+      if (!dbReady()) { const b = $('#global-search'); if (b) b.focus(); return; }
+      const back = el('div', { id: 'cmdk', class: 'fixed inset-0 z-[60] flex items-start justify-center bg-ink-950/70 p-4 pt-[12vh] backdrop-blur-sm' });
+      const panel = el('div', { class: 'w-full max-w-xl overflow-hidden rounded-2xl border border-white/10 bg-ink-850 shadow-glow' });
+      panel.innerHTML = `<input id="cmdk-input" type="text" placeholder="Search cases, people, gangs, places, charges, docs…" class="w-full border-b border-white/10 bg-transparent px-4 py-3 text-sm text-white outline-none" autocomplete="off" />
+        <div id="cmdk-list" class="max-h-[55vh] overflow-y-auto p-1.5"></div>
+        <div class="border-t border-white/10 px-3 py-1.5 text-[10px] text-slate-500">↑↓ navigate · ↵ open · esc close</div>`;
+      back.appendChild(panel); document.body.appendChild(back);
+      const input = $('#cmdk-input');
+      input.addEventListener('input', () => renderPalette(input.value.trim()));
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') { e.preventDefault(); palMove(1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); palMove(-1); }
+        else if (e.key === 'Enter') { e.preventDefault(); const it = palItems[palSel]; if (it) it.act(); }
+        else if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
+      });
+      back.addEventListener('click', (e) => { if (e.target === back) closePalette(); });
+      renderPalette(''); input.focus();
+    }
+
     /* ============================================================ 13. CLOCK + BOOT ============================================================ */
     function tickClock() { $('#clock').textContent = 'Secure link · ' + new Date().toLocaleTimeString('en-US', { hour12:false }); }
 
     function init() {
+      if (typeof setupConnectionWatch === 'function') setupConnectionWatch();
       wireDrawer(); wireCollapse(); wireAllImports();
       // Central command
       renderKPIs(); renderTickets(); renderActivity(); renderBureauLoad();
@@ -322,6 +390,10 @@
         const t = e.target, tag = t && t.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
         const box = $('#global-search'); if (box) { e.preventDefault(); box.focus(); box.select(); }
+      });
+      // Cmd/Ctrl-K opens the instant command palette anywhere.
+      document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openPalette(); }
       });
     }
     document.addEventListener('DOMContentLoaded', init);
