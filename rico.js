@@ -72,10 +72,25 @@
       try { evidence = await DB().list('evidence', { eq: { case_id: caseId } }); } catch (e) {}
       const node = el('div', { class: 'p-6' });
       const evOpts = ['<option value="">— none / use text below —</option>'].concat(evidence.map((ev) => `<option value="${ev.id}">${esc((ev.item_code ? ev.item_code + ' · ' : '') + (ev.description || ev.type || 'evidence'))}</option>`)).join('');
+      // Predicate type → the FULL San Andreas Penal Code catalog, grouped by Title,
+      // with RICO-eligible charges surfaced in a group on top. Falls back to the
+      // legacy shortlist only if the penal catalog isn't loaded.
+      const PENAL_TITLE_NAMES = { '1': 'Title 1 · Against the Person', '2': 'Title 2 · Property', '3': 'Title 3 · Public Safety & Order', '4': 'Title 4 · Against Justice', '5': 'Title 5 · Firearms & Weapons', '6': 'Title 6 · Public Health', '7': 'Title 7 · Wildlife', '8': 'Title 8 · Commercial Vehicles', '9': 'Title 9 · Traffic', '10': 'Title 10 · RICO' };
+      const penalCat = (typeof PENAL_CODE !== 'undefined' ? PENAL_CODE : []);
+      let prTypeOpts;
+      if (penalCat.length) {
+        const optEl = (c) => `<option value="${esc(c.code + ' ' + c.title)}">${esc(c.code)} · ${esc(c.title)}${c.rico ? ' · ★RICO' : ''}</option>`;
+        const groups = {}; penalCat.forEach((c) => { const t = (c.code.match(/\((\d+)\)/) || [])[1] || '?'; (groups[t] = groups[t] || []).push(c); });
+        const ricoOnes = penalCat.filter((c) => c.rico);
+        prTypeOpts = (ricoOnes.length ? `<optgroup label="★ RICO-eligible predicates">${ricoOnes.map(optEl).join('')}</optgroup>` : '')
+          + Object.keys(groups).sort((a, b) => (+a) - (+b)).map((t) => `<optgroup label="${esc(PENAL_TITLE_NAMES[t] || ('Title ' + t))}">${groups[t].map(optEl).join('')}</optgroup>`).join('');
+      } else {
+        prTypeOpts = RICO_PREDICATES.map((p) => `<option>${esc(p)}</option>`).join('');
+      }
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Add Predicate Act</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="space-y-3">
-          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Predicate Type *</label><select id="pr-type" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">${RICO_PREDICATES.map((p) => `<option>${esc(p)}</option>`).join('')}</select></div>
+          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Predicate Type *</label><select id="pr-type" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">${prTypeOpts}</select></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Date of Act *</label><input id="pr-date" type="date" value="${todayISO()}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Link Case Evidence</label><select id="pr-evid" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">${evOpts}</select><p class="mt-1 text-[10px] text-slate-500">${evidence.length ? evidence.length + ' evidence item(s) on this case.' : 'No evidence on this case yet — add some in the Case Detail.'}</p></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Evidence Reference (if not linking above)</label><input id="pr-ev" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Surveillance Log #2" /></div>
