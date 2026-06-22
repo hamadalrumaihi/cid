@@ -319,6 +319,7 @@
     function tickClock() { $('#clock').textContent = 'Secure link · ' + new Date().toLocaleTimeString('en-US', { hour12:false }); }
 
     function init() {
+      if (typeof setupConnectionWatch === 'function') setupConnectionWatch();
       wireDrawer(); wireCollapse(); wireAllImports();
       // Central command
       renderKPIs(); renderTickets(); renderActivity(); renderBureauLoad();

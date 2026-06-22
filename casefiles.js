@@ -204,11 +204,12 @@
       if (!dbReady()) { casesNotice('Live case data requires sign-in. Configure Supabase + sign in to load cases.'); return; }
       $('#cases-live').classList.remove('hidden'); $('#cases-live').classList.add('inline-flex');
       try {
-        casesCache = await DB().list('cases', { order: 'updated_at', ascending: false });
+        // Auto-retry once on a transient blip before surfacing an error.
+        casesCache = await (typeof withRetry === 'function' ? withRetry(() => DB().list('cases', { order: 'updated_at', ascending: false })) : DB().list('cases', { order: 'updated_at', ascending: false }));
         renderCases();
         renderJumpBack();
         if (typeof refreshCaseSelects === 'function') refreshCaseSelects();
-      } catch (e) { casesNotice('Could not load cases: ' + escapeHTML(e.message || String(e))); }
+      } catch (e) { casesNotice('Could not load cases — check your connection and retry. (' + escapeHTML(e.message || String(e)) + ')'); }
     }
 
     // QoL: days since a case last moved; flag open/active cases gone quiet (≥14d).

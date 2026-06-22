@@ -798,6 +798,26 @@
       Guard.confirmDiscard().then((ok) => { if (!ok) return; Guard.clear(); if (viaOnClose && modalOnClose) modalOnClose(); else closeModal(); });
     }
 
+    /* ---- Calm-under-pressure layer (Cluster 7) -------------------------------
+     * A persistent "offline — reconnecting…" banner so a dropped connection reads
+     * as a known state rather than a broken app, and withRetry() for one silent
+     * retry on transient (network-blip) failures. */
+    function setupConnectionWatch() {
+      const show = (online) => {
+        let b = document.getElementById('conn-banner');
+        if (online) { if (b) b.remove(); return; }
+        if (!b) { b = el('div', { id: 'conn-banner', class: 'fixed bottom-4 left-1/2 z-[80] -translate-x-1/2 rounded-full border border-amber-500/30 bg-amber-500/15 px-4 py-2 text-xs font-semibold text-amber-200 shadow-glow backdrop-blur' }, '⚠ Offline — reconnecting…'); document.body.appendChild(b); }
+      };
+      window.addEventListener('online', () => { show(true); toast('Back online', 'success'); });
+      window.addEventListener('offline', () => show(false));
+      if (!navigator.onLine) show(false);
+    }
+    async function withRetry(fn, tries = 2, delay = 600) {
+      let last;
+      for (let i = 0; i < tries; i++) { try { return await fn(); } catch (e) { last = e; if (i < tries - 1) await new Promise((r) => setTimeout(r, delay * (i + 1))); } }
+      throw last;
+    }
+
     /* Themed replacements for the native window.confirm / window.prompt (which
      * can't be styled). Promise-based; rendered as a top-layer overlay (inline
      * z-index above the modal at z-50) so they stack over an open modal without
