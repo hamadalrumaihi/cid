@@ -1041,6 +1041,7 @@
         DB().subscribe('audit_log', fetchActivity);
         DB().subscribe('notifications', fetchNotifications);
         DB().subscribe('case_signoff_history', () => { if (typeof detailCase !== 'undefined' && detailCase && detailTab === 'signoff') loadDetailTab(); });
+        DB().subscribe('case_intel_links', () => { if (typeof detailCase !== 'undefined' && detailCase && detailTab === 'intel') loadDetailTab(); });
         DB().subscribe('case_templates', fetchCaseTemplates);
         if (typeof fetchCaseFiles === 'function') DB().subscribe('case_files', fetchCaseFiles);
         if (typeof fetchShifts === 'function') DB().subscribe('shift_reports', fetchShifts);
