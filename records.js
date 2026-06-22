@@ -119,7 +119,7 @@
         return `<div><label class="mb-1 block text-xs font-semibold text-slate-400">${f.label}${req}</label><input data-k="${f.key}" value="${esc(v)}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>`;
       };
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Record</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Record</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">${REC_FIELDS.map(field).join('')}</div>
         <button id="rec-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">${record ? 'Save changes' : 'Create record'}</button>`;
       node.querySelector('.close-x').onclick = closeModal;

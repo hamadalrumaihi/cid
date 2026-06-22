@@ -63,7 +63,7 @@
       const node = el('div', { class: 'p-6' });
       const caseOpts = ['<option value="">— none —</option>'].concat(casesCache.map((c) => `<option value="${c.id}" ${c.id === b.case_id ? 'selected' : ''}>${escapeHTML(c.case_number)}</option>`)).join('');
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Weapon Bench</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Weapon Bench</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input data-k="name" value="${escapeHTML(b.name || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Bench Type</label><select data-k="bench_type" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option value="street" ${b.bench_type === 'street' ? 'selected' : ''}>Street Gang</option><option value="organized" ${b.bench_type === 'organized' ? 'selected' : ''}>Organized Crime</option></select></div>
@@ -97,7 +97,7 @@
       const gangOpts = ['<option value="">— none —</option>'].concat(GANGS.map((g) => `<option value="${g.id}" ${g.id === l.gang_id ? 'selected' : ''}>${escapeHTML(g.name)}</option>`)).join('');
       const caseOpts = ['<option value="">— none —</option>'].concat(casesCache.map((c) => `<option value="${c.id}" ${c.id === l.case_id ? 'selected' : ''}>${escapeHTML(c.case_number)}</option>`)).join('');
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Ballistic Footprint</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Ballistic Footprint</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="space-y-3">
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Signature *</label><input data-k="signature" value="${escapeHTML(l.signature || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-sm text-white outline-none focus:border-badge-500" placeholder="BLSTC-77-A · 9mm striations" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Weapon</label><input data-k="weapon" value="${escapeHTML(l.weapon || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>

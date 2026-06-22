@@ -67,7 +67,7 @@
       const c = record || {};
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Commendation</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Commendation</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="space-y-3">
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Title *</label><input data-k="title" value="${esc(c.title || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Recipient</label><input data-k="recipient_name" value="${esc(c.recipient_name || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="Officer name" /></div>
@@ -172,7 +172,7 @@
         : isVid ? `<video src="${esc(src)}" controls autoplay playsinline class="max-h-[70vh] w-full rounded-lg bg-black"></video>`
         : isAud ? `<div class="rounded-lg bg-ink-800 p-6"><audio src="${esc(src)}" controls autoplay class="w-full"></audio></div>`
         : `<iframe src="${esc(safeUrl(src))}" title="${esc(m.title)}" class="h-[70vh] w-full rounded-lg bg-black"></iframe>`;
-      node.innerHTML = `<div class="mb-3 flex items-center justify-between"><p class="text-sm font-semibold text-white">${esc(m.title)}</p><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>${body}<div class="mt-3 flex items-center justify-between gap-2"><div class="flex flex-wrap gap-1">${mediaTagChips(m)}</div>${src ? `<a href="${esc(safeUrl(src))}" target="_blank" rel="noopener" class="flex-shrink-0 text-xs text-blue-300 underline">Open ↗</a>` : ''}</div>`;
+      node.innerHTML = `<div class="mb-3 flex items-center justify-between"><p class="text-sm font-semibold text-white">${esc(m.title)}</p><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>${body}<div class="mt-3 flex items-center justify-between gap-2"><div class="flex flex-wrap gap-1">${mediaTagChips(m)}</div>${src ? `<a href="${esc(safeUrl(src))}" target="_blank" rel="noopener" class="flex-shrink-0 text-xs text-blue-300 underline">Open ↗</a>` : ''}</div>`;
       node.querySelector('.close-x').onclick = closeModal;
       openModal(node, { wide: true });
     }
@@ -202,7 +202,7 @@
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
-        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Edit Tags</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Edit Tags</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <p class="mb-3 truncate text-xs text-slate-400">${esc(m.title || 'Untitled')}</p>
         ${mediaTagsFieldHTML('met-tags', mediaLabels(m))}
         <button id="met-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save tags</button>`;
@@ -225,7 +225,7 @@
       const caseOpts = ['<option value="">— none —</option>'].concat(casesCache.map((c) => `<option value="${c.id}">${esc(c.case_number)}</option>`)).join('');
       const gangOpts = ['<option value="">— none —</option>'].concat(GANGS.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`)).join('');
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Ingest Media Asset</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Ingest Media Asset</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="space-y-3">
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Title *</label><input id="md-title" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Dashcam — Vinewood pursuit" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Source Type</label><select id="md-type" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500"><option value="image">Direct Image URL</option><option value="video">MP4 Video Link</option><option value="fivemanage">FiveManage CDN Embed</option></select></div>

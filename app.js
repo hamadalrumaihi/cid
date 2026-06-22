@@ -18,7 +18,7 @@
     function openNotifications() {
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
-        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Notifications</h3><div class="flex items-center gap-2">${NOTIFS.some((n) => !n.read) ? '<button id="notif-readall" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 hover:bg-white/10">Mark all read</button>' : ''}<button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Notifications</h3><div class="flex items-center gap-2">${NOTIFS.some((n) => !n.read) ? '<button id="notif-readall" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 hover:bg-white/10">Mark all read</button>' : ''}<button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
         <div class="space-y-2">${NOTIFS.length ? NOTIFS.map((n) => {
           const p = n.payload || {};
           const detail = p.case_number || p.tracker_code || p.target;
@@ -74,7 +74,7 @@
       if (!p) return;
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Manage Officer</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Manage Officer</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <p class="mb-3 text-[11px] text-slate-500">${esc(p.email || '')}</p>
         <div class="mb-3 grid grid-cols-2 gap-3">
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Display Name</label><input id="adm-name" value="${esc(p.display_name || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
@@ -188,7 +188,7 @@
       if (!c) return;
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
-        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Export Case Packet</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Export Case Packet</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <p class="mb-4 text-sm text-slate-400">${esc(c.case_number)} — includes the case, all evidence, reports, media and RICO predicates.</p>
         <div class="grid grid-cols-3 gap-2">
           <button data-fmt="docx" class="pk-fmt rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm font-semibold text-white transition hover:bg-white/10">📄<br>.docx</button>
@@ -212,7 +212,7 @@
     async function supaSearch(q) {
       if (!dbReady()) { toast('Sign in to search.', 'warn'); return; }
       const node = el('div', { class: 'p-6' });
-      node.innerHTML = `<div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Search “${esc(q)}”</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div><div id="search-results" class="space-y-4"><p class="text-sm text-slate-500">Searching…</p></div>`;
+      node.innerHTML = `<div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Search “${esc(q)}”</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div><div id="search-results" class="space-y-4"><p class="text-sm text-slate-500">Searching…</p></div>`;
       node.querySelector('.close-x').onclick = closeModal;
       openModal(node, { wide: true });
       const like = '%' + q + '%';

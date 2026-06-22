@@ -138,7 +138,7 @@
       const heading = kind === 'initial' ? tpl.name : kind === 'supplemental' ? `Supplemental #${seq}` : `Follow-up #${seq}`;
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><div><p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">${esc(tpl.name)}</p><h3 class="text-xl font-bold text-white">${esc(heading)}</h3></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><div><p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">${esc(tpl.name)}</p><h3 class="text-xl font-bold text-white">${esc(heading)}</h3></div><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         ${parentId ? `<p class="mb-4 rounded-lg border border-white/10 bg-ink-900 p-2.5 text-xs text-slate-400">↳ Linked as ${kind} to a prior report on <span class="font-mono text-blue-300">${esc(caseNumById(caseId) || caseId)}</span>.</p>` : ''}
         <div class="mb-3 flex flex-wrap items-center gap-1.5"><span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Insert snippet:</span>${REPORT_SNIPPETS.map((s, i) => `<button type="button" class="rpt-snippet rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 transition hover:bg-white/10" data-i="${i}">${esc(s.label)}</button>`).join('')}</div>
         <div id="r-people" class="mb-3 hidden"></div>
@@ -190,7 +190,7 @@
         props.forEach((pr) => {
           const addr = (pr.address || '').trim(); if (!addr || seen.has(addr.toLowerCase())) return; seen.add(addr.toLowerCase());
           let row = $$('tr', tb).find((tr) => $$('input[data-fkey], select[data-fkey]', tr).every((i) => !i.value.trim()));
-          if (!row) { const cells = sec.cols.map((col) => `<td class="border-b border-r border-white/5 p-1.5 align-top">${formCellInput({ key: col.key, type: col.type, opts: col.opts }, '', true)}</td>`).join(''); tb.insertAdjacentHTML('beforeend', `<tr>${cells}<td class="border-b border-white/5 p-1.5 text-center align-middle"><button class="grid-del text-slate-500 hover:text-rose-300" title="Remove row">✕</button></td></tr>`); row = tb.lastElementChild; }
+          if (!row) { const cells = sec.cols.map((col) => `<td class="border-b border-r border-white/5 p-1.5 align-top">${formCellInput({ key: col.key, type: col.type, opts: col.opts }, '', true)}</td>`).join(''); tb.insertAdjacentHTML('beforeend', `<tr>${cells}<td class="border-b border-white/5 p-1.5 text-center align-middle"><button aria-label="Remove row" class="grid-del text-slate-500 hover:text-rose-300" title="Remove row">✕</button></td></tr>`); row = tb.lastElementChild; }
           const vals = { address: addr, type: pr.type || '', notes: pr.notes || '' };
           sec.cols.forEach((col) => { const i = row.querySelector(`[data-fkey="${col.key}"]`); if (i && vals[col.key] != null) i.value = vals[col.key]; });
         });
@@ -284,7 +284,7 @@
       const sig = r.signature || null; const canFinalize = DB() && DB().canEdit() && !r.finalized;
       const node = el('div', { class: 'p-6 print-area' });
       node.innerHTML = `
-        <div class="mb-4 flex items-start justify-between no-print"><h3 class="text-lg font-bold text-white">Report Preview</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-4 flex items-start justify-between no-print"><h3 class="text-lg font-bold text-white">Report Preview</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="rounded-xl border border-white/10 bg-ink-900 p-5">
           <p class="text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-300/70">Criminal Investigation Division — State of San Andreas</p>
           <h2 class="mt-1 text-center text-xl font-bold text-white">${esc(reportTitle(r))}</h2>
@@ -345,7 +345,7 @@
       const node = el('div', { class: 'p-6' });
       const me = DB().me || {};
       node.innerHTML = `
-        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Finalize &amp; e-Sign</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Finalize &amp; e-Sign</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <p class="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">Finalizing locks the report against further edits and attaches your electronic signature. The signer is recorded server-side from your CID account — it cannot be changed here.</p>
         <div class="space-y-3">
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Officer (from your CID profile)</label><input id="fin-officer" value="${esc(me.display_name || '')}" readonly class="w-full cursor-not-allowed rounded-lg border border-white/10 bg-ink-800 px-3 py-2 font-[cursive] text-base text-blue-200 outline-none" /></div>
