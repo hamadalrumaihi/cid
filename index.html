@@ -556,18 +556,18 @@
         <section id="view-feedback" class="view">
           <div class="mb-5 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
             <h3 class="text-xl font-bold text-white">💡 Feedback</h3>
-            <p class="text-sm text-slate-400">Private to you — jot down feature ideas and bugs as they come up, then track them to done.</p>
+            <p id="fb-intro" class="text-sm text-slate-400">Suggest a feature or report a bug — your note goes straight to the CID dev team.</p>
           </div>
           <div class="mb-5 rounded-2xl border border-white/5 bg-ink-900/60 p-5">
             <div class="flex flex-wrap items-center gap-3">
               <select id="fb-kind" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">
-                <option value="feature">💡 Feature</option>
-                <option value="bug">🐞 Bug</option>
+                <option value="feature" style="background-color:#0f172a;color:#fff">💡 Feature</option>
+                <option value="bug" style="background-color:#0f172a;color:#fff">🐞 Bug</option>
               </select>
               <input id="fb-title" placeholder="Short title…" class="min-w-[14rem] flex-1 rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" />
             </div>
             <textarea id="fb-details" rows="3" placeholder="Details (optional) — steps to reproduce, context, what you'd want…" class="mt-3 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500"></textarea>
-            <button id="fb-add" class="mt-3 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">+ Add</button>
+            <button id="fb-add" class="mt-3 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Submit</button>
           </div>
           <div id="feedback-list" class="space-y-3"></div>
         </section>
