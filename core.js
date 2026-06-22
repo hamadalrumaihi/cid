@@ -424,6 +424,22 @@
       if (m) { const sch = m[1].toLowerCase(); return (sch === 'http' || sch === 'https' || sch === 'mailto') ? s : ''; }
       return s; // protocol-relative (//host) or relative path is safe
     };
+    // Shared double-submit guard: blocks a second click on a record-saving button
+    // while the first click's async handler is still in flight, preventing
+    // duplicate inserts. Targets primary submit buttons only (id ends in -save,
+    // plus a small allow-list / opt-in [data-guard-submit]); steppers, add-row,
+    // pagination and other rapid-click controls are untouched. The flag is set
+    // synchronously so a fast second click is suppressed before its onclick runs.
+    (function () {
+      const isSubmit = (b) => b && b.id && (/-save$/.test(b.id) || b.id === 'gen' || b.id === 'fb-add' || b.hasAttribute('data-guard-submit'));
+      document.addEventListener('click', function (e) {
+        const b = e.target && e.target.closest && e.target.closest('button');
+        if (!isSubmit(b)) return;
+        if (b.dataset.busy === '1') { e.preventDefault(); e.stopImmediatePropagation(); return; }
+        b.dataset.busy = '1';
+        setTimeout(function () { b.dataset.busy = '0'; }, 1500);
+      }, true);
+    })();
     // One-click copy to clipboard with a confirmation toast.
     function copyText(text, label) {
       const t = String(text == null ? '' : text);
@@ -563,7 +579,7 @@
       const node = el('div', { class: 'p-6' });
       const cols = cfg.allow.map((k) => k + ((cfg.required || []).includes(k) ? '*' : '')).join(', ');
       node.innerHTML = `
-        <div class="mb-4 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Import ${esc(cfg.label)}</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Import ${esc(cfg.label)}</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <p class="mb-2 text-xs text-slate-400">Paste a <b>JSON array</b> of objects or <b>CSV</b> with a header row, or pick a <b>.csv / .xlsx</b> file. Columns (<span class="text-rose-300">*</span> required): <span class="font-mono text-blue-300">${esc(cols)}</span></p>
         <button id="imp-tpl" class="mb-2 text-xs font-semibold text-blue-300 transition hover:text-blue-200">⬇ Download CSV template</button>
         <input id="imp-file" type="file" accept=".csv,.json,.xlsx,.xls,text/csv,application/json" class="mb-2 block w-full text-xs text-slate-400 file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-white" />
