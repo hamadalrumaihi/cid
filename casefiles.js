@@ -7,6 +7,21 @@
     const DB = () => window.CIDDB;
     const dbReady = () => { const d = DB(); return !!(d && d.ready); };
     const caseStatusTint = (s) => s === 'closed' ? 'bg-slate-500/20 text-slate-300' : s === 'cold' ? 'bg-blue-500/15 text-blue-300' : s === 'active' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300';
+    // Plain-English "whose court is it in" for the case header — derived from the
+    // server-authoritative sign-off state + the viewer (no workflow change).
+    function caseCourtHint(c) {
+      const me = (DB() && DB().me) ? DB().me.id : null; const st = c.signoff_status || 'none';
+      const awaiting = st === 'awaiting_bureau_lead' || st === 'awaiting_deputy' || st === 'awaiting_director';
+      const iAmOwner = me && (c.signoff_submitted_by === me || c.lead_detective_id === me);
+      const stageLabel = (typeof SIGNOFF !== 'undefined' && SIGNOFF.label && SIGNOFF.label[c.signoff_stage]) || 'reviewer';
+      if (st === 'none') return null;
+      if (awaiting && me && c.signoff_assignee_id === me) return { t: '⚖️ Awaiting your decision', c: 'bg-blue-500/15 text-blue-300' };
+      if (st === 'approved_deputy' && iAmOwner) return { t: '⚖️ Your call — complete or escalate', c: 'bg-blue-500/15 text-blue-300' };
+      if ((st === 'changes_requested' || st === 'denied') && iAmOwner) return { t: '↩️ Sent back to you — revise & resubmit', c: 'bg-rose-500/15 text-rose-300' };
+      if (awaiting) return { t: '⏳ Waiting on ' + (officerName(c.signoff_assignee_id) || stageLabel), c: 'bg-amber-500/15 text-amber-300' };
+      if (st === 'approved' || st === 'completed') return { t: '✅ Approved', c: 'bg-emerald-500/15 text-emerald-300' };
+      return null;
+    }
     let casesCache = [];
     let CASE_TEMPLATES = [];   // command-editable quick-create presets (case_templates)
     async function fetchCaseTemplates() { if (!dbReady()) return; try { CASE_TEMPLATES = await DB().list('case_templates', { order: 'sort_order', ascending: true }); } catch (e) { CASE_TEMPLATES = []; } }
@@ -460,6 +475,7 @@
               ${canDel ? '<button id="case-del" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>' : ''}
             </div>
           </div>
+          ${(() => { const h = caseCourtHint(c); return h ? `<div class="mt-3"><span class="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold ${h.c}">${h.t}</span></div>` : ''; })()}
           <div class="mt-5 flex gap-1 overflow-x-auto border-b border-white/5" id="detail-tabs">
             ${tabs.map((t) => `<button data-dt="${t}" class="detail-tab flex-shrink-0 border-b-2 px-4 py-2 text-sm font-medium capitalize transition ${t === detailTab ? 'border-badge-500 text-white' : 'border-transparent text-slate-400 hover:text-white'}">${t}</button>`).join('')}
           </div>

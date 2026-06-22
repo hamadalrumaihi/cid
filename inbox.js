@@ -47,7 +47,14 @@
       return INBOX_CACHE;
     }
 
-    function inboxActionCount() { return INBOX_CACHE.review.length + INBOX_CACHE.bounced.length; }
+    // My Desk needs-attention count: sign-off actions + unread mentions + my overdue cases.
+    function inboxActionCount() {
+      const me = (DB() && DB().me) ? DB().me.id : null;
+      const mentions = (typeof NOTIFS !== 'undefined' ? NOTIFS : []).filter((n) => !n.read && n.type === 'chat_mention').length;
+      const inSignoff = new Set([...INBOX_CACHE.review, ...INBOX_CACHE.bounced, ...INBOX_CACHE.mine].map((c) => c.id));
+      const overdue = me ? (typeof casesCache !== 'undefined' ? casesCache : []).filter((c) => c.lead_detective_id === me && inboxIsOverdue(c) && !inSignoff.has(c.id)).length : 0;
+      return INBOX_CACHE.review.length + INBOX_CACHE.bounced.length + mentions + overdue;
+    }
 
     function updateSignoffBadge() {
       const n = inboxActionCount();
@@ -64,7 +71,9 @@
         ? (st === 'approved_deputy' ? 'Your call — complete or escalate' : 'Awaiting your decision (' + (SIGNOFF.label[c.signoff_stage] || 'review') + ')')
         : kind === 'bounced'
           ? (st === 'denied' ? 'Denied — revise & resubmit' : 'Changes requested — revise & resubmit')
-          : 'Awaiting: ' + (escapeHTML(officerName(c.signoff_assignee_id) || '—'));
+          : kind === 'overdue'
+            ? 'Overdue — no movement in ' + age + ' days'
+            : 'Awaiting: ' + (escapeHTML(officerName(c.signoff_assignee_id) || '—'));
       const btnLabel = kind === 'review' ? 'Review →' : kind === 'bounced' ? 'Open & fix →' : 'Open →';
       const card = el('div', { class: 'rounded-2xl border border-white/5 bg-ink-900/60 p-4 ' + (overdue ? 'ring-1 ring-rose-500/30' : '') });
       card.innerHTML = `
@@ -106,14 +115,74 @@
       body.innerHTML = '<p class="text-sm text-slate-500">Loading…</p>';
       const { review, bounced, mine } = await fetchInbox();
       updateSignoffBadge();
+      const me = DB().me.id;
+      const inSignoff = new Set([...review, ...bounced, ...mine].map((c) => c.id));
+      // My overdue cases (I'm the lead), not already surfaced in a sign-off bucket.
+      const myOverdue = (typeof casesCache !== 'undefined' ? casesCache : [])
+        .filter((c) => c.lead_detective_id === me && inboxIsOverdue(c) && !inSignoff.has(c.id))
+        .sort((a, b) => inboxAge(b) - inboxAge(a));
+      // Unread @mentions + my unfinalized report drafts.
+      const mentions = (typeof NOTIFS !== 'undefined' ? NOTIFS : []).filter((n) => !n.read && n.type === 'chat_mention');
+      let myDrafts = [];
+      try { myDrafts = await DB().from('reports').select('*').eq('author_id', me).eq('finalized', false).then((r) => r.data || []); } catch (e) {}
+
       body.innerHTML = '';
-      if (!review.length && !bounced.length && !mine.length) {
-        body.innerHTML = '<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">✅ Your sign-off inbox is clear — nothing awaiting you and no submissions in flight.</div>';
+      if (!review.length && !bounced.length && !mine.length && !myOverdue.length && !mentions.length && !myDrafts.length) {
+        body.innerHTML = '<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">✅ All clear — nothing waiting on you. No sign-off actions, overdue cases, unread mentions, or open drafts.</div>';
         return;
       }
-      body.appendChild(inboxSection('Awaiting your decision', review, 'review', 'Nothing is waiting on your sign-off right now.'));
-      body.appendChild(inboxSection('Sent back to you', bounced, 'bounced', 'No cases have been returned to you.'));
-      body.appendChild(inboxSection('Your submissions in progress', mine, 'mine', 'You have no cases moving through the chain.'));
+      const chip = (n, label, tint) => n ? `<span class="rounded-full px-2.5 py-1 text-xs font-semibold ${tint}">${n} ${label}</span>` : '';
+      const summary = el('div', { class: 'flex flex-wrap gap-2' });
+      summary.innerHTML = [
+        chip(review.length, 'to review', 'bg-blue-500/15 text-blue-300'),
+        chip(bounced.length, 'sent back', 'bg-rose-500/15 text-rose-300'),
+        chip(myOverdue.length, 'overdue', 'bg-amber-500/15 text-amber-300'),
+        chip(mentions.length, 'mentions', 'bg-violet-500/15 text-violet-300'),
+        chip(myDrafts.length, 'draft reports', 'bg-emerald-500/15 text-emerald-300'),
+        chip(mine.length, 'in progress', 'bg-white/5 text-slate-300'),
+      ].filter(Boolean).join('');
+      body.appendChild(summary);
+      if (review.length) body.appendChild(inboxSection('Awaiting your decision', review, 'review', ''));
+      if (bounced.length) body.appendChild(inboxSection('Sent back to you', bounced, 'bounced', ''));
+      if (myOverdue.length) body.appendChild(inboxSection('Your overdue cases', myOverdue, 'overdue', ''));
+      if (mentions.length) body.appendChild(deskMentions(mentions));
+      if (myDrafts.length) body.appendChild(deskDrafts(myDrafts));
+      if (mine.length) body.appendChild(inboxSection('Your submissions in progress', mine, 'mine', ''));
+    }
+
+    // My Desk extras: unread @mentions and my unfinalized report drafts as
+    // clickable next-actions (open the case on the right tab). Reuses inbox cards
+    // for cases; these two are not case-shaped, so they get their own rows.
+    async function openDeskCaseTab(caseId, tab) {
+      navigate('cases'); await openCaseDetail(caseId);
+      if (typeof detailTab !== 'undefined' && typeof detailCase !== 'undefined' && detailCase && detailCase.id === caseId) { detailTab = tab; renderCaseDetailShell(); loadDetailTab(); }
+    }
+    function deskMentions(list) {
+      const wrap = el('div', {});
+      wrap.innerHTML = `<div class="mb-2"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Unread mentions <span class="ml-1 text-slate-500">(${list.length})</span></h4></div>`;
+      const grid = el('div', { class: 'space-y-2' });
+      list.forEach((n) => {
+        const p = n.payload || {};
+        const card = el('div', { class: 'flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-ink-900/60 p-3' });
+        card.innerHTML = `<div class="min-w-0"><p class="truncate text-sm text-slate-200">💬 ${escapeHTML(p.reason || 'You were mentioned')}</p><p class="text-[11px] text-slate-500">${p.case_number ? escapeHTML(p.case_number) + ' · ' : ''}${timeAgo(n.created_at)}</p></div>${p.case_id ? `<button class="desk-mention flex-shrink-0 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110" data-case="${p.case_id}" data-notif="${n.id}">Open →</button>` : ''}`;
+        const b = card.querySelector('.desk-mention'); if (b) b.onclick = async () => { try { await DB().update('notifications', b.dataset.notif, { read: true }); } catch (e) {} if (typeof fetchNotifications === 'function') fetchNotifications(); openDeskCaseTab(b.dataset.case, 'chat'); };
+        grid.appendChild(card);
+      });
+      wrap.appendChild(grid); return wrap;
+    }
+    function deskDrafts(list) {
+      const wrap = el('div', {});
+      wrap.innerHTML = `<div class="mb-2"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Your draft reports <span class="ml-1 text-slate-500">(${list.length})</span></h4></div>`;
+      const grid = el('div', { class: 'space-y-2' });
+      list.forEach((r) => {
+        const caseNo = (typeof caseNumById === 'function' && caseNumById(r.case_id)) || '';
+        const tpl = (typeof tplById === 'function') && tplById(r.template);
+        const card = el('div', { class: 'flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-ink-900/60 p-3' });
+        card.innerHTML = `<div class="min-w-0"><p class="truncate text-sm text-slate-200">📝 ${escapeHTML((tpl && tpl.name) || 'Report')} <span class="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-300">draft</span></p><p class="text-[11px] text-slate-500">${caseNo ? escapeHTML(caseNo) + ' · ' : ''}${timeAgo(r.created_at)}</p></div><button class="desk-draft flex-shrink-0 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110" data-case="${r.case_id}">Open →</button>`;
+        card.querySelector('.desk-draft').onclick = () => openDeskCaseTab(r.case_id, 'reports');
+        grid.appendChild(card);
+      });
+      wrap.appendChild(grid); return wrap;
     }
 
     async function openInboxCase(id) {

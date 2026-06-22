@@ -13,6 +13,7 @@
       const bell = $('#notif-bell'), badge = $('#notif-badge');
       if (bell) bell.classList.remove('hidden');
       if (badge) { badge.textContent = unread > 9 ? '9+' : String(unread); badge.classList.toggle('hidden', unread === 0); }
+      if (typeof updateSignoffBadge === 'function') updateSignoffBadge();   // My Desk badge counts unread mentions too
     }
     function openNotifications() {
       const node = el('div', { class: 'p-6' });
