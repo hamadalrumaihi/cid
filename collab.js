@@ -209,6 +209,10 @@
       // composer state
       const pendingMentions = []; const pendingLinks = [];
       const tokensEl = body.querySelector('#chat-tokens'), input = body.querySelector('#chat-input');
+      // Persist a half-typed message per case so it survives refresh / tab switch.
+      const chatDraftKey = 'chat:' + c.id;
+      { const cd = (typeof Drafts !== 'undefined') && Drafts.load(chatDraftKey); if (cd && cd.data && !input.value) input.value = cd.data; }
+      input.addEventListener('input', () => { if (typeof Drafts === 'undefined') return; if (input.value.trim()) Drafts.save(chatDraftKey, input.value); else Drafts.clear(chatDraftKey); });
       const renderTokens = () => { tokensEl.innerHTML = pendingMentions.map((m) => `<span class="rounded bg-blue-500/10 px-1.5 py-0.5 text-[11px] text-blue-300">@${esc(m.name)}</span>`).join(' ') + ' ' + pendingLinks.map((l) => `<span class="rounded bg-violet-500/10 px-1.5 py-0.5 text-[11px] text-violet-300">🔗 ${esc(l.label)}</span>`).join(' '); };
       body.querySelector('#chat-mention').onchange = (e) => { if (!e.target.value) return; const [id, name] = e.target.value.split('|'); if (!pendingMentions.find((m) => m.id === id)) { pendingMentions.push({ id, name }); input.value = (input.value + ' @' + name + ' ').trimStart(); renderTokens(); } e.target.value = ''; input.focus(); };
       body.querySelector('#chat-link').onchange = (e) => { if (!e.target.value) return; const [id, label] = e.target.value.split('|'); if (!pendingLinks.find((l) => l.id === id)) { pendingLinks.push({ type: 'case', id, label }); renderTokens(); } e.target.value = ''; };
@@ -220,6 +224,7 @@
         if (res.error) { toast('Send failed: ' + res.error.message, 'danger'); return; }
         for (const m of pendingMentions) { if (m.id !== DB().me.id && typeof notify === 'function') await notify(m.id, 'chat_mention', { case_id: c.id, case_number: c.case_number, detective: DB().me.display_name, reason: DB().me.display_name + ' mentioned you in the ' + c.case_number + ' channel.' }); }
         input.value = ''; pendingMentions.length = 0; pendingLinks.length = 0; renderTokens();
+        if (typeof Drafts !== 'undefined') Drafts.clear(chatDraftKey);
         if (typeof detailCase !== 'undefined' && detailCase && detailCase.id === c.id) loadDetailTab();
       };
       body.querySelector('#chat-send').onclick = send;

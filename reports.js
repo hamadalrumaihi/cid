@@ -146,8 +146,23 @@
         <div class="max-h-[60vh] overflow-y-auto pr-1" id="r-form">${renderFormBody(tpl.schema, reportSeed(templateId, caseId, kind), true)}</div>
         <label class="mt-4 flex items-center gap-2 text-xs text-slate-300"><input id="r-addppl" type="checkbox" checked class="h-3.5 w-3.5 accent-blue-500" /> Add any new names to the Persons registry on save</label>
         <button id="r-save" class="mt-3 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save Report to Case</button>`;
-      node.querySelector('.close-x').onclick = closeModal;
-      wireFormBody(node.querySelector('#r-form'), tpl.schema);
+      node.querySelector('.close-x').onclick = () => requestCloseModal(true); // unsaved-changes guard
+      const rform = node.querySelector('#r-form');
+      wireFormBody(rform, tpl.schema);
+      // Never-lose-work: guard close + autosave this new report draft for recovery.
+      const reportDraftKey = `report:${caseId}:${templateId}:${kind || 'initial'}`;
+      let rBaseline = JSON.stringify(readForm(node, tpl.schema));
+      Guard.set(() => JSON.stringify(readForm(node, tpl.schema)) !== rBaseline);
+      rform.addEventListener('input', debounce(() => { if (JSON.stringify(readForm(node, tpl.schema)) !== rBaseline) Drafts.save(reportDraftKey, readForm(node, tpl.schema)); }, 800));
+      { const dr = Drafts.load(reportDraftKey);
+        if (dr && dr.data && JSON.stringify(dr.data) !== rBaseline) {
+          const banner = el('div', { class: 'mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100' });
+          banner.innerHTML = `<span>↩️ Unsaved report draft from ${new Date(dr.at).toLocaleString('en-GB')}.</span><span class="flex gap-2"><button id="rdr-restore" class="rounded-md bg-amber-500/80 px-2 py-0.5 font-semibold text-ink-950 transition hover:bg-amber-400">Restore</button><button id="rdr-discard" class="rounded-md border border-white/15 px-2 py-0.5 font-semibold text-amber-100 transition hover:bg-white/10">Discard</button></span>`;
+          rform.parentElement.insertBefore(banner, rform);
+          banner.querySelector('#rdr-restore').onclick = () => { rform.innerHTML = renderFormBody(tpl.schema, dr.data, true); banner.remove(); };
+          banner.querySelector('#rdr-discard').onclick = () => { Drafts.clear(reportDraftKey); banner.remove(); };
+        }
+      }
       // Person-name fields: track focus + recommend this case's known suspects.
       let lastPerson = node.querySelector('#r-form input[data-person]');
       node.querySelectorAll('#r-form input[data-person]').forEach((i) => i.addEventListener('focus', () => { lastPerson = i; }));
@@ -199,6 +214,7 @@
           for (const n of fresh) { const r = await DB().insert('persons', { name: n, status: 'POI', notes: 'Auto-added from a report on ' + (caseNumById(caseId) || 'a case') + '.' }); if (!(r && r.error)) added++; }
           if (added) { if (typeof fetchPersons === 'function') fetchPersons(); toast(added + ' new person' + (added === 1 ? '' : 's') + ' added to the registry', 'info'); }
         }
+        Drafts.clear(reportDraftKey); Guard.clear();
         closeModal(); toast(`${heading} saved`, 'success'); reloadCaseReports();
       };
       openModal(node, { wide: true });

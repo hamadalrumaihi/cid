@@ -344,17 +344,40 @@
         </div>`;
       const body = node.querySelector('#form-body');
       const back = backToFolder(doc, meta);
-      node.querySelector('.close-x').onclick = back;
+      const draftKey = 'form:' + doc.id;
+      node.querySelector('.close-x').onclick = () => requestCloseModal(true); // routes through the unsaved guard
       node.querySelector('#d-print').onclick = () => window.print();
       const fHist = node.querySelector('#d-hist'); if (fHist) fHist.onclick = () => openDocHistory(doc, meta);
       wireFormBody(body, schema);
       const saveBtn = node.querySelector('#d-save');
+      let baseline = editable ? JSON.stringify(readForm(node, schema)) : null;
+      const setSaveState = (txt, cls) => { const s = node.querySelector('#d-savestate'); if (s) { s.textContent = txt; s.className = 'self-center text-[11px] ' + (cls || 'text-slate-400'); } };
+      if (editable) {
+        saveBtn.insertAdjacentHTML('afterend', '<span id="d-savestate" class="self-center text-[11px] text-slate-400"></span>');
+        // Unsaved-changes guard (× / Esc / browser unload all check this).
+        Guard.set(() => JSON.stringify(readForm(node, schema)) !== baseline);
+        // Local autosave: debounced stash for crash / accidental-close recovery.
+        const autosave = debounce(() => { if (JSON.stringify(readForm(node, schema)) !== baseline) { Drafts.save(draftKey, readForm(node, schema)); setSaveState('Draft saved locally · ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })); } }, 800);
+        body.addEventListener('input', autosave);
+        // Recovery: a newer local draft that differs from the saved copy → offer restore.
+        const draft = Drafts.load(draftKey);
+        if (draft && draft.data && JSON.stringify(draft.data) !== baseline) {
+          const banner = el('div', { class: 'no-print mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100' });
+          banner.innerHTML = `<span>↩️ Unsaved draft found from ${new Date(draft.at).toLocaleString('en-GB')}.</span><span class="flex gap-2"><button id="dr-restore" class="rounded-md bg-amber-500/80 px-2 py-0.5 font-semibold text-ink-950 transition hover:bg-amber-400">Restore</button><button id="dr-discard" class="rounded-md border border-white/15 px-2 py-0.5 font-semibold text-amber-100 transition hover:bg-white/10">Discard</button></span>`;
+          body.parentElement.insertBefore(banner, body);
+          banner.querySelector('#dr-restore').onclick = () => { body.innerHTML = renderFormBody(schema, draft.data, editable); $$('[data-person]', body).forEach(showPersonPropsHint); banner.remove(); setSaveState('Draft restored — review and Save', 'text-amber-300'); };
+          banner.querySelector('#dr-discard').onclick = () => { Drafts.clear(draftKey); banner.remove(); };
+        }
+      }
       if (saveBtn) saveBtn.onclick = async () => {
+        setSaveState('Saving…', 'text-slate-300');
         const content = { view: 'form', form: schemaId, values: readForm(node, schema) };
         const label = new Date().toLocaleDateString('en-GB');
         const res = await DB().update('documents', doc.id, { content, modified_label: label });
-        if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        if (res.error) { setSaveState('Save failed — retry', 'text-rose-300'); toast('Save failed: ' + res.error.message, 'danger'); return; }
         await captureDocVersion(doc.id, { name: doc.name, kind: doc.kind, content, modified_label: label });
+        baseline = JSON.stringify(content.values); Drafts.clear(draftKey); Guard.clear();
+        setSaveState('Saved ✓', 'text-emerald-300');
         toast(`"${doc.name}" saved`, 'success');
         await fetchDocuments();
         const fresh = DOCS.find((x) => x.id === doc.id); if (fresh) openFormDocument(fresh, meta, schemaId);

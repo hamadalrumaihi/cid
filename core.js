@@ -753,14 +753,14 @@
         ? 'modal-card modal-slide relative ml-auto flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-white/10 bg-ink-850 shadow-glow'
         : `modal-card relative w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-ink-850 shadow-glow`, role:'dialog', 'aria-modal':'true', tabindex:'-1' });
       card.appendChild(node); backdrop.appendChild(card);
-      if (dismissible) backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeModal(); });
+      if (dismissible) backdrop.addEventListener('click', (e) => { if (e.target === backdrop) requestCloseModal(); });
       $('#modal-root').appendChild(backdrop); document.body.classList.add('overflow-hidden');
       document.addEventListener('keydown', modalKey);
       (focusable(card)[0] || card).focus();
     }
     function focusable(c) { return $$('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])', c).filter((n) => n.offsetParent !== null); }
     function modalKey(e) {
-      if (e.key === 'Escape') { e.preventDefault(); return modalOnClose ? modalOnClose() : closeModal(); }
+      if (e.key === 'Escape') { e.preventDefault(); requestCloseModal(true); return; }
       if (e.key !== 'Tab') return;
       const card = $('.modal-card'); if (!card) return; const f = focusable(card); if (!f.length) return;
       const first = f[0], last = f[f.length - 1];
@@ -768,10 +768,34 @@
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     }
     function closeModal() {
-      modalOnClose = null;
+      modalOnClose = null; Guard.clear();
       $('#modal-root').innerHTML = ''; document.removeEventListener('keydown', modalKey);
       if ($('#sidebar').classList.contains('-translate-x-full') || isDesktop()) document.body.classList.remove('overflow-hidden');
       if (lastFocused && document.contains(lastFocused)) lastFocused.focus(); lastFocused = null;
+    }
+
+    /* ---- Never-lose-work layer (Cluster 1) -----------------------------------
+     * Drafts: namespaced localStorage stash for in-progress forms/chat, so a
+     * crash or accidental close can be recovered. Guard: a single "is the open
+     * editor dirty?" check that gates modal close (× / Esc / backdrop) and the
+     * browser unload, prompting before unsaved work is lost. */
+    const Drafts = {
+      _k(key) { return 'cid-draft:' + key; },
+      save(key, data) { try { localStorage.setItem(this._k(key), JSON.stringify({ at: Date.now(), data })); } catch (e) {} },
+      load(key) { try { return JSON.parse(localStorage.getItem(this._k(key)) || 'null'); } catch (e) { return null; } },
+      clear(key) { try { localStorage.removeItem(this._k(key)); } catch (e) {} },
+    };
+    const Guard = {
+      _fn: null,
+      set(fn) { this._fn = typeof fn === 'function' ? fn : null; },
+      clear() { this._fn = null; },
+      dirty() { try { return !!(this._fn && this._fn()); } catch (e) { return false; } },
+      confirmDiscard() { return this.dirty() ? uiConfirm('You have unsaved changes here. Leave without saving?', { title: 'Unsaved changes', confirmText: 'Discard changes', cancelText: 'Keep editing' }) : Promise.resolve(true); },
+    };
+    window.addEventListener('beforeunload', (e) => { if (Guard.dirty()) { e.preventDefault(); e.returnValue = ''; } });
+    // Guarded close used by the backdrop / Esc paths: prompt if dirty, else close.
+    function requestCloseModal(viaOnClose) {
+      Guard.confirmDiscard().then((ok) => { if (!ok) return; Guard.clear(); if (viaOnClose && modalOnClose) modalOnClose(); else closeModal(); });
     }
 
     /* Themed replacements for the native window.confirm / window.prompt (which
