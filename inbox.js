@@ -53,8 +53,11 @@
       const me = (DB() && DB().me) ? DB().me.id : null;
       const mentions = (typeof NOTIFS !== 'undefined' ? NOTIFS : []).filter((n) => !n.read && n.type === 'chat_mention').length;
       const inSignoff = new Set([...INBOX_CACHE.review, ...INBOX_CACHE.bounced, ...INBOX_CACHE.mine].map((c) => c.id));
-      const overdue = me ? (typeof casesCache !== 'undefined' ? casesCache : []).filter((c) => c.lead_detective_id === me && inboxIsOverdue(c) && !inSignoff.has(c.id)).length : 0;
-      return INBOX_CACHE.review.length + INBOX_CACHE.bounced.length + mentions + overdue;
+      const cc = (typeof casesCache !== 'undefined' ? casesCache : []);
+      const overdue = me ? cc.filter((c) => c.lead_detective_id === me && inboxIsOverdue(c) && !inSignoff.has(c.id)).length : 0;
+      const today = (typeof todayISO === 'function') ? todayISO() : new Date().toISOString().slice(0, 10);
+      const followUps = me ? cc.filter((c) => c.lead_detective_id === me && c.status !== 'closed' && c.follow_up_at && c.follow_up_at <= today).length : 0;
+      return INBOX_CACHE.review.length + INBOX_CACHE.bounced.length + mentions + overdue + followUps;
     }
 
     function updateSignoffBadge() {
@@ -127,9 +130,27 @@
       let myDrafts = [];
       try { myDrafts = await DB().from('reports').select('*').eq('author_id', me).eq('finalized', false).then((r) => r.data || []); } catch (e) {}
 
+      // My open lead cases → due follow-ups + soft "needs attention" nudges.
+      const today = (typeof todayISO === 'function') ? todayISO() : new Date().toISOString().slice(0, 10);
+      const myOpen = (typeof casesCache !== 'undefined' ? casesCache : []).filter((c) => c.lead_detective_id === me && c.status !== 'closed');
+      const followUps = myOpen.filter((c) => c.follow_up_at && c.follow_up_at <= today).sort((a, b) => (a.follow_up_at < b.follow_up_at ? -1 : 1));
+      let evSet = new Set(), repSet = new Set(); const openIds = myOpen.map((c) => c.id);
+      if (openIds.length) {
+        try { evSet = new Set((await DB().from('evidence').select('case_id').in('case_id', openIds).then((r) => r.data || [])).map((x) => x.case_id)); } catch (e) {}
+        try { repSet = new Set((await DB().from('reports').select('case_id').in('case_id', openIds).then((r) => r.data || [])).map((x) => x.case_id)); } catch (e) {}
+      }
+      const needs = [];
+      myOpen.forEach((c) => {
+        if (inSignoff.has(c.id)) return;
+        const reasons = [];
+        if (evSet.has(c.id) && !repSet.has(c.id)) reasons.push('evidence logged, no report yet');
+        if ((Array.isArray(c.charges) ? c.charges.length : 0) && (c.signoff_status || 'none') === 'none') reasons.push('charges attached, not submitted for sign-off');
+        if (reasons.length) needs.push({ c: c, reasons: reasons });
+      });
+
       body.innerHTML = '';
-      if (!review.length && !bounced.length && !mine.length && !myOverdue.length && !mentions.length && !myDrafts.length) {
-        body.innerHTML = '<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">✅ All clear — nothing waiting on you. No sign-off actions, overdue cases, unread mentions, or open drafts.</div>';
+      if (!review.length && !bounced.length && !mine.length && !myOverdue.length && !mentions.length && !myDrafts.length && !followUps.length && !needs.length) {
+        body.innerHTML = '<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">✅ All clear — nothing waiting on you. No sign-off actions, overdue cases, follow-ups, mentions, or open drafts.</div>';
         return;
       }
       const chip = (n, label, tint) => n ? `<span class="rounded-full px-2.5 py-1 text-xs font-semibold ${tint}">${n} ${label}</span>` : '';
@@ -137,7 +158,9 @@
       summary.innerHTML = [
         chip(review.length, 'to review', 'bg-blue-500/15 text-blue-300'),
         chip(bounced.length, 'sent back', 'bg-rose-500/15 text-rose-300'),
+        chip(followUps.length, 'follow-ups due', 'bg-cyan-500/15 text-cyan-300'),
         chip(myOverdue.length, 'overdue', 'bg-amber-500/15 text-amber-300'),
+        chip(needs.length, 'need attention', 'bg-amber-500/15 text-amber-300'),
         chip(mentions.length, 'mentions', 'bg-violet-500/15 text-violet-300'),
         chip(myDrafts.length, 'draft reports', 'bg-emerald-500/15 text-emerald-300'),
         chip(mine.length, 'in progress', 'bg-white/5 text-slate-300'),
@@ -145,10 +168,38 @@
       body.appendChild(summary);
       if (review.length) body.appendChild(inboxSection('Awaiting your decision', review, 'review', ''));
       if (bounced.length) body.appendChild(inboxSection('Sent back to you', bounced, 'bounced', ''));
+      if (followUps.length) body.appendChild(deskFollowUps(followUps, today));
       if (myOverdue.length) body.appendChild(inboxSection('Your overdue cases', myOverdue, 'overdue', ''));
+      if (needs.length) body.appendChild(deskNeeds(needs));
       if (mentions.length) body.appendChild(deskMentions(mentions));
       if (myDrafts.length) body.appendChild(deskDrafts(myDrafts));
       if (mine.length) body.appendChild(inboxSection('Your submissions in progress', mine, 'mine', ''));
+    }
+    function deskFollowUps(list, today) {
+      const wrap = el('div', {});
+      wrap.innerHTML = `<div class="mb-2"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Follow-ups due <span class="ml-1 text-slate-500">(${list.length})</span></h4></div>`;
+      const grid = el('div', { class: 'space-y-2' });
+      list.forEach((c) => {
+        const overdue = c.follow_up_at < today;
+        const card = el('div', { class: 'flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-ink-900/60 p-3' });
+        card.innerHTML = `<div class="min-w-0"><p class="truncate text-sm text-slate-200">📅 <span class="font-mono text-blue-300">${escapeHTML(c.case_number || '—')}</span> ${escapeHTML(c.title || '')}</p><p class="text-[11px] ${overdue ? 'text-amber-300' : 'text-slate-500'}">Follow up by ${escapeHTML(c.follow_up_at)}${overdue ? ' · past due' : ' · today'}</p></div><button class="desk-fu flex-shrink-0 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110" data-case="${c.id}">Open →</button>`;
+        card.querySelector('.desk-fu').onclick = () => openDeskCaseTab(c.id, 'overview');
+        grid.appendChild(card);
+      });
+      wrap.appendChild(grid); return wrap;
+    }
+    function deskNeeds(list) {
+      const wrap = el('div', {});
+      wrap.innerHTML = `<div class="mb-2"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Needs attention <span class="ml-1 text-slate-500">(${list.length})</span></h4></div>`;
+      const grid = el('div', { class: 'space-y-2' });
+      list.forEach((n) => {
+        const c = n.c;
+        const card = el('div', { class: 'flex items-center justify-between gap-3 rounded-xl border border-amber-500/15 bg-ink-900/60 p-3' });
+        card.innerHTML = `<div class="min-w-0"><p class="truncate text-sm text-slate-200"><span class="font-mono text-blue-300">${escapeHTML(c.case_number || '—')}</span> ${escapeHTML(c.title || '')}</p><p class="text-[11px] text-amber-300">⚠ ${escapeHTML(n.reasons.join(' · '))}</p></div><button class="desk-need flex-shrink-0 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110" data-case="${c.id}">Open →</button>`;
+        card.querySelector('.desk-need').onclick = () => openDeskCaseTab(c.id, 'overview');
+        grid.appendChild(card);
+      });
+      wrap.appendChild(grid); return wrap;
     }
 
     // My Desk extras: unread @mentions and my unfinalized report drafts as

@@ -472,6 +472,7 @@
               ${!canEdit ? '<span class="rounded-md bg-white/5 px-2.5 py-1 text-[10px] font-semibold uppercase text-slate-400" title="Your role can view this case but not edit it. Editing is limited to active members with write access.">👁 Read-only</span>' : ''}
               <button id="case-pin" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold transition hover:bg-white/10 ${isPinned(c.id) ? 'text-amber-300' : 'text-slate-200'}" title="Pin to Jump-back">${isPinned(c.id) ? '📌 Pinned' : '📌 Pin'}</button>
               <button id="case-link" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10" title="Copy a deep link to this case">🔗 Link</button>
+              ${(() => { const fu = c.follow_up_at; const due = fu && fu <= todayISO(); return `<button id="case-followup" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold transition hover:bg-white/10 ${due ? 'text-amber-300' : 'text-slate-200'}" title="Set a follow-up date for this case">📅 ${fu ? 'Follow-up ' + escapeHTML(fu) : 'Follow-up'}</button>`; })()}
               <button id="case-packet" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">📦 Packet .docx</button>
               ${canEdit ? '<button id="case-edit" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>' : ''}
               ${canDel ? '<button id="case-del" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>' : ''}
@@ -499,6 +500,7 @@
         else toast(url, 'info');
       };
       const pk = $('#case-packet'); if (pk) pk.onclick = () => exportCasePacket(detailCase);
+      const fub = $('#case-followup'); if (fub) fub.onclick = () => openFollowUpModal(detailCase);
       const eb = $('#case-edit'); if (eb) eb.onclick = () => openCaseModal(detailCase);
       const db = $('#case-del'); if (db) db.onclick = async () => {
         if (!(await uiConfirm('Delete case ' + detailCase.case_number + '? This cascades to its evidence/reports.', { confirmText: 'Delete case' }))) return;
@@ -506,6 +508,26 @@
         toast('Case deleted', 'warn'); showCasesList(); fetchCases();
       };
       $$('.detail-tab', $('#case-detail')).forEach((b) => b.onclick = () => { detailTab = b.dataset.dt; renderCaseDetailShell(); loadDetailTab(); });
+    }
+    // Per-case follow-up date (cases.follow_up_at) — surfaces on My Desk when due.
+    function openFollowUpModal(c) {
+      const canEdit = DB() && DB().canEdit();
+      const node = el('div', { class: 'p-6' });
+      node.innerHTML = `
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Follow-up date</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <p class="mb-3 text-xs text-slate-400">Set a date to revisit <span class="font-mono text-blue-300">${escapeHTML(c.case_number)}</span>. It appears on your My Desk when due, so you don't have to remember it.</p>
+        <input id="fu-date" type="date" value="${escapeHTML(c.follow_up_at || '')}" ${canEdit ? '' : 'disabled'} class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" />
+        ${canEdit ? `<div class="mt-5 flex gap-2"><button id="fu-save" class="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save</button>${c.follow_up_at ? '<button id="fu-clear" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Clear</button>' : ''}</div>` : ''}`;
+      node.querySelector('.close-x').onclick = closeModal;
+      const save = async (val) => {
+        const res = await DB().update('cases', c.id, { follow_up_at: val });
+        if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        c.follow_up_at = val; if (detailCase && detailCase.id === c.id) detailCase.follow_up_at = val;
+        closeModal(); toast(val ? 'Follow-up set for ' + val : 'Follow-up cleared', 'success'); renderCaseDetailShell(); if (typeof fetchCases === 'function') fetchCases();
+      };
+      const sv = node.querySelector('#fu-save'); if (sv) sv.onclick = () => save(node.querySelector('#fu-date').value || null);
+      const cl = node.querySelector('#fu-clear'); if (cl) cl.onclick = () => save(null);
+      openModal(node);
     }
     async function loadDetailTab() {
       const body = $('#detail-body'); const cid = detailCase.id; const canEdit = DB() && DB().canEdit();

@@ -253,8 +253,34 @@
       }
       node.querySelector('#v-docx').onclick = () => exportReportDocx(r);
       node.querySelector('#v-pdf').onclick = () => exportReportPdf(r);
-      const vf = node.querySelector('#v-final'); if (vf) vf.onclick = () => openFinalizeModal(r);
+      const vf = node.querySelector('#v-final'); if (vf) vf.onclick = async () => {
+        const gaps = reportFinalizeGaps(r);
+        if (gaps.length) {
+          const ok = await uiConfirm('This report is missing:\n\n• ' + gaps.join('\n• ') + '\n\nFinalizing locks it permanently against edits. Finalize anyway?', { title: 'Before you finalize', confirmText: 'Finalize anyway', cancelText: 'Go fill it in', danger: false });
+          if (!ok) return;
+        }
+        openFinalizeModal(r);
+      };
       openModal(node, { wide: true });
+    }
+    // Soft "required field" check before a report is sealed. Sensible defaults:
+    // case number, affiant/detective, date, and the primary narrative / PC field
+    // — only those a template actually has. Non-blocking.
+    function reportFinalizeGaps(r) {
+      const tpl = tplById(r.template); if (!tpl || !tpl.schema) return [];
+      const f = r.fields || {}; const keys = new Set();
+      (tpl.schema.sections || []).forEach((s) => {
+        if (s.type === 'kv') (s.fields || []).forEach((fl) => keys.add(fl.key));
+        else if (s.type === 'textarea') keys.add(s.key);
+      });
+      const has = (k) => { const v = f[k]; return Array.isArray(v) ? v.length > 0 : (v != null && String(v).trim() !== ''); };
+      const gaps = [];
+      if (keys.has('case_number') && !has('case_number')) gaps.push('Case number');
+      if ((keys.has('affiant') || keys.has('detective')) && !(has('affiant') || has('detective'))) gaps.push('Affiant / detective');
+      if (keys.has('date') && !has('date')) gaps.push('Date');
+      const primary = ['probable_cause', 'narrative', 'investigation_details', 'necessity'].filter((k) => keys.has(k));
+      if (primary.length && !primary.some(has)) gaps.push('Narrative / probable cause');
+      return gaps;
     }
     function openFinalizeModal(r) {
       const node = el('div', { class: 'p-6' });
