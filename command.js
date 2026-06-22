@@ -109,7 +109,7 @@
       renderKPIs();
     }
 
-    async function fetchTickets() { if (!dbReady()) { renderTickets(); return; } try { TICKETS_CACHE = await DB().list('tickets', { order: 'created_at', ascending: false }); } catch (e) {} renderTickets(); }
+    async function fetchTickets() { if (!dbReady()) { renderTickets(); return; } try { TICKETS_CACHE = await DB().list('tickets', { order: 'created_at', ascending: false }); } catch (e) { toast('Could not load the ticket queue — check your connection.', 'danger'); } renderTickets(); }
     function renderTickets() {
       const tb = $('#ticket-tbody'); if (!tb) return;
       const canEdit = DB() && DB().canEdit();

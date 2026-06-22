@@ -17,7 +17,7 @@
       return found;
     }
     const moFlatten = (ind) => [].concat(...['names','entry','vehicles','weapons'].map((k) => (ind && ind[k]) || []));
-    async function fetchMoProfiles() { if (!dbReady()) { return; } try { MO_PROFILES = await DB().list('mo_profiles', { order: 'created_at', ascending: false }); } catch (e) {} }
+    async function fetchMoProfiles() { if (!dbReady()) { return; } try { MO_PROFILES = await DB().list('mo_profiles', { order: 'created_at', ascending: false }); } catch (e) { toast('Could not load M.O. profiles — check your connection.', 'danger'); } }
     function onEnterModus() { if (dbReady()) fetchMoProfiles(); }
     function renderMO() {
       const text = $('#mo-input').value.trim();

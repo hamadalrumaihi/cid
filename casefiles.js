@@ -938,7 +938,7 @@
     async function openCustody(evidenceId) {
       const node = el('div', { class: 'p-6' });
       let chain = [];
-      try { chain = await DB().list('custody_chain', { order: 'at', ascending: true, eq: { evidence_id: evidenceId } }); } catch (e) {}
+      try { chain = await DB().list('custody_chain', { order: 'at', ascending: true, eq: { evidence_id: evidenceId } }); } catch (e) { toast('Could not load the chain of custody — check your connection.', 'danger'); }
       const canEdit = DB() && DB().canEdit();
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Chain of Custody</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>

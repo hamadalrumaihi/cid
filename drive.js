@@ -14,7 +14,7 @@
 
     async function fetchDocuments() {
       if (!dbReady()) { renderDrive(); return; }
-      try { DOCS = await DB().list('documents', { order: 'name' }); } catch (e) {}
+      try { DOCS = await DB().list('documents', { order: 'name' }); } catch (e) { toast('Could not load Drive documents — check your connection.', 'danger'); }
       renderDrive();
       const s = $('#drive-search'); if (s && s.value.trim()) renderDriveSearch(s.value);   // keep results fresh during search
     }

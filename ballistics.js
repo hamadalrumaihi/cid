@@ -13,7 +13,7 @@
     }
     function onEnterBallistics() { if (dbReady()) { fetchBenches(); fetchFootprints(); } else { renderBenches(); renderBallisticLog(); } }
     async function fetchBenches() { if (!dbReady()) { renderBenches(); return; } try { BENCHES_CACHE = await DB().list('ballistics_benches', { order: 'name', ascending: true }); renderBenches(); } catch (e) { $('#bench-list').innerHTML = '<p class="text-sm text-rose-300">Load error: ' + escapeHTML(e.message || String(e)) + '</p>'; } }
-    async function fetchFootprints() { if (!dbReady()) { renderBallisticLog(); return; } try { FOOTPRINTS = await DB().list('ballistic_footprints', { order: 'created_at', ascending: false }); renderBallisticLog(); } catch (e) {} }
+    async function fetchFootprints() { if (!dbReady()) { renderBallisticLog(); return; } try { FOOTPRINTS = await DB().list('ballistic_footprints', { order: 'created_at', ascending: false }); renderBallisticLog(); } catch (e) { toast('Could not load ballistic footprints — check your connection.', 'danger'); } }
     function renderBenches() {
       renderBenchTabs();
       const wrap = $('#bench-list'); if (!wrap) return;

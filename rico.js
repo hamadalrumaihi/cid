@@ -29,7 +29,7 @@
       if (typeof GANGS === 'undefined' || !GANGS.length) { try { GANGS = await DB().list('gangs', { order: 'name', ascending: true }); } catch (e) {} }
       let rc = null, preds = [];
       try { const rows = await DB().list('rico_cases', { eq: { case_id: caseId } }); rc = rows[0] || null; if (rc) preds = await DB().list('predicate_acts', { order: 'act_date', ascending: true, eq: { rico_case_id: rc.id } }); }
-      catch (e) { wrap('<p class="text-sm text-rose-300">Load error: ' + escapeHTML(e.message || e) + '</p>'); return; }
+      catch (e) { wrap('<p class="text-sm text-rose-300">Could not load the RICO tracker — check your connection and retry.</p>'); return; }
       const enterpriseGangId = rc ? rc.enterprise_gang_id : '';
       const evidenced = preds.filter(predEvidenced);
       const enterpriseOK = !!enterpriseGangId;

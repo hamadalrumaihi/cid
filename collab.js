@@ -147,7 +147,7 @@
       }
 
       let msgs = [];
-      try { msgs = await DB().list('case_messages', { order: 'created_at', ascending: true, eq: { case_id: c.id } }); } catch (e) {}
+      try { msgs = await DB().list('case_messages', { order: 'created_at', ascending: true, eq: { case_id: c.id } }); } catch (e) { toast('Could not load the case channel — check your connection.', 'danger'); }
       const officers = (typeof PROFILES !== 'undefined' ? PROFILES : []).filter((p) => p.active);
       const recentCases = (typeof casesCache !== 'undefined' ? casesCache : []).slice(0, 30);
 
