@@ -48,10 +48,11 @@
 - Migrations: prep `.sql` in-repo, get the owner's approval, then `apply_migration` + advisor check. (This session the owner pre-approved applying, so both migrations went straight to live.)
 
 ## Open backlog (next chat: pick up here)
-- 🟡 **Bulk multi-select delete** — done for Persons; **replicate to Gangs + Places** (same pattern: a `Set` + `.p-check` + sticky bar in `renderGangs`/`renderPlaces`). Wire those bulk deletes through `deleteWithUndo`.
-- ⬜ **Extend undo-on-delete** to more leaf/SET-NULL deletes (places, media, evidence, reports). NOT cascade parents (cases, gangs) unless children are restored too.
-- ⬜ **True soft-delete** (cross-cutting): a `deleted_at` column + query filters so undo survives reloads and covers cascade parents. Current undo is in-session client re-insert.
-- ⬜ Edit tags on existing media (no edit-media modal yet).
+- ✅ Bulk multi-select delete — now on **Persons, Gangs, and Places** (command-gated `Set` + checkbox + sticky bar), all routed through `deleteWithUndo`.
+- ✅ Undo-on-delete — `deleteWithUndo(table, rows, {label, after, children})`; `children:[{table,column}]` snapshots ON DELETE CASCADE rows and restores them on undo. Covers persons, gang members, commendations, gangs (+roster/ranks/turf), places (+process steps), evidence (+custody chain).
+- ✅ Edit tags on existing media — `openMediaTagsEdit` from a 🏷️ button on the vault + case-media cards.
+- ⬜ **True soft-delete** (cross-cutting): a `deleted_at` column + query filters so undo survives reloads and covers cascade parents without snapshotting. Touches RLS/SELECT on every table — **flag before doing**.
+- ⬜ Small adds: undo on report/media-vault delete (verify report child table first).
 - See `docs/BACKLOG.md` and `docs/DEFERRED.md` for the full lists + Pro-gated/network-blocked items (SheetJS repo-vendoring, server-side case filtering).
 
 ## Pre-pitch / known gaps (from the audit)
