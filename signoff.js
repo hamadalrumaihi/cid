@@ -148,7 +148,7 @@
     /* ---- Feature 2/5/6: the Case Detail "Sign-Off" tab ---- */
     async function renderSignoffTab(body, c) {
       let history = [];
-      try { history = await DB().list('case_signoff_history', { order: 'created_at', ascending: false, eq: { case_id: c.id } }); } catch (e) {}
+      try { history = await DB().list('case_signoff_history', { order: 'created_at', ascending: false, eq: { case_id: c.id } }); } catch (e) { toast('Could not load the sign-off history — check your connection.', 'danger'); }
       const status = c.signoff_status || 'none';
       const stage = c.signoff_stage;
       const owner = officerName(c.lead_detective_id);

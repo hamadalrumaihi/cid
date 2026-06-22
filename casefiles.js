@@ -577,7 +577,7 @@
           </div>` : '';
           body.innerHTML = `
             <div class="mb-3 flex items-center justify-between"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Evidence (${ev.length})</h4>${canEdit ? '<button id="ev-new" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ Add Evidence</button>' : ''}</div>
-            <div class="space-y-3">${ev.length ? ev.map((e) => evidenceCard(e, hasCustody.has(e.id))).join('') : '<p class="text-sm text-slate-500">No evidence logged.</p>'}</div>
+            <div class="space-y-3">${ev.length ? ev.map((e) => evidenceCard(e, hasCustody.has(e.id))).join('') : '<p class="text-sm text-slate-500">No evidence logged yet.' + (canEdit ? ' Use “+ Add Evidence” above to log the first item.' : '') + '</p>'}</div>
             <div class="mt-8 mb-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-6"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Linked Media (${med.length})</h4>${mediaActions}</div>
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">${med.length ? med.map((m) => caseMediaCard(m, canEdit)).join('') : '<p class="text-sm text-slate-500">No media linked to this case. Upload photos, add a link, or attach one from the Media Vault.</p>'}</div>`;
           const nb = $('#ev-new'); if (nb) nb.onclick = () => openEvidenceModal(cid);
@@ -895,7 +895,7 @@
         const rows = links.filter((l) => l.kind === m.kind);
         return `<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
           <h4 class="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">${m.icon} ${m.label} (${rows.length})</h4>
-          <div class="space-y-2">${rows.length ? rows.map(linkRow).join('') : `<p class="text-sm text-slate-500">No ${m.label.toLowerCase()} linked.</p>`}</div>
+          <div class="space-y-2">${rows.length ? rows.map(linkRow).join('') : `<p class="text-sm text-slate-500">No ${m.label.toLowerCase()} linked.${canEdit ? ' Use the picker below to link one.' : ''}</p>`}</div>
         </div>`;
       }).join('');
       const banner = tableMissing
@@ -938,7 +938,7 @@
     async function openCustody(evidenceId) {
       const node = el('div', { class: 'p-6' });
       let chain = [];
-      try { chain = await DB().list('custody_chain', { order: 'at', ascending: true, eq: { evidence_id: evidenceId } }); } catch (e) {}
+      try { chain = await DB().list('custody_chain', { order: 'at', ascending: true, eq: { evidence_id: evidenceId } }); } catch (e) { toast('Could not load the chain of custody — check your connection.', 'danger'); }
       const canEdit = DB() && DB().canEdit();
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Chain of Custody</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>

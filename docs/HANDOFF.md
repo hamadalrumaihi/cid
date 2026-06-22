@@ -53,7 +53,7 @@
 - **Won't get in trouble:** audit-transparency note on the timeline, read-only chip + role-capabilities tooltip (auth.js).
 - **Calm under pressure:** offline banner + auto-retry, friendlier load errors.
 - **Skipped by owner:** server-side report autosave, always-on readiness card, personal audit view, optimistic-UI.
-- **Tracked follow-ups:** full empty-state CTA audit (D4·c partial), full silent-`catch` sweep (D7·a partial — high-traffic loads done), optional pre-overdue *notification* (visual indicator shipped).
+- **Sweeps completed:** D4·c empty-state CTAs (all actionable empty states now point to their add action) and D7·a silent-failure sweep (all primary per-tab/data loads surface friendly errors; best-effort/subscription paths left silent by design). Optional pre-overdue *notification* still deferred (visual indicator shipped).
 
 ## Workflow that's been working
 - Build on a `claude/*` branch → commit per feature → push → owner opens/merges the PR to `main`. Production reflects `main`.
