@@ -6,18 +6,12 @@
   <!-- Render native controls (select popups, scrollbars, pickers) in dark mode -->
   <meta name="color-scheme" content="dark" />
   <style>
+    /* The whole app is dark-themed; declaring the scheme makes browsers paint
+       native controls — crucially the <select> options popup — dark and
+       readable. We deliberately do NOT set appearance:none on <select>: that
+       disables the native control and makes the popup flash-and-close on some
+       browsers. Keeping the native control means the popup just works. */
     :root{color-scheme:dark}
-    /* Make every native <select> render consistently: dark control, a single
-       custom caret (no flaky/invisible native arrow), and a dark options popup. */
-    select{
-      -webkit-appearance:none;-moz-appearance:none;appearance:none;
-      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 20 20' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 7.5l5 5 5-5'/%3E%3C/svg%3E");
-      background-repeat:no-repeat;
-      background-position:right .6rem center;
-      background-size:1.05rem;
-      padding-right:2.1rem!important;
-    }
-    select::-ms-expand{display:none}
     select option,select optgroup{background-color:#0b1220;color:#f8fafc}
   </style>
   <title>CID Portal — Criminal Investigation Division | State of San Andreas</title>
