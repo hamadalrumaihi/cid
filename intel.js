@@ -69,7 +69,8 @@
       if (!person) throw new Error('Person not found');
       const sel = (tbl, col) => DB().from(tbl).select('*').eq(col, id).then((r) => r.data || []).catch(() => []);
       const [members, media] = await Promise.all([sel('gang_members', 'person_id'), sel('media', 'person_id')]);
-      const caseIds = ipUniq([...members.map((m) => m.case_id), ...media.map((m) => m.case_id)].filter(Boolean));
+      const direct = await DB().from('case_intel_links').select('case_id').eq('kind', 'person').eq('ref_id', id).then((r) => r.data || []).catch(() => []);
+      const caseIds = ipUniq([...members.map((m) => m.case_id), ...media.map((m) => m.case_id), ...direct.map((d) => d.case_id)].filter(Boolean));
       let evidence = [];
       if (caseIds.length) evidence = await DB().from('evidence').select('*').in('case_id', caseIds).then((r) => r.data || []).catch(() => []);
 
@@ -101,7 +102,8 @@
         sel('gang_members', 'gang_id', id), sel('gang_turf', 'gang_id', id), sel('places', 'controlling_gang_id', id),
         sel('ballistic_footprints', 'gang_id', id), sel('media', 'gang_id', id),
       ]);
-      const caseIds = ipUniq([...members.map((m) => m.case_id), ...places.map((p) => p.case_id), ...footprints.map((f) => f.case_id), ...media.map((m) => m.case_id)].filter(Boolean));
+      const direct = await DB().from('case_intel_links').select('case_id').eq('kind', 'gang').eq('ref_id', id).then((r) => r.data || []).catch(() => []);
+      const caseIds = ipUniq([...members.map((m) => m.case_id), ...places.map((p) => p.case_id), ...footprints.map((f) => f.case_id), ...media.map((m) => m.case_id), ...direct.map((d) => d.case_id)].filter(Boolean));
       let evidence = [];
       if (caseIds.length) evidence = await DB().from('evidence').select('*').in('case_id', caseIds).then((r) => r.data || []).catch(() => []);
 
