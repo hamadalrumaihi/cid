@@ -20,8 +20,28 @@
       try { PLACES = await DB().list('places', { order: 'updated_at', ascending: false }); renderPlaces(); }
       catch (e) { placesNotice('Could not load locations: ' + escapeHTML(e.message || String(e))); }
     }
+    // Bulk multi-select delete (command-gated). Routes through deleteWithUndo
+    // with the cascade child (process steps) so an Undo restores them too.
+    let placeSel = new Set();
+    function updatePlaceBulkBar() {
+      const grid = $('#place-grid'); if (!grid) return;
+      let bar = document.getElementById('place-bulkbar');
+      if (!placeSel.size) { if (bar) bar.remove(); return; }
+      if (!bar) { bar = el('div', { id: 'place-bulkbar', class: 'lg:col-span-2 sticky top-2 z-10 mb-1 flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 backdrop-blur' }); grid.insertBefore(bar, grid.firstChild); }
+      bar.innerHTML = `<span class="text-sm font-semibold text-rose-200">${placeSel.size} selected</span><span class="flex gap-2"><button id="plsel-del" class="rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500">Delete selected</button><button id="plsel-clear" class="rounded-md border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Clear</button></span>`;
+      bar.querySelector('#plsel-del').onclick = deleteSelectedPlaces;
+      bar.querySelector('#plsel-clear').onclick = () => { placeSel.clear(); renderPlaces(); };
+    }
+    async function deleteSelectedPlaces() {
+      const ids = [...placeSel]; if (!ids.length) return;
+      if (!(await uiConfirm('Delete ' + ids.length + ' selected location' + (ids.length > 1 ? 's' : '') + '? Restorable via Undo.', { confirmText: 'Delete ' + ids.length }))) return;
+      const rows = PLACES.filter((p) => placeSel.has(p.id));
+      placeSel.clear();
+      await deleteWithUndo('places', rows, { label: ids.length + ' location' + (ids.length > 1 ? 's' : ''), after: fetchPlaces, children: [{ table: 'place_process_steps', column: 'place_id' }] });
+    }
     function renderPlaces() {
       const grid = $('#place-grid'); if (!grid) return;
+      { const have = new Set(PLACES.map((p) => p.id)); [...placeSel].forEach((id) => { if (!have.has(id)) placeSel.delete(id); }); }
       const canEdit = DB() && DB().canEdit(), canDel = DB() && DB().canDelete();
       const addBtn = $('#add-place'); if (addBtn) addBtn.classList.toggle('hidden', !canEdit);
       if (!dbReady()) { placesNotice('Live location records require sign-in.'); return; }
@@ -36,7 +56,7 @@
         card.innerHTML = `
           <div class="flex items-start justify-between gap-3">
             <div><h4 class="text-base font-semibold text-white">${escapeHTML(p.name)}</h4><p class="mt-0.5 text-xs text-slate-400">${escapeHTML(locLabel(p.type))} · ${escapeHTML(p.area || '—')}</p></div>
-            <div class="flex items-center gap-2">${canEdit ? '<button class="pl-tocase rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-blue-200 transition hover:bg-white/10" title="Attach to case">📎</button>' : ''}${canEdit ? '<button class="pl-edit rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>' : ''}${canDel ? '<button class="pl-del rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10">✕</button>' : ''}</div>
+            <div class="flex items-center gap-2">${canEdit ? '<button class="pl-tocase rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-blue-200 transition hover:bg-white/10" title="Attach to case">📎</button>' : ''}${canEdit ? '<button class="pl-edit rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>' : ''}${canDel ? '<button class="pl-del rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10">✕</button>' : ''}${canDel ? `<label class="flex items-center pl-0.5" title="Select for bulk delete"><input type="checkbox" class="pl-check h-4 w-4 accent-rose-500" data-id="${p.id}"${placeSel.has(p.id) ? ' checked' : ''}></label>` : ''}</div>
           </div>
           <div class="mt-3 flex flex-wrap gap-2 text-[11px]">
             ${gang ? `<span class="rounded-md bg-violet-500/10 px-2 py-1 text-violet-300">🚩 ${escapeHTML(gang.name)}</span>` : ''}
@@ -47,9 +67,11 @@
           ${recipe.length ? `<div class="mt-4"><p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-blue-300/70">Production Process</p><div class="space-y-1.5">${recipe.map((s, i) => `<div class="flex items-center gap-2 text-xs text-slate-300"><span class="grid h-5 w-5 flex-shrink-0 place-items-center rounded-full bg-blue-500/15 font-mono text-[10px] text-blue-300">${i + 1}</span>${escapeHTML(s)}</div>`).join('')}</div></div>` : ''}`;
         const ptc = card.querySelector('.pl-tocase'); if (ptc && typeof attachIntelToCase === 'function') ptc.addEventListener('click', () => attachIntelToCase(`Place — ${p.name} (${locLabel(p.type)})${p.area ? ' · ' + p.area : ''}`));
         const eb = card.querySelector('.pl-edit'); if (eb) eb.addEventListener('click', () => openPlaceModal(p));
-        const db = card.querySelector('.pl-del'); if (db) db.addEventListener('click', async () => { if (!(await uiConfirm(`Delete location "${p.name}"?`, { confirmText: 'Delete' }))) return; const r = await DB().remove('places', p.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } toast('Location deleted', 'warn'); fetchPlaces(); });
+        const db = card.querySelector('.pl-del'); if (db) db.addEventListener('click', async () => { if (!(await uiConfirm(`Delete location "${p.name}"?`, { confirmText: 'Delete' }))) return; await deleteWithUndo('places', p, { label: 'Location “' + p.name + '”', after: fetchPlaces, children: [{ table: 'place_process_steps', column: 'place_id' }] }); });
+        const plchk = card.querySelector('.pl-check'); if (plchk) plchk.onchange = () => { if (plchk.checked) placeSel.add(p.id); else placeSel.delete(p.id); updatePlaceBulkBar(); };
         grid.appendChild(card);
       });
+      updatePlaceBulkBar();
     }
     function openPlaceModal(record) {
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
