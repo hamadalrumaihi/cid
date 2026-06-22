@@ -277,8 +277,35 @@
       return `<div class="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-4"><p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Case lifecycle</p><div class="flex items-center gap-2 overflow-x-auto">${steps.map((st, i) => pill(st) + (i < steps.length - 1 ? '<span class="flex-shrink-0 text-slate-600">→</span>' : '')).join('')}</div><p class="mt-2 text-[11px] text-slate-500">Advance the case through sign-off &amp; DOJ from the <span class="text-slate-300">Sign-off</span> tab.</p></div>`;
     }
 
+    // Bulk multi-select delete on the Cases list (command-gated). Cases cascade
+    // deeply (evidence, reports, sign-off, charges, chat, links…), and the single
+    // delete has no undo, so the bulk path is a hard delete behind a strong
+    // confirm — consistent and honest, no misleading "undo".
+    let caseSel = new Set();
+    function updateCaseBulkBar() {
+      const grid = $('#cases-grid'); if (!grid) return;
+      let bar = document.getElementById('case-bulkbar');
+      if (!caseSel.size) { if (bar) bar.remove(); return; }
+      if (!bar) { bar = el('div', { id: 'case-bulkbar', class: 'sm:col-span-2 xl:col-span-3 sticky top-2 z-10 mb-1 flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 backdrop-blur' }); grid.insertBefore(bar, grid.firstChild); }
+      bar.innerHTML = `<span class="text-sm font-semibold text-rose-200">${caseSel.size} selected</span><span class="flex gap-2"><button id="csel-del" class="rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500">Delete selected</button><button id="csel-clear" class="rounded-md border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Clear</button></span>`;
+      bar.querySelector('#csel-del').onclick = deleteSelectedCases;
+      bar.querySelector('#csel-clear').onclick = () => { caseSel.clear(); renderCases(); };
+    }
+    async function deleteSelectedCases() {
+      const ids = [...caseSel]; if (!ids.length) return;
+      const rows = casesCache.filter((c) => caseSel.has(c.id));
+      const nums = rows.map((c) => c.case_number).join(', ');
+      if (!(await uiConfirm('Permanently delete ' + ids.length + ' case' + (ids.length > 1 ? 's' : '') + '?\n\n' + nums + '\n\nThis also deletes ALL of each case’s evidence, reports, charges, sign-off history, chat and links. This cannot be undone.', { confirmText: 'Delete ' + ids.length, danger: true }))) return;
+      let ok = 0, fail = 0;
+      for (const id of ids) { const r = await DB().remove('cases', id); if (r && r.error) fail++; else ok++; }
+      caseSel.clear();
+      toast('Deleted ' + ok + ' case' + (ok === 1 ? '' : 's') + (fail ? ' · ' + fail + ' failed' : ''), fail && !ok ? 'danger' : 'warn');
+      if (typeof detailCase !== 'undefined' && detailCase && ids.indexOf(detailCase.id) !== -1) showCasesList();
+      fetchCases();
+    }
     function renderCases() {
       const grid = $('#cases-grid'); if (!grid) return;
+      { const have = new Set(casesCache.map((c) => c.id)); [...caseSel].forEach((id) => { if (!have.has(id)) caseSel.delete(id); }); }
       const q = ($('#case-search') ? $('#case-search').value : '').trim().toLowerCase();
       renderScopeChips();
       const mine = myId();
@@ -295,14 +322,16 @@
         card.innerHTML = `
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0"><p class="truncate font-mono text-sm font-semibold text-blue-300">${escapeHTML(c.case_number)}</p><p class="mt-0.5 truncate text-sm text-white">${escapeHTML(c.title || 'Untitled case')}</p></div>
-            <div class="flex flex-shrink-0 items-center gap-1.5">${staleBadge(c)}<span class="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${caseStatusTint(c.status)}">${escapeHTML(c.status)}</span></div>
+            <div class="flex flex-shrink-0 items-center gap-1.5">${staleBadge(c)}<span class="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${caseStatusTint(c.status)}">${escapeHTML(c.status)}</span>${(DB() && DB().canDelete()) ? `<label class="flex items-center pl-0.5" title="Select for bulk delete"><input type="checkbox" class="c-check h-4 w-4 accent-rose-500" data-id="${c.id}"${caseSel.has(c.id) ? ' checked' : ''}></label>` : ''}</div>
           </div>
           <p class="mt-2 line-clamp-2 text-xs text-slate-400">${escapeHTML(c.summary || 'No summary.')}</p>
           ${c.signoff_status && c.signoff_status !== 'none' ? `<div class="mt-2"><span class="rounded px-2 py-0.5 text-[10px] font-semibold ${signoffTint(c.signoff_status)}">${escapeHTML(signoffLabel(c.signoff_status))}</span></div>` : ''}
           <div class="mt-3 flex items-center justify-between text-[11px] text-slate-500"><span class="rounded bg-white/5 px-2 py-0.5">${escapeHTML(c.bureau)}</span><span>updated ${new Date(c.updated_at).toLocaleDateString('en-US')}</span></div>`;
         card.addEventListener('click', () => openCaseDetail(c.id));
+        const cchk = card.querySelector('.c-check'); if (cchk) { cchk.addEventListener('click', (e) => e.stopPropagation()); cchk.onchange = () => { if (cchk.checked) caseSel.add(c.id); else caseSel.delete(c.id); updateCaseBulkBar(); }; }
         grid.appendChild(card);
       });
+      updateCaseBulkBar();
     }
 
     function openCaseModal(record) {

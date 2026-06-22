@@ -204,16 +204,34 @@
         if (DB().me) payload.author_id = DB().me.id;
         const res = await DB().insert('reports', payload);
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
-        // Auto-add any new person-field names to the Persons registry.
+        // Resolve every person named in the report → an id (existing, or newly
+        // created when auto-add is on), then auto-link them to this case's Intel
+        // tab as suspects so naming someone in a report doesn't need a manual link.
+        const named = [...new Set(collectPersonNames(tpl.schema, fields))].filter(Boolean);
+        const idx = new Map();
+        (typeof PERSONS !== 'undefined' ? PERSONS : []).forEach((p) => { if (p.name) idx.set(p.name.toLowerCase(), p.id); if (p.alias) idx.set(p.alias.toLowerCase(), p.id); });
         const addEl = node.querySelector('#r-addppl');
-        if (addEl && addEl.checked) {
-          const existing = new Set();
-          (typeof PERSONS !== 'undefined' ? PERSONS : []).forEach((p) => { if (p.name) existing.add(p.name.toLowerCase()); if (p.alias) existing.add(p.alias.toLowerCase()); });
-          const fresh = [...new Set(collectPersonNames(tpl.schema, fields))].filter((n) => n && !existing.has(n.toLowerCase()));
-          let added = 0;
-          for (const n of fresh) { const r = await DB().insert('persons', { name: n, status: 'POI', notes: 'Auto-added from a report on ' + (caseNumById(caseId) || 'a case') + '.' }); if (!(r && r.error)) added++; }
-          if (added) { if (typeof fetchPersons === 'function') fetchPersons(); toast(added + ' new person' + (added === 1 ? '' : 's') + ' added to the registry', 'info'); }
+        let added = 0; const linkIds = [];
+        for (const n of named) {
+          let pid = idx.get(n.toLowerCase());
+          if (!pid && addEl && addEl.checked) {
+            const r = await DB().insert('persons', { name: n, status: 'POI', notes: 'Auto-added from a report on ' + (caseNumById(caseId) || 'a case') + '.' });
+            if (r && !r.error && r.data && r.data[0]) { pid = r.data[0].id; idx.set(n.toLowerCase(), pid); added++; }
+          }
+          if (pid) linkIds.push(pid);
         }
+        let linked = 0;
+        if (linkIds.length) {
+          let already = new Set();
+          try { already = new Set((await DB().from('case_intel_links').select('ref_id').eq('case_id', caseId).eq('kind', 'person').then((r) => r.data || [])).map((x) => x.ref_id)); } catch (e) {}
+          for (const pid of [...new Set(linkIds)]) {
+            if (already.has(pid)) continue;
+            const r = await DB().insert('case_intel_links', { case_id: caseId, kind: 'person', ref_id: pid, role: 'Suspect' });
+            if (r && !r.error) linked++;
+          }
+        }
+        if (added && typeof fetchPersons === 'function') fetchPersons();
+        { const bits = []; if (added) bits.push(added + ' new person' + (added === 1 ? '' : 's') + ' added'); if (linked) bits.push(linked + ' linked to the case'); if (bits.length) toast(bits.join(' · '), 'info'); }
         Drafts.clear(reportDraftKey); Guard.clear();
         closeModal(); toast(`${heading} saved`, 'success'); reloadCaseReports();
       };
