@@ -282,7 +282,7 @@
             { key: 'department', label: 'Department', type: 'select', opts: ['', 'LSPD', 'BCSO', 'SAHP'] },
             { key: 'date', label: 'Date', type: 'text' },
           ] },
-          { id: 'target', label: 'Target Information', type: 'kv', fields: [
+          { id: 'targets', label: 'Target Information', type: 'grid', cols: [
             { key: 'name_alias', label: 'Name / Alias', type: 'text', person: true },
             { key: 'phone_device', label: 'Phone Number / Device', type: 'text' },
           ] },
@@ -316,7 +316,7 @@
           { id: 'type', label: 'Subpoena Type', type: 'kv', fields: [
             { key: 'subpoena_type', label: 'Type', type: 'checks', opts: ['Records (Duces Tecum)', 'Witness Testimony (Ad Testificandum)', 'Financial / Bank Records', 'Phone / Communications Records', 'Other'] },
           ] },
-          { id: 'recipient', label: 'Recipient / Custodian', type: 'kv', fields: [
+          { id: 'recipients', label: 'Recipient / Custodian', type: 'grid', cols: [
             { key: 'recipient_name', label: 'Name / Business', type: 'text', person: true },
             { key: 'recipient_address', label: 'Address', type: 'text' },
           ] },
