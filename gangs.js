@@ -174,7 +174,7 @@
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast('Member saved', 'success'); renderGangDetail();
       };
-      const md = node.querySelector('#m-del'); if (md) md.onclick = async () => { await DB().remove('gang_members', member.id); closeModal(); toast('Member removed', 'warn'); renderGangDetail(); };
+      const md = node.querySelector('#m-del'); if (md) md.onclick = async () => { closeModal(); await deleteWithUndo('gang_members', member, { label: 'Member' + (member.name ? ' “' + member.name + '”' : ''), after: renderGangDetail }); };
       openModal(node, { wide: true });
     }
     function openTurfModal(gangId) {

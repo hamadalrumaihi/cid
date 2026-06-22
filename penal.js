@@ -1,9 +1,10 @@
-/* penal.js — San Andreas Penal Code catalog + helpers (Titles 1–4). Reference
+/* penal.js — San Andreas Penal Code catalog + helpers (Titles 1–10). Reference
    data for attaching charges to cases (cases.charges jsonb = [{code,count}]).
    Classic script, shared global scope. Up-to-date 20/01/2026.
    Flags: stack = stackable (Ⓢ) · arrest = arrest required (**) · rico = RICO-eligible
-   predicate (murder/kidnapping/robbery/extortion/arson/bribery/laundering). jail in
-   months; null jail = JUDGE/Capital sentence. */
+   predicate (murder/kidnapping/robbery/extortion/arson/bribery/laundering/controlled-
+   substance dealing) · modifier = enhances another charge, can't stand alone or stack.
+   jail in months; null jail = JUDGE/Capital/special sentence. */
 "use strict";
 
     const PENAL_CODE = [
@@ -85,7 +86,101 @@
       { code:'(4)20', title:'Evidence Tampering', level:'Felony', jail:20, fine:16000, desc:'Moving, destroying, or concealing evidence.' },
       { code:'(4)21', title:'Malfeasance', level:'Felony', jail:45, fine:50000, desc:'Intentional neglect of duties and the law.' },
       { code:'(4)22', title:'Theft of Government Property', level:'Felony', jail:20, fine:20000, desc:'Taking government property from a structure/vehicle.' },
-      { code:'(4)23', title:'Contempt of Court', level:'Misdemeanor', jail:null, fine:null, stack:true, desc:'Being disruptive or disrespectful in court.' },
+      { code:'(4)23', title:'Contempt of Court', level:'Misdemeanor', jail:null, fine:10000, stack:true, desc:'Being disruptive or disrespectful in court (sentence: JUDGE).' },
+      { code:'(4)24', title:'Perjury', level:'Felony', jail:null, fine:50000, desc:'Providing false information / lying while under oath (sentence: JUDGE).' },
+      { code:'(4)25', title:'Failure to Appear', level:'Felony', jail:25, fine:20000, desc:'Willfully failing to appear at a required court date.' },
+      { code:'(4)26', title:'Murder of a Police K-9', level:'Felony', jail:60, fine:40000, stack:true, desc:'Intentional killing of a Police K-9.' },
+      { code:'(4)27', title:'Attempted Murder of a Police K-9', level:'Felony', jail:40, fine:24000, stack:true, desc:'Attempting to kill or gravely harm a Police K-9.' },
+      { code:'(4)28', title:'Unlawful Death of a Police K-9', level:'Misdemeanor', jail:30, fine:18000, desc:'Actions resulting in the death of a K-9, with or without malice.' },
+      { code:'(4)29', title:'Murder of a State Official', level:'Felony', jail:180, fine:300000, stack:true, rico:true, desc:'Intentional killing of a State Official.' },
+      { code:'(4)30', title:'Attempted Murder of a State Official', level:'Felony', jail:60, fine:120000, stack:true, rico:true, desc:'Attempting to kill or gravely harm a State Official.' },
+      { code:'(4)31', title:'Battery of a State Official', level:'Felony', jail:30, fine:75000, stack:true, desc:'Inflicting bodily harm on a State Official, no weapon.' },
+      { code:'(4)32', title:'Aggravated Battery of a State Official', level:'Felony', jail:45, fine:90000, stack:true, desc:'Inflicting bodily harm on a State Official with a weapon.' },
+      { code:'(4)33', title:'Assisting or Instigating Escape', level:'Felony', jail:30, fine:20000, desc:'Assisting/instigating an escape from lawful custody.' },
+      { code:'(4)34', title:'Corruption', level:'Felony', jail:60, fine:200000, desc:'Being influenced to commit fraud or violate official duty as an authority.' },
+      { code:'(4)35', title:'Prison Break', level:'Felony', jail:null, fine:100000, desc:'Unlawfully escaping/attempting to escape a correctional facility (sentence: MAX ORIGINAL TIME); aiders face the same.' },
+      { code:'(4)36', title:'Misprision of Felony', level:'Felony', jail:15, fine:15000, desc:'Concealing/failing to report a felony on premises you control (+30mo & $30k if business owner).' },
+      // Title 5 — Crimes Committed with Firearms, Deadly Weapons, or Enhancements
+      { code:'(5)01', title:'Brandishing a Firearm', level:'Misdemeanor', jail:10, fine:14000, arrest:true, desc:'Aiming/waving a firearm in a reckless manner.' },
+      { code:'(5)02', title:'Unlawful Discharge of a Firearm', level:'Felony', jail:20, fine:18000, desc:'Discharging a firearm recklessly, risking serious injury or death.' },
+      { code:'(5)03', title:'Felon in Possession of a Firearm and/or Ammunition', level:'Felony', jail:10, fine:16000, desc:'A convicted felon possessing a firearm and/or ammunition.' },
+      { code:'(5)04', title:'Possession of a Firearm in the Commission of a Crime (Modifier)', level:'Felony', jail:10, fine:12000, modifier:true, desc:'Committing a crime with a firearm in your possession.' },
+      { code:'(5)05', title:'Possession of a Firearm Alongside Illegal Substances (Modifier)', level:'Felony', jail:15, fine:20000, modifier:true, arrest:true, desc:'Possessing a firearm with illegal substances.' },
+      { code:'(5)06', title:'Unlicensed Distribution of Firearms', level:'Felony', jail:15, fine:14000, desc:'Selling/giving away firearms without a license.' },
+      { code:'(5)07', title:'Wearing Body Armor in the Commission of a Crime (Modifier)', level:'Felony', jail:20, fine:10000, modifier:true, desc:'Wearing body armor while committing a crime.' },
+      { code:'(5)08', title:'Possession of an Illegal Firearm (Class 1)', level:'Felony', jail:20, fine:20000, stack:true, desc:'Possessing an illegal Class 1 firearm/weapon.' },
+      { code:'(5)09', title:'Possession of an Illegal Firearm (Class 2)', level:'Felony', jail:30, fine:70000, stack:true, desc:'Possessing an illegal Class 2 firearm/weapon.' },
+      { code:'(5)10', title:'Possession of an Illegal Firearm (Class 3)', level:'Felony', jail:40, fine:100000, stack:true, desc:'Possessing an illegal Class 3 firearm/weapon.' },
+      { code:'(5)11', title:'Distribution of Illegal Weapons', level:'Felony', jail:80, fine:150000, desc:'Selling/giving away illegal weapons.' },
+      { code:'(5)12', title:'Unlawful Possession of a Firearm', level:'Felony', jail:15, fine:15000, desc:'Carrying a firearm without an active license/permit (non-felon).' },
+      { code:'(5)13', title:'Illegal Firearm Modification', level:'Felony', jail:15, fine:10000, desc:'Illegally modifying a firearm with a drum magazine or suppressor.' },
+      { code:'(5)14', title:'Discharge of a Class 2 or Class 3 Firearm in the Commission of a Crime (Modifier)', level:'Felony', jail:10, fine:20000, modifier:true, desc:'Discharging a Class 2/3 firearm while committing a crime.' },
+      { code:'(5)15', title:'Unlawful Carry', level:'Misdemeanor', jail:0, fine:10000, desc:'Openly carrying a firearm, registered or not, in public.' },
+      // Title 6 — Crimes Against Public Health
+      { code:'(6)01', title:'Possession of a Controlled Substance [Schedule I]', level:'Felony', jail:20, fine:20000, desc:'Possessing a Schedule I controlled substance or materials to make it.' },
+      { code:'(6)02', title:'Possession of a Controlled Substance [Schedule II]', level:'Felony', jail:30, fine:50000, desc:'Possessing a Schedule II controlled substance or materials to make it.' },
+      { code:'(6)03', title:'Possession of a Controlled Substance with Intent to Sell (Modifier)', level:'Felony', jail:30, fine:75000, modifier:true, arrest:true, rico:true, desc:'Possessing a controlled substance packaged for distribution.' },
+      { code:'(6)04', title:'Distribution of a Controlled Substance', level:'Felony', jail:30, fine:60000, rico:true, desc:'Selling a controlled substance to another person.' },
+      { code:'(6)05', title:'Possession of Drug Paraphernalia', level:'Misdemeanor', jail:15, fine:10000, desc:'Possessing items used to sniff, smoke, or inject drugs.' },
+      { code:'(6)06', title:'Manufacturing a Controlled Substance', level:'Felony', jail:30, fine:25000, desc:'Making a controlled substance.' },
+      { code:'(6)07', title:'Criminal Possession of Marijuana', level:'Misdemeanor', jail:10, fine:10000, desc:'Over 4oz unrolled or 10 joints in public / off your property.' },
+      { code:'(6)08', title:'Under the Influence of Narcotics', level:'Misdemeanor', jail:10, fine:5000, arrest:true, desc:'Being in public under the influence of a narcotic.' },
+      { code:'(6)09', title:'Underage Possession of Alcohol', level:'Misdemeanor', jail:10, fine:4000, desc:'Possessing alcohol under the legal age (21).' },
+      { code:'(6)10', title:'Public Intoxication', level:'Misdemeanor', jail:10, fine:10000, arrest:true, desc:'Being in public under the influence of alcohol.' },
+      { code:'(6)11', title:'Trafficking Narcotics, First Degree', level:'Felony', jail:45, fine:50000, rico:true, desc:'Transporting 16oz (448g)+ of any controlled substance incl. marijuana.' },
+      { code:'(6)12', title:'Trafficking Narcotics, Second Degree', level:'Felony', jail:30, fine:40000, rico:true, desc:'Transporting 4oz–16oz of any controlled substance excl. marijuana.' },
+      { code:'(6)13', title:'Unlawful Production of Distilled Spirits', level:'Felony', jail:20, fine:15000, desc:'Unlicensed production of distilled spirits (moonshine).' },
+      { code:'(6)14', title:'Unlicensed Distribution of Distilled Spirits', level:'Misdemeanor', jail:25, fine:20000, arrest:true, desc:'Unlicensed sale of distilled spirits (moonshine).' },
+      // Title 7 — Crimes Against Natural Resources and Wildlife
+      { code:'(7)01', title:'Animal Abuse', level:'Felony', jail:30, fine:20000, stack:true, desc:'Physically abusing or neglecting an animal.' },
+      { code:'(7)02', title:'Hunting without a Permit', level:'Misdemeanor', jail:10, fine:10000, desc:'Hunting wildlife without proper credentials.' },
+      { code:'(7)03', title:'Fishing without a Permit', level:'Misdemeanor', jail:15, fine:10000, desc:'Fishing without proper credentials.' },
+      { code:'(7)04', title:'Poaching', level:'Misdemeanor', jail:25, fine:15000, desc:'Illegal hunting/capturing of wildlife.' },
+      { code:'(7)05', title:'Illegal Hunting/Fishing Methods', level:'Misdemeanor', jail:10, fine:10000, desc:'Illegal methods/equipment used for hunting or fishing.' },
+      { code:'(7)06', title:'Illegal Fire Placement', level:'Misdemeanor', jail:10, fine:16000, desc:'Illegally placing/setting fires in a natural area.' },
+      { code:'(7)07', title:'Possession of Illegal Trophies', level:'Infraction', jail:0, fine:2000, desc:'Possessing animal parts/products obtained in violation of wildlife laws.' },
+      // Title 8 — Crimes Relating to Commercial Vehicles
+      { code:'(8)01', title:'Failure to Keep/Maintain Log Book', level:'Infraction', jail:0, fine:1500, desc:'Commercial driver failing to keep/maintain a log book.' },
+      { code:'(8)02', title:'Failure to Stop at Weigh Station/Inspection', level:'Misdemeanor', jail:10, fine:2000, desc:'Passing an active weigh station.' },
+      { code:'(8)03', title:'Improper Safety Equipment', level:'Misdemeanor', jail:10, fine:4000, desc:'Operating a commercial vehicle with improper safety equipment.' },
+      { code:'(8)04', title:'Operating an Overweight Vehicle', level:'Misdemeanor', jail:10, fine:3000, desc:'Operating an overweight commercial vehicle.' },
+      { code:'(8)05', title:'Failure to Ensure Connection of Trailer', level:'Misdemeanor', jail:10, fine:3000, desc:'Operating with an improperly connected trailer.' },
+      { code:'(8)06', title:'Possession of Alcohol Inside of a Commercial Vehicle', level:'Misdemeanor', jail:10, fine:8000, desc:'Unlawful possession of alcohol while in/operating a commercial vehicle.' },
+      // Title 9 — Crimes and Offenses Related to Traffic
+      { code:'(9)01', title:'Driving without a License', level:'Misdemeanor', jail:10, fine:4000, desc:'Operating a motor vehicle without an active DL.' },
+      { code:'(9)02', title:'Driving with a Suspended or Revoked License', level:'Misdemeanor', jail:15, fine:10000, desc:'Operating a motor vehicle with a suspended/revoked DL.' },
+      { code:'(9)03', title:'Operating a Motor Vehicle without Proper Reg/Insurance', level:'Infraction', jail:0, fine:15000, desc:'Operating without valid registration and/or insurance.' },
+      { code:'(9)04', title:'Failure to Display License Plate', level:'Infraction', jail:0, fine:10000, desc:'Operating without a plate or with the plate obstructed.' },
+      { code:'(9)05', title:'License Plate Violation', level:'Infraction', jail:0, fine:10000, desc:'Operating with an SA Exempt plate or another vehicle’s registration.' },
+      { code:'(9)06', title:'Speeding, 1st Degree', level:'Misdemeanor', jail:0, fine:10000, desc:'Operating 51–99 MPH over the posted limit.' },
+      { code:'(9)07', title:'Speeding, 2nd Degree', level:'Infraction', jail:0, fine:7000, desc:'Operating 26–50 MPH over the posted limit.' },
+      { code:'(9)08', title:'Speeding, 3rd Degree', level:'Infraction', jail:0, fine:5000, desc:'Operating 1–25 MPH over the posted limit.' },
+      { code:'(9)09', title:'Felony Speeding', level:'Felony', jail:15, fine:15000, desc:'Operating 100+ MPH over the posted limit.' },
+      { code:'(9)10', title:'Window Tint Violation', level:'Infraction', jail:0, fine:1000, desc:'Dark smoke/limo/black window tint on a vehicle.' },
+      { code:'(9)11', title:'Failure to Display Headlights/Brake Lights', level:'Infraction', jail:0, fine:1000, desc:'Operating without headlights or brake lights on.' },
+      { code:'(9)12', title:'Failure to Maintain Lanes', level:'Infraction', jail:0, fine:2000, desc:'Failing to stay in lane or changing lanes recklessly.' },
+      { code:'(9)13', title:'Reckless Driving', level:'Felony', jail:15, fine:15000, arrest:true, desc:'Operating with total disregard for public safety.' },
+      { code:'(9)14', title:'Distracted Driving', level:'Infraction', jail:0, fine:2000, desc:'Operating while paying attention to things other than the road.' },
+      { code:'(9)15', title:'Excessive Use of Horn', level:'Infraction', jail:0, fine:1000, desc:'Honking for reasons other than motor safety.' },
+      { code:'(9)16', title:'Parking Violation', level:'Infraction', jail:0, fine:1000, desc:'Parking in an unauthorized area.' },
+      { code:'(9)17', title:'Illegal Overtake', level:'Infraction', jail:0, fine:2000, desc:'Illegally passing via shoulder or crossing a double yellow.' },
+      { code:'(9)18', title:'Obstructing a Roadway', level:'Misdemeanor', jail:5, fine:4000, desc:'Obstructing/impeding traffic on foot or by vehicle.' },
+      { code:'(9)19', title:'Obstructing a Sidewalk/Crosswalk', level:'Infraction', jail:0, fine:1000, desc:'Stopping/parking on a sidewalk or crosswalk.' },
+      { code:'(9)20', title:'Failure to Yield Right of Way/Stop Sign', level:'Infraction', jail:0, fine:2000, desc:'Failing to yield right of way or stop at stop signs.' },
+      { code:'(9)21', title:'Hit and Run, 1st Degree', level:'Felony', jail:10, fine:10000, desc:'Striking another and leaving the scene, causing death/serious injury.' },
+      { code:'(9)22', title:'Hit and Run, 2nd Degree', level:'Misdemeanor', jail:5, fine:3000, desc:'Striking another vehicle/person and leaving the scene.' },
+      { code:'(9)23', title:'Driving Under the Influence [DUI]', level:'Misdemeanor', jail:10, fine:6000, arrest:true, desc:'Operating under the influence (over 35%); FST/PBT or BaC ≥0.08% satisfies.' },
+      { code:'(9)24', title:'Aggravated Driving Under the Influence', level:'Felony', jail:20, fine:10000, desc:'Operating while unusually intoxicated (over 60%); PBT satisfies.' },
+      { code:'(9)25', title:'Failure to Obey a Traffic Control Device', level:'Infraction', jail:0, fine:2000, desc:'Failing to follow a construction/LE sign or traffic light.' },
+      { code:'(9)26', title:'Failure to Display Drivers License', level:'Infraction', jail:0, fine:2000, desc:'Failing to display DL when requested by an officer.' },
+      // Title 10 — Racketeering Influenced Corrupt Organizations (RICO). Modifiers added
+      // only by a prosecuting attorney; apply to organized criminal activity (2+ persons).
+      { code:'(10)01', title:'RICO Conspiracy (Modifier)', level:'Capital', jail:null, fine:150000, modifier:true, rico:true, desc:'Organized agreement to commit an illegal act (sentence: JUDGE).' },
+      { code:'(10)02', title:'RICO Murder (Modifier)', level:'Capital', jail:null, fine:500000, modifier:true, rico:true, desc:'Unlawful killing as part of a criminal organization (sentence: JUDGE).' },
+      { code:'(10)03', title:'RICO Robbery (Modifier)', level:'Capital', jail:null, fine:100000, modifier:true, rico:true, desc:'Taking property by force as part of a criminal organization (sentence: JUDGE).' },
+      { code:'(10)04', title:'RICO Bribery (Modifier)', level:'Capital', jail:null, fine:75000, modifier:true, rico:true, desc:'Bribery as part of a criminal organization (sentence: JUDGE).' },
+      { code:'(10)05', title:'RICO Trafficking (Modifier)', level:'Capital', jail:null, fine:80000, modifier:true, rico:true, desc:'Trafficking 16oz+ as part of a criminal organization (sentence: JUDGE).' },
+      { code:'(10)06', title:'RICO Kidnapping (Modifier)', level:'Capital', jail:null, fine:50000, modifier:true, rico:true, desc:'Kidnapping as part of a criminal organization (sentence: JUDGE).' },
     ];
 
     const PENAL_BY_CODE = {}; PENAL_CODE.forEach((c) => { PENAL_BY_CODE[c.code] = c; });

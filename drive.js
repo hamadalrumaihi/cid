@@ -286,8 +286,24 @@
     }
     // Attach grid add/remove-row delegation to a rendered form body (shared by the
     // Drive form viewer and the in-case Reports authoring flow).
+    // When a person-linked field matches a known person who has registered
+    // properties, show them as a non-printing hint under the field (helps fill
+    // location/recipient lines on subpoenas, wiretaps, etc.).
+    function showPersonPropsHint(inp) {
+      if (!inp || !inp.parentElement) return;
+      const old = inp.parentElement.querySelector(':scope > .person-props-hint'); if (old) old.remove();
+      const val = (inp.value || '').trim().toLowerCase(); if (!val) return;
+      const p = (typeof PERSONS !== 'undefined' ? PERSONS : []).find((x) => (x.name && x.name.toLowerCase() === val) || (x.alias && x.alias.toLowerCase() === val));
+      const props = p && Array.isArray(p.properties) ? p.properties : [];
+      if (!props.length) return;
+      const hint = el('div', { class: 'person-props-hint no-print mt-1 rounded-md border border-blue-500/20 bg-blue-500/5 px-2.5 py-1.5 text-[11px] text-slate-300' });
+      hint.innerHTML = `🏠 <span class="font-semibold text-blue-200">${esc(p.name)}</span> known properties: ` + props.map((pr) => `${esc(pr.address || '—')}${pr.type ? ' (' + esc(pr.type) + ')' : ''}`).join('; ');
+      inp.parentElement.appendChild(hint);
+    }
     function wireFormBody(body, schema) {
       if (!body) return;
+      body.addEventListener('input', (e) => { const inp = e.target.closest('[data-person]'); if (inp) showPersonPropsHint(inp); });
+      $$('[data-person]', body).forEach(showPersonPropsHint);
       body.addEventListener('click', (e) => {
         const add = e.target.closest('[data-grid-add]');
         if (add) {

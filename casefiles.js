@@ -443,7 +443,7 @@
     }
     function renderCaseDetailShell() {
       const c = detailCase, canEdit = DB() && DB().canEdit(), canDel = DB() && DB().canDelete();
-      const tabs = ['overview', 'evidence', 'charges', 'intel', 'reports', 'signoff', 'chat', 'timeline'];
+      const tabs = ['overview', 'evidence', 'charges', 'rico', 'intel', 'reports', 'signoff', 'chat', 'timeline'];
       $('#case-detail').innerHTML = `
         <button id="case-back" class="mb-4 inline-flex items-center gap-1 text-sm text-slate-300 transition hover:text-white">← All cases</button>
         <div class="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
@@ -556,6 +556,9 @@
           });
         } else if (detailTab === 'charges') {
           renderCaseCharges(body);
+        } else if (detailTab === 'rico') {
+          if (typeof renderRicoInto === 'function') await renderRicoInto(cid, body);
+          else body.innerHTML = '<p class="text-sm text-slate-500">RICO module unavailable.</p>';
         } else if (detailTab === 'intel') {
           await renderCaseIntel(body, cid);
         } else if (detailTab === 'reports') {
@@ -757,7 +760,7 @@
         const c = penalByCode(x.code); if (!c) return `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm text-slate-500">Unknown charge ${esc(x.code)}${canEdit ? ` <button class="ch-rm text-rose-300" data-code="${esc(x.code)}">✕</button>` : ''}</div>`;
         const n = Math.max(1, x.count || 1);
         return `<div class="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-ink-900 px-3 py-2">
-          <div class="min-w-0"><p class="text-sm text-slate-200"><span class="font-mono text-blue-300">${esc(c.code)}</span> ${esc(c.title)}${c.rico ? ' <span class="text-[10px] font-semibold text-fuchsia-300" title="RICO-eligible predicate">RICO</span>' : ''}${c.stack ? ' <span class="text-[10px] text-slate-500" title="Stackable">Ⓢ</span>' : ''}</p>
+          <div class="min-w-0"><p class="text-sm text-slate-200"><span class="font-mono text-blue-300">${esc(c.code)}</span> ${esc(c.title)}${c.rico ? ' <span class="text-[10px] font-semibold text-fuchsia-300" title="RICO-eligible predicate">RICO</span>' : ''}${c.modifier ? ' <span class="text-[10px] font-semibold text-cyan-300" title="Modifier — enhances another charge; can’t stand alone or stack">MOD</span>' : ''}${c.stack ? ' <span class="text-[10px] text-slate-500" title="Stackable">Ⓢ</span>' : ''}</p>
           <p class="text-[11px] text-slate-500"><span class="rounded border px-1.5 py-0.5 ${PENAL_LEVEL_TINT[c.level] || ''}">${esc(c.level)}</span> · ${penalSentence(c.jail)} · ${c.fine != null ? fmtUSD(c.fine) : '—'} each</p>${c.desc ? `<p class="mt-0.5 text-[11px] text-slate-400">${esc(c.desc)}</p>` : ''}</div>
           <div class="flex flex-shrink-0 items-center gap-2">${canEdit && c.stack ? `<div class="flex items-center gap-1"><button class="ch-dec rounded border border-white/10 bg-white/5 px-2 text-sm text-slate-200" data-code="${esc(c.code)}">−</button><span class="w-6 text-center text-sm text-white">${n}</span><button class="ch-inc rounded border border-white/10 bg-white/5 px-2 text-sm text-slate-200" data-code="${esc(c.code)}">+</button></div>` : (n > 1 ? `<span class="text-xs text-slate-400">×${n}</span>` : '')}${canEdit ? `<button class="ch-rm rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-rose-300 transition hover:bg-rose-500/10" data-code="${esc(c.code)}">✕</button>` : ''}</div>
         </div>`;
@@ -778,7 +781,7 @@
       $$('.ch-inc', body).forEach((b) => b.onclick = async () => { const next = caseCharges().map((x) => x.code === b.dataset.code ? { code: x.code, count: Math.max(1, (x.count || 1) + 1) } : x); if (await saveCaseCharges(next)) renderCaseCharges(body); });
       $$('.ch-dec', body).forEach((b) => b.onclick = async () => { const next = caseCharges().map((x) => x.code === b.dataset.code ? { code: x.code, count: Math.max(1, (x.count || 1) - 1) } : x); if (await saveCaseCharges(next)) renderCaseCharges(body); });
       $$('.ch-rec', body).forEach((b) => b.onclick = async () => { if (await addCharge(b.dataset.code)) renderCaseCharges(body); });
-      const rico = $('#ch-rico', body); if (rico) rico.onclick = () => { if (typeof navigate === 'function') navigate('rico'); };
+      const rico = $('#ch-rico', body); if (rico) rico.onclick = () => { detailTab = 'rico'; renderCaseDetailShell(); loadDetailTab(); };
     }
     function openChargePicker() {
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
@@ -792,7 +795,7 @@
       const draw = (q) => {
         const attached = new Set(caseCharges().map((x) => x.code));
         listEl.innerHTML = penalSearch(q).map((c) => `<button class="ch-pick flex w-full items-center justify-between gap-3 rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left transition hover:bg-white/5 ${attached.has(c.code) && !c.stack ? 'opacity-50' : ''}" data-code="${esc(c.code)}">
-          <span class="min-w-0"><span class="font-mono text-xs text-blue-300">${esc(c.code)}</span> <span class="text-sm text-slate-200">${esc(c.title)}</span>${c.rico ? ' <span class="text-[10px] text-fuchsia-300">RICO</span>' : ''}<br><span class="text-[11px] text-slate-500">${esc(c.level)} · ${penalSentence(c.jail)} · ${c.fine != null ? fmtUSD(c.fine) : '—'}</span>${c.desc ? `<br><span class="text-[11px] text-slate-400">${esc(c.desc)}</span>` : ''}</span>
+          <span class="min-w-0"><span class="font-mono text-xs text-blue-300">${esc(c.code)}</span> <span class="text-sm text-slate-200">${esc(c.title)}</span>${c.rico ? ' <span class="text-[10px] text-fuchsia-300">RICO</span>' : ''}${c.modifier ? ' <span class="text-[10px] text-cyan-300" title="Modifier">MOD</span>' : ''}<br><span class="text-[11px] text-slate-500">${esc(c.level)} · ${penalSentence(c.jail)} · ${c.fine != null ? fmtUSD(c.fine) : '—'}</span>${c.desc ? `<br><span class="text-[11px] text-slate-400">${esc(c.desc)}</span>` : ''}</span>
           <span class="flex-shrink-0 text-xs text-blue-300">${attached.has(c.code) ? (c.stack ? '+1' : 'added') : '+ add'}</span></button>`).join('') || '<p class="text-sm text-slate-500">No matching charge.</p>';
         $$('.ch-pick', listEl).forEach((b) => b.onclick = async () => { if (await addCharge(b.dataset.code)) { toast('Charge added', 'success'); draw(node.querySelector('#ch-search').value); const bd = $('#detail-body'); if (bd) renderCaseCharges(bd); } });
       };

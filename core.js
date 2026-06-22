@@ -428,6 +428,42 @@
       setTimeout(() => { t.style.transition = 'opacity .3s, transform .3s'; t.style.opacity = '0'; t.style.transform = 'translateX(20px)'; setTimeout(() => t.remove(), 300); }, 3400);
     }
 
+    // Undo-able toast: shows an "Undo" button for `ms` (default 6s); clicking it
+    // runs onUndo, otherwise it self-dismisses.
+    function undoToast(message, onUndo, ms = 6000) {
+      const t = el('div', { class: 'flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-100 shadow-glow backdrop-blur-xl' });
+      t.innerHTML = `<span>↩️</span><span>${esc(message)}</span><button class="undo-btn ml-1 rounded-md border border-amber-300/40 bg-amber-300/10 px-2 py-0.5 text-xs font-semibold text-amber-50 transition hover:bg-amber-300/20">Undo</button>`;
+      t.style.animation = 'popIn .25s cubic-bezier(.16,.84,.44,1) both';
+      $('#toast-root').appendChild(t);
+      let done = false;
+      const dismiss = () => { if (done) return; done = true; t.style.transition = 'opacity .3s, transform .3s'; t.style.opacity = '0'; t.style.transform = 'translateX(20px)'; setTimeout(() => t.remove(), 300); };
+      t.querySelector('.undo-btn').onclick = () => { dismiss(); try { onUndo(); } catch (e) {} };
+      setTimeout(dismiss, ms);
+    }
+    // Delete a row (or array of rows) with a 6s "Undo" that re-inserts them,
+    // preserving id so references survive. Honest only where a delete doesn't
+    // cascade-destroy children — use on leaf / SET-NULL records (persons, media,
+    // commendations…), NOT cascade parents like cases or gangs. `opts.after` runs
+    // after the delete and after a successful undo. Returns true if the delete stuck.
+    async function deleteWithUndo(table, rows, opts) {
+      opts = opts || {};
+      const list = Array.isArray(rows) ? rows.slice() : [rows];
+      if (!list.length) return false;
+      let ok = 0, fail = 0;
+      for (const row of list) { const r = await DB().remove(table, row.id); if (r && r.error) fail++; else ok++; }
+      if (typeof opts.after === 'function') opts.after();
+      const one = list.length === 1;
+      const noun = opts.label || (one ? 'Item' : list.length + ' items');
+      if (fail && !ok) { toast(noun + ' delete failed', 'danger'); return false; }
+      undoToast((one ? noun + ' deleted' : ok + ' deleted') + (fail ? ' · ' + fail + ' failed' : ''), async () => {
+        let rok = 0;
+        for (const row of list) { const r = await DB().insert(table, row); if (!(r && r.error)) rok++; }
+        toast(rok === list.length ? (one ? noun + ' restored' : rok + ' restored') : 'Restored ' + rok + ' of ' + list.length, rok ? 'success' : 'danger');
+        if (typeof opts.after === 'function') opts.after();
+      });
+      return true;
+    }
+
     const Store = {
       KEY: 'cid-portal-v3', OLD: 'cid-portal-v2', _d: null,
       _load() {

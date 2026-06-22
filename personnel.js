@@ -86,7 +86,7 @@
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast(record ? 'Commendation updated' : 'Commendation awarded', 'success'); fetchCommendations();
       };
-      const cd = node.querySelector('#cm-del'); if (cd) cd.onclick = async () => { const r = await DB().remove('commendations', record.id); if (r.error) { toast('Delete failed', 'danger'); return; } closeModal(); toast('Removed', 'warn'); fetchCommendations(); };
+      const cd = node.querySelector('#cm-del'); if (cd) cd.onclick = async () => { closeModal(); await deleteWithUndo('commendations', record, { label: 'Commendation', after: fetchCommendations }); };
       openModal(node);
     }
 

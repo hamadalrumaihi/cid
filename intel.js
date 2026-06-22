@@ -84,8 +84,11 @@
         ${ipFact('Felonies', String(person.felony_count || 0))}
       </div>${person.notes ? `<p class="mt-3 rounded-lg bg-ink-900 px-3 py-2 text-sm text-slate-300">${escapeHTML(person.notes)}</p>` : ''}`;
       const memItem = (m) => `<div class="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm"><span class="min-w-0 truncate text-slate-200">🚩 ${m.gang_id ? `<button class="ip-gang text-blue-300 hover:text-blue-200" data-id="${m.gang_id}">${escapeHTML((typeof gangNameById === 'function' && gangNameById(m.gang_id)) || 'Gang')}</button>` : 'Gang'} <span class="text-slate-500">· ${escapeHTML(m.rank || m.status || 'member')}</span></span>${ipCaseTag(m.case_id)}</div>`;
+      const props = Array.isArray(person.properties) ? person.properties : [];
+      const propItem = (pr) => `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm text-slate-200">🏠 ${escapeHTML(pr.address || '—')}${pr.type ? ` <span class="text-slate-500">· ${escapeHTML(pr.type)}</span>` : ''}${pr.notes ? `<br><span class="text-[11px] text-slate-400">${escapeHTML(pr.notes)}</span>` : ''}</div>`;
       node.querySelector('#ip-body').innerHTML = facts + [
         ipSection('Linked cases', caseIds.length, ipListOrEmpty(caseIds, ipCaseChip)),
+        ipSection('Known properties', props.length, ipListOrEmpty(props, propItem)),
         ipSection('Gang memberships', members.length, ipListOrEmpty(members, memItem)),
         ipSection('Media', media.length, ipListOrEmpty(media, ipMediaItem)),
         ipSection('Evidence (in linked cases)', evidence.length, ipListOrEmpty(evidence, ipEvItem)),

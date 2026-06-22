@@ -13,13 +13,23 @@
       if (res.error) { toast('RICO init failed: ' + res.error.message, 'danger'); return null; }
       return res.data && res.data[0];
     }
+    // Page-level entry point (RICO tab). Delegates to the container-agnostic
+    // renderer, which is reused embedded in the per-case detail "RICO" tab.
     async function renderRico() {
-      const caseId = $('#rico-case').value; const body = $('#rico-body'); if (!body) return;
-      if (!dbReady()) { body.innerHTML = '<div class="lg:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">Sign in to use the RICO tracker.</div>'; return; }
-      if (!caseId) { body.innerHTML = '<div class="lg:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">No case selected — create a case in Case Files first.</div>'; return; }
+      renderRicoInto($('#rico-case') ? $('#rico-case').value : '', $('#rico-body'));
+    }
+    async function renderRicoInto(caseId, body, rerender) {
+      if (!body) return;
+      rerender = rerender || (() => renderRicoInto(caseId, body, rerender));
+      const wrap = (inner) => { body.innerHTML = `<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">${inner}</div>`; };
+      if (!dbReady()) { wrap('<div class="lg:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">Sign in to use the RICO tracker.</div>'); return; }
+      if (!caseId) { wrap('<div class="lg:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">No case selected — create a case in Case Files first.</div>'); return; }
+      // The enterprise picker needs the gangs cache; warm it if a consumer (e.g. the
+      // per-case tab) opened before the Gangs/Persons views populated it.
+      if (typeof GANGS === 'undefined' || !GANGS.length) { try { GANGS = await DB().list('gangs', { order: 'name', ascending: true }); } catch (e) {} }
       let rc = null, preds = [];
       try { const rows = await DB().list('rico_cases', { eq: { case_id: caseId } }); rc = rows[0] || null; if (rc) preds = await DB().list('predicate_acts', { order: 'act_date', ascending: true, eq: { rico_case_id: rc.id } }); }
-      catch (e) { body.innerHTML = '<p class="text-sm text-rose-300">Load error: ' + escapeHTML(e.message || e) + '</p>'; return; }
+      catch (e) { wrap('<p class="text-sm text-rose-300">Load error: ' + escapeHTML(e.message || e) + '</p>'); return; }
       const enterpriseGangId = rc ? rc.enterprise_gang_id : '';
       const evidenced = preds.filter(predEvidenced);
       const enterpriseOK = !!enterpriseGangId;
@@ -29,7 +39,7 @@
       const score = (enterpriseOK ? 34 : 0) + Math.min(2, evidenced.length) * 22 + (allEvidenced ? 22 : 0);
       const gang = GANGS.find((g) => g.id === enterpriseGangId);
       const canEdit = DB() && DB().canEdit(), canDel = DB() && DB().canDelete();
-      body.innerHTML = `
+      wrap(`
         <div class="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
           <p class="mb-2 text-xs font-semibold uppercase tracking-wider text-blue-300/70">① Enterprise</p>
           <p class="mb-3 text-xs text-slate-400">Link the criminal organization (a gang) that constitutes the enterprise.</p>
@@ -51,13 +61,13 @@
             <li class="${allEvidenced ? 'text-emerald-300' : 'text-slate-400'}">${allEvidenced ? '✓' : '○'} Every predicate evidenced &amp; in-window</li>
           </ul>
           <p class="mt-4 text-[11px] text-slate-500">Tracking aid only — charging sufficiency is a prosecutor's determination.</p>
-        </div>`;
+        </div>`);
       const gs = body.querySelector('#rico-gang');
-      if (gs && canEdit) gs.onchange = async (e) => { const r = await ensureRicoCase(caseId); if (!r) return; await DB().update('rico_cases', r.id, { enterprise_gang_id: e.target.value || null }); renderRico(); };
-      const ab = body.querySelector('#rico-add'); if (ab) ab.onclick = async () => { const r = await ensureRicoCase(caseId); if (r) openPredicateModal(r.id, caseId); };
-      body.querySelectorAll('.pr-del').forEach((b) => b.onclick = async () => { await DB().remove('predicate_acts', b.dataset.id); renderRico(); });
+      if (gs && canEdit) gs.onchange = async (e) => { const r = await ensureRicoCase(caseId); if (!r) return; await DB().update('rico_cases', r.id, { enterprise_gang_id: e.target.value || null }); rerender(); };
+      const ab = body.querySelector('#rico-add'); if (ab) ab.onclick = async () => { const r = await ensureRicoCase(caseId); if (r) openPredicateModal(r.id, caseId, rerender); };
+      body.querySelectorAll('.pr-del').forEach((b) => b.onclick = async () => { await DB().remove('predicate_acts', b.dataset.id); rerender(); });
     }
-    async function openPredicateModal(ricoCaseId, caseId) {
+    async function openPredicateModal(ricoCaseId, caseId, rerender) {
       let evidence = [];
       try { evidence = await DB().list('evidence', { eq: { case_id: caseId } }); } catch (e) {}
       const node = el('div', { class: 'p-6' });
@@ -77,7 +87,7 @@
         const payload = { rico_case_id: ricoCaseId, predicate_type: node.querySelector('#pr-type').value, act_date: node.querySelector('#pr-date').value || null, evidence_id: node.querySelector('#pr-evid').value || null, evidence_ref: node.querySelector('#pr-ev').value.trim() || null, note: node.querySelector('#pr-note').value.trim() || null };
         const res = await DB().insert('predicate_acts', payload);
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
-        closeModal(); toast('Predicate act added', 'success'); renderRico();
+        closeModal(); toast('Predicate act added', 'success'); (rerender || renderRico)();
       };
       openModal(node);
     }
