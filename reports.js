@@ -168,13 +168,20 @@
       node.querySelectorAll('#r-form input[data-person]').forEach((i) => i.addEventListener('focus', () => { lastPerson = i; }));
       const fillPerson = (p) => {
         const inp = (lastPerson && node.contains(lastPerson)) ? lastPerson : node.querySelector('#r-form input[data-person]');
-        if (!inp) { toast('This report has no name field.', 'info'); return; }
-        inp.value = p.name;
-        if (p.dob) { const scope = inp.closest('tr') || inp.closest('section') || node; const dob = scope.querySelector('input[data-fkey*="dob" i]') || node.querySelector('#r-form input[data-fkey*="dob" i]'); if (dob && !dob.value) dob.value = p.dob; }
-        inp.focus();
+        if (inp) {
+          inp.value = p.name;
+          if (p.dob) { const scope = inp.closest('tr') || inp.closest('section') || node; const dob = scope.querySelector('input[data-fkey*="dob" i]') || node.querySelector('#r-form input[data-fkey*="dob" i]'); if (dob && !dob.value) dob.value = p.dob; }
+          inp.focus(); return;
+        }
+        // No single-name input (e.g. a search warrant) — add the name to a "persons involved" box instead.
+        const ta = node.querySelector('#r-form textarea[data-fkey*="person" i]');
+        if (ta) { ta.value = ta.value.replace(/\s+$/, '') + (ta.value.trim() ? '\n' : '') + p.name; ta.focus(); return; }
+        toast('This template has no suspect field to fill.', 'info');
       };
       gatherCasePeople(caseId).then((people) => {
         const box = node.querySelector('#r-people'); if (!box || !people.length) return;
+        // Only offer the quick-fill when the template actually has a suspect field.
+        if (!node.querySelector('#r-form input[data-person], #r-form textarea[data-fkey*="person" i]')) return;
         box.classList.remove('hidden');
         box.innerHTML = `<p class="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Suspects on this case · tap to fill the focused name field</p><div class="flex flex-wrap gap-1.5">${people.map((p, i) => `<button type="button" class="r-person rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 transition hover:bg-white/10" data-i="${i}">👤 ${esc(p.name)}${p.dob ? ` <span class="text-slate-500">· ${esc(p.dob)}</span>` : ''}</button>`).join('')}</div>`;
         box.querySelectorAll('.r-person').forEach((b) => b.onclick = () => fillPerson(people[+b.dataset.i]));
