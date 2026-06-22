@@ -13,8 +13,28 @@
       try { GANGS = await DB().list('gangs', { order: 'name', ascending: true }); renderGangs(); }
       catch (e) { gangsNotice('Could not load gangs: ' + escapeHTML(e.message || String(e))); }
     }
+    // Bulk multi-select delete (command-gated). Mirrors the Persons pattern;
+    // routes through deleteWithUndo with cascade children (roster/ranks/turf).
+    let gangSel = new Set();
+    function updateGangBulkBar() {
+      const grid = $('#gang-grid'); if (!grid) return;
+      let bar = document.getElementById('gang-bulkbar');
+      if (!gangSel.size) { if (bar) bar.remove(); return; }
+      if (!bar) { bar = el('div', { id: 'gang-bulkbar', class: 'xl:col-span-2 sticky top-2 z-10 mb-1 flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 backdrop-blur' }); grid.insertBefore(bar, grid.firstChild); }
+      bar.innerHTML = `<span class="text-sm font-semibold text-rose-200">${gangSel.size} selected</span><span class="flex gap-2"><button id="gsel-del" class="rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500">Delete selected</button><button id="gsel-clear" class="rounded-md border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Clear</button></span>`;
+      bar.querySelector('#gsel-del').onclick = deleteSelectedGangs;
+      bar.querySelector('#gsel-clear').onclick = () => { gangSel.clear(); renderGangs(); };
+    }
+    async function deleteSelectedGangs() {
+      const ids = [...gangSel]; if (!ids.length) return;
+      if (!(await uiConfirm('Delete ' + ids.length + ' selected gang' + (ids.length > 1 ? 's' : '') + '? This also removes their roster, ranks, and turf — restorable via Undo.', { confirmText: 'Delete ' + ids.length }))) return;
+      const rows = GANGS.filter((g) => gangSel.has(g.id));
+      gangSel.clear();
+      await deleteWithUndo('gangs', rows, { label: ids.length + ' gang' + (ids.length > 1 ? 's' : ''), after: fetchGangs, children: [{ table: 'gang_members', column: 'gang_id' }, { table: 'gang_ranks', column: 'gang_id' }, { table: 'gang_turf', column: 'gang_id' }] });
+    }
     function renderGangs() {
       const grid = $('#gang-grid'); if (!grid) return;
+      { const have = new Set(GANGS.map((g) => g.id)); [...gangSel].forEach((id) => { if (!have.has(id)) gangSel.delete(id); }); }
       const q = ($('#gang-search') ? $('#gang-search').value : '').trim().toLowerCase();
       const items = GANGS.filter((g) => !q || JSON.stringify(g).toLowerCase().includes(q));
       const addBtn = $('#add-gang'); if (addBtn) addBtn.classList.toggle('hidden', !(DB() && DB().canEdit()));
@@ -28,14 +48,17 @@
             <div class="flex flex-shrink-0 items-center gap-2">
               <span class="rounded-md border px-2.5 py-1 text-[10px] font-semibold uppercase ${threatTint(g.threat_level)}">${escapeHTML(cap(g.threat_level))} Threat</span>
               <button class="g-profile rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10" title="Unified intel profile">🔎</button>
+              ${DB() && DB().canDelete() ? `<label class="flex items-center pl-0.5" title="Select for bulk delete"><input type="checkbox" class="g-check h-4 w-4 accent-rose-500" data-id="${g.id}"${gangSel.has(g.id) ? ' checked' : ''}></label>` : ''}
             </div>
           </div>
           ${g.notes ? `<p class="mt-3 line-clamp-2 text-xs text-slate-400">${escapeHTML(g.notes)}</p>` : ''}
           <p class="mt-3 text-[11px] text-blue-300">View roster &amp; turf →</p>`;
         card.addEventListener('click', () => openGangDetail(g.id));
         const gp = card.querySelector('.g-profile'); if (gp && typeof openIntelProfile === 'function') gp.onclick = (e) => { e.stopPropagation(); openIntelProfile('gang', g.id); };
+        const gchk = card.querySelector('.g-check'); if (gchk) { gchk.addEventListener('click', (e) => e.stopPropagation()); gchk.onchange = () => { if (gchk.checked) gangSel.add(g.id); else gangSel.delete(g.id); updateGangBulkBar(); }; }
         grid.appendChild(card);
       });
+      updateGangBulkBar();
     }
     function openGangModal(record) {
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }

@@ -441,14 +441,22 @@
       setTimeout(dismiss, ms);
     }
     // Delete a row (or array of rows) with a 6s "Undo" that re-inserts them,
-    // preserving id so references survive. Honest only where a delete doesn't
-    // cascade-destroy children — use on leaf / SET-NULL records (persons, media,
-    // commendations…), NOT cascade parents like cases or gangs. `opts.after` runs
-    // after the delete and after a successful undo. Returns true if the delete stuck.
+    // preserving id so references survive. `opts.after` runs after the delete and
+    // after a successful undo. For cascade parents, pass `opts.children` —
+    // [{table, column}] of ON DELETE CASCADE children keyed by the FK to the
+    // parent id — and they're snapshotted before the delete and re-inserted (after
+    // the parents) on undo, so undo stays honest. Returns true if the delete stuck.
     async function deleteWithUndo(table, rows, opts) {
       opts = opts || {};
       const list = Array.isArray(rows) ? rows.slice() : [rows];
       if (!list.length) return false;
+      const ids = list.map((r) => r.id);
+      // Snapshot cascade children before the DB removes them with the parent.
+      const childSnap = [];
+      for (const spec of (opts.children || [])) {
+        try { const r = await DB().from(spec.table).select('*').in(spec.column, ids); childSnap.push({ table: spec.table, rows: r.data || [] }); }
+        catch (e) { childSnap.push({ table: spec.table, rows: [] }); }
+      }
       let ok = 0, fail = 0;
       for (const row of list) { const r = await DB().remove(table, row.id); if (r && r.error) fail++; else ok++; }
       if (typeof opts.after === 'function') opts.after();
@@ -458,6 +466,7 @@
       undoToast((one ? noun + ' deleted' : ok + ' deleted') + (fail ? ' · ' + fail + ' failed' : ''), async () => {
         let rok = 0;
         for (const row of list) { const r = await DB().insert(table, row); if (!(r && r.error)) rok++; }
+        for (const snap of childSnap) for (const kid of snap.rows) { try { await DB().insert(snap.table, kid); } catch (e) {} }
         toast(rok === list.length ? (one ? noun + ' restored' : rok + ' restored') : 'Restored ' + rok + ' of ' + list.length, rok ? 'success' : 'danger');
         if (typeof opts.after === 'function') opts.after();
       });

@@ -155,10 +155,11 @@
           ${mediaThumb(m)}
           <div class="p-4"><div class="flex items-center justify-between"><p class="truncate text-sm font-semibold text-white">${esc(m.title)}</p><span class="ml-2 flex-shrink-0 rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-slate-400">${esc(m.kind || m.type)}</span></div>
           <div class="mt-2 flex flex-wrap gap-1">${mediaTagChips(m)}</div>
-          ${canEdit ? '<div class="mt-3 relative">' + dropupBtn() + '</div>' : ''}</div>`;
+          ${canEdit ? '<div class="mt-3 flex items-center gap-2"><div class="relative flex-1">' + dropupBtn() + '</div><button class="med-tags rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-fuchsia-200 transition hover:bg-white/10" title="Edit tags">🏷️</button></div>' : ''}</div>`;
         const img = card.querySelector('.ev-img'); if (img) img.addEventListener('click', () => openLightbox(m));
         const cl = card.querySelector('.media-case-link'); if (cl) cl.addEventListener('click', (e) => { e.stopPropagation(); if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(cl.dataset.case); });
         const dd = card.querySelector('.dropup'); if (dd) wireDropup(dd, m);
+        const mt = card.querySelector('.med-tags'); if (mt) mt.addEventListener('click', (e) => { e.stopPropagation(); openMediaTagsEdit(m, fetchMedia); });
         g.appendChild(card);
       });
     }
@@ -195,6 +196,29 @@
     }
     document.addEventListener('click', () => document.querySelectorAll('.dropup-menu').forEach((m) => { m.remove(); const b = m.parentElement && m.parentElement.querySelector('.dropup'); if (b) b.setAttribute('aria-expanded', 'false'); }));
 
+    // Edit the labels on an existing media asset (vault + case media). Preserves
+    // the other tag keys (location/person) and only rewrites `labels`.
+    function openMediaTagsEdit(m, onSaved) {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      const node = el('div', { class: 'p-6' });
+      node.innerHTML = `
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Edit Tags</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <p class="mb-3 truncate text-xs text-slate-400">${esc(m.title || 'Untitled')}</p>
+        ${mediaTagsFieldHTML('met-tags', mediaLabels(m))}
+        <button id="met-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save tags</button>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      wireMediaTagsField(node);
+      node.querySelector('#met-save').onclick = async () => {
+        const labels = parseTags(node.querySelector('#met-tags').value);
+        const tags = Object.assign({}, m.tags || {}, { labels });
+        const res = await DB().update('media', m.id, { tags });
+        if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        m.tags = tags;
+        closeModal(); toast('Tags updated', 'success');
+        if (typeof onSaved === 'function') onSaved();
+      };
+      openModal(node);
+    }
     function openMediaModal() {
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
       const node = el('div', { class: 'p-6' });

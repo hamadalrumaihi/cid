@@ -17,13 +17,15 @@ Shipping incrementally on `claude/cid-rebuild`. ✅ done · 🟡 in progress · 
 - ✅ **Penal code Titles 5–10** — extended `penal.js` to the full San Andreas Penal Code (162 charges): Title 4 (4)24–(4)36 + new Titles 5 (firearms), 6 (controlled substances), 7 (wildlife), 8 (commercial vehicles), 9 (traffic), 10 (RICO modifiers). Added a `modifier` flag (MOD chip in the Charges list/picker).
 - ✅ **RICO tab in each case** — embedded the RICO builder (enterprise · predicate pattern · readiness meter) as a per-case detail tab; Charges "open RICO Builder" now jumps to it in-place.
 - ✅ **Player properties on profiles** — `persons.properties` jsonb (migration `20260622130000`, **applied to live**); modal editor, card 🏠 chip, intel-profile section, and a properties hint under person-linked form fields (subpoena/wiretap).
-- ✅ **Undo on delete** — `deleteWithUndo` + 6s Undo toast (re-insert preserving id). Wired into persons (single/modal/bulk), gang members, commendations.
+- ✅ **Undo on delete** — `deleteWithUndo` + 6s Undo toast (re-insert preserving id; `opts.children` snapshots/restores ON DELETE CASCADE children). Wired into persons (single/modal/bulk), gang members, commendations, gangs (bulk, +roster/ranks/turf), places (bulk/single, +process steps), evidence (single, +custody chain).
+- ✅ **Bulk multi-select delete on Gangs + Places** — same command-gated pattern as Persons, routed through undo.
+- ✅ **Edit tags on existing media** — `openMediaTagsEdit` reachable from a 🏷️ button on the Media Vault card and the case Linked-Media card.
 
 ## Next up
-- ⬜ **Extend undo-on-delete coverage** — apply `deleteWithUndo` to more leaf/SET-NULL deletes (places, media, evidence, reports). Skip cascade parents (cases, gangs) unless we restore children too.
+- ⬜ Nothing pinned — most non-deferred items are shipped. Candidate small adds: undo on report delete (verify its child table first); undo on media delete in the vault.
 
 ## Bigger / refactor
-- ⬜ **True soft-delete** — a `deleted_at` column + query filters would make undo survive page reloads and cover cascade parents, at the cost of a cross-cutting migration on every table. Current undo is client-side re-insert (works within the session only).
+- ⬜ **True soft-delete** — a `deleted_at` column + query filters would make undo survive page reloads (current undo is in-session client re-insert) and cover cascade parents without snapshotting. Cost: a cross-cutting migration on every table + filter every list/cache + a SELECT/RLS decision. Not started — flag before doing (touches RLS).
 
 ## Notes
 - Penal code now covers Titles 1–10 (crimes + firearm/drug classifications live as the Title 5/6 charge tables). Modifiers (Title 5/6/10) carry the `modifier` flag; stacking keys off `stack`, so modifiers get no count stepper.

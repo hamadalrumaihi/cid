@@ -540,14 +540,14 @@
           const nb = $('#ev-new'); if (nb) nb.onclick = () => openEvidenceModal(cid);
           $$('.ev-custody', body).forEach((b) => b.onclick = () => openCustody(b.dataset.id));
           $$('.ev-del', body).forEach((b) => b.onclick = async () => {
-            if (!(await uiConfirm('Delete this evidence item? This also removes its chain-of-custody history.', { confirmText: 'Delete' }))) return;
-            const res = await DB().remove('evidence', b.dataset.id);
-            if (res.error) { toast('Delete failed: ' + res.error.message, 'danger'); return; }
-            toast('Evidence deleted', 'warn'); loadDetailTab();
+            if (!(await uiConfirm('Delete this evidence item? This also removes its chain-of-custody history (restorable via Undo).', { confirmText: 'Delete' }))) return;
+            const row = ev.find((x) => x.id === b.dataset.id); if (!row) return;
+            await deleteWithUndo('evidence', row, { label: 'Evidence', after: loadDetailTab, children: [{ table: 'custody_chain', column: 'evidence_id' }] });
           });
           const ma = $('#cmedia-add'); if (ma) ma.onclick = () => openCaseMediaLink(cid);
           const mt = $('#cmedia-attach'); if (mt) mt.onclick = () => openAttachMedia(cid);
           const mu = $('#cmedia-upload'); if (mu) mu.onclick = () => openCaseMediaUpload(cid);
+          $$('.cmedia-tags', body).forEach((b) => b.onclick = () => { const m = med.find((x) => x.id === b.dataset.id); if (m && typeof openMediaTagsEdit === 'function') openMediaTagsEdit(m, () => { if (typeof fetchMedia === 'function') fetchMedia(); loadDetailTab(); }); });
           $$('.cmedia-detach', body).forEach((b) => b.onclick = async () => {
             if (!(await uiConfirm('Detach this media from the case? It stays in the Media Vault.', { danger: false, confirmText: 'Detach' }))) return;
             const res = await DB().update('media', b.dataset.id, { case_id: null });
@@ -645,6 +645,7 @@
           ${(typeof mediaLabels === 'function' && mediaLabels(m).length) ? `<div class="mt-1.5 flex flex-wrap gap-1">${mediaLabels(m).map((l) => `<span class="rounded bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] text-fuchsia-300">🏷️ ${escapeHTML(l)}</span>`).join('')}</div>` : ''}
           <div class="mt-2 flex items-center gap-2">
             ${url ? `<a href="${escapeHTML(url)}" target="_blank" rel="noopener" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10">open ↗</a>` : ''}
+            ${canEdit ? `<button class="cmedia-tags rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-fuchsia-200 transition hover:bg-white/10" data-id="${m.id}" title="Edit tags">🏷️</button>` : ''}
             ${canEdit ? `<button class="cmedia-detach rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-rose-300 transition hover:bg-rose-500/10" data-id="${m.id}">Detach</button>` : ''}
           </div>
         </div>

@@ -7,50 +7,57 @@
 - **App:** CID Portal — a Criminal Investigation Division ops tool for an SA-RP community ("State of San Andreas"). Cases, evidence, intel (persons/gangs/places), reports/forms, RICO, Drive, chat.
 - **Stack:** Vanilla ES2017, **classic scripts sharing ONE global lexical scope** (no build step, no modules). Precompiled Tailwind in `styles.css`. Supabase backend with RLS.
 - **Supabase project:** `cid` = `jhxuflzmqspidkvjckox` (org `nvxxnximnedwwzoxoceq`, **Free** plan). Other projects (leqat-platform, sahp-rbac) are unrelated/paused.
-- **Repo:** GitHub `hamadalrumaihi/cid` (the MCP scope registers it as `hamadalrumaihi/sahp.` — note trailing dot). Dev branch **`claude/cid-rebuild`**; production tracks **`main`** (Vercel).
+- **Repo:** GitHub `hamadalrumaihi/cid`. Production tracks **`main`** (Vercel); feature work lands on a `claude/*` branch → PR → merge to `main`. The most recent working branch was `claude/continue-previous-7pqwjg`.
 - **Deployed:** `cidportal-ody.vercel.app` (Vercel builds `main`; PR previews build the branch).
 
 ## Critical architecture rules (don't break these)
 - **Shared global scope:** every top-level `const`/`let`/`function` is global across all `*.js`. Names must be unique across files. **Verify every change two ways:**
   1. `node --check <file>` per changed file.
-  2. Concatenate all `<script src>` files in `index.html` load order and `node --check` the concatenation (catches cross-file `const` collisions). One-liner used all session:
+  2. Concatenate all `<script src>` files in `index.html` load order and `node --check` the concatenation (catches cross-file `const` collisions). One-liner:
      `files=$(grep -oE '<script src="[a-z0-9_]+\.js"></script>' index.html | sed -E 's/.*"([^"]+)".*/\1/'); :> /tmp/c.js; for f in $files; do cat "$f">>/tmp/c.js; echo>>/tmp/c.js; done; node --check /tmp/c.js`
 - **Precompiled Tailwind:** classes not already used in the app may be **absent** from `styles.css` (e.g. `max-w-sm` was missing → broke a dialog). For new/uncommon utilities, prefer **inline `style=`** for critical layout (width/z-index), or reuse classes known to exist.
-- **Migrations:** applied to live `cid` via the Supabase MCP `apply_migration`, **each shown + user-approved first** (auto-mode classifier blocks unapproved prod writes). Keep the `.sql` in `supabase/migrations/`.
-- **RLS model:** `private.is_active()`, `private.is_command()` (bureau_lead/deputy_director/director), `private.can_delete()` (=command), `private.can_access_case()`, `private.can_create_case(bureau)`, `private.can_access_case_row(...)`. Function-grant gaps bite: policy functions must have EXECUTE for `authenticated` (a missing grant on `can_create_case` once broke ALL case creation).
-- **DB layer:** `DB().list(table,{eq,order,ascending,select})`, `DB().insert/update/remove`, `DB().from(table)` (raw supabase builder), `DB().rpc(fn,args)`. `DB().me` = profile; `canEdit()`=active, `canDelete()`/`isAdmin()`=command.
-- **Forms engine** (`drive.js` + `core.js FORM_SCHEMAS`): section types `kv|grid|textarea|note`; field types `text|select|textarea|date|money|checks`(checkbox group)`. Field flag `person:true` → autocomplete vs Persons + auto-add. A documents row renders as a fillable form when `formSchemaIdFor(doc)` matches (by `content.form` or name contains a `FORM_NAME_MAP` title). `REPORT_TEMPLATES` (persons.js) drives the per-case Reports tab launcher.
+- **Migrations:** applied to live `cid` via the Supabase MCP `apply_migration`, **each user-approved first**. Keep the `.sql` in `supabase/migrations/`. After a DDL change, run `get_advisors` (security) and confirm only the by-design items remain.
+- **RLS model:** `private.is_active()`, `private.is_command()` (bureau_lead/deputy_director/director), `private.can_delete()` (=command), `private.can_access_case()`, `private.can_create_case(bureau)`, `private.can_access_case_row(...)`. Function-grant gaps bite: policy functions must have EXECUTE for `authenticated`.
+- **DB layer:** `DB().list(table,{eq,order,ascending,select})`, `DB().insert/update/remove`, `DB().from(table)` (raw supabase builder), `DB().rpc(fn,args)`. `DB().me` = profile; `canEdit()`=active, `canDelete()`/`isAdmin()`=command. `DB().list` **throws** on error (so `try/catch` detects a missing table).
+- **Forms engine** (`drive.js` + `core.js FORM_SCHEMAS`): section types `kv|grid|textarea|note`; field types `text|select|textarea|date|money|checks`. Field flag `person:true` → autocomplete vs Persons (+ a known-properties hint). `REPORT_TEMPLATES` (persons.js) drives the per-case Reports tab launcher.
+- **Reusable helpers worth knowing:** `toast(msg,type)`, `undoToast(msg,onUndo,ms)`, `deleteWithUndo(table,rows,{label,after})` (re-insert preserving id — leaf/SET-NULL deletes only), `uiConfirm`/`uiPrompt`, `copyText`, `openModal`/`closeModal`, `$`/`$$`/`el`, `openIntelProfile(type,id)`, `renderRicoInto(caseId,body,rerender)`.
 
-## Shipped this session (all merged to main via PRs, except the latest commit)
-- Waves 0–4 completed earlier (security, cases/sign-off, intel profiles + network graph, command scorecards + heatmap, branded exports + Drive search/versions).
+## Case detail tabs (casefiles.js)
+`overview · evidence · charges · rico · intel · reports · signoff · chat · timeline` — data-driven from one `tabs` array in `renderCaseDetailShell`; `loadDetailTab()` dispatches each.
+
+## Shipped (cumulative — all merged to main)
+- Waves 0–4: security; cases/sign-off; intel profiles + network graph; command scorecards + heatmap; branded exports + Drive search/versions.
 - **Fillable forms:** Arrest/Search/Wiretap warrants, Subpoena, Surveillance Report (+ a `checks` checkbox field type).
-- **Penal-code charges:** `penal.js` catalog (Titles 1–4, ~75 charges; stack/arrest/RICO flags) → **Charges tab** per case (picker, stacking, totals incl. RICO predicates, keyword "Recommended", RICO jump, charge descriptions). Stored in `cases.charges` jsonb.
-- **Reports:** name autocomplete vs Persons; "Suspects on this case" quick-fill chips (from gang_members/media/prior reports) incl. DOB; opt-in **auto-add new persons** on save; **cross-reference other reports** (`fields._refs`).
-- **Media:** case Evidence "Linked Media" (thumbnails, +Add link, Upload photos [multi, FiveManage], Attach from Vault, Detach); **tags/labels** (Mugshot/Scene/… presets, chips, vault label filters).
-- **Quality-of-life:** themed `uiConfirm`/`uiPrompt` replacing native dialogs; evidence Delete; roster **Remove (deactivate)**; chat **edit/delete + remove mention/link chips**; quick **case status** dropdown; **copy** buttons (`copyText`); **bulk multi-select delete on Persons**.
-- Fixed: case-creation grant bug; fillable-form name-prefix matching; dialog width (Tailwind gap).
+- **Penal-code charges:** `penal.js` catalog → **Charges tab** per case (picker, stacking, totals incl. RICO predicates, keyword "Recommended", charge descriptions). Stored in `cases.charges` jsonb.
+- **Full San Andreas Penal Code — Titles 1–10** (162 charges). Title 5/6 = firearm/drug charge tables; Title 10 = RICO modifiers. `modifier` flag → **MOD** chip; stacking keys off `stack` (modifiers get no stepper).
+- **Reports:** name autocomplete vs Persons; suspect quick-fill chips; opt-in auto-add new persons; cross-reference other reports.
+- **Media:** case Evidence "Linked Media" (upload/attach/detach); tags/labels with chips + vault filters.
+- **Link intel directly to a case:** case **Intel tab** (link/unlink persons/gangs/places + kind/entity/role picker), bidirectional with the intel-profile "Linked cases" rollup. Table `case_intel_links`.
+- **RICO per-case tab:** the RICO builder embedded in case detail via `renderRicoInto`; Charges "open RICO Builder" jumps to it in-place.
+- **Player properties:** `persons.properties` jsonb — modal editor, card 🏠 chip, intel-profile section, properties hint under person-linked form fields.
+- **Undo on delete:** `deleteWithUndo` + 6s Undo toast (re-insert preserving id). Wired into persons (single/modal/bulk), gang members, commendations.
+- **QoL:** themed `uiConfirm`/`uiPrompt`; chat edit/delete; quick case status; copy buttons; bulk multi-select delete on Persons.
 
-## Migrations applied to live `cid` this session (all verified)
-- `cid_records_lock` (was committed-but-never-applied; closed anon read) · `wave0_advisor_followup` (search_path + dup index) · `documents_versions` · `case_charges` (cases.charges jsonb) · `case_messages_edit_delete` (cm_upd/cm_del).
-- In-repo, **not yet applied**: none pending right now.
+## Migrations applied to live `cid`
+- Earlier: `cid_records_lock`, `wave0_advisor_followup`, `documents_versions`, `case_charges`, `case_messages_edit_delete`.
+- This session: **`20260622120000_case_intel_links`** (polymorphic case↔intel join, RLS on `can_access_case`) · **`20260622130000_persons_properties`** (additive jsonb, inherits persons RLS).
+- In-repo **not yet applied:** none pending.
 
 ## Workflow that's been working
-- Build on `claude/cid-rebuild` → commit (per feature) → push → **owner opens/merges PR to `main` and deletes the branch** (so the next push recreates it). Production reflects `main`.
-- Migrations: I prep `.sql`, show it, **AskUserQuestion to approve**, then `apply_migration` + verify.
+- Build on a `claude/*` branch → commit per feature → push → owner opens/merges the PR to `main`. Production reflects `main`.
+- Migrations: prep `.sql` in-repo, get the owner's approval, then `apply_migration` + advisor check. (This session the owner pre-approved applying, so both migrations went straight to live.)
 
 ## Open backlog (next chat: pick up here)
-- 🟡 **Bulk multi-select delete** — done for Persons; **replicate to Gangs + Places** (same pattern: `personSel` Set + `.p-check` + sticky bar in `renderGangs`/`renderPlaces`).
-- ⬜ Link intel (person/gang/place) directly to a case.
-- ⬜ **RICO tab in each case** (RICO is already per-case Supabase data; embed as a case-detail tab; Charges tab already surfaces RICO predicates + links to it).
-- ⬜ Undo-on-delete (soft-delete + 5s undo toast; cross-cutting).
-- ⬜ Edit tags on existing media (no edit-media modal yet).
-- ⬜ **Player properties on profiles** — owned properties on a person, surfaced in Search/Subpoena warrants. **Needs migration** (persons.properties jsonb or person_properties table).
-- See `docs/BACKLOG.md` and `docs/DEFERRED.md` for the full lists + the Pro-gated/network-blocked items (SheetJS repo-vendoring, server-side case filtering).
+- ✅ Bulk multi-select delete — now on **Persons, Gangs, and Places** (command-gated `Set` + checkbox + sticky bar), all routed through `deleteWithUndo`.
+- ✅ Undo-on-delete — `deleteWithUndo(table, rows, {label, after, children})`; `children:[{table,column}]` snapshots ON DELETE CASCADE rows and restores them on undo. Covers persons, gang members, commendations, gangs (+roster/ranks/turf), places (+process steps), evidence (+custody chain).
+- ✅ Edit tags on existing media — `openMediaTagsEdit` from a 🏷️ button on the vault + case-media cards.
+- ⬜ **True soft-delete** (cross-cutting): a `deleted_at` column + query filters so undo survives reloads and covers cascade parents without snapshotting. Touches RLS/SELECT on every table — **flag before doing**.
+- ⬜ Small adds: undo on report/media-vault delete (verify report child table first).
+- See `docs/BACKLOG.md` and `docs/DEFERRED.md` for the full lists + Pro-gated/network-blocked items (SheetJS repo-vendoring, server-side case filtering).
 
 ## Pre-pitch / known gaps (from the audit)
 - Roster is tiny (Tom Wood = director/SAB + 1 detective). No bureau_lead/deputy or non-SAB users → can't demo the 3-tier sign-off live. **Seed a realistic roster before pitching.**
 - Narcotics tab is empty; reports/chat/evidence are thin. Intel (persons/gangs/places) is rich.
-- Leaked-password protection: enable in Supabase Auth (dashboard toggle) if not already.
-- Penal code: only Titles 1–4 (crimes) loaded; Titles 5/6 are classifications. Send more titles/traffic/drug charge tables to extend.
+- Leaked-password protection: a Supabase **Pro** feature — owner has opted not to enable it now.
 
-_Last updated this session (2026-06-21)._
+_Last updated 2026-06-22 (penal Titles 5–10, intel↔case links, RICO per-case tab, player properties, undo-on-delete)._
