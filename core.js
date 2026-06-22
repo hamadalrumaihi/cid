@@ -221,7 +221,7 @@
             { key: 'department', label: 'Department', type: 'select', opts: ['', 'LSPD', 'BCSO', 'SAHP'] },
             { key: 'date', label: 'Date', type: 'text' },
           ] },
-          { id: 'suspect', label: 'Suspect Information', type: 'kv', fields: [
+          { id: 'suspects', label: 'Suspect Information', type: 'grid', cols: [
             { key: 'full_name', label: 'Full Name', type: 'text', person: true },
             { key: 'dob', label: 'DOB', type: 'text' },
             { key: 'address', label: 'Known Address', type: 'text' },
@@ -251,6 +251,11 @@
             { key: 'date', label: 'Date', type: 'text' },
           ] },
           { id: 'location', label: 'Location to be Searched', type: 'textarea', key: 'location' },
+          { id: 'properties', label: 'Properties / Premises to Search', type: 'grid', cols: [
+            { key: 'address', label: 'Address / Location', type: 'text' },
+            { key: 'type', label: 'Type', type: 'select', opts: ['', 'Residence', 'Business', 'Vehicle', 'Storage Unit', 'Other'] },
+            { key: 'notes', label: 'Notes', type: 'text' },
+          ] },
           { id: 'persons', label: 'Person(s) Involved', type: 'textarea', key: 'persons_involved' },
           { id: 'items', label: 'Items to be Seized', type: 'kv', fields: [
             { key: 'items_to_seize', label: 'Items', type: 'checks', opts: ['Narcotics', 'Firearms (Class 2 / Class 3)', 'Currency / Proceeds', 'Documents / Records', 'Electronic Devices', 'Other'] },

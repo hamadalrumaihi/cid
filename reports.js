@@ -163,21 +163,55 @@
           banner.querySelector('#rdr-discard').onclick = () => { Drafts.clear(reportDraftKey); banner.remove(); };
         }
       }
-      // Person-name fields: track focus + recommend this case's known suspects.
+      // Person-name fields: track the focused name field (delegated, so rows added
+      // to a suspect grid are covered too) + recommend this case's known suspects.
       let lastPerson = node.querySelector('#r-form input[data-person]');
-      node.querySelectorAll('#r-form input[data-person]').forEach((i) => i.addEventListener('focus', () => { lastPerson = i; }));
-      const fillPerson = (p) => {
-        const inp = (lastPerson && node.contains(lastPerson)) ? lastPerson : node.querySelector('#r-form input[data-person]');
-        if (inp) {
-          inp.value = p.name;
-          if (p.dob) { const scope = inp.closest('tr') || inp.closest('section') || node; const dob = scope.querySelector('input[data-fkey*="dob" i]') || node.querySelector('#r-form input[data-fkey*="dob" i]'); if (dob && !dob.value) dob.value = p.dob; }
-          inp.focus(); return;
-        }
-        // No single-name input (e.g. a search warrant) — add the name to a "persons involved" box instead.
-        const ta = node.querySelector('#r-form textarea[data-fkey*="person" i]');
-        if (ta) { ta.value = ta.value.replace(/\s+$/, '') + (ta.value.trim() ? '\n' : '') + p.name; ta.focus(); return; }
-        toast('This template has no suspect field to fill.', 'info');
+      const rForm = node.querySelector('#r-form');
+      if (rForm) rForm.addEventListener('focusin', (e) => { const i = e.target.closest && e.target.closest('input[data-person]'); if (i) lastPerson = i; });
+      const propsOf = (p) => (p && Array.isArray(p.properties)) ? p.properties : [];
+      // Resolve the fullest registry record we hold for a person (carries dob + properties).
+      const lookupPerson = (p) => (typeof PERSONS !== 'undefined' ? PERSONS : []).find((x) => (p && p.id && x.id === p.id) || (x.name && p && p.name && x.name.toLowerCase() === p.name.toLowerCase())) || p;
+      // Fill DOB + Known Address beside a person field from the registry record.
+      const applyPersonDetails = (inp, person) => {
+        if (!person) return;
+        const scope = (inp && (inp.closest('tr') || inp.closest('section'))) || node;
+        if (person.dob) { const dob = scope.querySelector('input[data-fkey*="dob" i]') || node.querySelector('#r-form input[data-fkey*="dob" i]'); if (dob && !dob.value) dob.value = person.dob; }
+        const addr = (propsOf(person)[0] || {}).address || '';
+        if (addr) { const a = scope.querySelector('input[data-fkey*="address" i]'); if (a && !a.value) a.value = addr; }
+        if (inp && typeof showPersonPropsHint === 'function') showPersonPropsHint(inp);
       };
+      // If the template has a properties grid (search warrant), drop the person's
+      // registered properties into it, skipping any address already listed.
+      const addPersonProps = (person) => {
+        const sec = tpl.schema.sections.find((s) => s.type === 'grid' && s.id === 'properties'); if (!sec) return;
+        const tb = node.querySelector('#r-form [data-grid="properties"] tbody'); if (!tb) return;
+        const props = propsOf(person); if (!props.length) return;
+        const seen = new Set($$('input[data-fkey="address"]', tb).map((i) => i.value.trim().toLowerCase()).filter(Boolean));
+        props.forEach((pr) => {
+          const addr = (pr.address || '').trim(); if (!addr || seen.has(addr.toLowerCase())) return; seen.add(addr.toLowerCase());
+          let row = $$('tr', tb).find((tr) => $$('input[data-fkey], select[data-fkey]', tr).every((i) => !i.value.trim()));
+          if (!row) { const cells = sec.cols.map((col) => `<td class="border-b border-r border-white/5 p-1.5 align-top">${formCellInput({ key: col.key, type: col.type, opts: col.opts }, '', true)}</td>`).join(''); tb.insertAdjacentHTML('beforeend', `<tr>${cells}<td class="border-b border-white/5 p-1.5 text-center align-middle"><button class="grid-del text-slate-500 hover:text-rose-300" title="Remove row">✕</button></td></tr>`); row = tb.lastElementChild; }
+          const vals = { address: addr, type: pr.type || '', notes: pr.notes || '' };
+          sec.cols.forEach((col) => { const i = row.querySelector(`[data-fkey="${col.key}"]`); if (i && vals[col.key] != null) i.value = vals[col.key]; });
+        });
+      };
+      const fillPerson = (p) => {
+        const person = lookupPerson(p);
+        const inp = (lastPerson && node.contains(lastPerson)) ? lastPerson : node.querySelector('#r-form input[data-person]');
+        if (inp) { inp.value = person.name || (p && p.name) || ''; applyPersonDetails(inp, person); inp.focus(); }
+        else {
+          const ta = node.querySelector('#r-form textarea[data-fkey*="person" i]');
+          if (ta) { ta.value = ta.value.replace(/\s+$/, '') + (ta.value.trim() ? '\n' : '') + (person.name || p.name); ta.focus(); }
+          else if (!node.querySelector('#r-form [data-grid="properties"]')) { toast('This template has no suspect field to fill.', 'info'); }
+        }
+        addPersonProps(person); // populate the search-warrant properties grid if present
+      };
+      // Typing or picking a known name in any person field auto-fills their details.
+      if (rForm) rForm.addEventListener('change', (e) => {
+        const inp = e.target.closest && e.target.closest('input[data-person]'); if (!inp) return;
+        const val = inp.value.trim().toLowerCase(); if (!val) return;
+        applyPersonDetails(inp, (typeof PERSONS !== 'undefined' ? PERSONS : []).find((x) => (x.name && x.name.toLowerCase() === val) || (x.alias && x.alias.toLowerCase() === val)));
+      });
       gatherCasePeople(caseId).then((people) => {
         const box = node.querySelector('#r-people'); if (!box || !people.length) return;
         // Only offer the quick-fill when the template actually has a suspect field.
