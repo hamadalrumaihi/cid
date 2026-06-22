@@ -1,6 +1,6 @@
 # Feature Backlog — CID Portal
 
-Shipping incrementally on `claude/cid-rebuild`. ✅ done · 🟡 in progress · ⛔ blocked · ⬜ todo.
+Shipping incrementally on the dev branch. ✅ done · 🟡 in progress · ⛔ blocked · ⬜ todo.
 
 ## Done
 - ✅ **Warrant templates** — Arrest, Search, Wiretap (fillable; added a `checks` checkbox field type).

@@ -79,7 +79,7 @@
     function casesNotice(msg) { $('#cases-grid').innerHTML = `<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">${msg}</div>`; }
 
     function showCasesList() { $('#case-detail').classList.add('hidden'); $('#cases-list').classList.remove('hidden'); }
-    function onEnterCases() { showCasesList(); if (dbReady()) fetchCases(); else casesNotice('Live case data requires sign-in. Configure Supabase + sign in to load cases.'); }
+    function onEnterCases() { showCasesList(); if (dbReady()) fetchCases(); else casesNotice('Sign in to load live case data.'); }
 
     /* ============================================================ CASE FILES — ATTACHMENTS (per-case files via FiveManage + Supabase, #case-files) ============================================================ */
     /* Files are uploaded to FiveManage (window.CID_FIVEMANAGE); their URL +
@@ -159,7 +159,7 @@
       }
       if (toolbar) { toolbar.classList.remove('hidden'); toolbar.classList.add('flex'); }
       const drop = $('#cf-drop'); if (drop) drop.classList.toggle('hidden', !fmReady);
-      if (auth) auth.innerHTML = '<span class="rounded-lg bg-white/5 px-2.5 py-1.5 text-[11px] text-slate-300">Files upload to FiveManage; records stored in Supabase.</span>';
+      if (auth) auth.innerHTML = '<span class="rounded-lg bg-white/5 px-2.5 py-1.5 text-[11px] text-slate-300">Attachments are uploaded and linked to the case.</span>';
       cfPopulateCaseList();
       if (!cfWired) {
         cfWired = true;
@@ -201,7 +201,7 @@
     }
 
     async function fetchCases() {
-      if (!dbReady()) { casesNotice('Live case data requires sign-in. Configure Supabase + sign in to load cases.'); return; }
+      if (!dbReady()) { casesNotice('Sign in to load live case data.'); return; }
       $('#cases-live').classList.remove('hidden'); $('#cases-live').classList.add('inline-flex');
       try {
         // Auto-retry once on a transient blip before surfacing an error.
@@ -294,7 +294,7 @@
     async function deleteSelectedCases() {
       const ids = [...caseSel]; if (!ids.length) return;
       const rows = casesCache.filter((c) => caseSel.has(c.id));
-      const nums = rows.map((c) => c.case_number).join(', ');
+      const nums = rows.slice(0, 12).map((c) => c.case_number).join(', ') + (rows.length > 12 ? ', …and ' + (rows.length - 12) + ' more' : '');
       if (!(await uiConfirm('Permanently delete ' + ids.length + ' case' + (ids.length > 1 ? 's' : '') + '?\n\n' + nums + '\n\nThis also deletes ALL of each case’s evidence, reports, charges, sign-off history, chat and links. This cannot be undone.', { confirmText: 'Delete ' + ids.length, danger: true }))) return;
       let ok = 0, fail = 0;
       for (const id of ids) { const r = await DB().remove('cases', id); if (r && r.error) fail++; else ok++; }
@@ -312,6 +312,20 @@
       let items = casesCache.filter((c) => !q || JSON.stringify(c).toLowerCase().includes(q));
       if (casesScope === 'mine' && mine) items = items.filter((c) => c.lead_detective_id === mine);
       $('#case-new').classList.toggle('hidden', !(DB() && DB().canEdit()));
+      // Master "Select all" (command only): one click selects every case in the
+      // current view (respecting the My/All scope + search filter), feeding the
+      // bulk-delete bar — so "select all → Delete selected" wipes the whole view.
+      const selAll = $('#case-selectall');
+      if (selAll) {
+        const canDel = DB() && DB().canDelete();
+        selAll.classList.toggle('hidden', !(canDel && items.length));
+        if (canDel && items.length) {
+          const visIds = items.map((c) => c.id);
+          const allSel = visIds.every((id) => caseSel.has(id));
+          selAll.textContent = allSel ? '☐ Deselect all' : '☑ Select all (' + items.length + ')';
+          selAll.onclick = () => { if (allSel) visIds.forEach((id) => caseSel.delete(id)); else visIds.forEach((id) => caseSel.add(id)); renderCases(); };
+        }
+      }
       if (!items.length) {
         const scopedEmpty = casesScope === 'mine' && mine && casesCache.length;
         casesNotice(scopedEmpty ? 'No cases led by you. Switch to “All” to see every case.' : (casesCache.length ? 'No cases match your filter.' : 'No case files yet.' + (DB() && DB().canEdit() ? ' Use “+ New Case” to create the first.' : ''))); return;
@@ -661,7 +675,7 @@
           const dot = { blue: 'bg-blue-400', violet: 'bg-violet-400', amber: 'bg-amber-400', emerald: 'bg-emerald-400', cyan: 'bg-cyan-400', slate: 'bg-slate-400' };
           body.innerHTML = `<div class="mb-4 flex items-start gap-2 rounded-lg border border-white/5 bg-ink-900/60 px-3 py-2 text-[11px] text-slate-400"><span>🛡</span><span>Every action on this case (evidence, reports, custody, sign-off, chat) is recorded with who and when. This trail is your accountability record — it protects you as much as it documents the case.</span></div><ul class="space-y-4">${events.map((e) => `<li class="flex gap-3"><span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${dot[e.dot] || 'bg-slate-400'}"></span><div><p class="text-sm text-slate-200">${escapeHTML(e.label)}</p><p class="text-[11px] text-slate-500">${e.t ? new Date(e.t).toLocaleString('en-US') : '—'}</p></div></li>`).join('')}</ul>`;
         }
-      } catch (e) { body.innerHTML = '<p class="text-sm text-rose-300">Load error: ' + escapeHTML(e.message || String(e)) + '</p>'; }
+      } catch (e) { body.innerHTML = '<p class="text-sm text-rose-300">Couldn’t load — ' + escapeHTML(e.message || String(e)) + '</p>'; }
     }
     function evidenceCard(e, hasCustody) {
       const tint = e.tamper === 'intact' ? 'text-emerald-300' : e.tamper === 'compromised' ? 'text-rose-300' : 'text-amber-300';
@@ -1027,6 +1041,7 @@
         DB().subscribe('audit_log', fetchActivity);
         DB().subscribe('notifications', fetchNotifications);
         DB().subscribe('case_signoff_history', () => { if (typeof detailCase !== 'undefined' && detailCase && detailTab === 'signoff') loadDetailTab(); });
+        DB().subscribe('case_intel_links', () => { if (typeof detailCase !== 'undefined' && detailCase && detailTab === 'intel') loadDetailTab(); });
         DB().subscribe('case_templates', fetchCaseTemplates);
         if (typeof fetchCaseFiles === 'function') DB().subscribe('case_files', fetchCaseFiles);
         if (typeof fetchShifts === 'function') DB().subscribe('shift_reports', fetchShifts);

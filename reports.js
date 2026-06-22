@@ -57,7 +57,7 @@
       if (!dbReady()) { body.innerHTML = '<p class="text-sm text-slate-500">Sign in to view case reports.</p>'; return; }
       let list = [];
       try { list = await DB().list('reports', { order: 'created_at', ascending: true, eq: { case_id: caseId } }); }
-      catch (e) { body.innerHTML = '<p class="text-sm text-rose-300">Load error: ' + escapeHTML(e.message || e) + '</p>'; return; }
+      catch (e) { body.innerHTML = '<p class="text-sm text-rose-300">Couldn’t load — ' + escapeHTML(e.message || e) + '</p>'; return; }
       const tplBtns = REPORT_TEMPLATES.map((t) => `<button class="rpt-tpl flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/10 hover:text-white" data-tpl="${t.id}"><span class="text-lg">${t.icon}</span><span>${esc(t.name)}${t.default ? ' · default' : ''}</span></button>`).join('');
       body.innerHTML = `
         ${canEdit ? `<div class="mb-4 rounded-2xl border border-white/5 bg-ink-900/60 p-4"><p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">New report — official templates</p><div class="flex flex-wrap gap-2">${tplBtns}</div></div>` : ''}
@@ -168,13 +168,20 @@
       node.querySelectorAll('#r-form input[data-person]').forEach((i) => i.addEventListener('focus', () => { lastPerson = i; }));
       const fillPerson = (p) => {
         const inp = (lastPerson && node.contains(lastPerson)) ? lastPerson : node.querySelector('#r-form input[data-person]');
-        if (!inp) { toast('This report has no name field.', 'info'); return; }
-        inp.value = p.name;
-        if (p.dob) { const scope = inp.closest('tr') || inp.closest('section') || node; const dob = scope.querySelector('input[data-fkey*="dob" i]') || node.querySelector('#r-form input[data-fkey*="dob" i]'); if (dob && !dob.value) dob.value = p.dob; }
-        inp.focus();
+        if (inp) {
+          inp.value = p.name;
+          if (p.dob) { const scope = inp.closest('tr') || inp.closest('section') || node; const dob = scope.querySelector('input[data-fkey*="dob" i]') || node.querySelector('#r-form input[data-fkey*="dob" i]'); if (dob && !dob.value) dob.value = p.dob; }
+          inp.focus(); return;
+        }
+        // No single-name input (e.g. a search warrant) — add the name to a "persons involved" box instead.
+        const ta = node.querySelector('#r-form textarea[data-fkey*="person" i]');
+        if (ta) { ta.value = ta.value.replace(/\s+$/, '') + (ta.value.trim() ? '\n' : '') + p.name; ta.focus(); return; }
+        toast('This template has no suspect field to fill.', 'info');
       };
       gatherCasePeople(caseId).then((people) => {
         const box = node.querySelector('#r-people'); if (!box || !people.length) return;
+        // Only offer the quick-fill when the template actually has a suspect field.
+        if (!node.querySelector('#r-form input[data-person], #r-form textarea[data-fkey*="person" i]')) return;
         box.classList.remove('hidden');
         box.innerHTML = `<p class="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Suspects on this case · tap to fill the focused name field</p><div class="flex flex-wrap gap-1.5">${people.map((p, i) => `<button type="button" class="r-person rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 transition hover:bg-white/10" data-i="${i}">👤 ${esc(p.name)}${p.dob ? ` <span class="text-slate-500">· ${esc(p.dob)}</span>` : ''}</button>`).join('')}</div>`;
         box.querySelectorAll('.r-person').forEach((b) => b.onclick = () => fillPerson(people[+b.dataset.i]));

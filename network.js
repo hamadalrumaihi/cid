@@ -40,9 +40,12 @@
     // node table + undirected adjacency. Persons/places only enter the graph when
     // they have a gang link — unaffiliated records would just be noise here.
     async function netLoad() {
-      const gangs   = (typeof GANGS !== 'undefined' && GANGS.length)     ? GANGS   : await DB().list('gangs');
-      const persons = (typeof PERSONS !== 'undefined' && PERSONS.length) ? PERSONS : await DB().list('persons');
-      const places  = (typeof PLACES !== 'undefined' && PLACES.length)   ? PLACES  : await DB().list('places');
+      // DB().list throws on error; guard the cache-miss fallbacks so a network
+      // blip can't reject netLoad unhandled (the graph just renders empty).
+      const safeList = async (t) => { try { return await DB().list(t); } catch (e) { return []; } };
+      const gangs   = (typeof GANGS !== 'undefined' && GANGS.length)     ? GANGS   : await safeList('gangs');
+      const persons = (typeof PERSONS !== 'undefined' && PERSONS.length) ? PERSONS : await safeList('persons');
+      const places  = (typeof PLACES !== 'undefined' && PLACES.length)   ? PLACES  : await safeList('places');
       let members = []; try { members = await DB().list('gang_members'); } catch (e) {}
 
       const nodes = {}, adj = {};
