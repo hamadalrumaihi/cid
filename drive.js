@@ -237,8 +237,11 @@
         if (s.type === 'note') return `<section class="mb-5"><div class="rounded-lg border border-white/10 bg-ink-900/60 p-4">${head}<p class="text-xs leading-relaxed text-slate-400">${esc(s.text)}</p></div></section>`;
         if (s.type === 'textarea') return `<section class="mb-5">${head}${formCellInput({ key: s.key, type: 'textarea' }, V[s.key], editable)}</section>`;
         if (s.type === 'kv') return `<section class="mb-5">${head}<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">${s.fields.map((f) => `<div><label class="mb-1 block text-[11px] font-medium text-slate-400">${esc(f.label)}</label>${formCellInput(f, V[f.key], editable)}</div>`).join('')}</div></section>`;
-        // grid: repeatable table
-        const rows = Array.isArray(V[s.id]) && V[s.id].length ? V[s.id] : [{}];
+        // grid: repeatable table. Older reports stored single-suspect fields at the
+        // top level (before this section became a grid) — seed one row from those
+        // flat keys so legacy warrants still show their suspect.
+        let rows = Array.isArray(V[s.id]) && V[s.id].length ? V[s.id] : null;
+        if (!rows) { const seed = {}; let has = false; s.cols.forEach((col) => { if (V[col.key] != null && V[col.key] !== '') { seed[col.key] = V[col.key]; has = true; } }); rows = has ? [seed] : [{}]; }
         const rowHtml = (r) => `<tr>${s.cols.map((col) => `<td class="border-b border-r border-white/5 p-1.5 align-top">${formCellInput({ key: col.key, type: col.type, opts: col.opts }, r[col.key], editable)}</td>`).join('')}${editable ? '<td class="border-b border-white/5 p-1.5 text-center align-middle"><button class="grid-del text-slate-500 hover:text-rose-300" title="Remove row">✕</button></td>' : ''}</tr>`;
         return `<section class="mb-5">${head}
           <div class="overflow-x-auto rounded-lg border border-white/10"><table class="w-full text-left text-sm" data-grid="${s.id}">
