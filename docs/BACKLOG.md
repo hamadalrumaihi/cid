@@ -7,15 +7,15 @@ Shipping incrementally on `claude/cid-rebuild`. ✅ done · 🟡 in progress · 
 - ✅ **Subpoena template** (fillable).
 - ✅ **Surveillance Report template** (fillable).
 - ✅ **Penal-code charges system** — `penal.js` catalog (Titles 1–4); Charges tab per case with picker, stacking, totals (sentence/fines/RICO), recommendations. Migration `case_charges` **applied to live**.
+- ✅ **Name autocomplete in reports** — typing a name suggests matching persons; auto-add/auto-create on save; suspect recommendations.
+- ✅ **Media tags** — tag media (Mugshot/Scene/Weapon…); chips + filter in case media and the Media Vault.
+- ✅ **Tag/reference reports inside other reports** — cross-reference chips between reports in the same case.
+- ✅ **Chat edit/delete** — edit & delete messages; remove mention/linked-case chips. Migration `case_messages_edit_delete` applied.
+- ✅ **Quick status change** on the case header + **copy buttons** (case #, etc.).
+- ✅ **Bulk multi-select delete** on the Persons list (command-gated).
 
-## Next up (no migration)
-- ⬜ **Name autocomplete in reports** — typing a name suggests matching persons from the DB (partial match); option to **auto-create** the person if new when the report is saved.
-- ⬜ **Media tags** — tag media (e.g. "Mugshot", "Scene", "Weapon"); filter by tag in case media + the Media Vault. (`media.tags` jsonb already exists.)
-- ⬜ **Tag/reference reports inside other reports** — link a report to other reports in the same case (cross-reference chips).
-- ⬜ **Delete chat mentions / linked-case chips**; **edit & delete chat messages**.
-- ⬜ **Quick status change** on case cards/header; **Copy buttons** (case #, phone, badge).
-- ⬜ **Bulk multi-select delete** on lists.
-- ⬜ **Link intel (person/gang/place) directly to a case**.
+## Next up
+- 🟡 **Link intel (person/gang/place) directly to a case** — case **Intel tab** with link/unlink + a kind/entity/role picker; direct links also surface in the person/gang intel-profile "Linked cases" rollup. Backed by a new `case_intel_links` join table. Migration `20260622120000_case_intel_links.sql` is **prepped in-repo, NOT yet applied to live** — the tab shows a "run migration" banner and degrades gracefully until it is. (Reclassified from "no migration": a real many-to-many person/gang→case link needs a join table.)
 
 ## Bigger / refactor
 - ⬜ **RICO tab in each case** — embed the RICO builder per case (Charges tab already surfaces RICO predicates + links to it).

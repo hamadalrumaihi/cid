@@ -443,7 +443,7 @@
     }
     function renderCaseDetailShell() {
       const c = detailCase, canEdit = DB() && DB().canEdit(), canDel = DB() && DB().canDelete();
-      const tabs = ['overview', 'evidence', 'charges', 'reports', 'signoff', 'chat', 'timeline'];
+      const tabs = ['overview', 'evidence', 'charges', 'intel', 'reports', 'signoff', 'chat', 'timeline'];
       $('#case-detail').innerHTML = `
         <button id="case-back" class="mb-4 inline-flex items-center gap-1 text-sm text-slate-300 transition hover:text-white">← All cases</button>
         <div class="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
@@ -556,6 +556,8 @@
           });
         } else if (detailTab === 'charges') {
           renderCaseCharges(body);
+        } else if (detailTab === 'intel') {
+          await renderCaseIntel(body, cid);
         } else if (detailTab === 'reports') {
           await renderCaseReports(body, cid);
         } else if (detailTab === 'signoff') {
@@ -797,6 +799,88 @@
       node.querySelector('#ch-search').oninput = (e) => draw(e.target.value);
       draw('');
       openModal(node, { wide: true });
+    }
+    // Intel tab — direct case ↔ person/gang/place links via case_intel_links (#backlog).
+    // Complements the indirect links (gang_members/media/footprints) that already
+    // surface a person or gang on a case; this is an explicit "of interest" attach.
+    const INTEL_KINDS = [
+      { kind: 'person', icon: '👤', label: 'Persons', table: 'persons', canProfile: true,
+        name: (x) => x.name || 'Person', sub: (x) => [x.alias ? '“' + x.alias + '”' : '', x.status || ''].filter(Boolean).join(' · ') },
+      { kind: 'gang', icon: '🚩', label: 'Gangs', table: 'gangs', canProfile: true,
+        name: (x) => x.name || 'Gang', sub: (x) => [x.colors ? 'Colors: ' + x.colors : '', (x.threat_level || '') ? x.threat_level + ' threat' : ''].filter(Boolean).join(' · ') },
+      { kind: 'place', icon: '📍', label: 'Places', table: 'places', canProfile: false,
+        name: (x) => x.name || 'Place', sub: (x) => [x.type || '', x.area || ''].filter(Boolean).join(' · ') },
+    ];
+    const INTEL_ROLES = ['Person of Interest', 'Suspect', 'Witness', 'Victim', 'Associate', 'Location', 'Other'];
+    async function renderCaseIntel(body, cid) {
+      const canEdit = DB() && DB().canEdit();
+      body.innerHTML = '<p class="text-sm text-slate-500">Loading linked intel…</p>';
+      let links = [], tableMissing = false;
+      try { links = await DB().list('case_intel_links', { order: 'created_at', ascending: true, eq: { case_id: cid } }); }
+      catch (e) { tableMissing = true; }
+      // Fetch fresh so names resolve even when the intel tab caches are cold.
+      const [persons, gangs, places] = await Promise.all([
+        DB().list('persons', { order: 'name', ascending: true }).catch(() => []),
+        DB().list('gangs', { order: 'name', ascending: true }).catch(() => []),
+        DB().list('places', { order: 'name', ascending: true }).catch(() => []),
+      ]);
+      const pool = { person: persons, gang: gangs, place: places };
+      const byId = { person: new Map(persons.map((x) => [x.id, x])), gang: new Map(gangs.map((x) => [x.id, x])), place: new Map(places.map((x) => [x.id, x])) };
+      const linkRow = (lk) => {
+        const m = INTEL_KINDS.find((k) => k.kind === lk.kind); if (!m) return '';
+        const ent = byId[lk.kind].get(lk.ref_id);
+        const title = ent ? m.name(ent) : 'Deleted / no access';
+        const sub = ent ? m.sub(ent) : 'this ' + lk.kind + ' is gone or outside your bureau';
+        return `<div class="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm">
+          <span class="min-w-0 truncate text-slate-200">${m.icon} ${escapeHTML(title)}${lk.role ? ` <span class="rounded bg-white/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-400">${escapeHTML(lk.role)}</span>` : ''}${sub ? `<br><span class="text-[11px] text-slate-500">${escapeHTML(sub)}</span>` : ''}</span>
+          <span class="flex flex-shrink-0 items-center gap-2">
+            ${(ent && m.canProfile && typeof openIntelProfile === 'function') ? `<button class="ci-profile text-[11px] text-blue-300 hover:text-blue-200" data-kind="${lk.kind}" data-ref="${lk.ref_id}">profile →</button>` : ''}
+            ${canEdit ? `<button class="ci-unlink text-rose-300 hover:text-rose-200" data-id="${lk.id}" title="Unlink from this case">✕</button>` : ''}
+          </span></div>`;
+      };
+      const sections = INTEL_KINDS.map((m) => {
+        const rows = links.filter((l) => l.kind === m.kind);
+        return `<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+          <h4 class="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">${m.icon} ${m.label} (${rows.length})</h4>
+          <div class="space-y-2">${rows.length ? rows.map(linkRow).join('') : `<p class="text-sm text-slate-500">No ${m.label.toLowerCase()} linked.</p>`}</div>
+        </div>`;
+      }).join('');
+      const banner = tableMissing
+        ? `<div class="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">The <code>case_intel_links</code> table isn't in the database yet — apply migration <code>20260622120000_case_intel_links.sql</code> to enable linking. Existing data is unaffected.</div>`
+        : '';
+      const picker = (canEdit && !tableMissing) ? `<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+        <h4 class="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">Link intel to this case</h4>
+        <div class="flex flex-wrap items-end gap-2">
+          <div><label class="mb-1 block text-[11px] text-slate-400">Type</label><select id="ci-kind" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${INTEL_KINDS.map((k) => `<option value="${k.kind}">${k.icon} ${k.label.replace(/s$/, '')}</option>`).join('')}</select></div>
+          <div class="min-w-[12rem] flex-1"><label class="mb-1 block text-[11px] text-slate-400">Entity</label><select id="ci-ref" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"></select></div>
+          <div><label class="mb-1 block text-[11px] text-slate-400">Role</label><select id="ci-role" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${INTEL_ROLES.map((r) => `<option>${r}</option>`).join('')}</select></div>
+          <button id="ci-add" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">+ Link</button>
+        </div></div>` : '';
+      body.innerHTML = banner + `<div class="space-y-4">${sections}${picker}</div>`;
+
+      $$('.ci-profile', body).forEach((b) => b.onclick = () => openIntelProfile(b.dataset.kind, b.dataset.ref));
+      $$('.ci-unlink', body).forEach((b) => b.onclick = async () => {
+        if (!(await uiConfirm('Unlink this from the case? The intel record itself is kept.', { danger: false, confirmText: 'Unlink' }))) return;
+        const res = await DB().remove('case_intel_links', b.dataset.id);
+        if (res && res.error) { toast('Unlink failed: ' + res.error.message, 'danger'); return; }
+        toast('Unlinked', 'info'); renderCaseIntel(body, cid);
+      });
+      const kindSel = $('#ci-kind', body), refSel = $('#ci-ref', body), addBtn = $('#ci-add', body);
+      const fillRefs = () => {
+        if (!kindSel || !refSel) return;
+        const kind = kindSel.value; const linked = new Set(links.filter((l) => l.kind === kind).map((l) => l.ref_id));
+        const m = INTEL_KINDS.find((k) => k.kind === kind);
+        const opts = (pool[kind] || []).filter((x) => !linked.has(x.id)).map((x) => `<option value="${x.id}">${escapeHTML(m.name(x))}${m.sub(x) ? ' — ' + escapeHTML(m.sub(x)) : ''}</option>`).join('');
+        refSel.innerHTML = opts || '<option value="">— all already linked / none available —</option>';
+      };
+      if (kindSel) kindSel.onchange = fillRefs;
+      fillRefs();
+      if (addBtn) addBtn.onclick = async () => {
+        const kind = kindSel.value, ref = refSel.value; if (!ref) { toast('Nothing to link.', 'warn'); return; }
+        const res = await DB().insert('case_intel_links', { case_id: cid, kind, ref_id: ref, role: $('#ci-role', body).value });
+        if (res.error) { toast('Link failed: ' + res.error.message, 'danger'); return; }
+        toast('Linked', 'success'); renderCaseIntel(body, cid);
+      };
     }
     async function openCustody(evidenceId) {
       const node = el('div', { class: 'p-6' });

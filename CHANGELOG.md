@@ -1,5 +1,28 @@
 # CHANGELOG — CID Portal → Production Platform
 
+## Link intel directly to a case (2026-06-22)
+- New **Intel tab** on the case detail view: link a **person, gang, or place**
+  directly to a case as a "person/gang/place of interest", with an optional role
+  (Suspect, Witness, Victim, Associate, Location, …). Each linked item lists with
+  a `profile →` jump (persons/gangs open the intel slide-over) and an unlink (✕)
+  control; a kind/entity/role picker adds new links, excluding anything already
+  linked. This complements the *indirect* links that already surface intel on a
+  case (`gang_members.case_id`, `media`, `ballistic_footprints`, `places.case_id`)
+  with an explicit, first-class attach.
+- The links are **bidirectional**: a person/gang linked from a case now also
+  appears in that entity's intel-profile **"Linked cases"** rollup.
+- Backed by a new **`case_intel_links`** join table (polymorphic
+  `kind ∈ {person, gang, place}` + `ref_id`, unique per `(case_id, kind, ref_id)`,
+  optional `role`/`note`). RLS mirrors the bureau-isolation model — select / insert
+  / delete all gated on `private.can_access_case(case_id)`, so a link is only
+  visible and editable to someone who can already work that case; no UPDATE
+  (links are immutable — re-target by unlink + relink). A deleted or
+  cross-bureau target degrades to "Deleted / no access" rather than erroring.
+- Migration `20260622120000_case_intel_links.sql` is **prepped in-repo but NOT yet
+  applied to live `cid`** (pending approval, per the repo's migration convention).
+  Until it is applied the Intel tab shows a "run migration" banner and stays
+  read-only-empty; no existing data or view is affected.
+
 ## SheetJS upgrade — 0.18.5 → 0.20.3, off npm CDN (2026-06-20)
 - The Excel (`.xlsx`) import/export library now loads the latest SheetJS
   Community Edition (**0.20.3**) from the **official** `cdn.sheetjs.com` instead
