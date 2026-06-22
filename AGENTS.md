@@ -1,6 +1,6 @@
-# AGENTS.md — CID Portal (orientation & audit for LLM agents)
+# AGENTS.md — CID Portal (orientation & audit for developers)
 
-> Audience: AI coding agents working in this repo. Read this before editing.
+> Audience: developers and maintainers working in this repo. Read this before editing.
 > It encodes the architecture, the conventions every module follows, the
 > data-layer contract, and a full audit (findings + remediation). Last full
 > audit: 2026-06-16.
@@ -242,7 +242,7 @@ Severity: 🔴 act soon · 🟡 worth fixing · 🟢 informational / by-design.
 6. 🟢 **Multiple permissive policies on `profiles`** (`profiles_command` + `profiles_sel`/`profiles_upd_self` for the same role/action) and a few **unused indexes**. Micro-optimizations only.
 
 ### Code / repo health
-7. 🟡 **Orphaned migration files** not applied to live (see §8) — risk that an agent reads them as truth. Consider deleting or moving to `docs/` to avoid confusion.
+7. 🟡 **Orphaned migration files** not applied to live (see §8) — risk that a developer reads them as truth. Consider deleting or moving to `docs/` to avoid confusion.
 8. 🟢 ~~`app.js` is a ~2470-line monolith~~ **RESOLVED** — split into 16 feature files (shared global scope, no build step). See §2.
 9. 🟢 **A couple of hardcoded display strings in `index.html`** (e.g. the Drive header "11 folders") are not data-driven; harmless but can drift from `FOLDER_META`.
 10. 🟢 **CI Risk Matrix** in the Drive is a *live computed read-only view* from a static `CI_MATRIX` array (no CI table exists). If CIs become real data, add a table and replace the `content.view='matrix'` special-case in `openDocument`.

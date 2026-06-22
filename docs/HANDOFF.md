@@ -7,7 +7,7 @@
 - **App:** CID Portal — a Criminal Investigation Division ops tool for an SA-RP community ("State of San Andreas"). Cases, evidence, intel (persons/gangs/places), reports/forms, RICO, Drive, chat.
 - **Stack:** Vanilla ES2017, **classic scripts sharing ONE global lexical scope** (no build step, no modules). Precompiled Tailwind in `styles.css`. Supabase backend with RLS.
 - **Supabase project:** `cid` = `jhxuflzmqspidkvjckox` (org `nvxxnximnedwwzoxoceq`, **Free** plan). Other projects (leqat-platform, sahp-rbac) are unrelated/paused.
-- **Repo:** GitHub `hamadalrumaihi/cid`. Production tracks **`main`** (Vercel); feature work lands on a `claude/*` branch → PR → merge to `main`. The most recent working branch was `claude/continue-previous-7pqwjg`.
+- **Repo:** GitHub `hamadalrumaihi/cid`. Production tracks **`main`** (Vercel); feature work lands on a dev branch → PR → merge to `main`. The most recent working branch was an earlier feature branch.
 - **Deployed:** `cidportal-ody.vercel.app` (Vercel builds `main`; PR previews build the branch).
 
 ## Critical architecture rules (don't break these)
@@ -43,7 +43,7 @@
 - This session: **`20260622120000_case_intel_links`** (polymorphic case↔intel join, RLS on `can_access_case`) · **`20260622130000_persons_properties`** (additive jsonb, inherits persons RLS) · **`20260622150000_cases_follow_up_at`** (additive date, inherits cases RLS).
 - In-repo **not yet applied:** none pending.
 
-## "Ease of mind" pass (claude/cid-rebuild — 9 commits, planned via 7-dimension AskUserQuestion)
+## "Ease of mind" pass (dev branch — 9 commits, planned via 7-dimension AskUserQuestion)
 20 enhancements built across 7 peace-of-mind dimensions. Shared layers in core.js: `Drafts` (namespaced localStorage), `Guard` + `requestCloseModal` + `beforeunload` (unsaved-changes), `setupConnectionWatch` + `withRetry` (resilience).
 - **Never lose work:** form/report autosave + recovery banner, unsaved-changes guard, chat draft persistence, save-state feedback (drive.js/reports.js/collab.js).
 - **Know where you stand:** the inbox leaf is now **My Desk** (sign-off + overdue + due follow-ups + needs-attention + mentions + draft reports), whose-court header hint, broadened My Desk badge.
@@ -56,7 +56,7 @@
 - **Sweeps completed:** D4·c empty-state CTAs (all actionable empty states now point to their add action) and D7·a silent-failure sweep (all primary per-tab/data loads surface friendly errors; best-effort/subscription paths left silent by design). Optional pre-overdue *notification* still deferred (visual indicator shipped).
 
 ## Workflow that's been working
-- Build on a `claude/*` branch → commit per feature → push → owner opens/merges the PR to `main`. Production reflects `main`.
+- Build on a dev branch → commit per feature → push → owner opens/merges the PR to `main`. Production reflects `main`.
 - Migrations: prep `.sql` in-repo, get the owner's approval, then `apply_migration` + advisor check. (This session the owner pre-approved applying, so both migrations went straight to live.)
 
 ## Open backlog (next chat: pick up here)

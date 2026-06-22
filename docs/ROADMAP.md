@@ -1,9 +1,9 @@
-# CID Portal — Build Spec (claude/cid-rebuild) · v2
+# CID Portal — Build Spec (dev branch) · v2
 
 > Source of truth for the wave roadmap. Shipped work is also recorded in `CHANGELOG.md` (as Phases). Keep this in sync as waves land.
 
 ## Ground rules
-- Branch: `claude/cid-rebuild` · commit per feature · NO PR/merge/deploy until explicitly asked.
+- Branch: the dev branch · commit per feature · NO PR/merge/deploy until explicitly asked.
 - Migrations: applied directly via Supabase tooling, each shown before applying; `.sql` kept in-repo.
 - Validation: read-only queries + Supabase advisors (fix what they flag); NO test writes to live DB; `node --check` on JS.
 - Advisor findings: apply mechanical/low-risk fixes directly. If an advisor flags something needing a DESIGN decision — e.g. a change to a bureau-isolation or other RLS policy — STOP and ask. Never silently rewrite an isolation policy to satisfy an advisor.
