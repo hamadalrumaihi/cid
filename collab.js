@@ -30,7 +30,7 @@
       if (!me) { toast('Sign in to manage your profile.', 'warn'); return; }
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">My Profile</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">My Profile</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="mb-4 flex items-center gap-3">
           <div class="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-slate-600 to-slate-700 text-lg font-bold text-white">${me.avatar_url ? `<img src="${esc(me.avatar_url)}" class="h-14 w-14 rounded-2xl object-cover" alt="">` : esc(initials(me.display_name))}</div>
           <div><p class="text-[11px] uppercase tracking-wider text-blue-300/80">${esc((typeof ROLE_LABEL !== 'undefined' && ROLE_LABEL[me.role]) || me.role)}</p><p class="text-sm text-slate-300">${esc(deptLabel(me.division))} · ${esc(me.email || '')}</p></div>
@@ -294,7 +294,7 @@
       const node = el('div', { class: 'p-6' });
       const links = (a.links || []);
       node.innerHTML = `
-        <div class="mb-4 flex items-start justify-between gap-3"><div><h3 class="text-xl font-bold text-white">${a.pinned ? '📌 ' : ''}${esc(a.title)}</h3><p class="mt-1 text-[11px] text-slate-500">${esc(a.author_name || 'Command')} · ${new Date(a.created_at).toLocaleString('en-US')}${a.audience !== 'all' ? ' · ' + esc(deptLabel(a.audience)) + ' only' : ''}</p></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-4 flex items-start justify-between gap-3"><div><h3 class="text-xl font-bold text-white">${a.pinned ? '📌 ' : ''}${esc(a.title)}</h3><p class="mt-1 text-[11px] text-slate-500">${esc(a.author_name || 'Command')} · ${new Date(a.created_at).toLocaleString('en-US')}${a.audience !== 'all' ? ' · ' + esc(deptLabel(a.audience)) + ' only' : ''}</p></div><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         ${(a.mentions || []).length ? `<div class="mb-3 flex flex-wrap gap-1">${(a.mentions || []).map((x) => `<span class="rounded bg-blue-500/10 px-2 py-0.5 text-[11px] text-blue-300">@${esc(mentionLabel(x.target || x))}</span>`).join(' ')}</div>` : ''}
         <p class="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">${esc(a.body)}</p>
         ${links.length ? `<div class="mt-4 border-t border-white/5 pt-4"><p class="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Linked records</p><div class="flex flex-wrap gap-2">${links.map((l) => `<button class="av-link rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-blue-300 hover:bg-white/10" data-type="${esc(l.type)}" data-id="${esc(l.id)}">${(REC_LINK[l.type] || {}).icon || '🔗'} ${esc(l.label || l.id)}</button>`).join('')}</div></div>` : ''}`;
@@ -319,7 +319,7 @@
       const roleOpts = ['detective', 'senior_detective', 'bureau_lead', 'deputy_director', 'director'];
       const recentCases = (typeof casesCache !== 'undefined' ? casesCache : []).slice(0, 30);
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Announcement</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Announcement</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="space-y-3">
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Title *</label><input id="an-title" value="${esc(a.title || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Message *</label><textarea id="an-body" rows="5" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${esc(a.body || '')}</textarea></div>

@@ -88,7 +88,7 @@
       const node = el('div', { class:'p-6' });
       const cases = (typeof casesCache !== 'undefined' ? casesCache : []).filter((c) => BUREAU_FOLDER[c.bureau] === meta.name).slice().sort((x, y) => (x.case_number || '').localeCompare(y.case_number || ''));
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white">${esc(meta.name)}</h3><p class="text-xs text-slate-400">${cases.length} case${cases.length === 1 ? '' : 's'} · open a case to see its files</p></div></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white">${esc(meta.name)}</h3><p class="text-xs text-slate-400">${cases.length} case${cases.length === 1 ? '' : 's'} · open a case to see its files</p></div></div><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="space-y-2">${cases.length ? cases.map((c) => `<div class="case-row flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:bg-white/5 hover:border-blue-500/30" data-id="${c.id}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">🗂️</span><span><span class="font-mono text-blue-300">${esc(c.case_number)}</span> <span class="text-slate-300">${esc(c.title || '')}</span></span></span><span class="text-[11px] text-slate-500">${docsForCase(c.id).length} file${docsForCase(c.id).length === 1 ? '' : 's'} ›</span></div>`).join('') : '<p class="text-sm text-slate-500">No cases in this bureau yet. Create one in Case Files.</p>'}</div>`;
       node.querySelector('.close-x').onclick = closeModal;
       node.querySelectorAll('.case-row').forEach((row) => row.addEventListener('click', () => { const c = casesCache.find((x) => x.id === row.dataset.id); if (c) openCaseFolder(c, meta); }));
@@ -102,7 +102,7 @@
       const sub = (d) => { const t = docDisplayType(d); return t === 'matrix' ? 'live matrix' : t === 'form' ? 'fillable form' : t === 'sheet' ? 'open sheet' : t === 'zip' ? 'open archive' : 'open document'; };
       const node = el('div', { class:'p-6' });
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><button id="case-back" class="text-slate-400 hover:text-white" title="Back to bureau">←</button><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white"><span class="font-mono text-blue-300">${esc(c.case_number)}</span> ${esc(c.title || '')}</h3><p class="text-xs text-slate-400">${esc(meta.name)} · ${files.length} file${files.length === 1 ? '' : 's'}</p></div></div><div class="flex items-center gap-2">${canEdit ? '<button id="cf-new-doc" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">+ New Document</button>' : ''}<button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
+        <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><button id="case-back" class="text-slate-400 hover:text-white" title="Back to bureau">←</button><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white"><span class="font-mono text-blue-300">${esc(c.case_number)}</span> ${esc(c.title || '')}</h3><p class="text-xs text-slate-400">${esc(meta.name)} · ${files.length} file${files.length === 1 ? '' : 's'}</p></div></div><div class="flex items-center gap-2">${canEdit ? '<button id="cf-new-doc" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">+ New Document</button>' : ''}<button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
         <div class="space-y-2" id="case-files-rows">${files.length ? files.map((d) => `<div class="file-row flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:bg-white/5 hover:border-blue-500/30" data-id="${d.id}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">${fileIcon(docDisplayType(d))}</span>${esc(d.name)}</span><span class="text-[11px] text-slate-500">${sub(d)}</span></div>`).join('') : '<p class="text-sm text-slate-500">No files for this case yet.</p>'}</div>`;
       const back = () => openBureauFolder(meta);
       node.querySelector('.close-x').onclick = back;
@@ -115,7 +115,7 @@
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
       const node = el('div', { class:'p-6' });
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">New Document — ${esc(c.case_number)}</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">New Document — ${esc(c.case_number)}</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="space-y-3">
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">File name *</label><input id="ncd-name" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Surveillance Log.doc" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Type</label><select id="ncd-kind" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500"><option value="doc">Document</option><option value="sheet">Spreadsheet</option></select></div>
@@ -141,7 +141,7 @@
       const files = docsInFolder(meta.name);
       const sub = (d) => { const t = docDisplayType(d); return t === 'matrix' ? 'live matrix' : t === 'form' ? 'fillable form' : t === 'sheet' ? 'open sheet' : t === 'zip' ? 'open archive' : 'open document'; };
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white">${esc(meta.name)}</h3><p class="text-xs text-slate-400">CID General / Shared · ${files.length} item${files.length === 1 ? '' : 's'}</p></div></div><div class="flex items-center gap-2">${canEdit ? '<button id="folder-import" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">⇪ Import</button><button id="folder-new" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">+ New Document</button>' : ''}<button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
+        <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white">${esc(meta.name)}</h3><p class="text-xs text-slate-400">CID General / Shared · ${files.length} item${files.length === 1 ? '' : 's'}</p></div></div><div class="flex items-center gap-2">${canEdit ? '<button id="folder-import" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">⇪ Import</button><button id="folder-new" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">+ New Document</button>' : ''}<button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
         <div class="space-y-2" id="folder-files">${files.length ? files.map((d) => `<div class="file-row flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:bg-white/5 hover:border-blue-500/30" data-id="${d.id}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">${fileIcon(docDisplayType(d))}</span>${esc(d.name)}</span><span class="text-[11px] text-slate-500">${sub(d)}</span></div>`).join('') : '<p class="text-sm text-slate-500">Empty folder.</p>'}</div>`;
       node.querySelector('.close-x').onclick = closeModal;
       node.querySelectorAll('.file-row').forEach((row) => row.addEventListener('click', () => { const d = DOCS.find((x) => x.id === row.dataset.id); if (d) openDocument(d, meta); }));
@@ -158,7 +158,7 @@
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
       const node = el('div', { class:'p-6' });
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">New Document — ${esc(meta.name)}</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">New Document — ${esc(meta.name)}</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="space-y-3">
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">File name *</label><input id="nd-name" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Surveillance Log.doc" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Type</label><select id="nd-kind" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500"><option value="doc">Document</option><option value="sheet">Spreadsheet</option><option value="pdf">Reference (read-only)</option></select></div>
@@ -242,7 +242,7 @@
         // flat keys so legacy warrants still show their suspect.
         let rows = Array.isArray(V[s.id]) && V[s.id].length ? V[s.id] : null;
         if (!rows) { const seed = {}; let has = false; s.cols.forEach((col) => { if (V[col.key] != null && V[col.key] !== '') { seed[col.key] = V[col.key]; has = true; } }); rows = has ? [seed] : [{}]; }
-        const rowHtml = (r) => `<tr>${s.cols.map((col) => `<td class="border-b border-r border-white/5 p-1.5 align-top">${formCellInput({ key: col.key, type: col.type, opts: col.opts }, r[col.key], editable)}</td>`).join('')}${editable ? '<td class="border-b border-white/5 p-1.5 text-center align-middle"><button class="grid-del text-slate-500 hover:text-rose-300" title="Remove row">✕</button></td>' : ''}</tr>`;
+        const rowHtml = (r) => `<tr>${s.cols.map((col) => `<td class="border-b border-r border-white/5 p-1.5 align-top">${formCellInput({ key: col.key, type: col.type, opts: col.opts }, r[col.key], editable)}</td>`).join('')}${editable ? '<td class="border-b border-white/5 p-1.5 text-center align-middle"><button aria-label="Remove row" class="grid-del text-slate-500 hover:text-rose-300" title="Remove row">✕</button></td>' : ''}</tr>`;
         return `<section class="mb-5">${head}
           <div class="overflow-x-auto rounded-lg border border-white/10"><table class="w-full text-left text-sm" data-grid="${s.id}">
             <thead><tr class="bg-ink-800 text-[10px] uppercase tracking-wider text-slate-400">${s.cols.map((col) => `<th class="border-b border-r border-white/5 px-2.5 py-2 font-semibold">${esc(col.label)}</th>`).join('')}${editable ? '<th class="border-b border-white/5 px-2 py-2"></th>' : ''}</tr></thead>
@@ -313,7 +313,7 @@
           const sid = add.dataset.gridAdd; const sec = schema.sections.find((s) => s.id === sid);
           const tb = body.querySelector(`[data-grid="${sid}"] tbody`);
           const cellHtml = sec.cols.map((col) => `<td class="border-b border-r border-white/5 p-1.5 align-top">${formCellInput({ key: col.key, type: col.type, opts: col.opts }, '', true)}</td>`).join('');
-          tb.insertAdjacentHTML('beforeend', `<tr>${cellHtml}<td class="border-b border-white/5 p-1.5 text-center align-middle"><button class="grid-del text-slate-500 hover:text-rose-300" title="Remove row">✕</button></td></tr>`);
+          tb.insertAdjacentHTML('beforeend', `<tr>${cellHtml}<td class="border-b border-white/5 p-1.5 text-center align-middle"><button aria-label="Remove row" class="grid-del text-slate-500 hover:text-rose-300" title="Remove row">✕</button></td></tr>`);
           return;
         }
         const del = e.target.closest('.grid-del');
@@ -332,7 +332,7 @@
       node.innerHTML = `
         <div class="mb-4 flex items-start justify-between gap-3 no-print">
           <div class="flex items-center gap-3"><span class="text-2xl">📝</span><div><h3 class="text-base font-bold text-white">${esc(doc.name)}</h3><p class="text-[11px] text-slate-400">Fillable form${meta ? ' · ' + esc(meta.name) : ''}${doc.modified_label ? ' · ' + esc(doc.modified_label) : ''}${editable ? '' : ' · read-only'}</p></div></div>
-          <button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+          <button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
         </div>
         <div class="print-area max-h-[68vh] overflow-y-auto pr-1">
           <div class="mb-4 border-b border-white/10 pb-3"><h2 class="text-lg font-bold text-white">${esc(schema.title)}</h2><p class="text-[11px] text-slate-500">${esc(schema.subtitle)}</p></div>
@@ -434,7 +434,7 @@
           ? '<p class="rounded-lg border border-white/5 bg-ink-900/60 p-6 text-center text-sm text-slate-500">No saved versions yet. Edits you save from now on are recorded here.</p>'
           : `<div class="max-h-[60vh] space-y-2 overflow-y-auto">${rowsHtml}</div>`);
       node.innerHTML = `
-        <div class="mb-4 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><button id="hist-back" class="text-slate-400 hover:text-white" title="Back to document">←</button><div><h3 class="text-base font-bold text-white">Version history</h3><p class="text-[11px] text-slate-400">${esc(doc.name)}</p></div></div><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-4 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><button id="hist-back" class="text-slate-400 hover:text-white" title="Back to document">←</button><div><h3 class="text-base font-bold text-white">Version history</h3><p class="text-[11px] text-slate-400">${esc(doc.name)}</p></div></div><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         ${bodyHtml}`;
       node.querySelector('.close-x').onclick = back;
       node.querySelector('#hist-back').onclick = back;
@@ -496,7 +496,7 @@
       node.innerHTML = `
         <div class="mb-4 flex items-start justify-between gap-3 no-print">
           <div class="flex items-center gap-3"><span class="text-2xl">${fileIcon(kind)}</span><div><h3 class="text-base font-bold text-white">${esc(doc.name)}</h3><p class="text-[11px] text-slate-400">CID General${meta?' / '+esc(meta.name):''}${doc.modified_label?' · '+esc(doc.modified_label):''}${editable?'':' · read-only'}</p></div></div>
-          <button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+          <button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
         </div>
         <div class="print-area">${bodyHtml}</div>
         <div class="mt-4 flex flex-wrap gap-2 no-print">

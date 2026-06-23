@@ -88,7 +88,7 @@
       const caseOpts = casesCache.length ? casesCache.map((c) => `<option value="${c.id}">${esc(c.case_number)}</option>`).join('') : '<option value="">— no cases —</option>';
       const tags = moFlatten(lastMoScan.indicators);
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Save M.O. Profile</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Save M.O. Profile</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <p class="mb-3 text-xs text-slate-400">Link these ${tags.length} indicators to a case so future scans cross-reference against it.</p>
         <div class="mb-3 flex flex-wrap gap-2">${tags.map((t) => `<span class="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-200">${esc(t)}</span>`).join('')}</div>
         <label class="mb-1 block text-xs font-semibold text-slate-400">Case *</label>

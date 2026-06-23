@@ -61,7 +61,7 @@
       const node = el('div', { class: 'p-6' });
       const opts = casesCache.slice().sort((a, b) => (a.case_number || '').localeCompare(b.case_number || '')).map((c) => `<option value="${c.id}">${escapeHTML(c.case_number)} · ${escapeHTML(c.title || '')}</option>`).join('');
       node.innerHTML = `
-        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Attach to case</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Attach to case</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <p class="mb-3 text-sm text-slate-400">Posts a reference to <span class="text-white">${escapeHTML(label)}</span> into the case channel.</p>
         <select id="atc-case" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">${opts}</select>
         <button id="atc-go" class="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Attach reference</button>`;
@@ -106,9 +106,9 @@
       const body = k === 'image' ? `<img src="${esc(url)}" alt="${esc(f.name)}" class="max-h-[72vh] w-full rounded-lg object-contain" />`
         : k === 'video' ? `<video src="${esc(url)}" controls autoplay playsinline class="max-h-[72vh] w-full rounded-lg bg-black"></video>`
         : k === 'audio' ? `<div class="rounded-lg bg-ink-800 p-6"><audio src="${esc(url)}" controls autoplay class="w-full"></audio></div>`
-        : k === 'pdf' ? `<iframe src="${esc(url)}" title="${esc(f.name)}" class="h-[72vh] w-full rounded-lg bg-white"></iframe>`
+        : k === 'pdf' ? `<iframe src="${esc(safeUrl(url))}" title="${esc(f.name)}" class="h-[72vh] w-full rounded-lg bg-white"></iframe>`
         : `<div class="flex h-48 items-center justify-center rounded-lg bg-ink-800 text-sm text-slate-300">No inline preview for this type.</div>`;
-      node.innerHTML = `<div class="mb-3 flex items-center justify-between gap-3"><p class="min-w-0 truncate text-sm font-semibold text-white">${CF_ICON[k]} ${esc(f.name)}</p><button class="close-x flex-shrink-0 text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>${body}<div class="mt-3 text-right"><a href="${esc(url)}" target="_blank" rel="noopener" class="text-xs text-blue-300 underline">Open original ↗</a></div>`;
+      node.innerHTML = `<div class="mb-3 flex items-center justify-between gap-3"><p class="min-w-0 truncate text-sm font-semibold text-white">${CF_ICON[k]} ${esc(f.name)}</p><button aria-label="Close" class="close-x flex-shrink-0 text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>${body}<div class="mt-3 text-right"><a href="${esc(safeUrl(url))}" target="_blank" rel="noopener" class="text-xs text-blue-300 underline">Open original ↗</a></div>`;
       node.querySelector('.close-x').onclick = closeModal;
       openModal(node, { wide: true });
     }
@@ -354,7 +354,7 @@
       const node = el('div', { class: 'p-6' });
       const sel = (k, opts, v) => `<select data-k="${k}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${opts.map((o) => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Case</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Case</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         ${!record ? `<div class="mb-4 rounded-xl border border-white/5 bg-ink-900/60 p-3">
           <div class="mb-2 flex items-center justify-between"><p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Quick-create from template</p>${canReassign() ? '<button id="tpl-manage" type="button" class="text-[11px] font-semibold text-blue-300 transition hover:text-blue-200">Manage templates</button>' : ''}</div>
           <div id="tpl-chips" class="flex flex-wrap gap-2"></div>
@@ -460,7 +460,7 @@
       const collect = (rowEl) => { const o = {}; rowEl.querySelectorAll('[data-tk]').forEach((f) => o[f.dataset.tk] = f.value.trim()); o.bureau = o.bureau || null; return o; };
       const render = () => {
         node.innerHTML = `
-          <div class="mb-4 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Case Templates</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+          <div class="mb-4 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Case Templates</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
           <p class="mb-3 text-xs text-slate-400">Presets offered when creating a new case. Visible to all detectives; editable by command staff.</p>
           <div class="max-h-[55vh] space-y-3 overflow-y-auto pr-1">${CASE_TEMPLATES.map(rowHtml).join('')}${rowHtml(blank())}</div>`;
         node.querySelector('.close-x').onclick = closeModal;
@@ -557,7 +557,7 @@
       const canEdit = DB() && DB().canEdit();
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
-        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Follow-up date</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Follow-up date</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <p class="mb-3 text-xs text-slate-400">Set a date to revisit <span class="font-mono text-blue-300">${escapeHTML(c.case_number)}</span>. It appears on your My Desk when due, so you don't have to remember it.</p>
         <input id="fu-date" type="date" value="${escapeHTML(c.follow_up_at || '')}" ${canEdit ? '' : 'disabled'} class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" />
         ${canEdit ? `<div class="mt-5 flex gap-2"><button id="fu-save" class="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save</button>${c.follow_up_at ? '<button id="fu-clear" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Clear</button>' : ''}</div>` : ''}`;
@@ -693,7 +693,7 @@
     function openEvidenceModal(caseId) {
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Add Evidence</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Add Evidence</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Item Code</label><input data-k="item_code" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="EV-001" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Type</label><input data-k="type" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="Firearm / Narcotic / Document" /></div>
@@ -736,7 +736,7 @@
           <p class="mt-0.5 text-[11px] text-slate-400">${escapeHTML(m.kind || m.type || 'media')}</p>
           ${(typeof mediaLabels === 'function' && mediaLabels(m).length) ? `<div class="mt-1.5 flex flex-wrap gap-1">${mediaLabels(m).map((l) => `<span class="rounded bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] text-fuchsia-300">🏷️ ${escapeHTML(l)}</span>`).join('')}</div>` : ''}
           <div class="mt-2 flex items-center gap-2">
-            ${url ? `<a href="${escapeHTML(url)}" target="_blank" rel="noopener" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10">open ↗</a>` : ''}
+            ${url ? `<a href="${escapeHTML(safeUrl(url))}" target="_blank" rel="noopener" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10">open ↗</a>` : ''}
             ${canEdit ? `<button class="cmedia-tags rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-fuchsia-200 transition hover:bg-white/10" data-id="${m.id}" title="Edit tags">🏷️</button>` : ''}
             ${canEdit ? `<button class="cmedia-detach rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-rose-300 transition hover:bg-rose-500/10" data-id="${m.id}">Detach</button>` : ''}
           </div>
@@ -747,7 +747,7 @@
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Add Media Link</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Add Media Link</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="space-y-3">
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Title *</label><input id="cm-title" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Dashcam — Vinewood pursuit" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Type</label><select id="cm-type" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500"><option value="image">Direct Image URL</option><option value="video">MP4 Video Link</option><option value="fivemanage">FiveManage CDN Embed</option></select></div>
@@ -776,7 +776,7 @@
       if (typeof fmConfigured !== 'function' || !fmConfigured()) { toast('Direct upload isn’t configured — use “+ Add link” to paste a URL.', 'warn'); return; }
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
-        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Upload Photos / Video</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Upload Photos / Video</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <p class="mb-3 text-xs text-slate-400">Pick one or more files — each is uploaded to FiveManage and linked to this case. Images show a thumbnail automatically.</p>
         <input id="cmu-files" type="file" accept="image/*,video/*" multiple class="block w-full text-xs text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-white" />
         <div class="mt-3">${typeof mediaTagsFieldHTML === 'function' ? mediaTagsFieldHTML('cmu-tags', []) : ''}</div>
@@ -819,7 +819,7 @@
         </div>`;
       }).join('');
       node.innerHTML = `
-        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Attach Media from Vault</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Attach Media from Vault</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         ${pool.length ? `<p class="mb-3 text-[11px] text-slate-500">Media belongs to one case — attaching moves it onto this case.</p><div class="max-h-[60vh] space-y-2 overflow-y-auto">${rows}</div>` : '<p class="text-sm text-slate-500">No other media in the vault. Use “+ Add link” to create one.</p>'}`;
       node.querySelector('.close-x').onclick = closeModal;
       node.querySelectorAll('.cm-attach').forEach((b) => b.onclick = async () => {
@@ -880,7 +880,7 @@
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
-        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Add Charge — Penal Code</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Add Charge — Penal Code</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <input id="ch-search" type="text" placeholder="Search code, title, level…" class="mb-3 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
         <div id="ch-list" class="max-h-[55vh] space-y-1.5 overflow-y-auto pr-1"></div>`;
       node.querySelector('.close-x').onclick = closeModal;
@@ -984,7 +984,7 @@
       try { chain = await DB().list('custody_chain', { order: 'at', ascending: true, eq: { evidence_id: evidenceId } }); } catch (e) { toast('Could not load the chain of custody — check your connection.', 'danger'); }
       const canEdit = DB() && DB().canEdit();
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Chain of Custody</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Chain of Custody</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <p class="mb-3 text-xs text-slate-400">Append-only transfer log.</p>
         <div id="custody-list" class="mb-4 space-y-2">${chain.length ? chain.map((c) => `<div class="rounded-lg border border-white/5 bg-ink-900 p-3 text-sm"><p class="text-slate-200">${escapeHTML(c.from_officer || '?')} → ${escapeHTML(c.to_officer || '?')}</p><p class="text-[11px] text-slate-500">${escapeHTML(c.reason || '')} · ${new Date(c.at).toLocaleString('en-US')}</p></div>`).join('') : '<p class="text-sm text-slate-500">No transfers recorded.</p>'}</div>
         ${canEdit ? `<div class="grid grid-cols-1 gap-2 sm:grid-cols-3"><input id="cf" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="From officer" /><input id="ct" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="To officer" /><input id="cr" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="Reason" /></div><button id="cust-add" class="mt-3 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Record Transfer</button>` : ''}`;

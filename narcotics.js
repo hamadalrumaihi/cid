@@ -19,7 +19,7 @@
         det.innerHTML = `
           <summary class="flex flex-wrap items-center gap-4 px-6 py-4">
             <svg class="chev h-4 w-4 flex-shrink-0 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-            <span class="text-2xl">${d.icon}</span>
+            <span class="text-2xl">${esc(d.icon)}</span>
             <div class="min-w-0"><h3 class="text-base font-semibold text-white">${esc(d.name)}</h3><p class="text-xs text-slate-400">${esc(d.cls)}</p></div>
             <div class="ml-auto flex items-center gap-4 text-right">
               <div><p class="text-[10px] uppercase tracking-wider text-slate-500">Street</p><p class="font-mono text-sm font-bold text-emerald-300">${fmtUSD(d.street)}</p></div>
@@ -43,7 +43,7 @@
               </div>
               <p class="mb-2 mt-5 text-xs font-semibold uppercase tracking-wider text-blue-300/70">Geographic Selling Hotspots</p>
               <div class="space-y-2">
-                ${d.hotspots.map((h)=>`<div class="flex items-center justify-between rounded-lg border border-white/5 bg-ink-850 px-3 py-2 text-sm"><span class="text-slate-200">${esc(h.area)}</span><span class="flex items-center gap-2"><span class="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${densTint(h.d)}">${h.d}</span>${h.case?`<span class="font-mono text-[11px] text-blue-300">${esc(h.case)}</span>`:'<span class="text-[11px] text-slate-500">unlinked</span>'}</span></div>`).join('')||'<p class="text-xs text-slate-500">No hotspots logged.</p>'}
+                ${d.hotspots.map((h)=>`<div class="flex items-center justify-between rounded-lg border border-white/5 bg-ink-850 px-3 py-2 text-sm"><span class="text-slate-200">${esc(h.area)}</span><span class="flex items-center gap-2"><span class="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${densTint(h.d)}">${esc(h.d)}</span>${h.case?`<span class="font-mono text-[11px] text-blue-300">${esc(h.case)}</span>`:'<span class="text-[11px] text-slate-500">unlinked</span>'}</span></div>`).join('')||'<p class="text-xs text-slate-500">No hotspots logged.</p>'}
               </div>
               ${canEdit ? `<div class="mt-4 text-right"><button class="narc-edit rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10" data-id="${d.id}">Edit narcotic</button></div>` : ''}
             </div>
@@ -94,7 +94,7 @@
       const hotRow = (h) => `<div class="hot-row grid grid-cols-12 gap-2"><input class="ha col-span-5 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white" placeholder="Area" value="${escapeHTML(h ? h.area : '')}" /><select class="hd col-span-3 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white">${['low','medium','high'].map((d)=>`<option value="${d}" ${h && (h.density||'')===d?'selected':''}>${cap(d)}</option>`).join('')}</select><select class="hc col-span-3 rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white">${caseOpts(h ? h.case_id : '')}</select><button class="hrx col-span-1 rounded bg-white/5 text-xs text-rose-300 hover:bg-rose-500/10">✕</button></div>`;
       const d = record || {};
       node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${isEdit ? 'Edit' : 'New'} Narcotic</h3><button class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${isEdit ? 'Edit' : 'New'} Narcotic</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input data-k="name" value="${escapeHTML(d.name || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Icon</label><input data-k="icon" value="${escapeHTML(d.icon || '💊')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>

@@ -128,3 +128,23 @@ body[data-auth="out"] #bottom-nav { display: none !important; }
 .hm-bar{height:100%;background:linear-gradient(90deg,#3b82f6,#f59e0b,#f43f5e)}
 .fm-file::file-selector-button{margin-right:.5rem;border:0;border-radius:.375rem;background:rgba(255,255,255,.1);padding:.375rem .75rem;font-size:.75rem;font-weight:600;color:#fff;cursor:pointer}
 .fm-file::file-selector-button:hover{background:rgba(255,255,255,.18)}
+
+/* --- Restored utility classes missing from the precompiled build (used in JS/HTML templates). Manually added because no Tailwind build step runs in this repo. Standard Tailwind values. --- */
+.max-w-xl{max-width:36rem}
+.max-w-\[10rem\]{max-width:10rem}
+.max-w-\[80\%\]{max-width:80%}
+.max-h-\[48vh\]{max-height:48vh}
+.max-h-\[68vh\]{max-height:68vh}
+.max-h-\[72vh\]{max-height:72vh}
+.h-\[72vh\]{height:72vh}
+.min-h-\[34px\]{min-height:34px}
+.min-w-\[8rem\]{min-width:8rem}
+.min-w-\[10rem\]{min-width:10rem}
+.min-w-\[14rem\]{min-width:14rem}
+.min-w-\[6\.5rem\]{min-width:6.5rem}
+.pt-\[12vh\]{padding-top:12vh}
+.z-\[60\]{z-index:60}
+.z-\[80\]{z-index:80}
+
+/* Visible keyboard focus ring (overrides Tailwind .outline-none on focus-visible only). */
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}

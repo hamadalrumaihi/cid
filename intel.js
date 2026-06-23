@@ -27,7 +27,7 @@
     }
     const ipCaseTag = (cid) => { const n = (typeof caseNumById === 'function') ? caseNumById(cid) : null; return n ? `<button class="ip-case flex-shrink-0 font-mono text-[11px] text-blue-300 hover:text-blue-200" data-id="${cid}">${escapeHTML(n)}</button>` : ''; };
     function ipMediaItem(m) {
-      return `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm"><div class="flex items-center justify-between gap-2"><span class="truncate text-slate-200">${IP_MEDIA_ICON[m.type] || '📎'} ${escapeHTML(m.title || m.kind || 'Media')}</span>${m.external_url ? `<a href="${escapeHTML(m.external_url)}" target="_blank" rel="noopener" class="flex-shrink-0 text-[11px] text-blue-300 hover:text-blue-200">open ↗</a>` : ''}</div>${ipCaseTag(m.case_id) ? `<div class="mt-1">${ipCaseTag(m.case_id)}</div>` : ''}</div>`;
+      return `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm"><div class="flex items-center justify-between gap-2"><span class="truncate text-slate-200">${IP_MEDIA_ICON[m.type] || '📎'} ${escapeHTML(m.title || m.kind || 'Media')}</span>${m.external_url ? `<a href="${escapeHTML(safeUrl(m.external_url))}" target="_blank" rel="noopener" class="flex-shrink-0 text-[11px] text-blue-300 hover:text-blue-200">open ↗</a>` : ''}</div>${ipCaseTag(m.case_id) ? `<div class="mt-1">${ipCaseTag(m.case_id)}</div>` : ''}</div>`;
     }
     function ipEvItem(e) {
       return `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm"><div class="flex items-center justify-between gap-2"><span class="truncate text-slate-200">${escapeHTML(e.item_code || e.type || 'Item')}${e.description ? ' <span class="text-slate-500">' + escapeHTML(e.description) + '</span>' : ''}</span>${ipCaseTag(e.case_id)}</div></div>`;
@@ -47,7 +47,7 @@
           <div class="min-w-0"><p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Intel profile</p><h3 id="ip-title" class="truncate text-xl font-bold text-white">Loading…</h3><p id="ip-sub" class="text-xs text-slate-400"></p></div>
           <div class="flex flex-shrink-0 items-center gap-2">
             <button id="ip-network" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10" title="View in relationship network">🕸 Network</button>
-            <button class="close-x text-2xl leading-none text-slate-400 hover:text-white">&times;</button>
+            <button aria-label="Close" class="close-x text-2xl leading-none text-slate-400 hover:text-white">&times;</button>
           </div>
         </div>
         <div id="ip-body" class="flex-1 space-y-6 px-6 py-5"><p class="text-sm text-slate-500">Building rollup…</p></div>`;
