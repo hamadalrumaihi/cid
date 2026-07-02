@@ -381,3 +381,20 @@ The #bolo-filter input handler calls renderBolo() per keystroke, and renderBolo 
 ## Note on refuted findings
 
 48 candidate findings were killed by adversarial verification (false positives — e.g. client-gating gaps the server RLS already blocks, TDZ complaints about runtime calls, escaping applied upstream). That kill rate is the point of the verification phase: it keeps this list actionable.
+
+---
+
+## Resolution status (updated 2026-07-02)
+
+**All 45 confirmed findings addressed.** Fixes landed on branch `claude/continue-previous-7pqwjg` across four commits; the two server-side items were applied to the live database as migrations `20260702150000_audit_integrity_hardening` and `20260702160000_signoff_bureau_isolation`.
+
+Highlights:
+- **Both stored-XSS vectors** (notification payload, sign-off officer name) — escaped.
+- **Finalized reports** are now sealed server-side (only the warrant lifecycle may change post-finalize); **tracker dual-signature** and **sign-off RPC bureau isolation** enforced in Postgres, not just the browser.
+- **Silent data-loss family** (person/vehicle/place/gang FK wipes on stale caches; undo not restoring SET NULL refs; undo child-snapshot failures) — all closed.
+- **Auth lifecycle** — once-guarded onAuthed (no boot double-fetch / hourly storm), sign-out teardown, transient-error retry gate.
+- Correctness/error-handling nits across command, reports, rico, gangs, vehicles, core.
+
+**Open policy question (not auto-changed):** the sign-off RPCs still permit any `detective`/`senior_detective` in an accessible bureau to submit/complete a case (not only its owner). Bureau isolation is now enforced; whether to further restrict to the case owner is a workflow decision left to command.
+
+**Verification caveat carried forward:** the original run's adversarial verification was truncated by a session token limit, so the ~48 non-confirmed candidates were never fully adjudicated. Because the codebase has since changed under many of them, the trustworthy way to re-check is a fresh audit run rather than resuming the token-limited one.
