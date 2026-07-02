@@ -131,6 +131,10 @@
       try { myDrafts = await DB().from('reports').select('*').eq('author_id', me).eq('finalized', false).then((r) => r.data || []); } catch (e) {}
       let myTasks = [];
       try { myTasks = await DB().from('case_tasks').select('*').eq('assignee', me).eq('done', false).order('due', { ascending: true, nullsFirst: false }).then((r) => r.data || []); } catch (e) {}
+      // Followed cases / persons / vehicles (personal watchlist).
+      if (typeof fetchWatchlist === 'function') await fetchWatchlist();
+      const watchItems = (typeof watchResolvedItems === 'function') ? watchResolvedItems() : [];
+      const watchNew = (typeof watchlistNewCount === 'function') ? watchlistNewCount() : 0;
 
       // My open lead cases → due follow-ups + soft "needs attention" nudges.
       const today = (typeof todayISO === 'function') ? todayISO() : new Date().toISOString().slice(0, 10);
@@ -151,7 +155,7 @@
       });
 
       body.innerHTML = '';
-      if (!review.length && !bounced.length && !mine.length && !myOverdue.length && !mentions.length && !myDrafts.length && !followUps.length && !needs.length && !myTasks.length) {
+      if (!review.length && !bounced.length && !mine.length && !myOverdue.length && !mentions.length && !myDrafts.length && !followUps.length && !needs.length && !myTasks.length && !watchItems.length) {
         body.innerHTML = '<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">✅ All clear — nothing waiting on you. No sign-off actions, overdue cases, follow-ups, mentions, or open drafts.</div>';
         return;
       }
@@ -166,6 +170,7 @@
         chip(mentions.length, 'mentions', 'bg-violet-500/15 text-violet-300'),
         chip(myDrafts.length, 'draft reports', 'bg-emerald-500/15 text-emerald-300'),
         chip(myTasks.length, 'tasks for you', 'bg-blue-500/15 text-blue-300'),
+        chip(watchNew, 'followed updated', 'bg-amber-500/15 text-amber-300'),
         chip(mine.length, 'in progress', 'bg-white/5 text-slate-300'),
       ].filter(Boolean).join('');
       body.appendChild(summary);
@@ -177,6 +182,7 @@
       if (mentions.length) body.appendChild(deskMentions(mentions));
       if (myDrafts.length) body.appendChild(deskDrafts(myDrafts));
       if (myTasks.length) body.appendChild(deskTasks(myTasks));
+      if (watchItems.length && typeof deskWatchlist === 'function') body.appendChild(deskWatchlist());
       if (mine.length) body.appendChild(inboxSection('Your submissions in progress', mine, 'mine', ''));
     }
     function deskTasks(list) {

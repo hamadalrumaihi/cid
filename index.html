@@ -27,7 +27,7 @@
   <title>CID Portal — Criminal Investigation Division | State of San Andreas</title>
 
   <!-- Tailwind CSS — precompiled & inlined (production-safe, offline, no runtime warning) -->
-    <link rel="stylesheet" href="styles.css?v=20260625b" />
+    <link rel="stylesheet" href="styles.css?v=20260702a" />
 
   <!-- Typefaces -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -273,6 +273,7 @@
               <button id="case-refresh" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">↻ Refresh</button>
               <button id="case-selectall" class="hidden rounded-lg border border-rose-500/20 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/20" title="Select every case in the current view for bulk delete (command only)">☑ Select all</button>
             </div>
+            <div id="case-filters" class="mb-4"></div>
             <div id="cases-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"></div>
           </div>
           <!-- Detail mode (populated by JS) -->
@@ -487,7 +488,10 @@
               <h3 class="text-xl font-bold text-white">🚗 Vehicle Registry</h3>
               <p class="text-sm text-slate-400">Plates as first-class intel — owners, gang links &amp; automatic cross-case matching</p>
             </div>
-            <button id="vehicle-new" class="hidden rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ New Vehicle</button>
+            <div class="flex items-center gap-3">
+              <input id="vehicle-filter" type="search" placeholder="Filter plate, owner, gang…" class="hidden w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" aria-label="Filter vehicles" />
+              <button id="vehicle-new" class="hidden rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ New Vehicle</button>
+            </div>
           </div>
           <div id="crossref-box" class="mb-6"></div>
           <div id="vehicle-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"></div>
@@ -495,9 +499,12 @@
 
         <!-- ===================== VIEW: BOLO BOARD ===================== -->
         <section id="view-bolo" class="view">
-          <div class="mb-6 rounded-2xl border border-rose-500/20 bg-ink-900/60 p-6">
-            <h3 class="text-xl font-bold text-white">🚨 BOLO Board</h3>
-            <p class="text-sm text-slate-400">At-large subjects flagged “be on the lookout” — with warrant status where one exists. Flag or clear via Persons → Edit.</p>
+          <div class="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-rose-500/20 bg-ink-900/60 p-6">
+            <div>
+              <h3 class="text-xl font-bold text-white">🚨 BOLO Board</h3>
+              <p class="text-sm text-slate-400">At-large subjects flagged “be on the lookout” — with warrant status where one exists. Flag or clear via Persons → Edit.</p>
+            </div>
+            <input id="bolo-filter" type="search" placeholder="Filter name, alias, gang…" class="hidden w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" aria-label="Filter BOLOs" />
           </div>
           <div id="bolo-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"></div>
         </section>
@@ -667,36 +674,37 @@
   </script>
 
   <!-- ===== APPLICATION JS (feature-split classic scripts; shared global scope, load order matters) ===== -->
-  <script src="supabase.js?v=20260625b"></script>
-  <script src="roles.js?v=20260625b"></script>
-  <script src="core.js?v=20260625b"></script>
-  <script src="penal.js?v=20260625b"></script>
-  <script src="casefiles.js?v=20260625b"></script>
-  <script src="command.js?v=20260625b"></script>
-  <script src="narcotics.js?v=20260625b"></script>
-  <script src="ballistics.js?v=20260625b"></script>
-  <script src="personnel.js?v=20260625b"></script>
-  <script src="modus.js?v=20260625b"></script>
-  <script src="drive.js?v=20260625b"></script>
-  <script src="persons.js?v=20260625b"></script>
-  <script src="gangs.js?v=20260625b"></script>
-  <script src="intel.js?v=20260625b"></script>
-  <script src="places.js?v=20260625b"></script>
-  <script src="network.js?v=20260625b"></script>
-  <script src="reports.js?v=20260625b"></script>
-  <script src="rico.js?v=20260625b"></script>
-  <script src="docx.js?v=20260625b"></script>
-  <script src="records.js?v=20260625b"></script>
-  <script src="signoff.js?v=20260625b"></script>
-  <script src="inbox.js?v=20260625b"></script>
-  <script src="collab.js?v=20260625b"></script>
-  <script src="heatmap.js?v=20260625b"></script>
-  <script src="shifts.js?v=20260625b"></script>
-  <script src="fivemanage.js?v=20260625b"></script>
-  <script src="vehicles.js?v=20260625b"></script>
-  <script src="feedback.js?v=20260625b"></script>
-  <script src="app.js?v=20260625b"></script>
-  <script src="auth.js?v=20260625b"></script>
+  <script src="supabase.js?v=20260702a"></script>
+  <script src="roles.js?v=20260702a"></script>
+  <script src="core.js?v=20260702a"></script>
+  <script src="penal.js?v=20260702a"></script>
+  <script src="casefiles.js?v=20260702a"></script>
+  <script src="command.js?v=20260702a"></script>
+  <script src="narcotics.js?v=20260702a"></script>
+  <script src="ballistics.js?v=20260702a"></script>
+  <script src="personnel.js?v=20260702a"></script>
+  <script src="modus.js?v=20260702a"></script>
+  <script src="drive.js?v=20260702a"></script>
+  <script src="persons.js?v=20260702a"></script>
+  <script src="gangs.js?v=20260702a"></script>
+  <script src="intel.js?v=20260702a"></script>
+  <script src="places.js?v=20260702a"></script>
+  <script src="network.js?v=20260702a"></script>
+  <script src="reports.js?v=20260702a"></script>
+  <script src="rico.js?v=20260702a"></script>
+  <script src="docx.js?v=20260702a"></script>
+  <script src="records.js?v=20260702a"></script>
+  <script src="signoff.js?v=20260702a"></script>
+  <script src="inbox.js?v=20260702a"></script>
+  <script src="collab.js?v=20260702a"></script>
+  <script src="heatmap.js?v=20260702a"></script>
+  <script src="shifts.js?v=20260702a"></script>
+  <script src="fivemanage.js?v=20260702a"></script>
+  <script src="vehicles.js?v=20260702a"></script>
+  <script src="watchlist.js?v=20260702a"></script>
+  <script src="feedback.js?v=20260702a"></script>
+  <script src="app.js?v=20260702a"></script>
+  <script src="auth.js?v=20260702a"></script>
 
   
 </body>

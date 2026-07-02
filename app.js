@@ -130,7 +130,7 @@
     /* ---- Full case packet export (.docx) ---- */
     // Gather all linked records for a case (used by every packet format).
     async function gatherCasePacket(c) {
-      let ev = [], rep = [], cust = [], rico = [], preds = [], media = [];
+      let ev = [], rep = [], cust = [], rico = [], preds = [], media = [], persons = [];
       try {
         [ev, rep, media] = await Promise.all([
           DB().list('evidence', { order: 'created_at', ascending: true, eq: { case_id: c.id } }),
@@ -139,8 +139,18 @@
         ]);
         const ricoRows = await DB().list('rico_cases', { eq: { case_id: c.id } }); rico = ricoRows;
         if (ricoRows[0]) preds = await DB().list('predicate_acts', { eq: { rico_case_id: ricoRows[0].id } });
+        // Named persons linked to the case (Intel tab), resolved to names.
+        const links = await DB().from('case_intel_links').select('ref_id').eq('case_id', c.id).eq('kind', 'person').then((r) => r.data || []).catch(() => []);
+        const pcache = (typeof PERSONS !== 'undefined' ? PERSONS : []);
+        persons = links.map((l) => { const p = pcache.find((x) => x.id === l.ref_id); return p ? { name: p.name, alias: p.alias, status: p.status } : null; }).filter(Boolean);
       } catch (e) {}
-      return { ev, rep, cust, rico, preds, media };
+      // Charges live on the case row (cases.charges = [{code,count}]), resolved
+      // against the in-memory penal catalog.
+      const charges = (Array.isArray(c.charges) ? c.charges : []).map((x) => {
+        const pc = (typeof penalByCode === 'function') ? penalByCode(x.code) : null;
+        return { code: x.code, count: Math.max(1, x.count || 1), title: pc ? pc.title : '(unknown)', level: pc ? pc.level : '', jail: pc ? pc.jail : null, fine: pc ? pc.fine : null };
+      });
+      return { ev, rep, cust, rico, preds, media, charges, persons };
     }
     const slug = (s) => String(s || 'case').replace(/[^a-z0-9]/gi, '-');
 
@@ -151,6 +161,10 @@
       d.ev.length ? d.ev.forEach((e) => P.push({ text: `• ${(e.item_code ? e.item_code + ' — ' : '') + (e.description || e.type || 'item')} [${e.tamper}]`, style: 'normal' })) : P.push({ text: 'None.', style: 'normal' });
       P.push({ text: `Reports (${d.rep.length})`, style: 'heading' });
       d.rep.length ? d.rep.forEach((r) => P.push({ text: `• ${reportTitle(r)}${r.finalized ? ' (finalized)' : ''} — ${new Date(r.created_at).toLocaleDateString('en-US')}`, style: 'normal' })) : P.push({ text: 'None.', style: 'normal' });
+      P.push({ text: `Charges (${d.charges.length})`, style: 'heading' });
+      d.charges.length ? d.charges.forEach((x) => P.push({ text: `• ${x.code} — ${x.title}${x.count > 1 ? ' ×' + x.count : ''}${x.level ? ' [' + x.level + ']' : ''}${x.jail != null ? ' · ' + penalSentence(x.jail) : ''}${x.fine != null ? ' · ' + fmtUSD(x.fine) : ''}`, style: 'normal' })) : P.push({ text: 'None.', style: 'normal' });
+      P.push({ text: `Named persons (${d.persons.length})`, style: 'heading' });
+      d.persons.length ? d.persons.forEach((p) => P.push({ text: `• ${p.name}${p.alias ? ' “' + p.alias + '”' : ''}${p.status ? ' — ' + p.status : ''}`, style: 'normal' })) : P.push({ text: 'None linked.', style: 'normal' });
       P.push({ text: `Media (${d.media.length})`, style: 'heading' });
       d.media.length ? d.media.forEach((m) => P.push({ text: `• ${m.title || m.type} — ${m.external_url || m.storage_path || ''}`, style: 'normal' })) : P.push({ text: 'None.', style: 'normal' });
       P.push({ text: 'RICO', style: 'heading' });
@@ -169,6 +183,8 @@
       line('Summary', 12, true); line(c.summary || '—', 10, false); y += 4;
       line(`Evidence (${d.ev.length})`, 12, true); d.ev.length ? d.ev.forEach((e) => line(`• ${(e.item_code ? e.item_code + ' — ' : '') + (e.description || e.type || 'item')} [${e.tamper}]`, 10, false)) : line('None.', 10, false); y += 4;
       line(`Reports (${d.rep.length})`, 12, true); d.rep.length ? d.rep.forEach((r) => line(`• ${reportTitle(r)}${r.finalized ? ' (finalized)' : ''} — ${new Date(r.created_at).toLocaleDateString('en-US')}`, 10, false)) : line('None.', 10, false); y += 4;
+      line(`Charges (${d.charges.length})`, 12, true); d.charges.length ? d.charges.forEach((x) => line(`• ${x.code} — ${x.title}${x.count > 1 ? ' ×' + x.count : ''}${x.level ? ' [' + x.level + ']' : ''}${x.jail != null ? ' · ' + penalSentence(x.jail) : ''}${x.fine != null ? ' · ' + fmtUSD(x.fine) : ''}`, 10, false)) : line('None.', 10, false); y += 4;
+      line(`Named persons (${d.persons.length})`, 12, true); d.persons.length ? d.persons.forEach((p) => line(`• ${p.name}${p.alias ? ' “' + p.alias + '”' : ''}${p.status ? ' — ' + p.status : ''}`, 10, false)) : line('None linked.', 10, false); y += 4;
       line(`Media (${d.media.length})`, 12, true); d.media.length ? d.media.forEach((m) => line(`• ${m.title || m.type} — ${m.external_url || m.storage_path || ''}`, 10, false)) : line('None.', 10, false); y += 4;
       line('RICO', 12, true); line(d.rico[0] ? `Enterprise linked; ${d.preds.length} predicate act(s).` : 'No RICO tracker for this case.', 10, false);
       doc.save(slug(c.case_number) + '-packet.pdf'); return true;
@@ -181,6 +197,8 @@
       X.utils.book_append_sheet(wb, X.utils.json_to_sheet(d.ev.map((e) => ({ item_code: e.item_code, type: e.type, description: e.description, location: e.location, tamper: e.tamper, collected_at: e.collected_at }))), 'Evidence');
       X.utils.book_append_sheet(wb, X.utils.json_to_sheet(d.rep.map((r) => ({ kind: r.kind, template: r.template, seq: r.seq, finalized: r.finalized, created_at: r.created_at }))), 'Reports');
       X.utils.book_append_sheet(wb, X.utils.json_to_sheet(d.media.map((m) => ({ title: m.title, type: m.type, url: m.external_url || m.storage_path }))), 'Media');
+      X.utils.book_append_sheet(wb, X.utils.json_to_sheet((d.charges.length ? d.charges : [{}]).map((x) => ({ code: x.code, title: x.title, count: x.count, level: x.level, max_sentence: x.jail != null ? penalSentence(x.jail) : '', max_fine: x.fine }))), 'Charges');
+      X.utils.book_append_sheet(wb, X.utils.json_to_sheet((d.persons.length ? d.persons : [{}]).map((p) => ({ name: p.name, alias: p.alias, status: p.status }))), 'Persons');
       X.utils.book_append_sheet(wb, X.utils.json_to_sheet(d.preds.map((p) => ({ statute: p.statute, description: p.description, occurred_at: p.occurred_at }))), 'RICO_Predicates');
       X.writeFile(wb, slug(c.case_number) + '-packet.xlsx'); return true;
     }
@@ -189,7 +207,7 @@
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
         <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Export Case Packet</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
-        <p class="mb-4 text-sm text-slate-400">${esc(c.case_number)} — includes the case, all evidence, reports, media and RICO predicates.</p>
+        <p class="mb-4 text-sm text-slate-400">${esc(c.case_number)} — includes the case, all evidence, reports, charges, named persons, media and RICO predicates.</p>
         <div class="grid grid-cols-3 gap-2">
           <button data-fmt="docx" class="pk-fmt rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm font-semibold text-white transition hover:bg-white/10">📄<br>.docx</button>
           <button data-fmt="pdf" class="pk-fmt rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm font-semibold text-white transition hover:bg-white/10">📕<br>.pdf</button>
