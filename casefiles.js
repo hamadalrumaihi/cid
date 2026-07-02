@@ -752,11 +752,12 @@
             <button id="cmedia-add" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ Add link</button>
           </div>` : '';
           body.innerHTML = `
-            <div class="mb-3 flex items-center justify-between"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Evidence (${ev.length})</h4>${canEdit ? '<button id="ev-new" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ Add Evidence</button>' : ''}</div>
+            <div class="mb-3 flex items-center justify-between"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Evidence (${ev.length})</h4>${canEdit ? '<div class="flex gap-2"><button id="ev-quick" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10" title="Log several items fast — keyboard-first, auto item codes">⚡ Quick-log</button><button id="ev-new" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ Add Evidence</button></div>' : ''}</div>
             <div class="space-y-3">${ev.length ? ev.map((e) => evidenceCard(e, hasCustody.has(e.id))).join('') : '<p class="text-sm text-slate-500">No evidence logged yet.' + (canEdit ? ' Use “+ Add Evidence” above to log the first item.' : '') + '</p>'}</div>
             <div class="mt-8 mb-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-6"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Linked Media (${med.length})</h4>${mediaActions}</div>
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">${med.length ? med.map((m) => caseMediaCard(m, canEdit)).join('') : '<p class="text-sm text-slate-500">No media linked to this case. Upload photos, add a link, or attach one from the Media Vault.</p>'}</div>`;
           const nb = $('#ev-new'); if (nb) nb.onclick = () => openEvidenceModal(cid);
+          const qb = $('#ev-quick'); if (qb) qb.onclick = () => openEvidenceQuickLog(cid, ev);
           $$('.ev-custody', body).forEach((b) => b.onclick = () => openCustody(b.dataset.id));
           $$('.ev-del', body).forEach((b) => b.onclick = async () => {
             if (!(await uiConfirm('Delete this evidence item? This also removes its chain-of-custody history (restorable via Undo).', { confirmText: 'Delete' }))) return;
@@ -851,6 +852,79 @@
         closeModal(); toast('Evidence logged', 'success'); loadDetailTab();
       };
       openModal(node, { wide: true });
+    }
+
+    /* ---- Evidence quick-log (Wave 5) ------------------------------------------
+     * Keyboard-first bulk intake for scene processing: stage several items in one
+     * modal (Enter stages, Ctrl/Cmd+Enter saves all), with item codes continuing
+     * the case's existing EV-### sequence and collector auto-stamped to you.
+     * Inserts use the same table + defaults as the single-item modal. */
+    function nextEvidenceCode(existing, offset) {
+      let prefix = 'EV-', width = 3, max = 0;
+      (existing || []).forEach((e) => {
+        const m = /^([A-Za-z][A-Za-z0-9]*?-?)(\d+)$/.exec(String(e.item_code || '').trim());
+        if (!m) return;
+        const n = parseInt(m[2], 10);
+        if (n > max) { max = n; prefix = m[1]; width = m[2].length; }
+      });
+      return prefix + String(max + 1 + (offset || 0)).padStart(width, '0');
+    }
+    function openEvidenceQuickLog(caseId, existing) {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      const staged = [];
+      const node = el('div', { class: 'p-6' });
+      const inp = 'rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500';
+      node.innerHTML = `
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-xl font-bold text-white">⚡ Evidence Quick-log</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <p class="mb-3 text-xs text-slate-400">Type a description, hit <span class="rounded bg-white/10 px-1 font-mono text-slate-200">Enter</span> to stage it, repeat. <span class="rounded bg-white/10 px-1 font-mono text-slate-200">Ctrl/⌘+Enter</span> logs everything. Item codes continue the case sequence; collector &amp; tamper (intact) are auto-stamped.</p>
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-4">
+          <input id="ql-desc" placeholder="Description * (e.g. 9mm casing)" class="${inp} sm:col-span-2" />
+          <input id="ql-type" placeholder="Type (Firearm…)" list="ql-types" class="${inp}" />
+          <input id="ql-loc" placeholder="Location" class="${inp}" />
+        </div>
+        <datalist id="ql-types"><option>Firearm</option><option>Narcotic</option><option>Document</option><option>Casing</option><option>Currency</option><option>Digital</option><option>Clothing</option><option>Vehicle</option></datalist>
+        <div class="mt-2 flex justify-end"><button id="ql-stage" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">+ Stage (Enter)</button></div>
+        <div id="ql-list" class="mt-3 max-h-[38vh] space-y-1.5 overflow-y-auto pr-1"></div>
+        <button id="ql-save" class="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110" disabled>Log 0 items</button>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      const list = node.querySelector('#ql-list'), save = node.querySelector('#ql-save');
+      const descF = node.querySelector('#ql-desc'), typeF = node.querySelector('#ql-type'), locF = node.querySelector('#ql-loc');
+      const redraw = () => {
+        list.innerHTML = staged.map((s, i) => `<div class="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm"><span class="min-w-0 truncate text-slate-200"><span class="font-mono text-blue-300">${escapeHTML(s.item_code)}</span> ${escapeHTML(s.description)}${s.type ? ' <span class="text-slate-500">· ' + escapeHTML(s.type) + '</span>' : ''}${s.location ? ' <span class="text-slate-500">@ ' + escapeHTML(s.location) + '</span>' : ''}</span><button class="ql-rm flex-shrink-0 text-slate-500 transition hover:text-rose-300" data-i="${i}" aria-label="Remove staged item">✕</button></div>`).join('');
+        list.querySelectorAll('.ql-rm').forEach((b) => b.onclick = () => { staged.splice(+b.dataset.i, 1); staged.forEach((s, i) => s.item_code = nextEvidenceCode(existing, i)); redraw(); });
+        save.disabled = !staged.length;
+        save.textContent = 'Log ' + staged.length + ' item' + (staged.length === 1 ? '' : 's');
+      };
+      const stage = () => {
+        const description = descF.value.trim();
+        if (!description) { toast('Describe the item first.', 'warn'); descF.focus(); return; }
+        staged.push({ item_code: nextEvidenceCode(existing, staged.length), description: description, type: typeF.value.trim() || null, location: locF.value.trim() || null });
+        descF.value = ''; redraw(); descF.focus();
+      };
+      node.querySelector('#ql-stage').onclick = stage;
+      const saveAll = async () => {
+        if (!staged.length) return;
+        if (descF.value.trim()) stage();   // don't drop a typed-but-unstaged item
+        save.disabled = true; save.textContent = 'Logging…';
+        let ok = 0, fail = 0;
+        for (const s of staged) {
+          const payload = { case_id: caseId, item_code: s.item_code, description: s.description, type: s.type, location: s.location, tamper: 'intact' };
+          if (DB() && DB().me) payload.collected_by = DB().me.id;
+          const res = await DB().insert('evidence', payload);
+          if (res && res.error) fail++; else ok++;
+        }
+        closeModal();
+        toast('Logged ' + ok + ' evidence item' + (ok === 1 ? '' : 's') + (fail ? ' · ' + fail + ' failed' : ''), fail && !ok ? 'danger' : 'success');
+        loadDetailTab();
+      };
+      save.onclick = saveAll;
+      [descF, typeF, locF].forEach((f) => f.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (e.metaKey || e.ctrlKey) saveAll(); else stage();
+      }));
+      openModal(node, { wide: true });
+      descF.focus();
     }
 
     /* ---- Case-linked media (Evidence tab) -------------------------------------
