@@ -443,5 +443,36 @@
       document.addEventListener('keydown', (e) => {
         if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); openPalette(); }
       });
+      // One-time "what's new" card for the current release (per-browser, dismissable).
+      setTimeout(showWhatsNew, 1200);
+    }
+
+    // Lightweight release note — shows once per WHATS_NEW.version per browser.
+    const WHATS_NEW = {
+      version: 'wave5',
+      title: 'New in the CID Portal',
+      items: [
+        ['⭐', 'Follow cases, persons & plates', 'Tap ☆ Follow on any case, person profile or vehicle. Updates surface under “Following” on My Desk.'],
+        ['🔎', 'Saved views & filters', 'Filter cases by bureau, status, lead detective or staleness — and save the combo as a named view.'],
+        ['🧾', 'Richer court packet', 'Case packet exports now include charges and named persons alongside evidence, reports & media.'],
+        ['🕑', 'Fuller case timeline', 'Task activity and scheduled follow-ups now appear on the case timeline.'],
+      ],
+    };
+    function showWhatsNew() {
+      try {
+        if (typeof Store === 'undefined') return;
+        if (Store.get('seenWhatsNew', '') === WHATS_NEW.version) return;
+        if (document.getElementById('whatsnew-card')) return;
+        const card = el('div', { id: 'whatsnew-card', class: 'fixed bottom-4 left-4 z-[60] w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-white/10 bg-ink-850/95 p-4 shadow-glow backdrop-blur-xl' });
+        card.style.animation = 'popIn .3s cubic-bezier(.16,.84,.44,1) both';
+        card.innerHTML = `
+          <div class="mb-2 flex items-center justify-between"><p class="text-sm font-bold text-white">✨ ${esc(WHATS_NEW.title)}</p><button id="wn-x" aria-label="Dismiss" class="text-slate-400 transition hover:text-white">&times;</button></div>
+          <ul class="space-y-2">${WHATS_NEW.items.map((it) => `<li class="flex gap-2 text-xs"><span class="flex-shrink-0">${it[0]}</span><span><span class="font-semibold text-slate-100">${esc(it[1])}</span><span class="block text-slate-400">${esc(it[2])}</span></span></li>`).join('')}</ul>
+          <button id="wn-ok" class="mt-3 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">Got it</button>`;
+        const close = () => { Store.set('seenWhatsNew', WHATS_NEW.version); card.style.transition = 'opacity .25s, transform .25s'; card.style.opacity = '0'; card.style.transform = 'translateY(10px)'; setTimeout(() => card.remove(), 250); };
+        card.querySelector('#wn-x').onclick = close;
+        card.querySelector('#wn-ok').onclick = close;
+        document.body.appendChild(card);
+      } catch (e) {}
     }
     document.addEventListener('DOMContentLoaded', init);
