@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+/* ── CID Portal theme tokens — ported from the legacy styles.css ─────────── */
+@theme {
+  --color-ink-950: #070b14;
+  --color-ink-900: #0b1220;
+  --color-ink-850: #0f1726;
+  --color-ink-800: #131c2e;
+  --color-ink-700: #1b2940;
+  --color-ink-600: #26385a;
+  --color-badge-500: #3b82f6;
+
+  /* Accent is a variable so data-accent themes swap it in one place. */
+  --color-accent: var(--cid-accent);
+  --color-accent-deep: var(--cid-accent-deep);
+  --color-accent-soft: var(--cid-accent-soft);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+
+  --shadow-glow: 0 0 24px rgba(59, 130, 246, 0.18);
+}
+
+/* Accent themes — same Store keys and data attributes as the legacy app. */
+:root, body[data-accent="blue"] {
+  --cid-accent: #3b82f6;
+  --cid-accent-deep: #1d4ed8;
+  --cid-accent-soft: #93c5fd;
+}
+body[data-accent="amber"]   { --cid-accent: #f59e0b; --cid-accent-deep: #b45309; --cid-accent-soft: #fcd34d; }
+body[data-accent="emerald"] { --cid-accent: #10b981; --cid-accent-deep: #047857; --cid-accent-soft: #6ee7b7; }
+body[data-accent="rose"]    { --cid-accent: #f43f5e; --cid-accent-deep: #be123c; --cid-accent-soft: #fda4af; }
+
+/* Density — same html[data-density] contract as the legacy app. */
+html[data-density="compact"] { font-size: 14px; }
+
+/* Base — dark ink, native controls dark (select popups etc.), visible focus. */
+:root { color-scheme: dark; }
+body {
+  background: var(--color-ink-950);
+  color: #e2e8f0;
+}
+select option, select optgroup { background-color: #0b1220; color: #f8fafc; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible,
+textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
