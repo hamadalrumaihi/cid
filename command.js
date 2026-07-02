@@ -215,16 +215,74 @@
           </div>`;
         }).join('')}</div>`;
     }
+    /* ---- Crime analytics (Command) -----------------------------------------
+       Stat tiles + single-hue magnitude bars, computed from the RLS-scoped
+       client caches. One hue per chart (magnitude, not identity); values are
+       direct-labeled; labels stay in text tokens. */
+    function anBar(label, val, max, hue) {
+      const pct = max ? Math.round(val / max * 100) : 0;
+      return `<div class="flex items-center gap-3" title="${escapeHTML(label)}: ${val}">
+        <span class="w-32 flex-shrink-0 truncate text-xs text-slate-400">${escapeHTML(label)}</span>
+        <div class="h-2 flex-1 overflow-hidden rounded-full bg-ink-900"><div class="h-full rounded-full" style="width:${pct}%;background:${hue}"></div></div>
+        <span class="w-8 flex-shrink-0 text-right font-mono text-xs text-slate-200">${val}</span>
+      </div>`;
+    }
+    function renderAnalytics() {
+      const box = $('#cmd-analytics'); if (!box) return;
+      if (!dbReady()) { box.classList.add('hidden'); return; }
+      const cases = (typeof casesCache !== 'undefined' ? casesCache : []);
+      const persons = (typeof PERSONS !== 'undefined' ? PERSONS : []);
+      const gangs = (typeof GANGS !== 'undefined' ? GANGS : []);
+      const evidence = (typeof EVIDENCE_CACHE !== 'undefined' ? EVIDENCE_CACHE : []);
+      if (!cases.length && !persons.length) { box.classList.add('hidden'); return; }
+      box.classList.remove('hidden');
+      // Headlines.
+      const closed = cases.filter((c) => c.status === 'closed').length;
+      const clearance = cases.length ? Math.round(closed / cases.length * 100) : 0;
+      const openCases = cases.filter((c) => c.status === 'open' || c.status === 'active').length;
+      const bolos = persons.filter((p) => p.bolo).length;
+      const ev30 = evidence.filter((e) => e.created_at && (Date.now() - Date.parse(e.created_at)) < 30 * 86400000).length;
+      // Cases opened per month (last 6 calendar months).
+      const months = [];
+      for (let i = 5; i >= 0; i--) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); months.push({ key: d.toISOString().slice(0, 7), label: d.toLocaleString('en-US', { month: 'short' }), n: 0 }); }
+      cases.forEach((c) => { const k = (c.created_at || '').slice(0, 7); const m = months.find((x) => x.key === k); if (m) m.n++; });
+      const mMax = months.reduce((a, m) => Math.max(a, m.n), 0);
+      // Evidence by type.
+      const byType = {};
+      evidence.forEach((e) => { const t = (e.type || 'other').toLowerCase(); byType[t] = (byType[t] || 0) + 1; });
+      const types = Object.entries(byType).sort((a, b) => b[1] - a[1]).slice(0, 6);
+      const tMax = types.reduce((a, t) => Math.max(a, t[1]), 0);
+      // Top gangs by tracked members.
+      const byGang = {};
+      persons.forEach((p) => { if (p.gang_id) byGang[p.gang_id] = (byGang[p.gang_id] || 0) + 1; });
+      const topGangs = Object.entries(byGang).map(([id, n]) => ({ name: (gangs.find((g) => g.id === id) || {}).name || 'Unknown', n })).sort((a, b) => b.n - a.n).slice(0, 6);
+      const gMax = topGangs.reduce((a, g) => Math.max(a, g.n), 0);
+      const tile = (label, val, sub) => `<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-5"><p class="text-xs uppercase tracking-wider text-slate-400">${escapeHTML(label)}</p><p class="mt-1 text-2xl font-bold text-white">${escapeHTML(String(val))}</p>${sub ? `<p class="mt-0.5 text-[11px] text-slate-500">${escapeHTML(sub)}</p>` : ''}</div>`;
+      const panel = (title, inner) => `<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-5"><h4 class="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">${escapeHTML(title)}</h4><div class="space-y-2">${inner}</div></div>`;
+      box.innerHTML = `
+        <h4 class="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">📈 Crime Analytics</h4>
+        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          ${tile('Clearance rate', clearance + '%', closed + ' of ' + cases.length + ' cases closed')}
+          ${tile('Open cases', openCases, 'open + active')}
+          ${tile('Active BOLOs', bolos, 'flagged persons at large')}
+          ${tile('Evidence (30d)', ev30, 'items logged this month')}
+        </div>
+        <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          ${panel('Cases opened per month', months.map((m) => anBar(m.label, m.n, mMax, '#3b82f6')).join('') || '<p class="text-xs text-slate-500">No data.</p>')}
+          ${panel('Evidence by type', types.length ? types.map(([t, n]) => anBar(t, n, tMax, '#10b981')).join('') : '<p class="text-xs text-slate-500">No evidence logged yet.</p>')}
+          ${panel('Top gangs by tracked members', topGangs.length ? topGangs.map((g) => anBar(g.name, g.n, gMax, '#8b5cf6')).join('') : '<p class="text-xs text-slate-500">No gang-linked persons yet.</p>')}
+        </div>`;
+    }
     function onEnterCommand() {
       wireCommandFilters();
       if (typeof renderJumpBack === 'function') renderJumpBack();
       if (dbReady()) {
-        fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); renderBureauLoad(); renderBureauScorecards();
+        fetchTrackers(); fetchTickets(); fetchKpis().then(() => { if (typeof renderAnalytics === 'function') renderAnalytics(); }); fetchActivity(); renderBureauLoad(); renderBureauScorecards();
         // KPIs read PROFILES (activity/detective filter) and PERSONS (persons-of-interest count),
         // which are loaded by onAuthed elsewhere; reload here and re-render so the dashboard is
         // never stuck showing 0 / an empty detective list when Command is the first view entered.
         if (typeof fetchProfiles === 'function') fetchProfiles();
-        if (typeof fetchPersons === 'function') fetchPersons().then(() => renderKPIs());
+        if (typeof fetchPersons === 'function') fetchPersons().then(() => { renderKPIs(); if (typeof renderAnalytics === 'function') renderAnalytics(); });
       } else { renderKPIs(); renderTickets(); renderActivity(); renderBureauLoad(); renderBureauScorecards(); renderTrackers(); }
     }
 

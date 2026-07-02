@@ -129,6 +129,8 @@
       const mentions = (typeof NOTIFS !== 'undefined' ? NOTIFS : []).filter((n) => !n.read && n.type === 'chat_mention');
       let myDrafts = [];
       try { myDrafts = await DB().from('reports').select('*').eq('author_id', me).eq('finalized', false).then((r) => r.data || []); } catch (e) {}
+      let myTasks = [];
+      try { myTasks = await DB().from('case_tasks').select('*').eq('assignee', me).eq('done', false).order('due', { ascending: true, nullsFirst: false }).then((r) => r.data || []); } catch (e) {}
 
       // My open lead cases → due follow-ups + soft "needs attention" nudges.
       const today = (typeof todayISO === 'function') ? todayISO() : new Date().toISOString().slice(0, 10);
@@ -149,7 +151,7 @@
       });
 
       body.innerHTML = '';
-      if (!review.length && !bounced.length && !mine.length && !myOverdue.length && !mentions.length && !myDrafts.length && !followUps.length && !needs.length) {
+      if (!review.length && !bounced.length && !mine.length && !myOverdue.length && !mentions.length && !myDrafts.length && !followUps.length && !needs.length && !myTasks.length) {
         body.innerHTML = '<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">✅ All clear — nothing waiting on you. No sign-off actions, overdue cases, follow-ups, mentions, or open drafts.</div>';
         return;
       }
@@ -163,6 +165,7 @@
         chip(needs.length, 'need attention', 'bg-amber-500/15 text-amber-300'),
         chip(mentions.length, 'mentions', 'bg-violet-500/15 text-violet-300'),
         chip(myDrafts.length, 'draft reports', 'bg-emerald-500/15 text-emerald-300'),
+        chip(myTasks.length, 'tasks for you', 'bg-blue-500/15 text-blue-300'),
         chip(mine.length, 'in progress', 'bg-white/5 text-slate-300'),
       ].filter(Boolean).join('');
       body.appendChild(summary);
@@ -173,7 +176,28 @@
       if (needs.length) body.appendChild(deskNeeds(needs));
       if (mentions.length) body.appendChild(deskMentions(mentions));
       if (myDrafts.length) body.appendChild(deskDrafts(myDrafts));
+      if (myTasks.length) body.appendChild(deskTasks(myTasks));
       if (mine.length) body.appendChild(inboxSection('Your submissions in progress', mine, 'mine', ''));
+    }
+    function deskTasks(list) {
+      const today = (typeof todayISO === 'function') ? todayISO() : new Date().toISOString().slice(0, 10);
+      const wrap = el('div', {});
+      wrap.innerHTML = `<div class="mb-2 mt-2"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Tasks assigned to you <span class="ml-1 text-slate-500">(${list.length})</span></h4></div>
+        <div class="space-y-2">${list.map((t) => {
+          const overdue = t.due && t.due < today;
+          const cn = (typeof caseNumById === 'function' && caseNumById(t.case_id)) || '';
+          return `<div class="flex items-center gap-3 rounded-xl border border-white/5 bg-ink-900 px-4 py-3">
+            <input type="checkbox" class="dt-done h-4 w-4 flex-shrink-0 accent-emerald-500" data-id="${t.id}" aria-label="Mark task done" />
+            <div class="min-w-0 flex-1"><p class="truncate text-sm text-slate-200">${escapeHTML(t.title)}</p><p class="mt-0.5 text-[11px] text-slate-500">${cn ? `<button class="dt-case font-mono text-blue-300 hover:text-blue-200" data-case="${t.case_id}">${escapeHTML(cn)}</button>` : ''}${t.due ? ` \u00b7 <span class="${overdue ? 'font-semibold text-rose-300' : ''}">due ${escapeHTML(t.due)}${overdue ? ' \u2014 overdue' : ''}</span>` : ''}</p></div>
+          </div>`;
+        }).join('')}</div>`;
+      wrap.querySelectorAll('.dt-done').forEach((c) => c.onchange = async () => {
+        const res = await DB().update('case_tasks', c.dataset.id, { done: true });
+        if (res.error) { toast('Update failed: ' + res.error.message, 'danger'); c.checked = false; return; }
+        toast('Task done \u2014 nice.', 'success'); onEnterInbox();
+      });
+      wrap.querySelectorAll('.dt-case').forEach((b) => b.onclick = () => { if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(b.dataset.case); });
+      return wrap;
     }
     function deskFollowUps(list, today) {
       const wrap = el('div', {});

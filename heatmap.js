@@ -73,9 +73,49 @@
       }
     }
 
+    /* ---- Stylized San Andreas map: intensity dots by area ------------------
+       Rough coastline silhouette (decorative context); known areas get fixed
+       positions, everything else stays in the tiles below. */
+    const HM_XY = {
+      'paleto bay': [30, 10], 'mount chiliad': [40, 20], 'grapeseed': [57, 20], 'sandy shores': [55, 32],
+      'grand senora desert': [47, 43], 'harmony': [37, 41], 'blaine county': [62, 28], 'chumash': [13, 58],
+      'banham canyon': [18, 64], 'tataviam mountains': [68, 55], 'richman': [28, 72], 'morningwood': [24, 77],
+      'vinewood hills': [42, 66], 'vinewood': [46, 73], 'burton': [39, 78], 'rockford hills': [32, 79],
+      'downtown los santos': [49, 80], 'mirror park': [58, 76], 'del perro': [20, 80], 'vespucci': [23, 86],
+      'vespucci beach': [18, 89], 'little seoul': [34, 85], 'pillbox hill': [47, 85], 'strawberry': [46, 91],
+      'davis': [51, 95], 'chamberlain hills': [41, 93], 'la mesa': [58, 85], 'el burro heights': [66, 87],
+      'cypress flats': [62, 93], 'murrieta heights': [62, 81], 'rancho': [54, 96], 'port of los santos': [55, 104],
+      'la puerta': [36, 93], 'fort zancudo': [22, 40], 'route 68': [40, 48], 'humane labs': [72, 44],
+    };
+    function renderHeatSvg(rows, max) {
+      const box = $('#hm-map'); if (!box) return;
+      if (!dbReady() || !rows || !rows.length) { box.innerHTML = ''; return; }
+      const placed = rows.filter((r) => HM_XY[r.area.toLowerCase()]);
+      if (!placed.length) { box.innerHTML = ''; return; }
+      const dotColor = (pct) => pct >= 75 ? '#f43f5e' : pct >= 50 ? '#f59e0b' : '#3b82f6';
+      const dots = placed.map((r) => {
+        const xy = HM_XY[r.area.toLowerCase()], x = xy[0], y = xy[1];
+        const pct = Math.round(r.score / max * 100);
+        const rad = 2 + pct / 100 * 4.5;
+        const parts = HM_LAYER_META.filter((L) => HM_LAYERS[L.key] && r.v[L.key]).map((L) => r.v[L.key] + ' ' + L.label.toLowerCase()).join(', ');
+        return `<g><circle cx="${x}" cy="${y}" r="${rad.toFixed(1)}" fill="${dotColor(pct)}" fill-opacity="0.75" stroke="#0b1120" stroke-width="0.6"><title>${esc(r.area)} \u2014 intensity ${pct} (${esc(parts)})</title></circle>
+          <text x="${x}" y="${(y - rad - 1.5).toFixed(1)}" text-anchor="middle" font-size="3.2" fill="#cbd5e1">${esc(r.area.length > 16 ? r.area.slice(0, 15) + '\u2026' : r.area)}</text></g>`;
+      }).join('');
+      const unplaced = rows.length - placed.length;
+      box.innerHTML = `<div class="overflow-hidden rounded-2xl border border-white/5 bg-ink-950/60">
+        <svg viewBox="0 0 100 130" preserveAspectRatio="xMidYMid meet" style="width:100%;max-height:520px;height:auto;display:block" role="img" aria-label="San Andreas intensity map">
+          <path d="M28,3 C45,1 62,6 68,14 C76,22 80,34 78,46 C86,54 88,66 84,78 C80,92 72,102 60,110 C52,116 40,118 30,112 C18,106 10,96 10,84 C6,72 8,60 14,50 C10,38 12,24 18,14 C21,8 24,5 28,3 Z" fill="#0f1726" stroke="#26385a" stroke-width="0.8" />
+          <text x="30" y="7" font-size="3" fill="#64748b">PALETO</text>
+          <text x="52" y="38" font-size="3" fill="#64748b">BLAINE COUNTY</text>
+          <text x="40" y="102" font-size="3" fill="#64748b">LOS SANTOS</text>
+          ${dots}
+        </svg>
+        <p class="border-t border-white/5 px-4 py-2 text-[11px] text-slate-500">Stylized map \u2014 dot size &amp; color follow area intensity (hover a dot for the breakdown).${unplaced ? ` ${unplaced} area${unplaced === 1 ? '' : 's'} without a map position (postals etc.) appear in the tiles below.` : ''}</p>
+      </div>`;
+    }
     function renderHeatmap() {
       const grid = $('#hm-grid'), notice = $('#hm-notice'), legend = $('#hm-legend'); if (!grid) return;
-      if (!dbReady()) { if (notice) { notice.classList.remove('hidden'); notice.textContent = 'Sign in to view the Commander Heatmap.'; } grid.innerHTML = ''; if (legend) legend.textContent = ''; const c = $('#hm-controls'); if (c) c.innerHTML = ''; return; }
+      if (!dbReady()) { if (notice) { notice.classList.remove('hidden'); notice.textContent = 'Sign in to view the Commander Heatmap.'; } grid.innerHTML = ''; if (legend) legend.textContent = ''; const c = $('#hm-controls'); if (c) c.innerHTML = ''; const hmm = $('#hm-map'); if (hmm) hmm.innerHTML = ''; return; }
       if (notice) notice.classList.add('hidden');
 
       const enabled = HM_LAYER_META.filter((L) => HM_LAYERS[L.key]);
@@ -106,7 +146,8 @@
         .filter((r) => r.score > 0).sort((x, y) => y.score - x.score);
       const max = rows.reduce((m, r) => Math.max(m, r.score), 0) || 1;
 
-      if (!rows.length) { grid.innerHTML = '<p class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-500">No area data in this window. Widen the time range, enable more layers, or add an <b>Area</b> to cases, places, or gang turf.</p>'; if (legend) legend.textContent = ''; return; }
+      if (!rows.length) { renderHeatSvg([], 1); grid.innerHTML = '<p class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-500">No area data in this window. Widen the time range, enable more layers, or add an <b>Area</b> to cases, places, or gang turf.</p>'; if (legend) legend.textContent = ''; return; }
+      renderHeatSvg(rows, max);
       const lvl = (pct) => pct >= 75 ? 'lvl3' : pct >= 50 ? 'lvl2' : pct >= 25 ? 'lvl1' : '';
       grid.innerHTML = rows.map((r) => { const pct = Math.round(r.score / max * 100); return `<div class="hm-tile ${lvl(pct)}">
         <div class="flex items-center justify-between"><h4 class="text-base font-bold text-white">${esc(r.area)}</h4><span class="font-mono text-lg font-bold text-white">${pct}</span></div>
