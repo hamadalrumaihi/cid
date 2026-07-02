@@ -65,8 +65,17 @@
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
       const v = record || {};
       const persons = (typeof PERSONS !== 'undefined' ? PERSONS : []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      const ownerOpts = ['<option value="">— unknown —</option>'].concat(persons.map((p) => `<option value="${p.id}" ${p.id === v.owner_id ? 'selected' : ''}>${escapeHTML(p.name)}</option>`)).join('');
-      const gangOpts = ['<option value="">— none —</option>'].concat((typeof GANGS !== 'undefined' ? GANGS : []).map((g) => `<option value="${g.id}" ${g.id === v.gang_id ? 'selected' : ''}>${escapeHTML(g.name)}</option>`)).join('');
+      const gangsList = (typeof GANGS !== 'undefined' ? GANGS : []);
+      // Preserve existing FK links even if PERSONS/GANGS haven't loaded / failed —
+      // otherwise the select falls back to blank and an unrelated save nulls the link.
+      const ownerKnown = v.owner_id && persons.some((p) => p.id === v.owner_id);
+      const gangKnown = v.gang_id && gangsList.some((g) => g.id === v.gang_id);
+      const ownerOpts = ['<option value="">— unknown —</option>']
+        .concat(v.owner_id && !ownerKnown ? [`<option value="${escapeHTML(v.owner_id)}" selected>(current owner — loading…)</option>`] : [])
+        .concat(persons.map((p) => `<option value="${p.id}" ${p.id === v.owner_id ? 'selected' : ''}>${escapeHTML(p.name)}</option>`)).join('');
+      const gangOpts = ['<option value="">— none —</option>']
+        .concat(v.gang_id && !gangKnown ? [`<option value="${escapeHTML(v.gang_id)}" selected>(current gang — loading…)</option>`] : [])
+        .concat(gangsList.map((g) => `<option value="${g.id}" ${g.id === v.gang_id ? 'selected' : ''}>${escapeHTML(g.name)}</option>`)).join('');
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Vehicle</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
@@ -105,9 +114,12 @@
       const box = $('#crossref-box'); if (!box) return;
       if (!dbReady()) { box.innerHTML = ''; return; }
       box.innerHTML = '<p class="text-sm text-slate-500">Scanning for cross-case matches…</p>';
-      let reports = [], links = [];
-      try { reports = await DB().list('reports', {}); } catch (e) { reports = []; }
-      try { links = await DB().list('case_intel_links', {}); } catch (e) { links = []; }
+      let reports = [], links = [], scanFailed = false;
+      try { reports = await DB().list('reports', {}); } catch (e) { reports = []; scanFailed = true; }
+      try { links = await DB().list('case_intel_links', {}); } catch (e) { links = []; scanFailed = true; }
+      // A failed scan must not masquerade as an authoritative "no matches" — that's
+      // a dangerous false negative for a deconfliction tool.
+      if (scanFailed) { box.innerHTML = '<div class="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 text-sm text-amber-200">⚠ Could not scan for cross-case matches (connection issue). <button class="cx-retry underline">Retry</button></div>'; const rb = box.querySelector('.cx-retry'); if (rb) rb.onclick = () => renderCrossref(); return; }
       const caseNum = (id) => (typeof caseNumById === 'function' && caseNumById(id)) || 'a case';
       // Flatten each case's report fields to one searchable text blob.
       const textByCase = {};
@@ -166,7 +178,11 @@
       // Warrant context: latest warrant status per named suspect (RLS-scoped).
       let warrants = [];
       try { warrants = (await DB().list('reports', {})).filter((r) => r.template === 'arrest_warrant'); } catch (e) {}
-      const wStatus = {};
+      // Oldest → newest so the latest warrant's status wins the per-name lookup.
+      warrants.sort((a, b) => new Date(a.updated_at || a.created_at || 0) - new Date(b.updated_at || b.created_at || 0));
+      // Object.create(null): a suspect named e.g. "Constructor" must not collide with
+      // Object.prototype members on the name-keyed lookup below.
+      const wStatus = Object.create(null);
       warrants.forEach((r) => {
         const st = (r.fields && r.fields._warrant_status) || 'draft';
         const names = [];
@@ -215,5 +231,7 @@
     document.addEventListener('DOMContentLoaded', () => {
       const nb = $('#vehicle-new'); if (nb) nb.addEventListener('click', () => openVehicleModal(null));
       const vf = $('#vehicle-filter'); if (vf) vf.addEventListener('input', () => { vehicleFilter = vf.value; renderVehicles(); });
-      const bf = $('#bolo-filter'); if (bf) bf.addEventListener('input', () => { boloFilter = bf.value; renderBolo(); });
+      // renderBolo refetches the reports table, so debounce to avoid a full download
+      // per keystroke and the stale-repaint race from out-of-order responses.
+      const bf = $('#bolo-filter'); if (bf) bf.addEventListener('input', (typeof debounce === 'function' ? debounce(() => { boloFilter = bf.value; renderBolo(); }, 200) : () => { boloFilter = bf.value; renderBolo(); }));
     });

@@ -78,8 +78,29 @@
     if (loaBtn) loaBtn.onclick = function () { if (window.CIDApp && window.CIDApp.setMyLoa) window.CIDApp.setMyLoa(!onLoa); };
     document.getElementById('auth-out').onclick = function () { window.CIDDB.signOut(); };
   }
+  function showAuthError() {
+    setState('out');
+    gateBody(
+      '<div class="rounded-lg border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-200">Couldn’t verify your account (network hiccup?). Your session is fine — try again.</div>' +
+      '<button id="g-retry" class="mt-4 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">Retry</button>'
+    );
+    var r = document.getElementById('g-retry'); if (r) r.onclick = function () { evaluate(); };
+  }
   window.CIDApp = window.CIDApp || {};
-  window.CIDApp.refreshAuthBar = function () { if (window.CIDDB && window.CIDDB.me && lastSession) showApp(window.CIDDB.me, lastSession); };
+  // Chain any refreshAuthBar already registered (collab.js registers the sidebar
+  // officer-card refresh) instead of clobbering it, so LOA toggles refresh both.
+  var _prevRefreshAuthBar = window.CIDApp.refreshAuthBar;
+  window.CIDApp.refreshAuthBar = function () {
+    if (window.CIDDB && window.CIDDB.me && lastSession) showApp(window.CIDDB.me, lastSession);
+    if (typeof _prevRefreshAuthBar === 'function') { try { _prevRefreshAuthBar(); } catch (e) {} }
+  };
+
+  // onAuthed does the heavy one-time work (fetch-all + ~30 realtime subscriptions).
+  // supabase-js fires INITIAL_SESSION + TOKEN_REFRESHED (~hourly) + SIGNED_IN, and
+  // boot() also calls evaluate() directly, so without this guard onAuthed would
+  // re-run on every event — a double fetch-all at boot and an hourly refetch storm.
+  // Fire it only on the first transition to a given active user; reset on sign-out.
+  var lastAuthedUid = null;
 
   async function evaluate() {
     if (!window.CIDDB || !window.CIDDB.ready) {
@@ -89,8 +110,16 @@
       return;
     }
     var session = await window.CIDDB.getSession();
-    if (!session) { showLogin(); return; }
-    var profile = await window.CIDDB.profile(session.user.id);
+    if (!session) {
+      // Signed out: drop the cached identity and tear down realtime so a different
+      // account on a shared browser doesn't inherit the previous member's state.
+      lastAuthedUid = null;
+      if (window.CIDDB) { window.CIDDB.me = null; if (window.CIDDB.removeAllChannels) window.CIDDB.removeAllChannels(); }
+      showLogin(); return;
+    }
+    var profile;
+    try { profile = await window.CIDDB.profile(session.user.id); }
+    catch (e) { showAuthError(); return; }   // transient error — offer retry, don't mislabel as unapproved
     window.CIDDB.me = profile || null;
     if (profile && profile.active) {
       showApp(profile, session);
@@ -104,7 +133,10 @@
           profile.discord_id = String(did); if (window.CIDDB.me) window.CIDDB.me.discord_id = String(did);
         }
       } catch (e) {}
-      if (window.CIDApp && typeof window.CIDApp.onAuthed === 'function') window.CIDApp.onAuthed(profile, session);
+      if (window.CIDApp && typeof window.CIDApp.onAuthed === 'function' && lastAuthedUid !== profile.id) {
+        lastAuthedUid = profile.id;
+        window.CIDApp.onAuthed(profile, session);
+      }
     } else showPending(session);
   }
 

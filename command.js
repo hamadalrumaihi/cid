@@ -66,6 +66,51 @@
         if (m.go && live) card.onclick = m.go;
         g.appendChild(card); });
       renderCmdDrill();
+      renderAttention();
+    }
+
+    /* ---- Needs-attention widget (Wave 5) --------------------------------------
+       Three things that quietly slip: open cases gone stale (≥14d, matching the
+       auto-escalate rule), open cases with no lead detective, and cases stuck in
+       the sign-off chain. Derived entirely from the RLS-scoped cases cache, so
+       every member sees only their own bureau's slippage. Hidden when clean. */
+    function renderAttention() {
+      const box = $('#attention-widget'); if (!box) return;
+      if (!dbReady()) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+      const cc = (typeof casesCache !== 'undefined' ? casesCache : []);
+      const days = (typeof caseStaleDays === 'function') ? caseStaleDays : () => 0;
+      const isOpen = (c) => c.status === 'open' || c.status === 'active';
+      const stale = cc.filter((c) => isOpen(c) && days(c) >= 14).sort((a, b) => days(b) - days(a));
+      const unassigned = cc.filter((c) => isOpen(c) && !c.lead_detective_id).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      const sAge = (c) => Math.floor((Date.now() - new Date(c.signoff_submitted_at || c.updated_at).getTime()) / 86400000);
+      const awaiting = cc.filter((c) => /^awaiting_/.test(c.signoff_status || '')).sort((a, b) => sAge(b) - sAge(a));
+      if (!stale.length && !unassigned.length && !awaiting.length) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+      const row = (c, note, noteTint) => `<button class="att-row flex w-full items-center justify-between gap-2 rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left transition hover:border-blue-500/30 hover:bg-white/5" data-id="${c.id}"><span class="min-w-0 flex-1 truncate"><span class="font-mono text-xs text-blue-300">${esc(c.case_number)}</span> <span class="text-xs text-slate-300">${esc(c.title || '')}</span></span><span class="flex-shrink-0 text-[10px] font-semibold ${noteTint}">${esc(note)}</span></button>`;
+      const col = (icon, title, list, tint, rowsHtml, viewAll) => `<div class="min-w-0 rounded-xl border border-white/5 bg-ink-900/60 p-3">
+        <div class="mb-2 flex items-center justify-between"><p class="text-[11px] font-semibold uppercase tracking-wider ${tint}">${icon} ${title} (${list.length})</p>${list.length > 5 && viewAll ? `<button class="att-all text-[11px] font-semibold text-blue-300 hover:text-blue-200" data-go="${viewAll}">all →</button>` : ''}</div>
+        ${list.length ? `<div class="space-y-1.5">${rowsHtml}</div>` : '<p class="text-xs text-slate-600">Clear ✓</p>'}</div>`;
+      box.classList.remove('hidden');
+      box.innerHTML = `<div class="rounded-2xl border border-amber-500/15 bg-ink-900/60 p-4">
+        <p class="mb-3 text-[11px] font-semibold uppercase tracking-wider text-amber-300/80">⚠ Needs attention — what's slipping</p>
+        <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
+          ${col('⏳', 'Stale ≥14d', stale, 'text-amber-300', stale.slice(0, 5).map((c) => row(c, days(c) + 'd quiet', 'text-amber-300')).join(''), 'stale')}
+          ${col('👤', 'No lead detective', unassigned, 'text-rose-300', unassigned.slice(0, 5).map((c) => row(c, 'unassigned', 'text-rose-300')).join(''), 'unassigned')}
+          ${col('✍️', 'Stuck in sign-off', awaiting, 'text-blue-300', awaiting.slice(0, 5).map((c) => row(c, sAge(c) + 'd waiting on ' + (officerName(c.signoff_assignee_id) || 'reviewer'), 'text-blue-300')).join(''), 'awaiting')}
+        </div>
+      </div>`;
+      box.querySelectorAll('.att-row').forEach((b) => b.onclick = () => { if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(b.dataset.id); });
+      box.querySelectorAll('.att-all').forEach((b) => b.onclick = () => {
+        const go = b.dataset.go;
+        if (go === 'awaiting') { setCmdStatus('awaiting'); return; }   // drill stays on Command
+        // Stale/unassigned → the Cases list with the matching saved-filter applied.
+        if (typeof caseFilters !== 'undefined') {
+          caseFilters = { bureau: '', status: '', assignee: go === 'unassigned' ? 'unassigned' : '', stale: go === 'stale' ? 'stale' : '' };
+          if (typeof activeViewName !== 'undefined') activeViewName = '';
+          if (typeof persistCaseFilters === 'function') persistCaseFilters();
+        }
+        if (typeof navigate === 'function') navigate('cases');
+        if (typeof renderCases === 'function') renderCases();
+      });
     }
     function setCmdStatus(s) { CMD_FILTERS.status = (CMD_FILTERS.status === s ? '' : s); syncCmdFilterControls(); refreshCommand(); }
     function renderCmdDrill() {
@@ -156,7 +201,7 @@
     }
 
     function timeAgo(ts) { const s = (Date.now() - new Date(ts).getTime()) / 1000; if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago'; }
-    async function fetchActivity() { if (dbReady()) { try { AUDIT = (await DB().list('audit_log', { order: 'created_at', ascending: false })).slice(0, 12); } catch (e) {} } renderActivity(); }
+    async function fetchActivity() { if (dbReady()) { try { const r = await DB().from('audit_log').select('*').order('created_at', { ascending: false }).limit(12); AUDIT = r.data || []; } catch (e) {} } renderActivity(); }
     function renderActivity() {
       const f = $('#activity-feed'); if (!f) return;
       if (!dbReady()) { f.innerHTML = '<li class="text-sm text-slate-500">Sign in to view the division activity feed.</li>'; return; }
@@ -195,7 +240,7 @@
       const isCommand = !!(me && me.active && CMD_ROLES.includes(me.role));
       if (!dbReady() || !isCommand) { w.classList.add('hidden'); w.innerHTML = ''; return; }
       let keys = ['LSB', 'BCB', 'SAB', 'JTF'];
-      if (me.role === 'bureau_lead' && me.bureau) keys = [me.bureau];
+      if (me.role === 'bureau_lead' && me.division) keys = [me.division];   // profiles use `division`, not `bureau`
       const all = (typeof casesCache !== 'undefined' ? casesCache : []);
       w.classList.remove('hidden');
       w.innerHTML = `<div class="mb-3 flex items-center justify-between"><h3 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Bureau scorecards</h3><span class="text-[11px] text-slate-500">${me.role === 'bureau_lead' ? 'your bureau' : 'all bureaus'} · performance</span></div>
@@ -346,7 +391,7 @@
             const res = await DB().insert('cases', { case_number: full, title: ticket.description || workingId, bureau: k, status: 'open' });
             if (res.error) { const dup = /duplicate|unique|already exists|23505/i.test(res.error.message || ''); toast(dup ? `Case number ${full} already exists — choose a unique number.` : 'Case create failed: ' + res.error.message, 'danger'); return; }
             newCaseId = res.data && res.data[0] && res.data[0].id;
-            if (ticket.id) await DB().update('tickets', ticket.id, { status: 'processed', case_id: newCaseId, routed_bureau: k });
+            if (ticket.id) { const tu = await DB().update('tickets', ticket.id, { status: 'processed', case_id: newCaseId, routed_bureau: k }); if (tu && tu.error) toast('Case created, but the ticket wasn’t marked processed: ' + tu.error.message + ' — re-check the queue.', 'warn'); }
           }
           step3(full, k, newCaseId);
         };

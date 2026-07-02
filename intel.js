@@ -47,6 +47,7 @@
           <div class="min-w-0"><p class="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Intel profile</p><h3 id="ip-title" class="truncate text-xl font-bold text-white">Loading…</h3><p id="ip-sub" class="text-xs text-slate-400"></p></div>
           <div class="flex flex-shrink-0 items-center gap-2">
             ${(type === 'person' && typeof watchBtnHtml === 'function' && DB() && DB().me) ? watchBtnHtml('person', id, '') : ''}
+            ${type === 'person' ? '<button id="ip-dossier" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10" title="Export the full dossier as .docx or .pdf">📇 Dossier</button>' : ''}
             <button id="ip-network" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10" title="View in relationship network">🕸 Network</button>
             <button aria-label="Close" class="close-x text-2xl leading-none text-slate-400 hover:text-white">&times;</button>
           </div>
@@ -54,6 +55,7 @@
         <div id="ip-body" class="flex-1 space-y-6 px-6 py-5"><p class="text-sm text-slate-500">Building rollup…</p></div>`;
       node.querySelector('.close-x').onclick = closeModal;
       const ipn = node.querySelector('#ip-network'); if (ipn) ipn.onclick = () => { closeModal(); if (typeof openIntelGraph === 'function') openIntelGraph(type, id); };
+      const ipd = node.querySelector('#ip-dossier'); if (ipd) ipd.onclick = () => exportPersonDossier(id);
       openModal(node, { slide: true });
       try {
         if (type === 'person') await buildPersonProfile(id, node);
@@ -133,4 +135,107 @@
         ipSection('Evidence (in linked cases)', evidence.length, ipListOrEmpty(evidence, ipEvItem)),
       ].join('');
       wireProfileLinks(node);
+    }
+
+    /* ---- Person dossier export (Wave 5) -------------------------------------
+       One-click .docx / .pdf compiling everything the viewer can see about a
+       person: bio, gang ties, known properties, registered vehicles, linked
+       cases, warrants naming them, evidence in linked cases, and media. Every
+       input is RLS-scoped, so the dossier only ever contains what the exporting
+       member could already read on screen. Reuses the case-packet writers'
+       letterhead + download plumbing (docx.js / app.js). */
+    async function gatherPersonDossier(id) {
+      let person = (typeof PERSONS !== 'undefined' ? PERSONS : []).find((p) => p.id === id);
+      if (!person) { const r = await DB().list('persons', { eq: { id } }); person = r[0]; }
+      if (!person) throw new Error('Person not found');
+      const sel = (tbl, col) => DB().from(tbl).select('*').eq(col, id).then((r) => r.data || []).catch(() => []);
+      const [members, media, direct] = await Promise.all([
+        sel('gang_members', 'person_id'), sel('media', 'person_id'),
+        DB().from('case_intel_links').select('case_id').eq('kind', 'person').eq('ref_id', id).then((r) => r.data || []).catch(() => []),
+      ]);
+      const caseIds = ipUniq([...members.map((m) => m.case_id), ...media.map((m) => m.case_id), ...direct.map((d) => d.case_id)].filter(Boolean));
+      let evidence = [];
+      if (caseIds.length) evidence = await DB().from('evidence').select('*').in('case_id', caseIds).then((r) => r.data || []).catch(() => []);
+      // Linked cases resolved to number/title/status from the RLS-scoped cache.
+      const cc = (typeof casesCache !== 'undefined' ? casesCache : []);
+      const cases = caseIds.map((cid) => cc.find((c) => c.id === cid)).filter(Boolean);
+      // Warrants naming this person (any warrant template, matched on the name).
+      let warrants = [];
+      try {
+        const nm = (person.name || '').trim().toLowerCase();
+        if (nm) warrants = (await DB().list('reports', {})).filter((r) => {
+          if (!(typeof WARRANT_TPLS !== 'undefined' && WARRANT_TPLS[r.template])) return false;
+          const f = r.fields || {}; const names = [];
+          if (Array.isArray(f.suspects)) f.suspects.forEach((s) => { if (s && s.full_name) names.push(s.full_name); });
+          if (f.full_name) names.push(f.full_name);
+          return names.some((n) => String(n).trim().toLowerCase() === nm);
+        });
+      } catch (e) {}
+      const vehicles = (typeof VEHICLES !== 'undefined' ? VEHICLES : []).filter((v) => v.owner_id === id);
+      const gang = person.gang_id && typeof gangNameById === 'function' ? gangNameById(person.gang_id) : null;
+      const props = Array.isArray(person.properties) ? person.properties : [];
+      return { person, gang, props, vehicles, cases, warrants, members, media, evidence };
+    }
+    function dossierParas(p, d) {
+      const P = [
+        { text: 'Criminal Investigation Division — State of San Andreas', style: 'subtitle' },
+        { text: 'PERSON DOSSIER — ' + (p.name || 'Unknown'), style: 'title' },
+        { text: `${p.alias ? '“' + p.alias + '” · ' : ''}${p.status || 'Person of interest'} · prepared ${new Date().toLocaleString('en-US')}`, style: 'subtitle' },
+        { text: '', style: 'normal' },
+        { text: 'Profile', style: 'heading' },
+        { text: `Gang: ${d.gang || '—'} · CCW: ${p.ccw ? 'Yes' : 'No'} · VCH: ${p.vch || 0} · Felonies: ${p.felony_count || 0}${p.bolo ? ' · ACTIVE BOLO' : ''}${p.dob ? ' · DOB ' + p.dob : ''}`, style: 'normal' },
+      ];
+      if (p.notes) P.push({ text: 'Notes: ' + p.notes, style: 'normal' });
+      const section = (title, arr, fmt, empty) => {
+        P.push({ text: `${title} (${arr.length})`, style: 'heading' });
+        arr.length ? arr.forEach((x) => P.push({ text: '• ' + fmt(x), style: 'normal' })) : P.push({ text: empty || 'None on file.', style: 'normal' });
+      };
+      section('Linked cases', d.cases, (c) => `${c.case_number} — ${c.title || 'Untitled'} [${c.status}] · ${c.bureau}`);
+      section('Warrants naming subject', d.warrants, (r) => `${(typeof reportTitle === 'function' ? reportTitle(r) : r.template)} — status: ${(typeof warrantStatusOf === 'function' ? warrantStatusOf(r) : 'draft')} · ${new Date(r.created_at).toLocaleDateString('en-US')}`);
+      section('Known properties', d.props, (pr) => `${pr.address || '—'}${pr.type ? ' · ' + pr.type : ''}${pr.notes ? ' · ' + pr.notes : ''}`);
+      section('Registered vehicles', d.vehicles, (v) => `${v.plate}${v.model ? ' — ' + v.model : ''}${v.color ? ' · ' + v.color : ''}`);
+      section('Gang memberships', d.members, (m) => `${m.rank || m.status || 'member'}${m.case_id && typeof caseNumById === 'function' && caseNumById(m.case_id) ? ' · per ' + caseNumById(m.case_id) : ''}`);
+      section('Evidence (in linked cases)', d.evidence, (e) => `${(e.item_code ? e.item_code + ' — ' : '') + (e.description || e.type || 'item')} [${e.tamper}]${e.case_id && typeof caseNumById === 'function' && caseNumById(e.case_id) ? ' · ' + caseNumById(e.case_id) : ''}`);
+      section('Media', d.media, (m) => `${m.title || m.type} — ${m.external_url || m.storage_path || ''}`);
+      P.push({ text: '', style: 'normal' });
+      P.push({ text: 'Generated by the CID Portal. For internal investigative use.', style: 'subtitle' });
+      return P;
+    }
+    function dossierPdf(p, d) {
+      const J = window.jspdf && window.jspdf.jsPDF; if (!J) { toast('PDF library unavailable (offline). Use .docx.', 'warn'); return false; }
+      const doc = new J({ unit: 'pt', format: 'letter' }); const M = 54; let y = M;
+      const W = doc.internal.pageSize.getWidth() - M * 2;
+      const line = (t, sz, bold) => { doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(sz); doc.splitTextToSize(String(t), W).forEach((ln) => { if (y > doc.internal.pageSize.getHeight() - M) { doc.addPage(); y = M; } doc.text(ln, M, y); y += sz + 4; }); };
+      if (typeof pdfLetterhead === 'function') y = pdfLetterhead(doc, M);
+      dossierParas(p, d).forEach((para) => {
+        if (!para.text) { y += 6; return; }
+        const sz = para.style === 'title' ? 16 : para.style === 'heading' ? 12 : para.style === 'subtitle' ? 9 : 10;
+        line(para.text, sz, para.style === 'title' || para.style === 'heading');
+        if (para.style === 'heading') y += 2;
+      });
+      doc.save('dossier-' + String(p.name || 'person').replace(/[^a-z0-9]/gi, '-') + '.pdf'); return true;
+    }
+    function exportPersonDossier(id) {
+      if (!dbReady()) { toast('Sign in to export dossiers.', 'warn'); return; }
+      const node = el('div', { class: 'p-6' });
+      node.innerHTML = `
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Export Person Dossier</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <p class="mb-4 text-sm text-slate-400">Compiles the full profile — bio, gang ties, properties, vehicles, linked cases, warrants, evidence &amp; media (only what you can access).</p>
+        <div class="grid grid-cols-2 gap-2">
+          <button data-fmt="docx" class="ds-fmt rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm font-semibold text-white transition hover:bg-white/10">📄<br>.docx</button>
+          <button data-fmt="pdf" class="ds-fmt rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm font-semibold text-white transition hover:bg-white/10">📕<br>.pdf</button>
+        </div>
+        <div id="ds-msg" class="mt-3 text-xs text-slate-400"></div>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelectorAll('.ds-fmt').forEach((b) => b.onclick = async () => {
+        const m = node.querySelector('#ds-msg'); m.textContent = 'Compiling dossier…';
+        try {
+          const d = await gatherPersonDossier(id);
+          let ok = true;
+          if (b.dataset.fmt === 'docx') downloadDocx('Person Dossier — ' + (d.person.name || ''), dossierParas(d.person, d), 'dossier-' + String(d.person.name || 'person').replace(/[^a-z0-9]/gi, '-') + '.docx');
+          else ok = dossierPdf(d.person, d);
+          if (ok) { toast('Dossier exported (.' + b.dataset.fmt + ')', 'success'); closeModal(); } else m.textContent = '';
+        } catch (e) { m.textContent = 'Export failed: ' + (e.message || e); }
+      });
+      openModal(node);
     }

@@ -82,7 +82,7 @@
       if (!(await uiConfirm('Delete ' + ids.length + ' selected person' + (ids.length > 1 ? 's' : '') + '? This removes the registry records (not any linked officer accounts).', { confirmText: 'Delete ' + ids.length }))) return;
       const rows = PERSONS.filter((p) => personSel.has(p.id));
       personSel.clear();
-      await deleteWithUndo('persons', rows, { label: ids.length + ' person' + (ids.length > 1 ? 's' : ''), after: fetchPersons });
+      await deleteWithUndo('persons', rows, { label: ids.length + ' person' + (ids.length > 1 ? 's' : ''), after: fetchPersons, setNullRefs: [{ table: 'gang_members', column: 'person_id' }, { table: 'vehicles', column: 'owner_id' }] });
     }
     function renderPersons() {
       const grid = $('#persons-grid'); if (!grid) return;
@@ -106,7 +106,7 @@
         const card = el('div', { class: 'rounded-2xl border border-white/5 bg-ink-900/60 p-5' });
         card.innerHTML = `
           <div class="flex items-start gap-3">
-            ${p.mugshot_url ? `<img src="${escapeHTML(p.mugshot_url)}" class="h-14 w-14 flex-shrink-0 rounded-lg object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="hidden h-14 w-14 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-xl">👤</div>` : `<div class="grid h-14 w-14 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-xl">👤</div>`}
+            ${(p.mugshot_url && safeUrl(p.mugshot_url)) ? `<img src="${escapeHTML(safeUrl(p.mugshot_url))}" class="h-14 w-14 flex-shrink-0 rounded-lg object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="hidden h-14 w-14 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-xl">👤</div>` : `<div class="grid h-14 w-14 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-xl">👤</div>`}
             <div class="min-w-0 flex-1"><p class="truncate font-semibold text-white">${escapeHTML(p.name)}${flag ? ' <span title="≥8 violent felonies">🚨</span>' : ''}</p><p class="text-xs text-slate-400">${p.alias ? '“' + escapeHTML(p.alias) + '” · ' : ''}${escapeHTML(p.status || '')}</p>
               <p class="mt-1 text-[11px] text-slate-500">${p.gang_id ? '🚩 ' + escapeHTML(gangNameById(p.gang_id) || 'Gang') + ' · ' : ''}CCW ${p.ccw ? 'Yes' : 'No'} · VCH ${p.vch || 0} · Felonies ${p.felony_count || 0}${(Array.isArray(p.properties) && p.properties.length) ? ' · 🏠 ' + p.properties.length : ''}</p></div>
             <button class="p-profile rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-white/10" title="Unified intel profile">🔎 Profile</button>
@@ -121,7 +121,7 @@
         const tc = card.querySelector('.p-tocase'); if (tc && typeof attachIntelToCase === 'function') tc.onclick = () => attachIntelToCase(`Person — ${p.name}${p.alias ? ' “' + p.alias + '”' : ''} · ${p.status || 'POI'}${p.felony_count ? ', ' + p.felony_count + ' felonies' : ''}`);
         const pdb = card.querySelector('.p-del'); if (pdb) pdb.onclick = async () => {
           if (!(await uiConfirm('Delete person "' + (p.name || 'record') + '"? This removes the persons-registry record (not any linked officer account).', { confirmText: 'Delete' }))) return;
-          await deleteWithUndo('persons', p, { label: 'Person “' + (p.name || 'record') + '”', after: fetchPersons });
+          await deleteWithUndo('persons', p, { label: 'Person “' + (p.name || 'record') + '”', after: fetchPersons, setNullRefs: [{ table: 'gang_members', column: 'person_id' }, { table: 'vehicles', column: 'owner_id' }] });
         };
         const chk = card.querySelector('.p-check'); if (chk) chk.onchange = () => { if (chk.checked) personSel.add(p.id); else personSel.delete(p.id); updatePersonBulkBar(); };
         grid.appendChild(card);
@@ -132,7 +132,12 @@
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
       const p = record || prefill || {};
       const node = el('div', { class: 'p-6' });
-      const gangOpts = ['<option value="">— no gang —</option>'].concat(GANGS.map((g) => `<option value="${g.id}" ${g.id === p.gang_id ? 'selected' : ''}>${escapeHTML(g.name)}</option>`)).join('');
+      // Preserve the current gang even if the GANGS cache hasn't loaded / failed —
+      // otherwise the select falls back to '— no gang —' and an unrelated save nulls it.
+      const gangKnown = p.gang_id && GANGS.some((g) => g.id === p.gang_id);
+      const gangOpts = ['<option value="">— no gang —</option>']
+        .concat(p.gang_id && !gangKnown ? [`<option value="${escapeHTML(p.gang_id)}" selected>(current gang — loading…)</option>`] : [])
+        .concat(GANGS.map((g) => `<option value="${g.id}" ${g.id === p.gang_id ? 'selected' : ''}>${escapeHTML(g.name)}</option>`)).join('');
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Person</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -186,7 +191,7 @@
       const pd = node.querySelector('#p-del'); if (pd) pd.onclick = async () => {
         if (!(await uiConfirm('Delete person “' + p.name + '”?', { confirmText: 'Delete' }))) return;
         closeModal();
-        await deleteWithUndo('persons', p, { label: 'Person “' + p.name + '”', after: fetchPersons });
+        await deleteWithUndo('persons', p, { label: 'Person “' + p.name + '”', after: fetchPersons, setNullRefs: [{ table: 'gang_members', column: 'person_id' }, { table: 'vehicles', column: 'owner_id' }] });
       };
       openModal(node, { wide: true });
     }

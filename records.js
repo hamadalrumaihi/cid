@@ -44,6 +44,10 @@
       // session exists and refetch on any auth change, mirroring the app sign-in.
       DB().getSession().then((s) => { if (s) fetchRecords(); else renderRecords(); });
       DB().onAuth((s) => { renderAuthBar(); if (s) fetchRecords(); else { recCache = []; renderRecords(); } });
+      // Raw auth events fire before auth.js populates DB().me (async profile fetch),
+      // so the first renderAuthBar() above runs with me === null and hides the create
+      // UI. Re-render once the profile has actually loaded (chain the shared hook).
+      if (window.CIDApp) { const prev = window.CIDApp.onAuthed; window.CIDApp.onAuthed = function (p, s) { if (typeof prev === 'function') prev(p, s); renderAuthBar(); renderRecords(); }; }
 
       // Realtime: re-fetch on any change so all open clients stay in sync.
       if (DB().client) {
@@ -130,6 +134,9 @@
         if (record && record.id) res = await DB().update('cid_records', record.id, payload);
         else { payload.created_by = DB().me && DB().me.id; res = await DB().insert('cid_records', payload); }
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        // RLS lets only the record's creator (or command) UPDATE. A blocked update
+        // returns zero rows with no error — surface that instead of a false success.
+        if (record && record.id && res.data && res.data.length === 0) { toast('You can only edit records you created.', 'warn'); return; }
         closeModal(); toast(record ? 'Record updated' : 'Record created', 'success');
         fetchRecords(); // realtime will also fire, but refetch guarantees immediate update
       };

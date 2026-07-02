@@ -437,7 +437,10 @@
         if (!isSubmit(b)) return;
         if (b.dataset.busy === '1') { e.preventDefault(); e.stopImmediatePropagation(); return; }
         b.dataset.busy = '1';
-        setTimeout(function () { b.dataset.busy = '0'; }, 1500);
+        // Fallback release covers multi-statement saves (e.g. the report save runs
+        // several sequential DB calls); a successful save closes its modal, which
+        // clears the flag immediately (see closeModal), so this is only a backstop.
+        setTimeout(function () { b.dataset.busy = '0'; }, 4000);
       }, true);
     })();
     // One-click copy to clipboard with a confirmation toast.
@@ -483,23 +486,44 @@
       const list = Array.isArray(rows) ? rows.slice() : [rows];
       if (!list.length) return false;
       const ids = list.map((r) => r.id);
-      // Snapshot cascade children before the DB removes them with the parent.
+      // Snapshot cascade children before the DB removes them with the parent. If a
+      // snapshot query fails, ABORT — deleting anyway would cascade-wipe children we
+      // could no longer restore (the raw builder returns {error}, never throws).
       const childSnap = [];
       for (const spec of (opts.children || [])) {
-        try { const r = await DB().from(spec.table).select('*').in(spec.column, ids); childSnap.push({ table: spec.table, rows: r.data || [] }); }
-        catch (e) { childSnap.push({ table: spec.table, rows: [] }); }
+        const r = await DB().from(spec.table).select('*').in(spec.column, ids);
+        if (r.error) { toast('Delete aborted — could not snapshot related ' + spec.table + ' for undo.', 'danger'); return false; }
+        childSnap.push({ table: spec.table, rows: r.data || [] });
       }
+      // Snapshot ON DELETE SET NULL references (rows that point AT the deleted row via
+      // an FK Postgres will null). Undo re-inserts the parent but can't recover these
+      // unless we re-apply the FK value afterwards.
+      const refSnap = [];
+      for (const spec of (opts.setNullRefs || [])) {
+        const r = await DB().from(spec.table).select('id,' + spec.column).in(spec.column, ids);
+        if (r.error) { toast('Delete aborted — could not snapshot ' + spec.table + ' references for undo.', 'danger'); return false; }
+        refSnap.push({ table: spec.table, column: spec.column, rows: r.data || [] });
+      }
+      const deleted = [];
       let ok = 0, fail = 0;
-      for (const row of list) { const r = await DB().remove(table, row.id); if (r && r.error) fail++; else ok++; }
+      for (const row of list) { const r = await DB().remove(table, row.id); if (r && r.error) fail++; else { ok++; deleted.push(row); } }
       if (typeof opts.after === 'function') opts.after();
       const one = list.length === 1;
       const noun = opts.label || (one ? 'Item' : list.length + ' items');
       if (fail && !ok) { toast(noun + ' delete failed', 'danger'); return false; }
       undoToast((one ? noun + ' deleted' : ok + ' deleted') + (fail ? ' · ' + fail + ' failed' : ''), async () => {
-        let rok = 0;
-        for (const row of list) { const r = await DB().insert(table, row); if (!(r && r.error)) rok++; }
-        for (const snap of childSnap) for (const kid of snap.rows) { try { await DB().insert(snap.table, kid); } catch (e) {} }
-        toast(rok === list.length ? (one ? noun + ' restored' : rok + ' restored') : 'Restored ' + rok + ' of ' + list.length, rok ? 'success' : 'danger');
+        // Re-insert ONLY the parents that were actually deleted (never-deleted rows
+        // would duplicate-key), then their snapshotted children; count both honestly.
+        let rok = 0, rfail = 0;
+        for (const row of deleted) { const r = await DB().insert(table, row); if (r && r.error) rfail++; else rok++; }
+        let ckid = 0, cfail = 0;
+        for (const snap of childSnap) for (const kid of snap.rows) { const r = await DB().insert(snap.table, kid); if (r && r.error) cfail++; else ckid++; }
+        // Re-apply nulled-out FK references now that the parent row exists again.
+        for (const ref of refSnap) for (const rr of ref.rows) { const r = await DB().update(ref.table, rr.id, { [ref.column]: rr[ref.column] }); if (r && r.error) cfail++; else ckid++; }
+        const allOk = rfail === 0 && cfail === 0;
+        toast(allOk ? (one ? noun + ' restored' : rok + ' restored')
+          : 'Restored ' + rok + ' of ' + deleted.length + (childSnap.length ? ' (+' + ckid + ' related' + (cfail ? ', ' + cfail + ' failed' : '') + ')' : ''),
+          (rok || ckid) ? (allOk ? 'success' : 'warn') : 'danger');
         if (typeof opts.after === 'function') opts.after();
       });
       return true;
@@ -723,6 +747,11 @@
 
     function navigate(tab) {
       if (!PAGE_META[tab]) tab = 'command';
+      // Guard against tabs that have PAGE_META but no rendered <section> (e.g. the
+      // legacy 'reports' leaf whose authoring now lives inside the case detail):
+      // without a view, every .view would deactivate and the shell would blank —
+      // and that blank state would persist across reloads via the saved tab.
+      if (!$('#view-' + tab)) tab = 'cases';
       $$('.view').forEach((v) => v.classList.remove('active'));
       const view = $('#view-' + tab); if (view) view.classList.add('active');
       const cat = TAB_CATEGORY[tab] || 'command';
@@ -837,6 +866,9 @@
     }
     function closeModal() {
       modalOnClose = null; Guard.clear();
+      // Release any double-submit guard flag: a successful save closes its modal,
+      // so the button is free again immediately rather than waiting on the fallback.
+      $$('[data-busy="1"]').forEach((b) => b.dataset.busy = '0');
       $('#modal-root').innerHTML = ''; document.removeEventListener('keydown', modalKey);
       if ($('#sidebar').classList.contains('-translate-x-full') || isDesktop()) document.body.classList.remove('overflow-hidden');
       if (lastFocused && document.contains(lastFocused)) lastFocused.focus(); lastFocused = null;
@@ -915,14 +947,23 @@
           </div>`;
         back.appendChild(card); document.body.appendChild(back);
         const inp = card.querySelector('#ui-dlg-input');
-        const finish = (val) => { document.removeEventListener('keydown', onKey); back.remove(); resolve(val); };
+        const finish = (val) => { document.removeEventListener('keydown', onKey, true); back.remove(); resolve(val); };
         const cancelVal = input ? null : false;
         const okFn = () => finish(input ? (inp ? inp.value.trim() : '') : true);
-        const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); finish(cancelVal); } else if (e.key === 'Enter') { e.preventDefault(); okFn(); } };
+        // Capture-phase + stopImmediatePropagation so this dialog's keys win over the
+        // underlying modal's Escape handler (which would otherwise close the modal too).
+        // Enter on the focused Cancel button cancels rather than confirming a destructive action.
+        const onKey = (e) => {
+          if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(cancelVal); }
+          else if (e.key === 'Enter') {
+            e.preventDefault(); e.stopImmediatePropagation();
+            if (document.activeElement === card.querySelector('#ui-dlg-cancel')) finish(cancelVal); else okFn();
+          }
+        };
         card.querySelector('#ui-dlg-ok').onclick = okFn;
         card.querySelector('#ui-dlg-cancel').onclick = () => finish(cancelVal);
         back.addEventListener('mousedown', (e) => { if (e.target === back) finish(cancelVal); });
-        document.addEventListener('keydown', onKey);
+        document.addEventListener('keydown', onKey, true);
         setTimeout(() => { (inp || card.querySelector('#ui-dlg-ok')).focus(); }, 30);
       });
     }

@@ -18,7 +18,7 @@
       if (awaiting && me && c.signoff_assignee_id === me) return { t: '⚖️ Awaiting your decision', c: 'bg-blue-500/15 text-blue-300' };
       if (st === 'approved_deputy' && iAmOwner) return { t: '⚖️ Your call — complete or escalate', c: 'bg-blue-500/15 text-blue-300' };
       if ((st === 'changes_requested' || st === 'denied') && iAmOwner) return { t: '↩️ Sent back to you — revise & resubmit', c: 'bg-rose-500/15 text-rose-300' };
-      if (awaiting) return { t: '⏳ Waiting on ' + (officerName(c.signoff_assignee_id) || stageLabel), c: 'bg-amber-500/15 text-amber-300' };
+      if (awaiting) return { t: '⏳ Waiting on ' + escapeHTML(officerName(c.signoff_assignee_id) || stageLabel), c: 'bg-amber-500/15 text-amber-300' };
       if (st === 'approved' || st === 'completed') return { t: '✅ Approved', c: 'bg-emerald-500/15 text-emerald-300' };
       return null;
     }
@@ -314,14 +314,19 @@
       if (!stale.length) return;
       const profs = (typeof PROFILES !== 'undefined' ? PROFILES : []);
       for (const c of stale) {
-        // Stamp first; if another viewer beat us (or RLS blocks the write), skip.
-        const res = await DB().update('cases', c.id, { last_stale_notified_at: new Date().toISOString() });
-        if (res && res.error) continue;
-        c.last_stale_notified_at = new Date().toISOString();
+        // Compare-and-swap the stamp: only the viewer whose expected prior value
+        // still matches wins the right to notify, so concurrent viewers don't
+        // double-fire (and a lost race is a no-op, not a suppressed alert).
+        const prev = c.last_stale_notified_at, ts = new Date().toISOString();
+        let q = DB().from('cases').update({ last_stale_notified_at: ts }).eq('id', c.id);
+        q = (prev == null) ? q.is('last_stale_notified_at', null) : q.eq('last_stale_notified_at', prev);
+        const res = await q.select();
+        if (res.error || !res.data || res.data.length === 0) continue;   // another viewer won, or blocked
+        c.last_stale_notified_at = ts;
         const reason = 'No activity in ' + caseStaleDays(c) + ' days — needs an update or a status change.';
         const targets = new Set();
         if (c.lead_detective_id) targets.add(c.lead_detective_id);
-        profs.filter((p) => p.active && p.role === 'bureau_lead' && p.bureau === c.bureau).forEach((p) => targets.add(p.id));
+        profs.filter((p) => p.active && p.role === 'bureau_lead' && p.division === c.bureau).forEach((p) => targets.add(p.id));
         // No bureau lead covering this bureau? escalate to the deputy directors.
         if (![...targets].some((id) => id !== c.lead_detective_id)) {
           profs.filter((p) => p.active && p.role === 'deputy_director').forEach((p) => targets.add(p.id));
@@ -499,7 +504,9 @@
             try {
               const tpls = await DB().list('documents', { eq: { folder: 'Forms' } });
               const fname = (typeof BUREAU_FOLDER !== 'undefined' && BUREAU_FOLDER[payload.bureau]) || 'Archives';
-              for (const t of tpls) await DB().insert('documents', { folder: fname, name: t.name, kind: t.kind, content: t.content, case_id: newId, modified_label: new Date().toLocaleDateString('en-GB') });
+              let seedFail = 0;
+              for (const t of tpls) { const sr = await DB().insert('documents', { folder: fname, name: t.name, kind: t.kind, content: t.content, case_id: newId, modified_label: new Date().toLocaleDateString('en-GB') }); if (sr && sr.error) seedFail++; }
+              if (seedFail) toast(seedFail + ' form template' + (seedFail === 1 ? '' : 's') + ' couldn’t be seeded — attach manually if needed.', 'warn');
             } catch (e) {}
             if (typeof fetchDocuments === 'function') fetchDocuments();
           }
@@ -613,9 +620,9 @@
         if (ss.value === 'closed' && !detailCase.closed_at) patch.closed_at = new Date().toISOString();
         const res = await DB().update('cases', detailCase.id, patch);
         if (res.error) { toast('Status update failed: ' + res.error.message, 'danger'); ss.value = detailCase.status; return; }
-        Object.assign(detailCase, patch); toast('Status → ' + ss.value, 'success'); renderCaseDetailShell(); fetchCases();
+        Object.assign(detailCase, patch); toast('Status → ' + ss.value, 'success'); renderCaseDetailShell(); loadDetailTab(); fetchCases();
       };
-      const pin = $('#case-pin'); if (pin) pin.onclick = () => { togglePinCase(detailCase.id); renderCaseDetailShell(); renderJumpBack(); };
+      const pin = $('#case-pin'); if (pin) pin.onclick = () => { togglePinCase(detailCase.id); renderCaseDetailShell(); loadDetailTab(); renderJumpBack(); };
       const lk = $('#case-link'); if (lk) lk.onclick = () => {
         const url = location.origin + location.pathname + '#case=' + detailCase.id;
         if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(() => toast('Case link copied', 'success'), () => toast(url, 'info'));
@@ -699,7 +706,9 @@
         const res = await DB().update('cases', c.id, { follow_up_at: val });
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
         c.follow_up_at = val; if (detailCase && detailCase.id === c.id) detailCase.follow_up_at = val;
-        closeModal(); toast(val ? 'Follow-up set for ' + val : 'Follow-up cleared', 'success'); renderCaseDetailShell(); if (typeof fetchCases === 'function') fetchCases();
+        closeModal(); toast(val ? 'Follow-up set for ' + val : 'Follow-up cleared', 'success');
+        if (detailCase && detailCase.id === c.id && !$('#case-detail').classList.contains('hidden')) { renderCaseDetailShell(); loadDetailTab(); }
+        if (typeof fetchCases === 'function') fetchCases();
       };
       const sv = node.querySelector('#fu-save'); if (sv) sv.onclick = () => save(node.querySelector('#fu-date').value || null);
       const cl = node.querySelector('#fu-clear'); if (cl) cl.onclick = () => save(null);
@@ -752,11 +761,12 @@
             <button id="cmedia-add" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ Add link</button>
           </div>` : '';
           body.innerHTML = `
-            <div class="mb-3 flex items-center justify-between"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Evidence (${ev.length})</h4>${canEdit ? '<button id="ev-new" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ Add Evidence</button>' : ''}</div>
+            <div class="mb-3 flex items-center justify-between"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Evidence (${ev.length})</h4>${canEdit ? '<div class="flex gap-2"><button id="ev-quick" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10" title="Log several items fast — keyboard-first, auto item codes">⚡ Quick-log</button><button id="ev-new" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ Add Evidence</button></div>' : ''}</div>
             <div class="space-y-3">${ev.length ? ev.map((e) => evidenceCard(e, hasCustody.has(e.id))).join('') : '<p class="text-sm text-slate-500">No evidence logged yet.' + (canEdit ? ' Use “+ Add Evidence” above to log the first item.' : '') + '</p>'}</div>
             <div class="mt-8 mb-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-6"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Linked Media (${med.length})</h4>${mediaActions}</div>
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">${med.length ? med.map((m) => caseMediaCard(m, canEdit)).join('') : '<p class="text-sm text-slate-500">No media linked to this case. Upload photos, add a link, or attach one from the Media Vault.</p>'}</div>`;
           const nb = $('#ev-new'); if (nb) nb.onclick = () => openEvidenceModal(cid);
+          const qb = $('#ev-quick'); if (qb) qb.onclick = () => openEvidenceQuickLog(cid, ev);
           $$('.ev-custody', body).forEach((b) => b.onclick = () => openCustody(b.dataset.id));
           $$('.ev-del', body).forEach((b) => b.onclick = async () => {
             if (!(await uiConfirm('Delete this evidence item? This also removes its chain-of-custody history (restorable via Undo).', { confirmText: 'Delete' }))) return;
@@ -851,6 +861,79 @@
         closeModal(); toast('Evidence logged', 'success'); loadDetailTab();
       };
       openModal(node, { wide: true });
+    }
+
+    /* ---- Evidence quick-log (Wave 5) ------------------------------------------
+     * Keyboard-first bulk intake for scene processing: stage several items in one
+     * modal (Enter stages, Ctrl/Cmd+Enter saves all), with item codes continuing
+     * the case's existing EV-### sequence and collector auto-stamped to you.
+     * Inserts use the same table + defaults as the single-item modal. */
+    function nextEvidenceCode(existing, offset) {
+      let prefix = 'EV-', width = 3, max = 0;
+      (existing || []).forEach((e) => {
+        const m = /^([A-Za-z][A-Za-z0-9]*?-?)(\d+)$/.exec(String(e.item_code || '').trim());
+        if (!m) return;
+        const n = parseInt(m[2], 10);
+        if (n > max) { max = n; prefix = m[1]; width = m[2].length; }
+      });
+      return prefix + String(max + 1 + (offset || 0)).padStart(width, '0');
+    }
+    function openEvidenceQuickLog(caseId, existing) {
+      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
+      const staged = [];
+      const node = el('div', { class: 'p-6' });
+      const inp = 'rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500';
+      node.innerHTML = `
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-xl font-bold text-white">⚡ Evidence Quick-log</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <p class="mb-3 text-xs text-slate-400">Type a description, hit <span class="rounded bg-white/10 px-1 font-mono text-slate-200">Enter</span> to stage it, repeat. <span class="rounded bg-white/10 px-1 font-mono text-slate-200">Ctrl/⌘+Enter</span> logs everything. Item codes continue the case sequence; collector &amp; tamper (intact) are auto-stamped.</p>
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-4">
+          <input id="ql-desc" placeholder="Description * (e.g. 9mm casing)" class="${inp} sm:col-span-2" />
+          <input id="ql-type" placeholder="Type (Firearm…)" list="ql-types" class="${inp}" />
+          <input id="ql-loc" placeholder="Location" class="${inp}" />
+        </div>
+        <datalist id="ql-types"><option>Firearm</option><option>Narcotic</option><option>Document</option><option>Casing</option><option>Currency</option><option>Digital</option><option>Clothing</option><option>Vehicle</option></datalist>
+        <div class="mt-2 flex justify-end"><button id="ql-stage" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">+ Stage (Enter)</button></div>
+        <div id="ql-list" class="mt-3 max-h-[38vh] space-y-1.5 overflow-y-auto pr-1"></div>
+        <button id="ql-save" class="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110" disabled>Log 0 items</button>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      const list = node.querySelector('#ql-list'), save = node.querySelector('#ql-save');
+      const descF = node.querySelector('#ql-desc'), typeF = node.querySelector('#ql-type'), locF = node.querySelector('#ql-loc');
+      const redraw = () => {
+        list.innerHTML = staged.map((s, i) => `<div class="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm"><span class="min-w-0 truncate text-slate-200"><span class="font-mono text-blue-300">${escapeHTML(s.item_code)}</span> ${escapeHTML(s.description)}${s.type ? ' <span class="text-slate-500">· ' + escapeHTML(s.type) + '</span>' : ''}${s.location ? ' <span class="text-slate-500">@ ' + escapeHTML(s.location) + '</span>' : ''}</span><button class="ql-rm flex-shrink-0 text-slate-500 transition hover:text-rose-300" data-i="${i}" aria-label="Remove staged item">✕</button></div>`).join('');
+        list.querySelectorAll('.ql-rm').forEach((b) => b.onclick = () => { staged.splice(+b.dataset.i, 1); staged.forEach((s, i) => s.item_code = nextEvidenceCode(existing, i)); redraw(); });
+        save.disabled = !staged.length;
+        save.textContent = 'Log ' + staged.length + ' item' + (staged.length === 1 ? '' : 's');
+      };
+      const stage = () => {
+        const description = descF.value.trim();
+        if (!description) { toast('Describe the item first.', 'warn'); descF.focus(); return; }
+        staged.push({ item_code: nextEvidenceCode(existing, staged.length), description: description, type: typeF.value.trim() || null, location: locF.value.trim() || null });
+        descF.value = ''; redraw(); descF.focus();
+      };
+      node.querySelector('#ql-stage').onclick = stage;
+      const saveAll = async () => {
+        if (descF.value.trim()) stage();   // stage a typed-but-unstaged item first…
+        if (!staged.length) return;        // …so Ctrl/⌘+Enter logs the very first item too
+        save.disabled = true; save.textContent = 'Logging…';
+        let ok = 0, fail = 0;
+        for (const s of staged) {
+          const payload = { case_id: caseId, item_code: s.item_code, description: s.description, type: s.type, location: s.location, tamper: 'intact' };
+          if (DB() && DB().me) payload.collected_by = DB().me.id;
+          const res = await DB().insert('evidence', payload);
+          if (res && res.error) fail++; else ok++;
+        }
+        closeModal();
+        toast('Logged ' + ok + ' evidence item' + (ok === 1 ? '' : 's') + (fail ? ' · ' + fail + ' failed' : ''), fail && !ok ? 'danger' : 'success');
+        loadDetailTab();
+      };
+      save.onclick = saveAll;
+      [descF, typeF, locF].forEach((f) => f.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (e.metaKey || e.ctrlKey) saveAll(); else stage();
+      }));
+      openModal(node, { wide: true });
+      descF.focus();
     }
 
     /* ---- Case-linked media (Evidence tab) -------------------------------------
@@ -1049,9 +1132,12 @@
     async function renderCaseIntel(body, cid) {
       const canEdit = DB() && DB().canEdit();
       body.innerHTML = '<p class="text-sm text-slate-500">Loading linked intel…</p>';
-      let links = [], tableMissing = false;
+      let links = [], tableMissing = false, loadErr = null;
       try { links = await DB().list('case_intel_links', { order: 'created_at', ascending: true, eq: { case_id: cid } }); }
-      catch (e) { tableMissing = true; }
+      // Only the "relation does not exist" codes mean the migration is unapplied;
+      // a transient/RLS error should show a retry, not a false "table missing" banner.
+      catch (e) { if (e && (e.code === '42P01' || e.code === 'PGRST205')) tableMissing = true; else loadErr = e; }
+      if (loadErr) { body.innerHTML = '<p class="text-sm text-rose-300">Couldn’t load linked intel — ' + escapeHTML(loadErr.message || String(loadErr)) + '. <button class="ci-retry underline">Retry</button></p>'; const rb = body.querySelector('.ci-retry'); if (rb) rb.onclick = () => renderCaseIntel(body, cid); return; }
       // Fetch fresh so names resolve even when the intel tab caches are cold.
       const [persons, gangs, places] = await Promise.all([
         DB().list('persons', { order: 'name', ascending: true }).catch(() => []),
