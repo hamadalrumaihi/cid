@@ -106,7 +106,7 @@
         const card = el('div', { class: 'rounded-2xl border border-white/5 bg-ink-900/60 p-5' });
         card.innerHTML = `
           <div class="flex items-start gap-3">
-            ${p.mugshot_url ? `<img src="${escapeHTML(p.mugshot_url)}" class="h-14 w-14 flex-shrink-0 rounded-lg object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="hidden h-14 w-14 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-xl">👤</div>` : `<div class="grid h-14 w-14 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-xl">👤</div>`}
+            ${(p.mugshot_url && safeUrl(p.mugshot_url)) ? `<img src="${escapeHTML(safeUrl(p.mugshot_url))}" class="h-14 w-14 flex-shrink-0 rounded-lg object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="hidden h-14 w-14 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-xl">👤</div>` : `<div class="grid h-14 w-14 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-xl">👤</div>`}
             <div class="min-w-0 flex-1"><p class="truncate font-semibold text-white">${escapeHTML(p.name)}${flag ? ' <span title="≥8 violent felonies">🚨</span>' : ''}</p><p class="text-xs text-slate-400">${p.alias ? '“' + escapeHTML(p.alias) + '” · ' : ''}${escapeHTML(p.status || '')}</p>
               <p class="mt-1 text-[11px] text-slate-500">${p.gang_id ? '🚩 ' + escapeHTML(gangNameById(p.gang_id) || 'Gang') + ' · ' : ''}CCW ${p.ccw ? 'Yes' : 'No'} · VCH ${p.vch || 0} · Felonies ${p.felony_count || 0}${(Array.isArray(p.properties) && p.properties.length) ? ' · 🏠 ' + p.properties.length : ''}</p></div>
             <button class="p-profile rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-white/10" title="Unified intel profile">🔎 Profile</button>
@@ -132,7 +132,12 @@
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
       const p = record || prefill || {};
       const node = el('div', { class: 'p-6' });
-      const gangOpts = ['<option value="">— no gang —</option>'].concat(GANGS.map((g) => `<option value="${g.id}" ${g.id === p.gang_id ? 'selected' : ''}>${escapeHTML(g.name)}</option>`)).join('');
+      // Preserve the current gang even if the GANGS cache hasn't loaded / failed —
+      // otherwise the select falls back to '— no gang —' and an unrelated save nulls it.
+      const gangKnown = p.gang_id && GANGS.some((g) => g.id === p.gang_id);
+      const gangOpts = ['<option value="">— no gang —</option>']
+        .concat(p.gang_id && !gangKnown ? [`<option value="${escapeHTML(p.gang_id)}" selected>(current gang — loading…)</option>`] : [])
+        .concat(GANGS.map((g) => `<option value="${g.id}" ${g.id === p.gang_id ? 'selected' : ''}>${escapeHTML(g.name)}</option>`)).join('');
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Person</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">

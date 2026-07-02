@@ -77,9 +77,18 @@
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
       const p = record || {};
       const node = el('div', { class: 'p-6' });
-      const gangOpts = ['<option value="">— none —</option>'].concat(GANGS.map((g) => `<option value="${g.id}" ${g.id === p.controlling_gang_id ? 'selected' : ''}>${escapeHTML(g.name)}</option>`)).join('');
-      const caseOpts = ['<option value="">— none —</option>'].concat(casesCache.map((c) => `<option value="${c.id}" ${c.id === p.case_id ? 'selected' : ''}>${escapeHTML(c.case_number)}</option>`)).join('');
-      const drugOpts = ['<option value="">— none —</option>'].concat(DRUGS.map((d) => `<option value="${d.id}" ${d.id === p.narcotic_id ? 'selected' : ''}>${escapeHTML(d.name)}</option>`)).join('');
+      // Preserve each FK even when its cache hasn't loaded / failed / is cross-bureau,
+      // so an unrelated edit doesn't silently null the gang / case / narcotic link.
+      const keep = (id, label) => id ? [`<option value="${escapeHTML(id)}" selected>${label}</option>`] : [];
+      const gangOpts = ['<option value="">— none —</option>']
+        .concat(p.controlling_gang_id && !GANGS.some((g) => g.id === p.controlling_gang_id) ? keep(p.controlling_gang_id, '(current gang — loading…)') : [])
+        .concat(GANGS.map((g) => `<option value="${g.id}" ${g.id === p.controlling_gang_id ? 'selected' : ''}>${escapeHTML(g.name)}</option>`)).join('');
+      const caseOpts = ['<option value="">— none —</option>']
+        .concat(p.case_id && !casesCache.some((c) => c.id === p.case_id) ? keep(p.case_id, '(linked case — other bureau)') : [])
+        .concat(casesCache.map((c) => `<option value="${c.id}" ${c.id === p.case_id ? 'selected' : ''}>${escapeHTML(c.case_number)}</option>`)).join('');
+      const drugOpts = ['<option value="">— none —</option>']
+        .concat(p.narcotic_id && !DRUGS.some((d) => d.id === p.narcotic_id) ? keep(p.narcotic_id, '(current narcotic — loading…)') : [])
+        .concat(DRUGS.map((d) => `<option value="${d.id}" ${d.id === p.narcotic_id ? 'selected' : ''}>${escapeHTML(d.name)}</option>`)).join('');
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${record ? 'Edit' : 'New'} Location</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="space-y-3">

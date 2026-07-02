@@ -18,7 +18,7 @@
       if (awaiting && me && c.signoff_assignee_id === me) return { t: '⚖️ Awaiting your decision', c: 'bg-blue-500/15 text-blue-300' };
       if (st === 'approved_deputy' && iAmOwner) return { t: '⚖️ Your call — complete or escalate', c: 'bg-blue-500/15 text-blue-300' };
       if ((st === 'changes_requested' || st === 'denied') && iAmOwner) return { t: '↩️ Sent back to you — revise & resubmit', c: 'bg-rose-500/15 text-rose-300' };
-      if (awaiting) return { t: '⏳ Waiting on ' + (officerName(c.signoff_assignee_id) || stageLabel), c: 'bg-amber-500/15 text-amber-300' };
+      if (awaiting) return { t: '⏳ Waiting on ' + escapeHTML(officerName(c.signoff_assignee_id) || stageLabel), c: 'bg-amber-500/15 text-amber-300' };
       if (st === 'approved' || st === 'completed') return { t: '✅ Approved', c: 'bg-emerald-500/15 text-emerald-300' };
       return null;
     }

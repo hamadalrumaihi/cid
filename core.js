@@ -723,6 +723,11 @@
 
     function navigate(tab) {
       if (!PAGE_META[tab]) tab = 'command';
+      // Guard against tabs that have PAGE_META but no rendered <section> (e.g. the
+      // legacy 'reports' leaf whose authoring now lives inside the case detail):
+      // without a view, every .view would deactivate and the shell would blank —
+      // and that blank state would persist across reloads via the saved tab.
+      if (!$('#view-' + tab)) tab = 'cases';
       $$('.view').forEach((v) => v.classList.remove('active'));
       const view = $('#view-' + tab); if (view) view.classList.add('active');
       const cat = TAB_CATEGORY[tab] || 'command';

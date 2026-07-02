@@ -54,7 +54,7 @@
       const mentions = (typeof NOTIFS !== 'undefined' ? NOTIFS : []).filter((n) => !n.read && n.type === 'chat_mention').length;
       const inSignoff = new Set([...INBOX_CACHE.review, ...INBOX_CACHE.bounced, ...INBOX_CACHE.mine].map((c) => c.id));
       const cc = (typeof casesCache !== 'undefined' ? casesCache : []);
-      const overdue = me ? cc.filter((c) => c.lead_detective_id === me && inboxIsOverdue(c) && !inSignoff.has(c.id)).length : 0;
+      const overdue = me ? cc.filter((c) => c.lead_detective_id === me && c.status !== 'closed' && c.status !== 'cold' && inboxIsOverdue(c) && !inSignoff.has(c.id)).length : 0;
       const today = (typeof todayISO === 'function') ? todayISO() : new Date().toISOString().slice(0, 10);
       const followUps = me ? cc.filter((c) => c.lead_detective_id === me && c.status !== 'closed' && c.follow_up_at && c.follow_up_at <= today).length : 0;
       return INBOX_CACHE.review.length + INBOX_CACHE.bounced.length + mentions + overdue + followUps;
@@ -123,7 +123,7 @@
       const inSignoff = new Set([...review, ...bounced, ...mine].map((c) => c.id));
       // My overdue cases (I'm the lead), not already surfaced in a sign-off bucket.
       const myOverdue = (typeof casesCache !== 'undefined' ? casesCache : [])
-        .filter((c) => c.lead_detective_id === me && inboxIsOverdue(c) && !inSignoff.has(c.id))
+        .filter((c) => c.lead_detective_id === me && c.status !== 'closed' && c.status !== 'cold' && inboxIsOverdue(c) && !inSignoff.has(c.id))
         .sort((a, b) => inboxAge(b) - inboxAge(a));
       // Unread @mentions + my unfinalized report drafts.
       const mentions = (typeof NOTIFS !== 'undefined' ? NOTIFS : []).filter((n) => !n.read && n.type === 'chat_mention');
@@ -246,7 +246,7 @@
       list.forEach((n) => {
         const p = n.payload || {};
         const card = el('div', { class: 'flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-ink-900/60 p-3' });
-        card.innerHTML = `<div class="min-w-0"><p class="truncate text-sm text-slate-200">💬 ${escapeHTML(p.reason || 'You were mentioned')}</p><p class="text-[11px] text-slate-500">${p.case_number ? escapeHTML(p.case_number) + ' · ' : ''}${timeAgo(n.created_at)}</p></div>${p.case_id ? `<button class="desk-mention flex-shrink-0 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110" data-case="${p.case_id}" data-notif="${n.id}">Open →</button>` : ''}`;
+        card.innerHTML = `<div class="min-w-0"><p class="truncate text-sm text-slate-200">💬 ${escapeHTML(p.reason || 'You were mentioned')}</p><p class="text-[11px] text-slate-500">${p.case_number ? escapeHTML(p.case_number) + ' · ' : ''}${timeAgo(n.created_at)}</p></div>${p.case_id ? `<button class="desk-mention flex-shrink-0 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110" data-case="${escapeHTML(p.case_id)}" data-notif="${escapeHTML(n.id)}">Open →</button>` : ''}`;
         const b = card.querySelector('.desk-mention'); if (b) b.onclick = async () => { try { await DB().update('notifications', b.dataset.notif, { read: true }); } catch (e) {} if (typeof fetchNotifications === 'function') fetchNotifications(); openDeskCaseTab(b.dataset.case, 'chat'); };
         grid.appendChild(card);
       });

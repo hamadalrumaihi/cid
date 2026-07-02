@@ -160,7 +160,7 @@
     function memberCard(m) {
       const flag = (m.felony_count || 0) >= 8, canEdit = DB() && DB().canEdit();
       return `<div class="flex items-center gap-3 rounded-lg border border-white/5 bg-ink-850 p-2.5">
-        ${m.mugshot_url ? `<img src="${escapeHTML(m.mugshot_url)}" class="h-10 w-10 flex-shrink-0 rounded-md object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="hidden h-10 w-10 flex-shrink-0 place-items-center rounded-md bg-ink-700 text-sm">👤</div>` : `<div class="grid h-10 w-10 flex-shrink-0 place-items-center rounded-md bg-ink-700 text-sm">👤</div>`}
+        ${(m.mugshot_url && safeUrl(m.mugshot_url)) ? `<img src="${escapeHTML(safeUrl(m.mugshot_url))}" class="h-10 w-10 flex-shrink-0 rounded-md object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="hidden h-10 w-10 flex-shrink-0 place-items-center rounded-md bg-ink-700 text-sm">👤</div>` : `<div class="grid h-10 w-10 flex-shrink-0 place-items-center rounded-md bg-ink-700 text-sm">👤</div>`}
         <div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold text-white">${escapeHTML(m.name)}${flag ? ' 🚨' : ''}</p><p class="text-[11px] text-slate-400">${escapeHTML(m.status || '')} · CCW ${m.ccw ? 'Yes' : 'No'} · VCH ${m.vch || 0}</p></div>
         ${canEdit ? `<button class="m-edit flex-shrink-0 rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10" data-id="${m.id}">Edit</button>` : ''}
       </div>`;
@@ -169,7 +169,13 @@
       const m = member || {};
       const node = el('div', { class: 'p-6' });
       const personOpts = ['<option value="">— link person (optional) —</option>'].concat(PERSONS.map((p) => `<option value="${p.id}" ${p.id === m.person_id ? 'selected' : ''}>${escapeHTML(p.name)}</option>`)).join('');
-      const caseOpts = ['<option value="">— link case (optional) —</option>'].concat(casesCache.map((c) => `<option value="${c.id}" ${c.id === m.case_id ? 'selected' : ''}>${escapeHTML(c.case_number)}</option>`)).join('');
+      // Preserve a link to a case the current viewer can't see (another bureau):
+      // it's absent from the bureau-scoped casesCache, so without a carried option
+      // the select would fall back to '' and silently null the linkage on save.
+      const caseKnown = m.case_id && casesCache.some((c) => c.id === m.case_id);
+      const caseOpts = ['<option value="">— link case (optional) —</option>']
+        .concat(m.case_id && !caseKnown ? [`<option value="${escapeHTML(m.case_id)}" selected>(linked case — other bureau)</option>`] : [])
+        .concat(casesCache.map((c) => `<option value="${c.id}" ${c.id === m.case_id ? 'selected' : ''}>${escapeHTML(c.case_number)}</option>`)).join('');
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">${member ? 'Edit' : 'Add'} Member</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
