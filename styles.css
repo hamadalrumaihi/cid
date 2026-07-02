@@ -148,3 +148,14 @@ body[data-auth="out"] #bottom-nav { display: none !important; }
 
 /* Visible keyboard focus ring (overrides Tailwind .outline-none on focus-visible only). */
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
+
+/* --- Mobile & accessibility polish (audit pass) ------------------------- */
+/* iOS Safari: 100vh includes the retracting URL bar; prefer dynamic units. */
+@supports (min-height:100dvh){ .min-h-screen{min-height:100dvh} }
+@supports (height:100dvh){ .h-screen{height:100dvh} }
+/* Contrast: dim helper text was ~3.7:1 on the ink background; lift toward AA
+   while keeping the muted look. */
+.text-slate-500{--tw-text-opacity:1;color:rgb(124 141 173/var(--tw-text-opacity,1))}
+.text-slate-600{--tw-text-opacity:1;color:rgb(105 122 153/var(--tw-text-opacity,1))}
+/* Modal close (×): comfortable touch target without shifting layout. */
+.close-x{padding:.5rem;margin:-.5rem}

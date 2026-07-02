@@ -811,6 +811,16 @@
       if ($('#sidebar').classList.contains('-translate-x-full') || isDesktop()) document.body.classList.remove('overflow-hidden');
       if (lastFocused && document.contains(lastFocused)) lastFocused.focus(); lastFocused = null;
     }
+    // Phones/tablets: the soft keyboard doesn't resize the fixed modal, so a
+    // field low in a tall form can be hidden behind it. Re-center the focused
+    // field once the keyboard has animated in.
+    document.addEventListener('focusin', (e) => {
+      if (window.innerWidth >= 1024) return;
+      const t = e.target;
+      if (!t || !t.closest || !t.closest('.modal-card')) return;
+      if (!/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+      setTimeout(() => { try { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (err) {} }, 250);
+    });
 
     /* ---- Never-lose-work layer (Cluster 1) -----------------------------------
      * Drafts: namespaced localStorage stash for in-progress forms/chat, so a
