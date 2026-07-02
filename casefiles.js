@@ -40,6 +40,79 @@
         b.onclick = () => { casesScope = b.dataset.scope; if (typeof Store !== 'undefined') Store.set('casesScope', casesScope); renderCases(); };
       });
     }
+
+    /* ---- Advanced case filters + saved views (Wave 5) ---------------------
+       Layer on top of the My/All scope + text search: narrow by bureau, status,
+       lead detective and staleness, and save the whole combination (filters +
+       scope + search) as a named preset. Presets + the last-used filter live in
+       Store (localStorage), so they're personal and survive reloads. */
+    const CASE_FILTER_KEYS = ['bureau', 'status', 'assignee', 'stale'];
+    let caseFilters = (typeof Store !== 'undefined') ? Store.get('caseFilters', { bureau: '', status: '', assignee: '', stale: '' }) : { bureau: '', status: '', assignee: '', stale: '' };
+    CASE_FILTER_KEYS.forEach((k) => { if (typeof caseFilters[k] !== 'string') caseFilters[k] = ''; });
+    let activeViewName = '';
+    const caseViews = () => (typeof Store !== 'undefined' ? Store.get('caseViews', []) : []);
+    const setCaseViews = (v) => { if (typeof Store !== 'undefined') Store.set('caseViews', v); };
+    const persistCaseFilters = () => { if (typeof Store !== 'undefined') Store.set('caseFilters', caseFilters); };
+    function activeCaseFilterCount() { return CASE_FILTER_KEYS.filter((k) => caseFilters[k]).length; }
+    function applyCaseFilters(items) {
+      const f = caseFilters, me = myId();
+      return items.filter((c) => {
+        if (f.bureau && c.bureau !== f.bureau) return false;
+        if (f.status && c.status !== f.status) return false;
+        if (f.assignee === 'me') { if (c.lead_detective_id !== me) return false; }
+        else if (f.assignee === 'unassigned') { if (c.lead_detective_id) return false; }
+        else if (f.assignee && c.lead_detective_id !== f.assignee) return false;
+        if (f.stale === 'stale') { if (c.status === 'closed' || c.status === 'cold' || caseStaleDays(c) < 14) return false; }
+        else if (f.stale === 'fresh') { if (caseStaleDays(c) >= 14) return false; }
+        return true;
+      });
+    }
+    function applyCaseView(v) {
+      if (!v) return;
+      caseFilters = Object.assign({ bureau: '', status: '', assignee: '', stale: '' }, v.filters || {});
+      if (v.scope) { casesScope = v.scope; if (typeof Store !== 'undefined') Store.set('casesScope', casesScope); }
+      const se = $('#case-search'); if (se) se.value = v.q || '';
+      activeViewName = v.name || '';
+      persistCaseFilters(); renderCases();
+    }
+    function renderCaseFilterBar() {
+      const bar = $('#case-filters'); if (!bar) return;
+      if (!dbReady()) { bar.innerHTML = ''; return; }
+      const f = caseFilters;
+      const profs = (typeof PROFILES !== 'undefined' ? PROFILES : []).filter((p) => p.active).slice().sort((a, b) => (a.display_name || '').localeCompare(b.display_name || ''));
+      const sel = (id, label, val, opts) => `<label class="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">${label}<select id="${id}" class="rounded-lg border border-white/10 bg-ink-850 px-2 py-1.5 text-xs font-normal normal-case text-slate-200 outline-none focus:border-badge-500">${opts.map((o) => `<option value="${esc(o.v)}"${o.v === val ? ' selected' : ''}>${esc(o.t)}</option>`).join('')}</select></label>`;
+      const views = caseViews();
+      const active = activeCaseFilterCount();
+      bar.innerHTML = `<div class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-white/5 bg-ink-900/60 p-3">
+        ${sel('cf-bureau', 'Bureau', f.bureau, [{ v: '', t: 'All' }].concat(['LSB', 'BCB', 'SAB', 'JTF'].map((x) => ({ v: x, t: x }))))}
+        ${sel('cf-status', 'Status', f.status, [{ v: '', t: 'All' }].concat(['open', 'active', 'cold', 'closed'].map((x) => ({ v: x, t: x }))))}
+        ${sel('cf-assignee', 'Lead', f.assignee, [{ v: '', t: 'Anyone' }, { v: 'me', t: 'Me' }, { v: 'unassigned', t: 'Unassigned' }].concat(profs.map((p) => ({ v: p.id, t: p.display_name }))))}
+        ${sel('cf-stale', 'Age', f.stale, [{ v: '', t: 'Any' }, { v: 'stale', t: 'Stale ≥14d' }, { v: 'fresh', t: 'Fresh <14d' }])}
+        ${active ? `<button id="cf-clear" class="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10">Clear (${active})</button>` : ''}
+        <span class="mx-0.5 hidden h-5 w-px bg-white/10 sm:inline-block"></span>
+        <select id="cf-view" class="rounded-lg border border-white/10 bg-ink-850 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-badge-500"><option value="">${views.length ? 'Saved views…' : 'No saved views'}</option>${views.map((v, i) => `<option value="${i}"${activeViewName === v.name ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select>
+        <button id="cf-save" class="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10" title="Save the current filters, scope and search as a named view">💾 Save view</button>
+        ${activeViewName ? `<button id="cf-del" class="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete “${esc(activeViewName)}”</button>` : ''}
+      </div>`;
+      const onF = (k, node) => { caseFilters[k] = node.value; activeViewName = ''; persistCaseFilters(); renderCases(); };
+      ['bureau', 'status', 'assignee', 'stale'].forEach((k) => { const n = $('#cf-' + k); if (n) n.onchange = () => onF(k, n); });
+      const clr = $('#cf-clear'); if (clr) clr.onclick = () => { caseFilters = { bureau: '', status: '', assignee: '', stale: '' }; activeViewName = ''; persistCaseFilters(); renderCases(); };
+      const vw = $('#cf-view'); if (vw) vw.onchange = () => { const v = caseViews()[+vw.value]; if (v) applyCaseView(v); };
+      const sv = $('#cf-save'); if (sv) sv.onclick = async () => {
+        const name = (await uiPrompt('Name this view (filters + scope + search):', { placeholder: 'e.g. My stale SAB cases', confirmText: 'Save' }) || '').trim();
+        if (!name) return;
+        const views = caseViews().filter((v) => v.name !== name);
+        views.push({ name: name, filters: Object.assign({}, caseFilters), scope: casesScope, q: ($('#case-search') ? $('#case-search').value : '') });
+        views.sort((a, b) => a.name.localeCompare(b.name)); setCaseViews(views); activeViewName = name;
+        toast('View “' + name + '” saved', 'success'); renderCases();
+      };
+      const dl = $('#cf-del'); if (dl) dl.onclick = async () => {
+        if (!activeViewName) return;
+        if (!(await uiConfirm('Delete saved view “' + activeViewName + '”?', { confirmText: 'Delete' }))) return;
+        setCaseViews(caseViews().filter((v) => v.name !== activeViewName)); activeViewName = '';
+        toast('View deleted', 'info'); renderCases();
+      };
+    }
     // "Jump back in" strip on Command: pinned + recently-opened cases.
     function renderJumpBack() {
       const wrap = $('#jump-back'); if (!wrap) return;
@@ -308,9 +381,11 @@
       { const have = new Set(casesCache.map((c) => c.id)); [...caseSel].forEach((id) => { if (!have.has(id)) caseSel.delete(id); }); }
       const q = ($('#case-search') ? $('#case-search').value : '').trim().toLowerCase();
       renderScopeChips();
+      renderCaseFilterBar();
       const mine = myId();
       let items = casesCache.filter((c) => !q || JSON.stringify(c).toLowerCase().includes(q));
       if (casesScope === 'mine' && mine) items = items.filter((c) => c.lead_detective_id === mine);
+      items = applyCaseFilters(items);
       $('#case-new').classList.toggle('hidden', !(DB() && DB().canEdit()));
       // Master "Select all" (command only): one click selects every case in the
       // current view (respecting the My/All scope + search filter), feeding the
@@ -328,7 +403,10 @@
       }
       if (!items.length) {
         const scopedEmpty = casesScope === 'mine' && mine && casesCache.length;
-        casesNotice(scopedEmpty ? 'No cases led by you. Switch to “All” to see every case.' : (casesCache.length ? 'No cases match your filter.' : 'No case files yet.' + (DB() && DB().canEdit() ? ' Use “+ New Case” to create the first.' : ''))); return;
+        const filtered = activeCaseFilterCount() > 0;
+        casesNotice(filtered ? 'No cases match the active filters. <button id="cf-empty-clear" class="text-blue-300 underline hover:text-blue-200">Clear filters</button>' : (scopedEmpty ? 'No cases led by you. Switch to “All” to see every case.' : (casesCache.length ? 'No cases match your filter.' : 'No case files yet.' + (DB() && DB().canEdit() ? ' Use “+ New Case” to create the first.' : ''))));
+        const ec = $('#cf-empty-clear'); if (ec) ec.onclick = () => { caseFilters = { bureau: '', status: '', assignee: '', stale: '' }; activeViewName = ''; persistCaseFilters(); renderCases(); };
+        return;
       }
       grid.innerHTML = '';
       items.forEach((c) => {
@@ -712,13 +790,14 @@
           await renderChatTab(body, detailCase);
         } else if (detailTab === 'timeline') {
           // Auto-generated timeline merging every case event source (#18).
-          const [ev, rep, cust, trk, sho, msg] = await Promise.all([
+          const [ev, rep, cust, trk, sho, msg, tsk] = await Promise.all([
             DB().list('evidence', { eq: { case_id: cid } }),
             DB().list('reports', { eq: { case_id: cid } }),
             DB().from('custody_chain').select('*, evidence!inner(case_id)').eq('evidence.case_id', cid).then((r) => r.data || []),
             DB().list('trackers', { eq: { case_id: cid } }).catch(() => []),
             DB().list('case_signoff_history', { eq: { case_id: cid } }).catch(() => []),
-            DB().list('case_messages', { eq: { case_id: cid } }).catch(() => [])
+            DB().list('case_messages', { eq: { case_id: cid } }).catch(() => []),
+            DB().list('case_tasks', { eq: { case_id: cid } }).catch(() => [])
           ]);
           const events = [];
           ev.forEach((e) => events.push({ t: e.collected_at || e.created_at, label: 'Evidence collected: ' + (e.description || e.item_code || 'item'), dot: 'blue' }));
@@ -727,6 +806,8 @@
           trk.forEach((t) => { events.push({ t: t.created_at, label: 'Tracker logged: ' + (t.tracker_code || '') + ' → ' + (t.target || ''), dot: 'cyan' }); if (t.authorized_at) events.push({ t: t.authorized_at, label: 'Tracker authorized: ' + (t.tracker_code || ''), dot: 'cyan' }); });
           sho.forEach((h) => { const v = { submitted: 'submitted for sign-off', approved: 'approved', denied: 'denied', changes_requested: 'requested changes', escalated: 'escalated', auto_routed: 'auto-routed', completed: 'marked complete' }[h.action] || h.action; events.push({ t: h.created_at, label: 'Sign-off: ' + (h.actor_name || 'Officer') + ' ' + v + (h.stage ? ' (' + ((typeof SIGNOFF !== 'undefined' && SIGNOFF.label[h.stage]) || h.stage) + ')' : ''), dot: 'emerald' }); });
           msg.forEach((m) => events.push({ t: m.created_at, label: 'Chat: ' + (m.author_name || 'Officer') + ' — ' + String(m.body || '').slice(0, 80) + (String(m.body || '').length > 80 ? '…' : ''), dot: 'slate' }));
+          tsk.forEach((t) => events.push({ t: t.created_at, label: 'Task ' + (t.done ? 'logged (done): ' : 'assigned: ') + (t.title || '') + (t.assignee ? ' → ' + (officerName(t.assignee) || 'officer') : ''), dot: 'blue' }));
+          if (detailCase.follow_up_at) events.push({ t: detailCase.follow_up_at, label: 'Follow-up scheduled', dot: 'cyan' });
           events.push({ t: detailCase.created_at, label: 'Case opened', dot: 'emerald' });
           events.sort((a, b) => new Date(b.t) - new Date(a.t));
           const dot = { blue: 'bg-blue-400', violet: 'bg-violet-400', amber: 'bg-amber-400', emerald: 'bg-emerald-400', cyan: 'bg-cyan-400', slate: 'bg-slate-400' };
