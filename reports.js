@@ -23,6 +23,28 @@
     }
     // Render the report-chain cards for one case into `wrap`. Shared by the
     // in-case Reports tab (renderCaseReports).
+    /* ---- Warrant lifecycle: Draft -> Signed -> Executed -> Returned --------
+       Stored inside the report's fields (_warrant_status + _warrant_log) so no
+       schema change is needed and history survives export. */
+    const WARRANT_TPLS = { arrest_warrant: 1, search_warrant: 1, wiretap_warrant: 1 };
+    const warrantStatusOf = (r) => (r && r.fields && r.fields._warrant_status) || 'draft';
+    const WARRANT_TINT = { draft: 'bg-white/5 text-slate-400', signed: 'bg-blue-500/15 text-blue-300', executed: 'bg-amber-500/15 text-amber-300', returned: 'bg-emerald-500/15 text-emerald-300' };
+    function warrantChip(r) {
+      if (!WARRANT_TPLS[r.template]) return '';
+      const st = warrantStatusOf(r);
+      return `<span class="rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${WARRANT_TINT[st] || WARRANT_TINT.draft}" title="Warrant lifecycle status">\u2696 ${esc(st)}</span>`;
+    }
+    async function setWarrantStatus(r, st) {
+      const by = (DB().me && DB().me.display_name) || 'Officer';
+      const log = Array.isArray(r.fields && r.fields._warrant_log) ? r.fields._warrant_log.slice() : [];
+      log.push({ status: st, at: new Date().toISOString(), by: by });
+      const nf = Object.assign({}, r.fields, { _warrant_status: st, _warrant_log: log });
+      const res = await DB().update('reports', r.id, { fields: nf });
+      if (res.error) { toast('Status change failed: ' + res.error.message, 'danger'); return false; }
+      r.fields = nf; toast('Warrant marked ' + st, 'success');
+      if (typeof reloadCaseReports === 'function') reloadCaseReports();
+      return true;
+    }
     function renderChainInto(wrap, list, caseId, canEdit) {
       if (!wrap) return;
       if (!list.length) { wrap.innerHTML = '<p class="text-sm text-slate-500">No reports for this case yet.' + (canEdit ? ' Pick a template above to author the initial report.' : '') + '</p>'; return; }
@@ -32,7 +54,7 @@
         const card = el('div', { class: 'rounded-xl border border-white/10 bg-ink-900 p-4' });
         card.innerHTML = `
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <div class="flex items-center gap-2">${reportKindBadge(r)}<span class="text-sm font-semibold text-white">${esc(tpl ? tpl.name : 'Report')}</span>${r.finalized ? '<span class="rounded bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-300">🔒 finalized</span>' : '<span class="rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-300">draft</span>'}</div>
+            <div class="flex items-center gap-2">${reportKindBadge(r)}<span class="text-sm font-semibold text-white">${esc(tpl ? tpl.name : 'Report')}</span>${r.finalized ? '<span class="rounded bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-300">🔒 finalized</span>' : '<span class="rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-300">draft</span>'}${warrantChip(r)}</div>
             <span class="text-[11px] text-slate-500">${new Date(r.created_at).toLocaleDateString('en-US')}</span>
           </div>
           ${r.parent_id ? `<p class="mt-1 text-[11px] text-slate-500">↳ linked to prior report</p>` : ''}
@@ -289,10 +311,16 @@
           <p class="text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-300/70">Criminal Investigation Division — State of San Andreas</p>
           <h2 class="mt-1 text-center text-xl font-bold text-white">${esc(reportTitle(r))}</h2>
           <p class="mt-1 text-center text-xs text-slate-400">${esc(caseNo)} · ${new Date(r.created_at).toLocaleString('en-US')}${r.finalized ? ' · 🔒 FINALIZED' : ' · DRAFT'}</p>
+          ${WARRANT_TPLS[r.template] ? `<p class="mt-2 text-center">${warrantChip(r)}</p>` : ''}
           <div class="mt-5 space-y-3">${renderFormBody(tpl.schema, r.fields || {}, false)}</div>
           <div id="vr-refs"></div>
           ${sig ? `<div class="mt-6 border-t border-white/10 pt-4 text-xs text-slate-300"><p class="font-semibold uppercase tracking-wider text-emerald-300/80">Electronically signed</p><p class="mt-1 font-[cursive] text-base text-blue-200">${esc(sig.officer)}</p><p class="text-[11px] text-slate-500">Badge ${esc(sig.badge || '—')} · ${sig.signed_at ? new Date(sig.signed_at).toLocaleString('en-US') : ''}</p></div>` : ''}
         </div>
+        ${WARRANT_TPLS[r.template] && DB() && DB().canEdit() ? `<div class="mt-4 rounded-xl border border-white/10 bg-ink-900 p-4 no-print">
+          <p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Warrant lifecycle — currently <span class="font-bold text-white">${esc(warrantStatusOf(r))}</span></p>
+          <div class="flex flex-wrap gap-2">${['signed', 'executed', 'returned'].filter((x) => x !== warrantStatusOf(r)).map((x) => `<button class="w-status rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10" data-st="${x}">Mark ${x}</button>`).join('')}${warrantStatusOf(r) !== 'draft' ? '<button class="w-status rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-400 transition hover:bg-white/10" data-st="draft">↩ Back to draft</button>' : ''}</div>
+          ${Array.isArray(r.fields && r.fields._warrant_log) && r.fields._warrant_log.length ? `<div class="mt-3 space-y-1 border-t border-white/5 pt-3">${r.fields._warrant_log.slice(-5).reverse().map((L) => `<p class="text-[11px] text-slate-500">${esc(L.status)} · ${esc(L.by || '')} · ${new Date(L.at).toLocaleString('en-US')}</p>`).join('')}</div>` : ''}
+        </div>` : ''}
         <div class="mt-5 flex flex-wrap gap-3 no-print">
           <button onclick="window.print()" class="rounded-lg border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">🖨️ Print</button>
           <button id="v-docx" class="rounded-lg border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">Export .docx</button>
@@ -300,6 +328,9 @@
           ${canFinalize ? '<button id="v-final" class="rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-700 px-5 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">🔏 Finalize &amp; Sign</button>' : ''}
         </div>`;
       node.querySelector('.close-x').onclick = closeModal;
+      $$('.w-status', node).forEach((b) => b.onclick = async () => {
+        if (await setWarrantStatus(r, b.dataset.st)) { closeModal(); viewReport(r); }
+      });
       const refIds = (r.fields && Array.isArray(r.fields._refs)) ? r.fields._refs : [];
       if (refIds.length) {
         DB().list('reports', { eq: { case_id: r.case_id } }).then((reps) => {

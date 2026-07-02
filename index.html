@@ -27,7 +27,7 @@
   <title>CID Portal — Criminal Investigation Division | State of San Andreas</title>
 
   <!-- Tailwind CSS — precompiled & inlined (production-safe, offline, no runtime warning) -->
-    <link rel="stylesheet" href="styles.css?v=20260625a" />
+    <link rel="stylesheet" href="styles.css?v=20260625b" />
 
   <!-- Typefaces -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -110,6 +110,7 @@
       </nav>
 
       <div class="hidden border-t border-white/5 p-3 lg:block">
+        <button id="appearance-btn" class="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white" aria-label="Appearance settings">🎨 <span class="nav-label">Appearance</span></button>
         <button id="collapse-toggle" class="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white" aria-label="Collapse sidebar" aria-pressed="false">
           <svg id="collapse-icon" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
           <span class="nav-label">Collapse</span>
@@ -186,6 +187,7 @@
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" id="kpi-grid"></div>
           <div id="cmd-drill" class="mt-6 hidden rounded-2xl border border-white/5 bg-ink-900/60 p-5"></div>
           <div id="bureau-scorecards" class="mt-6 hidden"></div>
+          <div id="cmd-analytics" class="mt-6 hidden"></div>
 
           <div class="mt-8 overflow-hidden rounded-2xl border border-white/5 bg-ink-900/60">
             <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 px-6 py-4">
@@ -478,6 +480,28 @@
           <div id="place-grid" class="grid grid-cols-1 gap-4 lg:grid-cols-2"></div>
         </section>
 
+        <!-- ===================== VIEW: VEHICLE REGISTRY + CROSSREF ===================== -->
+        <section id="view-vehicles" class="view">
+          <div class="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+            <div>
+              <h3 class="text-xl font-bold text-white">🚗 Vehicle Registry</h3>
+              <p class="text-sm text-slate-400">Plates as first-class intel — owners, gang links &amp; automatic cross-case matching</p>
+            </div>
+            <button id="vehicle-new" class="hidden rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ New Vehicle</button>
+          </div>
+          <div id="crossref-box" class="mb-6"></div>
+          <div id="vehicle-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"></div>
+        </section>
+
+        <!-- ===================== VIEW: BOLO BOARD ===================== -->
+        <section id="view-bolo" class="view">
+          <div class="mb-6 rounded-2xl border border-rose-500/20 bg-ink-900/60 p-6">
+            <h3 class="text-xl font-bold text-white">🚨 BOLO Board</h3>
+            <p class="text-sm text-slate-400">At-large subjects flagged “be on the lookout” — with warrant status where one exists. Flag or clear via Persons → Edit.</p>
+          </div>
+          <div id="bolo-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"></div>
+        </section>
+
         <!-- ===================== VIEW: RELATIONSHIP NETWORK ===================== -->
         <section id="view-network" class="view">
           <div class="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
@@ -544,6 +568,7 @@
             <div id="hm-controls" class="mt-3 flex flex-wrap gap-2"></div>
           </div>
           <div id="hm-notice" class="mb-4 hidden rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"></div>
+          <div id="hm-map" class="mb-4"></div>
           <div id="hm-grid" class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>
           <p id="hm-legend" class="mt-4 text-[11px] text-slate-500"></p>
         </section>
@@ -642,35 +667,36 @@
   </script>
 
   <!-- ===== APPLICATION JS (feature-split classic scripts; shared global scope, load order matters) ===== -->
-  <script src="supabase.js?v=20260625a"></script>
-  <script src="roles.js?v=20260625a"></script>
-  <script src="core.js?v=20260625a"></script>
-  <script src="penal.js?v=20260625a"></script>
-  <script src="casefiles.js?v=20260625a"></script>
-  <script src="command.js?v=20260625a"></script>
-  <script src="narcotics.js?v=20260625a"></script>
-  <script src="ballistics.js?v=20260625a"></script>
-  <script src="personnel.js?v=20260625a"></script>
-  <script src="modus.js?v=20260625a"></script>
-  <script src="drive.js?v=20260625a"></script>
-  <script src="persons.js?v=20260625a"></script>
-  <script src="gangs.js?v=20260625a"></script>
-  <script src="intel.js?v=20260625a"></script>
-  <script src="places.js?v=20260625a"></script>
-  <script src="network.js?v=20260625a"></script>
-  <script src="reports.js?v=20260625a"></script>
-  <script src="rico.js?v=20260625a"></script>
-  <script src="docx.js?v=20260625a"></script>
-  <script src="records.js?v=20260625a"></script>
-  <script src="signoff.js?v=20260625a"></script>
-  <script src="inbox.js?v=20260625a"></script>
-  <script src="collab.js?v=20260625a"></script>
-  <script src="heatmap.js?v=20260625a"></script>
-  <script src="shifts.js?v=20260625a"></script>
-  <script src="fivemanage.js?v=20260625a"></script>
-  <script src="feedback.js?v=20260625a"></script>
-  <script src="app.js?v=20260625a"></script>
-  <script src="auth.js?v=20260625a"></script>
+  <script src="supabase.js?v=20260625b"></script>
+  <script src="roles.js?v=20260625b"></script>
+  <script src="core.js?v=20260625b"></script>
+  <script src="penal.js?v=20260625b"></script>
+  <script src="casefiles.js?v=20260625b"></script>
+  <script src="command.js?v=20260625b"></script>
+  <script src="narcotics.js?v=20260625b"></script>
+  <script src="ballistics.js?v=20260625b"></script>
+  <script src="personnel.js?v=20260625b"></script>
+  <script src="modus.js?v=20260625b"></script>
+  <script src="drive.js?v=20260625b"></script>
+  <script src="persons.js?v=20260625b"></script>
+  <script src="gangs.js?v=20260625b"></script>
+  <script src="intel.js?v=20260625b"></script>
+  <script src="places.js?v=20260625b"></script>
+  <script src="network.js?v=20260625b"></script>
+  <script src="reports.js?v=20260625b"></script>
+  <script src="rico.js?v=20260625b"></script>
+  <script src="docx.js?v=20260625b"></script>
+  <script src="records.js?v=20260625b"></script>
+  <script src="signoff.js?v=20260625b"></script>
+  <script src="inbox.js?v=20260625b"></script>
+  <script src="collab.js?v=20260625b"></script>
+  <script src="heatmap.js?v=20260625b"></script>
+  <script src="shifts.js?v=20260625b"></script>
+  <script src="fivemanage.js?v=20260625b"></script>
+  <script src="vehicles.js?v=20260625b"></script>
+  <script src="feedback.js?v=20260625b"></script>
+  <script src="app.js?v=20260625b"></script>
+  <script src="auth.js?v=20260625b"></script>
 
   
 </body>

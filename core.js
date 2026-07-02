@@ -687,6 +687,8 @@
       shifts:     { title: 'Weekly Shift Reports', sub: 'Detective activity rolled up to bureau leadership' },
       audit:      { title: 'Audit Log', sub: 'Division-wide action history (Bureau Lead and above)' },
       feedback:   { title: 'Feedback', sub: 'Suggest a feature or report a bug' },
+      vehicles:   { title: 'Vehicle Registry', sub: 'Plates, owners & cross-case matches' },
+      bolo:       { title: 'BOLO Board', sub: 'At-large subjects — be on the lookout' },
     };
 
     // ---- Two-tier navigation: 5 top-level categories, each a set of tool tabs ----
@@ -695,14 +697,14 @@
     const NAV_CATEGORIES = [
       { id: 'command',   label: 'Command',      tabs: ['command', 'announce', 'heatmap', 'personnel'] },
       { id: 'cases',     label: 'Cases',        tabs: ['cases', 'case-files', 'rico'] },
-      { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'gangs', 'places', 'network', 'narcotics', 'ballistics', 'modus', 'media'] },
+      { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'network', 'narcotics', 'ballistics', 'modus', 'media'] },
       { id: 'drive',     label: 'Drive',        tabs: ['drive', 'records'] },
       { id: 'oversight', label: 'Oversight',    tabs: ['inbox', 'shifts', 'audit'] },
     ];
     const TAB_LABEL = {
       command: 'Dashboard', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
       cases: 'Case Files', 'case-files': 'Attachments', rico: 'RICO',
-      persons: 'Persons', gangs: 'Gangs', places: 'Places', network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector', media: 'Media Vault',
+      persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector', media: 'Media Vault',
       drive: 'CID General', records: 'Records', inbox: 'My Desk', shifts: 'Shift Reports', audit: 'Audit Log',
     };
     const TAB_CATEGORY = {}; NAV_CATEGORIES.forEach((c) => c.tabs.forEach((t) => { TAB_CATEGORY[t] = c.id; }));
@@ -756,6 +758,8 @@
       if (tab === 'shifts' && typeof onEnterShifts === 'function') onEnterShifts();
       if (tab === 'audit' && typeof onEnterAudit === 'function') onEnterAudit();
       if (tab === 'feedback' && typeof onEnterFeedback === 'function') onEnterFeedback();
+      if (tab === 'vehicles' && typeof onEnterVehicles === 'function') onEnterVehicles();
+      if (tab === 'bolo' && typeof onEnterBolo === 'function') onEnterBolo();
     }
     $$('.nav-cat, .bnav-link').forEach((b) => b.addEventListener('click', () => navigate(CAT_DEFAULT[b.dataset.cat] || 'command')));
 
@@ -775,6 +779,32 @@
       const b = $('#collapse-toggle'); b.setAttribute('aria-pressed', String(c)); b.setAttribute('aria-label', c ? 'Expand sidebar' : 'Collapse sidebar');
       $('#collapse-icon').innerHTML = c ? '<path d="m9 18 6-6-6-6"/>' : '<path d="m15 18-6-6 6-6"/>';
       Store.set('collapsed', c);
+    }
+    /* ---- Appearance: per-device accent + density (stored in Store) -------- */
+    function applyAppearance() {
+      const acc = Store.get('accent', 'blue'), den = Store.get('density', 'comfortable');
+      if (document.body) document.body.dataset.accent = acc;
+      document.documentElement.dataset.density = den;
+    }
+    function openAppearanceModal() {
+      const acc = Store.get('accent', 'blue'), den = Store.get('density', 'comfortable');
+      const ACCENTS = [['blue', 'Electric Blue', '#3b82f6'], ['amber', 'Amber', '#f59e0b'], ['emerald', 'Emerald', '#10b981'], ['rose', 'Rose', '#f43f5e']];
+      const node = el('div', { class: 'p-6' });
+      node.innerHTML = `
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">🎨 Appearance</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
+        <p class="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Accent</p>
+        <div class="grid grid-cols-2 gap-2">${ACCENTS.map(([k, label, hex]) => `<button class="ap-accent flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${k === acc ? 'border-white/40 bg-white/10 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}" data-k="${k}"><span class="h-3.5 w-3.5 rounded-full" style="background:${hex}"></span>${label}</button>`).join('')}</div>
+        <p class="mb-2 mt-5 text-xs font-semibold uppercase tracking-wider text-slate-400">Density</p>
+        <div class="grid grid-cols-2 gap-2">${[['comfortable', 'Comfortable'], ['compact', 'Compact']].map(([k, label]) => `<button class="ap-density rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${k === den ? 'border-white/40 bg-white/10 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}" data-k="${k}">${label}</button>`).join('')}</div>
+        <p class="mt-4 text-[11px] text-slate-500">Saved on this device. Applies instantly.</p>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      $$('.ap-accent', node).forEach((b) => b.onclick = () => { Store.set('accent', b.dataset.k); applyAppearance(); closeModal(); openAppearanceModal(); });
+      $$('.ap-density', node).forEach((b) => b.onclick = () => { Store.set('density', b.dataset.k); applyAppearance(); closeModal(); openAppearanceModal(); });
+      openModal(node);
+    }
+    function wireAppearance() {
+      applyAppearance();
+      const b = $('#appearance-btn'); if (b) b.addEventListener('click', openAppearanceModal);
     }
     function wireCollapse() { applyCollapse(Store.get('collapsed', false)); $('#collapse-toggle').addEventListener('click', () => applyCollapse(!document.body.classList.contains('nav-collapsed'))); }
 

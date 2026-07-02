@@ -502,7 +502,7 @@
     }
     function renderCaseDetailShell() {
       const c = detailCase, canEdit = DB() && DB().canEdit(), canDel = DB() && DB().canDelete();
-      const tabs = ['overview', 'evidence', 'charges', 'rico', 'intel', 'reports', 'signoff', 'chat', 'timeline'];
+      const tabs = ['overview', 'evidence', 'charges', 'rico', 'intel', 'reports', 'tasks', 'signoff', 'chat', 'timeline'];
       $('#case-detail').innerHTML = `
         <div class="mb-4 flex items-center gap-1.5 text-sm text-slate-400"><button id="case-back" class="inline-flex items-center gap-1 text-slate-300 transition hover:text-white">← Cases</button><span class="text-slate-600">/</span><span class="font-mono text-blue-300">${escapeHTML(c.case_number)}</span><span class="text-slate-600">/</span><span class="capitalize text-slate-300">${escapeHTML(detailTab)}</span></div>
         <div class="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
@@ -551,6 +551,60 @@
         toast('Case deleted', 'warn'); showCasesList(); fetchCases();
       };
       $$('.detail-tab', $('#case-detail')).forEach((b) => b.onclick = () => { detailTab = b.dataset.dt; renderCaseDetailShell(); loadDetailTab(); });
+    }
+    /* ---- Case tasks: per-case checklist assignable to detectives ---------- */
+    async function renderCaseTasks(body, cid, canEdit) {
+      let tasks = [];
+      try { tasks = await DB().list('case_tasks', { order: 'created_at', ascending: true, eq: { case_id: cid } }); }
+      catch (e) { body.innerHTML = '<p class="text-sm text-rose-300">Couldn\u2019t load tasks \u2014 ' + escapeHTML(e.message || e) + '</p>'; return; }
+      const me = DB().me, canDel = DB() && DB().canDelete();
+      const today = (typeof todayISO === 'function') ? todayISO() : new Date().toISOString().slice(0, 10);
+      const profs = (typeof PROFILES !== 'undefined' ? PROFILES : []).filter((p) => p.active);
+      const open = tasks.filter((t) => !t.done), done = tasks.filter((t) => t.done);
+      const row = (t) => {
+        const overdue = !t.done && t.due && t.due < today;
+        return `<div class="flex items-center gap-3 rounded-xl border border-white/5 bg-ink-900 px-4 py-3 ${t.done ? 'opacity-60' : ''}">
+          <input type="checkbox" class="task-done h-4 w-4 flex-shrink-0 accent-emerald-500" data-id="${t.id}"${t.done ? ' checked' : ''}${canEdit ? '' : ' disabled'} aria-label="Mark task done" />
+          <div class="min-w-0 flex-1">
+            <p class="text-sm ${t.done ? 'text-slate-500 line-through' : 'text-slate-200'}">${escapeHTML(t.title)}</p>
+            <p class="mt-0.5 text-[11px] text-slate-500">${t.assignee ? '👤 ' + escapeHTML(officerName(t.assignee) || 'Officer') : 'Unassigned'}${t.due ? ` \u00b7 <span class="${overdue ? 'font-semibold text-rose-300' : ''}">due ${escapeHTML(t.due)}${overdue ? ' \u2014 overdue' : ''}</span>` : ''}</p>
+          </div>
+          ${(canDel || (me && t.created_by === me.id)) ? `<button class="task-del flex-shrink-0 text-slate-500 transition hover:text-rose-300" data-id="${t.id}" aria-label="Delete task">\u2715</button>` : ''}
+        </div>`;
+      };
+      body.innerHTML = `
+        ${canEdit ? `<div class="mb-4 rounded-2xl border border-white/5 bg-ink-900/60 p-4">
+          <p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">New task</p>
+          <div class="flex flex-wrap items-center gap-2">
+            <input id="task-title" placeholder="What needs doing\u2026 (e.g. pull CCTV from Postal 7157)" class="min-w-[14rem] flex-1 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
+            <select id="task-assignee" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option value="">\u2014 unassigned \u2014</option>${profs.map((p) => `<option value="${p.id}">${escapeHTML(p.display_name)}</option>`).join('')}</select>
+            <input id="task-due" type="date" class="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
+            <button id="task-add" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">+ Add</button>
+          </div>
+        </div>` : ''}
+        <div class="mb-2 flex items-center justify-between"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Open (${open.length})</h4>${open.filter((t) => t.due && t.due < today).length ? `<span class="text-[11px] font-semibold text-rose-300">${open.filter((t) => t.due && t.due < today).length} overdue</span>` : ''}</div>
+        <div class="space-y-2">${open.length ? open.map(row).join('') : '<p class="text-sm text-slate-500">No open tasks.' + (canEdit ? ' Add the first one above.' : '') + '</p>'}</div>
+        ${done.length ? `<h4 class="mb-2 mt-6 text-sm font-semibold uppercase tracking-wider text-slate-400">Done (${done.length})</h4><div class="space-y-2">${done.map(row).join('')}</div>` : ''}`;
+      const add = $('#task-add'); if (add) add.onclick = async () => {
+        const title = $('#task-title').value.trim(); if (!title) { toast('Describe the task first.', 'warn'); return; }
+        const payload = { case_id: cid, title: title, assignee: $('#task-assignee').value || null, due: $('#task-due').value || null };
+        const res = await DB().insert('case_tasks', payload);
+        if (res.error) { toast('Add failed: ' + res.error.message, 'danger'); return; }
+        if (payload.assignee && payload.assignee !== (me && me.id) && typeof notify === 'function') notify(payload.assignee, 'mention', { case_id: cid, case_number: detailCase.case_number, reason: 'Task assigned to you: ' + title });
+        toast('Task added', 'success'); loadDetailTab();
+      };
+      const ti = $('#task-title'); if (ti) ti.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); const b = $('#task-add'); if (b) b.click(); } });
+      $$('.task-done', body).forEach((c) => c.onchange = async () => {
+        const res = await DB().update('case_tasks', c.dataset.id, { done: c.checked });
+        if (res.error) { toast('Update failed: ' + res.error.message, 'danger'); c.checked = !c.checked; return; }
+        loadDetailTab();
+      });
+      $$('.task-del', body).forEach((b) => b.onclick = async () => {
+        if (!(await uiConfirm('Delete this task?', { confirmText: 'Delete' }))) return;
+        const res = await DB().remove('case_tasks', b.dataset.id);
+        if (res && res.error) { toast('Delete failed: ' + res.error.message, 'danger'); return; }
+        loadDetailTab();
+      });
     }
     // Per-case follow-up date (cases.follow_up_at) — surfaces on My Desk when due.
     function openFollowUpModal(c) {
@@ -649,6 +703,8 @@
           await renderCaseIntel(body, cid);
         } else if (detailTab === 'reports') {
           await renderCaseReports(body, cid);
+        } else if (detailTab === 'tasks') {
+          await renderCaseTasks(body, cid, canEdit);
         } else if (detailTab === 'signoff') {
           await renderSignoffTab(body, detailCase);
         } else if (detailTab === 'chat') {
@@ -1010,6 +1066,7 @@
     window.CIDApp.onAuthed = function () {
       fetchProfiles(); fetchCases(); fetchGangs(); fetchPersons(); fetchDrugs(); fetchPlaces(); fetchBenches(); fetchFootprints(); fetchTrackers(); fetchTickets(); fetchKpis(); fetchActivity(); fetchNotifications();
       fetchCommendations(); fetchMedia(); fetchMoProfiles(); fetchDocuments();
+      if (typeof fetchVehicles === 'function') fetchVehicles();
       fetchCaseTemplates();
       if (typeof fetchMyGrants === 'function') fetchMyGrants();
       if (typeof fetchAnnouncements === 'function') fetchAnnouncements();
@@ -1034,6 +1091,8 @@
         DB().subscribe('persons', () => { fetchPersons(); renderKPIs(); });
         DB().subscribe('narcotics', fetchDrugs);
         DB().subscribe('places', fetchPlaces);
+        DB().subscribe('vehicles', () => { if (typeof fetchVehicles === 'function') fetchVehicles(); });
+        DB().subscribe('case_tasks', () => { if (typeof detailCase !== 'undefined' && detailCase && typeof detailTab !== 'undefined' && detailTab === 'tasks' && typeof loadDetailTab === 'function') loadDetailTab(); });
         DB().subscribe('ballistics_benches', fetchBenches);
         DB().subscribe('ballistic_footprints', fetchFootprints);
         DB().subscribe('trackers', fetchTrackers);

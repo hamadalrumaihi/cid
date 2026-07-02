@@ -159,3 +159,39 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .text-slate-600{--tw-text-opacity:1;color:rgb(105 122 153/var(--tw-text-opacity,1))}
 /* Modal close (×): comfortable touch target without shifting layout. */
 .close-x{padding:.5rem;margin:-.5rem}
+
+/* --- Appearance: accent themes + density (body[data-accent], html[data-density]) --- */
+html[data-density="compact"]{font-size:14px}
+/* Amber */
+body[data-accent="amber"] .from-badge-500{--tw-gradient-from:#f59e0b var(--tw-gradient-from-position);--tw-gradient-to:rgba(245,158,11,0) var(--tw-gradient-to-position);--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to)}
+body[data-accent="amber"] .to-blue-700{--tw-gradient-to:#b45309 var(--tw-gradient-to-position)}
+body[data-accent="amber"] .text-blue-300{color:rgb(252 211 77/var(--tw-text-opacity,1))}
+body[data-accent="amber"] .text-blue-300\/70{color:rgb(252 211 77/.7)}
+body[data-accent="amber"] .text-blue-200{color:rgb(253 230 138/var(--tw-text-opacity,1))}
+body[data-accent="amber"] .focus\:border-badge-500:focus{border-color:rgb(245 158 11/var(--tw-border-opacity,1))}
+body[data-accent="amber"] .bg-badge-500{background-color:#f59e0b}
+body[data-accent="amber"] .border-badge-500{border-color:#f59e0b}
+body[data-accent="amber"] .bg-blue-500\/15{background-color:rgba(245,158,11,.15)}
+body[data-accent="amber"] .bg-blue-500\/10{background-color:rgba(245,158,11,.1)}
+/* Emerald */
+body[data-accent="emerald"] .from-badge-500{--tw-gradient-from:#10b981 var(--tw-gradient-from-position);--tw-gradient-to:rgba(16,185,129,0) var(--tw-gradient-to-position);--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to)}
+body[data-accent="emerald"] .to-blue-700{--tw-gradient-to:#047857 var(--tw-gradient-to-position)}
+body[data-accent="emerald"] .text-blue-300{color:rgb(110 231 183/var(--tw-text-opacity,1))}
+body[data-accent="emerald"] .text-blue-300\/70{color:rgb(110 231 183/.7)}
+body[data-accent="emerald"] .text-blue-200{color:rgb(167 243 208/var(--tw-text-opacity,1))}
+body[data-accent="emerald"] .focus\:border-badge-500:focus{border-color:rgb(16 185 129/var(--tw-border-opacity,1))}
+body[data-accent="emerald"] .bg-badge-500{background-color:#10b981}
+body[data-accent="emerald"] .border-badge-500{border-color:#10b981}
+body[data-accent="emerald"] .bg-blue-500\/15{background-color:rgba(16,185,129,.15)}
+body[data-accent="emerald"] .bg-blue-500\/10{background-color:rgba(16,185,129,.1)}
+/* Rose */
+body[data-accent="rose"] .from-badge-500{--tw-gradient-from:#f43f5e var(--tw-gradient-from-position);--tw-gradient-to:rgba(244,63,94,0) var(--tw-gradient-to-position);--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to)}
+body[data-accent="rose"] .to-blue-700{--tw-gradient-to:#be123c var(--tw-gradient-to-position)}
+body[data-accent="rose"] .text-blue-300{color:rgb(253 164 175/var(--tw-text-opacity,1))}
+body[data-accent="rose"] .text-blue-300\/70{color:rgb(253 164 175/.7)}
+body[data-accent="rose"] .text-blue-200{color:rgb(254 205 211/var(--tw-text-opacity,1))}
+body[data-accent="rose"] .focus\:border-badge-500:focus{border-color:rgb(244 63 94/var(--tw-border-opacity,1))}
+body[data-accent="rose"] .bg-badge-500{background-color:#f43f5e}
+body[data-accent="rose"] .border-badge-500{border-color:#f43f5e}
+body[data-accent="rose"] .bg-blue-500\/15{background-color:rgba(244,63,94,.15)}
+body[data-accent="rose"] .bg-blue-500\/10{background-color:rgba(244,63,94,.1)}
