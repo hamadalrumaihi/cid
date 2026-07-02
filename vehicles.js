@@ -9,6 +9,7 @@
 "use strict";
 
     let VEHICLES = [];
+    let vehicleFilter = '', boloFilter = '';
     const vhOwnerName = (id) => { const p = (typeof PERSONS !== 'undefined' ? PERSONS : []).find((x) => x.id === id); return p ? p.name : null; };
     const vhGangName = (id) => { const g = (typeof GANGS !== 'undefined' ? GANGS : []).find((x) => x.id === id); return g ? g.name : null; };
     function vehiclesNotice(m) { const g = $('#vehicle-grid'); if (g) g.innerHTML = `<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">${m}</div>`; }
@@ -26,9 +27,13 @@
       const canEdit = DB() && DB().canEdit(), canDel = DB() && DB().canDelete();
       const nb = $('#vehicle-new'); if (nb) nb.classList.toggle('hidden', !canEdit);
       if (!dbReady()) { vehiclesNotice('Live vehicle records require sign-in.'); return; }
+      const fi = $('#vehicle-filter'); if (fi) fi.classList.toggle('hidden', !VEHICLES.length);
       if (!VEHICLES.length) { vehiclesNotice('No vehicles on file yet.' + (canEdit ? ' Use “+ New Vehicle” to log the first plate.' : '')); return; }
+      const q = vehicleFilter.trim().toLowerCase();
+      const rows = !q ? VEHICLES : VEHICLES.filter((v) => [v.plate, v.model, v.color, v.notes, vhOwnerName(v.owner_id), vhGangName(v.gang_id)].some((s) => (s || '').toLowerCase().includes(q)));
+      if (!rows.length) { vehiclesNotice('No vehicles match “' + escapeHTML(vehicleFilter.trim()) + '”.'); return; }
       grid.innerHTML = '';
-      VEHICLES.forEach((v) => {
+      rows.forEach((v) => {
         const owner = vhOwnerName(v.owner_id), gang = vhGangName(v.gang_id);
         const card = el('div', { class: 'rounded-2xl border border-white/5 bg-ink-900/60 p-5' });
         card.innerHTML = `
@@ -38,6 +43,7 @@
               <p class="mt-1.5 text-sm font-semibold text-slate-200">${escapeHTML(v.model || 'Unknown model')}${v.color ? ` <span class="text-slate-500">· ${escapeHTML(v.color)}</span>` : ''}</p>
             </div>
             <div class="flex flex-shrink-0 items-center gap-2">
+              ${(typeof watchBtnHtml === 'function' && DB() && DB().me) ? watchBtnHtml('vehicle', v.id, v.plate, { compact: true }) : ''}
               ${canEdit ? '<button class="vh-edit rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>' : ''}
               ${canDel ? '<button class="vh-del rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10" aria-label="Delete vehicle">✕</button>' : ''}
             </div>
@@ -118,7 +124,8 @@
       // Registered plates mentioned in 2+ cases' reports.
       VEHICLES.forEach((v) => {
         if (!v.plate || v.plate.length < 5) return;
-        const hits = caseIds.filter((cid) => textByCase[cid].toUpperCase().includes(v.plate.toUpperCase()));
+        const re = new RegExp('\\b' + v.plate.toUpperCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
+        const hits = caseIds.filter((cid) => re.test(textByCase[cid].toUpperCase()));
         if (hits.length >= 2) alerts.push({ icon: '🚗', label: v.plate + (vhOwnerName(v.owner_id) ? ' — ' + vhOwnerName(v.owner_id) : ''), kind: 'Registered plate', cases: hits });
       });
       // Persons linked (Intel tab) to 2+ cases.
@@ -150,8 +157,12 @@
     async function renderBolo() {
       const grid = $('#bolo-grid'); if (!grid) return;
       const canEdit = DB() && DB().canEdit();
-      const people = (typeof PERSONS !== 'undefined' ? PERSONS : []).filter((p) => p.bolo);
-      if (!people.length) { grid.innerHTML = '<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">No active BOLOs. Flag a person via Persons → Edit → “Active BOLO”.</div>'; return; }
+      const allBolo = (typeof PERSONS !== 'undefined' ? PERSONS : []).filter((p) => p.bolo);
+      const fi = $('#bolo-filter'); if (fi) fi.classList.toggle('hidden', !allBolo.length);
+      if (!allBolo.length) { grid.innerHTML = '<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">No active BOLOs. Flag a person via Persons → Edit → “Active BOLO”.</div>'; return; }
+      const bq = boloFilter.trim().toLowerCase();
+      const people = !bq ? allBolo : allBolo.filter((p) => [p.name, p.alias, p.status, vhGangName(p.gang_id)].some((s) => (s || '').toLowerCase().includes(bq)));
+      if (!people.length) { grid.innerHTML = '<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">No BOLOs match “' + escapeHTML(boloFilter.trim()) + '”.</div>'; return; }
       // Warrant context: latest warrant status per named suspect (RLS-scoped).
       let warrants = [];
       try { warrants = (await DB().list('reports', {})).filter((r) => r.template === 'arrest_warrant'); } catch (e) {}
@@ -203,4 +214,6 @@
     // Self-wiring (this file loads before app.js's DOMContentLoaded init).
     document.addEventListener('DOMContentLoaded', () => {
       const nb = $('#vehicle-new'); if (nb) nb.addEventListener('click', () => openVehicleModal(null));
+      const vf = $('#vehicle-filter'); if (vf) vf.addEventListener('input', () => { vehicleFilter = vf.value; renderVehicles(); });
+      const bf = $('#bolo-filter'); if (bf) bf.addEventListener('input', () => { boloFilter = bf.value; renderBolo(); });
     });

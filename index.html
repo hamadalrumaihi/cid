@@ -487,7 +487,10 @@
               <h3 class="text-xl font-bold text-white">🚗 Vehicle Registry</h3>
               <p class="text-sm text-slate-400">Plates as first-class intel — owners, gang links &amp; automatic cross-case matching</p>
             </div>
-            <button id="vehicle-new" class="hidden rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ New Vehicle</button>
+            <div class="flex items-center gap-3">
+              <input id="vehicle-filter" type="search" placeholder="Filter plate, owner, gang…" class="hidden w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" aria-label="Filter vehicles" />
+              <button id="vehicle-new" class="hidden rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ New Vehicle</button>
+            </div>
           </div>
           <div id="crossref-box" class="mb-6"></div>
           <div id="vehicle-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"></div>
@@ -495,9 +498,12 @@
 
         <!-- ===================== VIEW: BOLO BOARD ===================== -->
         <section id="view-bolo" class="view">
-          <div class="mb-6 rounded-2xl border border-rose-500/20 bg-ink-900/60 p-6">
-            <h3 class="text-xl font-bold text-white">🚨 BOLO Board</h3>
-            <p class="text-sm text-slate-400">At-large subjects flagged “be on the lookout” — with warrant status where one exists. Flag or clear via Persons → Edit.</p>
+          <div class="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-rose-500/20 bg-ink-900/60 p-6">
+            <div>
+              <h3 class="text-xl font-bold text-white">🚨 BOLO Board</h3>
+              <p class="text-sm text-slate-400">At-large subjects flagged “be on the lookout” — with warrant status where one exists. Flag or clear via Persons → Edit.</p>
+            </div>
+            <input id="bolo-filter" type="search" placeholder="Filter name, alias, gang…" class="hidden w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" aria-label="Filter BOLOs" />
           </div>
           <div id="bolo-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"></div>
         </section>
@@ -693,7 +699,8 @@
   <script src="heatmap.js?v=20260625b"></script>
   <script src="shifts.js?v=20260625b"></script>
   <script src="fivemanage.js?v=20260625b"></script>
-  <script src="vehicles.js?v=20260625b"></script>
+  <script src="vehicles.js?v=20260702a"></script>
+  <script src="watchlist.js?v=20260702a"></script>
   <script src="feedback.js?v=20260625b"></script>
   <script src="app.js?v=20260625b"></script>
   <script src="auth.js?v=20260625b"></script>
