@@ -1,3 +1,18 @@
+# react-rebuild BRANCH NOTE
+
+On THIS branch the repo root is a Next.js 16 app (src/, package.json). The
+legacy static-site files (index.html, the 30 *.js, styles.css) are still
+present but INERT here — they stay live from `main` until cutover. Do not
+edit them on this branch.
+
+<!-- BEGIN:nextjs-agent-rules -->
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+<!-- END:nextjs-agent-rules -->
+
+---
+
 # AGENTS.md — CID Portal (orientation & audit for developers)
 
 > Audience: developers and maintainers working in this repo. Read this before editing.
