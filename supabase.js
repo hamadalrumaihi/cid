@@ -30,13 +30,16 @@
     signOut() { return client.auth.signOut(); },
 
     me: null,   // cached current profile (set by auth.js once approved)
+    // Returns the row, or null for a genuinely-missing profile (unapproved/new).
+    // THROWS on a real query error so the caller can show a retry notice instead of
+    // mistaking a transient network blip for "not yet approved".
     async profile(uid) {
       if (!client) return null;
-      try {
-        var r = await client.from('profiles').select('*').eq('id', uid).maybeSingle();
-        return r.error ? null : r.data;
-      } catch (e) { return null; }   // profiles table may not exist yet -> treat as unapproved
+      var r = await client.from('profiles').select('*').eq('id', uid).maybeSingle();
+      if (r.error) throw r.error;
+      return r.data;
     },
+    removeAllChannels() { try { if (client && client.removeAllChannels) client.removeAllChannels(); } catch (e) {} },
     role() { return this.me ? this.me.role : null; },
     // "Command staff" = Bureau Lead and above (member administration, audit, deletes).
     // Director is the supreme role; deputy_director and bureau_lead share command authority.

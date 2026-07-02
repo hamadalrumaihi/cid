@@ -36,9 +36,13 @@
     }
     async function setWarrantStatus(r, st) {
       const by = (DB().me && DB().me.display_name) || 'Officer';
-      const log = Array.isArray(r.fields && r.fields._warrant_log) ? r.fields._warrant_log.slice() : [];
+      // Re-fetch the row first so a concurrent status change / log entry from another
+      // officer isn't clobbered by a whole-`fields` overwrite from a stale cached row.
+      let cur = r;
+      try { const fresh = await DB().list('reports', { eq: { id: r.id } }); if (fresh && fresh[0]) cur = fresh[0]; } catch (e) {}
+      const log = Array.isArray(cur.fields && cur.fields._warrant_log) ? cur.fields._warrant_log.slice() : [];
       log.push({ status: st, at: new Date().toISOString(), by: by });
-      const nf = Object.assign({}, r.fields, { _warrant_status: st, _warrant_log: log });
+      const nf = Object.assign({}, cur.fields, { _warrant_status: st, _warrant_log: log });
       const res = await DB().update('reports', r.id, { fields: nf });
       if (res.error) { toast('Status change failed: ' + res.error.message, 'danger'); return false; }
       r.fields = nf; toast('Warrant marked ' + st, 'success');
@@ -263,7 +267,11 @@
       node.querySelector('#r-save').onclick = async () => {
         const fields = readForm(node, tpl.schema);
         if (selectedRefs.size) fields._refs = [...selectedRefs];
-        const payload = { case_id: caseId, template: templateId, kind: kind, seq: seq, parent_id: parentId || null, fields: fields };
+        // Recompute seq at save time (not modal-open) so a long-open modal or a
+        // concurrent author doesn't produce a duplicate "Supplemental #N".
+        let seqNow = seq;
+        if (kind !== 'initial') { try { const ex = await DB().list('reports', { eq: { case_id: caseId, kind: kind } }); seqNow = ex.length + 1; } catch (e) {} }
+        const payload = { case_id: caseId, template: templateId, kind: kind, seq: seqNow, parent_id: parentId || null, fields: fields };
         if (DB().me) payload.author_id = DB().me.id;
         const res = await DB().insert('reports', payload);
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
@@ -303,6 +311,7 @@
     function reportTitle(r) { const tpl = tplById(r.template); return `${tpl ? tpl.name : 'Report'}${r.kind !== 'initial' ? ' — ' + (r.kind === 'supplemental' ? 'Supplemental #' + r.seq : 'Follow-up #' + r.seq) : ''}`; }
     function viewReport(r) {
       const tpl = tplById(r.template); const caseNo = caseNumById(r.case_id) || r.case_id;
+      if (!tpl || !tpl.schema) { toast('This report uses an unknown template and can’t be previewed.', 'warn'); return; }
       const sig = r.signature || null; const canFinalize = DB() && DB().canEdit() && !r.finalized;
       const node = el('div', { class: 'p-6 print-area' });
       node.innerHTML = `
@@ -405,10 +414,12 @@
       return paras;
     }
     function exportReportDocx(r) {
+      const tpl = tplById(r.template); if (!tpl || !tpl.schema) { toast('This report uses an unknown template and can’t be exported.', 'warn'); return; }
       downloadDocx(reportTitle(r), reportParas(r), `${(caseNumById(r.case_id) || 'case').replace(/[^a-z0-9]/gi, '-')}-${r.kind}-${r.seq || 0}.docx`);
       toast('Report exported as .docx', 'success');
     }
     function exportReportPdf(r) {
+      const tplc = tplById(r.template); if (!tplc || !tplc.schema) { toast('This report uses an unknown template and can’t be exported.', 'warn'); return; }
       const J = window.jspdf && window.jspdf.jsPDF;
       if (!J) { toast('PDF library unavailable (offline). Use .docx or Print.', 'warn'); return; }
       const doc = new J({ unit: 'pt', format: 'letter' }); const W = 612, M = 56; let y = M;

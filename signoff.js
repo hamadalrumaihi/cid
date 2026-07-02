@@ -11,7 +11,7 @@
     const SIGNOFF = {
       order: ['bureau_lead', 'deputy', 'director'],
       roles: { bureau_lead: ['bureau_lead'], deputy: ['deputy_director'], director: ['director'] },
-      label: { bureau_lead: 'Bureau Lead', deputy: 'Deputy Director', director: 'Director' },
+      label: { bureau_lead: 'Bureau Lead', deputy: 'Deputy Director', deputy_director: 'Deputy Director', director: 'Director' },
       statusOf: { bureau_lead: 'awaiting_bureau_lead', deputy: 'awaiting_deputy', director: 'awaiting_director' },
     };
     const SUBMIT_ROLES = ['detective', 'senior_detective'];

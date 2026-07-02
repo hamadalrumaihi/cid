@@ -7,7 +7,9 @@
     function withinTenYears(dateStr) { if (!dateStr) return false; const d = new Date(dateStr); return (Date.now() - d.getTime()) <= 10 * 365.25 * 24 * 3.6e6 && d.getTime() <= Date.now(); }
     const predEvidenced = (p) => !!((p.evidence_id || p.evidence_ref) && withinTenYears(p.act_date));
     async function ensureRicoCase(caseId) {
-      const rows = await DB().list('rico_cases', { eq: { case_id: caseId } });
+      let rows = [];
+      try { rows = await DB().list('rico_cases', { eq: { case_id: caseId } }); }
+      catch (e) { toast('Could not load RICO tracker: ' + (e.message || e), 'danger'); return null; }
       if (rows.length) return rows[0];
       const res = await DB().insert('rico_cases', { case_id: caseId });
       if (res.error) { toast('RICO init failed: ' + res.error.message, 'danger'); return null; }
@@ -63,7 +65,7 @@
           <p class="mt-4 text-[11px] text-slate-500">Tracking aid only — charging sufficiency is a prosecutor's determination.</p>
         </div>`);
       const gs = body.querySelector('#rico-gang');
-      if (gs && canEdit) gs.onchange = async (e) => { const r = await ensureRicoCase(caseId); if (!r) return; await DB().update('rico_cases', r.id, { enterprise_gang_id: e.target.value || null }); rerender(); };
+      if (gs && canEdit) gs.onchange = async (e) => { const r = await ensureRicoCase(caseId); if (!r) return; const up = await DB().update('rico_cases', r.id, { enterprise_gang_id: e.target.value || null }); if (up && up.error) { toast('Save failed: ' + up.error.message, 'danger'); return; } rerender(); };
       const ab = body.querySelector('#rico-add'); if (ab) ab.onclick = async () => { const r = await ensureRicoCase(caseId); if (r) openPredicateModal(r.id, caseId, rerender); };
       body.querySelectorAll('.pr-del').forEach((b) => b.onclick = async () => { await DB().remove('predicate_acts', b.dataset.id); rerender(); });
     }

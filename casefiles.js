@@ -314,14 +314,19 @@
       if (!stale.length) return;
       const profs = (typeof PROFILES !== 'undefined' ? PROFILES : []);
       for (const c of stale) {
-        // Stamp first; if another viewer beat us (or RLS blocks the write), skip.
-        const res = await DB().update('cases', c.id, { last_stale_notified_at: new Date().toISOString() });
-        if (res && res.error) continue;
-        c.last_stale_notified_at = new Date().toISOString();
+        // Compare-and-swap the stamp: only the viewer whose expected prior value
+        // still matches wins the right to notify, so concurrent viewers don't
+        // double-fire (and a lost race is a no-op, not a suppressed alert).
+        const prev = c.last_stale_notified_at, ts = new Date().toISOString();
+        let q = DB().from('cases').update({ last_stale_notified_at: ts }).eq('id', c.id);
+        q = (prev == null) ? q.is('last_stale_notified_at', null) : q.eq('last_stale_notified_at', prev);
+        const res = await q.select();
+        if (res.error || !res.data || res.data.length === 0) continue;   // another viewer won, or blocked
+        c.last_stale_notified_at = ts;
         const reason = 'No activity in ' + caseStaleDays(c) + ' days — needs an update or a status change.';
         const targets = new Set();
         if (c.lead_detective_id) targets.add(c.lead_detective_id);
-        profs.filter((p) => p.active && p.role === 'bureau_lead' && p.bureau === c.bureau).forEach((p) => targets.add(p.id));
+        profs.filter((p) => p.active && p.role === 'bureau_lead' && p.division === c.bureau).forEach((p) => targets.add(p.id));
         // No bureau lead covering this bureau? escalate to the deputy directors.
         if (![...targets].some((id) => id !== c.lead_detective_id)) {
           profs.filter((p) => p.active && p.role === 'deputy_director').forEach((p) => targets.add(p.id));
@@ -499,7 +504,9 @@
             try {
               const tpls = await DB().list('documents', { eq: { folder: 'Forms' } });
               const fname = (typeof BUREAU_FOLDER !== 'undefined' && BUREAU_FOLDER[payload.bureau]) || 'Archives';
-              for (const t of tpls) await DB().insert('documents', { folder: fname, name: t.name, kind: t.kind, content: t.content, case_id: newId, modified_label: new Date().toLocaleDateString('en-GB') });
+              let seedFail = 0;
+              for (const t of tpls) { const sr = await DB().insert('documents', { folder: fname, name: t.name, kind: t.kind, content: t.content, case_id: newId, modified_label: new Date().toLocaleDateString('en-GB') }); if (sr && sr.error) seedFail++; }
+              if (seedFail) toast(seedFail + ' form template' + (seedFail === 1 ? '' : 's') + ' couldn’t be seeded — attach manually if needed.', 'warn');
             } catch (e) {}
             if (typeof fetchDocuments === 'function') fetchDocuments();
           }
@@ -613,9 +620,9 @@
         if (ss.value === 'closed' && !detailCase.closed_at) patch.closed_at = new Date().toISOString();
         const res = await DB().update('cases', detailCase.id, patch);
         if (res.error) { toast('Status update failed: ' + res.error.message, 'danger'); ss.value = detailCase.status; return; }
-        Object.assign(detailCase, patch); toast('Status → ' + ss.value, 'success'); renderCaseDetailShell(); fetchCases();
+        Object.assign(detailCase, patch); toast('Status → ' + ss.value, 'success'); renderCaseDetailShell(); loadDetailTab(); fetchCases();
       };
-      const pin = $('#case-pin'); if (pin) pin.onclick = () => { togglePinCase(detailCase.id); renderCaseDetailShell(); renderJumpBack(); };
+      const pin = $('#case-pin'); if (pin) pin.onclick = () => { togglePinCase(detailCase.id); renderCaseDetailShell(); loadDetailTab(); renderJumpBack(); };
       const lk = $('#case-link'); if (lk) lk.onclick = () => {
         const url = location.origin + location.pathname + '#case=' + detailCase.id;
         if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(() => toast('Case link copied', 'success'), () => toast(url, 'info'));
@@ -699,7 +706,9 @@
         const res = await DB().update('cases', c.id, { follow_up_at: val });
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
         c.follow_up_at = val; if (detailCase && detailCase.id === c.id) detailCase.follow_up_at = val;
-        closeModal(); toast(val ? 'Follow-up set for ' + val : 'Follow-up cleared', 'success'); renderCaseDetailShell(); if (typeof fetchCases === 'function') fetchCases();
+        closeModal(); toast(val ? 'Follow-up set for ' + val : 'Follow-up cleared', 'success');
+        if (detailCase && detailCase.id === c.id && !$('#case-detail').classList.contains('hidden')) { renderCaseDetailShell(); loadDetailTab(); }
+        if (typeof fetchCases === 'function') fetchCases();
       };
       const sv = node.querySelector('#fu-save'); if (sv) sv.onclick = () => save(node.querySelector('#fu-date').value || null);
       const cl = node.querySelector('#fu-clear'); if (cl) cl.onclick = () => save(null);
@@ -903,8 +912,8 @@
       };
       node.querySelector('#ql-stage').onclick = stage;
       const saveAll = async () => {
-        if (!staged.length) return;
-        if (descF.value.trim()) stage();   // don't drop a typed-but-unstaged item
+        if (descF.value.trim()) stage();   // stage a typed-but-unstaged item first…
+        if (!staged.length) return;        // …so Ctrl/⌘+Enter logs the very first item too
         save.disabled = true; save.textContent = 'Logging…';
         let ok = 0, fail = 0;
         for (const s of staged) {
@@ -1123,9 +1132,12 @@
     async function renderCaseIntel(body, cid) {
       const canEdit = DB() && DB().canEdit();
       body.innerHTML = '<p class="text-sm text-slate-500">Loading linked intel…</p>';
-      let links = [], tableMissing = false;
+      let links = [], tableMissing = false, loadErr = null;
       try { links = await DB().list('case_intel_links', { order: 'created_at', ascending: true, eq: { case_id: cid } }); }
-      catch (e) { tableMissing = true; }
+      // Only the "relation does not exist" codes mean the migration is unapplied;
+      // a transient/RLS error should show a retry, not a false "table missing" banner.
+      catch (e) { if (e && (e.code === '42P01' || e.code === 'PGRST205')) tableMissing = true; else loadErr = e; }
+      if (loadErr) { body.innerHTML = '<p class="text-sm text-rose-300">Couldn’t load linked intel — ' + escapeHTML(loadErr.message || String(loadErr)) + '. <button class="ci-retry underline">Retry</button></p>'; const rb = body.querySelector('.ci-retry'); if (rb) rb.onclick = () => renderCaseIntel(body, cid); return; }
       // Fetch fresh so names resolve even when the intel tab caches are cold.
       const [persons, gangs, places] = await Promise.all([
         DB().list('persons', { order: 'name', ascending: true }).catch(() => []),

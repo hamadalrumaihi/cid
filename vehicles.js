@@ -114,9 +114,12 @@
       const box = $('#crossref-box'); if (!box) return;
       if (!dbReady()) { box.innerHTML = ''; return; }
       box.innerHTML = '<p class="text-sm text-slate-500">Scanning for cross-case matches…</p>';
-      let reports = [], links = [];
-      try { reports = await DB().list('reports', {}); } catch (e) { reports = []; }
-      try { links = await DB().list('case_intel_links', {}); } catch (e) { links = []; }
+      let reports = [], links = [], scanFailed = false;
+      try { reports = await DB().list('reports', {}); } catch (e) { reports = []; scanFailed = true; }
+      try { links = await DB().list('case_intel_links', {}); } catch (e) { links = []; scanFailed = true; }
+      // A failed scan must not masquerade as an authoritative "no matches" — that's
+      // a dangerous false negative for a deconfliction tool.
+      if (scanFailed) { box.innerHTML = '<div class="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 text-sm text-amber-200">⚠ Could not scan for cross-case matches (connection issue). <button class="cx-retry underline">Retry</button></div>'; const rb = box.querySelector('.cx-retry'); if (rb) rb.onclick = () => renderCrossref(); return; }
       const caseNum = (id) => (typeof caseNumById === 'function' && caseNumById(id)) || 'a case';
       // Flatten each case's report fields to one searchable text blob.
       const textByCase = {};

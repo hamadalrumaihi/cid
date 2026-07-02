@@ -201,7 +201,7 @@
     }
 
     function timeAgo(ts) { const s = (Date.now() - new Date(ts).getTime()) / 1000; if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago'; }
-    async function fetchActivity() { if (dbReady()) { try { AUDIT = (await DB().list('audit_log', { order: 'created_at', ascending: false })).slice(0, 12); } catch (e) {} } renderActivity(); }
+    async function fetchActivity() { if (dbReady()) { try { const r = await DB().from('audit_log').select('*').order('created_at', { ascending: false }).limit(12); AUDIT = r.data || []; } catch (e) {} } renderActivity(); }
     function renderActivity() {
       const f = $('#activity-feed'); if (!f) return;
       if (!dbReady()) { f.innerHTML = '<li class="text-sm text-slate-500">Sign in to view the division activity feed.</li>'; return; }
@@ -240,7 +240,7 @@
       const isCommand = !!(me && me.active && CMD_ROLES.includes(me.role));
       if (!dbReady() || !isCommand) { w.classList.add('hidden'); w.innerHTML = ''; return; }
       let keys = ['LSB', 'BCB', 'SAB', 'JTF'];
-      if (me.role === 'bureau_lead' && me.bureau) keys = [me.bureau];
+      if (me.role === 'bureau_lead' && me.division) keys = [me.division];   // profiles use `division`, not `bureau`
       const all = (typeof casesCache !== 'undefined' ? casesCache : []);
       w.classList.remove('hidden');
       w.innerHTML = `<div class="mb-3 flex items-center justify-between"><h3 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Bureau scorecards</h3><span class="text-[11px] text-slate-500">${me.role === 'bureau_lead' ? 'your bureau' : 'all bureaus'} · performance</span></div>
@@ -391,7 +391,7 @@
             const res = await DB().insert('cases', { case_number: full, title: ticket.description || workingId, bureau: k, status: 'open' });
             if (res.error) { const dup = /duplicate|unique|already exists|23505/i.test(res.error.message || ''); toast(dup ? `Case number ${full} already exists — choose a unique number.` : 'Case create failed: ' + res.error.message, 'danger'); return; }
             newCaseId = res.data && res.data[0] && res.data[0].id;
-            if (ticket.id) await DB().update('tickets', ticket.id, { status: 'processed', case_id: newCaseId, routed_bureau: k });
+            if (ticket.id) { const tu = await DB().update('tickets', ticket.id, { status: 'processed', case_id: newCaseId, routed_bureau: k }); if (tu && tu.error) toast('Case created, but the ticket wasn’t marked processed: ' + tu.error.message + ' — re-check the queue.', 'warn'); }
           }
           step3(full, k, newCaseId);
         };
