@@ -151,7 +151,19 @@
 
     function casesNotice(msg) { $('#cases-grid').innerHTML = `<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">${msg}</div>`; }
 
-    function showCasesList() { $('#case-detail').classList.add('hidden'); $('#cases-list').classList.remove('hidden'); }
+    // Native View Transitions API "swish" for board <-> detail. Feature-detected
+    // and disabled under reduced-motion; falls back to an instant swap otherwise.
+    // heroEl (the clicked case card) is tagged so it morphs into the detail header.
+    function withViewTransition(run, heroEl) {
+      const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!document.startViewTransition || reduce) { run(); return; }
+      if (heroEl) heroEl.style.viewTransitionName = 'case-hero';
+      const vt = document.startViewTransition(run);
+      if (heroEl) vt.finished.finally(() => { heroEl.style.viewTransitionName = ''; });
+    }
+    function showCasesList() {
+      withViewTransition(() => { $('#case-detail').classList.add('hidden'); $('#cases-list').classList.remove('hidden'); });
+    }
     function onEnterCases() { showCasesList(); if (dbReady()) fetchCases(); else casesNotice('Sign in to load live case data.'); }
 
     /* ============================================================ CASE FILES — ATTACHMENTS (per-case files via FiveManage + Supabase, #case-files) ============================================================ */
@@ -414,8 +426,13 @@
         return;
       }
       grid.innerHTML = '';
-      items.forEach((c) => {
-        const card = el('div', { class: 'cursor-pointer rounded-2xl border border-white/5 bg-ink-900/60 p-5 transition hover:border-blue-500/30 hover:bg-white/5' });
+      items.forEach((c, i) => {
+        // case-card + data-status drive the investigative skin (status stripe,
+        // stagger via --i). Structural utility classes kept for the fallback look.
+        const lead = officerName(c.lead_detective_id);
+        const card = el('div', { class: 'case-card cursor-pointer rounded-2xl border border-white/5 bg-ink-900/60 p-5 transition hover:border-blue-500/30 hover:bg-white/5' });
+        card.style.setProperty('--i', String(i));
+        card.dataset.status = c.status || '';
         card.innerHTML = `
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0"><p class="truncate font-mono text-sm font-semibold text-blue-300">${escapeHTML(c.case_number)}</p><p class="mt-0.5 truncate text-sm text-white">${escapeHTML(c.title || 'Untitled case')}</p></div>
@@ -423,8 +440,8 @@
           </div>
           <p class="mt-2 line-clamp-2 text-xs text-slate-400">${escapeHTML(c.summary || 'No summary.')}</p>
           ${c.signoff_status && c.signoff_status !== 'none' ? `<div class="mt-2"><span class="rounded px-2 py-0.5 text-[10px] font-semibold ${signoffTint(c.signoff_status)}">${escapeHTML(signoffLabel(c.signoff_status))}</span></div>` : ''}
-          <div class="mt-3 flex items-center justify-between text-[11px] text-slate-500"><span class="rounded bg-white/5 px-2 py-0.5">${escapeHTML(c.bureau)}</span><span>updated ${new Date(c.updated_at).toLocaleDateString('en-US')}</span></div>`;
-        card.addEventListener('click', () => openCaseDetail(c.id));
+          <div class="mt-3 flex items-center justify-between gap-2 text-[11px] text-slate-500"><span class="inline-flex items-center gap-1.5 truncate"><span class="rounded bg-white/5 px-2 py-0.5">${escapeHTML(c.bureau)}</span><span class="truncate" title="Assigned lead detective">👤 ${escapeHTML(lead || 'Unassigned')}</span></span><span class="whitespace-nowrap">updated ${new Date(c.updated_at).toLocaleDateString('en-US')}</span></div>`;
+        card.addEventListener('click', () => withViewTransition(() => openCaseDetail(c.id), card));
         const cchk = card.querySelector('.c-check'); if (cchk) { cchk.addEventListener('click', (e) => e.stopPropagation()); cchk.onchange = () => { if (cchk.checked) caseSel.add(c.id); else caseSel.delete(c.id); updateCaseBulkBar(); }; }
         grid.appendChild(card);
       });
@@ -590,7 +607,7 @@
       const tabs = ['overview', 'evidence', 'charges', 'rico', 'intel', 'reports', 'tasks', 'signoff', 'chat', 'timeline'];
       $('#case-detail').innerHTML = `
         <div class="mb-4 flex items-center gap-1.5 text-sm text-slate-400"><button id="case-back" class="inline-flex items-center gap-1 text-slate-300 transition hover:text-white">← Cases</button><span class="text-slate-600">/</span><span class="font-mono text-blue-300">${escapeHTML(c.case_number)}</span><span class="text-slate-600">/</span><span class="capitalize text-slate-300">${escapeHTML(detailTab)}</span></div>
-        <div class="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+        <div class="case-hero mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6" data-status="${escapeHTML(c.status || '')}">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div><p class="flex items-center gap-1.5 font-mono text-sm text-blue-300">${escapeHTML(c.case_number)}<button id="case-copy" class="text-slate-500 transition hover:text-white" title="Copy case number">📋</button></p><h3 class="text-xl font-bold text-white">${escapeHTML(c.title || 'Untitled case')}</h3><p class="mt-1 text-sm text-slate-400">${escapeHTML(c.summary || '')}</p></div>
             <div class="flex items-center gap-2">
@@ -821,7 +838,7 @@
           events.push({ t: detailCase.created_at, label: 'Case opened', dot: 'emerald' });
           events.sort((a, b) => new Date(b.t) - new Date(a.t));
           const dot = { blue: 'bg-blue-400', violet: 'bg-violet-400', amber: 'bg-amber-400', emerald: 'bg-emerald-400', cyan: 'bg-cyan-400', slate: 'bg-slate-400' };
-          body.innerHTML = `<div class="mb-4 flex items-start gap-2 rounded-lg border border-white/5 bg-ink-900/60 px-3 py-2 text-[11px] text-slate-400"><span>🛡</span><span>Every action on this case (evidence, reports, custody, sign-off, chat) is recorded with who and when. This trail is your accountability record — it protects you as much as it documents the case.</span></div><ul class="space-y-4">${events.map((e) => `<li class="flex gap-3"><span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${dot[e.dot] || 'bg-slate-400'}"></span><div><p class="text-sm text-slate-200">${escapeHTML(e.label)}</p><p class="text-[11px] text-slate-500">${e.t ? new Date(e.t).toLocaleString('en-US') : '—'}</p></div></li>`).join('')}</ul>`;
+          body.innerHTML = `<div class="mb-4 flex items-start gap-2 rounded-lg border border-white/5 bg-ink-900/60 px-3 py-2 text-[11px] text-slate-400"><span>🛡</span><span>Every action on this case (evidence, reports, custody, sign-off, chat) is recorded with who and when. This trail is your accountability record — it protects you as much as it documents the case.</span></div><ul class="case-timeline space-y-4">${events.map((e) => `<li class="tl-event flex gap-3"><span class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${dot[e.dot] || 'bg-slate-400'}"></span><div><p class="text-sm text-slate-200">${escapeHTML(e.label)}</p><p class="text-[11px] text-slate-500">${e.t ? new Date(e.t).toLocaleString('en-US') : '—'}</p></div></li>`).join('')}</ul>`;
         }
       } catch (e) { body.innerHTML = '<p class="text-sm text-rose-300">Couldn’t load — ' + escapeHTML(e.message || String(e)) + '</p>'; }
     }
@@ -833,7 +850,7 @@
       if (e.tamper && e.tamper !== 'intact') risks.push(e.tamper === 'compromised' ? 'tamper: compromised' : 'tamper: ' + e.tamper);
       if (hasCustody === false) risks.push('no chain-of-custody logged');
       const riskChip = risks.length ? `<span class="rounded bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300" title="Integrity check">⚠ ${escapeHTML(risks.join(' · '))}</span>` : '';
-      return `<div class="rounded-xl border ${risks.length ? 'border-amber-500/25' : 'border-white/10'} bg-ink-900 p-4">
+      return `<div class="evidence-card rounded-xl border ${risks.length ? 'border-amber-500/25' : 'border-white/10'} bg-ink-900 p-4">
         <div class="flex items-start justify-between gap-2"><div><p class="text-sm font-semibold text-white">${escapeHTML(e.description || e.item_code || 'Evidence')}</p><p class="text-[11px] text-slate-400">${escapeHTML(e.type || '—')}${e.item_code ? ' · ' + escapeHTML(e.item_code) : ''} · collected ${e.collected_at ? new Date(e.collected_at).toLocaleDateString('en-US') : '—'}</p>${riskChip ? '<div class="mt-1.5">' + riskChip + '</div>' : ''}</div><span class="rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${tint}">${escapeHTML(e.tamper)}</span></div>
         <div class="mt-2 flex gap-2"><button class="ev-custody rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10" data-id="${e.id}">Chain of custody</button>${(DB() && DB().canDelete()) ? `<button class="ev-del rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10" data-id="${e.id}">Delete</button>` : ''}</div>
       </div>`;

@@ -101,9 +101,10 @@
         personsNotice(PERSONS.length ? 'No persons match your filter.' : 'No persons on file.' + (DB() && DB().canEdit() ? ' Use “+ New Person”.' : '')); return;
       }
       grid.innerHTML = '';
-      items.forEach((p) => {
+      items.forEach((p, i) => {
         const flag = (p.felony_count || 0) >= 8;
-        const card = el('div', { class: 'rounded-2xl border border-white/5 bg-ink-900/60 p-5' });
+        const card = el('div', { class: 'person-card rounded-2xl border border-white/5 bg-ink-900/60 p-5' });
+        card.style.setProperty('--i', String(i));
         card.innerHTML = `
           <div class="flex items-start gap-3">
             ${(p.mugshot_url && safeUrl(p.mugshot_url)) ? `<img src="${escapeHTML(safeUrl(p.mugshot_url))}" class="h-14 w-14 flex-shrink-0 rounded-lg object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="hidden h-14 w-14 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-xl">👤</div>` : `<div class="grid h-14 w-14 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-xl">👤</div>`}

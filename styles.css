@@ -195,3 +195,151 @@ body[data-accent="rose"] .bg-badge-500{background-color:#f43f5e}
 body[data-accent="rose"] .border-badge-500{border-color:#f43f5e}
 body[data-accent="rose"] .bg-blue-500\/15{background-color:rgba(244,63,94,.15)}
 body[data-accent="rose"] .bg-blue-500\/10{background-color:rgba(244,63,94,.1)}
+
+/* ============================================================================
+   INVESTIGATIVE SKIN (2026-07-05) — restyle + native-motion pass.
+   Self-contained, hand-written (no dependency on which Tailwind utilities were
+   compiled into the bundle). Reuses the existing amber accent theme
+   (body[data-accent="amber"], now the default) and only animates transform /
+   opacity so it stays on the compositor at 60fps. All motion collapses to
+   instant under prefers-reduced-motion (see the block at the end).
+   ========================================================================== */
+:root {
+  --accent: #f59e0b;            /* deep amber, the single restrained accent */
+  --accent-soft: #fbbf24;
+  --accent-deep: #b45309;
+  --signal: #f43f5e;            /* signal red, reserved for critical/attention */
+  --hairline: rgba(245, 158, 11, .16);
+  --hairline-soft: rgba(148, 163, 184, .12);
+  --field: #0b1220;
+  --display: "Inter", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* Case-file atmosphere: a fixed, near-invisible film grain over the whole app.
+   pointer-events:none so it never intercepts clicks; opacity-only so it is free
+   to composite. Data-URI feTurbulence = zero network cost. */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+#app-shell, #login-gate { position: relative; z-index: 1; }
+
+/* Type hierarchy: display face (Inter 800, tightened) for the page + view
+   headers so headings read as a case-file masthead, mono for IDs/metadata. */
+#page-title { font-family: var(--display); font-weight: 800; letter-spacing: -.02em; }
+main h3 { font-family: var(--display); letter-spacing: -.015em; }
+.font-mono, [class*="font-mono"] { font-family: var(--mono); font-feature-settings: "tnum" 1; }
+::selection { background: rgba(245, 158, 11, .28); color: #fff; }
+
+/* Redaction-style masthead rule: a short amber underline under the page title.
+   Atmosphere only — it never covers real data. */
+#page-title { position: relative; padding-bottom: .35rem; }
+#page-title::after {
+  content: ""; position: absolute; left: 0; bottom: 0; width: 2.25rem; height: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent); border-radius: 2px;
+}
+
+/* ---- Case board cards: hairline, status stripe, hover lift, staggered entry -- */
+.case-card, .person-card, .evidence-card {
+  position: relative; overflow: hidden;
+  transition: transform .18s cubic-bezier(.16,.84,.44,1), border-color .18s ease, box-shadow .18s ease, background .18s ease;
+  will-change: transform;
+}
+.case-card:hover, .person-card:hover, .evidence-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--hairline);
+  box-shadow: 0 14px 34px -18px rgba(0,0,0,.75), 0 0 0 1px var(--hairline) inset;
+}
+.case-card:focus-visible { transform: translateY(-3px); }
+
+/* Left status stripe — instant-scan case state. Real statuses only. */
+.case-card::before, .case-hero::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: #334155; transition: background .2s ease;
+}
+.case-card[data-status="open"]::before, .case-hero[data-status="open"]::before,
+.case-card[data-status="active"]::before, .case-hero[data-status="active"]::before { background: var(--accent); }
+.case-card[data-status="cold"]::before, .case-hero[data-status="cold"]::before { background: #3b82f6; }
+.case-card[data-status="closed"]::before, .case-hero[data-status="closed"]::before { background: #10b981; }
+.case-hero { position: relative; overflow: hidden; }
+
+/* Accent sweep across a hovered card (transform-only, clipped by overflow). */
+.case-card::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: linear-gradient(105deg, transparent 30%, rgba(245,158,11,.08) 50%, transparent 70%);
+  transform: translateX(-100%); transition: opacity .2s ease;
+}
+.case-card:hover::after { opacity: 1; animation: card-sweep .7s ease; }
+@keyframes card-sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+/* Staggered entrance off the JS-supplied --i index (cheap, no JS loop). */
+@keyframes card-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+.case-card, .person-card {
+  animation: card-in .45s cubic-bezier(.16,.84,.44,1) both;
+  animation-delay: calc(min(var(--i, 0), 16) * 35ms);   /* cap the cascade so late cards are not held back */
+}
+
+/* Critical/attention pulse — driven by REAL signals (stale badge, sent-back
+   sign-off), never fabricated priority. Subtle amber ring breathing. */
+@keyframes attn-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(244,63,94,0); } 50% { box-shadow: 0 0 0 3px rgba(244,63,94,.18); } }
+.case-card:has([title^="No updates in"]) { animation: card-in .45s cubic-bezier(.16,.84,.44,1) both, attn-pulse 3.2s ease-in-out 1s infinite; }
+
+/* ---- Sidebar nav: active accent rail + hover sweep underline ---- */
+.nav-link.active { background: linear-gradient(90deg, rgba(245,158,11,.16), rgba(245,158,11,.02)); box-shadow: inset 2px 0 0 0 var(--accent); }
+.nav-link.active .nav-icon { filter: drop-shadow(0 0 6px rgba(245,158,11,.55)); }
+.nav-link { position: relative; }
+.nav-link::after {
+  content: ""; position: absolute; left: 12px; right: 12px; bottom: 6px; height: 1.5px;
+  background: var(--accent); transform: scaleX(0); transform-origin: left; opacity: .0;
+  transition: transform .22s cubic-bezier(.16,.84,.44,1), opacity .22s ease;
+}
+.nav-link:hover::after { transform: scaleX(1); opacity: .7; }
+
+/* ---- Buttons + focus: accent focus ring, tactile press ---- */
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;   /* AA-visible amber ring, overrides the blue default */
+}
+button:not(:disabled):active { transform: translateY(1px); }
+
+/* ---- Modals + backdrop: native @starting-style entrance (replaces keyframes) -- */
+.modal-backdrop { animation: none; transition: opacity .2s ease; }
+.modal-card { animation: none; transition: opacity .28s ease, transform .28s cubic-bezier(.16,.84,.44,1); border-color: var(--hairline); }
+@starting-style { .modal-backdrop { opacity: 0; } }
+@starting-style { .modal-card { opacity: 0; transform: translateY(16px) scale(.985); } }
+
+/* ---- Scroll-driven case timeline: each event reveals as it scrolls into view.
+   Pure CSS via animation-timeline:view(); guarded by @supports so unsupported
+   browsers simply show the events statically. ---- */
+@supports (animation-timeline: view()) {
+  .case-timeline .tl-event {
+    animation: tl-reveal linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 22%;
+  }
+  @keyframes tl-reveal { from { opacity: 0; transform: translateY(16px) translateX(-4px); } to { opacity: 1; transform: none; } }
+}
+
+/* ---- View Transitions API: tune the board <-> detail swish + hero morph ---- */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .32s; }
+::view-transition-group(case-hero) { animation-duration: .4s; animation-timing-function: cubic-bezier(.16,.84,.44,1); }
+.case-hero { view-transition-name: case-hero; }   /* the detail header is the morph target; the clicked card is tagged in JS */
+
+/* ---- Tablet degrade: soften the lift so touch scrolling stays crisp ---- */
+@media (max-width: 1024px) {
+  .case-card:hover, .person-card:hover, .evidence-card:hover { transform: none; }
+}
+
+/* ---- Reduced motion: collapse every skin animation + the View Transition to
+   instant. This is not optional. ---- */
+@media (prefers-reduced-motion: reduce) {
+  .case-card, .person-card, .evidence-card,
+  .case-card::after, .case-timeline .tl-event, .nav-link::after,
+  .modal-card, .modal-backdrop {
+    animation: none !important; transition: none !important;
+  }
+  .case-card:hover, .person-card:hover, .evidence-card:hover { transform: none; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+  @starting-style { .modal-card { opacity: 1; transform: none; } .modal-backdrop { opacity: 1; } }
+}

@@ -811,12 +811,12 @@
     }
     /* ---- Appearance: per-device accent + density (stored in Store) -------- */
     function applyAppearance() {
-      const acc = Store.get('accent', 'blue'), den = Store.get('density', 'comfortable');
+      const acc = Store.get('accent', 'amber'), den = Store.get('density', 'comfortable');
       if (document.body) document.body.dataset.accent = acc;
       document.documentElement.dataset.density = den;
     }
     function openAppearanceModal() {
-      const acc = Store.get('accent', 'blue'), den = Store.get('density', 'comfortable');
+      const acc = Store.get('accent', 'amber'), den = Store.get('density', 'comfortable');
       const ACCENTS = [['blue', 'Electric Blue', '#3b82f6'], ['amber', 'Amber', '#f59e0b'], ['emerald', 'Emerald', '#10b981'], ['rose', 'Rose', '#f43f5e']];
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
