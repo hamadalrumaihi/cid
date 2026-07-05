@@ -103,6 +103,9 @@
         const go = b.dataset.go;
         if (go === 'awaiting') { setCmdStatus('awaiting'); return; }   // drill stays on Command
         // Stale/unassigned → the Cases list with the matching saved-filter applied.
+        // Force 'all' scope: the default 'mine' scope would intersect these
+        // bureau-wide lists (esp. unassigned) down to the empty set.
+        if (typeof casesScope !== 'undefined') { casesScope = 'all'; if (typeof Store !== 'undefined') Store.set('casesScope', 'all'); }
         if (typeof caseFilters !== 'undefined') {
           caseFilters = { bureau: '', status: '', assignee: go === 'unassigned' ? 'unassigned' : '', stale: go === 'stale' ? 'stale' : '' };
           if (typeof activeViewName !== 'undefined') activeViewName = '';

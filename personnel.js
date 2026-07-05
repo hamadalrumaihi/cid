@@ -94,7 +94,7 @@
     const mediaSrc = (m) => m.external_url || m.storage_path || '';
     function mediaThumb(m) {
       const src = mediaSrc(m);
-      if (m.type === 'image' && src) return `<img src="${esc(src)}" alt="${esc(m.title)}" class="ev-img h-40 w-full cursor-zoom-in object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="hidden h-40 w-full items-center justify-center bg-ink-800 text-4xl">🖼️</div>`;
+      if (m.type === 'image' && safeUrl(src)) return `<img src="${esc(safeUrl(src))}" alt="${esc(m.title)}" class="ev-img h-40 w-full cursor-zoom-in object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="hidden h-40 w-full items-center justify-center bg-ink-800 text-4xl">🖼️</div>`;
       if (m.type === 'video') return `<div class="flex h-40 w-full items-center justify-center bg-ink-800 text-4xl">🎬</div>`;
       return `<div class="flex h-40 w-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-ink-800 to-ink-700"><span class="text-3xl">📡</span><span class="font-mono text-[10px] text-slate-400">${esc(src || 'fivemanage')}</span></div>`;
     }
@@ -168,9 +168,9 @@
       const isVid = m.type === 'video' || /\.(mp4|webm|mov|m4v)($|\?)/i.test(src || '');
       const isAud = m.type === 'audio' || /\.(mp3|wav|ogg|m4a)($|\?)/i.test(src || '');
       const body = !src ? `<div class="flex h-64 items-center justify-center rounded-lg bg-ink-800 text-5xl">📡</div>`
-        : m.type === 'image' ? `<img src="${esc(src)}" alt="${esc(m.title)}" class="max-h-[70vh] w-full rounded-lg object-contain" />`
-        : isVid ? `<video src="${esc(src)}" controls autoplay playsinline class="max-h-[70vh] w-full rounded-lg bg-black"></video>`
-        : isAud ? `<div class="rounded-lg bg-ink-800 p-6"><audio src="${esc(src)}" controls autoplay class="w-full"></audio></div>`
+        : m.type === 'image' ? `<img src="${esc(safeUrl(src))}" alt="${esc(m.title)}" class="max-h-[70vh] w-full rounded-lg object-contain" />`
+        : isVid ? `<video src="${esc(safeUrl(src))}" controls autoplay playsinline class="max-h-[70vh] w-full rounded-lg bg-black"></video>`
+        : isAud ? `<div class="rounded-lg bg-ink-800 p-6"><audio src="${esc(safeUrl(src))}" controls autoplay class="w-full"></audio></div>`
         : `<iframe src="${esc(safeUrl(src))}" title="${esc(m.title)}" class="h-[70vh] w-full rounded-lg bg-black"></iframe>`;
       node.innerHTML = `<div class="mb-3 flex items-center justify-between"><p class="text-sm font-semibold text-white">${esc(m.title)}</p><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>${body}<div class="mt-3 flex items-center justify-between gap-2"><div class="flex flex-wrap gap-1">${mediaTagChips(m)}</div>${src ? `<a href="${esc(safeUrl(src))}" target="_blank" rel="noopener" class="flex-shrink-0 text-xs text-blue-300 underline">Open ↗</a>` : ''}</div>`;
       node.querySelector('.close-x').onclick = closeModal;

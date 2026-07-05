@@ -19,7 +19,16 @@
 
     function inboxAwaiting(s) { return s === 'awaiting_bureau_lead' || s === 'awaiting_deputy' || s === 'awaiting_director'; }
     function inboxDaysSince(ts) { if (!ts) return 0; const d = Math.floor((Date.now() - new Date(ts).getTime()) / 86400000); return d < 0 ? 0 : d; }
-    function inboxAge(c) { return inboxDaysSince(c.signoff_submitted_at || c.updated_at || c.created_at); }
+    // Age = how long the item has needed attention. While a case is awaiting a
+    // reviewer's decision, that's time since submission (how long they've sat on
+    // it). Otherwise (bounced back, or an open case being worked) it's time since
+    // last activity — so an actively-updated case isn't mislabelled "overdue" by a
+    // stale signoff_submitted_at from an earlier cycle.
+    function inboxAge(c) {
+      return inboxAwaiting(c.signoff_status)
+        ? inboxDaysSince(c.signoff_submitted_at || c.updated_at || c.created_at)
+        : inboxDaysSince(c.updated_at || c.created_at);
+    }
     function inboxIsOverdue(c) { return inboxAge(c) >= INBOX_STALE_DAYS; }
 
     function classifyInbox(all, me) {

@@ -194,7 +194,11 @@
       downloadDocx(title, paras, filename);
     }
     function downloadCsv(filename, cols, rows) {
-      const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+      // Neutralize spreadsheet formula/DDE injection: a member-authored cell that
+      // starts with = + - @ (or a leading control char) is prefixed with ' so
+      // Excel/Sheets treat it as literal text, not a formula, when another member
+      // opens the export.
+      const q = (v) => { let s = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };
       const csv = [cols.map(q).join(',')].concat(rows.map((r) => r.map(q).join(','))).join('\r\n');
       const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
       const a = document.createElement('a'); const url = URL.createObjectURL(blob);
