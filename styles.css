@@ -343,3 +343,23 @@ button:not(:disabled):active { transform: translateY(1px); }
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
   @starting-style { .modal-card { opacity: 1; transform: none; } .modal-backdrop { opacity: 1; } }
 }
+
+/* ---- Phones: the skin degrades desktop -> tablet above; this block takes it
+   down to handset. No new markup — targets the existing card structure. ---- */
+@media (max-width: 640px) {
+  /* Case-card meta row (bureau + assigned detective + last-updated) stacks so the
+     detective name and the date each get a full line instead of crowding and
+     breaking mid-value on a ~360px screen. */
+  .case-card > div:last-of-type { flex-direction: column; align-items: flex-start; gap: .3rem; }
+  body::before { opacity: .028; }   /* grain reads heavier on small OLED panels; ease it slightly */
+}
+/* Touch devices have no hover, so the lift + sweep never fire. Give taps a crisp
+   press state instead, and drop the sweep so it can't flash on first paint. */
+@media (hover: none) {
+  .case-card, .person-card, .evidence-card { -webkit-tap-highlight-color: transparent; }
+  .case-card:active, .person-card:active, .evidence-card:active { transform: scale(.99); transition: transform .12s ease; }
+  .case-card::after { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .case-card:active, .person-card:active, .evidence-card:active { transform: none; }
+}
