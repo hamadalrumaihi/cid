@@ -122,7 +122,7 @@
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast(record ? 'Location updated' : 'Location created', 'success'); fetchPlaces();
       };
-      const pd = node.querySelector('#pl-del2'); if (pd) pd.onclick = async () => { if (!(await uiConfirm('Delete “' + p.name + '”?', { confirmText: 'Delete' }))) return; const r = await DB().remove('places', p.id); if (r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } closeModal(); toast('Location deleted', 'warn'); fetchPlaces(); };
+      const pd = node.querySelector('#pl-del2'); if (pd) pd.onclick = async () => { if (!(await uiConfirm('Delete “' + p.name + '”? Restorable via Undo.', { confirmText: 'Delete' }))) return; closeModal(); await deleteWithUndo('places', record, { label: 'Location “' + p.name + '”', after: fetchPlaces, children: [{ table: 'place_process_steps', column: 'place_id' }] }); };
       openModal(node);
     }
 

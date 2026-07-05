@@ -91,7 +91,7 @@
         const card = el('div', { class:'overflow-hidden rounded-2xl border border-white/5 bg-ink-900/60' });
         card.innerHTML = `
           <div class="flex gap-4 p-5">
-            ${r.mugshot_url ? `<img src="${esc(r.mugshot_url)}" alt="" class="h-16 w-16 flex-shrink-0 rounded-lg object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="hidden h-16 w-16 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-2xl">👤</div>` : `<div class="grid h-16 w-16 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-2xl">👤</div>`}
+            ${(r.mugshot_url && safeUrl(r.mugshot_url)) ? `<img src="${esc(safeUrl(r.mugshot_url))}" alt="" class="h-16 w-16 flex-shrink-0 rounded-lg object-cover" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'"><div class="hidden h-16 w-16 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-2xl">👤</div>` : `<div class="grid h-16 w-16 flex-shrink-0 place-items-center rounded-lg bg-ink-700 text-2xl">👤</div>`}
             <div class="min-w-0 flex-1">
               <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0"><p class="truncate font-semibold text-white">${esc(r.name)}</p><p class="text-xs text-slate-400">${esc(r.callsign || '—')}${r.bureau ? ' · ' + esc(r.bureau) : ''}</p></div>

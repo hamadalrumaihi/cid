@@ -170,7 +170,13 @@
     function openMemberModal(gangId, member) {
       const m = member || {};
       const node = el('div', { class: 'p-6' });
-      const personOpts = ['<option value="">— link person (optional) —</option>'].concat(PERSONS.map((p) => `<option value="${p.id}" ${p.id === m.person_id ? 'selected' : ''}>${escapeHTML(p.name)}</option>`)).join('');
+      // Carry the member's existing person link even if PERSONS hasn't loaded (or
+      // its fetch failed, leaving PERSONS=[]) — otherwise the select falls back to
+      // '' and the save handler below silently nulls the linkage on any edit.
+      const personKnown = m.person_id && PERSONS.some((p) => p.id === m.person_id);
+      const personOpts = ['<option value="">— link person (optional) —</option>']
+        .concat(m.person_id && !personKnown ? [`<option value="${escapeHTML(m.person_id)}" selected>(linked person — loading…)</option>`] : [])
+        .concat(PERSONS.map((p) => `<option value="${p.id}" ${p.id === m.person_id ? 'selected' : ''}>${escapeHTML(p.name)}</option>`)).join('');
       // Preserve a link to a case the current viewer can't see (another bureau):
       // it's absent from the bureau-scoped casesCache, so without a carried option
       // the select would fall back to '' and silently null the linkage on save.

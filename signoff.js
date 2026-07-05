@@ -154,8 +154,13 @@
       const owner = officerName(c.lead_detective_id);
       const submitter = officerName(c.signoff_submitted_by);
       const assignee = officerName(c.signoff_assignee_id);
-      const isOwnerSide = meId() && (meId() === c.lead_detective_id || meId() === c.signoff_submitted_by || SUBMIT_ROLES.includes(meRole()));
-      const canSubmit = (status === 'none' || status === 'changes_requested' || status === 'denied') && (meId() === c.lead_detective_id || SUBMIT_ROLES.includes(meRole()) || canReassign());
+      // Owner stop-point actions (complete / escalate) mirror the signoff_owner_action
+      // RPC: only the lead detective or the original submitter.
+      const isOwnerSide = meId() && (meId() === c.lead_detective_id || meId() === c.signoff_submitted_by);
+      // Owner-only submit (mirrors the signoff_submit RPC): the lead detective,
+      // or the opener when no lead is assigned yet.
+      const isOwner = meId() && (meId() === c.lead_detective_id || (!c.lead_detective_id && meId() === c.created_by));
+      const canSubmit = (status === 'none' || status === 'changes_requested' || status === 'denied') && isOwner;
       const canReview = stage && SIGNOFF.roles[stage] && SIGNOFF.roles[stage].includes(meRole()) && meProfile() && meProfile().active;
       const canDecide = status === 'approved_deputy' && isOwnerSide;
 
@@ -190,7 +195,7 @@
                <p class="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">${status === 'none' ? 'Submit for sign-off' : 'Resubmit for sign-off'}</p>
                <button id="so-submit" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Submit for review →</button>` : ''}
            </div>`
-        : (status === 'none' ? '<p class="mt-4 text-sm text-slate-500">This case has not been submitted for sign-off. Only the case owner (Detective/Senior Detective) can submit it.</p>' : '');
+        : (status === 'none' ? '<p class="mt-4 text-sm text-slate-500">This case has not been submitted for sign-off. Only the case owner (lead detective) can submit it.</p>' : '');
 
       body.innerHTML = `
         <div class="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
