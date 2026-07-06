@@ -570,6 +570,18 @@
        create/edit is command staff — gated here for UX and enforced server-side
        by the documents RLS folder guard. */
     const SOP_FOLDER = 'SOPs';
+    const sopTitle = (d) => String(d.name || '').replace(/\.(docx?|pdf|sheet)$/i, '');
+    // Render plain doc text as a readable article: blank-line-separated blocks,
+    // short ALL-CAPS / colon-terminated lines become section headings. All escaped.
+    function sopArticle(body) {
+      const blocks = String(body || '').split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
+      if (!blocks.length) return '<p class="text-slate-500">No content.</p>';
+      return blocks.map((b) => {
+        const oneLine = !b.includes('\n');
+        const heading = oneLine && b.length <= 64 && (b === b.toUpperCase() && /[A-Z]/.test(b) || /:$/.test(b));
+        return heading ? `<h3>${esc(b.replace(/:$/, ''))}</h3>` : `<p>${esc(b).replace(/\n/g, '<br>')}</p>`;
+      }).join('');
+    }
     function onEnterSops() {
       if (typeof fetchDocuments === 'function' && dbReady()) fetchDocuments().then(renderSops); else renderSops();
     }
@@ -587,7 +599,7 @@
         card.style.setProperty('--i', String(i));
         const body = (d.content && d.content.body) || '';
         card.innerHTML = `
-          <p class="text-sm font-semibold text-white">${esc(d.name)}</p>
+          <p class="text-sm font-semibold text-white">${esc(sopTitle(d))}</p>
           <p class="mt-1 line-clamp-3 text-xs text-slate-400">${esc(body.slice(0, 200)) || 'No content yet.'}</p>
           <p class="t-readout mt-3 text-[10px] uppercase text-slate-500">${d.folder === 'Resources' ? 'LIBRARY' : 'SOP'} // ${esc(d.modified_label || 'undated')}</p>`;
         card.onclick = () => openSopReader(d, canManage);
@@ -597,9 +609,9 @@
     function openSopReader(d, canManage) {
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
-        <div class="mb-4 flex items-center justify-between gap-3"><h3 class="min-w-0 truncate text-lg font-bold text-white">${esc(d.name)}</h3><button aria-label="Close" class="close-x flex-shrink-0 text-2xl leading-none text-slate-400 hover:text-white">&times;</button></div>
-        <p class="t-readout mb-3 text-[10px] uppercase tracking-widest text-slate-500">${d.folder === 'Resources' ? 'Reference library document' : 'Standard operating procedure'} // ${esc(d.modified_label || 'undated')}</p>
-        <div class="max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-lg border border-white/5 bg-ink-900 p-4 text-sm leading-relaxed text-slate-200">${esc((d.content && d.content.body) || 'No content.')}</div>
+        <div class="mb-4 flex items-center justify-between gap-3"><h3 class="min-w-0 truncate text-lg font-bold text-white">${esc(sopTitle(d))}</h3><button aria-label="Close" class="close-x flex-shrink-0 text-2xl leading-none text-slate-400 hover:text-white">&times;</button></div>
+        <p class="t-readout mb-3 text-[10px] uppercase tracking-widest text-slate-500">${d.folder === 'Resources' ? 'Reference library document' : 'Standard operating procedure'} // ${esc(d.modified_label || 'undated')}${(d.content && d.content.sync && d.content.sync.source === 'gdrive') ? ' // SYNCED FROM GOOGLE DRIVE' : ''}</p>
+        <div class="sop-prose max-h-[65vh] overflow-y-auto rounded-lg border border-white/5 bg-ink-900 p-6">${sopArticle(d.content && d.content.body)}</div>
         ${canManage ? '<div class="mt-4 flex gap-2"><button id="sop-edit" class="flex-1 rounded-lg border border-white/10 bg-white/5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">Edit</button><button id="sop-del" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button></div>' : ''}`;
       node.querySelector('.close-x').onclick = closeModal;
       const ed = node.querySelector('#sop-edit'); if (ed) ed.onclick = () => { closeModal(); openSopEditor(d); };
