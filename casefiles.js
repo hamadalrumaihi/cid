@@ -1274,7 +1274,7 @@
         subscribe('commendations', () => { if (active('personnel')) fetchCommendations(); });
         subscribe('media', () => { if (active('media') || detailOpen()) fetchMedia(); });
         subscribe('mo_profiles', () => { if (active('modus')) fetchMoProfiles(); });
-        subscribe('documents', () => { if (active('drive', 'sops')) fetchDocuments(); });
+        subscribe('documents', () => { if (active('drive', 'sops', 'personnel', 'gangs')) fetchDocuments().then(() => { if (typeof refreshSopSurfaces === 'function') refreshSopSurfaces(); }); });
         subscribe('gangs', () => { if (active('gangs', 'network', 'vehicles')) fetchGangs(); });
         subscribe('persons', () => { if (active('command', 'persons', 'network', 'vehicles', 'bolo')) fetchPersons(); renderKPIs(); });
         subscribe('narcotics', () => { if (active('narcotics')) fetchDrugs(); });
