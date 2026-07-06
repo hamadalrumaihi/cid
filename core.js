@@ -703,6 +703,8 @@
       reports:    { title: 'Report Generation', sub: 'Template-driven reports & supplemental chains' },
       rico:       { title: 'RICO Builder', sub: 'Enterprise & predicate-act element tracker' },
       drive:      { title: 'CID General', sub: 'Shared investigative drive' },
+      penal:      { title: 'Penal Code', sub: 'San Andreas statutes, sentences & fines' },
+      sops:       { title: 'Standard Operating Procedures', sub: 'Division policy, managed by command staff' },
       records:    { title: 'CID Records', sub: 'Live shared division records' },
       announce:   { title: 'Announcements', sub: 'Division-wide notices from command staff' },
       'case-files': { title: 'Case Files — Attachments', sub: 'Files uploaded and linked per case' },
@@ -723,13 +725,14 @@
       { id: 'cases',     label: 'Cases',        tabs: ['cases', 'case-files', 'rico'] },
       { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'network', 'narcotics', 'ballistics', 'modus', 'media'] },
       { id: 'drive',     label: 'Drive',        tabs: ['drive', 'records'] },
+      { id: 'reference', label: 'Reference',    tabs: ['penal', 'sops'] },
       { id: 'oversight', label: 'Oversight',    tabs: ['inbox', 'shifts', 'audit'] },
     ];
     const TAB_LABEL = {
       command: 'Dashboard', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
       cases: 'Case Files', 'case-files': 'Attachments', rico: 'RICO',
       persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector', media: 'Media Vault',
-      drive: 'CID General', records: 'Records', inbox: 'My Desk', shifts: 'Shift Reports', audit: 'Audit Log',
+      drive: 'CID General', records: 'Records', penal: 'Penal Code', sops: 'SOPs', inbox: 'My Desk', shifts: 'Shift Reports', audit: 'Audit Log',
     };
     const TAB_CATEGORY = {}; NAV_CATEGORIES.forEach((c) => c.tabs.forEach((t) => { TAB_CATEGORY[t] = c.id; }));
     const CAT_DEFAULT = {}; NAV_CATEGORIES.forEach((c) => { CAT_DEFAULT[c.id] = c.tabs[0]; });
@@ -768,6 +771,8 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
       closeDrawer();
       if (tab === 'cases' && typeof onEnterCases === 'function') onEnterCases();
+      if (tab === 'penal' && typeof onEnterPenal === 'function') onEnterPenal();
+      if (tab === 'sops' && typeof onEnterSops === 'function') onEnterSops();
       if (tab === 'persons' && typeof onEnterPersons === 'function') onEnterPersons();
       if (tab === 'gangs' && typeof onEnterGangs === 'function') onEnterGangs();
       if (tab === 'narcotics' && typeof onEnterNarcotics === 'function') onEnterNarcotics();
