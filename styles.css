@@ -363,3 +363,71 @@ button:not(:disabled):active { transform: translateY(1px); }
 @media (prefers-reduced-motion: reduce) {
   .case-card:active, .person-card:active, .evidence-card:active { transform: none; }
 }
+
+/* ============================================================================
+   TACTICAL CONTROL PANEL (2026-07-05) — evolves the investigative skin into a
+   dense, matte-obsidian instrument panel. Later-in-file rules deliberately
+   override the earlier skin where the two disagree (corners, accent hue).
+   Palette: neon cyan (operational) / tactical amber (attention) / low-sat
+   green (clear). Still zero dependencies; transform/opacity motion only.
+   ========================================================================== */
+:root {
+  --t-cyan: #22d3ee; --t-amber: #f59e0b; --t-green: #34d399; --t-rose: #fb7185;
+  --t-line: rgba(148, 163, 184, .16);          /* ultra-thin structural hairline */
+  --t-cyanline: rgba(34, 211, 238, .30);
+  --t-field: rgba(255, 255, 255, .02);         /* near-flat section fill on the obsidian base */
+}
+body { background: #050708; }
+
+/* Uniform obsidian: flatten the heavy card fills into faint fields defined by
+   their borders, not their backgrounds. Inputs keep a solid fill for usability. */
+#app-shell .bg-ink-900\/60 { background-color: var(--t-field); }
+#app-shell .border-white\/5 { border-color: var(--t-line); }
+#app-shell .grid-texture { background-image: linear-gradient(rgba(34,211,238,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,.03) 1px, transparent 1px); }
+
+/* Sharp geometry: collapse the rounded-card language to 2-3px. Pills, dots and
+   avatars (rounded-full) stay circular by design. */
+#app-shell .rounded-2xl, #app-shell .rounded-xl { border-radius: 3px; }
+#app-shell .rounded-lg, #app-shell .rounded-md, #app-shell .rounded { border-radius: 2px; }
+.modal-card { border-radius: 3px; }
+
+/* Chamfered top-right corner on case cards + KPI tiles: the one non-rectangular
+   cue, cut with clip-path so it costs nothing. */
+.case-card, .kpi-tile { clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%); border-radius: 2px; }
+.case-card:hover { box-shadow: none; }   /* clip-path would crop the old glow; border carries the hover state now */
+
+/* KPI tiles: strip the gradient wash so only the accent border defines them;
+   metrics read in mono like an instrument cluster. */
+#kpi-grid .bg-gradient-to-br { background-image: none; background-color: var(--t-field); }
+.kpi-value { font-family: var(--mono); font-weight: 600; letter-spacing: -.01em; }
+.kpi-icon svg { opacity: .7; }
+.t-standby { font-size: .5em; font-weight: 500; color: #64748b; letter-spacing: .12em; vertical-align: middle; }
+.t-readout { font-family: var(--mono); letter-spacing: .04em; }
+
+/* Micro-indicators: 7px status dots; reuse .pulse-dot for the breathing ping. */
+.t-dot { display: inline-block; width: 7px; height: 7px; border-radius: 9999px; vertical-align: middle; background: #64748b; }
+.t-dot-cyan { background: var(--t-cyan); } .t-dot-amber { background: var(--t-amber); }
+.t-dot-green { background: var(--t-green); } .t-dot-rose { background: var(--t-rose); }
+
+/* Retune the accent system cyan-first (overrides the amber-first skin above). */
+#page-title::after { background: linear-gradient(90deg, var(--t-cyan), transparent); }
+.nav-link.active { background: linear-gradient(90deg, rgba(34,211,238,.12), rgba(34,211,238,.02)); box-shadow: inset 2px 0 0 0 var(--t-cyan); }
+.nav-link.active .nav-icon { filter: drop-shadow(0 0 6px rgba(34,211,238,.55)); color: var(--t-cyan); }
+.nav-link .nav-icon { color: #7d8ba1; }
+.nav-link::after { background: var(--t-cyan); }
+.bnav-link.active { color: var(--t-cyan); }
+.bnav-link.active span:first-child { filter: drop-shadow(0 0 6px rgba(34,211,238,.6)); }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline-color: var(--t-cyan); }
+.case-card::after { background: linear-gradient(105deg, transparent 30%, rgba(34,211,238,.07) 50%, transparent 70%); }
+.case-card:hover, .person-card:hover, .evidence-card:hover { border-color: var(--t-cyanline); }
+
+/* Status stripes, tactical mapping: operational=cyan, cold=slate, closed=green. */
+.case-card::before, .case-hero::before { width: 2px; }
+.case-card[data-status="open"]::before, .case-hero[data-status="open"]::before,
+.case-card[data-status="active"]::before, .case-hero[data-status="active"]::before { background: var(--t-cyan); }
+.case-card[data-status="cold"]::before, .case-hero[data-status="cold"]::before { background: #64748b; }
+.case-card[data-status="closed"]::before, .case-hero[data-status="closed"]::before { background: var(--t-green); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot::after { animation: none !important; }
+}

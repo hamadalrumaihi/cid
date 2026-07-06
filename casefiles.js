@@ -302,7 +302,7 @@
     function staleBadge(c) {
       if (c.status === 'closed' || c.status === 'cold') return '';
       const d = caseStaleDays(c); if (d < 14) return '';
-      return `<span class="flex-shrink-0 rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300" title="No updates in ${d} days">⏳ ${d}d stale</span>`;
+      return `<span class="t-readout flex-shrink-0 rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300" title="No updates in ${d} days"><span class="t-dot t-dot-amber pulse-dot"></span> ${d}D STALE</span>`;
     }
 
     // Wave 1: auto-escalate cases gone quiet ≥14d. Runs once per load. The first
@@ -440,7 +440,7 @@
           </div>
           <p class="mt-2 line-clamp-2 text-xs text-slate-400">${escapeHTML(c.summary || 'No summary.')}</p>
           ${c.signoff_status && c.signoff_status !== 'none' ? `<div class="mt-2"><span class="rounded px-2 py-0.5 text-[10px] font-semibold ${signoffTint(c.signoff_status)}">${escapeHTML(signoffLabel(c.signoff_status))}</span></div>` : ''}
-          <div class="mt-3 flex items-center justify-between gap-2 text-[11px] text-slate-500"><span class="inline-flex items-center gap-1.5 truncate"><span class="rounded bg-white/5 px-2 py-0.5">${escapeHTML(c.bureau)}</span><span class="truncate" title="Assigned lead detective">👤 ${escapeHTML(lead || 'Unassigned')}</span></span><span class="whitespace-nowrap">updated ${new Date(c.updated_at).toLocaleDateString('en-US')}</span></div>`;
+          <div class="mt-3 flex items-center justify-between gap-2 text-[11px] text-slate-500"><span class="inline-flex items-center gap-1.5 truncate"><span class="t-readout rounded bg-white/5 px-2 py-0.5">${escapeHTML(c.bureau)}</span><span class="inline-flex items-center gap-1 truncate" title="Assigned lead detective">${(typeof tIcon === 'function') ? tIcon('user', 12) : ''} ${escapeHTML(lead || 'Unassigned')}</span></span><span class="t-readout whitespace-nowrap">UPD ${new Date(c.updated_at).toLocaleDateString('en-US')}</span></div>`;
         card.addEventListener('click', () => withViewTransition(() => openCaseDetail(c.id), card));
         const cchk = card.querySelector('.c-check'); if (cchk) { cchk.addEventListener('click', (e) => e.stopPropagation()); cchk.onchange = () => { if (cchk.checked) caseSel.add(c.id); else caseSel.delete(c.id); updateCaseBulkBar(); }; }
         grid.appendChild(card);
