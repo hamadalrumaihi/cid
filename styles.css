@@ -488,3 +488,82 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 /* Telemetry readout is real data (stamped by fetchCases), so it stays in the
    a11y tree; empty until the first successful sync. */
 #sys-telemetry:empty { display: none; }
+
+/* ============================================================================
+   HARDWARE INSTRUMENT LAYER (2026-07-06) — skeuomorphic depth pass. Replaces
+   the flat chamfer geometry with machined-console tiles: beveled edges,
+   recessed wells, CRT scanline glass on the metrics. Paint-only effects
+   (box-shadow/background); the only animated property is still transform.
+   ========================================================================== */
+/* Deep metallic console base plate */
+body { background: radial-gradient(circle at 50% 20%, #10151d 0%, #06090d 100%); }
+
+/* 3D recessed instrument tile: bevel highlight, edge shadow, occlusion, well. */
+.kpi-tile, .case-card {
+  clip-path: none;                       /* retire the flat 2D chamfer for genuine depth */
+  border-radius: 6px;
+  background: linear-gradient(145deg, #0b1017, #070a0e);
+  box-shadow:
+    -1px -1px 0px 0px rgba(255, 255, 255, 0.05),   /* physical top bevel */
+    1px 1px 0px 0px rgba(0, 0, 0, 0.6),            /* physical bottom edge shadow */
+    0px 12px 24px -10px rgba(0, 0, 0, 0.9),        /* base occlusion */
+    inset 0px 2px 8px 0px rgba(0, 0, 0, 0.8);      /* recessed hardware well */
+  border: 1px solid #141c26;
+  transition: transform .25s cubic-bezier(.25,.8,.25,1), box-shadow .25s cubic-bezier(.25,.8,.25,1), border-color .25s ease, background-color .25s ease;
+}
+/* KPI tiles carry their accent color on the border already; thicken the left
+   edge into a module rail instead of dead :has(.t-dot) selectors. */
+#kpi-grid .kpi-tile { border-left-width: 3px; }
+
+/* CRT glass overlay on the metric screens (scanlines + faint phosphor drift). */
+.kpi-tile::before {
+  content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; opacity: .6;
+  background: linear-gradient(rgba(18,24,32,0) 50%, rgba(0,0,0,.25) 50%), linear-gradient(90deg, rgba(34,211,238,.02), rgba(0,0,0,0));
+  background-size: 100% 4px, 6px 100%;
+}
+
+/* Tactile hover: the tile lifts off the plate; shadow structure pops outward. */
+.kpi-tile.cursor-pointer:hover, .case-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  background: linear-gradient(145deg, #0f1622, #080c12);
+  border-color: rgba(34, 211, 238, 0.35);
+  box-shadow:
+    -1px -1px 0px 0px rgba(255, 255, 255, 0.08),
+    0px 20px 38px -12px rgba(0, 0, 0, 0.95),
+    0px 0px 12px 0px rgba(34, 211, 238, 0.15),     /* ambient backing glow */
+    inset 0px 1px 4px 0px rgba(0, 0, 0, 0.5);
+}
+
+/* Instrument glow on the mono readouts. */
+.kpi-value { text-shadow: 0 0 2px rgba(255,255,255,.6), 0 0 8px rgba(255,255,255,.2); }
+
+/* Extruded navigation dock with an aluminum edge rim (our dock is #bottom-nav). */
+#bottom-nav {
+  background: linear-gradient(0deg, #030507 0%, #090d14 100%);
+  border-top: 1px solid #161f2c;
+  box-shadow: 0px -4px 20px 0px rgba(0,0,0,.8), inset 0px 1px 0px 0px rgba(255,255,255,.05);
+}
+
+@media (hover: none) { .case-card:active, .kpi-tile:active { transform: scale(.99); } }
+@media (prefers-reduced-motion: reduce) {
+  .kpi-tile, .case-card, .kpi-tile.cursor-pointer:hover, .case-card:hover { transition: none; transform: none; }
+}
+
+/* ---- Identity & dossier pass (2026-07-06) ---------------------------------- */
+/* Case detail tabs read as physical file-folder tabs. Active tab detection
+   reuses the template's border-badge-500 class. */
+#detail-tabs .detail-tab { font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; border-radius: 4px 4px 0 0; }
+#detail-tabs .detail-tab.border-badge-500 { background: linear-gradient(180deg, rgba(34,211,238,.10), transparent); border-color: var(--t-cyan); }
+#detail-body h4 { font-family: var(--mono); letter-spacing: .08em; }
+
+/* Login gate boot sequence: children fade up in order; instant under RM. */
+.gate-boot > * { animation: card-in .5s cubic-bezier(.16,.84,.44,1) both; }
+.gate-boot > *:nth-child(2) { animation-delay: .12s; }
+.gate-boot > *:nth-child(3) { animation-delay: .24s; }
+@media (prefers-reduced-motion: reduce) { .gate-boot > * { animation: none !important; } }
+
+/* Bureau chips: one hue per bureau so unit ownership scans instantly. */
+[data-bureau="LSB"] { color: #7dd3fc; }
+[data-bureau="BCB"] { color: #c4b5fd; }
+[data-bureau="SAB"] { color: #fcd34d; }
+[data-bureau="JTF"] { color: #86efac; }

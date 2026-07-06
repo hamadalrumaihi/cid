@@ -422,7 +422,7 @@
       if (!items.length) {
         const scopedEmpty = casesScope === 'mine' && mine && casesCache.length;
         const filtered = activeCaseFilterCount() > 0;
-        casesNotice(filtered ? 'No cases match the active filters. <button id="cf-empty-clear" class="text-blue-300 underline hover:text-blue-200">Clear filters</button>' : (scopedEmpty ? 'No cases led by you. Switch to “All” to see every case.' : (casesCache.length ? 'No cases match your filter.' : 'No case files yet.' + (DB() && DB().canEdit() ? ' Use “+ New Case” to create the first.' : ''))));
+        casesNotice(filtered ? 'No cases match the active filters. <button id="cf-empty-clear" class="text-blue-300 underline hover:text-blue-200">Clear filters</button>' : (scopedEmpty ? 'No cases led by you. Switch to “All” to see every case.' : (casesCache.length ? 'No cases match your filter.' : 'NO CASE FILES ON RECORD // SECTOR QUIET.' + (DB() && DB().canEdit() ? ' Use “+ New Case” to create the first.' : ''))));
         const ec = $('#cf-empty-clear'); if (ec) ec.onclick = () => { caseFilters = { bureau: '', status: '', assignee: '', stale: '' }; activeViewName = ''; persistCaseFilters(); renderCases(); };
         return;
       }
@@ -437,12 +437,12 @@
         if (staleBadge(c)) card.dataset.stale = 'true';   // durable hook for the CSS attention pulse
         card.innerHTML = `
           <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0"><p class="truncate font-mono text-sm font-semibold text-blue-300">${escapeHTML(c.case_number)}</p><p class="mt-0.5 truncate text-sm text-white">${escapeHTML(c.title || 'Untitled case')}</p></div>
+            <div class="min-w-0"><p class="truncate font-mono text-sm font-semibold text-blue-300">${escapeHTML(String(c.case_number || '').replace('-', ' \u00b7 '))}</p><p class="mt-0.5 truncate text-sm text-white">${escapeHTML(c.title || 'Untitled case')}</p></div>
             <div class="flex flex-shrink-0 items-center gap-1.5">${staleBadge(c)}<span class="rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${caseStatusTint(c.status)}">${escapeHTML(c.status)}</span>${(DB() && DB().canDelete()) ? `<label class="flex items-center pl-0.5" title="Select for bulk delete"><input type="checkbox" class="c-check h-4 w-4 accent-rose-500" data-id="${c.id}"${caseSel.has(c.id) ? ' checked' : ''}></label>` : ''}</div>
           </div>
           <p class="mt-2 line-clamp-2 text-xs text-slate-400">${escapeHTML(c.summary || 'No summary.')}</p>
           ${c.signoff_status && c.signoff_status !== 'none' ? `<div class="mt-2"><span class="rounded px-2 py-0.5 text-[10px] font-semibold ${signoffTint(c.signoff_status)}">${escapeHTML(signoffLabel(c.signoff_status))}</span></div>` : ''}
-          <div class="mt-3 flex items-center justify-between gap-2 text-[11px] text-slate-500"><span class="inline-flex items-center gap-1.5 truncate"><span class="t-readout rounded bg-white/5 px-2 py-0.5">${escapeHTML(c.bureau)}</span><span class="inline-flex items-center gap-1 truncate" title="Assigned lead detective">${(typeof tIcon === 'function') ? tIcon('user', 12) : ''} ${escapeHTML(lead || 'Unassigned')}</span></span><span class="t-readout whitespace-nowrap">UPD ${new Date(c.updated_at).toLocaleDateString('en-US')}</span></div>`;
+          <div class="mt-3 flex items-center justify-between gap-2 text-[11px] text-slate-500"><span class="inline-flex items-center gap-1.5 truncate"><span class="t-readout rounded bg-white/5 px-2 py-0.5" data-bureau="${escapeHTML(c.bureau)}">${escapeHTML(c.bureau)}</span><span class="inline-flex items-center gap-1 truncate" title="Assigned lead detective">${(typeof tIcon === 'function') ? tIcon('user', 12) : ''} ${escapeHTML(lead || 'Unassigned')}</span></span><span class="t-readout whitespace-nowrap" title="${escapeHTML(new Date(c.updated_at).toLocaleString('en-US'))}">UPD ${(typeof timeAgo === 'function' ? escapeHTML(timeAgo(c.updated_at).toUpperCase()) : new Date(c.updated_at).toLocaleDateString('en-US'))}</span></div>`;
         card.addEventListener('click', () => withViewTransition(() => openCaseDetail(c.id), card));
         const cchk = card.querySelector('.c-check'); if (cchk) { cchk.addEventListener('click', (e) => e.stopPropagation()); cchk.onchange = () => { if (cchk.checked) caseSel.add(c.id); else caseSel.delete(c.id); updateCaseBulkBar(); }; }
         grid.appendChild(card);
@@ -610,6 +610,7 @@
       $('#case-detail').innerHTML = `
         <div class="mb-4 flex items-center gap-1.5 text-sm text-slate-400"><button id="case-back" class="inline-flex items-center gap-1 text-slate-300 transition hover:text-white">← Cases</button><span class="text-slate-600">/</span><span class="font-mono text-blue-300">${escapeHTML(c.case_number)}</span><span class="text-slate-600">/</span><span class="capitalize text-slate-300">${escapeHTML(detailTab)}</span></div>
         <div class="case-hero mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6" data-status="${escapeHTML(c.status || '')}">
+          <p class="t-readout mb-3 text-[10px] uppercase tracking-widest text-slate-500">Case file // ${escapeHTML(c.case_number)} // ${escapeHTML(c.bureau)} bureau // ${escapeHTML((c.status || 'open').toUpperCase())}</p>
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div><p class="flex items-center gap-1.5 font-mono text-sm text-blue-300">${escapeHTML(c.case_number)}<button id="case-copy" class="text-slate-500 transition hover:text-white" title="Copy case number">📋</button></p><h3 class="text-xl font-bold text-white">${escapeHTML(c.title || 'Untitled case')}</h3><p class="mt-1 text-sm text-slate-400">${escapeHTML(c.summary || '')}</p></div>
             <div class="flex items-center gap-2">
