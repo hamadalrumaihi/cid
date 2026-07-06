@@ -28,7 +28,7 @@
       const nb = $('#vehicle-new'); if (nb) nb.classList.toggle('hidden', !canEdit);
       if (!dbReady()) { vehiclesNotice('Live vehicle records require sign-in.'); return; }
       const fi = $('#vehicle-filter'); if (fi) fi.classList.toggle('hidden', !VEHICLES.length);
-      if (!VEHICLES.length) { vehiclesNotice('No vehicles on file yet.' + (canEdit ? ' Use “+ New Vehicle” to log the first plate.' : '')); return; }
+      if (!VEHICLES.length) { vehiclesNotice('NO VEHICLES ON FILE // REGISTRY EMPTY.' + (canEdit ? ' Use “+ New Vehicle” to log the first plate.' : '')); return; }
       const q = vehicleFilter.trim().toLowerCase();
       const rows = !q ? VEHICLES : VEHICLES.filter((v) => [v.plate, v.model, v.color, v.notes, vhOwnerName(v.owner_id), vhGangName(v.gang_id)].some((s) => (s || '').toLowerCase().includes(q)));
       if (!rows.length) { vehiclesNotice('No vehicles match “' + escapeHTML(vehicleFilter.trim()) + '”.'); return; }
@@ -148,7 +148,7 @@
         const p = (typeof PERSONS !== 'undefined' ? PERSONS : []).find((x) => x.id === pid);
         alerts.push({ icon: '👤', label: p ? p.name : 'Linked person', kind: 'Person in multiple cases', cases: s });
       });
-      if (!alerts.length) { box.innerHTML = '<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-5 text-sm text-slate-500">🔍 No cross-case matches yet. Alerts appear here when the same phone, plate, or person surfaces in two or more cases.</div>'; return; }
+      if (!alerts.length) { box.innerHTML = '<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-5 text-sm text-slate-500">NO CROSS-CASE MATCHES // SCAN COMPLETE. Alerts appear here when the same phone, plate, or person surfaces in two or more cases.</div>'; return; }
       box.innerHTML = `<p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-amber-300/80">⚡ Cross-reference alerts (${alerts.length})</p>
         <div class="space-y-2">${alerts.map((a) => `
           <div class="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
@@ -171,7 +171,7 @@
       const canEdit = DB() && DB().canEdit();
       const allBolo = (typeof PERSONS !== 'undefined' ? PERSONS : []).filter((p) => p.bolo);
       const fi = $('#bolo-filter'); if (fi) fi.classList.toggle('hidden', !allBolo.length);
-      if (!allBolo.length) { grid.innerHTML = '<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">No active BOLOs. Flag a person via Persons → Edit → “Active BOLO”.</div>'; return; }
+      if (!allBolo.length) { grid.innerHTML = '<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">NO ACTIVE BOLOS // SECTOR QUIET. Flag a person via Persons → Edit → “Active BOLO”.</div>'; return; }
       const bq = boloFilter.trim().toLowerCase();
       const people = !bq ? allBolo : allBolo.filter((p) => [p.name, p.alias, p.status, vhGangName(p.gang_id)].some((s) => (s || '').toLowerCase().includes(bq)));
       if (!people.length) { grid.innerHTML = '<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">No BOLOs match “' + escapeHTML(boloFilter.trim()) + '”.</div>'; return; }

@@ -98,7 +98,7 @@
           const qa = $('#person-quickadd'); if (qa) qa.onclick = () => openPersonModal(null, { name: raw });
           return;
         }
-        personsNotice(PERSONS.length ? 'No persons match your filter.' : 'No persons on file.' + (DB() && DB().canEdit() ? ' Use “+ New Person”.' : '')); return;
+        personsNotice(PERSONS.length ? 'No persons match your filter.' : 'NO PERSONS ON FILE // INDEX EMPTY.' + (DB() && DB().canEdit() ? ' Use “+ New Person”.' : '')); return;
       }
       grid.innerHTML = '';
       items.forEach((p, i) => {

@@ -27,7 +27,7 @@
   <title>CID Portal — Criminal Investigation Division | State of San Andreas</title>
 
   <!-- Tailwind CSS — precompiled & inlined (production-safe, offline, no runtime warning) -->
-    <link rel="stylesheet" href="styles.css?v=20260706b" />
+    <link rel="stylesheet" href="styles.css?v=20260706c" />
 
   <!-- Typefaces -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -41,17 +41,17 @@
 
   <!-- ====================================================== LOGIN GATE ====================================================== -->
   <div id="login-gate" class="items-center justify-center bg-ink-950 p-6">
-    <div class="w-full max-w-md rounded-2xl border border-white/10 bg-ink-900 p-8 shadow-glow">
+    <div class="gate-boot w-full max-w-md rounded-2xl border border-white/10 bg-ink-900 p-8 shadow-glow">
       <div class="mb-6 flex items-center gap-3">
         <div class="grid h-12 w-12 flex-shrink-0 place-items-center rounded-xl bg-gradient-to-br from-badge-500 to-blue-700 shadow-glow">
-          <svg class="h-7 w-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+          <svg class="h-7 w-7 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5l8 3v6.5c0 5.2-3.6 8.7-8 9.5-4.4-.8-8-4.3-8-9.5V5.5z"/><path d="M12 6l1.2 2.4 2.6.4-1.9 1.9.5 2.6-2.4-1.2-2.4 1.2.5-2.6-1.9-1.9 2.6-.4z"/><path d="M8 17h8"/></svg>
         </div>
         <div>
           <h1 class="text-lg font-bold text-white">CID Portal</h1>
           <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-blue-300/70">San Andreas · Secure Access</p>
         </div>
       </div>
-      <div id="gate-body"><p class="text-sm text-slate-400">Initializing secure session…</p></div>
+      <p class="t-readout mb-4 flex items-center gap-2 rounded border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[10px] uppercase tracking-widest text-amber-300/90"><span class="t-dot t-dot-amber pulse-dot"></span> Authorized personnel only // All access is logged</p><div id="gate-body"><p class="text-sm text-slate-400">Initializing secure session…</p></div>
     </div>
   </div>
 
@@ -66,7 +66,7 @@
 
       <div class="sidebar-head flex items-center gap-3 border-b border-white/5 px-5 py-5">
         <div class="relative grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-gradient-to-br from-badge-500 to-blue-700 shadow-glow">
-          <svg class="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+          <svg class="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5l8 3v6.5c0 5.2-3.6 8.7-8 9.5-4.4-.8-8-4.3-8-9.5V5.5z"/><path d="M12 6l1.2 2.4 2.6.4-1.9 1.9.5 2.6-2.4-1.2-2.4 1.2.5-2.6-1.9-1.9 2.6-.4z"/><path d="M8 17h8"/></svg>
         </div>
         <div class="sidebar-hide leading-tight">
           <h1 class="text-base font-bold tracking-tight text-white">CID Portal</h1>
@@ -676,37 +676,37 @@
   </script>
 
   <!-- ===== APPLICATION JS (feature-split classic scripts; shared global scope, load order matters) ===== -->
-  <script src="supabase.js?v=20260706b"></script>
-  <script src="roles.js?v=20260706b"></script>
-  <script src="core.js?v=20260706b"></script>
-  <script src="penal.js?v=20260706b"></script>
-  <script src="casefiles.js?v=20260706b"></script>
-  <script src="command.js?v=20260706b"></script>
-  <script src="narcotics.js?v=20260706b"></script>
-  <script src="ballistics.js?v=20260706b"></script>
-  <script src="personnel.js?v=20260706b"></script>
-  <script src="modus.js?v=20260706b"></script>
-  <script src="drive.js?v=20260706b"></script>
-  <script src="persons.js?v=20260706b"></script>
-  <script src="gangs.js?v=20260706b"></script>
-  <script src="intel.js?v=20260706b"></script>
-  <script src="places.js?v=20260706b"></script>
-  <script src="network.js?v=20260706b"></script>
-  <script src="reports.js?v=20260706b"></script>
-  <script src="rico.js?v=20260706b"></script>
-  <script src="docx.js?v=20260706b"></script>
-  <script src="records.js?v=20260706b"></script>
-  <script src="signoff.js?v=20260706b"></script>
-  <script src="inbox.js?v=20260706b"></script>
-  <script src="collab.js?v=20260706b"></script>
-  <script src="heatmap.js?v=20260706b"></script>
-  <script src="shifts.js?v=20260706b"></script>
-  <script src="fivemanage.js?v=20260706b"></script>
-  <script src="vehicles.js?v=20260706b"></script>
-  <script src="watchlist.js?v=20260706b"></script>
-  <script src="feedback.js?v=20260706b"></script>
-  <script src="app.js?v=20260706b"></script>
-  <script src="auth.js?v=20260706b"></script>
+  <script src="supabase.js?v=20260706c"></script>
+  <script src="roles.js?v=20260706c"></script>
+  <script src="core.js?v=20260706c"></script>
+  <script src="penal.js?v=20260706c"></script>
+  <script src="casefiles.js?v=20260706c"></script>
+  <script src="command.js?v=20260706c"></script>
+  <script src="narcotics.js?v=20260706c"></script>
+  <script src="ballistics.js?v=20260706c"></script>
+  <script src="personnel.js?v=20260706c"></script>
+  <script src="modus.js?v=20260706c"></script>
+  <script src="drive.js?v=20260706c"></script>
+  <script src="persons.js?v=20260706c"></script>
+  <script src="gangs.js?v=20260706c"></script>
+  <script src="intel.js?v=20260706c"></script>
+  <script src="places.js?v=20260706c"></script>
+  <script src="network.js?v=20260706c"></script>
+  <script src="reports.js?v=20260706c"></script>
+  <script src="rico.js?v=20260706c"></script>
+  <script src="docx.js?v=20260706c"></script>
+  <script src="records.js?v=20260706c"></script>
+  <script src="signoff.js?v=20260706c"></script>
+  <script src="inbox.js?v=20260706c"></script>
+  <script src="collab.js?v=20260706c"></script>
+  <script src="heatmap.js?v=20260706c"></script>
+  <script src="shifts.js?v=20260706c"></script>
+  <script src="fivemanage.js?v=20260706c"></script>
+  <script src="vehicles.js?v=20260706c"></script>
+  <script src="watchlist.js?v=20260706c"></script>
+  <script src="feedback.js?v=20260706c"></script>
+  <script src="app.js?v=20260706c"></script>
+  <script src="auth.js?v=20260706c"></script>
 
   
 </body>

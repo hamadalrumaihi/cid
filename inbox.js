@@ -165,7 +165,7 @@
 
       body.innerHTML = '';
       if (!review.length && !bounced.length && !mine.length && !myOverdue.length && !mentions.length && !myDrafts.length && !followUps.length && !needs.length && !myTasks.length && !watchItems.length) {
-        body.innerHTML = '<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">✅ All clear — nothing waiting on you. No sign-off actions, overdue cases, follow-ups, mentions, or open drafts.</div>';
+        body.innerHTML = '<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400"><span class="t-readout text-emerald-300">SYSTEM CLEAR</span> — nothing waiting on you. No sign-off actions, overdue cases, follow-ups, mentions, or open drafts.</div>';
         return;
       }
       const chip = (n, label, tint) => n ? `<span class="rounded-full px-2.5 py-1 text-xs font-semibold ${tint}">${n} ${label}</span>` : '';
