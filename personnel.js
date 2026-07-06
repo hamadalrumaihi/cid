@@ -127,7 +127,11 @@
     }
     async function fetchMedia() { if (!dbReady()) { renderMedia(); return; } try { MEDIA = await (typeof withRetry === 'function' ? withRetry(() => DB().list('media', { order: 'created_at', ascending: false })) : DB().list('media', { order: 'created_at', ascending: false })); } catch (e) { toast('Could not load the media vault — check your connection.', 'danger'); } renderMedia(); }
     // Roster + commendations live under Command; the media vault is its own tab under Intelligence.
-    function onEnterPersonnel() { renderRoster(); if (dbReady()) { fetchCommendations(); } else { renderCommendations(); } }
+    function onEnterPersonnel() {
+      renderRoster();
+      if (typeof renderPersonnelDocs === 'function') renderPersonnelDocs();
+      if (dbReady()) { fetchCommendations(); } else { renderCommendations(); }
+    }
     function onEnterMedia() { renderMediaFilters(); if (dbReady()) { fetchMedia(); } else { renderMedia(); } }
     function mediaMatchesFilter(m) {
       if (mediaFilter === 'all') return true;

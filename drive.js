@@ -670,7 +670,7 @@
       return tiles + rendered;
     }
     function onEnterSops() {
-      if (typeof fetchDocuments === 'function' && dbReady()) fetchDocuments().then(renderSops); else renderSops();
+      if (typeof fetchDocuments === 'function' && dbReady()) fetchDocuments().then(refreshSopSurfaces); else renderSops();
     }
     function renderSops() {
       const grid = $('#sop-grid'); if (!grid) return;
@@ -681,30 +681,49 @@
       if (!sops.length) { grid.innerHTML = '<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400"><span class="t-readout">NO SOPS PUBLISHED // POLICY QUEUE EMPTY.</span>' + (canManage ? ' Use “+ New SOP”.' : '') + '</div>'; return; }
       grid.innerHTML = '';
       const lib = (typeof DOCS !== 'undefined' ? DOCS : []).filter((x) => x.folder === 'Resources').sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      sops.concat(lib).forEach((d, i) => {
-        const card = el('div', { class: 'person-card cursor-pointer rounded-2xl border border-white/5 bg-ink-900/60 p-5' });
-        card.style.setProperty('--i', String(i));
-        const body = (d.content && d.content.body) || '';
-        card.innerHTML = `
-          <p class="text-sm font-semibold text-white">${esc(sopTitle(d))}</p>
-          <p class="mt-1 line-clamp-3 text-xs text-slate-400">${esc(body.slice(0, 200)) || 'No content yet.'}</p>
-          <p class="t-readout mt-3 text-[10px] uppercase text-slate-500">${d.folder === 'Resources' ? 'LIBRARY' : 'SOP'} // ${esc(d.modified_label || 'undated')}</p>`;
-        card.onclick = () => openSopReader(d, canManage);
-        grid.appendChild(card);
-      });
+      sops.concat(lib).forEach((d, i) => grid.appendChild(sopDocCard(d, i, canManage)));
     }
+    // Documents surface where their subject lives, not where they were uploaded:
+    // rosters (folder 'Personnel') on the Personnel tab, gang dossiers (folder
+    // 'Gang Intel') on the Gangs tab. Same reader/editor everywhere; the folder
+    // stays command-write-only via the documents RLS folder guard.
+    const SOP_CARD_TAG = { 'Resources': 'LIBRARY', 'Personnel': 'ROSTER', 'Gang Intel': 'GANG INTEL' };
+    function sopDocCard(d, i, canManage) {
+      const card = el('div', { class: 'person-card cursor-pointer rounded-2xl border border-white/5 bg-ink-900/60 p-5' });
+      card.style.setProperty('--i', String(i));
+      const body = (d.content && d.content.body) || '';
+      card.innerHTML = `
+        <p class="text-sm font-semibold text-white">${esc(sopTitle(d))}</p>
+        <p class="mt-1 line-clamp-3 text-xs text-slate-400">${esc(body.slice(0, 200)) || 'No content yet.'}</p>
+        <p class="t-readout mt-3 text-[10px] uppercase text-slate-500">${SOP_CARD_TAG[d.folder] || 'SOP'} // ${esc(d.modified_label || 'undated')}</p>`;
+      card.onclick = () => openSopReader(d, canManage);
+      return card;
+    }
+    function renderDocShelf(gridId, headId, folder) {
+      const grid = $('#' + gridId); if (!grid) return;
+      const head = headId ? $('#' + headId) : null;
+      const docs = (typeof DOCS !== 'undefined' && dbReady() ? DOCS : []).filter((d) => d.folder === folder).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      if (head) head.classList.toggle('hidden', !docs.length);
+      grid.classList.toggle('hidden', !docs.length);
+      grid.innerHTML = '';
+      const canManage = typeof canReassign === 'function' && canReassign();
+      docs.forEach((d, i) => grid.appendChild(sopDocCard(d, i, canManage)));
+    }
+    function renderPersonnelDocs() { renderDocShelf('personnel-docs', 'personnel-docs-head', 'Personnel'); }
+    function renderGangDocs() { renderDocShelf('gang-docs', 'gang-docs-head', 'Gang Intel'); }
+    function refreshSopSurfaces() { renderSops(); renderPersonnelDocs(); renderGangDocs(); }
     function openSopReader(d, canManage) {
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
         <div class="mb-4 flex items-center justify-between gap-3"><h3 class="min-w-0 truncate text-lg font-bold text-white">${esc(sopTitle(d))}</h3><button aria-label="Close" class="close-x flex-shrink-0 text-2xl leading-none text-slate-400 hover:text-white">&times;</button></div>
-        <p class="t-readout mb-3 text-[10px] uppercase tracking-widest text-slate-500">${d.folder === 'Resources' ? 'Reference library document' : 'Standard operating procedure'} // ${esc(d.modified_label || 'undated')}${(d.content && d.content.sync && d.content.sync.source === 'gdrive') ? ' // SYNCED FROM GOOGLE DRIVE' : ''}</p>
+        <p class="t-readout mb-3 text-[10px] uppercase tracking-widest text-slate-500">${{ 'Resources': 'Reference library document', 'Personnel': 'Division roster', 'Gang Intel': 'Gang intelligence document' }[d.folder] || 'Standard operating procedure'} // ${esc(d.modified_label || 'undated')}${(d.content && d.content.sync && d.content.sync.source === 'gdrive') ? ' // SYNCED FROM GOOGLE DRIVE' : ''}</p>
         <div class="sop-prose max-h-[65vh] overflow-y-auto rounded-lg border border-white/5 bg-ink-900 p-6">${sopArticle(d.content && d.content.body, sopTitle(d))}</div>
         ${canManage ? '<div class="mt-4 flex gap-2"><button id="sop-edit" class="flex-1 rounded-lg border border-white/10 bg-white/5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">Edit</button><button id="sop-del" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button></div>' : ''}`;
       node.querySelector('.close-x').onclick = closeModal;
       const ed = node.querySelector('#sop-edit'); if (ed) ed.onclick = () => { closeModal(); openSopEditor(d); };
       const dl = node.querySelector('#sop-del'); if (dl) dl.onclick = async () => {
         if (!(await uiConfirm('Delete SOP “' + d.name + '”? Restorable via Undo.', { confirmText: 'Delete' }))) return;
-        closeModal(); await deleteWithUndo('documents', d, { label: 'SOP “' + d.name + '”', after: () => { if (typeof fetchDocuments === 'function') fetchDocuments().then(renderSops); } });
+        closeModal(); await deleteWithUndo('documents', d, { label: 'SOP “' + d.name + '”', after: () => { if (typeof fetchDocuments === 'function') fetchDocuments().then(refreshSopSurfaces); } });
       };
       openModal(node, { wide: true });
     }
@@ -913,8 +932,8 @@
         const payload = { folder: (record && record.folder) || SOP_FOLDER, name: name, kind: 'doc', content: content, modified_label: new Date().toLocaleDateString('en-GB') };
         const res = record && record.id ? await DB().update('documents', record.id, payload) : await DB().insert('documents', payload);
         if (res && res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
-        closeModal(); toast(record ? 'SOP updated' : 'SOP published', 'success');
-        if (typeof fetchDocuments === 'function') fetchDocuments().then(renderSops);
+        closeModal(); toast(record ? 'Document updated' : 'Document published', 'success');
+        if (typeof fetchDocuments === 'function') fetchDocuments().then(refreshSopSurfaces);
       };
       openModal(node, { wide: true });
     }

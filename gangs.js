@@ -6,7 +6,7 @@
     /* ============================================================ 11A2. GANGS & TURF (Supabase) ============================================================ */
     function gangsNotice(m) { $('#gang-grid').innerHTML = `<div class="xl:col-span-2 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">${m}</div>`; }
     function showGangsList() { $('#gang-detail').classList.add('hidden'); $('#gangs-list').classList.remove('hidden'); }
-    function onEnterGangs() { showGangsList(); if (dbReady()) fetchGangs(); else gangsNotice('Live gang records require sign-in.'); }
+    function onEnterGangs() { showGangsList(); if (typeof renderGangDocs === 'function') renderGangDocs(); if (dbReady()) fetchGangs(); else gangsNotice('Live gang records require sign-in.'); }
     async function fetchGangs() {
       if (!dbReady()) { gangsNotice('Live gang records require sign-in.'); return; }
       $('#gangs-live').classList.remove('hidden'); $('#gangs-live').classList.add('inline-flex');
