@@ -971,3 +971,31 @@
     const uiPrompt = (message, opts = {}) => uiDialog({ message, title: opts.title || '', input: { placeholder: opts.placeholder || '', value: opts.value || '' }, confirmText: opts.confirmText || 'OK' });
 
 
+
+    /* ---- Tactical icon set (Control Panel restyle) --------------------------
+       Static inline-SVG micro-icons replacing emoji on the chrome, case board
+       and Command dashboard. Stroke follows currentColor so existing text-color
+       utilities tint them; aria-hidden because every use sits beside a label. */
+    const T_ICONS = {
+      command: '<path d="M3.5 3.5h7v7h-7zM13.5 3.5h7v7h-7zM3.5 13.5h7v7h-7zM13.5 13.5h7v7h-7z"/>',
+      cases: '<path d="M3 7.5a2 2 0 0 1 2-2h4.2l1.8 2H19a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+      intel: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/><path d="M12 12l6-6"/>',
+      drive: '<path d="M3.5 5h17v4h-17z"/><path d="M5.5 9v9.5h13V9"/><path d="M10 13h4"/>',
+      oversight: '<path d="M12 3.5l7.5 2.8v5.4c0 4.2-3 7.3-7.5 8.8-4.5-1.5-7.5-4.6-7.5-8.8V6.3z"/><path d="M9 12l2 2 4-4"/>',
+      feedback: '<path d="M20.5 12a8.5 8.5 0 1 0-3.3 6.7l3.3 1.3-1-3.4a8.4 8.4 0 0 0 1-4.6z"/>',
+      user: '<circle cx="12" cy="8" r="3.4"/><path d="M5 19.5c1.3-3.4 3.9-5 7-5s5.7 1.6 7 5"/>',
+      folder: '<path d="M3 7.5a2 2 0 0 1 2-2h4.2l1.8 2H19a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+      pen: '<path d="M4.5 19.5l3.8-.9L19.5 7.4l-2.9-2.9L5.4 15.7z"/>',
+      scale: '<path d="M12 4.5v15M6.5 6.5h11"/><path d="M6.5 6.5l-2.5 5.5a3 3 0 0 0 5 0zM17.5 6.5L15 12a3 3 0 0 0 5 0z"/>',
+      timer: '<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 2M9.5 3.5h5"/>',
+      cold: '<path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5l-15.6 9"/>',
+      cash: '<rect x="3" y="7" width="18" height="10" rx="1"/><circle cx="12" cy="12" r="2.6"/>',
+      capsule: '<rect x="3.5" y="8.5" width="17" height="7" rx="3.5"/><path d="M12 8.5v7"/>',
+      crosshair: '<circle cx="12" cy="12" r="7"/><path d="M12 3.5V7M12 17v3.5M3.5 12H7M17 12h3.5"/>',
+      users: '<circle cx="9" cy="8.5" r="3"/><path d="M3.5 19c1-2.8 3-4.2 5.5-4.2s4.5 1.4 5.5 4.2"/><circle cx="16.5" cy="9.5" r="2.4"/><path d="M16.8 14.6c2 .3 3.3 1.6 4 3.9"/>',
+    };
+    function tIcon(name, size) {
+      const d = T_ICONS[name]; if (!d) return '';
+      const s = size || 18;
+      return `<svg aria-hidden="true" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+    }

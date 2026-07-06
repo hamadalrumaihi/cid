@@ -293,8 +293,9 @@
         casesCache = await (typeof withRetry === 'function' ? withRetry(() => DB().list('cases', { order: 'updated_at', ascending: false })) : DB().list('cases', { order: 'updated_at', ascending: false }));
         renderCases();
         renderJumpBack();
+        { const tel = $('#sys-telemetry'); if (tel) tel.textContent = 'SYS.LINK // RECV_OK // ' + new Date().toTimeString().slice(0, 5); }
         if (typeof refreshCaseSelects === 'function') refreshCaseSelects();
-      } catch (e) { casesNotice('Could not load cases — check your connection and retry. (' + escapeHTML(e.message || String(e)) + ')'); }
+      } catch (e) { const tel = $('#sys-telemetry'); if (tel) tel.textContent = 'SYS.LINK // DEGRADED'; casesNotice('Could not load cases — check your connection and retry. (' + escapeHTML(e.message || String(e)) + ')'); }
     }
 
     // QoL: days since a case last moved; flag open/active cases gone quiet (≥14d).
@@ -302,7 +303,7 @@
     function staleBadge(c) {
       if (c.status === 'closed' || c.status === 'cold') return '';
       const d = caseStaleDays(c); if (d < 14) return '';
-      return `<span class="flex-shrink-0 rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300" title="No updates in ${d} days">⏳ ${d}d stale</span>`;
+      return `<span class="t-readout flex-shrink-0 rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300" title="No updates in ${d} days"><span class="t-dot t-dot-amber pulse-dot"></span> ${d}D STALE</span>`;
     }
 
     // Wave 1: auto-escalate cases gone quiet ≥14d. Runs once per load. The first
@@ -433,6 +434,7 @@
         const card = el('div', { class: 'case-card cursor-pointer rounded-2xl border border-white/5 bg-ink-900/60 p-5 transition hover:border-blue-500/30 hover:bg-white/5' });
         card.style.setProperty('--i', String(i));
         card.dataset.status = c.status || '';
+        if (staleBadge(c)) card.dataset.stale = 'true';   // durable hook for the CSS attention pulse
         card.innerHTML = `
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0"><p class="truncate font-mono text-sm font-semibold text-blue-300">${escapeHTML(c.case_number)}</p><p class="mt-0.5 truncate text-sm text-white">${escapeHTML(c.title || 'Untitled case')}</p></div>
@@ -440,7 +442,7 @@
           </div>
           <p class="mt-2 line-clamp-2 text-xs text-slate-400">${escapeHTML(c.summary || 'No summary.')}</p>
           ${c.signoff_status && c.signoff_status !== 'none' ? `<div class="mt-2"><span class="rounded px-2 py-0.5 text-[10px] font-semibold ${signoffTint(c.signoff_status)}">${escapeHTML(signoffLabel(c.signoff_status))}</span></div>` : ''}
-          <div class="mt-3 flex items-center justify-between gap-2 text-[11px] text-slate-500"><span class="inline-flex items-center gap-1.5 truncate"><span class="rounded bg-white/5 px-2 py-0.5">${escapeHTML(c.bureau)}</span><span class="truncate" title="Assigned lead detective">👤 ${escapeHTML(lead || 'Unassigned')}</span></span><span class="whitespace-nowrap">updated ${new Date(c.updated_at).toLocaleDateString('en-US')}</span></div>`;
+          <div class="mt-3 flex items-center justify-between gap-2 text-[11px] text-slate-500"><span class="inline-flex items-center gap-1.5 truncate"><span class="t-readout rounded bg-white/5 px-2 py-0.5">${escapeHTML(c.bureau)}</span><span class="inline-flex items-center gap-1 truncate" title="Assigned lead detective">${(typeof tIcon === 'function') ? tIcon('user', 12) : ''} ${escapeHTML(lead || 'Unassigned')}</span></span><span class="t-readout whitespace-nowrap">UPD ${new Date(c.updated_at).toLocaleDateString('en-US')}</span></div>`;
         card.addEventListener('click', () => withViewTransition(() => openCaseDetail(c.id), card));
         const cchk = card.querySelector('.c-check'); if (cchk) { cchk.addEventListener('click', (e) => e.stopPropagation()); cchk.onchange = () => { if (cchk.checked) caseSel.add(c.id); else caseSel.delete(c.id); updateCaseBulkBar(); }; }
         grid.appendChild(card);

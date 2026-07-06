@@ -284,7 +284,7 @@ main h3 { font-family: var(--display); letter-spacing: -.015em; }
 /* Critical/attention pulse — driven by REAL signals (stale badge, sent-back
    sign-off), never fabricated priority. Subtle amber ring breathing. */
 @keyframes attn-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(244,63,94,0); } 50% { box-shadow: 0 0 0 3px rgba(244,63,94,.18); } }
-.case-card:has([title^="No updates in"]) { animation: card-in .45s cubic-bezier(.16,.84,.44,1) both, attn-pulse 3.2s ease-in-out 1s infinite; }
+.case-card[data-stale="true"] { animation: card-in .45s cubic-bezier(.16,.84,.44,1) both, attn-pulse 3.2s ease-in-out 1s infinite; }
 
 /* ---- Sidebar nav: active accent rail + hover sweep underline ---- */
 .nav-link.active { background: linear-gradient(90deg, rgba(245,158,11,.16), rgba(245,158,11,.02)); box-shadow: inset 2px 0 0 0 var(--accent); }
@@ -363,3 +363,128 @@ button:not(:disabled):active { transform: translateY(1px); }
 @media (prefers-reduced-motion: reduce) {
   .case-card:active, .person-card:active, .evidence-card:active { transform: none; }
 }
+
+/* ============================================================================
+   TACTICAL CONTROL PANEL (2026-07-05) — evolves the investigative skin into a
+   dense, matte-obsidian instrument panel. Later-in-file rules deliberately
+   override the earlier skin where the two disagree (corners, accent hue).
+   Palette: neon cyan (operational) / tactical amber (attention) / low-sat
+   green (clear). Still zero dependencies; transform/opacity motion only.
+   ========================================================================== */
+:root {
+  --t-cyan: #22d3ee; --t-amber: #f59e0b; --t-green: #34d399; --t-rose: #fb7185;
+  --t-line: rgba(148, 163, 184, .16);          /* ultra-thin structural hairline */
+  --t-cyanline: rgba(34, 211, 238, .30);
+  --t-field: rgba(255, 255, 255, .02);         /* near-flat section fill on the obsidian base */
+}
+body { background: #050708; }
+
+/* Uniform obsidian: flatten the heavy card fills into faint fields defined by
+   their borders, not their backgrounds. Inputs keep a solid fill for usability. */
+#app-shell .bg-ink-900\/60 { background-color: var(--t-field); }
+#app-shell .border-white\/5 { border-color: var(--t-line); }
+#app-shell .grid-texture { background-image: linear-gradient(rgba(34,211,238,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,.03) 1px, transparent 1px); }
+
+/* Sharp geometry: collapse the rounded-card language to 2-3px. Pills, dots and
+   avatars (rounded-full) stay circular by design. */
+#app-shell .rounded-2xl, #app-shell .rounded-xl { border-radius: 3px; }
+#app-shell .rounded-lg, #app-shell .rounded-md, #app-shell .rounded { border-radius: 2px; }
+.modal-card { border-radius: 3px; }
+
+/* Chamfered top-right corner on case cards + KPI tiles: the one non-rectangular
+   cue, cut with clip-path so it costs nothing. */
+.case-card, .kpi-tile { clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%); border-radius: 2px; }
+.case-card:hover { box-shadow: none; }   /* clip-path would crop the old glow; border carries the hover state now */
+
+/* KPI tiles: strip the gradient wash so only the accent border defines them;
+   metrics read in mono like an instrument cluster. */
+#kpi-grid .bg-gradient-to-br { background-image: none; background-color: var(--t-field); }
+.kpi-value { font-family: var(--mono); font-weight: 600; letter-spacing: -.01em; }
+.kpi-icon svg { opacity: .7; }
+.t-standby { font-size: .5em; font-weight: 500; color: #64748b; letter-spacing: .12em; vertical-align: middle; }
+.t-readout { font-family: var(--mono); letter-spacing: .04em; }
+
+/* Micro-indicators: 7px status dots; reuse .pulse-dot for the breathing ping. */
+.t-dot { display: inline-block; width: 7px; height: 7px; border-radius: 9999px; vertical-align: middle; background: #64748b; }
+.t-dot-cyan { background: var(--t-cyan); } .t-dot-amber { background: var(--t-amber); }
+.t-dot-green { background: var(--t-green); } .t-dot-rose { background: var(--t-rose); }
+
+/* Retune the accent system cyan-first (overrides the amber-first skin above). */
+#page-title::after { background: linear-gradient(90deg, var(--t-cyan), transparent); }
+.nav-link.active { background: linear-gradient(90deg, rgba(34,211,238,.12), rgba(34,211,238,.02)); box-shadow: inset 2px 0 0 0 var(--t-cyan); }
+.nav-link.active .nav-icon { filter: drop-shadow(0 0 6px rgba(34,211,238,.55)); color: var(--t-cyan); }
+.nav-link .nav-icon { color: #7d8ba1; }
+.nav-link::after { background: var(--t-cyan); }
+.bnav-link.active { color: var(--t-cyan); }
+.bnav-link.active span:first-child { filter: drop-shadow(0 0 6px rgba(34,211,238,.6)); }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline-color: var(--t-cyan); }
+.case-card::after { background: linear-gradient(105deg, transparent 30%, rgba(34,211,238,.07) 50%, transparent 70%); }
+.case-card:hover, .person-card:hover, .evidence-card:hover { border-color: var(--t-cyanline); }
+
+/* Status stripes, tactical mapping: operational=cyan, cold=slate, closed=green. */
+.case-card::before, .case-hero::before { width: 2px; }
+.case-card[data-status="open"]::before, .case-hero[data-status="open"]::before,
+.case-card[data-status="active"]::before, .case-hero[data-status="active"]::before { background: var(--t-cyan); }
+.case-card[data-status="cold"]::before, .case-hero[data-status="cold"]::before { background: #64748b; }
+.case-card[data-status="closed"]::before, .case-hero[data-status="closed"]::before { background: var(--t-green); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot::after { animation: none !important; }
+}
+
+/* ============================================================================
+   TACTICAL DENSITY PASS (2026-07-05) — the matrix layout half of the Control
+   Panel spec. Phones get a dense, data-first grid: the KPI cluster becomes a
+   2-column instrument matrix, card padding compresses, and descriptive filler
+   lines yield to the page header. Desktop keeps its working-room spacing.
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* KPI instrument matrix: two compact tiles per row instead of a 1-col stack. */
+  #kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+  #kpi-grid .kpi-tile { padding: .7rem .8rem; }
+  #kpi-grid .kpi-value { font-size: 1.35rem; margin-top: .3rem; }
+  #kpi-grid .kpi-tile p:first-child { font-size: .6rem; letter-spacing: .08em; }
+  #kpi-grid .kpi-tile p:last-child { font-size: .62rem; margin-top: .15rem; }
+  #kpi-grid .kpi-icon svg { width: 14px; height: 14px; }
+  .t-standby { letter-spacing: .06em; }
+}
+@media (max-width: 640px) {
+  /* Compress the card language app-wide on handsets: dense matrix, not lounge. */
+  #app-shell .p-6 { padding: .9rem; }
+  #app-shell .p-5 { padding: .8rem; }
+  #app-shell .p-4 { padding: .7rem; }
+  #app-shell .mb-6 { margin-bottom: .8rem; }
+  #app-shell .mb-4 { margin-bottom: .6rem; }
+  #app-shell .gap-4 { gap: .6rem; }
+  main .grid.gap-4 { gap: .55rem; }
+  /* Section hero banners: the sticky page header already names the view, so the
+     hero's descriptive subline is filler on a phone. Title shrinks to a label. */
+  main .view h3 { font-size: 1rem; }
+  main .view h3 + p { display: none; }
+  .case-card p.line-clamp-2 { margin-top: .3rem; }
+  .case-card > div:last-of-type { margin-top: .45rem; }
+  /* Toolbar rows (search / scope / refresh) tighten to instrument height. */
+  #app-shell input[type="text"], #app-shell input[type="search"] { padding-top: .45rem; padding-bottom: .45rem; }
+  /* Attention widget columns stack tight. */
+  #attention-widget .p-3 { padding: .55rem; }
+}
+
+/* ---- Optimization pass (2026-07-06) ----------------------------------------
+   Hover glow that survives the chamfer: filter/mask both get clipped on the
+   same element (filter applies before clip-path), so the glow is an INSET ring
+   + tint — it lives inside the silhouette, follows the notch exactly, and adds
+   no stacking context or subpixel text blur. */
+.case-card:hover, .kpi-tile:hover {
+  box-shadow: inset 0 0 0 1px var(--t-cyanline), inset 0 14px 30px -22px rgba(34, 211, 238, .35);
+  border-color: var(--t-cyanline);
+  background-color: rgba(34, 211, 238, .035);
+}
+@media (hover: none) {
+  .case-card:active, .kpi-tile:active { box-shadow: none; }   /* no glow flash on tap */
+}
+@media (prefers-reduced-motion: reduce) {
+  .case-card:hover, .kpi-tile:hover { box-shadow: none; }
+}
+/* Telemetry readout is real data (stamped by fetchCases), so it stays in the
+   a11y tree; empty until the first successful sync. */
+#sys-telemetry:empty { display: none; }

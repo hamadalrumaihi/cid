@@ -49,20 +49,23 @@
       const narcs = ev.filter((e) => reEvNarc.test(e.type || '') || reEvNarc.test(e.description || '')).length;
       const avg = avgResolutionDays(cases);
       const flagged = PERSONS.filter((p) => (p.felony_count || 0) >= 8).length;
+      // Tactical zero-state: a flat 0 reads as "00 // STANDBY" so an idle metric
+      // still reads as a deliberate system state, not missing data.
+      const tVal = (v) => (v === 0 ? '00&#8202;<span class="t-standby">// STANDBY</span>' : String(v));
       const cards = [
-        { label:'Open Cases', value: live ? open : '—', delta: `${cases.length} ${scoped ? 'in filter' : 'total on file'}`, icon:'📂', accent:'blue', go:() => setCmdStatus('open_active') },
-        { label:'Awaiting Sign-off', value: live ? awaiting : '—', delta:'stuck in the approval chain', icon:'✍️', accent:'amber', go:() => setCmdStatus('awaiting') },
-        { label:'Ready for DOJ', value: live ? readyDoj : '—', delta:'approved & complete', icon:'⚖️', accent:'emerald', go:() => setCmdStatus('ready_doj') },
-        { label:'Avg Resolution', value: live ? (avg == null ? '—' : (avg < 1 ? '<1d' : avg.toFixed(1) + 'd')) : '—', delta: avg == null ? 'no closed cases yet' : 'open → closed', icon:'⏱️', accent:'cyan' },
-        { label:'Cold Cases', value: live ? cold : '—', delta:'2-week inactivity policy', icon:'🧊', accent:'slate', go:() => setCmdStatus('cold') },
-        { label:'Seizures (money)', value: live ? fmtUSD(seiz) : '—', delta:'logged raid compensation', icon:'💵', accent:'emerald' },
-        { label:'Narcotics Seized', value: live ? narcs : '—', delta:'evidence items logged', icon:'💊', accent:'violet' },
-        { label:'Weapons Seized', value: live ? weapons : '—', delta:'evidence items logged', icon:'🔫', accent:'rose' },
-        { label:'Persons of Interest', value: live ? PERSONS.length : '—', delta: `${flagged} ≥8-felony flagged`, icon:'🧑‍⚖️', accent:'violet' },
+        { label:'Open Cases', value: live ? tVal(open) : '—', delta: `${cases.length} ${scoped ? 'in filter' : 'total on file'}`, icon:'folder', accent:'blue', go:() => setCmdStatus('open_active') },
+        { label:'Awaiting Sign-off', value: live ? tVal(awaiting) : '—', delta:'stuck in the approval chain', icon:'pen', accent:'amber', go:() => setCmdStatus('awaiting') },
+        { label:'Ready for DOJ', value: live ? tVal(readyDoj) : '—', delta:'approved & complete', icon:'scale', accent:'emerald', go:() => setCmdStatus('ready_doj') },
+        { label:'Avg Resolution', value: live ? (avg == null ? '<span class="t-readout text-slate-500">--</span>' : (avg < 1 ? '<1d' : avg.toFixed(1) + 'd')) : '—', delta: avg == null ? 'no closed cases yet' : 'open → closed', icon:'timer', accent:'cyan' },
+        { label:'Cold Cases', value: live ? tVal(cold) : '—', delta:'2-week inactivity policy', icon:'cold', accent:'slate', go:() => setCmdStatus('cold') },
+        { label:'Seizures (money)', value: live ? (seiz === 0 ? tVal(0) : fmtUSD(seiz)) : '—', delta:'logged raid compensation', icon:'cash', accent:'emerald' },
+        { label:'Narcotics Seized', value: live ? tVal(narcs) : '—', delta:'evidence items logged', icon:'capsule', accent:'violet' },
+        { label:'Weapons Seized', value: live ? tVal(weapons) : '—', delta:'evidence items logged', icon:'crosshair', accent:'rose' },
+        { label:'Persons of Interest', value: live ? tVal(PERSONS.length) : '—', delta: `${flagged} ≥8-felony flagged`, icon:'users', accent:'violet' },
       ];
       g.innerHTML = '';
-      cards.forEach((m) => { const card = el('div', { class:`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${KPI_ACCENTS[m.accent]} p-5 transition hover:shadow-glow${m.go ? ' cursor-pointer hover:brightness-110' : ''}` },
-        `<div class="flex items-start justify-between"><div><p class="text-xs font-semibold uppercase tracking-wider text-slate-400">${m.label}</p><p class="mt-2 text-3xl font-bold text-white">${m.value}</p><p class="mt-1 text-[11px] text-slate-400">${m.delta}</p></div><span class="text-2xl">${m.icon}</span></div>`);
+      cards.forEach((m) => { const card = el('div', { class:`kpi-tile relative overflow-hidden rounded-2xl border bg-gradient-to-br ${KPI_ACCENTS[m.accent]} p-5 transition hover:shadow-glow${m.go ? ' cursor-pointer hover:brightness-110' : ''}` },
+        `<div class="flex items-start justify-between"><div><p class="text-xs font-semibold uppercase tracking-wider text-slate-400">${m.label}</p><p class="kpi-value mt-2 text-3xl font-bold text-white">${m.value}</p><p class="mt-1 text-[11px] text-slate-400">${m.delta}</p></div><span class="kpi-icon text-slate-500">${(typeof tIcon === 'function') ? tIcon(m.icon, 20) : ''}</span></div>`);
         if (m.go && live) card.onclick = m.go;
         g.appendChild(card); });
       renderCmdDrill();
@@ -88,14 +91,14 @@
       const row = (c, note, noteTint) => `<button class="att-row flex w-full items-center justify-between gap-2 rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left transition hover:border-blue-500/30 hover:bg-white/5" data-id="${c.id}"><span class="min-w-0 flex-1 truncate"><span class="font-mono text-xs text-blue-300">${esc(c.case_number)}</span> <span class="text-xs text-slate-300">${esc(c.title || '')}</span></span><span class="flex-shrink-0 text-[10px] font-semibold ${noteTint}">${esc(note)}</span></button>`;
       const col = (icon, title, list, tint, rowsHtml, viewAll) => `<div class="min-w-0 rounded-xl border border-white/5 bg-ink-900/60 p-3">
         <div class="mb-2 flex items-center justify-between"><p class="text-[11px] font-semibold uppercase tracking-wider ${tint}">${icon} ${title} (${list.length})</p>${list.length > 5 && viewAll ? `<button class="att-all text-[11px] font-semibold text-blue-300 hover:text-blue-200" data-go="${viewAll}">all →</button>` : ''}</div>
-        ${list.length ? `<div class="space-y-1.5">${rowsHtml}</div>` : '<p class="text-xs text-slate-600">Clear ✓</p>'}</div>`;
+        ${list.length ? `<div class="space-y-1.5">${rowsHtml}</div>` : '<p class="t-readout text-xs text-slate-600">SYSTEM CLEAR</p>'}</div>`;
       box.classList.remove('hidden');
       box.innerHTML = `<div class="rounded-2xl border border-amber-500/15 bg-ink-900/60 p-4">
-        <p class="mb-3 text-[11px] font-semibold uppercase tracking-wider text-amber-300/80">⚠ Needs attention — what's slipping</p>
+        <p class="t-readout mb-3 text-[11px] font-semibold uppercase tracking-wider text-amber-300/80"><span class="t-dot t-dot-amber pulse-dot"></span> Needs attention // what's slipping</p>
         <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
-          ${col('⏳', 'Stale ≥14d', stale, 'text-amber-300', stale.slice(0, 5).map((c) => row(c, days(c) + 'd quiet', 'text-amber-300')).join(''), 'stale')}
-          ${col('👤', 'No lead detective', unassigned, 'text-rose-300', unassigned.slice(0, 5).map((c) => row(c, 'unassigned', 'text-rose-300')).join(''), 'unassigned')}
-          ${col('✍️', 'Stuck in sign-off', awaiting, 'text-blue-300', awaiting.slice(0, 5).map((c) => row(c, sAge(c) + 'd waiting on ' + (officerName(c.signoff_assignee_id) || 'reviewer'), 'text-blue-300')).join(''), 'awaiting')}
+          ${col('<span class="t-dot t-dot-amber"></span>', 'Stale ≥14d', stale, 'text-amber-300', stale.slice(0, 5).map((c) => row(c, days(c) + 'd quiet', 'text-amber-300')).join(''), 'stale')}
+          ${col('<span class="t-dot t-dot-rose"></span>', 'No lead detective', unassigned, 'text-rose-300', unassigned.slice(0, 5).map((c) => row(c, 'unassigned', 'text-rose-300')).join(''), 'unassigned')}
+          ${col('<span class="t-dot t-dot-cyan"></span>', 'Stuck in sign-off', awaiting, 'text-blue-300', awaiting.slice(0, 5).map((c) => row(c, sAge(c) + 'd waiting on ' + (officerName(c.signoff_assignee_id) || 'reviewer'), 'text-blue-300')).join(''), 'awaiting')}
         </div>
       </div>`;
       box.querySelectorAll('.att-row').forEach((b) => b.onclick = () => { if (typeof navigate === 'function') navigate('cases'); if (typeof openCaseDetail === 'function') openCaseDetail(b.dataset.id); });
