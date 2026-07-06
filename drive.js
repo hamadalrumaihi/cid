@@ -708,22 +708,209 @@
       };
       openModal(node, { wide: true });
     }
+    /* ---- Structured SOP editor ------------------------------------------------
+       Rosters live as pipe/Markdown text inside content.body. Editing that raw
+       text is hostile, so the editor parses the body into blocks (headings,
+       tables, prose), presents labeled inputs per cell, and serializes back to
+       the exact text format sopArticle renders. The parser mirrors sopArticle's
+       block heuristics; changing one side means re-checking the round-trip. */
+    const SOP_STATUS_OPTS = ['Active', 'Semi-Active', 'LOA', 'Inactive', 'Suspended', 'TBA', 'N/A'];
+    const sopIsSep = (l) => /^\|?[\s:|-]+\|?$/.test(l) && l.includes('-');
+    const sopSplitRow = (l) => l.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+    function sopParseBlocks(body) {
+      const norm = String(body || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').replace(/^_{4,}\s*$/gm, '');
+      const out = [];
+      const mkRow = (cells) => {
+        const filled = cells.filter(Boolean);
+        if (filled.length === 1 && /^\*\*[^*]+\*\*$/.test(filled[0])) return { g: true, text: filled[0].replace(/\*\*/g, '') };
+        return { g: false, cells: cells };
+      };
+      norm.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean).forEach((b) => {
+        const lines = b.split('\n').map((l) => l.trim()).filter(Boolean);
+        if (!lines.length) return;
+        const md = lines.length === 1 && lines[0].match(/^(#{1,6})\s+(.*)$/);
+        if (md) { out.push({ t: 'h', level: md[1].length, text: md[2] }); return; }
+        const piped = lines.filter((l) => l.includes('|'));
+        const sepIdx = lines.findIndex(sopIsSep);
+        if (sepIdx === 1 && piped.length >= 2) {
+          const rows = lines.filter((l, i) => i !== sepIdx && !sopIsSep(l)).map(sopSplitRow);
+          out.push({ t: 'tbl', head: rows[0], sep: lines[sepIdx], title: null, rows: rows.slice(1).map(mkRow) });
+          return;
+        }
+        if (piped.length >= 2 || (piped.length === 1 && piped[0].split('|').length >= 4)) {
+          const ls = lines.slice();
+          const title = !ls[0].includes('|') && !/^#/.test(ls[0]) ? ls.shift() : null;
+          out.push({ t: 'tbl', head: null, sep: null, title: title, rows: ls.filter((l) => !sopIsSep(l)).map(sopSplitRow).map(mkRow) });
+          return;
+        }
+        if (lines.length === 1 && lines[0].length <= 64 && !lines[0].includes('|') &&
+            ((lines[0] === lines[0].toUpperCase() && /[A-Z]/.test(lines[0])) || /:$/.test(lines[0]))) {
+          out.push({ t: 'h', level: 0, text: lines[0] }); return;
+        }
+        out.push({ t: 'p', raw: b });
+      });
+      return out;
+    }
+    function sopSerializeBlocks(blocks) {
+      const clean = (c) => String(c == null ? '' : c).trim();
+      return blocks.map((b) => {
+        if (b.t === 'h') return b.level ? '#'.repeat(b.level) + ' ' + b.text.trim() : b.text.trim();
+        if (b.t === 'p') return b.raw;
+        if (b.head) {
+          const width = b.head.length;
+          const line = (cs) => '| ' + Array.from({ length: width }, (_, i) => clean(cs[i])).join(' | ') + ' |';
+          const sep = b.sep || ('|' + Array.from({ length: width }, () => ' :-: ').join('|') + '|');
+          return [line(b.head), sep].concat(b.rows.map((r) => line(r.g ? ['**' + r.text.trim() + '**'] : r.cells))).join('\n');
+        }
+        // Bare pipe tables keep their ragged style: trailing empties dropped.
+        const rowLine = (r) => {
+          const cs = (r.g ? ['**' + r.text.trim() + '**'] : r.cells).map(clean);
+          while (cs.length > 1 && !cs[cs.length - 1]) cs.pop();
+          return cs.join(' | ');
+        };
+        return (b.title ? b.title + '\n' : '') + b.rows.map(rowLine).join('\n');
+      }).filter(Boolean).join('\n\n');
+    }
+    // Which column holds a member status: named header first, else the column
+    // where most filled values belong to the status vocabulary (headerless rosters).
+    function sopStatusCol(b) {
+      if (b.head) return b.head.findIndex((h) => /status/i.test(h));
+      const rows = b.rows.filter((r) => !r.g);
+      const width = rows.reduce((m, r) => Math.max(m, r.cells.length), 0);
+      const vocab = SOP_STATUS_OPTS.map((s) => s.toLowerCase());
+      for (let i = 0; i < width; i++) {
+        const vals = rows.map((r) => (r.cells[i] || '').trim().toLowerCase()).filter(Boolean);
+        if (vals.length >= 2 && vals.filter((v) => vocab.indexOf(v) >= 0).length / vals.length >= 0.6) return i;
+      }
+      return -1;
+    }
+    function sopFormEditor(host, model) {
+      host.innerHTML = '';
+      const rerender = () => sopFormEditor(host, model);
+      model.forEach((b) => {
+        if (b.t === 'h') {
+          const wrap = el('div', { class: 'mb-3' }, '<p class="sop-fe-col">SECTION HEADING</p>');
+          const inp = el('input', { class: 'sop-fe-head' });
+          inp.value = b.text; inp.oninput = () => { b.text = inp.value; };
+          wrap.appendChild(inp); host.appendChild(wrap); return;
+        }
+        if (b.t === 'p') {
+          const wrap = el('div', { class: 'mb-3' }, '<p class="sop-fe-col">TEXT</p>');
+          const ta = el('textarea', { class: 'sop-fe-text', rows: String(Math.min(8, b.raw.split('\n').length + 1)) });
+          ta.value = b.raw; ta.oninput = () => { b.raw = ta.value; };
+          wrap.appendChild(ta); host.appendChild(wrap); return;
+        }
+        const width = b.head ? b.head.length : Math.max(2, b.rows.filter((r) => !r.g).reduce((m, r) => Math.max(m, r.cells.length), 0));
+        const statusCol = sopStatusCol(b);
+        const numCol = b.head ? b.head.findIndex((h) => /strike|points?$/i.test(h)) : -1;
+        const box = el('div', { class: 'sop-fe-tbl' });
+        if (b.title != null) {
+          const ti = el('input', { class: 'sop-fe-head' });
+          ti.value = b.title; ti.placeholder = 'Section heading';
+          ti.oninput = () => { b.title = ti.value; };
+          box.appendChild(ti);
+        }
+        const grid = el('div', { class: 'sop-fe-grid' });
+        grid.style.gridTemplateColumns = 'repeat(' + width + ', minmax(110px, 1fr)) 28px';
+        for (let i = 0; i < width; i++) {
+          if (b.head) {
+            const hi = el('input', { class: 'sop-fe-colhead' });
+            hi.value = b.head[i] || ''; hi.oninput = () => { b.head[i] = hi.value; };
+            grid.appendChild(hi);
+          } else grid.appendChild(el('p', { class: 'sop-fe-col' }, 'COL ' + (i + 1)));
+        }
+        grid.appendChild(el('span'));
+        b.rows.forEach((r, ri) => {
+          if (r.g) {
+            const gi = el('input', { class: 'sop-fe-groupin' });
+            gi.style.gridColumn = '1 / span ' + width;
+            gi.value = r.text; gi.placeholder = 'Group header';
+            gi.oninput = () => { r.text = gi.value; };
+            grid.appendChild(gi);
+          } else {
+            while (r.cells.length < width) r.cells.push('');
+            for (let i = 0; i < width; i++) {
+              const cur = (r.cells[i] || '').trim();
+              if (i === statusCol) {
+                const sel = el('select', {});
+                const opts = SOP_STATUS_OPTS.slice();
+                if (cur && opts.map((o) => o.toLowerCase()).indexOf(cur.toLowerCase()) < 0) opts.unshift(cur);
+                [''].concat(opts).forEach((o) => { const op = el('option', { value: o }, esc(o || '—')); sel.appendChild(op); });
+                sel.value = cur && opts.map((o) => o.toLowerCase()).indexOf(cur.toLowerCase()) >= 0
+                  ? opts[opts.map((o) => o.toLowerCase()).indexOf(cur.toLowerCase())] : cur;
+                sel.onchange = () => { r.cells[i] = sel.value; };
+                grid.appendChild(sel);
+              } else {
+                const ci = el('input', i === numCol ? { type: 'number', min: '0' } : {});
+                ci.value = r.cells[i] || '';
+                if (b.head) ci.placeholder = b.head[i] || '';
+                ci.oninput = () => { r.cells[i] = ci.value; };
+                grid.appendChild(ci);
+              }
+            }
+          }
+          const del = el('button', { class: 'sop-fe-del', type: 'button', 'aria-label': 'Remove row' }, '&times;');
+          del.onclick = () => { b.rows.splice(ri, 1); rerender(); };
+          grid.appendChild(del);
+        });
+        const scroll = el('div', { class: 'sop-fe-scroll' }); scroll.appendChild(grid); box.appendChild(scroll);
+        const bar = el('div', { class: 'sop-fe-bar' });
+        const addRow = el('button', { class: 'sop-fe-add', type: 'button' }, '+ Row');
+        addRow.onclick = () => { b.rows.push({ g: false, cells: Array.from({ length: width }, () => '') }); rerender(); };
+        bar.appendChild(addRow);
+        if (b.head) {
+          const addGrp = el('button', { class: 'sop-fe-add', type: 'button' }, '+ Group header');
+          addGrp.onclick = () => { b.rows.push({ g: true, text: '' }); rerender(); };
+          bar.appendChild(addGrp);
+        }
+        box.appendChild(bar); host.appendChild(box);
+      });
+      if (!model.length) host.appendChild(el('p', { class: 'sop-fe-col' }, 'NO CONTENT PARSED // SWITCH TO RAW TEXT.'));
+    }
     function openSopEditor(record) {
       if (!(typeof canReassign === 'function' && canReassign())) { toast('Command staff only.', 'warn'); return; }
       const d = record || {};
+      const body0 = (d.content && d.content.body) || '';
+      let model = sopParseBlocks(body0);
+      const hasTables = model.some((b) => b.t === 'tbl');
+      let mode = hasTables ? 'form' : 'raw';
+      const synced = !!(d.content && d.content.sync && d.content.sync.source === 'gdrive');
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
-        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">${record ? 'Edit' : 'New'} SOP</h3><button aria-label="Close" class="close-x text-2xl leading-none text-slate-400 hover:text-white">&times;</button></div>
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <h3 class="text-lg font-bold text-white">${record ? 'Edit' : 'New'} SOP</h3>
+          <div class="flex flex-shrink-0 items-center gap-3">
+            ${hasTables ? '<button id="sop-mode" type="button" class="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-white/10">Raw text</button>' : ''}
+            <button aria-label="Close" class="close-x text-2xl leading-none text-slate-400 hover:text-white">&times;</button>
+          </div>
+        </div>
+        ${synced ? '<p class="t-readout mb-3 text-[10px] uppercase tracking-widest text-amber-400/80">SYNCED FROM GOOGLE DRIVE // THE NEXT DRIVE EDIT OVERWRITES PORTAL CHANGES</p>' : ''}
         <label class="mb-1 block text-xs font-semibold text-slate-400">Title *</label>
         <input id="sop-name" value="${esc(d.name || '')}" class="mb-3 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Use of Force Policy" />
-        <label class="mb-1 block text-xs font-semibold text-slate-400">Procedure text *</label>
-        <textarea id="sop-body" rows="12" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${esc((d.content && d.content.body) || '')}</textarea>
+        <div id="sop-form" class="sop-fe ${mode === 'form' ? '' : 'hidden'}"></div>
+        <div id="sop-rawwrap" class="${mode === 'raw' ? '' : 'hidden'}">
+          <label class="mb-1 block text-xs font-semibold text-slate-400">Procedure text *</label>
+          <textarea id="sop-body" rows="12" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"></textarea>
+        </div>
         <button id="sop-save" class="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">${record ? 'Save changes' : 'Publish SOP'}</button>`;
       node.querySelector('.close-x').onclick = closeModal;
+      const formHost = node.querySelector('#sop-form');
+      const ta = node.querySelector('#sop-body');
+      if (mode === 'form') sopFormEditor(formHost, model); else ta.value = body0;
+      const modeBtn = node.querySelector('#sop-mode');
+      if (modeBtn) modeBtn.onclick = () => {
+        if (mode === 'form') { ta.value = sopSerializeBlocks(model); mode = 'raw'; modeBtn.textContent = 'Form editor'; }
+        else { model = sopParseBlocks(ta.value); mode = 'form'; modeBtn.textContent = 'Raw text'; sopFormEditor(formHost, model); }
+        formHost.classList.toggle('hidden', mode !== 'form');
+        node.querySelector('#sop-rawwrap').classList.toggle('hidden', mode !== 'raw');
+      };
       node.querySelector('#sop-save').onclick = async () => {
-        const name = node.querySelector('#sop-name').value.trim(), body = node.querySelector('#sop-body').value;
+        const name = node.querySelector('#sop-name').value.trim();
+        const body = mode === 'form' ? sopSerializeBlocks(model) : ta.value;
         if (!name || !body.trim()) { toast('Title and procedure text are required.', 'warn'); return; }
-        const payload = { folder: (record && record.folder) || SOP_FOLDER, name: name, kind: 'doc', content: { body: body }, modified_label: new Date().toLocaleDateString('en-GB') };
+        // Merge into existing content so Drive-sync metadata survives portal edits.
+        const content = Object.assign({}, d.content || {}, { body: body });
+        const payload = { folder: (record && record.folder) || SOP_FOLDER, name: name, kind: 'doc', content: content, modified_label: new Date().toLocaleDateString('en-GB') };
         const res = record && record.id ? await DB().update('documents', record.id, payload) : await DB().insert('documents', payload);
         if (res && res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast(record ? 'SOP updated' : 'SOP published', 'success');
