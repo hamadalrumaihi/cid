@@ -774,3 +774,26 @@ body { background: radial-gradient(circle at 50% 20%, #10151d 0%, #06090d 100%);
 .sop-tile-n { font-family: var(--mono); font-size: 1.3rem; font-weight: 600; color: #fff; }
 .sop-tile-a { font-family: var(--mono); font-size: .62rem; letter-spacing: .08em; color: var(--t-green); }
 .sop-tile-l { font-size: .6rem; letter-spacing: .07em; text-transform: uppercase; color: #64748b; margin-top: .25rem; }
+
+/* SOP form editor: structured inputs over the same text the reader renders.
+   Grid width comes from the table's column count (inline style); wide rosters
+   scroll horizontally inside .sop-fe-scroll instead of breaking the modal. */
+.sop-fe { max-height: 58vh; overflow-y: auto; padding-right: .25rem; }
+.sop-fe-col { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #64748b; padding: 2px 2px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sop-fe-head { width: 100%; background: #0b0f14; border: 1px solid rgba(148,163,184,.2); border-radius: 2px; color: #fff; font-weight: 600; font-size: 13px; padding: 7px 9px; margin-bottom: .5rem; }
+.sop-fe-head:focus { outline: none; border-color: var(--t-cyan); }
+.sop-fe-text { width: 100%; background: #0b0f14; border: 1px solid rgba(148,163,184,.15); border-radius: 2px; color: #cbd5e1; font-size: 12.5px; line-height: 1.5; padding: 7px 9px; }
+.sop-fe-text:focus { outline: none; border-color: var(--t-cyan); }
+.sop-fe-tbl { border: 1px solid var(--t-line); border-radius: 2px; background: var(--t-field); padding: .6rem; margin-bottom: .9rem; }
+.sop-fe-scroll { overflow-x: auto; }
+.sop-fe-grid { display: grid; gap: 4px; align-items: center; }
+.sop-fe-grid input, .sop-fe-grid select { width: 100%; min-width: 0; background: #0b0f14; border: 1px solid rgba(148,163,184,.15); border-radius: 2px; color: #e2e8f0; font-family: var(--mono); font-size: 12px; padding: 5px 7px; }
+.sop-fe-grid input:focus, .sop-fe-grid select:focus { outline: none; border-color: var(--t-cyan); }
+.sop-fe-grid input[type="number"] { -moz-appearance: textfield; }
+.sop-fe-colhead { font-size: 10.5px !important; letter-spacing: .06em; text-transform: uppercase; color: #94a3b8 !important; background: rgba(148,163,184,.06) !important; }
+.sop-fe-groupin { background: rgba(34,211,238,.06) !important; border-color: rgba(34,211,238,.3) !important; color: #a5f3fc !important; font-weight: 600; }
+.sop-fe-del { color: #64748b; font-size: 15px; line-height: 1; padding: 4px; border-radius: 2px; transition: color .15s ease; }
+.sop-fe-del:hover { color: #fb7185; }
+.sop-fe-bar { display: flex; gap: .5rem; margin-top: .55rem; }
+.sop-fe-add { font-family: var(--mono); font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: #94a3b8; border: 1px solid rgba(148,163,184,.2); border-radius: 2px; padding: 4px 10px; transition: all .15s ease; }
+.sop-fe-add:hover { color: #fff; border-color: var(--t-cyan); background: rgba(34,211,238,.06); }
