@@ -567,3 +567,9 @@ body { background: radial-gradient(circle at 50% 20%, #10151d 0%, #06090d 100%);
 [data-bureau="BCB"] { color: #c4b5fd; }
 [data-bureau="SAB"] { color: #fcd34d; }
 [data-bureau="JTF"] { color: #86efac; }
+
+/* Readable SOP/Library article typography (Reference tab reader). */
+.sop-prose { font-size: .92rem; line-height: 1.75; color: #cbd5e1; }
+.sop-prose p { margin: 0 0 .9em; }
+.sop-prose h3 { font-family: var(--mono); font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--t-cyan); margin: 1.4em 0 .5em; padding-bottom: .3em; border-bottom: 1px solid var(--t-line); }
+.sop-prose h3:first-child { margin-top: 0; }
