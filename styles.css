@@ -591,3 +591,175 @@ body { background: radial-gradient(circle at 50% 20%, #10151d 0%, #06090d 100%);
 .sop-note { margin: 0 0 1em; padding: .6em .9em; border-left: 2px solid var(--t-amber); background: rgba(245,158,11,.06); color: #cbd5e1; font-size: .85rem; }
 .sop-list { margin: 0 0 1em 1.2em; } .sop-list li { margin-bottom: .35em; }
 .sop-prose code { font-family: var(--mono); font-size: .85em; background: rgba(255,255,255,.06); padding: .1em .35em; border-radius: 2px; }
+
+/* ============================================================================
+   FRONTEND OVERHAUL FOUNDATION (2026-07-06)
+   Operational shell pass: reduce nested-card weight, standardize first-screen
+   headers/toolbars, and keep mobile dense without hiding real controls.
+   ========================================================================== */
+.workspace-shell {
+  width: min(100%, 104rem);
+  margin-inline: auto;
+}
+
+#app-shell main {
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, .38), rgba(2, 6, 12, .16) 32rem, transparent),
+    radial-gradient(circle at 18% 0%, rgba(34, 211, 238, .055), transparent 24rem),
+    radial-gradient(circle at 100% 12%, rgba(245, 158, 11, .035), transparent 22rem);
+}
+
+#app-shell header,
+#subtabs {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .035), 0 12px 28px -22px rgba(0, 0, 0, .85);
+}
+
+#subtabs {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, .28) transparent;
+}
+
+#subtabs .subtab {
+  min-height: 2rem;
+  white-space: nowrap;
+}
+
+/* View mastheads should read as work headers, not cards inside the page. */
+#app-shell .workspace-shell > .view > .rounded-2xl:first-child,
+#app-shell .workspace-shell > .view > .flex.rounded-2xl:first-child,
+#app-shell .workspace-shell > .view > .rounded-2xl:first-of-type,
+#app-shell .workspace-shell > .view > .flex.rounded-2xl:first-of-type,
+#cases-list > .rounded-2xl:first-child,
+#gangs-list > .rounded-2xl:first-child {
+  border-radius: 0;
+  border-inline: 0;
+  border-top-color: rgba(34, 211, 238, .16);
+  border-bottom-color: rgba(148, 163, 184, .12);
+  background:
+    linear-gradient(90deg, rgba(34, 211, 238, .075), rgba(255, 255, 255, .025) 38%, transparent),
+    rgba(8, 13, 20, .52);
+  box-shadow: none;
+  padding: 1rem 0;
+}
+
+#app-shell .workspace-shell > .view > .rounded-2xl:first-child > *,
+#app-shell .workspace-shell > .view > .flex.rounded-2xl:first-child > *,
+#cases-list > .rounded-2xl:first-child > *,
+#gangs-list > .rounded-2xl:first-child > * {
+  margin-inline: 1rem;
+}
+
+#app-shell .workspace-shell > .view > .rounded-2xl:first-child h3,
+#app-shell .workspace-shell > .view > .flex.rounded-2xl:first-child h3,
+#cases-list > .rounded-2xl:first-child h3,
+#gangs-list > .rounded-2xl:first-child h3 {
+  font-family: var(--display);
+  font-size: clamp(1rem, 1.3vw, 1.25rem);
+  letter-spacing: 0;
+}
+
+#app-shell .workspace-shell > .view > .rounded-2xl:first-child p,
+#app-shell .workspace-shell > .view > .flex.rounded-2xl:first-child p,
+#cases-list > .rounded-2xl:first-child p,
+#gangs-list > .rounded-2xl:first-child p {
+  max-width: 58rem;
+}
+
+/* Toolbars become compact control rails with predictable wrapping. */
+#cmd-filterbar,
+#cases-list > .mb-4.flex,
+#view-persons > .mb-4.flex,
+#view-gangs #gangs-list > .mb-4.flex,
+#view-records > .mb-4.flex,
+#view-case-files > .mb-5.flex,
+#view-vehicles > .mb-6.flex {
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, .09);
+  background: rgba(7, 11, 17, .46);
+  padding: .65rem;
+}
+
+#app-shell input,
+#app-shell select,
+#app-shell textarea {
+  min-height: 2.25rem;
+}
+
+#app-shell button {
+  min-height: 2rem;
+}
+
+#app-shell button[class*="from-badge-500"],
+#app-shell button[class*="bg-gradient-to-r"] {
+  background: linear-gradient(180deg, rgba(34, 211, 238, .22), rgba(14, 116, 144, .22));
+  border: 1px solid rgba(34, 211, 238, .22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+
+#app-shell button[class*="from-badge-500"]:hover,
+#app-shell button[class*="bg-gradient-to-r"]:hover {
+  background: linear-gradient(180deg, rgba(34, 211, 238, .3), rgba(14, 116, 144, .28));
+}
+
+/* Empty states and notices should occupy rows without looking like major panels. */
+#app-shell .workspace-shell .view [class*="text-center"][class*="bg-ink-900/60"] {
+  background: rgba(7, 11, 17, .35);
+  border-style: dashed;
+  box-shadow: none;
+}
+
+@media (min-width: 1024px) {
+  .nav-collapsed main { margin-left: 4.75rem; }
+  .workspace-shell { padding-inline: clamp(1.5rem, 2.2vw, 2.5rem); }
+}
+
+@media (max-width: 768px) {
+  #app-shell header {
+    align-items: flex-start;
+  }
+  #page-subtitle,
+  #sys-telemetry {
+    display: none;
+  }
+  .workspace-shell {
+    padding-inline: .75rem;
+  }
+  #subtabs {
+    padding-inline: .75rem;
+  }
+  #app-shell .workspace-shell > .view > .rounded-2xl:first-child,
+  #app-shell .workspace-shell > .view > .flex.rounded-2xl:first-child,
+  #cases-list > .rounded-2xl:first-child,
+  #gangs-list > .rounded-2xl:first-child {
+    margin-bottom: .75rem;
+    padding: .75rem 0;
+  }
+  #app-shell .workspace-shell > .view > .rounded-2xl:first-child > *,
+  #app-shell .workspace-shell > .view > .flex.rounded-2xl:first-child > *,
+  #cases-list > .rounded-2xl:first-child > *,
+  #gangs-list > .rounded-2xl:first-child > * {
+    margin-inline: .75rem;
+  }
+  #cmd-filterbar,
+  #cases-list > .mb-4.flex,
+  #view-persons > .mb-4.flex,
+  #view-gangs #gangs-list > .mb-4.flex,
+  #view-records > .mb-4.flex,
+  #view-case-files > .mb-5.flex,
+  #view-vehicles > .mb-6.flex {
+    gap: .5rem;
+  }
+  #cmd-filterbar > *,
+  #cases-list > .mb-4.flex > *,
+  #view-persons > .mb-4.flex > *,
+  #view-gangs #gangs-list > .mb-4.flex > *,
+  #view-case-files > .mb-5.flex > * {
+    min-width: min(100%, 12rem);
+  }
+  #view-command > .overflow-hidden {
+    overflow-x: auto;
+  }
+  #view-command > .overflow-hidden table {
+    min-width: 44rem;
+  }
+}

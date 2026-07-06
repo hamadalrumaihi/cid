@@ -734,6 +734,42 @@
     };
     const TAB_CATEGORY = {}; NAV_CATEGORIES.forEach((c) => c.tabs.forEach((t) => { TAB_CATEGORY[t] = c.id; }));
     const CAT_DEFAULT = {}; NAV_CATEGORIES.forEach((c) => { CAT_DEFAULT[c.id] = c.tabs[0]; });
+    const ROUTE_ENTER = {
+      cases: 'onEnterCases',
+      penal: 'onEnterPenal',
+      sops: 'onEnterSops',
+      persons: 'onEnterPersons',
+      gangs: 'onEnterGangs',
+      narcotics: 'onEnterNarcotics',
+      places: 'onEnterPlaces',
+      network: 'onEnterNetwork',
+      ballistics: 'onEnterBallistics',
+      rico: 'renderRico',
+      command: 'onEnterCommand',
+      personnel: 'onEnterPersonnel',
+      media: 'onEnterMedia',
+      modus: 'onEnterModus',
+      drive: 'onEnterDrive',
+      announce: 'onEnterAnnounce',
+      'case-files': 'onEnterCaseFiles',
+      heatmap: 'onEnterHeatmap',
+      inbox: 'onEnterInbox',
+      shifts: 'onEnterShifts',
+      audit: 'onEnterAudit',
+      feedback: 'onEnterFeedback',
+      vehicles: 'onEnterVehicles',
+      bolo: 'onEnterBolo',
+    };
+    function runRouteEnter(tab) {
+      const hook = ROUTE_ENTER[tab];
+      if (!hook) return;
+      const fn = window[hook];
+      if (typeof fn === 'function') fn();
+    }
+    function activeRoute() {
+      const view = $('.view.active');
+      return view && view.id ? view.id.replace(/^view-/, '') : Store.get('tab', 'command');
+    }
     function renderSubtabs(activeTab, cat) {
       const bar = $('#subtabs'); if (!bar) return;
       const def = NAV_CATEGORIES.find((c) => c.id === cat);
@@ -768,30 +804,7 @@
       Store.set('tab', tab);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       closeDrawer();
-      if (tab === 'cases' && typeof onEnterCases === 'function') onEnterCases();
-      if (tab === 'penal' && typeof onEnterPenal === 'function') onEnterPenal();
-      if (tab === 'sops' && typeof onEnterSops === 'function') onEnterSops();
-      if (tab === 'persons' && typeof onEnterPersons === 'function') onEnterPersons();
-      if (tab === 'gangs' && typeof onEnterGangs === 'function') onEnterGangs();
-      if (tab === 'narcotics' && typeof onEnterNarcotics === 'function') onEnterNarcotics();
-      if (tab === 'places' && typeof onEnterPlaces === 'function') onEnterPlaces();
-      if (tab === 'network' && typeof onEnterNetwork === 'function') onEnterNetwork();
-      if (tab === 'ballistics' && typeof onEnterBallistics === 'function') onEnterBallistics();
-      if (tab === 'rico' && typeof renderRico === 'function') renderRico();
-      if (tab === 'command' && typeof onEnterCommand === 'function') onEnterCommand();
-      if (tab === 'personnel' && typeof onEnterPersonnel === 'function') onEnterPersonnel();
-      if (tab === 'media' && typeof onEnterMedia === 'function') onEnterMedia();
-      if (tab === 'modus' && typeof onEnterModus === 'function') onEnterModus();
-      if (tab === 'drive' && typeof onEnterDrive === 'function') onEnterDrive();
-      if (tab === 'announce' && typeof onEnterAnnounce === 'function') onEnterAnnounce();
-      if (tab === 'case-files' && typeof onEnterCaseFiles === 'function') onEnterCaseFiles();
-      if (tab === 'heatmap' && typeof onEnterHeatmap === 'function') onEnterHeatmap();
-      if (tab === 'inbox' && typeof onEnterInbox === 'function') onEnterInbox();
-      if (tab === 'shifts' && typeof onEnterShifts === 'function') onEnterShifts();
-      if (tab === 'audit' && typeof onEnterAudit === 'function') onEnterAudit();
-      if (tab === 'feedback' && typeof onEnterFeedback === 'function') onEnterFeedback();
-      if (tab === 'vehicles' && typeof onEnterVehicles === 'function') onEnterVehicles();
-      if (tab === 'bolo' && typeof onEnterBolo === 'function') onEnterBolo();
+      runRouteEnter(tab);
     }
     $$('.nav-cat, .bnav-link').forEach((b) => b.addEventListener('click', () => navigate(CAT_DEFAULT[b.dataset.cat] || 'command')));
 
@@ -930,6 +943,21 @@
       for (let i = 0; i < tries; i++) { try { return await fn(); } catch (e) { last = e; if (i < tries - 1) await new Promise((r) => setTimeout(r, delay * (i + 1))); } }
       throw last;
     }
+    window.CIDApp = window.CIDApp || {};
+    window.CIDApp.activeRoute = activeRoute;
+    window.CIDApp.isRouteActive = function (tab) { return activeRoute() === tab; };
+    window.CIDApp.enterActiveRoute = function () { runRouteEnter(activeRoute()); };
+    window.CIDApp.realtime = window.CIDApp.realtime || {
+      _tables: new Set(),
+      subscribeOnce(table, handler) {
+        if (!dbReady() || !table || this._tables.has(table)) return;
+        DB().subscribe(table, handler);
+        this._tables.add(table);
+      },
+      reset() {
+        this._tables.clear();
+      },
+    };
 
     /* Themed replacements for the native window.confirm / window.prompt (which
      * can't be styled). Promise-based; rendered as a top-layer overlay (inline

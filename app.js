@@ -374,30 +374,30 @@
       renderCompBrackets();
       $('#comp-input').addEventListener('input', () => { const d = $('#comp-input').value.replace(/[^0-9]/g,''); $('#comp-input').value = d ? Number(d).toLocaleString('en-US') : ''; calcComp(); });
       calcComp();
-      // Narcotics (Supabase) — fetch via onAuthed / onEnterNarcotics
+      // Narcotics (Supabase) — fetch via onEnterNarcotics
       renderDrugs();
       $('#narc-new').addEventListener('click', () => openNarcoticModal(null));
-      // Ballistics (Supabase) — fetch via onAuthed / onEnterBallistics
+      // Ballistics (Supabase) — fetch via onEnterBallistics
       renderBenches(); renderBallisticLog();
       $$('.bench-tab').forEach((b) => b.addEventListener('click', () => { benchType = b.dataset.bench; Store.set('benchType', benchType); renderBenches(); }));
       $('#bench-new').addEventListener('click', () => openBenchModal(null));
       $('#footprint-new').addEventListener('click', () => openFootprintModal(null));
-      // Personnel + evidence vault (Supabase) — fetch via onAuthed / onEnterPersonnel
+      // Personnel + evidence vault (Supabase) — fetch via onEnterPersonnel/onEnterMedia
       renderRoster(); renderCommendations(); renderMediaFilters(); renderMedia();
       $('#add-media').addEventListener('click', openMediaModal);
       $('#add-commend').addEventListener('click', () => openCommendModal(null));
-      // M.O. (Supabase) — profiles fetched via onAuthed / onEnterModus
+      // M.O. (Supabase) — profiles fetched via onEnterModus
       $('#mo-run').addEventListener('click', renderMO);
       $('#mo-sample').addEventListener('click', () => { $('#mo-input').value = SAMPLE_MO; renderMO(); });
       $('#mo-save').addEventListener('click', openMoSaveModal);
-      // Gangs (Supabase) + Persons (Supabase) — fetch via onAuthed / onEnter*
+      // Gangs (Supabase) + Persons (Supabase) — fetch via onEnter*
       $('#add-gang').addEventListener('click', () => openGangModal(null));
       $('#gang-refresh').addEventListener('click', fetchGangs);
       $('#gang-search').addEventListener('input', debounce(renderGangs, 180));
       $('#person-new').addEventListener('click', () => openPersonModal(null));
       $('#person-refresh').addEventListener('click', fetchPersons);
       $('#person-search').addEventListener('input', debounce(renderPersons, 180));
-      // Criminal places (Supabase) — fetch via onAuthed / onEnterPlaces
+      // Criminal places (Supabase) — fetch via onEnterPlaces
       renderPlaces(); $('#add-place').addEventListener('click', () => openPlaceModal(null));
       // Reports authoring now lives inside each case's Reports tab (Case Files).
       // RICO
@@ -406,7 +406,7 @@
       renderDrive();
       // Live CID Records (Supabase)
       initRecords();
-      // Case Files (Supabase spine) — fetch happens via onAuthed / onEnterCases
+      // Case Files (Supabase spine) — fetch happens via onEnterCases
       initCases();
       // Sign-off Inbox (Oversight) — badge + per-user case buckets
       initInbox();

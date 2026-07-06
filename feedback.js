@@ -5,14 +5,12 @@
    feedback table's RLS enforces the same split on the server. */
 "use strict";
 
-    // Both accounts belong to the app owner; either one triages feedback.
+    // Both accounts belong to the app owner; RLS grants triage by these UUIDs.
     const FEEDBACK_OWNER_IDS = ['25466146-c512-4497-8ee8-88cbf3b1d22d', '6554181a-e2ed-4993-a66f-420c08f1471c'];
-    const FEEDBACK_OWNER_EMAILS = ['hkalrumaihi@gmail.com', 'jcarrter04@gmail.com'];
     function isAppOwner() {
       const me = DB() && DB().me;
       if (!me) return false;
-      if (FEEDBACK_OWNER_IDS.includes(me.id)) return true;
-      return !!(me.email && FEEDBACK_OWNER_EMAILS.includes(me.email.toLowerCase()));
+      return FEEDBACK_OWNER_IDS.includes(me.id);
     }
     // Show the Feedback tab to any signed-in member (everyone can request).
     function updateFeedbackNav() {

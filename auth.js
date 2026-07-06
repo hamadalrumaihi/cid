@@ -115,6 +115,7 @@
       // account on a shared browser doesn't inherit the previous member's state.
       lastAuthedUid = null;
       if (window.CIDDB) { window.CIDDB.me = null; if (window.CIDDB.removeAllChannels) window.CIDDB.removeAllChannels(); }
+      if (window.CIDApp && window.CIDApp.realtime && typeof window.CIDApp.realtime.reset === 'function') window.CIDApp.realtime.reset();
       showLogin(); return;
     }
     var profile;
