@@ -429,10 +429,25 @@
     let trackers = [];
     let PROFILES = [];
     const officerName = (id) => { if (!id) return null; const p = PROFILES.find((x) => x.id === id); if (p) return p.display_name; const me = DB() && DB().me; return (me && me.id === id) ? me.display_name : 'Officer'; };
-    async function fetchProfiles() { if (!dbReady()) return; try { PROFILES = await DB().list('profiles', {}); } catch (e) {} if (typeof renderAdmin === 'function') renderAdmin(); if (typeof renderActivity === 'function') renderActivity(); if (typeof populateDetectiveFilter === 'function') populateDetectiveFilter(); updatePendingBadge(); }
+    // profiles.email is column-restricted to command; roster reads omit it and
+    // the admin panel pulls addresses via the command-gated admin_member_emails RPC.
+    const PROFILE_COLS = 'id,display_name,avatar_url,badge_number,division,role,active,created_at,updated_at,loa,loa_since,discord_id,removed_at';
+    let MEMBER_EMAILS = {};
+    async function fetchProfiles() {
+      if (!dbReady()) return;
+      try { PROFILES = await DB().list('profiles', { select: PROFILE_COLS }); } catch (e) {}
+      if (DB() && DB().isAdmin && DB().isAdmin()) {
+        try { const r = await DB().rpc('admin_member_emails'); if (r && !r.error && Array.isArray(r.data)) { MEMBER_EMAILS = {}; r.data.forEach((x) => { MEMBER_EMAILS[x.id] = x.email; }); } } catch (e) {}
+      }
+      if (typeof renderAdmin === 'function') renderAdmin();
+      if (typeof renderActivity === 'function') renderActivity();
+      if (typeof populateDetectiveFilter === 'function') populateDetectiveFilter();
+      updatePendingBadge();
+    }
+    const memberEmail = (id) => (typeof MEMBER_EMAILS !== 'undefined' && MEMBER_EMAILS[id]) || '';
     // Pending-approval alert badge (admins only): count of inactive profiles.
     function updatePendingBadge() {
-      const n = (typeof PROFILES !== 'undefined' ? PROFILES : []).filter((p) => !p.active).length;
+      const n = (typeof PROFILES !== 'undefined' ? PROFILES : []).filter((p) => !p.active && !p.removed_at).length;
       const show = n > 0 && DB() && DB().isAdmin();
       ['#pending-nav-badge', '#pending-bnav-badge'].forEach((sel) => { const b = $(sel); if (!b) return; b.textContent = String(n); b.classList.toggle('hidden', !show); });
     }
@@ -491,7 +506,7 @@
           </div>
           <div class="mt-3 flex flex-wrap gap-2">
             ${(!authorized && !expired && canSign) ? '<button class="tk-cosign flex-1 rounded-lg border border-white/10 bg-white/5 py-2 text-xs font-semibold text-white transition hover:bg-white/10">Co-sign as Deputy</button>' : ''}
-            ${canSign ? '<button class="tk-del rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">✕</button>' : ''}
+            ${canSign ? '<button aria-label="Remove" class="tk-del rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">✕</button>' : ''}
           </div>`;
         const co = card.querySelector('.tk-cosign');
         if (co) co.addEventListener('click', async () => {

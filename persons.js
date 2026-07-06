@@ -169,7 +169,7 @@
         row.innerHTML = `<input class="prop-addr min-w-[10rem] flex-1 rounded-md border border-white/10 bg-ink-800 px-2 py-1.5 text-sm text-white outline-none focus:border-badge-500" placeholder="Address / location" value="${escapeHTML(pr.address || '')}" />
           <select class="prop-type rounded-md border border-white/10 bg-ink-800 px-2 py-1.5 text-sm text-white outline-none focus:border-badge-500">${typeOpts}</select>
           <input class="prop-notes min-w-[8rem] flex-1 rounded-md border border-white/10 bg-ink-800 px-2 py-1.5 text-sm text-white outline-none focus:border-badge-500" placeholder="Notes (optional)" value="${escapeHTML(pr.notes || '')}" />
-          <button type="button" class="prop-rm rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10">✕</button>`;
+          <button type="button" aria-label="Remove property" class="prop-rm rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10">✕</button>`;
         row.querySelector('.prop-rm').onclick = () => row.remove();
         propsWrap.appendChild(row);
       };
