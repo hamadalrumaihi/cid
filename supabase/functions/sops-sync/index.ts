@@ -1,9 +1,8 @@
 // sops-sync: pulls Google Docs from a shared Drive folder into documents(folder='SOPs').
-// Secrets required (Dashboard > Edge Functions > sops-sync > Secrets):
-//   GOOGLE_SA_EMAIL   service-account email
-//   GOOGLE_SA_KEY     service-account private key (PEM; \n-escaped is fine)
-//   SOPS_FOLDER_ID    Drive folder id shared read-only with the service account
-//   SYNC_SECRET       shared secret; callers must send the x-sync-secret header
+// Config comes from public.app_secrets (service-role-only table; RLS deny-all
+// for app users) with env vars as optional overrides — so deploying needs NO
+// dashboard secrets. Keys: GOOGLE_SA_EMAIL, GOOGLE_SA_KEY, SYNC_SECRET, and
+// optional SOPS_FOLDER_ID (absent = sync every Google Doc shared with the SA).
 // Deploy: supabase functions deploy sops-sync --no-verify-jwt
 // Runs on a pg_cron schedule via pg_net; idempotent (upserts by Drive file id,
 // skips files whose modifiedTime is unchanged). Service-role writes are trusted
@@ -35,17 +34,21 @@ async function googleToken(email: string, pem: string): Promise<string> {
 }
 
 Deno.serve(async (req) => {
-  const need = Deno.env.get('SYNC_SECRET');
-  if (!need || req.headers.get('x-sync-secret') !== need) return new Response('forbidden', { status: 403 });
-  const email = Deno.env.get('GOOGLE_SA_EMAIL'), pem = Deno.env.get('GOOGLE_SA_KEY'), folder = Deno.env.get('SOPS_FOLDER_ID');
-  if (!email || !pem || !folder) return Response.json({ error: 'missing GOOGLE_SA_EMAIL / GOOGLE_SA_KEY / SOPS_FOLDER_ID secrets' }, { status: 500 });
   const supaUrl = Deno.env.get('SUPABASE_URL')!, svc = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const sb = (path: string, init: RequestInit = {}) =>
     fetch(`${supaUrl}/rest/v1/${path}`, { ...init, headers: { apikey: svc, authorization: `Bearer ${svc}`, 'content-type': 'application/json', prefer: 'return=representation', ...(init.headers || {}) } });
+  const stored: Record<string, string> = {};
+  try { for (const r of await (await sb('app_secrets?select=key,value')).json()) stored[r.key] = r.value; } catch (_e) { /* fall through to env */ }
+  const cfg = (k: string) => Deno.env.get(k) || stored[k] || '';
+  const need = cfg('SYNC_SECRET');
+  if (!need || req.headers.get('x-sync-secret') !== need) return new Response('forbidden', { status: 403 });
+  const email = cfg('GOOGLE_SA_EMAIL'), pem = cfg('GOOGLE_SA_KEY'), folder = cfg('SOPS_FOLDER_ID');
+  if (!email || !pem) return Response.json({ error: 'missing GOOGLE_SA_EMAIL / GOOGLE_SA_KEY (app_secrets or env)' }, { status: 500 });
   try {
     const tok = await googleToken(email, pem);
     const g = (u: string) => fetch(`https://www.googleapis.com/drive/v3/${u}`, { headers: { authorization: `Bearer ${tok}` } });
-    const q = encodeURIComponent(`'${folder}' in parents and trashed=false and mimeType='application/vnd.google-apps.document'`);
+    const scope = folder ? `'${folder}' in parents and ` : '';
+    const q = encodeURIComponent(`${scope}trashed=false and mimeType='application/vnd.google-apps.document'`);
     const files = (await (await g(`files?q=${q}&fields=files(id,name,modifiedTime)&pageSize=100`)).json()).files || [];
     const existing = await (await sb('documents?select=id,name,content&folder=eq.SOPs')).json();
     const byFileId: Record<string, { id: string; content?: { sync?: { modifiedTime?: string } } }> = {};
