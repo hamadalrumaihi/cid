@@ -56,7 +56,7 @@
         const eb = card.querySelector('.vh-edit'); if (eb) eb.onclick = () => openVehicleModal(v);
         const db = card.querySelector('.vh-del'); if (db) db.onclick = async () => {
           if (!(await uiConfirm(`Delete vehicle ${v.plate}? Restorable via Undo.`, { confirmText: 'Delete' }))) return;
-          await deleteWithUndo('vehicles', v, { label: 'Vehicle ' + v.plate, after: fetchVehicles });
+          await deleteWithUndo('vehicles', v, { label: 'Vehicle ' + v.plate, noConfirm: true, after: fetchVehicles });
         };
         grid.appendChild(card);
       });

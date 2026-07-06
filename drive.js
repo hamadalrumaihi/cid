@@ -3,180 +3,23 @@
    Split from the original monolith; see AGENTS.md. */
 "use strict";
 
-    /* ============================================================ 10. CID GENERAL (Drive) ============================================================ */
-    const ACCENTS = { blue:{tint:'text-blue-400',ring:'hover:border-blue-500/40 hover:bg-blue-500/5'}, emerald:{tint:'text-emerald-400',ring:'hover:border-emerald-500/40 hover:bg-emerald-500/5'}, violet:{tint:'text-violet-400',ring:'hover:border-violet-500/40 hover:bg-violet-500/5'}, amber:{tint:'text-amber-400',ring:'hover:border-amber-500/40 hover:bg-amber-500/5'}, rose:{tint:'text-rose-400',ring:'hover:border-rose-500/40 hover:bg-rose-500/5'}, slate:{tint:'text-slate-300',ring:'hover:border-slate-400/40 hover:bg-white/5'} };
+    /* ============================================================ 10. DOCUMENTS LIBRARY ============================================================
+       The Drive tab was retired; this module keeps the shared documents cache,
+       the live paperwork viewers (doc/sheet/form + history), and the SOP /
+       roster / gang-intel surfaces that render from it. */
     const fileIcon = (t) => ({ doc:'📄', sheet:'📊', pdf:'📕', zip:'🗜️', matrix:'🛡️', form:'📝' }[t] || '📄');
     const safeName = (n) => n.replace(/\.[a-z]+$/i,'').replace(/[^a-z0-9]+/gi,'-').replace(/^-+|-+$/g,'').toLowerCase();
     // Display type drives the icon / sub-label: a name/flag matching a fillable form
     // schema → 'form'; a sheet flagged content.view='matrix' is the live CI matrix.
     const docDisplayType = (d) => formSchemaIdFor(d) ? 'form' : (d.content && d.content.view === 'matrix') ? 'matrix' : d.kind;
-    const docsInFolder = (name) => DOCS.filter((d) => d.folder === name).sort((a, b) => a.name.localeCompare(b.name));
-
     async function fetchDocuments() {
-      if (!dbReady()) { renderDrive(); return; }
-      try { DOCS = await DB().list('documents', { order: 'name' }); } catch (e) { toast('Could not load Drive documents — check your connection.', 'danger'); }
-      renderDrive();
-      const s = $('#drive-search'); if (s && s.value.trim()) renderDriveSearch(s.value);   // keep results fresh during search
+      if (!dbReady()) return;
+      try { DOCS = await DB().list('documents', { order: 'name' }); } catch (e) { toast('Could not load documents — check your connection.', 'danger'); }
+      if (typeof refreshSopSurfaces === 'function') refreshSopSurfaces();
     }
-    function onEnterDrive() { if (dbReady()) fetchDocuments(); else renderDrive(); wireDriveSearch(); }
-
-    /* Wave 4: cross-drive search — matches a document's name, folder, linked case
-       number, and content (body / sheet cells / form values). Client-side over the
-       already-RLS-scoped DOCS cache; results click straight through to the file. */
-    function wireDriveSearch() {
-      const s = $('#drive-search'); if (!s) return;
-      s.oninput = debounce(() => renderDriveSearch(s.value), 150);
-    }
-    function driveSearchText(d) {
-      const parts = [d.name || '', d.folder || ''];
-      if (d.case_id && typeof caseNumById === 'function') { const cn = caseNumById(d.case_id); if (cn) parts.push(cn); }
-      try { parts.push(JSON.stringify(d.content || {})); } catch (e) {}
-      return parts.join(' ').toLowerCase();
-    }
-    function renderDriveSearch(q) {
-      const grid = $('#drive-grid'), box = $('#drive-results'); if (!grid || !box) return;
-      q = (q || '').trim().toLowerCase();
-      if (!q) { box.classList.add('hidden'); box.innerHTML = ''; grid.classList.remove('hidden'); return; }
-      grid.classList.add('hidden'); box.classList.remove('hidden');
-      const hits = (typeof DOCS !== 'undefined' ? DOCS : []).filter((d) => driveSearchText(d).includes(q)).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      if (!hits.length) { box.innerHTML = `<p class="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-500">No documents match “${esc(q)}”.</p>`; return; }
-      box.innerHTML = `<p class="mb-2 text-[11px] text-slate-500">${hits.length} document${hits.length === 1 ? '' : 's'} match “${esc(q)}”</p>
-        <div class="space-y-2">${hits.map((d) => {
-          const cn = d.case_id && typeof caseNumById === 'function' ? caseNumById(d.case_id) : null;
-          const where = cn ? '🗂️ ' + cn : d.folder;
-          return `<div class="drive-hit flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:border-blue-500/30 hover:bg-white/5" data-id="${d.id}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">${fileIcon(docDisplayType(d))}</span>${esc(d.name)}</span><span class="text-[11px] text-slate-500">${esc(where || '')}</span></div>`;
-        }).join('')}</div>`;
-      box.querySelectorAll('.drive-hit').forEach((row) => row.onclick = () => {
-        const d = DOCS.find((x) => x.id === row.dataset.id); if (!d) return;
-        const meta = (typeof FOLDER_META !== 'undefined' ? FOLDER_META : []).find((f) => f.name === d.folder) || null;
-        openDocument(d, meta);
-      });
-    }
-
-    function renderDrive() {
-      const grid = $('#drive-grid'); if (!grid) return;
-      if (!dbReady()) { grid.innerHTML = '<p class="text-sm text-slate-500 sm:col-span-2 lg:col-span-3 xl:col-span-4">Sign in to open the CID General shared drive.</p>'; return; }
-      grid.innerHTML = '';
-      FOLDER_META.forEach((f) => {
-        const a = ACCENTS[f.accent] || ACCENTS.slate;
-        const bureauF = isBureauFolder(f.name);
-        const count = bureauF ? (typeof casesCache !== 'undefined' ? casesCache : []).filter((c) => BUREAU_FOLDER[c.bureau] === f.name).length : docsInFolder(f.name).length;
-        const noun = bureauF ? 'case' : 'item';
-        const stars = f.star ? `<span class="text-amber-400">${'★'.repeat(f.star)}</span> ` : '';
-        const card = el('div', { class:`folder-card cursor-pointer rounded-2xl border border-white/5 bg-ink-900/60 p-4 ${a.ring}` }, `
-          <div class="flex items-start justify-between"><svg class="h-9 w-9 ${a.tint}" viewBox="0 0 24 24" fill="currentColor" opacity="0.9"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><svg class="h-4 w-4 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></div>
-          <p class="mt-3 truncate text-sm font-semibold text-white" title="${esc(f.name)}">${stars}${esc(f.name)}</p>
-          <p class="mt-1 text-[11px] text-slate-500">${count} ${noun}${count === 1 ? '' : 's'}</p>`);
-        card.addEventListener('click', () => openFolder(f));
-        grid.appendChild(card);
-      });
-    }
+    // Case-linked paperwork (legacy Drive files + anything case-tagged): listed
+    // on the case detail Reports tab.
     const docsForCase = (id) => DOCS.filter((d) => d.case_id === id);
-    // Step back from an open file to the folder that contains it (case folder for a
-    // case-linked doc, otherwise its shared folder) rather than exiting the Drive.
-    function backToFolder(doc, meta) {
-      return () => {
-        const c = doc.case_id && typeof casesCache !== 'undefined' ? casesCache.find((x) => x.id === doc.case_id) : null;
-        if (c) return openCaseFolder(c, meta);
-        if (meta) return openFolder(meta);
-        closeModal();
-      };
-    }
-    // Bureau folder → list that bureau's cases; each opens to its own files.
-    function openBureauFolder(meta) {
-      const a = ACCENTS[meta.accent] || ACCENTS.slate;
-      const node = el('div', { class:'p-6' });
-      const cases = (typeof casesCache !== 'undefined' ? casesCache : []).filter((c) => BUREAU_FOLDER[c.bureau] === meta.name).slice().sort((x, y) => (x.case_number || '').localeCompare(y.case_number || ''));
-      node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white">${esc(meta.name)}</h3><p class="text-xs text-slate-400">${cases.length} case${cases.length === 1 ? '' : 's'} · open a case to see its files</p></div></div><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
-        <div class="space-y-2">${cases.length ? cases.map((c) => `<div class="case-row flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:bg-white/5 hover:border-blue-500/30" data-id="${c.id}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">🗂️</span><span><span class="font-mono text-blue-300">${esc(c.case_number)}</span> <span class="text-slate-300">${esc(c.title || '')}</span></span></span><span class="text-[11px] text-slate-500">${docsForCase(c.id).length} file${docsForCase(c.id).length === 1 ? '' : 's'} ›</span></div>`).join('') : '<p class="text-sm text-slate-500">No cases in this bureau yet. Create one in Case Files.</p>'}</div>`;
-      node.querySelector('.close-x').onclick = closeModal;
-      node.querySelectorAll('.case-row').forEach((row) => row.addEventListener('click', () => { const c = casesCache.find((x) => x.id === row.dataset.id); if (c) openCaseFolder(c, meta); }));
-      openModal(node, { wide: true, dismissible: false });
-    }
-    // A single case's file folder (documents linked by case_id).
-    function openCaseFolder(c, meta) {
-      const a = ACCENTS[meta.accent] || ACCENTS.slate;
-      const canEdit = DB() && DB().canEdit();
-      const files = docsForCase(c.id);
-      const sub = (d) => { const t = docDisplayType(d); return t === 'matrix' ? 'live matrix' : t === 'form' ? 'fillable form' : t === 'sheet' ? 'open sheet' : t === 'zip' ? 'open archive' : 'open document'; };
-      const node = el('div', { class:'p-6' });
-      node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><button id="case-back" class="text-slate-400 hover:text-white" title="Back to bureau">←</button><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white"><span class="font-mono text-blue-300">${esc(c.case_number)}</span> ${esc(c.title || '')}</h3><p class="text-xs text-slate-400">${esc(meta.name)} · ${files.length} file${files.length === 1 ? '' : 's'}</p></div></div><div class="flex items-center gap-2">${canEdit ? '<button id="cf-new-doc" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">+ New Document</button>' : ''}<button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
-        <div class="space-y-2" id="case-files-rows">${files.length ? files.map((d) => `<div class="file-row flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:bg-white/5 hover:border-blue-500/30" data-id="${d.id}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">${fileIcon(docDisplayType(d))}</span>${esc(d.name)}</span><span class="text-[11px] text-slate-500">${sub(d)}</span></div>`).join('') : '<p class="text-sm text-slate-500">No files for this case yet.</p>'}</div>`;
-      const back = () => openBureauFolder(meta);
-      node.querySelector('.close-x').onclick = back;
-      node.querySelector('#case-back').onclick = back;
-      node.querySelectorAll('.file-row').forEach((row) => row.addEventListener('click', () => { const d = DOCS.find((x) => x.id === row.dataset.id); if (d) openDocument(d, meta); }));
-      const nb = node.querySelector('#cf-new-doc'); if (nb) nb.onclick = () => openNewCaseDoc(c, meta);
-      openModal(node, { wide: true, dismissible: false, onClose: back });
-    }
-    function openNewCaseDoc(c, meta) {
-      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
-      const node = el('div', { class:'p-6' });
-      node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">New Document — ${esc(c.case_number)}</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
-        <div class="space-y-3">
-          <div><label class="mb-1 block text-xs font-semibold text-slate-400">File name *</label><input id="ncd-name" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Surveillance Log.doc" /></div>
-          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Type</label><select id="ncd-kind" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500"><option value="doc">Document</option><option value="sheet">Spreadsheet</option></select></div>
-        </div>
-        <button id="ncd-go" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Create</button>`;
-      const back = () => openCaseFolder(c, meta);
-      node.querySelector('.close-x').onclick = back;
-      node.querySelector('#ncd-go').onclick = async () => {
-        const name = node.querySelector('#ncd-name').value.trim(); if (!name) { toast('A file name is required.', 'warn'); return; }
-        const kind = node.querySelector('#ncd-kind').value;
-        const content = kind === 'sheet' ? { cols: ['Date', 'Officer', 'Detail', 'Notes'], rows: [['', '', '', '']] } : { body: name.replace(/\.[a-z]+$/i, '') + '\n\n' };
-        const res = await DB().insert('documents', { folder: meta.name, name, kind, content, case_id: c.id, modified_label: new Date().toLocaleDateString('en-GB') });
-        if (res.error) { toast('Create failed: ' + res.error.message, 'danger'); return; }
-        closeModal(); toast('Document added to case', 'success'); await fetchDocuments(); openCaseFolder(c, meta);
-      };
-      openModal(node, { dismissible: false, onClose: back });
-    }
-    function openFolder(meta) {
-      if (isBureauFolder(meta.name)) return openBureauFolder(meta);
-      const a = ACCENTS[meta.accent] || ACCENTS.slate;
-      const node = el('div', { class:'p-6' });
-      const canEdit = DB() && DB().canEdit();
-      const files = docsInFolder(meta.name);
-      const sub = (d) => { const t = docDisplayType(d); return t === 'matrix' ? 'live matrix' : t === 'form' ? 'fillable form' : t === 'sheet' ? 'open sheet' : t === 'zip' ? 'open archive' : 'open document'; };
-      node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between gap-3"><div class="flex items-center gap-3"><svg class="h-8 w-8 ${a.tint}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/></svg><div><h3 class="text-lg font-bold text-white">${esc(meta.name)}</h3><p class="text-xs text-slate-400">CID General / Shared · ${files.length} item${files.length === 1 ? '' : 's'}</p></div></div><div class="flex items-center gap-2">${canEdit ? '<button id="folder-import" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">⇪ Import</button><button id="folder-new" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">+ New Document</button>' : ''}<button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div></div>
-        <div class="space-y-2" id="folder-files">${files.length ? files.map((d) => `<div class="file-row flex cursor-pointer items-center justify-between rounded-lg border border-white/5 bg-ink-900 px-4 py-3 transition hover:bg-white/5 hover:border-blue-500/30" data-id="${d.id}"><span class="flex items-center gap-3 text-sm text-slate-200"><span class="text-lg">${fileIcon(docDisplayType(d))}</span>${esc(d.name)}</span><span class="text-[11px] text-slate-500">${sub(d)}</span></div>`).join('') : '<p class="text-sm text-slate-500">Empty folder.</p>'}</div>`;
-      node.querySelector('.close-x').onclick = closeModal;
-      node.querySelectorAll('.file-row').forEach((row) => row.addEventListener('click', () => { const d = DOCS.find((x) => x.id === row.dataset.id); if (d) openDocument(d, meta); }));
-      const nb = node.querySelector('#folder-new'); if (nb) nb.onclick = () => openNewDocModal(meta);
-      const ib = node.querySelector('#folder-import'); if (ib) ib.onclick = () => openImportModal({
-        table: 'documents', label: 'documents into ' + meta.name,
-        allow: ['name', 'kind', 'body'], required: ['name'],
-        coerce: (o) => { o.folder = meta.name; if (!o.kind) o.kind = /\.sheet$/i.test(o.name) ? 'sheet' : /\.pdf$/i.test(o.name) ? 'pdf' : 'doc'; o.content = o.kind === 'sheet' ? { cols: ['Col 1', 'Col 2'], rows: [['', '']] } : { body: o.body || '' }; delete o.body; return o; },
-        after: () => { fetchDocuments(); openFolder(meta); },
-      });
-      openModal(node, { wide: true, dismissible: false });
-    }
-    function openNewDocModal(meta) {
-      if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
-      const node = el('div', { class:'p-6' });
-      node.innerHTML = `
-        <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">New Document — ${esc(meta.name)}</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
-        <div class="space-y-3">
-          <div><label class="mb-1 block text-xs font-semibold text-slate-400">File name *</label><input id="nd-name" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Surveillance Log.doc" /></div>
-          <div><label class="mb-1 block text-xs font-semibold text-slate-400">Type</label><select id="nd-kind" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500"><option value="doc">Document</option><option value="sheet">Spreadsheet</option><option value="pdf">Reference (read-only)</option></select></div>
-        </div>
-        <button id="nd-go" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Create</button>`;
-      const back = () => openFolder(meta);
-      node.querySelector('.close-x').onclick = back;
-      node.querySelector('#nd-go').onclick = async () => {
-        const name = node.querySelector('#nd-name').value.trim();
-        if (!name) { toast('A file name is required.', 'warn'); return; }
-        const kind = node.querySelector('#nd-kind').value;
-        const content = kind === 'sheet' ? { cols: ['Date', 'Officer', 'Detail', 'Notes'], rows: [['', '', '', '']] } : { body: name.replace(/\.[a-z]+$/i, '') + '\n\n' };
-        const res = await DB().insert('documents', { folder: meta.name, name, kind, content, modified_label: new Date().toLocaleDateString('en-GB') });
-        if (res.error) { toast('Create failed: ' + res.error.message, 'danger'); return; }
-        closeModal(); toast('Document created', 'success'); await fetchDocuments(); openFolder(meta);
-      };
-      openModal(node, { dismissible: false, onClose: back });
-    }
 
     /* ============================================================ LIVE CID PAPERWORK ============================================================
      * Every documents-table file opens as live, shared paperwork:
@@ -335,7 +178,7 @@
       const node = el('div', { class:'p-6' });
       node.innerHTML = `
         <div class="mb-4 flex items-start justify-between gap-3 no-print">
-          <div class="flex items-center gap-3"><span class="text-2xl">📝</span><div><h3 class="text-base font-bold text-white">${esc(doc.name)}</h3><p class="text-[11px] text-slate-400">Fillable form${meta ? ' · ' + esc(meta.name) : ''}${doc.modified_label ? ' · ' + esc(doc.modified_label) : ''}${editable ? '' : ' · read-only'}</p></div></div>
+          <div class="flex items-center gap-3"><span class="text-2xl">📝</span><div><h3 class="text-base font-bold text-white">${esc(doc.name)}</h3><p class="text-[11px] text-slate-400">Fillable form${doc.folder ? ' · ' + esc(doc.folder) : ''}${doc.modified_label ? ' · ' + esc(doc.modified_label) : ''}${editable ? '' : ' · read-only'}</p></div></div>
           <button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
         </div>
         <div class="print-area max-h-[68vh] overflow-y-auto pr-1">
@@ -350,7 +193,7 @@
           ${canDel ? `<button id="d-del" class="ml-auto rounded-lg px-3 py-2 text-xs font-medium text-slate-400 transition hover:text-rose-300">Delete</button>` : ''}
         </div>`;
       const body = node.querySelector('#form-body');
-      const back = backToFolder(doc, meta);
+      const back = () => closeModal();
       const draftKey = 'form:' + doc.id;
       node.querySelector('.close-x').onclick = () => requestCloseModal(true); // routes through the unsaved guard
       node.querySelector('#d-print').onclick = () => window.print();
@@ -391,9 +234,10 @@
       };
       const delBtn = node.querySelector('#d-del');
       if (delBtn) delBtn.onclick = async () => {
+        if (!(await uiConfirm('Delete \u201c' + doc.name + '\u201d? This removes the live document for everyone.', { confirmText: 'Delete' }))) return;
         const res = await DB().remove('documents', doc.id);
         if (res.error) { toast('Delete failed: ' + res.error.message, 'danger'); return; }
-        closeModal(); toast('Document deleted', 'warn'); await fetchDocuments(); if (meta) openFolder(meta);
+        closeModal(); toast('Document deleted', 'warn'); await fetchDocuments();
       };
       node.querySelector('#d-docx').onclick = () => {
         const vals = editable ? readForm(node, schema) : values;
@@ -499,7 +343,7 @@
 
       node.innerHTML = `
         <div class="mb-4 flex items-start justify-between gap-3 no-print">
-          <div class="flex items-center gap-3"><span class="text-2xl">${fileIcon(kind)}</span><div><h3 class="text-base font-bold text-white">${esc(doc.name)}</h3><p class="text-[11px] text-slate-400">CID General${meta?' / '+esc(meta.name):''}${doc.modified_label?' · '+esc(doc.modified_label):''}${editable?'':' · read-only'}</p></div></div>
+          <div class="flex items-center gap-3"><span class="text-2xl">${fileIcon(kind)}</span><div><h3 class="text-base font-bold text-white">${esc(doc.name)}</h3><p class="text-[11px] text-slate-400">${esc(doc.folder || 'Document')}${doc.modified_label?' · '+esc(doc.modified_label):''}${editable?'':' · read-only'}</p></div></div>
           <button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
         </div>
         <div class="print-area">${bodyHtml}</div>
@@ -511,7 +355,7 @@
           ${kind==='doc'||kind==='pdf'||kind==='matrix' ? `<button id="d-docx" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">Export .docx</button>` : ''}
           ${canDel && !isMatrix ? `<button id="d-del" class="ml-auto rounded-lg px-3 py-2 text-xs font-medium text-slate-400 transition hover:text-rose-300">Delete</button>` : ''}
         </div>`;
-      const back = backToFolder(doc, meta);
+      const back = () => closeModal();
       node.querySelector('.close-x').onclick = back;
       node.querySelector('#d-print') && (node.querySelector('#d-print').onclick = () => window.print());
       const histBtn = node.querySelector('#d-hist'); if (histBtn) histBtn.onclick = () => openDocHistory(doc, meta);
@@ -539,9 +383,10 @@
       // Delete
       const delBtn = node.querySelector('#d-del');
       if (delBtn) delBtn.onclick = async () => {
+        if (!(await uiConfirm('Delete \u201c' + doc.name + '\u201d? This removes the live document for everyone.', { confirmText: 'Delete' }))) return;
         const res = await DB().remove('documents', doc.id);
         if (res.error) { toast('Delete failed: ' + res.error.message, 'danger'); return; }
-        closeModal(); toast('Document deleted', 'warn'); await fetchDocuments(); if (meta) openFolder(meta);
+        closeModal(); toast('Document deleted', 'warn'); await fetchDocuments();
       };
       // Exports
       const docxBtn = node.querySelector('#d-docx');
@@ -723,7 +568,7 @@
       const ed = node.querySelector('#sop-edit'); if (ed) ed.onclick = () => { closeModal(); openSopEditor(d); };
       const dl = node.querySelector('#sop-del'); if (dl) dl.onclick = async () => {
         if (!(await uiConfirm('Delete SOP “' + d.name + '”? Restorable via Undo.', { confirmText: 'Delete' }))) return;
-        closeModal(); await deleteWithUndo('documents', d, { label: 'SOP “' + d.name + '”', after: () => { if (typeof fetchDocuments === 'function') fetchDocuments().then(refreshSopSurfaces); } });
+        closeModal(); await deleteWithUndo('documents', d, { label: 'SOP “' + d.name + '”', noConfirm: true, after: () => { if (typeof fetchDocuments === 'function') fetchDocuments(); } });
       };
       openModal(node, { wide: true });
     }

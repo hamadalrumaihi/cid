@@ -210,6 +210,7 @@
     }
     async function cfRemove(id) {
       if (!(DB() && DB().canDelete())) { toast('Only command/director can remove attachments.', 'warn'); return; }
+      if (!(await uiConfirm('Remove this attachment from the case? The uploaded file link is discarded.', { confirmText: 'Remove' }))) return;
       const res = await DB().remove('case_files', id);
       if (res && res.error) { toast('Remove failed: ' + res.error.message, 'danger'); return; }
       toast('Attachment removed', 'info'); fetchCaseFiles();
@@ -516,20 +517,8 @@
           toast(dup ? `Case number ${cn} already exists — choose a unique number.` : 'Save failed: ' + res.error.message, 'danger');
           return;
         }
-        // New case → seed it with copies of the Forms templates, filed under its bureau folder.
-        if (!record) {
-          const newId = res.data && res.data[0] && res.data[0].id;
-          if (newId) {
-            try {
-              const tpls = await DB().list('documents', { eq: { folder: 'Forms' } });
-              const fname = (typeof BUREAU_FOLDER !== 'undefined' && BUREAU_FOLDER[payload.bureau]) || 'Archives';
-              let seedFail = 0;
-              for (const t of tpls) { const sr = await DB().insert('documents', { folder: fname, name: t.name, kind: t.kind, content: t.content, case_id: newId, modified_label: new Date().toLocaleDateString('en-GB') }); if (sr && sr.error) seedFail++; }
-              if (seedFail) toast(seedFail + ' form template' + (seedFail === 1 ? '' : 's') + ' couldn’t be seeded — attach manually if needed.', 'warn');
-            } catch (e) {}
-            if (typeof fetchDocuments === 'function') fetchDocuments();
-          }
-        }
+        // Report templates live on the case's Reports tab (FORM_SCHEMAS) — no
+        // blank document copies are seeded per case anymore.
         closeModal(); toast(record ? 'Case updated' : 'Case created', 'success'); fetchCases();
         if (record && record.id) openCaseDetail(record.id);
       };
@@ -765,7 +754,7 @@
             if (typeof notify === 'function') notify(oid, 'mention', { case_number: detailCase.case_number, reason: 'You were assigned to this case.' });
             loadDetailTab();
           };
-          $$('.asg-rm', body).forEach((b) => b.onclick = async () => { const res = await DB().remove('case_assignments', b.dataset.id); if (res && res.error) { toast('Remove failed: ' + res.error.message, 'danger'); return; } toast('Assignee removed', 'info'); loadDetailTab(); });
+          $$('.asg-rm', body).forEach((b) => b.onclick = async () => { if (!(await uiConfirm('Remove this officer from the case?', { confirmText: 'Remove' }))) return; const res = await DB().remove('case_assignments', b.dataset.id); if (res && res.error) { toast('Remove failed: ' + res.error.message, 'danger'); return; } toast('Assignee removed', 'info'); loadDetailTab(); });
         } else if (detailTab === 'evidence') {
           const [ev, med] = await Promise.all([
             DB().list('evidence', { order: 'created_at', ascending: false, eq: { case_id: cid } }),
@@ -791,7 +780,7 @@
           $$('.ev-del', body).forEach((b) => b.onclick = async () => {
             if (!(await uiConfirm('Delete this evidence item? This also removes its chain-of-custody history (restorable via Undo).', { confirmText: 'Delete' }))) return;
             const row = ev.find((x) => x.id === b.dataset.id); if (!row) return;
-            await deleteWithUndo('evidence', row, { label: 'Evidence', after: loadDetailTab, children: [{ table: 'custody_chain', column: 'evidence_id' }] });
+            await deleteWithUndo('evidence', row, { label: 'Evidence', noConfirm: true, after: loadDetailTab, children: [{ table: 'custody_chain', column: 'evidence_id' }] });
           });
           const ma = $('#cmedia-add'); if (ma) ma.onclick = () => openCaseMediaLink(cid);
           const mt = $('#cmedia-attach'); if (mt) mt.onclick = () => openAttachMedia(cid);
@@ -1274,7 +1263,7 @@
         subscribe('commendations', () => { if (active('personnel')) fetchCommendations(); });
         subscribe('media', () => { if (active('media') || detailOpen()) fetchMedia(); });
         subscribe('mo_profiles', () => { if (active('modus')) fetchMoProfiles(); });
-        subscribe('documents', () => { if (active('drive', 'sops', 'personnel', 'gangs')) fetchDocuments().then(() => { if (typeof refreshSopSurfaces === 'function') refreshSopSurfaces(); }); });
+        subscribe('documents', () => { if (active('sops', 'personnel', 'gangs')) fetchDocuments(); });
         subscribe('gangs', () => { if (active('gangs', 'network', 'vehicles')) fetchGangs(); });
         subscribe('persons', () => { if (active('command', 'persons', 'network', 'vehicles', 'bolo')) fetchPersons(); renderKPIs(); });
         subscribe('narcotics', () => { if (active('narcotics')) fetchDrugs(); });

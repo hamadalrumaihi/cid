@@ -67,7 +67,7 @@
       const gs = body.querySelector('#rico-gang');
       if (gs && canEdit) gs.onchange = async (e) => { const r = await ensureRicoCase(caseId); if (!r) return; const up = await DB().update('rico_cases', r.id, { enterprise_gang_id: e.target.value || null }); if (up && up.error) { toast('Save failed: ' + up.error.message, 'danger'); return; } rerender(); };
       const ab = body.querySelector('#rico-add'); if (ab) ab.onclick = async () => { const r = await ensureRicoCase(caseId); if (r) openPredicateModal(r.id, caseId, rerender); };
-      body.querySelectorAll('.pr-del').forEach((b) => b.onclick = async () => { await DB().remove('predicate_acts', b.dataset.id); rerender(); });
+      body.querySelectorAll('.pr-del').forEach((b) => b.onclick = async () => { if (!(await uiConfirm('Delete this predicate act?', { confirmText: 'Delete' }))) return; const r = await DB().remove('predicate_acts', b.dataset.id); if (r && r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } rerender(); });
     }
     async function openPredicateModal(ricoCaseId, caseId, rerender) {
       let evidence = [];
