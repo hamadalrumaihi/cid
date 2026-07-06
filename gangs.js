@@ -30,7 +30,7 @@
       if (!(await uiConfirm('Delete ' + ids.length + ' selected gang' + (ids.length > 1 ? 's' : '') + '? This also removes their roster, ranks, and turf — restorable via Undo.', { confirmText: 'Delete ' + ids.length }))) return;
       const rows = GANGS.filter((g) => gangSel.has(g.id));
       gangSel.clear();
-      await deleteWithUndo('gangs', rows, { label: ids.length + ' gang' + (ids.length > 1 ? 's' : ''), after: fetchGangs, children: [{ table: 'gang_members', column: 'gang_id' }, { table: 'gang_ranks', column: 'gang_id' }, { table: 'gang_turf', column: 'gang_id' }], setNullRefs: [{ table: 'persons', column: 'gang_id' }] });
+      await deleteWithUndo('gangs', rows, { label: ids.length + ' gang' + (ids.length > 1 ? 's' : ''), noConfirm: true, after: fetchGangs, children: [{ table: 'gang_members', column: 'gang_id' }, { table: 'gang_ranks', column: 'gang_id' }, { table: 'gang_turf', column: 'gang_id' }], setNullRefs: [{ table: 'persons', column: 'gang_id' }] });
     }
     function renderGangs() {
       const grid = $('#gang-grid'); if (!grid) return;
@@ -144,7 +144,7 @@
         showGangsList();
         // Route through deleteWithUndo (snapshots roster/ranks/turf + person links)
         // so a mistaken single delete on the detail page is recoverable, matching the bulk path.
-        await deleteWithUndo('gangs', g, { label: 'Gang “' + g.name + '”', after: fetchGangs, children: [{ table: 'gang_members', column: 'gang_id' }, { table: 'gang_ranks', column: 'gang_id' }, { table: 'gang_turf', column: 'gang_id' }], setNullRefs: [{ table: 'persons', column: 'gang_id' }] });
+        await deleteWithUndo('gangs', g, { label: 'Gang “' + g.name + '”', noConfirm: true, after: fetchGangs, children: [{ table: 'gang_members', column: 'gang_id' }, { table: 'gang_ranks', column: 'gang_id' }, { table: 'gang_turf', column: 'gang_id' }], setNullRefs: [{ table: 'persons', column: 'gang_id' }] });
       };
       const mn = $('#member-new'); if (mn) mn.onclick = () => openMemberModal(g.id, null);
       // Bulk-import a roster straight into this gang; dedupe by name within the gang.
@@ -157,7 +157,7 @@
       });
       const tn = $('#turf-new'); if (tn) tn.onclick = () => openTurfModal(g.id);
       $$('.m-edit', $('#gang-detail')).forEach((b) => b.onclick = () => { const m = members.find((x) => x.id === b.dataset.id); openMemberModal(g.id, m); });
-      $$('.turf-del', $('#gang-detail')).forEach((b) => b.onclick = async () => { const r = await DB().remove('gang_turf', b.dataset.id); if (r && r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } renderGangDetail(); });
+      $$('.turf-del', $('#gang-detail')).forEach((b) => b.onclick = async () => { if (!(await uiConfirm('Delete this turf entry?', { confirmText: 'Delete' }))) return; const r = await DB().remove('gang_turf', b.dataset.id); if (r && r.error) { toast('Delete failed: ' + r.error.message, 'danger'); return; } renderGangDetail(); });
     }
     function memberCard(m) {
       const flag = (m.felony_count || 0) >= 8, canEdit = DB() && DB().canEdit();

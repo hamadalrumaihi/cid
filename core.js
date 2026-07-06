@@ -55,23 +55,11 @@
     };
 
 
-    /* ---- Drive ---- */
-    /* ---- CID General "Drive" — folder presentation config; files live in the documents table ---- */
-    const FOLDER_META = [
-      { name: 'Joint Task Force Cases', star: 2, accent: 'amber' },
-      { name: 'Blaine County Bureau Cases', star: 1, accent: 'emerald' },
-      { name: 'Los Santos Bureau Cases', star: 1, accent: 'blue' },
-      { name: 'State Bureau Cases', star: 1, accent: 'violet' },
-      { name: 'Archives', star: 0, accent: 'slate' },
-      { name: 'Confidential Informant', star: 0, accent: 'amber' },
-      { name: 'Dirty $- Tracker', star: 0, accent: 'emerald' },
-      { name: 'Forms', star: 0, accent: 'blue' },
-      { name: 'SOP/Training', star: 0, accent: 'violet' },
-    ];
-    // Bureau code → its Drive "…Cases" folder. These folders list the bureau's cases;
-    // each case opens to its own files (auto-seeded from the Forms templates on creation).
-    const BUREAU_FOLDER = { LSB: 'Los Santos Bureau Cases', BCB: 'Blaine County Bureau Cases', SAB: 'State Bureau Cases', JTF: 'Joint Task Force Cases' };
-    const isBureauFolder = (name) => Object.keys(BUREAU_FOLDER).some((k) => BUREAU_FOLDER[k] === name);
+    /* ---- Documents library (documents table) ----
+       The Drive tab was retired: SOPs/rosters/gang intel surface on their own
+       tabs, report templates live in the case Reports tab (FORM_SCHEMAS), and
+       case-linked paperwork lists under the case detail. DOCS stays the shared
+       client cache for all of those surfaces. */
     let DOCS = []; // Supabase-backed cache of the documents library
     // Confidential Informant risk matrix — alert flag when violent felonies >= 8 (live read-only view)
     const CI_MATRIX = [
@@ -483,6 +471,9 @@
       opts = opts || {};
       const list = Array.isArray(rows) ? rows.slice() : [rows];
       if (!list.length) return false;
+      // Every destructive path warns before acting. Callers that already showed
+      // their own uiConfirm pass noConfirm to avoid a double prompt.
+      if (!opts.noConfirm && !(await uiConfirm('Delete ' + (opts.label || 'this record') + '? Restorable via Undo for a short while.', { confirmText: 'Delete' }))) return false;
       const ids = list.map((r) => r.id);
       // Snapshot cascade children before the DB removes them with the parent. If a
       // snapshot query fails, ABORT — deleting anyway would cascade-wipe children we
@@ -700,7 +691,6 @@
       network:    { title: 'Relationship Network', sub: 'Gangs, members & properties as a navigable graph' },
       reports:    { title: 'Report Generation', sub: 'Template-driven reports & supplemental chains' },
       rico:       { title: 'RICO Builder', sub: 'Enterprise & predicate-act element tracker' },
-      drive:      { title: 'CID General', sub: 'Shared investigative drive' },
       penal:      { title: 'Penal Code', sub: 'San Andreas statutes, sentences & fines' },
       sops:       { title: 'Standard Operating Procedures', sub: 'Division policy & reference library, managed by command staff' },
       records:    { title: 'CID Records', sub: 'Live shared division records' },
@@ -721,8 +711,7 @@
     const NAV_CATEGORIES = [
       { id: 'command',   label: 'Command',      tabs: ['command', 'announce', 'heatmap', 'personnel'] },
       { id: 'cases',     label: 'Cases',        tabs: ['cases', 'case-files', 'rico'] },
-      { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'network', 'narcotics', 'ballistics', 'modus', 'media'] },
-      { id: 'drive',     label: 'Drive',        tabs: ['drive', 'records'] },
+      { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'network', 'narcotics', 'ballistics', 'modus', 'media', 'records'] },
       { id: 'reference', label: 'Reference',    tabs: ['penal', 'sops'] },
       { id: 'oversight', label: 'Oversight',    tabs: ['inbox', 'shifts', 'audit'] },
     ];
@@ -730,7 +719,7 @@
       command: 'Dashboard', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
       cases: 'Case Files', 'case-files': 'Attachments', rico: 'RICO',
       persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector', media: 'Media Vault',
-      drive: 'CID General', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', inbox: 'My Desk', shifts: 'Shift Reports', audit: 'Audit Log',
+      records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', inbox: 'My Desk', shifts: 'Shift Reports', audit: 'Audit Log',
     };
     const TAB_CATEGORY = {}; NAV_CATEGORIES.forEach((c) => c.tabs.forEach((t) => { TAB_CATEGORY[t] = c.id; }));
     const CAT_DEFAULT = {}; NAV_CATEGORIES.forEach((c) => { CAT_DEFAULT[c.id] = c.tabs[0]; });
@@ -749,7 +738,6 @@
       personnel: 'onEnterPersonnel',
       media: 'onEnterMedia',
       modus: 'onEnterModus',
-      drive: 'onEnterDrive',
       announce: 'onEnterAnnounce',
       'case-files': 'onEnterCaseFiles',
       heatmap: 'onEnterHeatmap',

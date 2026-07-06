@@ -85,11 +85,17 @@
       try { list = await DB().list('reports', { order: 'created_at', ascending: true, eq: { case_id: caseId } }); }
       catch (e) { body.innerHTML = '<p class="text-sm text-rose-300">Couldn’t load — ' + escapeHTML(e.message || e) + '</p>'; return; }
       const tplBtns = REPORT_TEMPLATES.map((t) => `<button class="rpt-tpl flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-white/10 hover:text-white" data-tpl="${t.id}"><span class="text-lg">${t.icon}</span><span>${esc(t.name)}${t.default ? ' · default' : ''}</span></button>`).join('');
+      // Case-linked documents (legacy Drive paperwork + case-tagged files) list
+      // here so they stay reachable now that the Drive tab is retired.
+      const atts = (typeof docsForCase === 'function' ? docsForCase(caseId) : []).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       body.innerHTML = `
         ${canEdit ? `<div class="mb-4 rounded-2xl border border-white/5 bg-ink-900/60 p-4"><p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">New report — official templates</p><div class="flex flex-wrap gap-2">${tplBtns}</div></div>` : ''}
         <div class="mb-2 flex items-center justify-between"><h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Report chain</h4><span class="text-[11px] text-slate-500">${list.length} report${list.length === 1 ? '' : 's'}</span></div>
-        <div id="case-report-chain" class="space-y-3"></div>`;
+        <div id="case-report-chain" class="space-y-3"></div>
+        ${atts.length ? `<div class="mb-2 mt-6 flex items-center justify-between"><h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Attached documents</h4><span class="text-[11px] text-slate-500">${atts.length} file${atts.length === 1 ? '' : 's'}</span></div>
+        <div class="space-y-2">${atts.map((d) => `<button class="rpt-doc flex w-full items-center justify-between gap-3 rounded-lg border border-white/5 bg-ink-900 px-4 py-2.5 text-left text-sm text-slate-200 transition hover:border-blue-500/30 hover:bg-white/5" data-id="${esc(d.id)}"><span class="min-w-0 truncate">${esc(d.name)}</span><span class="flex-shrink-0 text-[11px] text-slate-500">${esc(d.modified_label || '')}</span></button>`).join('')}</div>` : ''}`;
       body.querySelectorAll('.rpt-tpl').forEach((b) => { b.onclick = () => openReportModal(b.dataset.tpl, caseId, null, 'initial'); });
+      body.querySelectorAll('.rpt-doc').forEach((b) => { b.onclick = () => { const d = (typeof DOCS !== 'undefined' ? DOCS : []).find((x) => x.id === b.dataset.id); if (d && typeof reopenDoc === 'function') reopenDoc(d, null); }; });
       renderChainInto(body.querySelector('#case-report-chain'), list, caseId, canEdit);
     }
     // After saving/finalizing a report, refresh the in-case Reports tab if open.

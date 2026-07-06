@@ -82,7 +82,7 @@
       if (!(await uiConfirm('Delete ' + ids.length + ' selected person' + (ids.length > 1 ? 's' : '') + '? This removes the registry records (not any linked officer accounts).', { confirmText: 'Delete ' + ids.length }))) return;
       const rows = PERSONS.filter((p) => personSel.has(p.id));
       personSel.clear();
-      await deleteWithUndo('persons', rows, { label: ids.length + ' person' + (ids.length > 1 ? 's' : ''), after: fetchPersons, setNullRefs: [{ table: 'gang_members', column: 'person_id' }, { table: 'vehicles', column: 'owner_id' }] });
+      await deleteWithUndo('persons', rows, { label: ids.length + ' person' + (ids.length > 1 ? 's' : ''), noConfirm: true, after: fetchPersons, setNullRefs: [{ table: 'gang_members', column: 'person_id' }, { table: 'vehicles', column: 'owner_id' }] });
     }
     function renderPersons() {
       const grid = $('#persons-grid'); if (!grid) return;
@@ -122,7 +122,7 @@
         const tc = card.querySelector('.p-tocase'); if (tc && typeof attachIntelToCase === 'function') tc.onclick = () => attachIntelToCase(`Person — ${p.name}${p.alias ? ' “' + p.alias + '”' : ''} · ${p.status || 'POI'}${p.felony_count ? ', ' + p.felony_count + ' felonies' : ''}`);
         const pdb = card.querySelector('.p-del'); if (pdb) pdb.onclick = async () => {
           if (!(await uiConfirm('Delete person "' + (p.name || 'record') + '"? This removes the persons-registry record (not any linked officer account).', { confirmText: 'Delete' }))) return;
-          await deleteWithUndo('persons', p, { label: 'Person “' + (p.name || 'record') + '”', after: fetchPersons, setNullRefs: [{ table: 'gang_members', column: 'person_id' }, { table: 'vehicles', column: 'owner_id' }] });
+          await deleteWithUndo('persons', p, { label: 'Person “' + (p.name || 'record') + '”', noConfirm: true, after: fetchPersons, setNullRefs: [{ table: 'gang_members', column: 'person_id' }, { table: 'vehicles', column: 'owner_id' }] });
         };
         const chk = card.querySelector('.p-check'); if (chk) chk.onchange = () => { if (chk.checked) personSel.add(p.id); else personSel.delete(p.id); updatePersonBulkBar(); };
         grid.appendChild(card);
@@ -192,7 +192,7 @@
       const pd = node.querySelector('#p-del'); if (pd) pd.onclick = async () => {
         if (!(await uiConfirm('Delete person “' + p.name + '”?', { confirmText: 'Delete' }))) return;
         closeModal();
-        await deleteWithUndo('persons', p, { label: 'Person “' + p.name + '”', after: fetchPersons, setNullRefs: [{ table: 'gang_members', column: 'person_id' }, { table: 'vehicles', column: 'owner_id' }] });
+        await deleteWithUndo('persons', p, { label: 'Person “' + p.name + '”', noConfirm: true, after: fetchPersons, setNullRefs: [{ table: 'gang_members', column: 'person_id' }, { table: 'vehicles', column: 'owner_id' }] });
       };
       openModal(node, { wide: true });
     }

@@ -37,7 +37,7 @@
       if (!(await uiConfirm('Delete ' + ids.length + ' selected location' + (ids.length > 1 ? 's' : '') + '? Restorable via Undo.', { confirmText: 'Delete ' + ids.length }))) return;
       const rows = PLACES.filter((p) => placeSel.has(p.id));
       placeSel.clear();
-      await deleteWithUndo('places', rows, { label: ids.length + ' location' + (ids.length > 1 ? 's' : ''), after: fetchPlaces, children: [{ table: 'place_process_steps', column: 'place_id' }] });
+      await deleteWithUndo('places', rows, { label: ids.length + ' location' + (ids.length > 1 ? 's' : ''), noConfirm: true, after: fetchPlaces, children: [{ table: 'place_process_steps', column: 'place_id' }] });
     }
     function renderPlaces() {
       const grid = $('#place-grid'); if (!grid) return;
@@ -67,7 +67,7 @@
           ${recipe.length ? `<div class="mt-4"><p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-blue-300/70">Production Process</p><div class="space-y-1.5">${recipe.map((s, i) => `<div class="flex items-center gap-2 text-xs text-slate-300"><span class="grid h-5 w-5 flex-shrink-0 place-items-center rounded-full bg-blue-500/15 font-mono text-[10px] text-blue-300">${i + 1}</span>${escapeHTML(s)}</div>`).join('')}</div></div>` : ''}`;
         const ptc = card.querySelector('.pl-tocase'); if (ptc && typeof attachIntelToCase === 'function') ptc.addEventListener('click', () => attachIntelToCase(`Place — ${p.name} (${locLabel(p.type)})${p.area ? ' · ' + p.area : ''}`));
         const eb = card.querySelector('.pl-edit'); if (eb) eb.addEventListener('click', () => openPlaceModal(p));
-        const db = card.querySelector('.pl-del'); if (db) db.addEventListener('click', async () => { if (!(await uiConfirm(`Delete location "${p.name}"?`, { confirmText: 'Delete' }))) return; await deleteWithUndo('places', p, { label: 'Location “' + p.name + '”', after: fetchPlaces, children: [{ table: 'place_process_steps', column: 'place_id' }] }); });
+        const db = card.querySelector('.pl-del'); if (db) db.addEventListener('click', async () => { if (!(await uiConfirm(`Delete location "${p.name}"?`, { confirmText: 'Delete' }))) return; await deleteWithUndo('places', p, { label: 'Location “' + p.name + '”', noConfirm: true, after: fetchPlaces, children: [{ table: 'place_process_steps', column: 'place_id' }] }); });
         const plchk = card.querySelector('.pl-check'); if (plchk) plchk.onchange = () => { if (plchk.checked) placeSel.add(p.id); else placeSel.delete(p.id); updatePlaceBulkBar(); };
         grid.appendChild(card);
       });
@@ -122,7 +122,7 @@
         if (res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast(record ? 'Location updated' : 'Location created', 'success'); fetchPlaces();
       };
-      const pd = node.querySelector('#pl-del2'); if (pd) pd.onclick = async () => { if (!(await uiConfirm('Delete “' + p.name + '”? Restorable via Undo.', { confirmText: 'Delete' }))) return; closeModal(); await deleteWithUndo('places', record, { label: 'Location “' + p.name + '”', after: fetchPlaces, children: [{ table: 'place_process_steps', column: 'place_id' }] }); };
+      const pd = node.querySelector('#pl-del2'); if (pd) pd.onclick = async () => { if (!(await uiConfirm('Delete “' + p.name + '”? Restorable via Undo.', { confirmText: 'Delete' }))) return; closeModal(); await deleteWithUndo('places', record, { label: 'Location “' + p.name + '”', noConfirm: true, after: fetchPlaces, children: [{ table: 'place_process_steps', column: 'place_id' }] }); };
       openModal(node);
     }
 

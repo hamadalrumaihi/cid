@@ -265,7 +265,7 @@
         sec('Vehicles', vehicles, (v) => goto('vehicles', '', `\ud83d\ude97 <span class="font-mono">${esc(v.plate)}</span> ${esc(v.model || '')} <span class="text-slate-500">${esc(v.color || '')}</span>`)),
         sec('Narcotics', narcotics, (n) => goto('narcotics', n.name, `💊 ${esc(n.name)}${n.classification ? ' <span class="text-slate-500">' + esc(n.classification) + '</span>' : ''}`)),
         sec('Ballistics', ballistics, (b) => goto('ballistics', '', `${b.kind === 'bench' ? '🔫' : '🧬'} ${esc(b.label || '')} <span class="text-slate-500">${esc(b.sub || '')}</span>`)),
-        sec('Drive documents', docs, (d) => goto('drive', '', `📄 ${esc(d.name)}`)),
+        sec('Documents', docs, (d) => `<button class="sr sr-doc block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-id="${esc(d.id)}">📄 ${esc(d.name)} <span class="text-slate-500">${esc(d.folder || '')}</span></button>`),
         sec('Charges', charges, (c) => `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm text-slate-200">⚖️ <span class="font-mono text-blue-300">${esc(c.code)}</span> ${esc(c.title)} <span class="text-slate-500">· ${esc(c.level)} · ${penalSentence(c.jail)}${c.fine != null ? ' · ' + fmtUSD(c.fine) : ''}</span></div>`),
       ].join('');
       // Typo-tolerant fallback: when nothing matched, suggest close names from the
@@ -290,9 +290,10 @@
         if (sugg.length) fuzzyHtml = sec('Close matches \u2014 did you mean\u2026', sugg.slice(0, 8), (x) => goto(x.tab, x.term || '', esc(x.label)));
       }
       const recentsBar = recents.length > 1 ? `<div class="border-t border-white/5 pt-3"><p class="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Recent searches</p><div class="flex flex-wrap gap-1.5">${recents.slice(1).map((r) => `<button class="sr-recent rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-300 transition hover:bg-white/10" data-q="${esc(r)}">${esc(r)}</button>`).join('')}</div></div>` : '';
-      box.innerHTML = (html || fuzzyHtml || '<p class="text-sm text-slate-500">No matches across cases, persons, gangs, places, vehicles, narcotics, ballistics, Drive docs or charges.</p>') + recentsBar;
+      box.innerHTML = (html || fuzzyHtml || '<p class="text-sm text-slate-500">No matches across cases, persons, gangs, places, vehicles, narcotics, ballistics, documents or charges.</p>') + recentsBar;
       box.querySelectorAll('.sr-recent').forEach((b) => b.onclick = () => { closeModal(); supaSearch(b.dataset.q); });
       box.querySelectorAll('.sr-case').forEach((b) => b.onclick = () => { closeModal(); navigate('cases'); setTimeout(() => openCaseDetail(b.dataset.id), 120); });
+      box.querySelectorAll('.sr-doc').forEach((b) => b.onclick = () => { closeModal(); const d = (typeof DOCS !== 'undefined' ? DOCS : []).find((x) => x.id === b.dataset.id); if (d && typeof reopenDoc === 'function') reopenDoc(d, null); });
       box.querySelectorAll('.sr-goto').forEach((b) => b.onclick = () => {
         closeModal(); navigate(b.dataset.tab);
         const sel = { persons: '#person-search', gangs: '#gang-search' }[b.dataset.tab];
@@ -321,7 +322,7 @@
       push((typeof GANGS !== 'undefined' ? GANGS : []).filter((g) => match(g.name)), 5, (g) => ({ icon: '🚩', label: g.name, sub: 'Gang', act: () => { closePalette(); if (typeof openIntelProfile === 'function') openIntelProfile('gang', g.id); } }));
       push((typeof PLACES !== 'undefined' ? PLACES : []).filter((p) => match(p.name) || match(p.area)), 5, (p) => ({ icon: '📍', label: p.name, sub: 'Place' + (p.area ? ' · ' + p.area : ''), act: () => { closePalette(); navigate('places'); } }));
       push((typeof DRUGS !== 'undefined' ? DRUGS : []).filter((d) => match(d.name) || match(d.classification)), 4, (d) => ({ icon: '💊', label: d.name, sub: 'Narcotic', act: () => { closePalette(); navigate('narcotics'); } }));
-      push((typeof DOCS !== 'undefined' ? DOCS : []).filter((d) => match(d.name)), 5, (d) => ({ icon: '📄', label: d.name, sub: 'Drive document', act: () => { closePalette(); navigate('drive'); } }));
+      push((typeof DOCS !== 'undefined' ? DOCS : []).filter((d) => match(d.name)), 5, (d) => ({ icon: '📄', label: d.name, sub: 'Document' + (d.folder ? ' · ' + d.folder : ''), act: () => { closePalette(); if (typeof reopenDoc === 'function') reopenDoc(d, null); } }));
       push((typeof PENAL_CODE !== 'undefined' ? PENAL_CODE : []).filter((c) => match(c.code) || match(c.title)), 6, (c) => ({ icon: '⚖️', label: c.code + ' · ' + c.title, sub: 'Charge · ' + c.level, act: () => { closePalette(); toast(c.code + ' ' + c.title + ' — ' + c.level + ' · ' + penalSentence(c.jail) + (c.fine != null ? ' · ' + fmtUSD(c.fine) : ''), 'info'); } }));
       push((typeof BENCHES_CACHE !== 'undefined' ? BENCHES_CACHE : []).filter((b) => match(b.name)), 3, (b) => ({ icon: '🔫', label: b.name, sub: 'Ballistics bench', act: () => { closePalette(); navigate('ballistics'); } }));
       return out;
@@ -402,8 +403,6 @@
       // Reports authoring now lives inside each case's Reports tab (Case Files).
       // RICO
       fillCaseSelect($('#rico-case')); $('#rico-case').addEventListener('change', renderRico); $('#rico-export').addEventListener('click', exportRicoDocx); renderRico();
-      // Drive
-      renderDrive();
       // Live CID Records (Supabase)
       initRecords();
       // Case Files (Supabase spine) — fetch happens via onEnterCases
