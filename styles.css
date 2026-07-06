@@ -431,3 +431,40 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @media (prefers-reduced-motion: reduce) {
   .pulse-dot::after { animation: none !important; }
 }
+
+/* ============================================================================
+   TACTICAL DENSITY PASS (2026-07-05) — the matrix layout half of the Control
+   Panel spec. Phones get a dense, data-first grid: the KPI cluster becomes a
+   2-column instrument matrix, card padding compresses, and descriptive filler
+   lines yield to the page header. Desktop keeps its working-room spacing.
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* KPI instrument matrix: two compact tiles per row instead of a 1-col stack. */
+  #kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+  #kpi-grid .kpi-tile { padding: .7rem .8rem; }
+  #kpi-grid .kpi-value { font-size: 1.35rem; margin-top: .3rem; }
+  #kpi-grid .kpi-tile p:first-child { font-size: .6rem; letter-spacing: .08em; }
+  #kpi-grid .kpi-tile p:last-child { font-size: .62rem; margin-top: .15rem; }
+  #kpi-grid .kpi-icon svg { width: 14px; height: 14px; }
+  .t-standby { letter-spacing: .06em; }
+}
+@media (max-width: 640px) {
+  /* Compress the card language app-wide on handsets: dense matrix, not lounge. */
+  #app-shell .p-6 { padding: .9rem; }
+  #app-shell .p-5 { padding: .8rem; }
+  #app-shell .p-4 { padding: .7rem; }
+  #app-shell .mb-6 { margin-bottom: .8rem; }
+  #app-shell .mb-4 { margin-bottom: .6rem; }
+  #app-shell .gap-4 { gap: .6rem; }
+  main .grid.gap-4 { gap: .55rem; }
+  /* Section hero banners: the sticky page header already names the view, so the
+     hero's descriptive subline is filler on a phone. Title shrinks to a label. */
+  main .view h3 { font-size: 1rem; }
+  main .view h3 + p { display: none; }
+  .case-card p.line-clamp-2 { margin-top: .3rem; }
+  .case-card > div:last-of-type { margin-top: .45rem; }
+  /* Toolbar rows (search / scope / refresh) tighten to instrument height. */
+  #app-shell input[type="text"], #app-shell input[type="search"] { padding-top: .45rem; padding-bottom: .45rem; }
+  /* Attention widget columns stack tight. */
+  #attention-widget .p-3 { padding: .55rem; }
+}
