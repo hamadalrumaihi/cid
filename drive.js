@@ -573,13 +573,21 @@
     const sopTitle = (d) => String(d.name || '').replace(/\.(docx?|pdf|sheet)$/i, '');
     // Render plain doc text as a readable article: blank-line-separated blocks,
     // short ALL-CAPS / colon-terminated lines become section headings. All escaped.
-    function sopArticle(body) {
+    function sopArticle(body, docTitle) {
       // Safe mini-Markdown: escape first, then transform. Handles \r\n (Drive
       // exports), # headings, **bold**, > notes, -/1. lists, Markdown tables
       // (|:-:| separators), and bare pipe-delimited data blocks (rosters).
       const norm = String(body || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').replace(/^_{4,}\s*$/gm, '');
       const blocks = norm.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
       if (!blocks.length) return '<p class="text-slate-500">No content.</p>';
+      // Roster stats collected while rendering; tiles are derived from the SAME
+      // cells the tables show, so they can never disagree with the document.
+      const sections = []; let curSec = null;
+      const tally = (rows) => {
+        const members = rows.filter((r) => r.filter(Boolean).length >= 2);
+        const active = members.filter((r) => r.some((c) => c.trim().toLowerCase() === 'active')).length;
+        if (curSec) sections.push({ sec: curSec, n: members.length, active });
+      };
       const inline = (t) => esc(t).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>');
       const cell = (v) => {
         const t = v.trim(), l = t.toLowerCase();
@@ -590,7 +598,19 @@
       const isSep = (l) => /^\|?[\s:|-]+\|?$/.test(l) && l.includes('-');
       const tableHtml = (rows, hasHead) => {
         const width = Math.max.apply(null, rows.map((r) => r.length));
-        const tr = (r, tag) => '<tr>' + Array.from({ length: width }, (_, i) => '<' + tag + '>' + (r[i] ? cell(r[i]) : '<span class="sop-empty">-</span>') + '</' + tag + '>').join('') + '</tr>';
+        // Numeric column headed Strike/Points renders as number + proportional bar.
+        let barCol = -1, barMax = 0;
+        if (hasHead) {
+          barCol = rows[0].findIndex((h) => /strike|points?$/i.test(h));
+          if (barCol >= 0) { rows.slice(1).forEach((r) => { const v = parseFloat(r[barCol]); if (isFinite(v)) barMax = Math.max(barMax, v); }); if (!barMax) barCol = -1; }
+        }
+        const td = (r, i) => {
+          if (i === barCol && r !== rows[0]) { const v = parseFloat(r[i]); if (isFinite(v)) { const pct = Math.max(0, Math.min(100, Math.round(v / barMax * 100))); return '<td><span class="sop-barwrap"><span class="sop-bar" style="width:' + pct + '%"></span></span><span class="sop-barnum">' + v + '</span></td>'; } }
+          return '<td>' + (r[i] ? cell(r[i]) : '<span class="sop-empty">-</span>') + '</td>';
+        };
+        const tr = (r, tag) => tag === 'th'
+          ? '<tr>' + Array.from({ length: width }, (_, i) => '<th>' + (r[i] ? cell(r[i]) : '<span class="sop-empty">-</span>') + '</th>').join('') + '</tr>'
+          : '<tr>' + Array.from({ length: width }, (_, i) => td(r, i)).join('') + '</tr>';
         // A row with one non-empty bold cell is a group header (e.g. **HVPU Command**).
         const bodyRows = rows.slice(hasHead ? 1 : 0).map((r) => {
           const filled = r.filter(Boolean);
@@ -600,11 +620,11 @@
         return '<div class="sop-tablewrap"><table class="sop-table">' + (hasHead ? tr(rows[0], 'th') : '') + bodyRows + '</table></div>';
       };
       const splitRow = (l) => l.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
-      return blocks.map((b) => {
+      const rendered = blocks.map((b) => {
         const lines = b.split('\n').map((l) => l.trim()).filter(Boolean);
         if (!lines.length) return '';
         // Markdown heading / quote blocks.
-        if (/^#{1,6}\s/.test(lines[0]) && lines.length === 1) return '<h3>' + inline(lines[0].replace(/^#{1,6}\s+/, '')) + '</h3>';
+        if (/^#{1,6}\s/.test(lines[0]) && lines.length === 1) { curSec = lines[0].replace(/^#{1,6}\s+/, ''); return '<h3>' + inline(curSec) + '</h3>'; }
         if (lines.every((l) => /^>\s?/.test(l))) return '<blockquote class="sop-note">' + inline(lines.map((l) => l.replace(/^>\s?/, '')).join(' ')) + '</blockquote>';
         // Lists.
         if (lines.length > 1 && lines.every((l) => /^([-*•]|\d+[.)])\s/.test(l))) {
@@ -616,12 +636,15 @@
         const sepIdx = lines.findIndex(isSep);
         if (sepIdx === 1 && piped.length >= 2) {
           const rows = lines.filter((l, i) => i !== sepIdx && !isSep(l)).map(splitRow);
+          tally(rows.slice(1));
           return tableHtml(rows, true);
         }
         const tabular = piped.length >= 2 || (piped.length === 1 && piped[0].split('|').length >= 4);
         if (tabular) {
           const head = !lines[0].includes('|') && !/^#/.test(lines[0]) ? lines.shift() : null;
+          if (head) curSec = head.replace(/:$/, '');
           const rows = lines.filter((l) => !isSep(l)).map(splitRow);
+          tally(rows);
           return (head ? '<h3>' + inline(head.replace(/:$/, '')) + '</h3>' : '') + tableHtml(rows, false);
         }
         // Heading heuristics + mixed blocks (heading line then prose).
@@ -637,10 +660,14 @@
         flush();
         if (out.length === 1 && lines.length === 1) {
           const t = lines[0];
-          if (t.length <= 64 && ((t === t.toUpperCase() && /[A-Z]/.test(t)) || /:$/.test(t)) && !t.includes('|')) return '<h3>' + inline(t.replace(/:$/, '')) + '</h3>';
+          if (t.length <= 64 && ((t === t.toUpperCase() && /[A-Z]/.test(t)) || /:$/.test(t)) && !t.includes('|')) { curSec = t.replace(/:$/, ''); return '<h3>' + inline(curSec) + '</h3>'; }
         }
         return out.join('');
       }).join('');
+      const isRoster = /roster/i.test(String(docTitle || '')) && sections.length >= 2;
+      const tiles = isRoster ? '<div class="sop-tiles">' + sections.map((s) =>
+        '<div class="sop-tile"><p class="sop-tile-n">' + s.n + '</p><p class="sop-tile-a">' + s.active + ' ACTIVE</p><p class="sop-tile-l">' + esc(s.sec) + '</p></div>').join('') + '</div>' : '';
+      return tiles + rendered;
     }
     function onEnterSops() {
       if (typeof fetchDocuments === 'function' && dbReady()) fetchDocuments().then(renderSops); else renderSops();
@@ -671,7 +698,7 @@
       node.innerHTML = `
         <div class="mb-4 flex items-center justify-between gap-3"><h3 class="min-w-0 truncate text-lg font-bold text-white">${esc(sopTitle(d))}</h3><button aria-label="Close" class="close-x flex-shrink-0 text-2xl leading-none text-slate-400 hover:text-white">&times;</button></div>
         <p class="t-readout mb-3 text-[10px] uppercase tracking-widest text-slate-500">${d.folder === 'Resources' ? 'Reference library document' : 'Standard operating procedure'} // ${esc(d.modified_label || 'undated')}${(d.content && d.content.sync && d.content.sync.source === 'gdrive') ? ' // SYNCED FROM GOOGLE DRIVE' : ''}</p>
-        <div class="sop-prose max-h-[65vh] overflow-y-auto rounded-lg border border-white/5 bg-ink-900 p-6">${sopArticle(d.content && d.content.body)}</div>
+        <div class="sop-prose max-h-[65vh] overflow-y-auto rounded-lg border border-white/5 bg-ink-900 p-6">${sopArticle(d.content && d.content.body, sopTitle(d))}</div>
         ${canManage ? '<div class="mt-4 flex gap-2"><button id="sop-edit" class="flex-1 rounded-lg border border-white/10 bg-white/5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">Edit</button><button id="sop-del" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button></div>' : ''}`;
       node.querySelector('.close-x').onclick = closeModal;
       const ed = node.querySelector('#sop-edit'); if (ed) ed.onclick = () => { closeModal(); openSopEditor(d); };
