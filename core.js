@@ -63,11 +63,9 @@
       { name: 'Los Santos Bureau Cases', star: 1, accent: 'blue' },
       { name: 'State Bureau Cases', star: 1, accent: 'violet' },
       { name: 'Archives', star: 0, accent: 'slate' },
-      { name: 'Case assignment Help??!?', star: 0, accent: 'rose' },
       { name: 'Confidential Informant', star: 0, accent: 'amber' },
       { name: 'Dirty $- Tracker', star: 0, accent: 'emerald' },
       { name: 'Forms', star: 0, accent: 'blue' },
-      { name: 'Resources', star: 0, accent: 'slate' },
       { name: 'SOP/Training', star: 0, accent: 'violet' },
     ];
     // Bureau code → its Drive "…Cases" folder. These folders list the bureau's cases;
@@ -704,7 +702,7 @@
       rico:       { title: 'RICO Builder', sub: 'Enterprise & predicate-act element tracker' },
       drive:      { title: 'CID General', sub: 'Shared investigative drive' },
       penal:      { title: 'Penal Code', sub: 'San Andreas statutes, sentences & fines' },
-      sops:       { title: 'Standard Operating Procedures', sub: 'Division policy, managed by command staff' },
+      sops:       { title: 'Standard Operating Procedures', sub: 'Division policy & reference library, managed by command staff' },
       records:    { title: 'CID Records', sub: 'Live shared division records' },
       announce:   { title: 'Announcements', sub: 'Division-wide notices from command staff' },
       'case-files': { title: 'Case Files — Attachments', sub: 'Files uploaded and linked per case' },
@@ -732,7 +730,7 @@
       command: 'Dashboard', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
       cases: 'Case Files', 'case-files': 'Attachments', rico: 'RICO',
       persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector', media: 'Media Vault',
-      drive: 'CID General', records: 'Records', penal: 'Penal Code', sops: 'SOPs', inbox: 'My Desk', shifts: 'Shift Reports', audit: 'Audit Log',
+      drive: 'CID General', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', inbox: 'My Desk', shifts: 'Shift Reports', audit: 'Audit Log',
     };
     const TAB_CATEGORY = {}; NAV_CATEGORIES.forEach((c) => c.tabs.forEach((t) => { TAB_CATEGORY[t] = c.id; }));
     const CAT_DEFAULT = {}; NAV_CATEGORIES.forEach((c) => { CAT_DEFAULT[c.id] = c.tabs[0]; });

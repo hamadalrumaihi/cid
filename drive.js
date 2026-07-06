@@ -581,14 +581,15 @@
       const sops = (typeof DOCS !== 'undefined' ? DOCS : []).filter((d) => d.folder === SOP_FOLDER).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       if (!sops.length) { grid.innerHTML = '<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400"><span class="t-readout">NO SOPS PUBLISHED // POLICY QUEUE EMPTY.</span>' + (canManage ? ' Use “+ New SOP”.' : '') + '</div>'; return; }
       grid.innerHTML = '';
-      sops.forEach((d, i) => {
+      const lib = (typeof DOCS !== 'undefined' ? DOCS : []).filter((x) => x.folder === 'Resources').sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      sops.concat(lib).forEach((d, i) => {
         const card = el('div', { class: 'person-card cursor-pointer rounded-2xl border border-white/5 bg-ink-900/60 p-5' });
         card.style.setProperty('--i', String(i));
         const body = (d.content && d.content.body) || '';
         card.innerHTML = `
           <p class="text-sm font-semibold text-white">${esc(d.name)}</p>
           <p class="mt-1 line-clamp-3 text-xs text-slate-400">${esc(body.slice(0, 200)) || 'No content yet.'}</p>
-          <p class="t-readout mt-3 text-[10px] uppercase text-slate-500">SOP // ${esc(d.modified_label || 'undated')}</p>`;
+          <p class="t-readout mt-3 text-[10px] uppercase text-slate-500">${d.folder === 'Resources' ? 'LIBRARY' : 'SOP'} // ${esc(d.modified_label || 'undated')}</p>`;
         card.onclick = () => openSopReader(d, canManage);
         grid.appendChild(card);
       });
@@ -597,7 +598,7 @@
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
         <div class="mb-4 flex items-center justify-between gap-3"><h3 class="min-w-0 truncate text-lg font-bold text-white">${esc(d.name)}</h3><button aria-label="Close" class="close-x flex-shrink-0 text-2xl leading-none text-slate-400 hover:text-white">&times;</button></div>
-        <p class="t-readout mb-3 text-[10px] uppercase tracking-widest text-slate-500">Standard operating procedure // ${esc(d.modified_label || 'undated')}</p>
+        <p class="t-readout mb-3 text-[10px] uppercase tracking-widest text-slate-500">${d.folder === 'Resources' ? 'Reference library document' : 'Standard operating procedure'} // ${esc(d.modified_label || 'undated')}</p>
         <div class="max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-lg border border-white/5 bg-ink-900 p-4 text-sm leading-relaxed text-slate-200">${esc((d.content && d.content.body) || 'No content.')}</div>
         ${canManage ? '<div class="mt-4 flex gap-2"><button id="sop-edit" class="flex-1 rounded-lg border border-white/10 bg-white/5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">Edit</button><button id="sop-del" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button></div>' : ''}`;
       node.querySelector('.close-x').onclick = closeModal;
@@ -623,7 +624,7 @@
       node.querySelector('#sop-save').onclick = async () => {
         const name = node.querySelector('#sop-name').value.trim(), body = node.querySelector('#sop-body').value;
         if (!name || !body.trim()) { toast('Title and procedure text are required.', 'warn'); return; }
-        const payload = { folder: SOP_FOLDER, name: name, kind: 'doc', content: { body: body }, modified_label: new Date().toLocaleDateString('en-GB') };
+        const payload = { folder: (record && record.folder) || SOP_FOLDER, name: name, kind: 'doc', content: { body: body }, modified_label: new Date().toLocaleDateString('en-GB') };
         const res = record && record.id ? await DB().update('documents', record.id, payload) : await DB().insert('documents', payload);
         if (res && res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
         closeModal(); toast(record ? 'SOP updated' : 'SOP published', 'success');
