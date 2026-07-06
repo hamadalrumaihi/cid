@@ -1,37 +1,25 @@
-# SOP sync from Google Drive — setup (one time, ~10 minutes)
+# SOP sync from Google Drive — remaining setup
 
-The portal pulls SOPs from a Google Drive folder every 15 minutes via the
-`sops-sync` edge function (`supabase/functions/sops-sync/index.ts`). Synced docs
-appear on Reference > SOPs & Library as readable pages, always current.
+Server config is already stored in the service-role-only `app_secrets` table
+(invisible to app users; verified). The pg_cron job fires every 15 minutes.
+Three steps remain, all one-click-ish:
 
-## 1. Google service account
-1. console.cloud.google.com > create (or reuse) a project > APIs & Services >
-   enable **Google Drive API**.
-2. IAM & Admin > Service Accounts > Create. No roles needed.
-3. Keys > Add key > JSON — download it. You need `client_email` and `private_key`.
+1. **Enable the Drive API** (one click, owner account):
+   https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=628249261704
+2. **Share the SOP folder** (or individual Google Docs) with
+   `service-account@centering-brook-496510-a6.iam.gserviceaccount.com` as Viewer.
+   No folder id needed: the sync pulls every Google Doc shared with that account.
+   (To pin it to one folder later: `insert into app_secrets(key,value) values ('SOPS_FOLDER_ID','<id>')`.)
+3. **Deploy the function** — no secrets to enter:
+   Dashboard > Edge Functions > Deploy new function > name `sops-sync`,
+   paste `supabase/functions/sops-sync/index.ts`, turn OFF "Verify JWT".
+   (CLI: `supabase functions deploy sops-sync --no-verify-jwt`.)
 
-## 2. Share the SOP folder
-In Google Drive, share the folder that holds the SOP Google Docs with the
-service-account email (Viewer). Copy the folder id from its URL
-(`drive.google.com/drive/folders/<FOLDER_ID>`).
+Test: curl -X POST https://jhxuflzmqspidkvjckox.supabase.co/functions/v1/sops-sync \
+  -H "x-sync-secret: <SYNC_SECRET from app_secrets>"
+Expected: {"ok":true,"drive_files":N,...}. Synced docs appear on Reference >
+SOPs & Library as readable pages within 15 minutes of any Drive edit.
 
-## 3. Deploy the function + secrets
-Dashboard route: supabase.com/dashboard > project `cid` > Edge Functions >
-Deploy new function > name `sops-sync`, paste `index.ts`, disable JWT verification.
-(CLI route: `supabase functions deploy sops-sync --no-verify-jwt`.)
-
-Then add these secrets (Edge Functions > sops-sync > Secrets):
-- `GOOGLE_SA_EMAIL`  = client_email from the JSON
-- `GOOGLE_SA_KEY`    = private_key from the JSON (paste as-is)
-- `SOPS_FOLDER_ID`   = the folder id
-- `SYNC_SECRET`      = the value Claude gave you in chat (already wired into the
-  scheduled job; rotate both together if needed)
-
-## 4. Done — verify
-The schedule is already running (pg_cron, every 15 min). To test immediately:
-`curl -X POST https://jhxuflzmqspidkvjckox.supabase.co/functions/v1/sops-sync -H "x-sync-secret: <SYNC_SECRET>"`
-Expected: `{"ok":true,"drive_files":N,"created":...,"updated":...,"skipped":...}`.
-
-Notes: sync is one-way (Drive -> portal) and idempotent; portal-side SOP edits to
-synced docs are overwritten on the next Drive change, so treat Drive as the
-source of truth for synced SOPs. Docs are matched by Drive file id, renames follow.
+Key hygiene: this service-account key was shared in chat; it is read-only and
+scoped to what you share with it, but rotate it whenever you like (new JSON key
+-> update GOOGLE_SA_KEY in app_secrets -> delete the old key in Google Cloud).
