@@ -584,3 +584,10 @@ body { background: radial-gradient(circle at 50% 20%, #10151d 0%, #06090d 100%);
 .sop-chip-on { background: rgba(52,211,153,.12); color: #34d399; }
 .sop-chip-off { background: rgba(148,163,184,.12); color: #94a3b8; }
 .sop-empty { color: #475569; }
+
+/* Mini-Markdown additions for the reference reader. */
+.sop-table th { padding: .5em .7em; text-align: left; font-size: .66rem; letter-spacing: .08em; text-transform: uppercase; color: var(--t-cyan); border-bottom: 1px solid var(--t-cyanline); white-space: nowrap; }
+.sop-table .sop-group { background: rgba(34,211,238,.05); color: #e2e8f0; font-weight: 600; letter-spacing: .05em; }
+.sop-note { margin: 0 0 1em; padding: .6em .9em; border-left: 2px solid var(--t-amber); background: rgba(245,158,11,.06); color: #cbd5e1; font-size: .85rem; }
+.sop-list { margin: 0 0 1em 1.2em; } .sop-list li { margin-bottom: .35em; }
+.sop-prose code { font-family: var(--mono); font-size: .85em; background: rgba(255,255,255,.06); padding: .1em .35em; border-radius: 2px; }

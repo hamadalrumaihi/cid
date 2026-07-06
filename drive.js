@@ -574,33 +574,72 @@
     // Render plain doc text as a readable article: blank-line-separated blocks,
     // short ALL-CAPS / colon-terminated lines become section headings. All escaped.
     function sopArticle(body) {
-      const blocks = String(body || '').split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
+      // Safe mini-Markdown: escape first, then transform. Handles \r\n (Drive
+      // exports), # headings, **bold**, > notes, -/1. lists, Markdown tables
+      // (|:-:| separators), and bare pipe-delimited data blocks (rosters).
+      const norm = String(body || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').replace(/^_{4,}\s*$/gm, '');
+      const blocks = norm.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
       if (!blocks.length) return '<p class="text-slate-500">No content.</p>';
-      // Status cells become tinted chips so rosters scan at a glance.
+      const inline = (t) => esc(t).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>');
       const cell = (v) => {
         const t = v.trim(), l = t.toLowerCase();
         if (l === 'active') return '<span class="sop-chip sop-chip-on">ACTIVE</span>';
-        if (l === 'inactive' || l === 'loa' || l === 'suspended') return '<span class="sop-chip sop-chip-off">' + esc(t.toUpperCase()) + '</span>';
-        return esc(t);
+        if (l === 'inactive' || l === 'loa' || l === 'suspended' || l === 'tba') return '<span class="sop-chip sop-chip-off">' + esc(t.toUpperCase()) + '</span>';
+        return inline(t);
       };
+      const isSep = (l) => /^\|?[\s:|-]+\|?$/.test(l) && l.includes('-');
+      const tableHtml = (rows, hasHead) => {
+        const width = Math.max.apply(null, rows.map((r) => r.length));
+        const tr = (r, tag) => '<tr>' + Array.from({ length: width }, (_, i) => '<' + tag + '>' + (r[i] ? cell(r[i]) : '<span class="sop-empty">-</span>') + '</' + tag + '>').join('') + '</tr>';
+        // A row with one non-empty bold cell is a group header (e.g. **HVPU Command**).
+        const bodyRows = rows.slice(hasHead ? 1 : 0).map((r) => {
+          const filled = r.filter(Boolean);
+          if (filled.length === 1 && /^\*\*[^*]+\*\*$/.test(filled[0])) return '<tr><td class="sop-group" colspan="' + width + '">' + esc(filled[0].replace(/\*\*/g, '')) + '</td></tr>';
+          return tr(r, 'td');
+        }).join('');
+        return '<div class="sop-tablewrap"><table class="sop-table">' + (hasHead ? tr(rows[0], 'th') : '') + bodyRows + '</table></div>';
+      };
+      const splitRow = (l) => l.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
       return blocks.map((b) => {
         const lines = b.split('\n').map((l) => l.trim()).filter(Boolean);
+        if (!lines.length) return '';
+        // Markdown heading / quote blocks.
+        if (/^#{1,6}\s/.test(lines[0]) && lines.length === 1) return '<h3>' + inline(lines[0].replace(/^#{1,6}\s+/, '')) + '</h3>';
+        if (lines.every((l) => /^>\s?/.test(l))) return '<blockquote class="sop-note">' + inline(lines.map((l) => l.replace(/^>\s?/, '')).join(' ')) + '</blockquote>';
+        // Lists.
+        if (lines.length > 1 && lines.every((l) => /^([-*•]|\d+[.)])\s/.test(l))) {
+          const ord = /^\d/.test(lines[0]);
+          return '<' + (ord ? 'ol' : 'ul') + ' class="sop-list">' + lines.map((l) => '<li>' + inline(l.replace(/^([-*•]|\d+[.)])\s+/, '')) + '</li>').join('') + '</' + (ord ? 'ol' : 'ul') + '>';
+        }
+        // Tables: Markdown (with separator row) or bare pipe data.
         const piped = lines.filter((l) => l.includes('|'));
-        // Pipe-delimited groups are tabular data (rosters, fact sheets): render a
-        // real table. One piped line only counts if it has 4+ cells, so prose like
-        // "Title 1A | Mission Statement" stays a paragraph.
+        const sepIdx = lines.findIndex(isSep);
+        if (sepIdx === 1 && piped.length >= 2) {
+          const rows = lines.filter((l, i) => i !== sepIdx && !isSep(l)).map(splitRow);
+          return tableHtml(rows, true);
+        }
         const tabular = piped.length >= 2 || (piped.length === 1 && piped[0].split('|').length >= 4);
         if (tabular) {
-          const head = !lines[0].includes('|') ? lines.shift() : null;
-          const rows = lines.map((l) => l.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim()));
-          const width = Math.max.apply(null, rows.map((r) => r.length));
-          const table = '<div class="sop-tablewrap"><table class="sop-table">' + rows.map((r) =>
-            '<tr>' + Array.from({ length: width }, (_, i) => '<td>' + (r[i] ? cell(r[i]) : '<span class="sop-empty">-</span>') + '</td>').join('') + '</tr>').join('') + '</table></div>';
-          return (head ? '<h3>' + esc(head.replace(/:$/, '')) + '</h3>' : '') + table;
+          const head = !lines[0].includes('|') && !/^#/.test(lines[0]) ? lines.shift() : null;
+          const rows = lines.filter((l) => !isSep(l)).map(splitRow);
+          return (head ? '<h3>' + inline(head.replace(/:$/, '')) + '</h3>' : '') + tableHtml(rows, false);
         }
-        const one = lines.length === 1, t = lines.join(' ');
-        const heading = one && t.length <= 64 && ((t === t.toUpperCase() && /[A-Z]/.test(t)) || /:$/.test(t));
-        return heading ? '<h3>' + esc(t.replace(/:$/, '')) + '</h3>' : '<p>' + esc(b).replace(/\n/g, '<br>') + '</p>';
+        // Heading heuristics + mixed blocks (heading line then prose).
+        const out = [];
+        let para = [];
+        const flush = () => { if (para.length) { out.push('<p>' + para.map(inline).join('<br>') + '</p>'); para = []; } };
+        for (const l of lines) {
+          const md = /^#{1,6}\s/.test(l);
+          const caps = l.length <= 64 && ((l === l.toUpperCase() && /[A-Z]/.test(l)) || /:$/.test(l)) && lines.length > 1 === false;
+          if (md) { flush(); out.push('<h3>' + inline(l.replace(/^#{1,6}\s+/, '')) + '</h3>'); }
+          else para.push(l);
+        }
+        flush();
+        if (out.length === 1 && lines.length === 1) {
+          const t = lines[0];
+          if (t.length <= 64 && ((t === t.toUpperCase() && /[A-Z]/.test(t)) || /:$/.test(t)) && !t.includes('|')) return '<h3>' + inline(t.replace(/:$/, '')) + '</h3>';
+        }
+        return out.join('');
       }).join('');
     }
     function onEnterSops() {
