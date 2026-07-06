@@ -563,3 +563,71 @@
     }
     function exportDocxParas(title, paras, filename) { downloadDocx(title, paras, filename); }
 
+
+    /* ---- SOPs view (Reference tab) --------------------------------------------
+       Standard Operating Procedures live in the documents table (folder 'SOPs')
+       so they get versioning/search for free. Every active member can read;
+       create/edit is command staff — gated here for UX and enforced server-side
+       by the documents RLS folder guard. */
+    const SOP_FOLDER = 'SOPs';
+    function onEnterSops() {
+      if (typeof fetchDocuments === 'function' && dbReady()) fetchDocuments().then(renderSops); else renderSops();
+    }
+    function renderSops() {
+      const grid = $('#sop-grid'); if (!grid) return;
+      if (!dbReady()) { grid.innerHTML = '<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">Sign in to read division SOPs.</div>'; return; }
+      const canManage = typeof canReassign === 'function' && canReassign();
+      const nb = $('#sop-new'); if (nb) { nb.classList.toggle('hidden', !canManage); if (!nb.dataset.wired) { nb.dataset.wired = '1'; nb.onclick = () => openSopEditor(null); } }
+      const sops = (typeof DOCS !== 'undefined' ? DOCS : []).filter((d) => d.folder === SOP_FOLDER).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      if (!sops.length) { grid.innerHTML = '<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400"><span class="t-readout">NO SOPS PUBLISHED // POLICY QUEUE EMPTY.</span>' + (canManage ? ' Use “+ New SOP”.' : '') + '</div>'; return; }
+      grid.innerHTML = '';
+      sops.forEach((d, i) => {
+        const card = el('div', { class: 'person-card cursor-pointer rounded-2xl border border-white/5 bg-ink-900/60 p-5' });
+        card.style.setProperty('--i', String(i));
+        const body = (d.content && d.content.body) || '';
+        card.innerHTML = `
+          <p class="text-sm font-semibold text-white">${esc(d.name)}</p>
+          <p class="mt-1 line-clamp-3 text-xs text-slate-400">${esc(body.slice(0, 200)) || 'No content yet.'}</p>
+          <p class="t-readout mt-3 text-[10px] uppercase text-slate-500">SOP // ${esc(d.modified_label || 'undated')}</p>`;
+        card.onclick = () => openSopReader(d, canManage);
+        grid.appendChild(card);
+      });
+    }
+    function openSopReader(d, canManage) {
+      const node = el('div', { class: 'p-6' });
+      node.innerHTML = `
+        <div class="mb-4 flex items-center justify-between gap-3"><h3 class="min-w-0 truncate text-lg font-bold text-white">${esc(d.name)}</h3><button aria-label="Close" class="close-x flex-shrink-0 text-2xl leading-none text-slate-400 hover:text-white">&times;</button></div>
+        <p class="t-readout mb-3 text-[10px] uppercase tracking-widest text-slate-500">Standard operating procedure // ${esc(d.modified_label || 'undated')}</p>
+        <div class="max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-lg border border-white/5 bg-ink-900 p-4 text-sm leading-relaxed text-slate-200">${esc((d.content && d.content.body) || 'No content.')}</div>
+        ${canManage ? '<div class="mt-4 flex gap-2"><button id="sop-edit" class="flex-1 rounded-lg border border-white/10 bg-white/5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">Edit</button><button id="sop-del" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button></div>' : ''}`;
+      node.querySelector('.close-x').onclick = closeModal;
+      const ed = node.querySelector('#sop-edit'); if (ed) ed.onclick = () => { closeModal(); openSopEditor(d); };
+      const dl = node.querySelector('#sop-del'); if (dl) dl.onclick = async () => {
+        if (!(await uiConfirm('Delete SOP “' + d.name + '”? Restorable via Undo.', { confirmText: 'Delete' }))) return;
+        closeModal(); await deleteWithUndo('documents', d, { label: 'SOP “' + d.name + '”', after: () => { if (typeof fetchDocuments === 'function') fetchDocuments().then(renderSops); } });
+      };
+      openModal(node, { wide: true });
+    }
+    function openSopEditor(record) {
+      if (!(typeof canReassign === 'function' && canReassign())) { toast('Command staff only.', 'warn'); return; }
+      const d = record || {};
+      const node = el('div', { class: 'p-6' });
+      node.innerHTML = `
+        <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">${record ? 'Edit' : 'New'} SOP</h3><button aria-label="Close" class="close-x text-2xl leading-none text-slate-400 hover:text-white">&times;</button></div>
+        <label class="mb-1 block text-xs font-semibold text-slate-400">Title *</label>
+        <input id="sop-name" value="${esc(d.name || '')}" class="mb-3 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Use of Force Policy" />
+        <label class="mb-1 block text-xs font-semibold text-slate-400">Procedure text *</label>
+        <textarea id="sop-body" rows="12" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${esc((d.content && d.content.body) || '')}</textarea>
+        <button id="sop-save" class="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">${record ? 'Save changes' : 'Publish SOP'}</button>`;
+      node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#sop-save').onclick = async () => {
+        const name = node.querySelector('#sop-name').value.trim(), body = node.querySelector('#sop-body').value;
+        if (!name || !body.trim()) { toast('Title and procedure text are required.', 'warn'); return; }
+        const payload = { folder: SOP_FOLDER, name: name, kind: 'doc', content: { body: body }, modified_label: new Date().toLocaleDateString('en-GB') };
+        const res = record && record.id ? await DB().update('documents', record.id, payload) : await DB().insert('documents', payload);
+        if (res && res.error) { toast('Save failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast(record ? 'SOP updated' : 'SOP published', 'success');
+        if (typeof fetchDocuments === 'function') fetchDocuments().then(renderSops);
+      };
+      openModal(node, { wide: true });
+    }

@@ -227,3 +227,26 @@
       }).filter((x) => x.score >= 2).sort((a, b) => b.score - a.score);
       return scored.slice(0, limit || 6).map((x) => x.code);
     }
+
+    /* ---- Penal Code reference view (Reference tab) ---------------------------
+       Read-only searchable statute catalog for every role; same PENAL_CODE data
+       the charge picker uses, so the two can never drift apart. */
+    function renderPenalView() {
+      const list = $('#penal-list'); if (!list) return;
+      const q = ($('#penal-search') ? $('#penal-search').value : '').trim();
+      const rows = penalSearch(q);
+      const cnt = $('#penal-count'); if (cnt) cnt.textContent = rows.length + ' / ' + PENAL_CODE.length + ' STATUTES';
+      list.innerHTML = rows.length ? rows.map((c) => `
+        <div class="evidence-card rounded-xl border border-white/10 bg-ink-900 px-4 py-2.5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <p class="text-sm text-slate-200"><span class="font-mono font-semibold text-blue-300">${esc(c.code)}</span> ${esc(c.title)}${c.rico ? ' <span class="rounded bg-fuchsia-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-fuchsia-300">RICO</span>' : ''}</p>
+            <p class="t-readout text-[11px] text-slate-400"><span class="rounded border px-1.5 py-0.5 ${PENAL_LEVEL_TINT[c.level] || ''}">${esc(c.level)}</span> ${penalSentence(c.jail)}${c.fine != null ? ' · ' + fmtUSD(c.fine) : ''}</p>
+          </div>
+          ${c.desc ? `<p class="mt-1 text-xs text-slate-500">${esc(c.desc)}</p>` : ''}
+        </div>`).join('') : '<p class="t-readout p-6 text-center text-sm text-slate-500">NO STATUTE MATCH // REFINE SEARCH.</p>';
+    }
+    function onEnterPenal() {
+      renderPenalView();
+      const se = $('#penal-search');
+      if (se && !se.dataset.wired) { se.dataset.wired = '1'; se.addEventListener('input', (typeof debounce === 'function' ? debounce(renderPenalView, 120) : renderPenalView)); }
+    }

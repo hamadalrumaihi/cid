@@ -27,7 +27,7 @@
   <title>CID Portal — Criminal Investigation Division | State of San Andreas</title>
 
   <!-- Tailwind CSS — precompiled & inlined (production-safe, offline, no runtime warning) -->
-    <link rel="stylesheet" href="styles.css?v=20260706c" />
+    <link rel="stylesheet" href="styles.css?v=20260706d" />
 
   <!-- Typefaces -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -100,6 +100,9 @@
         </button>
         <button data-cat="drive" data-label="Drive" class="nav-cat nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
           <span class="nav-icon flex-shrink-0"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5h17v4h-17z"/><path d="M5.5 9v9.5h13V9"/><path d="M10 13h4"/></svg></span><span class="nav-label">Drive</span>
+        </button>
+        <button data-cat="reference" data-label="Reference" class="nav-cat nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
+          <span class="nav-icon flex-shrink-0"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5H6.5A2.5 2.5 0 0 0 4 21z"/><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20"/></svg></span><span class="nav-label">Reference</span>
         </button>
         <button data-cat="oversight" data-label="Oversight" class="nav-cat nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white">
           <span class="nav-icon flex-shrink-0"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l7.5 2.8v5.4c0 4.2-3 7.3-7.5 8.8-4.5-1.5-7.5-4.6-7.5-8.8V6.3z"/><path d="M9 12l2 2 4-4"/></svg></span><span class="nav-label">Oversight</span>
@@ -280,6 +283,27 @@
           </div>
           <!-- Detail mode (populated by JS) -->
           <div id="case-detail" class="hidden"></div>
+        </section>
+
+        <!-- ===================== VIEW: PENAL CODE (static catalog, all roles) ===================== -->
+        <section id="view-penal" class="view">
+          <div class="mb-4 flex flex-wrap items-center gap-3">
+            <div class="relative min-w-[12rem] flex-1">
+              <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input id="penal-search" type="text" placeholder="Search code, title, level…" class="w-full rounded-lg border border-white/10 bg-ink-850 py-2 pl-9 pr-3 text-sm text-slate-200 outline-none transition focus:border-badge-500" />
+            </div>
+            <span id="penal-count" class="t-readout text-[11px] text-slate-500"></span>
+          </div>
+          <div id="penal-list" class="space-y-1.5"></div>
+        </section>
+
+        <!-- ===================== VIEW: SOPs (documents folder, command-managed) ===================== -->
+        <section id="view-sops" class="view">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <p class="t-readout text-[11px] uppercase tracking-widest text-slate-500">Division policy // read access all active members // edits command staff</p>
+            <button id="sop-new" class="hidden rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">+ New SOP</button>
+          </div>
+          <div id="sop-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"></div>
         </section>
 
         <!-- ===================== VIEW: PERSONS (Supabase) ===================== -->
@@ -637,6 +661,7 @@
     <button data-cat="cases" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="leading-none"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5a2 2 0 0 1 2-2h4.2l1.8 2H19a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><span class="text-[10px] font-medium">Cases</span></button>
     <button data-cat="intel" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="leading-none"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4"/><path d="M12 12l6-6"/></svg></span><span class="text-[10px] font-medium">Intel</span></button>
     <button data-cat="drive" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="leading-none"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5h17v4h-17z"/><path d="M5.5 9v9.5h13V9"/><path d="M10 13h4"/></svg></span><span class="text-[10px] font-medium">Drive</span></button>
+    <button data-cat="reference" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="leading-none"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5H6.5A2.5 2.5 0 0 0 4 21z"/><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20"/></svg></span><span class="text-[10px] font-medium">Ref</span></button>
     <button data-cat="oversight" class="bnav-link flex min-w-[4.25rem] flex-1 flex-shrink-0 flex-col items-center justify-center gap-0.5 py-2.5 text-slate-400 transition"><span class="leading-none"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l7.5 2.8v5.4c0 4.2-3 7.3-7.5 8.8-4.5-1.5-7.5-4.6-7.5-8.8V6.3z"/><path d="M9 12l2 2 4-4"/></svg></span><span class="text-[10px] font-medium">Oversight</span></button>
   </nav>
 
@@ -676,37 +701,37 @@
   </script>
 
   <!-- ===== APPLICATION JS (feature-split classic scripts; shared global scope, load order matters) ===== -->
-  <script src="supabase.js?v=20260706c"></script>
-  <script src="roles.js?v=20260706c"></script>
-  <script src="core.js?v=20260706c"></script>
-  <script src="penal.js?v=20260706c"></script>
-  <script src="casefiles.js?v=20260706c"></script>
-  <script src="command.js?v=20260706c"></script>
-  <script src="narcotics.js?v=20260706c"></script>
-  <script src="ballistics.js?v=20260706c"></script>
-  <script src="personnel.js?v=20260706c"></script>
-  <script src="modus.js?v=20260706c"></script>
-  <script src="drive.js?v=20260706c"></script>
-  <script src="persons.js?v=20260706c"></script>
-  <script src="gangs.js?v=20260706c"></script>
-  <script src="intel.js?v=20260706c"></script>
-  <script src="places.js?v=20260706c"></script>
-  <script src="network.js?v=20260706c"></script>
-  <script src="reports.js?v=20260706c"></script>
-  <script src="rico.js?v=20260706c"></script>
-  <script src="docx.js?v=20260706c"></script>
-  <script src="records.js?v=20260706c"></script>
-  <script src="signoff.js?v=20260706c"></script>
-  <script src="inbox.js?v=20260706c"></script>
-  <script src="collab.js?v=20260706c"></script>
-  <script src="heatmap.js?v=20260706c"></script>
-  <script src="shifts.js?v=20260706c"></script>
-  <script src="fivemanage.js?v=20260706c"></script>
-  <script src="vehicles.js?v=20260706c"></script>
-  <script src="watchlist.js?v=20260706c"></script>
-  <script src="feedback.js?v=20260706c"></script>
-  <script src="app.js?v=20260706c"></script>
-  <script src="auth.js?v=20260706c"></script>
+  <script src="supabase.js?v=20260706d"></script>
+  <script src="roles.js?v=20260706d"></script>
+  <script src="core.js?v=20260706d"></script>
+  <script src="penal.js?v=20260706d"></script>
+  <script src="casefiles.js?v=20260706d"></script>
+  <script src="command.js?v=20260706d"></script>
+  <script src="narcotics.js?v=20260706d"></script>
+  <script src="ballistics.js?v=20260706d"></script>
+  <script src="personnel.js?v=20260706d"></script>
+  <script src="modus.js?v=20260706d"></script>
+  <script src="drive.js?v=20260706d"></script>
+  <script src="persons.js?v=20260706d"></script>
+  <script src="gangs.js?v=20260706d"></script>
+  <script src="intel.js?v=20260706d"></script>
+  <script src="places.js?v=20260706d"></script>
+  <script src="network.js?v=20260706d"></script>
+  <script src="reports.js?v=20260706d"></script>
+  <script src="rico.js?v=20260706d"></script>
+  <script src="docx.js?v=20260706d"></script>
+  <script src="records.js?v=20260706d"></script>
+  <script src="signoff.js?v=20260706d"></script>
+  <script src="inbox.js?v=20260706d"></script>
+  <script src="collab.js?v=20260706d"></script>
+  <script src="heatmap.js?v=20260706d"></script>
+  <script src="shifts.js?v=20260706d"></script>
+  <script src="fivemanage.js?v=20260706d"></script>
+  <script src="vehicles.js?v=20260706d"></script>
+  <script src="watchlist.js?v=20260706d"></script>
+  <script src="feedback.js?v=20260706d"></script>
+  <script src="app.js?v=20260706d"></script>
+  <script src="auth.js?v=20260706d"></script>
 
   
 </body>
