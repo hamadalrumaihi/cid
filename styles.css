@@ -763,3 +763,14 @@ body { background: radial-gradient(circle at 50% 20%, #10151d 0%, #06090d 100%);
     min-width: 44rem;
   }
 }
+
+/* Roster visuals: strike-point bars + per-section headcount tiles. Bars keep
+   the real number visible; width is proportion of the column max. */
+.sop-barwrap { display: inline-block; width: 72px; height: 6px; margin-right: .6em; vertical-align: middle; background: rgba(148,163,184,.12); border-radius: 2px; overflow: hidden; }
+.sop-bar { display: block; height: 100%; background: linear-gradient(90deg, var(--t-cyan), var(--t-amber)); }
+.sop-barnum { font-family: var(--mono); color: #e2e8f0; }
+.sop-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .5rem; margin-bottom: 1.1em; }
+.sop-tile { border: 1px solid var(--t-line); border-radius: 2px; background: var(--t-field); padding: .6rem .7rem; }
+.sop-tile-n { font-family: var(--mono); font-size: 1.3rem; font-weight: 600; color: #fff; }
+.sop-tile-a { font-family: var(--mono); font-size: .62rem; letter-spacing: .08em; color: var(--t-green); }
+.sop-tile-l { font-size: .6rem; letter-spacing: .07em; text-transform: uppercase; color: #64748b; margin-top: .25rem; }
