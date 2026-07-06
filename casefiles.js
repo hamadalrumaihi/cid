@@ -293,8 +293,9 @@
         casesCache = await (typeof withRetry === 'function' ? withRetry(() => DB().list('cases', { order: 'updated_at', ascending: false })) : DB().list('cases', { order: 'updated_at', ascending: false }));
         renderCases();
         renderJumpBack();
+        { const tel = $('#sys-telemetry'); if (tel) tel.textContent = 'SYS.LINK // RECV_OK // ' + new Date().toTimeString().slice(0, 5); }
         if (typeof refreshCaseSelects === 'function') refreshCaseSelects();
-      } catch (e) { casesNotice('Could not load cases — check your connection and retry. (' + escapeHTML(e.message || String(e)) + ')'); }
+      } catch (e) { const tel = $('#sys-telemetry'); if (tel) tel.textContent = 'SYS.LINK // DEGRADED'; casesNotice('Could not load cases — check your connection and retry. (' + escapeHTML(e.message || String(e)) + ')'); }
     }
 
     // QoL: days since a case last moved; flag open/active cases gone quiet (≥14d).
@@ -433,6 +434,7 @@
         const card = el('div', { class: 'case-card cursor-pointer rounded-2xl border border-white/5 bg-ink-900/60 p-5 transition hover:border-blue-500/30 hover:bg-white/5' });
         card.style.setProperty('--i', String(i));
         card.dataset.status = c.status || '';
+        if (staleBadge(c)) card.dataset.stale = 'true';   // durable hook for the CSS attention pulse
         card.innerHTML = `
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0"><p class="truncate font-mono text-sm font-semibold text-blue-300">${escapeHTML(c.case_number)}</p><p class="mt-0.5 truncate text-sm text-white">${escapeHTML(c.title || 'Untitled case')}</p></div>
