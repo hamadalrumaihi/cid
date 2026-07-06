@@ -121,6 +121,9 @@
     var profile;
     try { profile = await window.CIDDB.profile(session.user.id); }
     catch (e) { showAuthError(); return; }   // transient error — offer retry, don't mislabel as unapproved
+    // Own email is not selectable from profiles (command-only column); take it
+    // from the auth session so the officer's own card still shows it.
+    if (profile && session.user && session.user.email) profile.email = session.user.email;
     window.CIDDB.me = profile || null;
     if (profile && profile.active) {
       showApp(profile, session);

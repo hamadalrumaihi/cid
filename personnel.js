@@ -8,11 +8,14 @@
     function renderRoster() {
       const g = $('#roster-grid'); if (!g) return;
       if (!dbReady()) { g.innerHTML = '<p class="text-sm text-slate-500 sm:col-span-2 xl:col-span-3">Sign in to view the roster.</p>'; return; }
-      if (!PROFILES.length) { g.innerHTML = '<p class="text-sm text-slate-500 sm:col-span-2 xl:col-span-3">No officers on the roster yet.</p>'; return; }
+      // Permanently-removed members stay in the cache for historical name
+      // resolution but never appear on the live roster.
+      const roster = PROFILES.filter((p) => !p.removed_at);
+      if (!roster.length) { g.innerHTML = '<p class="text-sm text-slate-500 sm:col-span-2 xl:col-span-3">No officers on the roster yet.</p>'; return; }
       g.innerHTML = '';
       const myId = (DB() && DB().me) ? DB().me.id : null;
       const admin = DB() && DB().isAdmin();
-      PROFILES.forEach((p) => {
+      roster.forEach((p) => {
         const init = (p.display_name || '?').split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
         const isMe = myId && p.id === myId;
         const roleLabel = (typeof ROLE_LABEL !== 'undefined' && ROLE_LABEL[p.role]) || p.role;

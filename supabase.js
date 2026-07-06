@@ -35,7 +35,11 @@
     // mistaking a transient network blip for "not yet approved".
     async profile(uid) {
       if (!client) return null;
-      var r = await client.from('profiles').select('*').eq('id', uid).maybeSingle();
+      // email is column-restricted to command (see restrict_profile_email_column_grant);
+      // a member's own email comes from the auth session, not this row.
+      var r = await client.from('profiles')
+        .select('id,display_name,avatar_url,badge_number,division,role,active,created_at,updated_at,loa,loa_since,discord_id')
+        .eq('id', uid).maybeSingle();
       if (r.error) throw r.error;
       return r.data;
     },

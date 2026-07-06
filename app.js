@@ -51,15 +51,28 @@
       const wrap = $('#admin-panel'); if (!wrap) return;
       if (!(DB() && DB().isAdmin())) { wrap.classList.add('hidden'); return; }
       wrap.classList.remove('hidden');
-      const rows = PROFILES.slice().sort((a, b) => Number(a.active) - Number(b.active));
+      const rows = PROFILES.filter((p) => !p.removed_at).slice().sort((a, b) => Number(a.active) - Number(b.active));
+      const removed = PROFILES.filter((p) => p.removed_at).sort((a, b) => (b.removed_at || '').localeCompare(a.removed_at || ''));
       wrap.innerHTML = `
         <div class="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
           <h4 class="mb-1 text-sm font-semibold uppercase tracking-wider text-amber-300/80">⚙️ Member Administration (Director / Command)</h4>
           <p class="mb-4 text-xs text-slate-400">Approve and assign officers. New sign-ins are inactive until activated.</p>
           <div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead><tr class="text-[11px] uppercase tracking-wider text-slate-400"><th class="px-3 py-2">Officer</th><th class="px-3 py-2">Role</th><th class="px-3 py-2">Bureau</th><th class="px-3 py-2">Active</th><th class="px-3 py-2"></th></tr></thead>
-          <tbody class="divide-y divide-white/5">${rows.map((p) => `<tr class="${p.active ? '' : 'bg-amber-500/5'}"><td class="px-3 py-2"><p class="text-white">${esc(p.display_name)} ${p.loa ? '<span class="ml-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-300">On LOA</span>' : ''}</p><p class="text-[11px] text-slate-500">${esc(p.email || '')}</p></td><td class="px-3 py-2 text-slate-300">${esc(ROLE_LABEL[p.role] || p.role)}</td><td class="px-3 py-2 text-slate-300">${esc(p.division)}</td><td class="px-3 py-2">${p.active ? '<span class="text-emerald-300">Yes</span>' : '<span class="text-amber-300">Pending</span>'}</td><td class="px-3 py-2 text-right">${p.active ? '' : `<button class="adm-approve mr-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20" data-id="${p.id}">✓ Approve</button>`}<button class="adm-edit rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 hover:bg-white/10" data-id="${p.id}">Manage</button></td></tr>`).join('') || '<tr><td colspan="5" class="px-3 py-3 text-slate-500">No profiles yet.</td></tr>'}</tbody></table></div>
+          <tbody class="divide-y divide-white/5">${rows.map((p) => `<tr class="${p.active ? '' : 'bg-amber-500/5'}"><td class="px-3 py-2"><p class="text-white">${esc(p.display_name)} ${p.loa ? '<span class="ml-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-300">On LOA</span>' : ''}</p><p class="text-[11px] text-slate-500">${esc((typeof memberEmail === 'function' ? memberEmail(p.id) : '') || '')}</p></td><td class="px-3 py-2 text-slate-300">${esc(ROLE_LABEL[p.role] || p.role)}</td><td class="px-3 py-2 text-slate-300">${esc(p.division)}</td><td class="px-3 py-2">${p.active ? '<span class="text-emerald-300">Yes</span>' : '<span class="text-amber-300">Pending</span>'}</td><td class="px-3 py-2 text-right">${p.active ? '' : `<button class="adm-approve mr-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20" data-id="${p.id}">✓ Approve</button>`}<button class="adm-edit rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 hover:bg-white/10" data-id="${p.id}">Manage</button></td></tr>`).join('') || '<tr><td colspan="5" class="px-3 py-3 text-slate-500">No profiles yet.</td></tr>'}</tbody></table></div>
+          ${removed.length ? `<div class="mt-5 border-t border-white/5 pt-4">
+            <p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-rose-300/70">Permanently removed (${removed.length})</p>
+            <div class="space-y-1.5">${removed.map((p) => `<div class="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-ink-900 px-3 py-2"><span class="text-sm text-slate-400"><span class="text-slate-300">${esc(p.display_name)}</span> · <span class="text-[11px]">removed ${esc(p.removed_at ? new Date(p.removed_at).toLocaleDateString('en-GB') : '')}</span></span><button class="adm-restore rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/10" data-id="${p.id}">Restore</button></div>`).join('')}</div>
+          </div>` : ''}
         </div>`;
       wrap.querySelectorAll('.adm-edit').forEach((b) => b.onclick = () => openAssignModal(PROFILES.find((p) => p.id === b.dataset.id)));
+      wrap.querySelectorAll('.adm-restore').forEach((b) => b.onclick = async () => {
+        const p = PROFILES.find((x) => x.id === b.dataset.id); if (!p) return;
+        if (!(await uiConfirm('Restore ' + (p.display_name || 'this member') + '? They return as an inactive account and must be re-approved to regain access.', { confirmText: 'Restore' }))) return;
+        const res = await DB().rpc('admin_restore_member', { p_target: p.id });
+        if (res && res.error) { toast('Restore failed: ' + res.error.message, 'danger'); return; }
+        toast((p.display_name || 'Member') + ' restored — pending re-approval', 'success');
+        fetchProfiles().then(renderAdmin);
+      });
       // One-click approve for pending sign-ins (keeps their current role/bureau; flips active=true).
       wrap.querySelectorAll('.adm-approve').forEach((b) => b.onclick = async () => {
         const p = PROFILES.find((x) => x.id === b.dataset.id); if (!p) return;
@@ -75,7 +88,7 @@
       const node = el('div', { class: 'p-6' });
       node.innerHTML = `
         <div class="mb-5 flex items-center justify-between"><h3 class="text-xl font-bold text-white">Manage Officer</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div>
-        <p class="mb-3 text-[11px] text-slate-500">${esc(p.email || '')}</p>
+        <p class="mb-3 text-[11px] text-slate-500">${esc((typeof memberEmail === 'function' ? memberEmail(p.id) : '') || p.email || '')}</p>
         <div class="mb-3 grid grid-cols-2 gap-3">
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Display Name</label><input id="adm-name" value="${esc(p.display_name || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" /></div>
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Badge #</label><input id="adm-badge" value="${esc(p.badge_number || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-sm text-white outline-none focus:border-badge-500" /></div>
@@ -86,8 +99,21 @@
         </div>
         <label class="mt-3 flex items-center gap-2 text-sm text-slate-200"><input id="adm-active" type="checkbox" ${p.active ? 'checked' : ''} class="accent-emerald-500" /> Active (approved for access)</label>
         <label class="mt-2 flex items-center gap-2 text-sm text-slate-200"><input id="adm-loa" type="checkbox" ${p.loa ? 'checked' : ''} class="accent-amber-500" /> On LOA (Leave of Absence) — informational; auto-routes sign-offs around this officer</label>
-        <button id="adm-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save</button>`;
+        <button id="adm-save" class="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save</button>
+        <div class="mt-4 border-t border-white/5 pt-3">
+          <p class="mb-2 text-[11px] uppercase tracking-wider text-rose-300/70">Danger zone</p>
+          <button id="adm-remove" class="w-full rounded-lg border border-rose-500/30 bg-rose-500/5 py-2.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Permanently remove from CID</button>
+          <p class="mt-1.5 text-[10px] text-slate-500">Blocks all access, clears their sign-in email, unassigns their cases and hides them from the roster. Cases, reports and audit history they authored are kept. A director can restore them (they return inactive, pending re-approval).</p>
+        </div>`;
       node.querySelector('.close-x').onclick = closeModal;
+      node.querySelector('#adm-remove').onclick = async () => {
+        const me = DB() && DB().me;
+        if (me && me.id === p.id) { toast('You cannot remove yourself.', 'warn'); return; }
+        if (!(await uiConfirm('Permanently remove ' + (p.display_name || 'this member') + ' from CID?\n\nThey lose all access immediately and their sign-in email is cleared. Their authored cases, reports and audit trail are preserved. This is reversible only by a director restoring them.', { confirmText: 'Remove permanently', danger: true }))) return;
+        const res = await DB().rpc('admin_remove_member', { p_target: p.id });
+        if (res && res.error) { toast('Remove failed: ' + res.error.message, 'danger'); return; }
+        closeModal(); toast((p.display_name || 'Member') + ' permanently removed', 'warn'); fetchProfiles().then(renderAdmin);
+      };
       node.querySelector('#adm-save').onclick = async () => {
         const res = await DB().rpc('assign_member', { target: p.id, new_role: node.querySelector('#adm-role').value, new_division: node.querySelector('#adm-bureau').value, set_active: node.querySelector('#adm-active').checked });
         if (res.error) { toast('Update failed: ' + res.error.message, 'danger'); return; }
