@@ -576,10 +576,31 @@
     function sopArticle(body) {
       const blocks = String(body || '').split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
       if (!blocks.length) return '<p class="text-slate-500">No content.</p>';
+      // Status cells become tinted chips so rosters scan at a glance.
+      const cell = (v) => {
+        const t = v.trim(), l = t.toLowerCase();
+        if (l === 'active') return '<span class="sop-chip sop-chip-on">ACTIVE</span>';
+        if (l === 'inactive' || l === 'loa' || l === 'suspended') return '<span class="sop-chip sop-chip-off">' + esc(t.toUpperCase()) + '</span>';
+        return esc(t);
+      };
       return blocks.map((b) => {
-        const oneLine = !b.includes('\n');
-        const heading = oneLine && b.length <= 64 && (b === b.toUpperCase() && /[A-Z]/.test(b) || /:$/.test(b));
-        return heading ? `<h3>${esc(b.replace(/:$/, ''))}</h3>` : `<p>${esc(b).replace(/\n/g, '<br>')}</p>`;
+        const lines = b.split('\n').map((l) => l.trim()).filter(Boolean);
+        const piped = lines.filter((l) => l.includes('|'));
+        // Pipe-delimited groups are tabular data (rosters, fact sheets): render a
+        // real table. One piped line only counts if it has 4+ cells, so prose like
+        // "Title 1A | Mission Statement" stays a paragraph.
+        const tabular = piped.length >= 2 || (piped.length === 1 && piped[0].split('|').length >= 4);
+        if (tabular) {
+          const head = !lines[0].includes('|') ? lines.shift() : null;
+          const rows = lines.map((l) => l.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim()));
+          const width = Math.max.apply(null, rows.map((r) => r.length));
+          const table = '<div class="sop-tablewrap"><table class="sop-table">' + rows.map((r) =>
+            '<tr>' + Array.from({ length: width }, (_, i) => '<td>' + (r[i] ? cell(r[i]) : '<span class="sop-empty">-</span>') + '</td>').join('') + '</tr>').join('') + '</table></div>';
+          return (head ? '<h3>' + esc(head.replace(/:$/, '')) + '</h3>' : '') + table;
+        }
+        const one = lines.length === 1, t = lines.join(' ');
+        const heading = one && t.length <= 64 && ((t === t.toUpperCase() && /[A-Z]/.test(t)) || /:$/.test(t));
+        return heading ? '<h3>' + esc(t.replace(/:$/, '')) + '</h3>' : '<p>' + esc(b).replace(/\n/g, '<br>') + '</p>';
       }).join('');
     }
     function onEnterSops() {
