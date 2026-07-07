@@ -67,12 +67,21 @@
             <button class="r-docx rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-200 transition hover:bg-white/10">.docx</button>
             <button class="r-pdf rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-200 transition hover:bg-white/10">.pdf</button>
             ${canEdit ? '<button class="r-supp rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-violet-300 transition hover:bg-white/10">+ Supplemental</button><button class="r-follow rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-amber-300 transition hover:bg-white/10">+ Follow-up</button>' : ''}
+            ${(DB() && DB().canDelete()) ? '<button class="r-del ml-auto rounded-md border border-rose-500/30 bg-rose-500/5 px-3 py-1.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>' : ''}
           </div>`;
         card.querySelector('.r-view').onclick = () => viewReport(r);
         card.querySelector('.r-docx').onclick = () => exportReportDocx(r);
         card.querySelector('.r-pdf').onclick = () => exportReportPdf(r);
         const rs = card.querySelector('.r-supp'); if (rs) rs.onclick = () => openReportModal(r.template, caseId, r.id, 'supplemental');
         const rf = card.querySelector('.r-follow'); if (rf) rf.onclick = () => openReportModal(r.template, caseId, r.id, 'followup');
+        // Delete a report (command/delete-permission only; RLS reports_del enforces
+        // it server-side). Routed through deleteWithUndo so an accidental delete is
+        // recoverable. Finalized (signed) reports get an extra heads-up in the label.
+        const rd = card.querySelector('.r-del');
+        if (rd) rd.onclick = () => deleteWithUndo('reports', r, {
+          label: (tpl ? tpl.name : 'Report') + (r.finalized ? ' (finalized — signed)' : ''),
+          after: () => { if (typeof reloadCaseReports === 'function') reloadCaseReports(); },
+        });
         wrap.appendChild(card);
       });
     }
