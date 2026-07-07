@@ -30,12 +30,41 @@ route ids but the legacy `reports` route has no section and falls back to `cases
 - [x] **Phase 2** — Cases vertical slice implementation pass: cases grid/board,
       filters/saved views, stale badges/escalation, bulk delete, templates,
       operations picker/view, detail shell, 11 tabs, packet .docx/.md. Gates green.
-      **Live browser verification still pending**; several dense vanilla subflows are
-      intentionally lean in React v1 and called out below.
+      **Live-verified 2026-07-08** (see "Live QA results" below); several dense vanilla
+      subflows are intentionally lean in React v1 and called out below.
 - [ ] **Phase 3+** — one view per patch (order below). Done so far: `inbox` (My Desk),
       `command` (Central Command), `personnel` (Roster & Member Admin), and `announce`
-      (Announcements) implementation passes, gates green; live browser verification
-      still pending.
+      (Announcements) — all four **live-verified 2026-07-08** alongside Phase 2.
+
+### Live QA results (2026-07-08, real browser + live Supabase, director account)
+All flows exercised with throwaway rows; SQL sweep confirmed **zero QA rows left**
+across cases/tickets/trackers/operations/commendations/announcements/tasks/messages/
+notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscribe).
+- command: KPI numbers live; drill toggle + "X of Y" + matching list; filter bar
+  (command-gated, detectives populated); scorecards/caseload/analytics; ticket wizard
+  end-to-end (misroute rename ticket→blaine, BCB prefix + lead digit, processed chip);
+  tracker deploy → **self-co-sign blocked** → remove; raid comp brackets exact;
+  needs-attention live; activity feed realtime-bumped on tracker insert.
+- cases: list + grid/board toggle (persisted to `cid-portal-v3`), deep link
+  `?case=<id>`, all 11 tabs render live; notes save + safe-markdown render; task
+  create/delete; chat send/delete; packet .docx (valid OOXML) + .md (notes included);
+  case delete w/ undo-offer confirm.
+- operations: create → detail (deep link `?op=<id>`, link-case picker) → delete.
+- inbox: all 9 panels live; stat tiles; click-to-mark-read (unread 1→0);
+  tracker_pending fan-out landed. **Finding**: tracker/stale notification payloads
+  render raw JSON via payloadText fallback — proper per-type rendering goes with the
+  Notifications cross-cut.
+- personnel: roster + emails via `admin_member_emails` (command); removed-member list
+  renders w/ Restore; My Profile LOA round-trip (modal set → sidebar badge → roster
+  card clear); commendation award/delete w/ undo.
+- announce: pinned post w/ audience meta + case-link chip; **fan-out verified by SQL**
+  (4 recipients, correct "New announcement:" reason, author excluded); dismiss →
+  `annDismissed` Store key → restore; delete.
+- Still needing a targeted pass (needs second account / would mutate real data):
+  board drag persistence, saved filter views, case create/edit modal + templates,
+  bulk multi-select delete, watch/follow, sign-off RPC transitions, operation
+  link/unlink commit, mention-expansion fan-out, member approve + role/bureau
+  assign + permanent remove/restore, announce cross-app dismiss carry-over.
 
 ### Owner actions (infrastructure)
 - [x] Supabase Auth redirect allow-list: `http://localhost:3777/**` added

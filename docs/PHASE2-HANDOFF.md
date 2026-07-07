@@ -25,10 +25,17 @@ Companion source of truth: `docs/REACT-PARITY.md`.
   `311a88d feat(rebuild): add central command dashboard slice`.
 - The `personnel` / Roster & Member Admin slice was committed and pushed as
   `d849b77 feat(rebuild): add personnel roster and member admin slice`.
-- The `announce` / Announcements slice has an implementation pass in this
-  handoff state (see "Announce slice delivered" below).
-- Live browser verification for Phase 2, inbox, command, personnel, and
-  announce is still pending.
+- The `announce` / Announcements slice was committed and pushed as
+  `1a42119 feat(rebuild): add announcements slice with notification fan-out`.
+- **Live browser QA completed 2026-07-08** for Phase 2 + inbox + command +
+  personnel + announce against the live Supabase project (director account,
+  dev server on :3777, Playwright-driven). Full results in
+  `docs/REACT-PARITY.md` → "Live QA results". All exercised flows passed;
+  zero QA rows left behind (SQL-verified); zero app console errors. One
+  cosmetic finding: inbox notification payloads for tracker/stale types
+  render raw JSON (fix lands with the Notifications cross-cut). A short list
+  of flows still needing a second account or real-data mutation remains in
+  the parity doc.
 
 ## Phase 2 delivered
 
@@ -340,11 +347,11 @@ Do not cut over to `main` until all of these are true:
 
 ## Suggested next patch order
 
-1. Finish live browser QA (Phase 2 + inbox + command + personnel + announce)
-   and update `docs/REACT-PARITY.md` with results.
-2. Tackle `persons`, because it is the heaviest Intelligence view and seeds
+1. Tackle `persons`, because it is the heaviest Intelligence view and seeds
    the card-paging/watchlist/dossier patterns the other intel views reuse.
-3. Continue one view per patch, keeping each patch gated and live-verified.
+2. Continue one view per patch, keeping each patch gated and live-verified.
+3. Fold the remaining targeted-QA flows (second account / real-data mutations
+   — see the parity doc's Live QA results) into a later joint session.
 
 ## Prompt for the next LLM
 
