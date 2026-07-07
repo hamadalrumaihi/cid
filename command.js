@@ -449,7 +449,7 @@
     function updatePendingBadge() {
       const n = (typeof PROFILES !== 'undefined' ? PROFILES : []).filter((p) => !p.active && !p.removed_at).length;
       const show = n > 0 && DB() && DB().isAdmin();
-      ['#pending-nav-badge', '#pending-bnav-badge'].forEach((sel) => { const b = $(sel); if (!b) return; b.textContent = String(n); b.classList.toggle('hidden', !show); });
+      ['#pending-nav-badge', '#pending-bnav-badge'].forEach((sel) => { const b = $(sel); if (!b) return; b.textContent = String(n); b.setAttribute('role', 'status'); b.setAttribute('aria-label', n + ' member' + (n === 1 ? '' : 's') + ' awaiting approval'); b.classList.toggle('hidden', !show); });
     }
     function fmtCountdown(ms) {
       if (ms <= 0) return 'EXPIRED';
