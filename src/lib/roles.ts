@@ -29,8 +29,18 @@ export const BUREAUS: Record<string, string> = {
   JTF: 'Joint Task Force',
 }
 
+/** Department abbreviation per bureau — the officer-card vocabulary
+ *  (vanilla DEPT_OF_BUREAU, collab.js:7). bureauLabel is the long form. */
+export const DEPT_OF_BUREAU: Record<string, string> = {
+  LSB: 'LSPD',
+  BCB: 'BCSO',
+  SAB: 'SAHP',
+  JTF: 'JTF (Joint)',
+}
+
 export const roleLabel = (r?: string | null) => (r && ROLE_LABEL[r]) || r || '—'
 export const bureauLabel = (b?: string | null) => (b && BUREAUS[b]) || b || '—'
+export const deptLabel = (b?: string | null) => (b && DEPT_OF_BUREAU[b]) || b || '—'
 /** Seniority rank; -1 for unknown/legacy roles — mirrors vanilla cidRoleRank. */
 export const roleRank = (r?: string | null) =>
   (ROLE_ORDER as readonly string[]).indexOf(r ?? '')

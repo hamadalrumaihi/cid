@@ -7,7 +7,6 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { useCallback } from 'react'
 import { CAT_DEFAULT, TAB_CATEGORY, isValidTab } from '@/lib/nav'
-import { Store } from '@/lib/store'
 
 export function useNav() {
   const pathname = usePathname()
@@ -21,7 +20,8 @@ export function useNav() {
   const navigate = useCallback(
     (tab: string) => {
       const target = isValidTab(tab) ? tab : 'command'
-      Store.set('tab', target)
+      // Store('tab') persistence happens in AppShell's route-change effect so
+      // direct loads and back/forward persist too — not just clicks.
       router.push(`/${target}`)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     },

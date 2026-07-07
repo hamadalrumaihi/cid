@@ -17,7 +17,9 @@ export function Toaster() {
   const toasts = useToastStore((s) => s.toasts)
   const dismiss = useToastStore((s) => s.dismiss)
   return (
-    <div className="fixed bottom-20 right-4 z-50 flex flex-col gap-3 sm:bottom-6 sm:right-6" aria-live="polite">
+    // z-60: above the modal backdrop (z-50), below confirm dialogs (z-70) —
+    // vanilla got this ordering from #toast-root sitting after #modal-root.
+    <div className="fixed bottom-20 right-4 z-[60] flex flex-col gap-3 sm:bottom-6 sm:right-6" aria-live="polite">
       {toasts.map((t) => (
         <div
           key={t.id}

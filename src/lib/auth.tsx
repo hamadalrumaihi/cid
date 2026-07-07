@@ -12,7 +12,7 @@
  *    in      — active member → the app
  *
  *  Client gating is UX only; RLS is the authority for every data access. */
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { isConfigured, supabase } from './supabase'
 import type { Database } from './database.types'
@@ -169,15 +169,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: null }
   }, [profile])
 
-  const active = !!profile?.active
-  const value: AuthContextValue = {
-    state, session, profile,
-    refresh: evaluate,
-    signInOAuth, signInEmail, signOut, setMyLoa,
-    canEdit: active,
-    canDelete: active && isCommandRole(profile?.role),
-    isCommand: active && isCommandRole(profile?.role),
-  }
+  // Memoized so consumers (and modals with inline props) don't re-render on
+  // every provider render — only on real auth-state changes.
+  const value = useMemo<AuthContextValue>(() => {
+    const active = !!profile?.active
+    return {
+      state, session, profile,
+      refresh: evaluate,
+      signInOAuth, signInEmail, signOut, setMyLoa,
+      canEdit: active,
+      canDelete: active && isCommandRole(profile?.role),
+      isCommand: active && isCommandRole(profile?.role),
+    }
+  }, [state, session, profile, evaluate, signInOAuth, signInEmail, signOut, setMyLoa])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

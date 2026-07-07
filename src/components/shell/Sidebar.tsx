@@ -7,7 +7,7 @@
 import { useState, useSyncExternalStore } from 'react'
 import { useAuth } from '@/lib/auth'
 import { NAV_CATEGORIES } from '@/lib/nav'
-import { bureauLabel, roleLabel } from '@/lib/roles'
+import { deptLabel, roleLabel } from '@/lib/roles'
 import { safeUrl } from '@/lib/safeUrl'
 import { Store } from '@/lib/store'
 import { AppearanceModal } from './AppearanceModal'
@@ -19,20 +19,26 @@ import { useNav } from './useNav'
 
 function OfficerCard() {
   const { profile, session } = useAuth()
+  // Vanilla vocabulary (collab.js renderOfficerCard): 'Badge <n> · <dept
+  // abbreviation>' with amber On-LOA / emerald On-duty status dot. The card
+  // opens the My Profile editor in vanilla — that lands with the Personnel slice.
   const name = profile?.display_name || session?.user?.email || 'Not signed in'
-  const initials = (profile?.display_name || '—')
-    .split(/\s+/)
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase()
+  const initials =
+    (profile?.display_name || '?').split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || '?'
   const avatar = safeUrl(profile?.avatar_url ?? '')
-  const sub = [profile?.badge_number, bureauLabel(profile?.division)].filter(Boolean).join(' · ') || '—'
+  const sub = profile
+    ? `${profile.badge_number ? `Badge ${profile.badge_number} · ` : ''}${deptLabel(profile.division)}`
+    : '—'
+  const dot = !profile
+    ? { cls: 'bg-slate-500', title: 'Offline' }
+    : profile.loa
+      ? { cls: 'bg-amber-400', title: 'On LOA' }
+      : { cls: 'bg-emerald-400', title: 'On duty' }
   return (
     <div className="border-t border-white/5 p-3">
       <div className="flex w-full items-center gap-3 rounded-lg bg-white/5 px-3 py-2.5 text-left" aria-label="Your profile and status">
         <div className="grid h-9 w-9 flex-shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-slate-600 to-slate-700 text-xs font-bold text-white">
-          {avatar ? <img src={avatar} className="h-9 w-9 rounded-full object-cover" alt="" /> : initials || '—'}
+          {avatar ? <img src={avatar} className="h-9 w-9 rounded-full object-cover" alt="" /> : initials}
         </div>
         <div className="sidebar-hide min-w-0 flex-1 leading-tight">
           <p className="truncate text-sm font-semibold text-white">{name}</p>
@@ -44,10 +50,7 @@ function OfficerCard() {
             LOA
           </span>
         )}
-        <span
-          className={`sidebar-hide pulse-dot h-2.5 w-2.5 flex-shrink-0 rounded-full ${profile?.active ? 'bg-emerald-400' : 'bg-slate-500'}`}
-          title="Status"
-        />
+        <span className={`sidebar-hide pulse-dot h-2.5 w-2.5 flex-shrink-0 rounded-full ${dot.cls}`} title={dot.title} />
       </div>
     </div>
   )

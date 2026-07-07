@@ -23,15 +23,86 @@
 
 /* Accent themes — same Store keys and data attributes as the legacy app.
    DEFAULT IS AMBER (vanilla: Store.get('accent', 'amber')) — the :root rule
-   covers first paint and any tampered/unknown attribute value. */
+   covers first paint and any tampered/unknown attribute value.
+   Tier variables (RGB triplets, Tailwind v3 hex palette like vanilla) feed the
+   utility remap below — the port of styles.css:166-197 + 826-903, written once
+   in terms of the variables instead of per-accent rule triplication. */
 :root, body[data-accent="amber"] {
   --cid-accent: #f59e0b;
   --cid-accent-deep: #b45309;
   --cid-accent-soft: #fcd34d;
+  --acc-200: 253 230 138; --acc-300: 252 211 77; --acc-400: 251 191 36;
+  --acc-500: 245 158 11;  --acc-700: 180 83 9;
 }
-body[data-accent="blue"]    { --cid-accent: #3b82f6; --cid-accent-deep: #1d4ed8; --cid-accent-soft: #93c5fd; }
-body[data-accent="emerald"] { --cid-accent: #10b981; --cid-accent-deep: #047857; --cid-accent-soft: #6ee7b7; }
-body[data-accent="rose"]    { --cid-accent: #f43f5e; --cid-accent-deep: #be123c; --cid-accent-soft: #fda4af; }
+body[data-accent="blue"] {
+  --cid-accent: #3b82f6; --cid-accent-deep: #1d4ed8; --cid-accent-soft: #93c5fd;
+  --acc-200: 191 219 254; --acc-300: 147 197 253; --acc-400: 96 165 250;
+  --acc-500: 59 130 246;  --acc-700: 29 78 216;
+}
+body[data-accent="emerald"] {
+  --cid-accent: #10b981; --cid-accent-deep: #047857; --cid-accent-soft: #6ee7b7;
+  --acc-200: 167 243 208; --acc-300: 110 231 183; --acc-400: 52 211 153;
+  --acc-500: 16 185 129;  --acc-700: 4 120 87;
+}
+body[data-accent="rose"] {
+  --cid-accent: #f43f5e; --cid-accent-deep: #be123c; --cid-accent-soft: #fda4af;
+  --acc-200: 254 205 211; --acc-300: 253 164 175; --acc-400: 251 113 133;
+  --acc-500: 244 63 94;   --acc-700: 190 18 60;
+}
+
+/* Accent utility remap — the CONSUMERS of the accent choice. Same utility set
+   vanilla remaps (blue-* tiers and badge-500 aliases → accent tiers, lightness
+   preserved so contrast is unchanged). Unlayered on purpose: these must win
+   over Tailwind's @layer utilities. Blue is remapped too (to the same v3 hex
+   it already renders) so all four accents flow through one code path. */
+body .text-blue-200 { color: rgb(var(--acc-200)); }
+body .text-blue-300 { color: rgb(var(--acc-300)); }
+body .text-blue-300\/60 { color: rgb(var(--acc-300) / .6); }
+body .text-blue-300\/70 { color: rgb(var(--acc-300) / .7); }
+body .text-blue-300\/80 { color: rgb(var(--acc-300) / .8); }
+body .text-blue-300\/90 { color: rgb(var(--acc-300) / .9); }
+body .hover\:text-blue-200:hover { color: rgb(var(--acc-200)); }
+body .hover\:text-blue-300:hover { color: rgb(var(--acc-300)); }
+body .text-blue-400 { color: rgb(var(--acc-400)); }
+body .border-blue-400 { border-color: rgb(var(--acc-400)); }
+body .bg-blue-400 { background-color: rgb(var(--acc-400)); }
+body .bg-blue-500 { background-color: rgb(var(--acc-500)); }
+body .bg-blue-500\/5 { background-color: rgb(var(--acc-500) / .05); }
+body .bg-blue-500\/10 { background-color: rgb(var(--acc-500) / .1); }
+body .bg-blue-500\/15 { background-color: rgb(var(--acc-500) / .15); }
+body .bg-blue-500\/30 { background-color: rgb(var(--acc-500) / .3); }
+body .hover\:bg-blue-500\/15:hover { background-color: rgb(var(--acc-500) / .15); }
+body .hover\:bg-blue-500\/20:hover { background-color: rgb(var(--acc-500) / .2); }
+body .border-blue-500\/20 { border-color: rgb(var(--acc-500) / .2); }
+body .border-blue-500\/30 { border-color: rgb(var(--acc-500) / .3); }
+body .border-blue-500\/40 { border-color: rgb(var(--acc-500) / .4); }
+body .border-blue-500\/50 { border-color: rgb(var(--acc-500) / .5); }
+body .hover\:border-blue-500\/30:hover { border-color: rgb(var(--acc-500) / .3); }
+body .hover\:border-blue-500\/40:hover { border-color: rgb(var(--acc-500) / .4); }
+body .bg-badge-500 { background-color: rgb(var(--acc-500)); }
+body .bg-badge-500\/15 { background-color: rgb(var(--acc-500) / .15); }
+body .border-badge-500 { border-color: rgb(var(--acc-500)); }
+body .focus\:border-badge-500:focus { border-color: rgb(var(--acc-500)); }
+body .ring-badge-500 { --tw-ring-color: rgb(var(--acc-500)); }
+body .ring-badge-500\/60 { --tw-ring-color: rgb(var(--acc-500) / .6); }
+body .focus\:ring-badge-500\/30:focus { --tw-ring-color: rgb(var(--acc-500) / .3); }
+body .from-badge-500 {
+  --tw-gradient-from: rgb(var(--acc-500)) var(--tw-gradient-from-position);
+  --tw-gradient-to: rgb(var(--acc-500) / 0) var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+body .from-blue-500 {
+  --tw-gradient-from: rgb(var(--acc-500)) var(--tw-gradient-from-position);
+  --tw-gradient-to: rgb(var(--acc-500) / 0) var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+body .from-blue-500\/20 {
+  --tw-gradient-from: rgb(var(--acc-500) / .2) var(--tw-gradient-from-position);
+  --tw-gradient-to: rgb(var(--acc-500) / 0) var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+body .to-blue-700 { --tw-gradient-to: rgb(var(--acc-700)) var(--tw-gradient-to-position); }
+body .to-blue-700\/5 { --tw-gradient-to: rgb(var(--acc-700) / .05) var(--tw-gradient-to-position); }
 
 /* Density — same html[data-density] contract as the legacy app. */
 html[data-density="compact"] { font-size: 14px; }

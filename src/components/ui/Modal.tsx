@@ -42,7 +42,20 @@ export function Modal({ open, onClose, children, wide, slide, dismissible = true
     onClose()
   }, [dirty, onClose])
 
-  // Focus management + scroll lock + beforeunload dirty prompt.
+  // Callers pass inline onClose/dirty props, so their identities change on
+  // every parent re-render (which AuthProvider guarantees at least hourly via
+  // TOKEN_REFRESHED). Route them through refs so the setup effect below can
+  // depend on [open] alone — otherwise each re-render would tear down and
+  // re-run it, yanking focus back to the first control mid-interaction.
+  const requestCloseRef = useRef(requestClose)
+  const dirtyRef = useRef(dirty)
+  useEffect(() => {
+    requestCloseRef.current = requestClose
+    dirtyRef.current = dirty
+  })
+
+  // Focus management + scroll lock + beforeunload dirty prompt — runs once
+  // per open/close transition only.
   useEffect(() => {
     if (!open) return
     lastFocused.current = document.activeElement
@@ -52,7 +65,7 @@ export function Modal({ open, onClose, children, wide, slide, dismissible = true
     ;(first ?? card)?.focus()
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); void requestClose(); return }
+      if (e.key === 'Escape') { e.preventDefault(); void requestCloseRef.current(); return }
       if (e.key !== 'Tab' || !card) return
       const f = Array.from(card.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((n) => n.offsetParent !== null)
       if (!f.length) return
@@ -60,7 +73,7 @@ export function Modal({ open, onClose, children, wide, slide, dismissible = true
       if (e.shiftKey && document.activeElement === firstEl) { e.preventDefault(); lastEl.focus() }
       else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); firstEl.focus() }
     }
-    const onBeforeUnload = (e: BeforeUnloadEvent) => { if (dirty?.()) { e.preventDefault() } }
+    const onBeforeUnload = (e: BeforeUnloadEvent) => { if (dirtyRef.current?.()) { e.preventDefault() } }
     // Phones: soft keyboard hides low fields in tall forms — re-center after it animates in.
     const onFocusIn = (e: FocusEvent) => {
       if (window.innerWidth >= 1024) return
@@ -79,7 +92,7 @@ export function Modal({ open, onClose, children, wide, slide, dismissible = true
       const lf = lastFocused.current
       if (lf instanceof HTMLElement && document.contains(lf)) lf.focus()
     }
-  }, [open, requestClose, dirty])
+  }, [open])
 
   if (!open || typeof document === 'undefined') return null
 

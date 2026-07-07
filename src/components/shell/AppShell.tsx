@@ -4,14 +4,24 @@
  *  around the active view, mirroring the vanilla #app-shell layout
  *  (index.html:59-165) and drawer behavior (core.js:935-945). */
 import { useEffect, useState } from 'react'
+import { Store } from '@/lib/store'
 import { BottomNav } from './BottomNav'
 import { ConnBanner } from './ConnBanner'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 import { Subtabs } from './Subtabs'
+import { useNav } from './useNav'
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const { activeTab } = useNav()
+
+  // Persist the last tab on EVERY route change — clicks, direct loads,
+  // back/forward — matching vanilla navigate() (core.js:928), so the shared
+  // Store('tab') stays two-way continuous with the legacy app.
+  useEffect(() => {
+    Store.set('tab', activeTab)
+  }, [activeTab])
 
   // Desktop breakpoint: the sidebar is always visible (lg:translate-x-0), so
   // reset the mobile drawer state when crossing up (vanilla core.js:941-944).
