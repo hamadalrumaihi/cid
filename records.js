@@ -87,7 +87,8 @@
       const items = recCache.filter((r) => !q || JSON.stringify(r).toLowerCase().includes(q));
       if (!items.length) { grid.innerHTML = `<p class="text-sm text-slate-500">${recCache.length ? 'No records match your filter.' : 'No records yet.' + (canEdit ? ' Use “+ New Record”.' : ' Sign in as an active member to add the first one.')}</p>`; return; }
       grid.innerHTML = '';
-      items.forEach((r) => {
+      const pg = cardPage('records', items, q, 24);
+      pg.slice.forEach((r) => {
         const card = el('div', { class:'overflow-hidden rounded-2xl border border-white/5 bg-ink-900/60' });
         card.innerHTML = `
           <div class="flex gap-4 p-5">
@@ -109,6 +110,7 @@
         const eb = card.querySelector('.rec-edit'); if (eb) eb.onclick = () => openRecordModal(r);
         grid.appendChild(card);
       });
+      pg.appendControl(grid, renderRecords);
     }
 
     function openRecordModal(record) {

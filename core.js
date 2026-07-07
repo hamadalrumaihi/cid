@@ -835,6 +835,29 @@
       const pv = mount.querySelector('.dt-prev'); if (pv) pv.onclick = () => restate({ page: Math.max(0, page - 1) });
       const nx = mount.querySelector('.dt-next'); if (nx) nx.onclick = () => restate({ page: Math.min(pages - 1, page + 1) });
     }
+    /* ---- Card-grid pagination (audit: don't render every row) ----------------
+       Returns the visible slice + a Load-more control. `resetToken` (e.g. the
+       current search text) resets paging to the first page when it changes, so
+       filtering always starts from the top. State is per-`key`. */
+    const _cardPageState = {};
+    function cardPage(key, items, resetToken, pageSize) {
+      pageSize = pageSize || 24;
+      let st = _cardPageState[key];
+      if (!st || st.token !== resetToken) st = _cardPageState[key] = { shown: pageSize, token: resetToken, size: pageSize };
+      const slice = items.slice(0, st.shown);
+      return {
+        slice,
+        remaining: Math.max(0, items.length - slice.length),
+        appendControl(grid, reRender) {
+          if (this.remaining <= 0) return;
+          const step = Math.min(this.remaining, st.size);
+          const wrap = el('div', { class: 'col-span-full pt-1 text-center' },
+            '<button class="load-more rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Load ' + step + ' more · ' + this.remaining + ' remaining</button>');
+          wrap.querySelector('.load-more').onclick = () => { st.shown += st.size; if (typeof reRender === 'function') reRender(); };
+          grid.appendChild(wrap);
+        },
+      };
+    }
     function renderSubtabs(activeTab, cat) {
       const bar = $('#subtabs'); if (!bar) return;
       const def = NAV_CATEGORIES.find((c) => c.id === cat);

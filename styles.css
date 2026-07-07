@@ -805,3 +805,6 @@ body { background: radial-gradient(circle at 50% 20%, #10151d 0%, #06090d 100%);
    opacity variants (e.g. text-slate-500/70) are separate classes and unaffected. */
 .text-slate-500{color:#94a3b8}
 .text-slate-600{color:#64748b}
+
+/* Card-grid pagination: full-width row for the Load-more control. */
+.col-span-full{grid-column:1/-1}
