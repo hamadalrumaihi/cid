@@ -32,9 +32,9 @@ route ids but the legacy `reports` route has no section and falls back to `cases
       operations picker/view, detail shell, 11 tabs, packet .docx/.md. Gates green.
       **Live browser verification still pending**; several dense vanilla subflows are
       intentionally lean in React v1 and called out below.
-- [ ] **Phase 3+** — one view per patch (order below). Done so far: `inbox` (My Desk)
-      and `command` (Central Command) implementation passes, gates green; live browser
-      verification for both still pending.
+- [ ] **Phase 3+** — one view per patch (order below). Done so far: `inbox` (My Desk),
+      `command` (Central Command), and `personnel` (Roster & Member Admin)
+      implementation passes, gates green; live browser verification still pending.
 
 ### Owner actions (infrastructure)
 - [x] Supabase Auth redirect allow-list: `http://localhost:3777/**` added
@@ -67,11 +67,18 @@ route ids but the legacy `reports` route has no section and falls back to `cases
       waits on the Imports cross-cut.
 - [ ] **announce** — Announcements: post/pin/delete (LEAD_ROLES gate), notification fan-out.
 - [ ] **heatmap** — Commander heatmap (stylized SA map, incident density).
-- [ ] **personnel** — Personnel/Roster & Commendations: roster cards w/ strike-point bars +
-      per-section headcount tiles; commendations; member admin (approve pending, role/bureau
-      assign via `assign_member`, LOA, **permanent removal + restore** via
-      `admin_remove_member`/`admin_restore_member`; emails via `admin_member_emails` —
-      command-only column grant); Division Rosters doc shelf (structured form editor).
+- [x] **personnel** — implementation pass (live browser verification pending): roster
+      cards (LOA state, badge/bureau/status tiles, 30/page load-more); self LOA toggle +
+      My Profile editor (also wired to the sidebar officer card; saves via the new
+      non-returning profile update); member admin panel (pending-first table, one-click
+      approve + member_approved notify, Manage modal w/ role/bureau via `assign_member`,
+      name/badge, command-set LOA, **permanent removal + restore** via
+      `admin_remove_member`/`admin_restore_member`, removed-members list; emails via
+      command-gated `admin_member_emails`); roster-card deactivate (set_active=false);
+      commendations grid + award/edit modal + command delete w/ undo. **Lean in v1**:
+      Division Rosters doc shelf (reader + structured roster form editor + strike-point/
+      headcount visuals) lands with the `sops` doc engine; pending-approval nav badge
+      lands with the Notifications cross-cut.
 
 ### Cases
 - [x] **cases** — Case Files (heaviest; see case-detail tabs below): grid + drag kanban
@@ -198,8 +205,9 @@ RPCs typed). Missing capabilities, add as first-class helpers as slices need the
 - [x] `select` projection option on list (operations picker, intel, inbox rollups)
 - [x] `.in()` filter (deleteWithUndo snapshots, custody/evidence/reports by case ids)
 - [x] embedded-relation select w/ inner-join filter (`custody_chain` + `evidence!inner`)
-- [ ] `maybeSingle()` + profiles **non-email projection** (and non-`.select()` update for
-      profiles — current `update().select()` breaks under the email column grant)
+- [ ] `maybeSingle()` as a first-class db.ts helper (auth.tsx still calls the raw client).
+      Profiles **non-email projection** ✅ (ROSTER_COLS/PROFILE_COLS) and non-`.select()`
+      profile update ✅ (`updateNoSelect`, Personnel slice) are closed.
 - [ ] delete/update keyed by non-id columns (narcotics children; profile-by-uid)
 - [x] conditional update predicates (`.eq` extra col / `.is null`) for CAS
 - [x] `nullsFirst` order option (case_tasks due)

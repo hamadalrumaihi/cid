@@ -11,6 +11,7 @@ import { deptLabel, roleLabel } from '@/lib/roles'
 import { safeUrl } from '@/lib/safeUrl'
 import { Store } from '@/lib/store'
 import { AppearanceModal } from './AppearanceModal'
+import { MyProfileModal } from './MyProfileModal'
 import { CategoryIcon, ChevronIcon, CloseIcon, ShieldIcon } from './icons'
 import { useNav } from './useNav'
 
@@ -19,9 +20,10 @@ import { useNav } from './useNav'
 
 function OfficerCard() {
   const { profile, session } = useAuth()
+  const [profileOpen, setProfileOpen] = useState(false)
   // Vanilla vocabulary (collab.js renderOfficerCard): 'Badge <n> · <dept
-  // abbreviation>' with amber On-LOA / emerald On-duty status dot. The card
-  // opens the My Profile editor in vanilla — that lands with the Personnel slice.
+  // abbreviation>' with amber On-LOA / emerald On-duty status dot. Clicking
+  // opens the My Profile editor (collab.js wires #officer-card the same way).
   const name = profile?.display_name || session?.user?.email || 'Not signed in'
   const initials =
     (profile?.display_name || '?').split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || '?'
@@ -36,7 +38,11 @@ function OfficerCard() {
       : { cls: 'bg-emerald-400', title: 'On duty' }
   return (
     <div className="border-t border-white/5 p-3">
-      <div className="flex w-full items-center gap-3 rounded-lg bg-white/5 px-3 py-2.5 text-left" aria-label="Your profile and status">
+      <button
+        onClick={() => { if (profile) setProfileOpen(true) }}
+        className="flex w-full items-center gap-3 rounded-lg bg-white/5 px-3 py-2.5 text-left transition hover:bg-white/10"
+        aria-label="Your profile and status"
+      >
         <div className="grid h-9 w-9 flex-shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-slate-600 to-slate-700 text-xs font-bold text-white">
           {avatar ? <img src={avatar} className="h-9 w-9 rounded-full object-cover" alt="" /> : initials}
         </div>
@@ -51,7 +57,8 @@ function OfficerCard() {
           </span>
         )}
         <span className={`sidebar-hide pulse-dot h-2.5 w-2.5 flex-shrink-0 rounded-full ${dot.cls}`} title={dot.title} />
-      </div>
+      </button>
+      {profileOpen && <MyProfileModal onClose={() => setProfileOpen(false)} />}
     </div>
   )
 }

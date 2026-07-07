@@ -81,6 +81,16 @@ export async function updateWhere<T extends TableName>(
   return { data: data as Tables<T>[] | null, error: asDbError(error) }
 }
 
+/** Update WITHOUT a returning select. Needed for profiles: the email column
+ *  is granted to command only, so update().select() would be DENIED for a
+ *  member saving their own row (vanilla worked because its update never
+ *  returned columns). Use for any table where reading back can be narrower
+ *  than writing. */
+export async function updateNoSelect<T extends TableName>(table: T, id: string, patch: TablesUpdate<T>): Promise<MutationResult<null>> {
+  const { error } = await raw().from(table).update(patch).eq('id', id)
+  return { data: null, error: asDbError(error) }
+}
+
 export async function remove<T extends TableName>(table: T, id: string): Promise<MutationResult<null>> {
   const { error } = await raw().from(table).delete().eq('id', id)
   return { data: null, error: asDbError(error) }

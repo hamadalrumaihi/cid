@@ -1,6 +1,6 @@
 # React Rebuild Handoff - Phase 3 in progress
 
-Last updated: 2026-07-08 (command slice pass).
+Last updated: 2026-07-08 (personnel slice pass).
 
 This branch is `react-rebuild`. The repo root is the Next.js 16 app. The
 legacy root static files (`index.html`, root `*.js`, `styles.css`) remain inert
@@ -21,9 +21,12 @@ Companion source of truth: `docs/REACT-PARITY.md`.
   `b29434d feat(rebuild): finish phase 2 cases slice`.
 - The `inbox` / My Desk slice was committed and pushed as
   `e24463c feat(rebuild): add my desk inbox slice`.
-- The `command` / Central Command slice has an implementation pass in this
-  handoff state (see "Command slice delivered" below).
-- Live browser verification for Phase 2, inbox, and command is still pending.
+- The `command` / Central Command slice was committed and pushed as
+  `311a88d feat(rebuild): add central command dashboard slice`.
+- The `personnel` / Roster & Member Admin slice has an implementation pass in
+  this handoff state (see "Personnel slice delivered" below).
+- Live browser verification for Phase 2, inbox, command, and personnel is
+  still pending.
 
 ## Phase 2 delivered
 
@@ -115,6 +118,36 @@ Intentionally lean, tracked in `docs/REACT-PARITY.md`:
 - Ticket table sort/paging waits on the shared data-table engine.
 - CSV/XLSX/JSON bulk import on "+ New" waits on the Imports cross-cut.
 
+## Personnel slice delivered
+
+Implemented `/personnel` in `src/components/personnel/`, wired through the
+`[tab]` dispatcher:
+
+- Roster cards from the shared non-email profiles cache: LOA border/badge/dot
+  states, badge/bureau/status tiles, 30-per-page load-more.
+- Self LOA toggle on my own roster card (auth setMyLoa).
+- My Profile editor (`src/components/shell/MyProfileModal.tsx`): display name,
+  badge, LOA — also wired to the sidebar officer card (previously a Phase 1
+  placeholder). Saves via the new `updateNoSelect` because a member cannot
+  read back the command-only email column.
+- Member Administration panel (command only): pending-first table with emails
+  from the command-gated `admin_member_emails` RPC, one-click approve
+  (`assign_member` keep-role + `member_approved` notify), Manage modal
+  (role/bureau/active via `assign_member`; name/badge + command-set LOA via
+  `updateNoSelect`), permanent removal (`admin_remove_member`, self-block)
+  and the removed-members list with restore (`admin_restore_member`).
+- Roster-card "Remove from roster" deactivate (assign_member set_active=false).
+- Commendations: tinted gradient cards, award/edit modal, command delete with
+  undo.
+- Data layer: `updateNoSelect` added to `src/lib/db.ts`, closing the tracked
+  "non-.select() profile update" gap.
+
+Intentionally lean, tracked in `docs/REACT-PARITY.md`:
+
+- Division Rosters doc shelf (reader, structured roster form editor,
+  strike-point/headcount visuals) lands with the `sops` doc engine slice.
+- Pending-approval nav badge lands with the Notifications cross-cut.
+
 Implemented shared/data support:
 
 - `db.ts` list projections, `.in`, `updateWhere` CAS predicates, null ordering,
@@ -157,6 +190,15 @@ Command slice additions to that checklist:
   self-co-sign block), then remove it.
 - Raid comp calculator matches the vanilla brackets for a few values.
 
+Personnel slice additions to that checklist:
+
+- Roster renders all non-removed members; removed members absent.
+- My Profile save round-trips (name/badge/LOA) and the sidebar card updates.
+- Member admin table shows emails (command account only).
+- Approve a pending member (or verify none pending renders cleanly).
+- Manage modal: change role/bureau on a test-safe account and revert.
+- Award, edit, and delete (with undo restore) one commendation.
+
 Known local dev-server note:
 
 - Hidden attempts to start port `3777` did not leave a server running.
@@ -192,12 +234,12 @@ views. Done views (implementation passes; live verification pending):
 - `operations`
 - `inbox`
 - `command`
+- `personnel`
 
 Unchecked views remaining:
 
 - `announce` - announcements, pin/delete, notification fan-out.
 - `heatmap` - commander heatmap.
-- `personnel` - roster, commendations, member admin, division roster docs.
 - `case-files` - per-case attachments and FiveManage upload.
 - `rico` - standalone RICO tracker route and export.
 - `persons` - POI cards, warrants, BOLO, watch/follow, dossiers.
@@ -262,11 +304,12 @@ Do not cut over to `main` until all of these are true:
 
 ## Suggested next patch order
 
-1. Finish live browser QA (Phase 2 + inbox + command) and update
+1. Finish live browser QA (Phase 2 + inbox + command + personnel) and update
    `docs/REACT-PARITY.md` with results.
-2. Tackle `personnel`, because it closes member admin and role-management flows
-   (assign_member, LOA, remove/restore, admin_member_emails).
-3. Tackle `announce`, because it starts the notifications fan-out cross-cut.
+2. Tackle `announce`, because it starts the notifications fan-out cross-cut
+   (post/pin/delete gated to LEAD_ROLES, create_notification fan-out).
+3. Tackle `persons`, because it is the heaviest Intelligence view and seeds
+   the card-paging/watchlist patterns the other intel views reuse.
 4. Continue one view per patch, keeping each patch gated and live-verified.
 
 ## Prompt for the next LLM
@@ -292,24 +335,27 @@ Committed baseline:
   `b29434d feat(rebuild): finish phase 2 cases slice`.
 - Inbox / My Desk is pushed as
   `e24463c feat(rebuild): add my desk inbox slice`.
-- Command / Central Command has been implemented after that baseline
-  (src/components/command/, wired in src/app/(app)/[tab]/page.tsx).
+- Command / Central Command is pushed as
+  `311a88d feat(rebuild): add central command dashboard slice`.
+- Personnel / Roster & Member Admin has been implemented after that baseline
+  (src/components/personnel/, src/components/shell/MyProfileModal.tsx,
+  db.ts updateNoSelect, wired in src/app/(app)/[tab]/page.tsx).
 
 Current completed implementation passes:
 - Phase 1 app shell/auth.
 - Phase 2 Cases + Operations.
 - Oversight `inbox` / My Desk.
 - Command `command` / Central Command dashboard.
+- Command `personnel` / Roster, Member Admin & Commendations.
 
 Known local junk to ignore unless the user explicitly asks otherwise:
 - `.serena/`
 - `bash.exe.stackdump`
 
 Next recommended slice:
-- `personnel` / Roster & Commendations, because it closes member admin and
-  role-management flows (approve pending, `assign_member`, LOA, permanent
-  removal/restore via `admin_remove_member`/`admin_restore_member`, emails
-  via the command-gated `admin_member_emails` RPC).
+- `announce` / Announcements, because it starts the notifications fan-out
+  cross-cut: post/pin/delete gated to LEAD_ROLES, notification fan-out via
+  the forgery-guarded `create_notification` RPC + discord-notify invoke.
 
 Before changing code:
 - Read `docs/REACT-PARITY.md` and this handoff.
