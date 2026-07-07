@@ -777,6 +777,64 @@
     // restricted notice for anyone who isn't the owner.
     const AUDIT_OWNER_ID = '25466146-c512-4497-8ee8-88cbf3b1d22d';
     const isAuditOwner = () => { const me = DB() && DB().me; return !!(me && me.active && me.id === AUDIT_OWNER_ID); };
+    /* ---- Reusable data table (audit M-series: sort + sticky + paginate + copy) --
+       Renders `opts.rows` into `mount`. The caller keeps sort/page state and
+       passes it in; the table calls opts.onState({sortKey,sortDir,page}) on any
+       header/pager click so the caller re-renders. Columns:
+         { key, label, cell(row)->html, sortVal(row)->comparable?, mono, nowrap,
+           align:'right'?, tint? }.  Density: 'comfortable' (default) | 'compact'. */
+    function copyId(full) {
+      const s = String(full == null ? '' : full);
+      if (!s) return '';
+      return '<button type="button" class="copy-chip text-slate-500 hover:text-white" data-copy="' + esc(s) + '" title="Copy full ID: ' + esc(s) + '">' + esc(s.slice(0, 8)) + '</button>';
+    }
+    // One delegated clipboard handler for every [data-copy] chip in the app.
+    document.addEventListener('click', (e) => {
+      const c = e.target.closest && e.target.closest('[data-copy]'); if (!c) return;
+      const v = c.getAttribute('data-copy'); if (!v) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(v).then(() => toast('Copied to clipboard', 'info')).catch(() => {});
+    });
+    function renderDataTable(mount, opts) {
+      if (!mount) return;
+      const columns = opts.columns || [];
+      const pageSize = opts.pageSize || 50;
+      const rowPad = opts.density === 'compact' ? 'py-1' : 'py-2';
+      const rows = opts.rows || [];
+      const sortKey = opts.sortKey || null;
+      const sortDir = opts.sortDir === 'desc' ? 'desc' : 'asc';
+      const scol = columns.find((c) => c.key === sortKey && c.sortVal);
+      let sorted = rows;
+      if (scol) {
+        const dir = sortDir === 'asc' ? 1 : -1;
+        sorted = rows.slice().sort((a, b) => {
+          let av = scol.sortVal(a), bv = scol.sortVal(b);
+          if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+          av = String(av == null ? '' : av); bv = String(bv == null ? '' : bv);
+          return av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' }) * dir;
+        });
+      }
+      const total = sorted.length;
+      const pages = Math.max(1, Math.ceil(total / pageSize));
+      const page = Math.min(Math.max(0, opts.page || 0), pages - 1);
+      const start = page * pageSize;
+      const slice = sorted.slice(start, start + pageSize);
+      const arrow = (c) => c.key === sortKey ? (sortDir === 'asc' ? ' ▲' : ' ▼') : (c.sortVal ? ' <span class="opacity-30">↕</span>' : '');
+      const thBase = 'sticky top-0 z-10 bg-ink-900 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400';
+      const head = '<tr>' + columns.map((c) => '<th class="' + thBase + (c.sortVal ? ' cursor-pointer select-none hover:text-white' : '') + (c.align === 'right' ? ' text-right' : '') + '"' + (c.sortVal ? ' data-sort="' + esc(c.key) + '"' : '') + '>' + esc(c.label) + arrow(c) + '</th>').join('') + '</tr>';
+      const body = slice.length ? slice.map((r) => '<tr>' + columns.map((c) => {
+        const cls = 'px-3 ' + rowPad + (c.mono ? ' font-mono' : '') + (c.nowrap ? ' whitespace-nowrap' : '') + (c.align === 'right' ? ' text-right' : '') + ' ' + (c.tint || 'text-slate-200');
+        return '<td class="' + cls + '">' + c.cell(r) + '</td>';
+      }).join('') + '</tr>').join('') : '<tr><td colspan="' + columns.length + '" class="px-3 py-4 text-center text-slate-500">' + esc(opts.empty || 'Nothing to show.') + '</td></tr>';
+      const from = total ? start + 1 : 0, to = Math.min(start + pageSize, total);
+      const pager = pages > 1
+        ? '<div class="mt-2 flex items-center justify-between text-[11px] text-slate-400"><span>Showing ' + from + '–' + to + ' of ' + total + '</span><span class="flex items-center gap-1"><button class="dt-prev rounded border border-white/10 bg-white/5 px-2 py-1' + (page === 0 ? ' pointer-events-none opacity-40' : ' hover:bg-white/10') + '">Prev</button><span class="px-1 tabular-nums">Page ' + (page + 1) + ' / ' + pages + '</span><button class="dt-next rounded border border-white/10 bg-white/5 px-2 py-1' + (page >= pages - 1 ? ' pointer-events-none opacity-40' : ' hover:bg-white/10') + '">Next</button></span></div>'
+        : '<div class="mt-2 text-[11px] text-slate-500">' + total + ' row' + (total === 1 ? '' : 's') + '</div>';
+      mount.innerHTML = '<div class="max-h-[28rem] overflow-auto rounded-lg border border-white/5"><table class="w-full text-left text-xs"><thead>' + head + '</thead><tbody class="divide-y divide-white/5">' + body + '</tbody></table></div>' + pager;
+      const restate = (patch) => { if (typeof opts.onState === 'function') opts.onState(Object.assign({ sortKey: sortKey, sortDir: sortDir, page: page }, patch)); };
+      mount.querySelectorAll('th[data-sort]').forEach((th) => { const k = th.getAttribute('data-sort'); th.onclick = () => { if (k === sortKey) restate({ sortDir: sortDir === 'asc' ? 'desc' : 'asc' }); else restate({ sortKey: k, sortDir: 'asc', page: 0 }); }; });
+      const pv = mount.querySelector('.dt-prev'); if (pv) pv.onclick = () => restate({ page: Math.max(0, page - 1) });
+      const nx = mount.querySelector('.dt-next'); if (nx) nx.onclick = () => restate({ page: Math.min(pages - 1, page + 1) });
+    }
     function renderSubtabs(activeTab, cat) {
       const bar = $('#subtabs'); if (!bar) return;
       const def = NAV_CATEGORIES.find((c) => c.id === cat);

@@ -138,18 +138,34 @@
       try { AUDIT_LOG = await DB().list('audit_log', { order: 'created_at', ascending: false }); } catch (e) { AUDIT_LOG = []; }
       renderAuditLog();
     }
+    // Audit-table sort/page state persists across re-renders (search, refresh).
+    let auditState = { sortKey: 'when', sortDir: 'desc', page: 0 };
+    let auditLastQ = '';
     function renderAuditLog() {
       const wrap = $('#audit-panel'); if (!wrap) return;
       if (!dbReady()) { wrap.innerHTML = '<p class="text-sm text-slate-500">Sign in to view the audit log.</p>'; return; }
       if (!canViewAudit()) { wrap.innerHTML = '<p class="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-amber-200">Restricted — the audit log is owner-only.</p>'; return; }
       const q = ($('#audit-search') ? $('#audit-search').value : '').trim().toLowerCase();
+      if (q !== auditLastQ) { auditState.page = 0; auditLastQ = q; }   // new filter → first page
       const named = (id) => (typeof officerName === 'function' && officerName(id)) || 'System';
-      const rows = AUDIT_LOG.filter((r) => !q || [r.action, r.entity, r.entity_id, named(r.actor_id), JSON.stringify(r.detail || '')].join(' ').toLowerCase().includes(q)).slice(0, 200);
+      const rows = AUDIT_LOG.filter((r) => !q || [r.action, r.entity, r.entity_id, named(r.actor_id), JSON.stringify(r.detail || '')].join(' ').toLowerCase().includes(q));
       wrap.innerHTML = `<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-2"><span class="text-xs text-slate-400">${AUDIT_LOG.length} total · showing ${rows.length}</span><input id="audit-search" value="${esc(q)}" placeholder="Filter action / entity / officer…" class="w-60 rounded-lg border border-white/10 bg-ink-900 px-3 py-1.5 text-xs text-white outline-none focus:border-badge-500" /></div>
-        <div class="max-h-96 overflow-y-auto rounded-lg border border-white/5"><table class="w-full text-left text-xs"><thead class="sticky top-0 bg-ink-900"><tr class="text-[10px] uppercase tracking-wider text-slate-400"><th class="px-3 py-2">When</th><th class="px-3 py-2">Officer</th><th class="px-3 py-2">Action</th><th class="px-3 py-2">Entity</th></tr></thead>
-        <tbody class="divide-y divide-white/5">${rows.length ? rows.map((r) => `<tr><td class="whitespace-nowrap px-3 py-1.5 text-slate-400">${new Date(r.created_at).toLocaleString('en-US')}</td><td class="px-3 py-1.5 text-slate-200">${esc(named(r.actor_id))}</td><td class="px-3 py-1.5"><span class="rounded bg-white/5 px-1.5 py-0.5 text-slate-200">${esc(r.action || '')}</span></td><td class="px-3 py-1.5 font-mono text-slate-400">${esc(r.entity || '')}${r.entity_id ? ` <span class="text-slate-600">${esc(String(r.entity_id).slice(0, 8))}</span>` : ''}</td></tr>`).join('') : `<tr><td colspan="4" class="px-3 py-3 text-slate-500">${AUDIT_LOG.length ? 'No entries match.' : 'No audit entries yet.'}</td></tr>`}</tbody></table></div>
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2"><span class="text-xs text-slate-400">${AUDIT_LOG.length} total${q ? ' · ' + rows.length + ' match' + (rows.length === 1 ? '' : 'es') : ''}</span><input id="audit-search" value="${esc(q)}" placeholder="Filter action / entity / officer…" class="w-60 rounded-lg border border-white/10 bg-ink-900 px-3 py-1.5 text-xs text-white outline-none focus:border-badge-500" /></div>
+        <div id="audit-table"></div>
       </div>`;
+      renderDataTable($('#audit-table'), {
+        rows,
+        pageSize: 50,
+        sortKey: auditState.sortKey, sortDir: auditState.sortDir, page: auditState.page,
+        empty: AUDIT_LOG.length ? 'No entries match.' : 'No audit entries yet.',
+        onState: (s) => { auditState = s; renderAuditLog(); },
+        columns: [
+          { key: 'when', label: 'When', nowrap: true, tint: 'text-slate-400', sortVal: (r) => r.created_at || '', cell: (r) => esc(new Date(r.created_at).toLocaleString('en-US')) },
+          { key: 'officer', label: 'Officer', sortVal: (r) => named(r.actor_id), cell: (r) => esc(named(r.actor_id)) },
+          { key: 'action', label: 'Action', sortVal: (r) => r.action || '', cell: (r) => '<span class="rounded bg-white/5 px-1.5 py-0.5 text-slate-200">' + esc(r.action || '') + '</span>' },
+          { key: 'entity', label: 'Entity', mono: true, tint: 'text-slate-400', sortVal: (r) => r.entity || '', cell: (r) => esc(r.entity || '') + (r.entity_id ? ' ' + copyId(r.entity_id) : '') },
+        ],
+      });
       const se = $('#audit-search'); if (se) se.oninput = (typeof debounce === 'function' ? debounce(renderAuditLog, 150) : renderAuditLog);
     }
 
