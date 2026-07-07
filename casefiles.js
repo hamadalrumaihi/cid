@@ -27,6 +27,8 @@
     async function fetchCaseTemplates() { if (!dbReady()) return; try { CASE_TEMPLATES = await DB().list('case_templates', { order: 'sort_order', ascending: true }); } catch (e) { CASE_TEMPLATES = []; } }
     // QoL: list scope (mine/all) + recently-opened & pinned cases (persisted via Store).
     let casesScope = (typeof Store !== 'undefined') ? Store.get('casesScope', 'mine') : 'all';
+    let casesView = (typeof Store !== 'undefined') ? Store.get('casesView', 'grid') : 'grid';   // 'grid' | 'board'
+    const CASE_GRID_CLASS = 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3';
     const myId = () => (DB() && DB().me) ? DB().me.id : null;
     const recentCaseIds = () => (typeof Store !== 'undefined' ? Store.get('recentCases', []) : []);
     const pinnedCaseIds = () => (typeof Store !== 'undefined' ? Store.get('pinnedCases', []) : []);
@@ -38,6 +40,13 @@
         const on = b.dataset.scope === casesScope;
         b.classList.toggle('bg-blue-500/15', on); b.classList.toggle('text-white', on); b.classList.toggle('text-slate-400', !on);
         b.onclick = () => { casesScope = b.dataset.scope; if (typeof Store !== 'undefined') Store.set('casesScope', casesScope); renderCases(); };
+      });
+    }
+    function renderViewChips() {
+      $$('#case-view .cv-chip').forEach((b) => {
+        const on = b.dataset.cview === casesView;
+        b.classList.toggle('bg-blue-500/15', on); b.classList.toggle('text-white', on); b.classList.toggle('text-slate-400', !on);
+        b.onclick = () => { casesView = b.dataset.cview; if (typeof Store !== 'undefined') Store.set('casesView', casesView); renderCases(); };
       });
     }
 
@@ -149,7 +158,7 @@
       openModal(node);
     }
 
-    function casesNotice(msg) { $('#cases-grid').innerHTML = `<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">${msg}</div>`; }
+    function casesNotice(msg) { const g = $('#cases-grid'); g.className = CASE_GRID_CLASS; g.innerHTML = `<div class="sm:col-span-2 xl:col-span-3 rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">${msg}</div>`; }
 
     // Native View Transitions API "swish" for board <-> detail. Feature-detected
     // and disabled under reduced-motion; falls back to an instant swap otherwise.
@@ -164,7 +173,7 @@
     function showCasesList() {
       withViewTransition(() => { $('#case-detail').classList.add('hidden'); $('#cases-list').classList.remove('hidden'); });
     }
-    function onEnterCases() { showCasesList(); if (dbReady()) fetchCases(); else casesNotice('Sign in to load live case data.'); }
+    function onEnterCases() { showCasesList(); if (dbReady()) { fetchCases(); if (typeof ensureOperations === 'function') ensureOperations(); } else casesNotice('Sign in to load live case data.'); }
 
     /* ============================================================ CASE FILES — ATTACHMENTS (per-case files via FiveManage + Supabase, #case-files) ============================================================ */
     /* Files are uploaded to FiveManage (window.CID_FIVEMANAGE); their URL +
@@ -400,6 +409,7 @@
       { const have = new Set(casesCache.map((c) => c.id)); [...caseSel].forEach((id) => { if (!have.has(id)) caseSel.delete(id); }); }
       const q = ($('#case-search') ? $('#case-search').value : '').trim().toLowerCase();
       renderScopeChips();
+      renderViewChips();
       renderCaseFilterBar();
       const mine = myId();
       let items = casesCache.filter((c) => !q || JSON.stringify(c).toLowerCase().includes(q));
@@ -428,6 +438,8 @@
         return;
       }
       grid.innerHTML = '';
+      if (casesView === 'board') { renderCaseBoard(grid, items); updateCaseBulkBar(); return; }
+      grid.className = CASE_GRID_CLASS;
       items.forEach((c, i) => {
         // case-card + data-status drive the investigative skin (status stripe,
         // stagger via --i). Structural utility classes kept for the fallback look.
@@ -451,6 +463,50 @@
       updateCaseBulkBar();
     }
 
+    /* ---- Kanban board: cases as columns by status; drag to change status. ----
+       Plane/Linear-style. Dragging is command/detective-only (canEdit); everyone
+       can still click a card to open it. The drop persists via cases.status —
+       RLS decides whether the write actually lands. */
+    const BOARD_COLS = [['open', 'Open', 'text-amber-300'], ['active', 'Active', 'text-emerald-300'], ['cold', 'Cold', 'text-blue-300'], ['closed', 'Closed', 'text-slate-300']];
+    function renderCaseBoard(grid, items) {
+      const canEdit = DB() && DB().canEdit();
+      grid.className = 'flex gap-4 overflow-x-auto pb-2';
+      const cardHtml = (c) => `<div class="board-card cursor-pointer rounded-xl border border-white/5 bg-ink-900/60 p-3 transition hover:border-blue-500/30 hover:bg-white/5"${canEdit ? ' draggable="true"' : ''} data-id="${c.id}" data-status="${escapeHTML(c.status || '')}">
+          <p class="truncate font-mono text-xs font-semibold text-blue-300">${escapeHTML(String(c.case_number || '').replace('-', ' · '))}</p>
+          <p class="mt-0.5 line-clamp-2 text-sm text-white">${escapeHTML(c.title || 'Untitled case')}</p>
+          <div class="mt-2 flex items-center justify-between gap-2 text-[10px] text-slate-500"><span class="t-readout rounded bg-white/5 px-1.5 py-0.5" data-bureau="${escapeHTML(c.bureau)}">${escapeHTML(c.bureau || '')}</span><span class="truncate">${escapeHTML(officerName(c.lead_detective_id) || 'Unassigned')}</span></div>
+          ${staleBadge(c) ? `<div class="mt-1.5">${staleBadge(c)}</div>` : ''}</div>`;
+      BOARD_COLS.forEach(([st, label, tint]) => {
+        const colItems = items.filter((c) => (c.status || '') === st);
+        const col = el('div', { class: 'board-col flex w-72 flex-shrink-0 flex-col rounded-2xl border border-white/5 bg-ink-950/70 p-3' });
+        col.dataset.status = st;
+        col.innerHTML = `<div class="mb-2 flex items-center justify-between px-1"><span class="text-xs font-semibold uppercase tracking-wider ${tint}">${label}</span><span class="rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">${colItems.length}</span></div>
+          <div class="board-drop flex-1 space-y-2">${colItems.length ? colItems.map(cardHtml).join('') : '<p class="px-1 py-8 text-center text-[11px] text-slate-600">' + (canEdit ? 'Drop cases here' : 'None') + '</p>'}</div>`;
+        grid.appendChild(col);
+      });
+      // Click-to-open works for everyone.
+      $$('.board-card', grid).forEach((card) => card.addEventListener('click', () => withViewTransition(() => openCaseDetail(card.dataset.id), card)));
+      if (!canEdit) return;
+      $$('.board-card', grid).forEach((card) => {
+        card.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', card.dataset.id); e.dataTransfer.effectAllowed = 'move'; card.style.opacity = '.4'; });
+        card.addEventListener('dragend', () => { card.style.opacity = ''; });
+      });
+      $$('.board-col', grid).forEach((col) => {
+        col.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; col.classList.add('border-blue-500/50', 'bg-blue-500/5'); });
+        col.addEventListener('dragleave', (e) => { if (!col.contains(e.relatedTarget)) col.classList.remove('border-blue-500/50', 'bg-blue-500/5'); });
+        col.addEventListener('drop', async (e) => {
+          e.preventDefault(); col.classList.remove('border-blue-500/50', 'bg-blue-500/5');
+          const id = e.dataTransfer.getData('text/plain'), newStatus = col.dataset.status;
+          const c = casesCache.find((x) => x.id === id); if (!c || (c.status || '') === newStatus) return;
+          const prev = c.status; c.status = newStatus; renderCases();   // optimistic move
+          const res = await DB().update('cases', id, { status: newStatus });
+          if (res && res.error) { c.status = prev; renderCases(); toast('Move failed: ' + res.error.message, 'danger'); return; }
+          toast('Moved to ' + newStatus, 'success');
+          if (typeof fetchCases === 'function') fetchCases();
+        });
+      });
+    }
+
     function openCaseModal(record) {
       if (!(DB() && DB().canEdit())) { toast('Sign-in required to edit cases.', 'warn'); return; }
       const c = record || {};
@@ -469,6 +525,7 @@
           <div><label class="mb-1 block text-xs font-semibold text-slate-400">Status</label>${sel('status', ['open', 'active', 'cold', 'closed'], c.status || 'open')}</div>
           <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Area / Region</label><input data-k="area" list="area-list" value="${escapeHTML(c.area || '')}" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" placeholder="e.g. Vinewood, Sandy Shores, Mirror Park" /><p class="mt-1 text-[11px] text-slate-500">Used by the Commander Heatmap to plot case concentration.</p></div>
           ${canReassign() ? `<div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Owner — Lead Detective</label><select data-k="lead_detective_id" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option value="">— unassigned —</option>${(typeof PROFILES !== 'undefined' ? PROFILES : []).filter((p) => p.active).map((p) => `<option value="${p.id}" ${p.id === c.lead_detective_id ? 'selected' : ''}>${escapeHTML(p.display_name)} · ${escapeHTML(ROLE_LABEL[p.role] || p.role)}</option>`).join('')}</select><p class="mt-1 text-[11px] text-slate-500">Ownership is separate from the sign-off chain; reassigning does not change sign-off progress.</p></div>` : ''}
+          <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Operation / Task Force</label><select data-k="operation_id" id="case-op-sel" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"><option value="">— none —</option>${(typeof operationsCache !== 'undefined' ? operationsCache : []).map((op) => `<option value="${op.id}"${op.id === c.operation_id ? ' selected' : ''}>${escapeHTML(op.name)}</option>`).join('')}</select><p class="mt-1 text-[11px] text-slate-500">Bundle this case with related cases under one operation. Manage them in the Operations tab.</p></div>
           <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Summary</label><textarea data-k="summary" rows="4" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${escapeHTML(c.summary || '')}</textarea></div>
         </div>
         <div class="modal-actions"><button id="case-save" class="w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">${record ? 'Save changes' : 'Create case'}</button></div>`;
@@ -511,6 +568,7 @@
         const cn = payload.case_number;
         if ('lead_detective_id' in payload && !payload.lead_detective_id) payload.lead_detective_id = null;
         if ('area' in payload && !payload.area) payload.area = null;
+        if ('operation_id' in payload && !payload.operation_id) payload.operation_id = null;
         const res = record && record.id ? await DB().update('cases', record.id, payload) : await DB().insert('cases', payload);
         if (res.error) {
           const dup = /duplicate|unique|already exists|23505/i.test(res.error.message || '');
@@ -522,6 +580,15 @@
         closeModal(); toast(record ? 'Case updated' : 'Case created', 'success'); fetchCases();
         if (record && record.id) openCaseDetail(record.id);
       };
+      // If the operations cache was cold when the modal opened, fill the picker
+      // once it loads (keeps the current selection).
+      if (typeof ensureOperations === 'function' && (typeof operationsCache === 'undefined' || !operationsCache.length)) {
+        ensureOperations().then(() => {
+          const s = node.querySelector('#case-op-sel'); if (!s) return;
+          const cur = c.operation_id || '';
+          s.innerHTML = '<option value="">— none —</option>' + operationsCache.map((op) => `<option value="${op.id}"${op.id === cur ? ' selected' : ''}>${escapeHTML(op.name)}</option>`).join('');
+        });
+      }
       openModal(node, { wide: true });
     }
 
@@ -606,6 +673,7 @@
               ${canEdit ? `<select id="case-status" class="rounded-md border border-white/10 bg-ink-900 px-2 py-1 text-[10px] font-semibold uppercase outline-none ${caseStatusTint(c.status)}" title="Quick status change">${['open', 'active', 'cold', 'closed'].map((s) => `<option value="${s}"${s === c.status ? ' selected' : ''}>${s}</option>`).join('')}</select>` : `<span class="rounded-md px-2.5 py-1 text-[10px] font-semibold uppercase ${caseStatusTint(c.status)}">${escapeHTML(c.status)}</span>`}
               ${c.signoff_status && c.signoff_status !== 'none' ? `<span class="rounded-md px-2.5 py-1 text-[10px] font-semibold ${signoffTint(c.signoff_status)}" title="Sign-off status">${escapeHTML(signoffLabel(c.signoff_status))}</span>` : ''}
               <span class="rounded-md bg-white/5 px-2.5 py-1 text-xs text-slate-300">${escapeHTML(c.bureau)}</span>
+              ${c.operation_id ? (() => { const op = (typeof operationsCache !== 'undefined' ? operationsCache : []).find((o) => o.id === c.operation_id); return op ? `<button id="case-op" class="rounded-md border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase text-blue-200 transition hover:bg-blue-500/20" title="Part of operation — open it">🎯 ${escapeHTML(op.name)}</button>` : ''; })() : ''}
               ${!canEdit ? '<span class="rounded-md bg-white/5 px-2.5 py-1 text-[10px] font-semibold uppercase text-slate-400" title="Your role can view this case but not edit it. Editing is limited to active members with write access.">👁 Read-only</span>' : ''}
               <button id="case-pin" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold transition hover:bg-white/10 ${isPinned(c.id) ? 'text-amber-300' : 'text-slate-200'}" title="Pin to Jump-back">${isPinned(c.id) ? '📌 Pinned' : '📌 Pin'}</button>
               <button id="case-link" class="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10" title="Copy a deep link to this case">🔗 Link</button>
@@ -632,6 +700,7 @@
         Object.assign(detailCase, patch); toast('Status → ' + ss.value, 'success'); renderCaseDetailShell(); loadDetailTab(); fetchCases();
       };
       const pin = $('#case-pin'); if (pin) pin.onclick = () => { togglePinCase(detailCase.id); renderCaseDetailShell(); loadDetailTab(); renderJumpBack(); };
+      const opBtn = $('#case-op'); if (opBtn) opBtn.onclick = () => { if (typeof gotoOperation === 'function' && detailCase.operation_id) gotoOperation(detailCase.operation_id); };
       const lk = $('#case-link'); if (lk) lk.onclick = () => {
         const url = location.origin + location.pathname + '#case=' + detailCase.id;
         if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(() => toast('Case link copied', 'success'), () => toast(url, 'info'));
@@ -655,16 +724,38 @@
       const me = DB().me, canDel = DB() && DB().canDelete();
       const today = (typeof todayISO === 'function') ? todayISO() : new Date().toISOString().slice(0, 10);
       const profs = (typeof PROFILES !== 'undefined' ? PROFILES : []).filter((p) => p.active);
-      const open = tasks.filter((t) => !t.done), done = tasks.filter((t) => t.done);
-      const row = (t) => {
+      // Sub-tasks (Plane-style): a task with a parent_id nests under its parent.
+      // Open/Done split on TOP-LEVEL tasks only; children render under the parent.
+      const kids = {}; tasks.forEach((t) => { if (t.parent_id) (kids[t.parent_id] = kids[t.parent_id] || []).push(t); });
+      const parents = tasks.filter((t) => !t.parent_id);
+      const open = parents.filter((t) => !t.done), done = parents.filter((t) => t.done);
+      const assignOpts = (selId) => `<option value="">— unassigned —</option>${profs.map((p) => `<option value="${p.id}"${p.id === selId ? ' selected' : ''}>${escapeHTML(p.display_name)}</option>`).join('')}`;
+      const row = (t, isChild, badge) => {
         const overdue = !t.done && t.due && t.due < today;
-        return `<div class="flex items-center gap-3 rounded-xl border border-white/5 bg-ink-900 px-4 py-3 ${t.done ? 'opacity-60' : ''}">
+        return `<div class="flex items-center gap-3 rounded-xl border border-white/5 bg-ink-900 px-4 py-3 ${isChild ? 'ml-6' : ''} ${t.done ? 'opacity-60' : ''}">
           <input type="checkbox" class="task-done h-4 w-4 flex-shrink-0 accent-emerald-500" data-id="${t.id}"${t.done ? ' checked' : ''}${canEdit ? '' : ' disabled'} aria-label="Mark task done" />
           <div class="min-w-0 flex-1">
-            <p class="text-sm ${t.done ? 'text-slate-500 line-through' : 'text-slate-200'}">${escapeHTML(t.title)}</p>
+            <p class="text-sm ${t.done ? 'text-slate-500 line-through' : 'text-slate-200'}">${escapeHTML(t.title)}${badge || ''}</p>
             <p class="mt-0.5 text-[11px] text-slate-500">${t.assignee ? '👤 ' + escapeHTML(officerName(t.assignee) || 'Officer') : 'Unassigned'}${t.due ? ` \u00b7 <span class="${overdue ? 'font-semibold text-rose-300' : ''}">due ${escapeHTML(t.due)}${overdue ? ' \u2014 overdue' : ''}</span>` : ''}</p>
           </div>
           ${(canDel || (me && t.created_by === me.id)) ? `<button class="task-del flex-shrink-0 text-slate-500 transition hover:text-rose-300" data-id="${t.id}" aria-label="Delete task">\u2715</button>` : ''}
+        </div>`;
+      };
+      const block = (t) => {
+        const ch = kids[t.id] || [];
+        const doneCh = ch.filter((c) => c.done).length;
+        const badge = ch.length ? ` <span class="ml-1 rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold ${doneCh === ch.length ? 'text-emerald-300' : 'text-slate-400'}" title="Sub-tasks complete">${doneCh}/${ch.length}</span>` : '';
+        return `<div class="space-y-2 rounded-2xl border border-white/5 bg-ink-900/60 p-2">
+          ${row(t, false, badge)}
+          ${ch.map((c) => row(c, true, '')).join('')}
+          ${canEdit ? `<div class="ml-6">
+            <button class="subtask-toggle text-[11px] font-semibold text-blue-300 transition hover:text-blue-200" data-parent="${t.id}">＋ sub-task</button>
+            <div class="subtask-form mt-2 hidden flex-wrap items-center gap-2" data-parent="${t.id}">
+              <input class="subtask-title min-w-[10rem] flex-1 rounded-lg border border-white/10 bg-ink-900 px-3 py-1.5 text-sm text-white outline-none focus:border-badge-500" placeholder="Break it down…" />
+              <select class="subtask-assignee rounded-lg border border-white/10 bg-ink-900 px-2 py-1.5 text-sm text-white outline-none focus:border-badge-500">${assignOpts('')}</select>
+              <button class="subtask-add rounded-lg bg-white/10 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-white/15" data-parent="${t.id}">Add</button>
+            </div>
+          </div>` : ''}
         </div>`;
       };
       body.innerHTML = `
@@ -678,8 +769,8 @@
           </div>
         </div>` : ''}
         <div class="mb-2 flex items-center justify-between"><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Open (${open.length})</h4>${open.filter((t) => t.due && t.due < today).length ? `<span class="text-[11px] font-semibold text-rose-300">${open.filter((t) => t.due && t.due < today).length} overdue</span>` : ''}</div>
-        <div class="space-y-2">${open.length ? open.map(row).join('') : '<p class="text-sm text-slate-500">No open tasks.' + (canEdit ? ' Add the first one above.' : '') + '</p>'}</div>
-        ${done.length ? `<h4 class="mb-2 mt-6 text-sm font-semibold uppercase tracking-wider text-slate-400">Done (${done.length})</h4><div class="space-y-2">${done.map(row).join('')}</div>` : ''}`;
+        <div class="space-y-3">${open.length ? open.map(block).join('') : '<p class="text-sm text-slate-500">No open tasks.' + (canEdit ? ' Add the first one above.' : '') + '</p>'}</div>
+        ${done.length ? `<h4 class="mb-2 mt-6 text-sm font-semibold uppercase tracking-wider text-slate-400">Done (${done.length})</h4><div class="space-y-3">${done.map(block).join('')}</div>` : ''}`;
       const add = $('#task-add'); if (add) add.onclick = async () => {
         const title = $('#task-title').value.trim(); if (!title) { toast('Describe the task first.', 'warn'); return; }
         const payload = { case_id: cid, title: title, assignee: $('#task-assignee').value || null, due: $('#task-due').value || null };
@@ -689,13 +780,30 @@
         toast('Task added', 'success'); loadDetailTab();
       };
       const ti = $('#task-title'); if (ti) ti.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); const b = $('#task-add'); if (b) b.click(); } });
+      // Sub-task: reveal the inline form, then insert a child task under its parent.
+      $$('.subtask-toggle', body).forEach((b) => b.onclick = () => {
+        const f = body.querySelector(`.subtask-form[data-parent="${b.dataset.parent}"]`);
+        if (f) { const hidden = f.classList.toggle('hidden'); f.classList.toggle('flex', !hidden); if (!hidden) { const i = f.querySelector('.subtask-title'); if (i) i.focus(); } }
+      });
+      const addSubtask = async (parentId, wrap) => {
+        const inp = wrap.querySelector('.subtask-title'), title = inp.value.trim();
+        if (!title) { toast('Describe the sub-task first.', 'warn'); return; }
+        const assignee = wrap.querySelector('.subtask-assignee').value || null;
+        const res = await DB().insert('case_tasks', { case_id: cid, parent_id: parentId, title: title, assignee: assignee });
+        if (res.error) { toast('Add failed: ' + res.error.message, 'danger'); return; }
+        if (assignee && assignee !== (me && me.id) && typeof notify === 'function') notify(assignee, 'mention', { case_id: cid, case_number: detailCase.case_number, reason: 'Sub-task assigned to you: ' + title });
+        toast('Sub-task added', 'success'); loadDetailTab();
+      };
+      $$('.subtask-add', body).forEach((b) => b.onclick = () => addSubtask(b.dataset.parent, b.closest('.subtask-form')));
+      $$('.subtask-title', body).forEach((i) => i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); const f = i.closest('.subtask-form'); addSubtask(f.dataset.parent, f); } }));
       $$('.task-done', body).forEach((c) => c.onchange = async () => {
         const res = await DB().update('case_tasks', c.dataset.id, { done: c.checked });
         if (res.error) { toast('Update failed: ' + res.error.message, 'danger'); c.checked = !c.checked; return; }
         loadDetailTab();
       });
       $$('.task-del', body).forEach((b) => b.onclick = async () => {
-        if (!(await uiConfirm('Delete this task?', { confirmText: 'Delete' }))) return;
+        const nKids = (kids[b.dataset.id] || []).length;
+        if (!(await uiConfirm(nKids ? 'Delete this task and its ' + nKids + ' sub-task(s)?' : 'Delete this task?', { confirmText: 'Delete' }))) return;
         const res = await DB().remove('case_tasks', b.dataset.id);
         if (res && res.error) { toast('Delete failed: ' + res.error.message, 'danger'); return; }
         loadDetailTab();
@@ -1318,6 +1426,7 @@
         subscribe('places', () => { if (active('places', 'network', 'heatmap')) fetchPlaces(); });
         subscribe('vehicles', () => { if (active('vehicles') && typeof fetchVehicles === 'function') fetchVehicles(); });
         subscribe('case_tasks', () => { if (typeof detailCase !== 'undefined' && detailCase && typeof detailTab !== 'undefined' && detailTab === 'tasks' && typeof loadDetailTab === 'function') loadDetailTab(); });
+        subscribe('operations', () => { if (active('operations') && typeof onEnterOperations === 'function') onEnterOperations(); });
         subscribe('ballistics_benches', () => { if (active('ballistics')) fetchBenches(); });
         subscribe('ballistic_footprints', () => { if (active('ballistics')) fetchFootprints(); });
         subscribe('trackers', () => { if (active('command')) fetchTrackers(); });

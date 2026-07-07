@@ -27,7 +27,7 @@
   <title>CID Portal — Criminal Investigation Division | State of San Andreas</title>
 
   <!-- Tailwind CSS — precompiled & inlined (production-safe, offline, no runtime warning) -->
-    <link rel="stylesheet" href="styles.css?v=20260708r" />
+    <link rel="stylesheet" href="styles.css?v=20260708t" />
 
   <!-- Typefaces -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -262,6 +262,10 @@
                 <button data-scope="mine" class="cs-chip rounded-md px-3 py-1.5 text-xs font-semibold transition">My Cases</button>
                 <button data-scope="all" class="cs-chip rounded-md px-3 py-1.5 text-xs font-semibold transition">All</button>
               </div>
+              <div id="case-view" class="flex flex-shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-ink-850 p-1" title="Switch between card grid and status board">
+                <button data-cview="grid" class="cv-chip rounded-md px-3 py-1.5 text-xs font-semibold transition" aria-label="Card grid">▦ Grid</button>
+                <button data-cview="board" class="cv-chip rounded-md px-3 py-1.5 text-xs font-semibold transition" aria-label="Status board">▤ Board</button>
+              </div>
               <button id="case-refresh" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">↻ Refresh</button>
               <button id="case-selectall" class="hidden rounded-lg border border-rose-500/20 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/20" title="Select every case in the current view for bulk delete (command only)">☑ Select all</button>
             </div>
@@ -270,6 +274,11 @@
           </div>
           <!-- Detail mode (populated by JS) -->
           <div id="case-detail" class="hidden"></div>
+        </section>
+
+        <!-- ===================== VIEW: OPERATIONS / TASK FORCES ===================== -->
+        <section id="view-operations" class="view">
+          <div id="ops-body"></div>
         </section>
 
         <!-- ===================== VIEW: PENAL CODE (static catalog, all roles) ===================== -->
@@ -678,37 +687,38 @@
   </script>
 
   <!-- ===== APPLICATION JS (feature-split classic scripts; shared global scope, load order matters) ===== -->
-  <script src="supabase.js?v=20260708r"></script>
-  <script src="roles.js?v=20260708r"></script>
-  <script src="core.js?v=20260708r"></script>
-  <script src="penal.js?v=20260708r"></script>
-  <script src="casefiles.js?v=20260708r"></script>
-  <script src="command.js?v=20260708r"></script>
-  <script src="narcotics.js?v=20260708r"></script>
-  <script src="ballistics.js?v=20260708r"></script>
-  <script src="personnel.js?v=20260708r"></script>
-  <script src="modus.js?v=20260708r"></script>
-  <script src="drive.js?v=20260708r"></script>
-  <script src="persons.js?v=20260708r"></script>
-  <script src="gangs.js?v=20260708r"></script>
-  <script src="intel.js?v=20260708r"></script>
-  <script src="places.js?v=20260708r"></script>
-  <script src="network.js?v=20260708r"></script>
-  <script src="reports.js?v=20260708r"></script>
-  <script src="rico.js?v=20260708r"></script>
-  <script src="docx.js?v=20260708r"></script>
-  <script src="records.js?v=20260708r"></script>
-  <script src="signoff.js?v=20260708r"></script>
-  <script src="inbox.js?v=20260708r"></script>
-  <script src="collab.js?v=20260708r"></script>
-  <script src="heatmap.js?v=20260708r"></script>
-  <script src="shifts.js?v=20260708r"></script>
-  <script src="fivemanage.js?v=20260708r"></script>
-  <script src="vehicles.js?v=20260708r"></script>
-  <script src="watchlist.js?v=20260708r"></script>
-  <script src="feedback.js?v=20260708r"></script>
-  <script src="app.js?v=20260708r"></script>
-  <script src="auth.js?v=20260708r"></script>
+  <script src="supabase.js?v=20260708t"></script>
+  <script src="roles.js?v=20260708t"></script>
+  <script src="core.js?v=20260708t"></script>
+  <script src="penal.js?v=20260708t"></script>
+  <script src="casefiles.js?v=20260708t"></script>
+  <script src="operations.js?v=20260708t"></script>
+  <script src="command.js?v=20260708t"></script>
+  <script src="narcotics.js?v=20260708t"></script>
+  <script src="ballistics.js?v=20260708t"></script>
+  <script src="personnel.js?v=20260708t"></script>
+  <script src="modus.js?v=20260708t"></script>
+  <script src="drive.js?v=20260708t"></script>
+  <script src="persons.js?v=20260708t"></script>
+  <script src="gangs.js?v=20260708t"></script>
+  <script src="intel.js?v=20260708t"></script>
+  <script src="places.js?v=20260708t"></script>
+  <script src="network.js?v=20260708t"></script>
+  <script src="reports.js?v=20260708t"></script>
+  <script src="rico.js?v=20260708t"></script>
+  <script src="docx.js?v=20260708t"></script>
+  <script src="records.js?v=20260708t"></script>
+  <script src="signoff.js?v=20260708t"></script>
+  <script src="inbox.js?v=20260708t"></script>
+  <script src="collab.js?v=20260708t"></script>
+  <script src="heatmap.js?v=20260708t"></script>
+  <script src="shifts.js?v=20260708t"></script>
+  <script src="fivemanage.js?v=20260708t"></script>
+  <script src="vehicles.js?v=20260708t"></script>
+  <script src="watchlist.js?v=20260708t"></script>
+  <script src="feedback.js?v=20260708t"></script>
+  <script src="app.js?v=20260708t"></script>
+  <script src="auth.js?v=20260708t"></script>
 
   
 </body>

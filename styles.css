@@ -918,3 +918,9 @@ body[data-accent="rose"] .from-blue-500\/20{--tw-gradient-from:rgb(244 63 94 / .
   border-top:1px solid rgb(255 255 255 / .08);
 }
 @supports (backdrop-filter:blur(1px)){ .modal-actions{ background:rgb(15 23 38 / .82); backdrop-filter:blur(8px); } }
+
+/* Plane-inspired features (Operations / sub-tasks / status board): a few utility
+   classes the precompiled Tailwind build didn't include, hand-written so the new
+   UI renders correctly (and fixing the long-standing done-task dim). */
+.opacity-60{opacity:.6}
+.opacity-40{opacity:.4}
