@@ -107,9 +107,10 @@ route ids but the legacy `reports` route has no section and falls back to `cases
       guard); content synced by `sops-sync` edge function (backend — unaffected by rebuild).
 
 ### Oversight
-- [ ] **inbox** — My Desk: sign-off inbox (review/bounced/mine), overdue ≥14d, due
-      follow-ups, needs-attention nudges, unread @mentions, followed-items-changed,
-      my case tasks.
+- [x] **inbox** — My Desk implementation pass: sign-off review/returned/in-flight
+      queues, due follow-ups, stale visible cases, my open tasks, recent mentions,
+      followed cases, unread notifications, and draft report rows. Live browser
+      verification and richer followed-item delta/badge behavior still pending.
 - [ ] **shifts** — Weekly shift reports (author-or-command RLS).
 - [ ] **audit** — Audit log on the data-table engine (sort/paginate/copy-ID); owner-only
       (RLS + hidden subtab; writes happen ONLY via `private.audit()` trigger on 16 tables).

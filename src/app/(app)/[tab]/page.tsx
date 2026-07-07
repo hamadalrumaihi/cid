@@ -4,6 +4,7 @@ import { PAGE_META } from '@/lib/nav'
 import { ViewPlaceholder } from '@/components/ViewPlaceholder'
 import { CasesView } from '@/components/cases/CasesView'
 import { OperationsView } from '@/components/operations/OperationsView'
+import { InboxView } from '@/components/inbox/InboxView'
 
 /** One route per leaf tab. Placeholder views are replaced slice-by-slice as
  *  each vanilla view is ported (see docs/REACT-PARITY.md for the order). */
@@ -29,6 +30,13 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="operations" />}>
         <OperationsView />
+      </Suspense>
+    )
+  }
+  if (tab === 'inbox') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="inbox" />}>
+        <InboxView />
       </Suspense>
     )
   }

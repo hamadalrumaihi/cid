@@ -17,10 +17,11 @@ Companion source of truth: `docs/REACT-PARITY.md`.
   - `.\node_modules\.bin\tsc.cmd --noEmit`
   - `.\node_modules\.bin\eslint.cmd .`
   - `.\node_modules\.bin\next.cmd build`
-- `src/lib/packet.ts` lint warnings were fixed by replacing side-effect ternary
-  expressions with explicit `if` blocks.
+- Phase 2 was committed and pushed to `origin/react-rebuild` as
+  `b29434d feat(rebuild): finish phase 2 cases slice`.
+- The next slice, `inbox` / My Desk, has an implementation pass in this
+  handoff state.
 - Live browser verification for Phase 2 is still pending.
-- No commit has been made for Phase 2 in the current worktree.
 
 ## Phase 2 delivered
 
@@ -65,6 +66,17 @@ Implemented Operations surface:
 - Operation detail.
 - Link/unlink cases.
 - Create/edit/delete operation modal.
+
+Implemented Inbox / My Desk surface:
+
+- `/inbox` route wired through the existing `[tab]` dispatcher.
+- Sign-off review, returned, and in-flight queues.
+- Due follow-ups and stale visible cases.
+- Open case tasks assigned to or created by the current user.
+- Recent case-chat mentions.
+- Followed case rollup.
+- Notifications list with click-to-mark-read.
+- Draft report rows linked back to the case Reports tab.
 
 Implemented shared/data support:
 
@@ -130,6 +142,7 @@ views. Done views:
 
 - `cases`
 - `operations`
+- `inbox`
 
 Unchecked views remaining:
 
@@ -153,7 +166,6 @@ Unchecked views remaining:
 - `records` - CID records registry.
 - `penal` - read-only penal catalog.
 - `sops` - SOP/library reader and command writes.
-- `inbox` - My Desk, signoff inbox, mentions, follow-ups, tasks.
 - `shifts` - weekly shift reports.
 - `audit` - audit log data-table engine.
 - `feedback` - feature/bug submissions and triage.
@@ -204,9 +216,57 @@ Do not cut over to `main` until all of these are true:
 ## Suggested next patch order
 
 1. Finish Phase 2 live browser QA and update `docs/REACT-PARITY.md` with results.
-2. Tackle `inbox`, because it consumes signoff, tasks, mentions, follow-ups, and
-   watchlist state already exposed by Phase 2.
-3. Tackle `command`, because it exercises the broadest operational rollups.
-4. Tackle `personnel`, because it closes member admin and role-management flows.
-5. Continue one view per patch, keeping each patch gated and live-verified.
+2. Tackle `command`, because it exercises the broadest operational rollups.
+3. Tackle `personnel`, because it closes member admin and role-management flows.
+4. Continue one view per patch, keeping each patch gated and live-verified.
 
+## Prompt for the next LLM
+
+Use this if another LLM needs to continue from here:
+
+```text
+You are continuing work in `C:\Users\hkalr\Desktop\cid\cid` on branch
+`react-rebuild`.
+
+Hard rules:
+- This branch is a Next.js 16 app at repo root.
+- Do not edit legacy static files at repo root (`index.html`, root `*.js`,
+  `styles.css`); they are inert on this branch.
+- Read relevant local Next docs in `node_modules/next/dist/docs/` before
+  writing Next code.
+- Use `rg` for search and `apply_patch` for manual edits.
+- Do not revert user changes.
+- Keep work on `react-rebuild`, never `main`.
+
+Committed baseline:
+- Phase 2 Cases + Operations is pushed as
+  `b29434d feat(rebuild): finish phase 2 cases slice`.
+- Inbox / My Desk has now been implemented after that baseline.
+
+Current completed implementation passes:
+- Phase 1 app shell/auth.
+- Phase 2 Cases + Operations.
+- Oversight `inbox` / My Desk.
+
+Known local junk to ignore unless the user explicitly asks otherwise:
+- `.serena/`
+- `bash.exe.stackdump`
+
+Next recommended slice:
+- `command` / Central Command dashboard, because it exercises the broadest
+  operational rollups and consumes pins, recents, stale cases, task/signoff
+  signals, trackers, and imports.
+
+Before changing code:
+- Read `docs/REACT-PARITY.md` and this handoff.
+- Inspect current git status.
+- Verify any Next App Router behavior from local Next 16 docs.
+
+After changes:
+- Update `docs/REACT-PARITY.md` honestly.
+- Keep this handoff current.
+- Run:
+  `.\node_modules\.bin\tsc.cmd --noEmit`
+  `.\node_modules\.bin\eslint.cmd .`
+  `.\node_modules\.bin\next.cmd build`
+```
