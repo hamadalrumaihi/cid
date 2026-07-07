@@ -260,6 +260,7 @@
       node.querySelectorAll('.pk-fmt').forEach((b) => b.onclick = async () => {
         const fmt = b.dataset.fmt; const m = node.querySelector('#pk-msg'); m.textContent = 'Exporting…';
         const d = await gatherCasePacket(c);
+        if (fmt === 'pdf') await ensureJsPDF(); else if (fmt !== 'docx') await ensureXLSX();
         let ok = true;
         if (fmt === 'docx') packetDocx(c, d); else if (fmt === 'pdf') ok = packetPdf(c, d); else ok = packetXlsx(c, d);
         if (ok) { m.textContent = 'Ready — download started.'; toast('Case packet exported (.' + fmt + ')', 'success'); closeModal(); }

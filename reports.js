@@ -71,7 +71,7 @@
           </div>`;
         card.querySelector('.r-view').onclick = () => viewReport(r);
         card.querySelector('.r-docx').onclick = () => exportReportDocx(r);
-        card.querySelector('.r-pdf').onclick = () => exportReportPdf(r);
+        card.querySelector('.r-pdf').onclick = async () => { await ensureJsPDF(); exportReportPdf(r); };
         const rs = card.querySelector('.r-supp'); if (rs) rs.onclick = () => openReportModal(r.template, caseId, r.id, 'supplemental');
         const rf = card.querySelector('.r-follow'); if (rf) rf.onclick = () => openReportModal(r.template, caseId, r.id, 'followup');
         // Delete a report (command/delete-permission only; RLS reports_del enforces
@@ -366,7 +366,7 @@
         }).catch(() => {});
       }
       node.querySelector('#v-docx').onclick = () => exportReportDocx(r);
-      node.querySelector('#v-pdf').onclick = () => exportReportPdf(r);
+      node.querySelector('#v-pdf').onclick = async () => { await ensureJsPDF(); exportReportPdf(r); };
       const vf = node.querySelector('#v-final'); if (vf) vf.onclick = async () => {
         const gaps = reportFinalizeGaps(r);
         if (gaps.length) {
