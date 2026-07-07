@@ -907,3 +907,14 @@ body[data-accent="rose"] .from-blue-500\/20{--tw-gradient-from:rgb(244 63 94 / .
 @keyframes cid-skel{0%,100%{opacity:.9}50%{opacity:.4}}
 .skel{animation:cid-skel 1.4s ease-in-out infinite}
 @media (prefers-reduced-motion: reduce){ .skel{animation:none} }
+
+/* Sticky form action bar (audit Phase 5): dock the primary Save/Delete row to
+   the bottom of a scrolling modal so it's always reachable on long forms.
+   Negative margins cancel the modal's p-6 padding to reach the card edges. */
+.modal-actions{
+  position:sticky; bottom:0; z-index:5;
+  margin:1rem -1.5rem -1.5rem; padding:.8rem 1.5rem;
+  background:rgb(15 23 38 / .96);
+  border-top:1px solid rgb(255 255 255 / .08);
+}
+@supports (backdrop-filter:blur(1px)){ .modal-actions{ background:rgb(15 23 38 / .82); backdrop-filter:blur(8px); } }

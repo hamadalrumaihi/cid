@@ -156,7 +156,7 @@
           <div class="sm:col-span-2"><label class="mb-1 block text-xs font-semibold text-slate-400">Notes</label><textarea data-k="notes" rows="3" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">${escapeHTML(p.notes || '')}</textarea></div>
           <div class="sm:col-span-2"><div class="mb-1 flex items-center justify-between"><label class="block text-xs font-semibold text-slate-400">Known Properties</label><button type="button" id="p-prop-add" class="text-xs font-semibold text-blue-300 transition hover:text-blue-200">+ Add property</button></div><div id="p-props" class="space-y-2"></div></div>
         </div>
-        <div class="mt-5 flex gap-2">
+        <div class="modal-actions flex gap-2">
           <button id="p-save" class="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">${record ? 'Save changes' : 'Create person'}</button>
           ${record && DB().canDelete() ? '<button id="p-del" class="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>' : ''}
         </div>`;
