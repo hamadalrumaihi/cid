@@ -731,13 +731,17 @@
       const rendered = md.trim()
         ? '<div class="sop-prose max-h-[60vh] overflow-y-auto rounded-lg border border-white/5 bg-ink-900 p-5">' + (typeof sopArticle === 'function' ? sopArticle(md, 'Case Notes') : esc(md)) + '</div>'
         : '<div class="rounded-lg border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-500">No notes yet.' + (canEdit ? ' Use “✎ Edit” to start a free-form working page — paste, jot, list; it renders as a clean document and rides along in the court packet.' : '') + '</div>';
+      const btn = 'rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10';
+      const tools = (md.trim() ? '<button data-copy="' + esc(md) + '" class="' + btn + '" title="Copy the Markdown to send elsewhere">Copy</button><button id="cn-md" class="' + btn + '" title="Download as a .md file">⬇ .md</button>' : '')
+        + (canEdit ? '<button id="cn-edit" class="' + btn + '">✎ Edit</button>' : '');
       body.innerHTML = `
         <div class="mb-3 flex items-center justify-between gap-2">
           <div><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Case Notes</h4><p class="text-[11px] text-slate-500">Free-form working notes for this case — Markdown.</p></div>
-          ${canEdit ? '<button id="cn-edit" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">✎ Edit</button>' : ''}
+          <div class="flex flex-shrink-0 gap-2">${tools}</div>
         </div>
         ${rendered}`;
       const eb = $('#cn-edit', body); if (eb) eb.onclick = () => renderCaseNotesEditor(body, c);
+      const mb = $('#cn-md', body); if (mb) mb.onclick = () => { if (typeof downloadTextFile === 'function') downloadTextFile((typeof slug === 'function' ? slug(c.case_number) : c.case_number) + '-notes.md', c.notes || '', 'text/markdown'); };
     }
     function renderCaseNotesEditor(body, c) {
       body.innerHTML = `
