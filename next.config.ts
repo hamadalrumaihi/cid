@@ -1,7 +1,40 @@
 import type { NextConfig } from "next";
 
+// Security headers ported from main's vercel.json (vanilla app) so the rebase
+// does not lose security posture. CSP adjusted for Next.js:
+// - no cdn.jsdelivr.net / cdn.sheetjs.com (export libs come from npm, not CDNs)
+// - no Google Fonts origins (next/font self-hosts)
+// - 'unsafe-eval' only in dev (Next.js HMR needs it)
+const isDev = process.env.NODE_ENV === "development";
+
+const csp = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self'",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://discord.com https://*.discord.com https://api.fivemanage.com",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
+
 const nextConfig: NextConfig = {
-  /* config options here */
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          // No Cache-Control override: Next.js manages caching per-asset
+          // (immutable /_next/static, revalidated HTML) — unlike the static vanilla host.
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          { key: "Content-Security-Policy", value: csp },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

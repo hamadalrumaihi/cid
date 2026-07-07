@@ -1,1601 +1,2694 @@
-// Generated from the live Supabase schema (information_schema) — project jhxuflzmqspidkvjckox.
-// Regenerate with `supabase gen types typescript` when the schema changes.
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   public: {
     Tables: {
       announcements: {
         Row: {
-          id: string
+          audience: string
           author_id: string | null
           author_name: string | null
-          title: string
           body: string
-          audience: string
-          pinned: boolean
           created_at: string
-          updated_at: string
+          id: string
           links: Json
           mentions: Json
+          pinned: boolean
+          title: string
+          updated_at: string
         }
         Insert: {
-          id?: string
+          audience?: string
           author_id?: string | null
           author_name?: string | null
-          title: string
           body: string
-          audience?: string
-          pinned?: boolean
           created_at?: string
-          updated_at?: string
+          id?: string
           links?: Json
           mentions?: Json
+          pinned?: boolean
+          title: string
+          updated_at?: string
         }
         Update: {
-          id?: string
+          audience?: string
           author_id?: string | null
           author_name?: string | null
-          title?: string
           body?: string
-          audience?: string
-          pinned?: boolean
           created_at?: string
-          updated_at?: string
+          id?: string
           links?: Json
           mentions?: Json
+          pinned?: boolean
+          title?: string
+          updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "announcements_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_secrets: {
+        Row: {
+          key: string
+          updated_at: string
+          value: string
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value: string
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: string
+        }
+        Relationships: []
       }
       audit_log: {
         Row: {
-          id: number
-          actor_id: string | null
           action: string
+          actor_id: string | null
+          created_at: string
+          detail: Json | null
           entity: string
           entity_id: string | null
-          detail: Json | null
-          created_at: string
+          id: number
         }
         Insert: {
-          id: number
-          actor_id?: string | null
           action: string
+          actor_id?: string | null
+          created_at?: string
+          detail?: Json | null
           entity: string
           entity_id?: string | null
-          detail?: Json | null
-          created_at?: string
+          id?: never
         }
         Update: {
-          id?: number
-          actor_id?: string | null
           action?: string
+          actor_id?: string | null
+          created_at?: string
+          detail?: Json | null
           entity?: string
           entity_id?: string | null
-          detail?: Json | null
-          created_at?: string
+          id?: never
         }
+        Relationships: [
+          {
+            foreignKeyName: "audit_log_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ballistic_footprints: {
         Row: {
-          id: string
-          signature: string
-          weapon: string | null
-          gang_id: string | null
           case_id: string | null
           created_at: string
+          gang_id: string | null
+          id: string
+          signature: string
           updated_at: string
+          weapon: string | null
         }
         Insert: {
+          case_id?: string | null
+          created_at?: string
+          gang_id?: string | null
           id?: string
           signature: string
-          weapon?: string | null
-          gang_id?: string | null
-          case_id?: string | null
-          created_at?: string
           updated_at?: string
+          weapon?: string | null
         }
         Update: {
-          id?: string
-          signature?: string
-          weapon?: string | null
-          gang_id?: string | null
           case_id?: string | null
           created_at?: string
+          gang_id?: string | null
+          id?: string
+          signature?: string
           updated_at?: string
+          weapon?: string | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "ballistic_footprints_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ballistic_footprints_gang_id_fkey"
+            columns: ["gang_id"]
+            isOneToOne: false
+            referencedRelation: "gangs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ballistics_benches: {
         Row: {
-          id: string
-          bench_type: Database['public']['Enums']['bench_type']
-          name: string
-          tier: string | null
-          heat: string | null
-          outputs: string[] | null
-          components: string[] | null
+          bench_type: Database["public"]["Enums"]["bench_type"]
           case_id: string | null
+          components: string[] | null
           created_at: string
+          heat: string | null
+          id: string
+          name: string
+          outputs: string[] | null
+          tier: string | null
           updated_at: string
         }
         Insert: {
-          id?: string
-          bench_type: Database['public']['Enums']['bench_type']
-          name: string
-          tier?: string | null
-          heat?: string | null
-          outputs?: string[] | null
-          components?: string[] | null
+          bench_type: Database["public"]["Enums"]["bench_type"]
           case_id?: string | null
+          components?: string[] | null
           created_at?: string
+          heat?: string | null
+          id?: string
+          name: string
+          outputs?: string[] | null
+          tier?: string | null
           updated_at?: string
         }
         Update: {
-          id?: string
-          bench_type?: Database['public']['Enums']['bench_type']
-          name?: string
-          tier?: string | null
-          heat?: string | null
-          outputs?: string[] | null
-          components?: string[] | null
+          bench_type?: Database["public"]["Enums"]["bench_type"]
           case_id?: string | null
+          components?: string[] | null
           created_at?: string
+          heat?: string | null
+          id?: string
+          name?: string
+          outputs?: string[] | null
+          tier?: string | null
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "ballistics_benches_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       case_access_grants: {
         Row: {
-          id: string
           case_id: string
-          officer_id: string
-          granted_by: string | null
           created_at: string
+          granted_by: string | null
+          id: string
+          officer_id: string
         }
         Insert: {
-          id?: string
           case_id: string
-          officer_id: string
-          granted_by?: string | null
           created_at?: string
+          granted_by?: string | null
+          id?: string
+          officer_id: string
         }
         Update: {
-          id?: string
           case_id?: string
-          officer_id?: string
-          granted_by?: string | null
           created_at?: string
+          granted_by?: string | null
+          id?: string
+          officer_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "case_access_grants_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_access_grants_granted_by_fkey"
+            columns: ["granted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_access_grants_officer_id_fkey"
+            columns: ["officer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       case_access_requests: {
         Row: {
-          id: string
           case_id: string
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          id: string
+          reason: string | null
           requester_id: string
           requester_name: string | null
-          reason: string | null
           status: string
-          decided_by: string | null
-          decided_at: string | null
-          created_at: string
         }
         Insert: {
-          id?: string
           case_id: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          id?: string
+          reason?: string | null
           requester_id?: string
           requester_name?: string | null
-          reason?: string | null
           status?: string
-          decided_by?: string | null
-          decided_at?: string | null
-          created_at?: string
         }
         Update: {
-          id?: string
           case_id?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          id?: string
+          reason?: string | null
           requester_id?: string
           requester_name?: string | null
-          reason?: string | null
           status?: string
-          decided_by?: string | null
-          decided_at?: string | null
-          created_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "case_access_requests_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_access_requests_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_access_requests_requester_id_fkey"
+            columns: ["requester_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       case_assignments: {
         Row: {
-          id: string
           case_id: string
-          officer_id: string
-          role: Database['public']['Enums']['assign_role']
           created_at: string
+          id: string
+          officer_id: string
+          role: Database["public"]["Enums"]["assign_role"]
         }
         Insert: {
-          id?: string
           case_id: string
-          officer_id: string
-          role?: Database['public']['Enums']['assign_role']
           created_at?: string
+          id?: string
+          officer_id: string
+          role?: Database["public"]["Enums"]["assign_role"]
         }
         Update: {
-          id?: string
           case_id?: string
-          officer_id?: string
-          role?: Database['public']['Enums']['assign_role']
           created_at?: string
+          id?: string
+          officer_id?: string
+          role?: Database["public"]["Enums"]["assign_role"]
         }
+        Relationships: [
+          {
+            foreignKeyName: "case_assignments_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_assignments_officer_id_fkey"
+            columns: ["officer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       case_files: {
         Row: {
-          id: string
-          case_number: string
-          drive_file_id: string
-          name: string
-          mime_type: string | null
-          icon_url: string | null
-          web_view_link: string
           added_by: string | null
+          case_number: string
           created_at: string
+          drive_file_id: string
+          icon_url: string | null
+          id: string
+          mime_type: string | null
+          name: string
+          web_view_link: string
         }
         Insert: {
-          id?: string
-          case_number: string
-          drive_file_id: string
-          name: string
-          mime_type?: string | null
-          icon_url?: string | null
-          web_view_link: string
           added_by?: string | null
+          case_number: string
           created_at?: string
+          drive_file_id: string
+          icon_url?: string | null
+          id?: string
+          mime_type?: string | null
+          name: string
+          web_view_link: string
         }
         Update: {
-          id?: string
-          case_number?: string
-          drive_file_id?: string
-          name?: string
-          mime_type?: string | null
-          icon_url?: string | null
-          web_view_link?: string
           added_by?: string | null
+          case_number?: string
           created_at?: string
+          drive_file_id?: string
+          icon_url?: string | null
+          id?: string
+          mime_type?: string | null
+          name?: string
+          web_view_link?: string
         }
+        Relationships: []
       }
       case_intel_links: {
         Row: {
-          id: string
           case_id: string
+          created_at: string
+          created_by: string | null
+          id: string
           kind: string
+          note: string | null
           ref_id: string
           role: string | null
-          note: string | null
-          created_by: string | null
-          created_at: string
         }
         Insert: {
-          id?: string
           case_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
           kind: string
+          note?: string | null
           ref_id: string
           role?: string | null
-          note?: string | null
-          created_by?: string | null
-          created_at?: string
         }
         Update: {
-          id?: string
           case_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
           kind?: string
+          note?: string | null
           ref_id?: string
           role?: string | null
-          note?: string | null
-          created_by?: string | null
-          created_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "case_intel_links_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_intel_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       case_messages: {
         Row: {
-          id: string
-          case_id: string
           author_id: string | null
           author_name: string | null
           body: string
-          mentions: Json
-          links: Json
+          case_id: string
           created_at: string
+          id: string
+          links: Json
+          mentions: Json
         }
         Insert: {
-          id?: string
-          case_id: string
           author_id?: string | null
           author_name?: string | null
           body: string
-          mentions?: Json
-          links?: Json
+          case_id: string
           created_at?: string
+          id?: string
+          links?: Json
+          mentions?: Json
         }
         Update: {
-          id?: string
-          case_id?: string
           author_id?: string | null
           author_name?: string | null
           body?: string
-          mentions?: Json
-          links?: Json
+          case_id?: string
           created_at?: string
+          id?: string
+          links?: Json
+          mentions?: Json
         }
+        Relationships: [
+          {
+            foreignKeyName: "case_messages_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_messages_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       case_signoff_history: {
         Row: {
-          id: string
-          case_id: string
+          action: string
           actor_id: string | null
           actor_name: string | null
-          action: string
+          case_id: string
+          created_at: string
+          id: string
+          note: string | null
           stage: string | null
           to_status: string | null
-          note: string | null
-          created_at: string
         }
         Insert: {
-          id?: string
-          case_id: string
+          action: string
           actor_id?: string | null
           actor_name?: string | null
-          action: string
+          case_id: string
+          created_at?: string
+          id?: string
+          note?: string | null
           stage?: string | null
           to_status?: string | null
-          note?: string | null
-          created_at?: string
         }
         Update: {
-          id?: string
-          case_id?: string
+          action?: string
           actor_id?: string | null
           actor_name?: string | null
-          action?: string
+          case_id?: string
+          created_at?: string
+          id?: string
+          note?: string | null
           stage?: string | null
           to_status?: string | null
-          note?: string | null
-          created_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "case_signoff_history_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_signoff_history_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       case_tasks: {
         Row: {
-          id: string
-          case_id: string
-          title: string
           assignee: string | null
-          due: string | null
-          done: boolean
-          created_by: string | null
+          case_id: string
           created_at: string
+          created_by: string | null
+          done: boolean
+          due: string | null
+          id: string
+          parent_id: string | null
+          title: string
           updated_at: string
         }
         Insert: {
-          id?: string
-          case_id: string
-          title: string
           assignee?: string | null
-          due?: string | null
-          done?: boolean
-          created_by?: string | null
+          case_id: string
           created_at?: string
+          created_by?: string | null
+          done?: boolean
+          due?: string | null
+          id?: string
+          parent_id?: string | null
+          title: string
           updated_at?: string
         }
         Update: {
-          id?: string
-          case_id?: string
-          title?: string
           assignee?: string | null
-          due?: string | null
-          done?: boolean
-          created_by?: string | null
+          case_id?: string
           created_at?: string
+          created_by?: string | null
+          done?: boolean
+          due?: string | null
+          id?: string
+          parent_id?: string | null
+          title?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "case_tasks_assignee_fkey"
+            columns: ["assignee"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_tasks_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_tasks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_tasks_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "case_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       case_templates: {
         Row: {
+          active: boolean
+          area: string | null
+          bureau: Database["public"]["Enums"]["bureau"] | null
+          created_at: string
+          created_by: string | null
+          icon: string | null
           id: string
           name: string
-          icon: string | null
-          bureau: Database['public']['Enums']['bureau'] | null
-          title: string | null
-          summary: string | null
-          area: string | null
-          status: Database['public']['Enums']['case_status']
           sort_order: number
-          active: boolean
-          created_by: string | null
-          created_at: string
+          status: Database["public"]["Enums"]["case_status"]
+          summary: string | null
+          title: string | null
           updated_at: string
         }
         Insert: {
+          active?: boolean
+          area?: string | null
+          bureau?: Database["public"]["Enums"]["bureau"] | null
+          created_at?: string
+          created_by?: string | null
+          icon?: string | null
           id?: string
           name: string
-          icon?: string | null
-          bureau?: Database['public']['Enums']['bureau'] | null
-          title?: string | null
-          summary?: string | null
-          area?: string | null
-          status?: Database['public']['Enums']['case_status']
           sort_order?: number
-          active?: boolean
-          created_by?: string | null
-          created_at?: string
+          status?: Database["public"]["Enums"]["case_status"]
+          summary?: string | null
+          title?: string | null
           updated_at?: string
         }
         Update: {
+          active?: boolean
+          area?: string | null
+          bureau?: Database["public"]["Enums"]["bureau"] | null
+          created_at?: string
+          created_by?: string | null
+          icon?: string | null
           id?: string
           name?: string
-          icon?: string | null
-          bureau?: Database['public']['Enums']['bureau'] | null
-          title?: string | null
-          summary?: string | null
-          area?: string | null
-          status?: Database['public']['Enums']['case_status']
           sort_order?: number
-          active?: boolean
-          created_by?: string | null
-          created_at?: string
+          status?: Database["public"]["Enums"]["case_status"]
+          summary?: string | null
+          title?: string | null
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "case_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cases: {
         Row: {
-          id: string
-          case_number: string
-          title: string | null
-          bureau: Database['public']['Enums']['bureau']
-          status: Database['public']['Enums']['case_status']
-          lead_detective_id: string | null
-          summary: string | null
-          created_by: string | null
-          created_at: string
-          updated_at: string
-          signoff_status: string
-          signoff_stage: string | null
-          signoff_assignee_id: string | null
-          signoff_submitted_by: string | null
-          signoff_submitted_at: string | null
-          closed_at: string | null
           area: string | null
-          last_stale_notified_at: string | null
+          bureau: Database["public"]["Enums"]["bureau"]
+          case_number: string
           charges: Json
+          closed_at: string | null
+          created_at: string
+          created_by: string | null
           follow_up_at: string | null
+          id: string
+          last_stale_notified_at: string | null
+          lead_detective_id: string | null
+          notes: string | null
+          operation_id: string | null
+          signoff_assignee_id: string | null
+          signoff_stage: string | null
+          signoff_status: string
+          signoff_submitted_at: string | null
+          signoff_submitted_by: string | null
+          status: Database["public"]["Enums"]["case_status"]
+          summary: string | null
+          title: string | null
+          updated_at: string
         }
         Insert: {
-          id?: string
-          case_number: string
-          title?: string | null
-          bureau?: Database['public']['Enums']['bureau']
-          status?: Database['public']['Enums']['case_status']
-          lead_detective_id?: string | null
-          summary?: string | null
-          created_by?: string | null
-          created_at?: string
-          updated_at?: string
-          signoff_status?: string
-          signoff_stage?: string | null
-          signoff_assignee_id?: string | null
-          signoff_submitted_by?: string | null
-          signoff_submitted_at?: string | null
-          closed_at?: string | null
           area?: string | null
-          last_stale_notified_at?: string | null
+          bureau?: Database["public"]["Enums"]["bureau"]
+          case_number: string
           charges?: Json
+          closed_at?: string | null
+          created_at?: string
+          created_by?: string | null
           follow_up_at?: string | null
+          id?: string
+          last_stale_notified_at?: string | null
+          lead_detective_id?: string | null
+          notes?: string | null
+          operation_id?: string | null
+          signoff_assignee_id?: string | null
+          signoff_stage?: string | null
+          signoff_status?: string
+          signoff_submitted_at?: string | null
+          signoff_submitted_by?: string | null
+          status?: Database["public"]["Enums"]["case_status"]
+          summary?: string | null
+          title?: string | null
+          updated_at?: string
         }
         Update: {
-          id?: string
-          case_number?: string
-          title?: string | null
-          bureau?: Database['public']['Enums']['bureau']
-          status?: Database['public']['Enums']['case_status']
-          lead_detective_id?: string | null
-          summary?: string | null
-          created_by?: string | null
-          created_at?: string
-          updated_at?: string
-          signoff_status?: string
-          signoff_stage?: string | null
-          signoff_assignee_id?: string | null
-          signoff_submitted_by?: string | null
-          signoff_submitted_at?: string | null
-          closed_at?: string | null
           area?: string | null
-          last_stale_notified_at?: string | null
+          bureau?: Database["public"]["Enums"]["bureau"]
+          case_number?: string
           charges?: Json
+          closed_at?: string | null
+          created_at?: string
+          created_by?: string | null
           follow_up_at?: string | null
+          id?: string
+          last_stale_notified_at?: string | null
+          lead_detective_id?: string | null
+          notes?: string | null
+          operation_id?: string | null
+          signoff_assignee_id?: string | null
+          signoff_stage?: string | null
+          signoff_status?: string
+          signoff_submitted_at?: string | null
+          signoff_submitted_by?: string | null
+          status?: Database["public"]["Enums"]["case_status"]
+          summary?: string | null
+          title?: string | null
+          updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "cases_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cases_lead_detective_id_fkey"
+            columns: ["lead_detective_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cases_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "operations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cases_signoff_assignee_id_fkey"
+            columns: ["signoff_assignee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cases_signoff_submitted_by_fkey"
+            columns: ["signoff_submitted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cid_records: {
         Row: {
-          id: string
-          name: string
+          bureau: string | null
           callsign: string | null
           case_number: string | null
           charges: string | null
-          status: string
-          officer: string | null
-          notes: string | null
-          mugshot_url: string | null
-          gang: string | null
-          bureau: string | null
-          last_seen: string | null
-          created_by: string | null
           created_at: string
+          created_by: string | null
+          gang: string | null
+          id: string
+          last_seen: string | null
+          mugshot_url: string | null
+          name: string
+          notes: string | null
+          officer: string | null
+          status: string
           updated_at: string
         }
         Insert: {
-          id?: string
-          name: string
+          bureau?: string | null
           callsign?: string | null
           case_number?: string | null
           charges?: string | null
-          status?: string
-          officer?: string | null
-          notes?: string | null
-          mugshot_url?: string | null
-          gang?: string | null
-          bureau?: string | null
-          last_seen?: string | null
-          created_by?: string | null
           created_at?: string
+          created_by?: string | null
+          gang?: string | null
+          id?: string
+          last_seen?: string | null
+          mugshot_url?: string | null
+          name: string
+          notes?: string | null
+          officer?: string | null
+          status?: string
           updated_at?: string
         }
         Update: {
-          id?: string
-          name?: string
+          bureau?: string | null
           callsign?: string | null
           case_number?: string | null
           charges?: string | null
-          status?: string
-          officer?: string | null
-          notes?: string | null
-          mugshot_url?: string | null
-          gang?: string | null
-          bureau?: string | null
-          last_seen?: string | null
-          created_by?: string | null
           created_at?: string
+          created_by?: string | null
+          gang?: string | null
+          id?: string
+          last_seen?: string | null
+          mugshot_url?: string | null
+          name?: string
+          notes?: string | null
+          officer?: string | null
+          status?: string
           updated_at?: string
         }
+        Relationships: []
       }
       commendations: {
         Row: {
+          created_at: string
+          created_by: string | null
+          icon: string | null
           id: string
-          title: string
+          note: string | null
           recipient_id: string | null
           recipient_name: string | null
-          note: string | null
-          icon: string | null
           tint: string | null
-          created_by: string | null
-          created_at: string
+          title: string
           updated_at: string
         }
         Insert: {
+          created_at?: string
+          created_by?: string | null
+          icon?: string | null
           id?: string
-          title: string
+          note?: string | null
           recipient_id?: string | null
           recipient_name?: string | null
-          note?: string | null
-          icon?: string | null
           tint?: string | null
-          created_by?: string | null
-          created_at?: string
+          title: string
           updated_at?: string
         }
         Update: {
+          created_at?: string
+          created_by?: string | null
+          icon?: string | null
           id?: string
-          title?: string
+          note?: string | null
           recipient_id?: string | null
           recipient_name?: string | null
-          note?: string | null
-          icon?: string | null
           tint?: string | null
-          created_by?: string | null
-          created_at?: string
+          title?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "commendations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commendations_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       custody_chain: {
         Row: {
-          id: string
+          at: string
           evidence_id: string
           from_officer: string | null
-          to_officer: string | null
+          id: string
           reason: string | null
+          to_officer: string | null
           transferred_by: string | null
-          at: string
         }
         Insert: {
-          id?: string
+          at?: string
           evidence_id: string
           from_officer?: string | null
-          to_officer?: string | null
+          id?: string
           reason?: string | null
+          to_officer?: string | null
           transferred_by?: string | null
-          at?: string
         }
         Update: {
-          id?: string
+          at?: string
           evidence_id?: string
           from_officer?: string | null
-          to_officer?: string | null
+          id?: string
           reason?: string | null
+          to_officer?: string | null
           transferred_by?: string | null
-          at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "custody_chain_evidence_id_fkey"
+            columns: ["evidence_id"]
+            isOneToOne: false
+            referencedRelation: "evidence"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custody_chain_transferred_by_fkey"
+            columns: ["transferred_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       documents: {
         Row: {
-          id: string
-          folder: string
-          name: string
-          kind: Database['public']['Enums']['doc_kind']
-          content: Json | null
           case_id: string | null
-          modified_label: string | null
-          updated_by: string | null
+          content: Json | null
           created_at: string
+          folder: string
+          id: string
+          kind: Database["public"]["Enums"]["doc_kind"]
+          modified_label: string | null
+          name: string
           updated_at: string
+          updated_by: string | null
         }
         Insert: {
-          id?: string
-          folder: string
-          name: string
-          kind?: Database['public']['Enums']['doc_kind']
-          content?: Json | null
           case_id?: string | null
-          modified_label?: string | null
-          updated_by?: string | null
+          content?: Json | null
           created_at?: string
+          folder: string
+          id?: string
+          kind?: Database["public"]["Enums"]["doc_kind"]
+          modified_label?: string | null
+          name: string
           updated_at?: string
+          updated_by?: string | null
         }
         Update: {
-          id?: string
-          folder?: string
-          name?: string
-          kind?: Database['public']['Enums']['doc_kind']
-          content?: Json | null
           case_id?: string | null
-          modified_label?: string | null
-          updated_by?: string | null
+          content?: Json | null
           created_at?: string
+          folder?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["doc_kind"]
+          modified_label?: string | null
+          name?: string
           updated_at?: string
+          updated_by?: string | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "documents_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       documents_versions: {
         Row: {
-          id: string
-          document_id: string
-          name: string | null
-          kind: Database['public']['Enums']['doc_kind'] | null
           content: Json | null
+          document_id: string
+          id: string
+          kind: Database["public"]["Enums"]["doc_kind"] | null
           modified_label: string | null
-          saved_by: string | null
+          name: string | null
           saved_at: string
+          saved_by: string | null
         }
         Insert: {
-          id?: string
-          document_id: string
-          name?: string | null
-          kind?: Database['public']['Enums']['doc_kind'] | null
           content?: Json | null
+          document_id: string
+          id?: string
+          kind?: Database["public"]["Enums"]["doc_kind"] | null
           modified_label?: string | null
-          saved_by?: string | null
+          name?: string | null
           saved_at?: string
+          saved_by?: string | null
         }
         Update: {
-          id?: string
-          document_id?: string
-          name?: string | null
-          kind?: Database['public']['Enums']['doc_kind'] | null
           content?: Json | null
+          document_id?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["doc_kind"] | null
           modified_label?: string | null
-          saved_by?: string | null
+          name?: string | null
           saved_at?: string
+          saved_by?: string | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "documents_versions_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_versions_saved_by_fkey"
+            columns: ["saved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       evidence: {
         Row: {
-          id: string
           case_id: string | null
-          item_code: string | null
-          type: string | null
-          description: string | null
-          collected_by: string | null
           collected_at: string | null
-          location: string | null
-          tamper: Database['public']['Enums']['evidence_tamper']
-          notes: string | null
-          created_by: string | null
+          collected_by: string | null
           created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          item_code: string | null
+          location: string | null
+          notes: string | null
+          tamper: Database["public"]["Enums"]["evidence_tamper"]
+          type: string | null
           updated_at: string
         }
         Insert: {
-          id?: string
           case_id?: string | null
-          item_code?: string | null
-          type?: string | null
-          description?: string | null
-          collected_by?: string | null
           collected_at?: string | null
-          location?: string | null
-          tamper?: Database['public']['Enums']['evidence_tamper']
-          notes?: string | null
-          created_by?: string | null
+          collected_by?: string | null
           created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          item_code?: string | null
+          location?: string | null
+          notes?: string | null
+          tamper?: Database["public"]["Enums"]["evidence_tamper"]
+          type?: string | null
           updated_at?: string
         }
         Update: {
-          id?: string
           case_id?: string | null
-          item_code?: string | null
-          type?: string | null
-          description?: string | null
-          collected_by?: string | null
           collected_at?: string | null
-          location?: string | null
-          tamper?: Database['public']['Enums']['evidence_tamper']
-          notes?: string | null
-          created_by?: string | null
+          collected_by?: string | null
           created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          item_code?: string | null
+          location?: string | null
+          notes?: string | null
+          tamper?: Database["public"]["Enums"]["evidence_tamper"]
+          type?: string | null
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "evidence_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "evidence_collected_by_fkey"
+            columns: ["collected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "evidence_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       feedback: {
         Row: {
+          created_at: string
+          created_by: string | null
+          details: string | null
           id: string
           kind: string
-          title: string
-          details: string | null
           status: string
-          created_by: string | null
-          created_at: string
+          title: string
           updated_at: string
         }
         Insert: {
+          created_at?: string
+          created_by?: string | null
+          details?: string | null
           id?: string
           kind?: string
-          title: string
-          details?: string | null
           status?: string
-          created_by?: string | null
-          created_at?: string
+          title: string
           updated_at?: string
         }
         Update: {
+          created_at?: string
+          created_by?: string | null
+          details?: string | null
           id?: string
           kind?: string
-          title?: string
-          details?: string | null
           status?: string
-          created_by?: string | null
-          created_at?: string
+          title?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "feedback_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       gang_members: {
         Row: {
-          id: string
-          gang_id: string
-          rank_id: string | null
-          person_id: string | null
-          case_id: string | null
-          name: string
           callsign: string | null
+          case_id: string | null
           ccw: boolean | null
-          vch: number | null
-          felony_count: number | null
-          status: string | null
-          mugshot_url: string | null
           created_at: string
-          updated_at: string
+          felony_count: number | null
+          gang_id: string
+          id: string
+          mugshot_url: string | null
+          name: string
+          person_id: string | null
           rank: string | null
+          rank_id: string | null
+          status: string | null
+          updated_at: string
+          vch: number | null
         }
         Insert: {
-          id?: string
-          gang_id: string
-          rank_id?: string | null
-          person_id?: string | null
-          case_id?: string | null
-          name: string
           callsign?: string | null
+          case_id?: string | null
           ccw?: boolean | null
-          vch?: number | null
-          felony_count?: number | null
-          status?: string | null
-          mugshot_url?: string | null
           created_at?: string
-          updated_at?: string
+          felony_count?: number | null
+          gang_id: string
+          id?: string
+          mugshot_url?: string | null
+          name: string
+          person_id?: string | null
           rank?: string | null
+          rank_id?: string | null
+          status?: string | null
+          updated_at?: string
+          vch?: number | null
         }
         Update: {
-          id?: string
-          gang_id?: string
-          rank_id?: string | null
-          person_id?: string | null
-          case_id?: string | null
-          name?: string
           callsign?: string | null
+          case_id?: string | null
           ccw?: boolean | null
-          vch?: number | null
-          felony_count?: number | null
-          status?: string | null
-          mugshot_url?: string | null
           created_at?: string
-          updated_at?: string
+          felony_count?: number | null
+          gang_id?: string
+          id?: string
+          mugshot_url?: string | null
+          name?: string
+          person_id?: string | null
           rank?: string | null
+          rank_id?: string | null
+          status?: string | null
+          updated_at?: string
+          vch?: number | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "gang_members_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gang_members_gang_id_fkey"
+            columns: ["gang_id"]
+            isOneToOne: false
+            referencedRelation: "gangs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gang_members_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gang_members_rank_id_fkey"
+            columns: ["rank_id"]
+            isOneToOne: false
+            referencedRelation: "gang_ranks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       gang_ranks: {
         Row: {
-          id: string
           gang_id: string
+          id: string
           name: string
           sort_order: number | null
         }
         Insert: {
-          id?: string
           gang_id: string
+          id?: string
           name: string
           sort_order?: number | null
         }
         Update: {
-          id?: string
           gang_id?: string
+          id?: string
           name?: string
           sort_order?: number | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "gang_ranks_gang_id_fkey"
+            columns: ["gang_id"]
+            isOneToOne: false
+            referencedRelation: "gangs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       gang_turf: {
         Row: {
-          id: string
-          gang_id: string
           block: string
-          density: Database['public']['Enums']['density']
-          hotspot_area: string | null
           created_at: string
+          density: Database["public"]["Enums"]["density"]
+          gang_id: string
+          hotspot_area: string | null
+          id: string
         }
         Insert: {
-          id?: string
-          gang_id: string
           block: string
-          density?: Database['public']['Enums']['density']
-          hotspot_area?: string | null
           created_at?: string
+          density?: Database["public"]["Enums"]["density"]
+          gang_id: string
+          hotspot_area?: string | null
+          id?: string
         }
         Update: {
-          id?: string
-          gang_id?: string
           block?: string
-          density?: Database['public']['Enums']['density']
-          hotspot_area?: string | null
           created_at?: string
+          density?: Database["public"]["Enums"]["density"]
+          gang_id?: string
+          hotspot_area?: string | null
+          id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "gang_turf_gang_id_fkey"
+            columns: ["gang_id"]
+            isOneToOne: false
+            referencedRelation: "gangs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       gangs: {
         Row: {
+          colors: string | null
+          created_at: string
+          created_by: string | null
           id: string
           name: string
-          colors: string | null
-          threat_level: Database['public']['Enums']['threat_level']
           notes: string | null
-          created_by: string | null
-          created_at: string
+          threat_level: Database["public"]["Enums"]["threat_level"]
           updated_at: string
         }
         Insert: {
+          colors?: string | null
+          created_at?: string
+          created_by?: string | null
           id?: string
           name: string
-          colors?: string | null
-          threat_level?: Database['public']['Enums']['threat_level']
           notes?: string | null
-          created_by?: string | null
-          created_at?: string
+          threat_level?: Database["public"]["Enums"]["threat_level"]
           updated_at?: string
         }
         Update: {
+          colors?: string | null
+          created_at?: string
+          created_by?: string | null
           id?: string
           name?: string
-          colors?: string | null
-          threat_level?: Database['public']['Enums']['threat_level']
           notes?: string | null
-          created_by?: string | null
-          created_at?: string
+          threat_level?: Database["public"]["Enums"]["threat_level"]
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "gangs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       media: {
         Row: {
-          id: string
-          title: string
-          type: Database['public']['Enums']['media_type']
-          storage_path: string | null
-          external_url: string | null
-          kind: string | null
           case_id: string | null
-          gang_id: string | null
-          place_id: string | null
-          person_id: string | null
-          tags: Json | null
-          uploaded_by: string | null
           created_at: string
+          external_url: string | null
+          gang_id: string | null
+          id: string
+          kind: string | null
+          person_id: string | null
+          place_id: string | null
+          storage_path: string | null
+          tags: Json | null
+          title: string
+          type: Database["public"]["Enums"]["media_type"]
           updated_at: string
+          uploaded_by: string | null
         }
         Insert: {
-          id?: string
-          title: string
-          type: Database['public']['Enums']['media_type']
-          storage_path?: string | null
-          external_url?: string | null
-          kind?: string | null
           case_id?: string | null
-          gang_id?: string | null
-          place_id?: string | null
-          person_id?: string | null
-          tags?: Json | null
-          uploaded_by?: string | null
           created_at?: string
+          external_url?: string | null
+          gang_id?: string | null
+          id?: string
+          kind?: string | null
+          person_id?: string | null
+          place_id?: string | null
+          storage_path?: string | null
+          tags?: Json | null
+          title: string
+          type: Database["public"]["Enums"]["media_type"]
           updated_at?: string
+          uploaded_by?: string | null
         }
         Update: {
-          id?: string
-          title?: string
-          type?: Database['public']['Enums']['media_type']
-          storage_path?: string | null
-          external_url?: string | null
-          kind?: string | null
           case_id?: string | null
-          gang_id?: string | null
-          place_id?: string | null
-          person_id?: string | null
-          tags?: Json | null
-          uploaded_by?: string | null
           created_at?: string
+          external_url?: string | null
+          gang_id?: string | null
+          id?: string
+          kind?: string | null
+          person_id?: string | null
+          place_id?: string | null
+          storage_path?: string | null
+          tags?: Json | null
+          title?: string
+          type?: Database["public"]["Enums"]["media_type"]
           updated_at?: string
+          uploaded_by?: string | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "media_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_gang_id_fkey"
+            columns: ["gang_id"]
+            isOneToOne: false
+            referencedRelation: "gangs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       mo_profiles: {
         Row: {
-          id: string
           case_id: string
+          created_at: string
+          id: string
           indicators: Json
           narrative: string | null
-          created_at: string
           updated_at: string
         }
         Insert: {
-          id?: string
           case_id: string
+          created_at?: string
+          id?: string
           indicators?: Json
           narrative?: string | null
-          created_at?: string
           updated_at?: string
         }
         Update: {
-          id?: string
           case_id?: string
+          created_at?: string
+          id?: string
           indicators?: Json
           narrative?: string | null
-          created_at?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "mo_profiles_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       narcotic_hotspots: {
         Row: {
+          area: string
+          case_id: string | null
+          density: Database["public"]["Enums"]["density"]
           id: string
           narcotic_id: string
-          area: string
-          density: Database['public']['Enums']['density']
-          case_id: string | null
           place_id: string | null
         }
         Insert: {
+          area: string
+          case_id?: string | null
+          density?: Database["public"]["Enums"]["density"]
           id?: string
           narcotic_id: string
-          area: string
-          density?: Database['public']['Enums']['density']
-          case_id?: string | null
           place_id?: string | null
         }
         Update: {
+          area?: string
+          case_id?: string | null
+          density?: Database["public"]["Enums"]["density"]
           id?: string
           narcotic_id?: string
-          area?: string
-          density?: Database['public']['Enums']['density']
-          case_id?: string | null
           place_id?: string | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "narcotic_hotspots_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_hotspots_narcotic_id_fkey"
+            columns: ["narcotic_id"]
+            isOneToOne: false
+            referencedRelation: "narcotics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_hotspots_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       narcotic_precursors: {
         Row: {
-          id: string
-          narcotic_id: string
-          name: string
           default_purity: number | null
+          id: string
+          name: string
+          narcotic_id: string
           sort_order: number | null
         }
         Insert: {
-          id?: string
-          narcotic_id: string
-          name: string
           default_purity?: number | null
+          id?: string
+          name: string
+          narcotic_id: string
           sort_order?: number | null
         }
         Update: {
-          id?: string
-          narcotic_id?: string
-          name?: string
           default_purity?: number | null
+          id?: string
+          name?: string
+          narcotic_id?: string
           sort_order?: number | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "narcotic_precursors_narcotic_id_fkey"
+            columns: ["narcotic_id"]
+            isOneToOne: false
+            referencedRelation: "narcotics"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       narcotics: {
         Row: {
+          classification: string | null
+          created_at: string
+          icon: string | null
           id: string
           name: string
-          classification: string | null
-          icon: string | null
           popularity: number | null
           street_price: number | null
-          wholesale_price: number | null
-          created_at: string
           updated_at: string
+          wholesale_price: number | null
         }
         Insert: {
+          classification?: string | null
+          created_at?: string
+          icon?: string | null
           id?: string
           name: string
-          classification?: string | null
-          icon?: string | null
           popularity?: number | null
           street_price?: number | null
-          wholesale_price?: number | null
-          created_at?: string
           updated_at?: string
+          wholesale_price?: number | null
         }
         Update: {
+          classification?: string | null
+          created_at?: string
+          icon?: string | null
           id?: string
           name?: string
-          classification?: string | null
-          icon?: string | null
           popularity?: number | null
           street_price?: number | null
-          wholesale_price?: number | null
-          created_at?: string
           updated_at?: string
+          wholesale_price?: number | null
         }
+        Relationships: []
       }
       notifications: {
         Row: {
+          created_at: string
           id: string
-          user_id: string
-          type: string
           payload: Json | null
           read: boolean
-          created_at: string
+          type: string
+          user_id: string
         }
         Insert: {
+          created_at?: string
           id?: string
-          user_id: string
-          type: string
           payload?: Json | null
           read?: boolean
-          created_at?: string
+          type: string
+          user_id: string
         }
         Update: {
+          created_at?: string
           id?: string
-          user_id?: string
-          type?: string
           payload?: Json | null
           read?: boolean
-          created_at?: string
+          type?: string
+          user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      operations: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       persons: {
         Row: {
-          id: string
-          name: string
           alias: string | null
-          dob: string | null
-          gang_id: string | null
-          ccw: boolean | null
-          vch: number | null
-          felony_count: number | null
-          status: string | null
-          mugshot_url: string | null
-          notes: string | null
-          created_by: string | null
-          created_at: string
-          updated_at: string
-          properties: Json
           bolo: boolean
+          ccw: boolean | null
+          created_at: string
+          created_by: string | null
+          dob: string | null
+          felony_count: number | null
+          gang_id: string | null
+          id: string
+          mugshot_url: string | null
+          name: string
+          notes: string | null
+          properties: Json
+          status: string | null
+          updated_at: string
+          vch: number | null
         }
         Insert: {
-          id?: string
-          name: string
           alias?: string | null
-          dob?: string | null
-          gang_id?: string | null
-          ccw?: boolean | null
-          vch?: number | null
-          felony_count?: number | null
-          status?: string | null
-          mugshot_url?: string | null
-          notes?: string | null
-          created_by?: string | null
-          created_at?: string
-          updated_at?: string
-          properties?: Json
           bolo?: boolean
+          ccw?: boolean | null
+          created_at?: string
+          created_by?: string | null
+          dob?: string | null
+          felony_count?: number | null
+          gang_id?: string | null
+          id?: string
+          mugshot_url?: string | null
+          name: string
+          notes?: string | null
+          properties?: Json
+          status?: string | null
+          updated_at?: string
+          vch?: number | null
         }
         Update: {
-          id?: string
-          name?: string
           alias?: string | null
-          dob?: string | null
-          gang_id?: string | null
-          ccw?: boolean | null
-          vch?: number | null
-          felony_count?: number | null
-          status?: string | null
-          mugshot_url?: string | null
-          notes?: string | null
-          created_by?: string | null
-          created_at?: string
-          updated_at?: string
-          properties?: Json
           bolo?: boolean
+          ccw?: boolean | null
+          created_at?: string
+          created_by?: string | null
+          dob?: string | null
+          felony_count?: number | null
+          gang_id?: string | null
+          id?: string
+          mugshot_url?: string | null
+          name?: string
+          notes?: string | null
+          properties?: Json
+          status?: string | null
+          updated_at?: string
+          vch?: number | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "persons_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "persons_gang_fk"
+            columns: ["gang_id"]
+            isOneToOne: false
+            referencedRelation: "gangs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       place_process_steps: {
         Row: {
+          description: string
           id: string
           place_id: string
           step_order: number | null
-          description: string
         }
         Insert: {
+          description: string
           id?: string
           place_id: string
           step_order?: number | null
-          description: string
         }
         Update: {
+          description?: string
           id?: string
           place_id?: string
           step_order?: number | null
-          description?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "place_process_steps_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       places: {
         Row: {
+          area: string | null
+          case_id: string | null
+          controlling_gang_id: string | null
+          created_at: string
+          created_by: string | null
           id: string
           name: string
-          type: Database['public']['Enums']['location_type']
-          area: string | null
-          controlling_gang_id: string | null
-          case_id: string | null
           narcotic_id: string | null
           notes: string | null
-          created_by: string | null
-          created_at: string
+          type: Database["public"]["Enums"]["location_type"]
           updated_at: string
         }
         Insert: {
+          area?: string | null
+          case_id?: string | null
+          controlling_gang_id?: string | null
+          created_at?: string
+          created_by?: string | null
           id?: string
           name: string
-          type: Database['public']['Enums']['location_type']
-          area?: string | null
-          controlling_gang_id?: string | null
-          case_id?: string | null
           narcotic_id?: string | null
           notes?: string | null
-          created_by?: string | null
-          created_at?: string
+          type: Database["public"]["Enums"]["location_type"]
           updated_at?: string
         }
         Update: {
+          area?: string | null
+          case_id?: string | null
+          controlling_gang_id?: string | null
+          created_at?: string
+          created_by?: string | null
           id?: string
           name?: string
-          type?: Database['public']['Enums']['location_type']
-          area?: string | null
-          controlling_gang_id?: string | null
-          case_id?: string | null
           narcotic_id?: string | null
           notes?: string | null
-          created_by?: string | null
-          created_at?: string
+          type?: Database["public"]["Enums"]["location_type"]
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "places_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "places_controlling_gang_id_fkey"
+            columns: ["controlling_gang_id"]
+            isOneToOne: false
+            referencedRelation: "gangs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "places_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "places_narcotic_fk"
+            columns: ["narcotic_id"]
+            isOneToOne: false
+            referencedRelation: "narcotics"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       predicate_acts: {
         Row: {
-          id: string
-          rico_case_id: string
-          predicate_type: string
           act_date: string | null
+          created_at: string
           evidence_id: string | null
           evidence_ref: string | null
+          id: string
           note: string | null
-          created_at: string
+          predicate_type: string
+          rico_case_id: string
           updated_at: string
         }
         Insert: {
-          id?: string
-          rico_case_id: string
-          predicate_type: string
           act_date?: string | null
+          created_at?: string
           evidence_id?: string | null
           evidence_ref?: string | null
+          id?: string
           note?: string | null
-          created_at?: string
+          predicate_type: string
+          rico_case_id: string
           updated_at?: string
         }
         Update: {
-          id?: string
-          rico_case_id?: string
-          predicate_type?: string
           act_date?: string | null
+          created_at?: string
           evidence_id?: string | null
           evidence_ref?: string | null
+          id?: string
           note?: string | null
-          created_at?: string
+          predicate_type?: string
+          rico_case_id?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "predicate_acts_evidence_id_fkey"
+            columns: ["evidence_id"]
+            isOneToOne: false
+            referencedRelation: "evidence"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predicate_acts_rico_case_id_fkey"
+            columns: ["rico_case_id"]
+            isOneToOne: false
+            referencedRelation: "rico_cases"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
-          id: string
-          email: string | null
-          display_name: string
+          active: boolean
           avatar_url: string | null
           badge_number: string | null
-          division: Database['public']['Enums']['bureau']
-          role: Database['public']['Enums']['app_role']
-          active: boolean
           created_at: string
-          updated_at: string
+          discord_id: string | null
+          display_name: string
+          division: Database["public"]["Enums"]["bureau"]
+          email: string | null
+          id: string
           loa: boolean
           loa_since: string | null
-          discord_id: string | null
+          removed_at: string | null
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at: string
         }
         Insert: {
-          id: string
-          email?: string | null
-          display_name?: string
+          active?: boolean
           avatar_url?: string | null
           badge_number?: string | null
-          division?: Database['public']['Enums']['bureau']
-          role?: Database['public']['Enums']['app_role']
-          active?: boolean
           created_at?: string
-          updated_at?: string
+          discord_id?: string | null
+          display_name?: string
+          division?: Database["public"]["Enums"]["bureau"]
+          email?: string | null
+          id: string
           loa?: boolean
           loa_since?: string | null
-          discord_id?: string | null
+          removed_at?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
         }
         Update: {
-          id?: string
-          email?: string | null
-          display_name?: string
+          active?: boolean
           avatar_url?: string | null
           badge_number?: string | null
-          division?: Database['public']['Enums']['bureau']
-          role?: Database['public']['Enums']['app_role']
-          active?: boolean
           created_at?: string
-          updated_at?: string
+          discord_id?: string | null
+          display_name?: string
+          division?: Database["public"]["Enums"]["bureau"]
+          email?: string | null
+          id?: string
           loa?: boolean
           loa_since?: string | null
-          discord_id?: string | null
+          removed_at?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
         }
+        Relationships: []
       }
       raid_compensations: {
         Row: {
-          id: string
-          case_id: string | null
-          net_value: number
           bracket_pct: number
+          case_id: string | null
+          ci_amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          net_value: number
           primary_amount: number
           support_amount: number
-          ci_amount: number
-          created_by: string | null
-          created_at: string
           updated_at: string
         }
         Insert: {
-          id?: string
-          case_id?: string | null
-          net_value: number
           bracket_pct: number
+          case_id?: string | null
+          ci_amount: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          net_value: number
           primary_amount: number
           support_amount: number
-          ci_amount: number
-          created_by?: string | null
-          created_at?: string
           updated_at?: string
         }
         Update: {
-          id?: string
-          case_id?: string | null
-          net_value?: number
           bracket_pct?: number
+          case_id?: string | null
+          ci_amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          net_value?: number
           primary_amount?: number
           support_amount?: number
-          ci_amount?: number
-          created_by?: string | null
-          created_at?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "raid_compensations_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "raid_compensations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       reports: {
         Row: {
-          id: string
-          case_id: string
-          template: string
-          kind: Database['public']['Enums']['report_kind']
-          seq: number | null
-          parent_id: string | null
           author_id: string | null
+          case_id: string
+          created_at: string
           fields: Json
           finalized: boolean
+          id: string
+          kind: Database["public"]["Enums"]["report_kind"]
+          parent_id: string | null
+          seq: number | null
           signature: Json | null
-          created_at: string
+          template: string
           updated_at: string
         }
         Insert: {
-          id?: string
-          case_id: string
-          template: string
-          kind?: Database['public']['Enums']['report_kind']
-          seq?: number | null
-          parent_id?: string | null
           author_id?: string | null
+          case_id: string
+          created_at?: string
           fields?: Json
           finalized?: boolean
+          id?: string
+          kind?: Database["public"]["Enums"]["report_kind"]
+          parent_id?: string | null
+          seq?: number | null
           signature?: Json | null
-          created_at?: string
+          template: string
           updated_at?: string
         }
         Update: {
-          id?: string
-          case_id?: string
-          template?: string
-          kind?: Database['public']['Enums']['report_kind']
-          seq?: number | null
-          parent_id?: string | null
           author_id?: string | null
+          case_id?: string
+          created_at?: string
           fields?: Json
           finalized?: boolean
+          id?: string
+          kind?: Database["public"]["Enums"]["report_kind"]
+          parent_id?: string | null
+          seq?: number | null
           signature?: Json | null
-          created_at?: string
+          template?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "reports_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       rico_cases: {
         Row: {
-          id: string
           case_id: string
-          enterprise_gang_id: string | null
           created_at: string
+          enterprise_gang_id: string | null
+          id: string
           updated_at: string
         }
         Insert: {
-          id?: string
           case_id: string
-          enterprise_gang_id?: string | null
           created_at?: string
+          enterprise_gang_id?: string | null
+          id?: string
           updated_at?: string
         }
         Update: {
-          id?: string
           case_id?: string
-          enterprise_gang_id?: string | null
           created_at?: string
+          enterprise_gang_id?: string | null
+          id?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "rico_cases_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: true
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rico_cases_enterprise_gang_id_fkey"
+            columns: ["enterprise_gang_id"]
+            isOneToOne: false
+            referencedRelation: "gangs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       shift_reports: {
         Row: {
-          id: string
+          arrests: number
           author_id: string
           author_name: string | null
-          bureau: Database['public']['Enums']['bureau']
-          week_start: string
+          bureau: Database["public"]["Enums"]["bureau"]
           cases_worked: string | null
-          arrests: number
-          evidence_count: number
-          notes: string | null
           created_at: string
+          evidence_count: number
+          id: string
+          notes: string | null
           updated_at: string
+          week_start: string
         }
         Insert: {
-          id?: string
+          arrests?: number
           author_id?: string
           author_name?: string | null
-          bureau: Database['public']['Enums']['bureau']
-          week_start: string
+          bureau: Database["public"]["Enums"]["bureau"]
           cases_worked?: string | null
-          arrests?: number
-          evidence_count?: number
-          notes?: string | null
           created_at?: string
+          evidence_count?: number
+          id?: string
+          notes?: string | null
           updated_at?: string
+          week_start: string
         }
         Update: {
-          id?: string
+          arrests?: number
           author_id?: string
           author_name?: string | null
-          bureau?: Database['public']['Enums']['bureau']
-          week_start?: string
+          bureau?: Database["public"]["Enums"]["bureau"]
           cases_worked?: string | null
-          arrests?: number
-          evidence_count?: number
-          notes?: string | null
           created_at?: string
+          evidence_count?: number
+          id?: string
+          notes?: string | null
           updated_at?: string
+          week_start?: string
         }
+        Relationships: []
       }
       tickets: {
         Row: {
-          id: string
-          ticket_code: string
-          source: string | null
-          description: string | null
-          reported_dept: string | null
-          status: string | null
-          routed_bureau: Database['public']['Enums']['bureau'] | null
           case_id: string | null
-          created_by: string | null
           created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          reported_dept: string | null
+          routed_bureau: Database["public"]["Enums"]["bureau"] | null
+          source: string | null
+          status: string | null
+          ticket_code: string
           updated_at: string
         }
         Insert: {
-          id?: string
-          ticket_code: string
-          source?: string | null
-          description?: string | null
-          reported_dept?: string | null
-          status?: string | null
-          routed_bureau?: Database['public']['Enums']['bureau'] | null
           case_id?: string | null
-          created_by?: string | null
           created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          reported_dept?: string | null
+          routed_bureau?: Database["public"]["Enums"]["bureau"] | null
+          source?: string | null
+          status?: string | null
+          ticket_code: string
           updated_at?: string
         }
         Update: {
-          id?: string
-          ticket_code?: string
-          source?: string | null
-          description?: string | null
-          reported_dept?: string | null
-          status?: string | null
-          routed_bureau?: Database['public']['Enums']['bureau'] | null
           case_id?: string | null
-          created_by?: string | null
           created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          reported_dept?: string | null
+          routed_bureau?: Database["public"]["Enums"]["bureau"] | null
+          source?: string | null
+          status?: string | null
+          ticket_code?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       trackers: {
         Row: {
-          id: string
-          tracker_code: string
-          target: string
-          case_id: string | null
-          bureau: Database['public']['Enums']['bureau']
-          director_sig: string | null
-          deputy_sig: string | null
-          duration_hours: number
           authorized_at: string | null
-          expires_at: string | null
-          status: Database['public']['Enums']['tracker_status']
-          created_by: string | null
+          bureau: Database["public"]["Enums"]["bureau"]
+          case_id: string | null
           created_at: string
+          created_by: string | null
+          deputy_sig: string | null
+          director_sig: string | null
+          duration_hours: number
+          expires_at: string | null
+          id: string
+          status: Database["public"]["Enums"]["tracker_status"]
+          target: string
+          tracker_code: string
           updated_at: string
         }
         Insert: {
-          id?: string
-          tracker_code: string
-          target: string
-          case_id?: string | null
-          bureau?: Database['public']['Enums']['bureau']
-          director_sig?: string | null
-          deputy_sig?: string | null
-          duration_hours?: number
           authorized_at?: string | null
-          expires_at?: string | null
-          status?: Database['public']['Enums']['tracker_status']
-          created_by?: string | null
+          bureau?: Database["public"]["Enums"]["bureau"]
+          case_id?: string | null
           created_at?: string
+          created_by?: string | null
+          deputy_sig?: string | null
+          director_sig?: string | null
+          duration_hours?: number
+          expires_at?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["tracker_status"]
+          target: string
+          tracker_code: string
           updated_at?: string
         }
         Update: {
-          id?: string
-          tracker_code?: string
-          target?: string
-          case_id?: string | null
-          bureau?: Database['public']['Enums']['bureau']
-          director_sig?: string | null
-          deputy_sig?: string | null
-          duration_hours?: number
           authorized_at?: string | null
-          expires_at?: string | null
-          status?: Database['public']['Enums']['tracker_status']
-          created_by?: string | null
+          bureau?: Database["public"]["Enums"]["bureau"]
+          case_id?: string | null
           created_at?: string
+          created_by?: string | null
+          deputy_sig?: string | null
+          director_sig?: string | null
+          duration_hours?: number
+          expires_at?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["tracker_status"]
+          target?: string
+          tracker_code?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "trackers_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trackers_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trackers_deputy_sig_fkey"
+            columns: ["deputy_sig"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trackers_director_sig_fkey"
+            columns: ["director_sig"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vehicles: {
         Row: {
-          id: string
-          plate: string
-          model: string | null
           color: string | null
-          owner_id: string | null
-          gang_id: string | null
-          notes: string | null
-          created_by: string | null
           created_at: string
+          created_by: string | null
+          gang_id: string | null
+          id: string
+          model: string | null
+          notes: string | null
+          owner_id: string | null
+          plate: string
           updated_at: string
         }
         Insert: {
-          id?: string
-          plate: string
-          model?: string | null
           color?: string | null
-          owner_id?: string | null
-          gang_id?: string | null
-          notes?: string | null
-          created_by?: string | null
           created_at?: string
+          created_by?: string | null
+          gang_id?: string | null
+          id?: string
+          model?: string | null
+          notes?: string | null
+          owner_id?: string | null
+          plate: string
           updated_at?: string
         }
         Update: {
-          id?: string
-          plate?: string
-          model?: string | null
           color?: string | null
-          owner_id?: string | null
-          gang_id?: string | null
-          notes?: string | null
-          created_by?: string | null
           created_at?: string
+          created_by?: string | null
+          gang_id?: string | null
+          id?: string
+          model?: string | null
+          notes?: string | null
+          owner_id?: string | null
+          plate?: string
           updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicles_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicles_gang_id_fkey"
+            columns: ["gang_id"]
+            isOneToOne: false
+            referencedRelation: "gangs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicles_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      watchlist: {
+        Row: {
+          created_at: string
+          id: string
+          target_id: string
+          target_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          target_id: string
+          target_type: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          target_id?: string
+          target_type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "watchlist_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      admin_member_emails: {
+        Args: never
+        Returns: {
+          email: string
+          id: string
+        }[]
+      }
+      admin_remove_member: { Args: { p_target: string }; Returns: undefined }
+      admin_restore_member: { Args: { p_target: string }; Returns: undefined }
+      assign_member: {
+        Args: {
+          new_division: Database["public"]["Enums"]["bureau"]
+          new_role: Database["public"]["Enums"]["app_role"]
+          set_active: boolean
+          target: string
+        }
+        Returns: undefined
+      }
+      bootstrap_command: { Args: { p_email: string }; Returns: string }
+      bootstrap_director: { Args: { p_email: string }; Returns: string }
+      create_notification: {
+        Args: { p_payload?: Json; p_type: string; p_user_id: string }
+        Returns: undefined
+      }
+      mo_crossref: {
+        Args: { terms: string[] }
+        Returns: {
+          bureau: Database["public"]["Enums"]["bureau"]
+          case_id: string
+          case_number: string
+          shared: string[]
+        }[]
+      }
+      report_finalize: {
+        Args: { p_badge?: string; p_report: string }
+        Returns: {
+          author_id: string | null
+          case_id: string
+          created_at: string
+          fields: Json
+          finalized: boolean
+          id: string
+          kind: Database["public"]["Enums"]["report_kind"]
+          parent_id: string | null
+          seq: number | null
+          signature: Json | null
+          template: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "reports"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      search_all: {
+        Args: { q: string }
+        Returns: {
+          id: string
+          kind: string
+          label: string
+          rank: number
+          sublabel: string
+          term: string
+        }[]
+      }
+      signoff_decide: {
+        Args: { p_case: string; p_decision: string; p_note?: string }
+        Returns: {
+          area: string | null
+          bureau: Database["public"]["Enums"]["bureau"]
+          case_number: string
+          charges: Json
+          closed_at: string | null
+          created_at: string
+          created_by: string | null
+          follow_up_at: string | null
+          id: string
+          last_stale_notified_at: string | null
+          lead_detective_id: string | null
+          notes: string | null
+          operation_id: string | null
+          signoff_assignee_id: string | null
+          signoff_stage: string | null
+          signoff_status: string
+          signoff_submitted_at: string | null
+          signoff_submitted_by: string | null
+          status: Database["public"]["Enums"]["case_status"]
+          summary: string | null
+          title: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cases"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      signoff_owner_action: {
+        Args: { p_action: string; p_case: string }
+        Returns: {
+          area: string | null
+          bureau: Database["public"]["Enums"]["bureau"]
+          case_number: string
+          charges: Json
+          closed_at: string | null
+          created_at: string
+          created_by: string | null
+          follow_up_at: string | null
+          id: string
+          last_stale_notified_at: string | null
+          lead_detective_id: string | null
+          notes: string | null
+          operation_id: string | null
+          signoff_assignee_id: string | null
+          signoff_stage: string | null
+          signoff_status: string
+          signoff_submitted_at: string | null
+          signoff_submitted_by: string | null
+          status: Database["public"]["Enums"]["case_status"]
+          summary: string | null
+          title: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cases"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      signoff_submit: {
+        Args: { p_case: string }
+        Returns: {
+          area: string | null
+          bureau: Database["public"]["Enums"]["bureau"]
+          case_number: string
+          charges: Json
+          closed_at: string | null
+          created_at: string
+          created_by: string | null
+          follow_up_at: string | null
+          id: string
+          last_stale_notified_at: string | null
+          lead_detective_id: string | null
+          notes: string | null
+          operation_id: string | null
+          signoff_assignee_id: string | null
+          signoff_stage: string | null
+          signoff_status: string
+          signoff_submitted_at: string | null
+          signoff_submitted_by: string | null
+          status: Database["public"]["Enums"]["case_status"]
+          summary: string | null
+          title: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cases"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
     }
-    Views: Record<string, never>
-    Functions: {
-      assign_member: { Args: { target: string; new_role: Database['public']['Enums']['app_role']; new_division: Database['public']['Enums']['bureau'] | null; set_active: boolean }; Returns: undefined }
-      mo_crossref: { Args: { terms: string[] }; Returns: Json }
-      report_finalize: { Args: { p_report: string; p_badge: string }; Returns: undefined }
-      signoff_submit: { Args: { p_case: string }; Returns: undefined }
-      signoff_decide: { Args: { p_case: string; p_decision: string; p_note: string }; Returns: undefined }
-      signoff_owner_action: { Args: { p_case: string; p_action: string }; Returns: undefined }
-    }
     Enums: {
-      app_role: 'detective' | 'supervisor' | 'director' | 'command' | 'senior_detective' | 'bureau_lead' | 'deputy_director'
-      assign_role: 'primary' | 'support'
-      bench_type: 'street' | 'organized'
-      bureau: 'LSB' | 'BCB' | 'SAB' | 'JTF'
-      case_status: 'open' | 'active' | 'cold' | 'closed'
-      density: 'low' | 'medium' | 'high'
-      doc_kind: 'doc' | 'sheet' | 'pdf' | 'zip'
-      evidence_tamper: 'intact' | 'compromised' | 'released' | 'destroyed'
-      location_type: 'drug_lab' | 'stash_house' | 'dead_drop' | 'front_business' | 'chop_shop'
-      media_type: 'image' | 'video' | 'fivemanage' | 'document'
-      report_kind: 'initial' | 'supplemental' | 'followup'
-      threat_level: 'low' | 'medium' | 'high'
-      tracker_status: 'pending' | 'authorized' | 'expired'
+      app_role:
+        | "detective"
+        | "supervisor"
+        | "director"
+        | "command"
+        | "senior_detective"
+        | "bureau_lead"
+        | "deputy_director"
+      assign_role: "primary" | "support"
+      bench_type: "street" | "organized"
+      bureau: "LSB" | "BCB" | "SAB" | "JTF"
+      case_status: "open" | "active" | "cold" | "closed"
+      density: "low" | "medium" | "high"
+      doc_kind: "doc" | "sheet" | "pdf" | "zip"
+      evidence_tamper: "intact" | "compromised" | "released" | "destroyed"
+      location_type:
+        | "drug_lab"
+        | "stash_house"
+        | "dead_drop"
+        | "front_business"
+        | "chop_shop"
+      media_type: "image" | "video" | "fivemanage" | "document"
+      report_kind: "initial" | "supplemental" | "followup"
+      threat_level: "low" | "medium" | "high"
+      tracker_status: "pending" | "authorized" | "expired"
     }
-    CompositeTypes: Record<string, never>
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
 }
 
-export type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row']
-export type TablesInsert<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Insert']
-export type TablesUpdate<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Update']
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      app_role: [
+        "detective",
+        "supervisor",
+        "director",
+        "command",
+        "senior_detective",
+        "bureau_lead",
+        "deputy_director",
+      ],
+      assign_role: ["primary", "support"],
+      bench_type: ["street", "organized"],
+      bureau: ["LSB", "BCB", "SAB", "JTF"],
+      case_status: ["open", "active", "cold", "closed"],
+      density: ["low", "medium", "high"],
+      doc_kind: ["doc", "sheet", "pdf", "zip"],
+      evidence_tamper: ["intact", "compromised", "released", "destroyed"],
+      location_type: [
+        "drug_lab",
+        "stash_house",
+        "dead_drop",
+        "front_business",
+        "chop_shop",
+      ],
+      media_type: ["image", "video", "fivemanage", "document"],
+      report_kind: ["initial", "supplemental", "followup"],
+      threat_level: ["low", "medium", "high"],
+      tracker_status: ["pending", "authorized", "expired"],
+    },
+  },
+} as const

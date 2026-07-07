@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Legacy vanilla app (main's live code, frozen on this branch during the
+    // React rebuild — root-level classic scripts, not part of the Next.js app):
+    "*.js",
+    // Supabase edge functions are Deno code with their own conventions:
+    "supabase/functions/**",
   ]),
 ]);
 
