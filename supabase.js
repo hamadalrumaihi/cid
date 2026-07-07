@@ -45,7 +45,8 @@
     },
     removeAllChannels() { try { if (client && client.removeAllChannels) client.removeAllChannels(); } catch (e) {} },
     role() { return this.me ? this.me.role : null; },
-    // "Command staff" = Bureau Lead and above (member administration, audit, deletes).
+    // "Command staff" = Bureau Lead and above (member administration, deletes).
+    // (The audit log is owner-only, not a command power — see audit_sel RLS.)
     // Director is the supreme role; deputy_director and bureau_lead share command authority.
     isAdmin() { return !!this.me && this.me.active && ['bureau_lead', 'deputy_director', 'director'].includes(this.me.role); },
     canDelete() { return this.isAdmin(); },
