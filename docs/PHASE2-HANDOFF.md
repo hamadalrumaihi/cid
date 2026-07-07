@@ -1,6 +1,6 @@
 # React Rebuild Handoff - Phase 3 in progress
 
-Last updated: 2026-07-08 (personnel slice pass).
+Last updated: 2026-07-08 (announce slice pass).
 
 This branch is `react-rebuild`. The repo root is the Next.js 16 app. The
 legacy root static files (`index.html`, root `*.js`, `styles.css`) remain inert
@@ -23,10 +23,12 @@ Companion source of truth: `docs/REACT-PARITY.md`.
   `e24463c feat(rebuild): add my desk inbox slice`.
 - The `command` / Central Command slice was committed and pushed as
   `311a88d feat(rebuild): add central command dashboard slice`.
-- The `personnel` / Roster & Member Admin slice has an implementation pass in
-  this handoff state (see "Personnel slice delivered" below).
-- Live browser verification for Phase 2, inbox, command, and personnel is
-  still pending.
+- The `personnel` / Roster & Member Admin slice was committed and pushed as
+  `d849b77 feat(rebuild): add personnel roster and member admin slice`.
+- The `announce` / Announcements slice has an implementation pass in this
+  handoff state (see "Announce slice delivered" below).
+- Live browser verification for Phase 2, inbox, command, personnel, and
+  announce is still pending.
 
 ## Phase 2 delivered
 
@@ -148,6 +150,31 @@ Intentionally lean, tracked in `docs/REACT-PARITY.md`:
   strike-point/headcount visuals) lands with the `sops` doc engine slice.
 - Pending-approval nav badge lands with the Notifications cross-cut.
 
+## Announce slice delivered
+
+Implemented `/announce` in `src/components/announce/`, wired through the
+`[tab]` dispatcher:
+
+- Announcement cards: pinned-first amber sort, audience scoping to the
+  viewer's division, author/date/audience meta, mention + case-link chips,
+  line-clamped body.
+- Per-user dismiss (✕) and restore-all, on the same `annDismissed` Store key
+  as vanilla; `annSeen` stamped on view for the future unread badge.
+- Read modal with mention chips, full body, and linked-record navigation
+  (case links deep-link to `/cases?case=<id>`).
+- Post/edit/delete modal, gated to LEAD_ROLES (client UX; RLS enforces):
+  title/message, audience select, pin-to-top, @mention picker (All Officers /
+  role groups / individual officers), link-case picker (recent 30, slim
+  projection), token chips.
+- Notification fan-out on FIRST post only via the forgery-guarded
+  `create_notification` RPC + best-effort discord-notify: audience-scoped
+  active roster minus the author; mentioned officers join even outside the
+  audience and get a "You were mentioned" reason.
+
+Intentionally lean, tracked in `docs/REACT-PARITY.md`:
+
+- The announce unread nav badge lands with the Notifications cross-cut.
+
 Implemented shared/data support:
 
 - `db.ts` list projections, `.in`, `updateWhere` CAS predicates, null ordering,
@@ -199,6 +226,15 @@ Personnel slice additions to that checklist:
 - Manage modal: change role/bureau on a test-safe account and revert.
 - Award, edit, and delete (with undo restore) one commendation.
 
+Announce slice additions to that checklist:
+
+- Post an announcement (command account), confirm the notification lands for
+  another member, then delete the announcement and the test notification.
+- Dismiss + restore an announcement; confirm `annDismissed` carries over
+  between the vanilla app and the rebuild on the same browser.
+- Pinned announcement sorts to the top with amber styling.
+- Case link chip in the read modal deep-links to the case detail.
+
 Known local dev-server note:
 
 - Hidden attempts to start port `3777` did not leave a server running.
@@ -235,10 +271,10 @@ views. Done views (implementation passes; live verification pending):
 - `inbox`
 - `command`
 - `personnel`
+- `announce`
 
 Unchecked views remaining:
 
-- `announce` - announcements, pin/delete, notification fan-out.
 - `heatmap` - commander heatmap.
 - `case-files` - per-case attachments and FiveManage upload.
 - `rico` - standalone RICO tracker route and export.
@@ -304,13 +340,11 @@ Do not cut over to `main` until all of these are true:
 
 ## Suggested next patch order
 
-1. Finish live browser QA (Phase 2 + inbox + command + personnel) and update
-   `docs/REACT-PARITY.md` with results.
-2. Tackle `announce`, because it starts the notifications fan-out cross-cut
-   (post/pin/delete gated to LEAD_ROLES, create_notification fan-out).
-3. Tackle `persons`, because it is the heaviest Intelligence view and seeds
-   the card-paging/watchlist patterns the other intel views reuse.
-4. Continue one view per patch, keeping each patch gated and live-verified.
+1. Finish live browser QA (Phase 2 + inbox + command + personnel + announce)
+   and update `docs/REACT-PARITY.md` with results.
+2. Tackle `persons`, because it is the heaviest Intelligence view and seeds
+   the card-paging/watchlist/dossier patterns the other intel views reuse.
+3. Continue one view per patch, keeping each patch gated and live-verified.
 
 ## Prompt for the next LLM
 
@@ -337,9 +371,10 @@ Committed baseline:
   `e24463c feat(rebuild): add my desk inbox slice`.
 - Command / Central Command is pushed as
   `311a88d feat(rebuild): add central command dashboard slice`.
-- Personnel / Roster & Member Admin has been implemented after that baseline
-  (src/components/personnel/, src/components/shell/MyProfileModal.tsx,
-  db.ts updateNoSelect, wired in src/app/(app)/[tab]/page.tsx).
+- Personnel / Roster & Member Admin is pushed as
+  `d849b77 feat(rebuild): add personnel roster and member admin slice`.
+- Announce / Announcements has been implemented after that baseline
+  (src/components/announce/, wired in src/app/(app)/[tab]/page.tsx).
 
 Current completed implementation passes:
 - Phase 1 app shell/auth.
@@ -347,15 +382,17 @@ Current completed implementation passes:
 - Oversight `inbox` / My Desk.
 - Command `command` / Central Command dashboard.
 - Command `personnel` / Roster, Member Admin & Commendations.
+- Command `announce` / Announcements + first-post notification fan-out.
 
 Known local junk to ignore unless the user explicitly asks otherwise:
 - `.serena/`
 - `bash.exe.stackdump`
 
 Next recommended slice:
-- `announce` / Announcements, because it starts the notifications fan-out
-  cross-cut: post/pin/delete gated to LEAD_ROLES, notification fan-out via
-  the forgery-guarded `create_notification` RPC + discord-notify invoke.
+- `persons` / Persons of Interest, because it is the heaviest Intelligence
+  view and seeds patterns the other intel views reuse: paged card grid
+  (24/page), warrants lifecycle, BOLO flag, watch/follow beyond cases,
+  intel profile slide-over, dossier export, mugshots via `safeUrl`.
 
 Before changing code:
 - Read `docs/REACT-PARITY.md` and this handoff.

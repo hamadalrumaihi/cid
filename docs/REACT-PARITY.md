@@ -33,8 +33,9 @@ route ids but the legacy `reports` route has no section and falls back to `cases
       **Live browser verification still pending**; several dense vanilla subflows are
       intentionally lean in React v1 and called out below.
 - [ ] **Phase 3+** — one view per patch (order below). Done so far: `inbox` (My Desk),
-      `command` (Central Command), and `personnel` (Roster & Member Admin)
-      implementation passes, gates green; live browser verification still pending.
+      `command` (Central Command), `personnel` (Roster & Member Admin), and `announce`
+      (Announcements) implementation passes, gates green; live browser verification
+      still pending.
 
 ### Owner actions (infrastructure)
 - [x] Supabase Auth redirect allow-list: `http://localhost:3777/**` added
@@ -65,7 +66,15 @@ route ids but the legacy `reports` route has no section and falls back to `cases
       (pins + recents); encourage widget (session dismiss). **Lean in v1**: ticket table
       sort/paging waits on the Data-table engine; CSV/XLSX/JSON bulk import on "+ New"
       waits on the Imports cross-cut.
-- [ ] **announce** — Announcements: post/pin/delete (LEAD_ROLES gate), notification fan-out.
+- [x] **announce** — implementation pass (live browser verification pending):
+      announcement cards (pinned amber-first sort, audience scoping to my division,
+      mention/link chips); per-user dismiss + restore-all on the vanilla `annDismissed`
+      Store key; `annSeen` stamped for the future unread badge; read modal with linked-
+      record navigation; post/edit/delete modal (LEAD_ROLES gate) with audience select,
+      pin, @mentions (all/role/officer) and case links; **notification fan-out on first
+      post only** via `create_notification` (mentioned officers get "You were mentioned"
+      and join even outside the audience). **Lean in v1**: the announce unread nav badge
+      lands with the Notifications cross-cut.
 - [ ] **heatmap** — Commander heatmap (stylized SA map, incident density).
 - [x] **personnel** — implementation pass (live browser verification pending): roster
       cards (LOA state, badge/bureau/status tiles, 30/page load-more); self LOA toggle +
