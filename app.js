@@ -313,61 +313,32 @@
       node.innerHTML = `<div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-bold text-white">Search “${esc(q)}”</h3><button aria-label="Close" class="close-x text-slate-400 hover:text-white text-2xl leading-none">&times;</button></div><div id="search-results" class="space-y-4"><p class="text-sm text-slate-500">Searching…</p></div>`;
       node.querySelector('.close-x').onclick = closeModal;
       openModal(node, { wide: true });
-      const like = '%' + q + '%';
-      const run = (tbl, cols, col) => DB().from(tbl).select('*').or(cols.map((c) => `${c}.ilike.${like}`).join(',')).limit(8).then((r) => r.data || []).catch(() => []);
-      const [cases, persons, gangs, places, narcotics, benches, footprints, docs, vehicles] = await Promise.all([
-        run('cases', ['case_number', 'title', 'summary']),
-        run('persons', ['name', 'alias', 'status']),
-        run('gangs', ['name', 'colors', 'notes']),
-        run('places', ['name', 'area']),
-        run('narcotics', ['name', 'classification']),
-        run('ballistics_benches', ['name']),
-        run('ballistic_footprints', ['signature', 'weapon']),
-        run('documents', ['name']),
-        run('vehicles', ['plate', 'model', 'color', 'notes']),
-      ]);
+      // Deep search via the Postgres FTS RPC (pg_trgm): fuzzy/typo-tolerant,
+      // relevance-ranked, RLS-filtered per caller, in one round-trip.
+      const rows = await DB().rpc('search_all', { q }).then((r) => r.data || []).catch(() => []);
+      const of = (k) => rows.filter((r) => r.kind === k);
+      const cases = of('case'), persons = of('person'), gangs = of('gang'), places = of('place'), vehicles = of('vehicle'), narcotics = of('narcotic'), docs = of('document');
       // Charges are static reference data — filter the in-memory penal catalog.
       const charges = (typeof PENAL_CODE !== 'undefined' ? PENAL_CODE : []).filter((c) => (c.code + ' ' + c.title + ' ' + c.level + ' ' + (c.desc || '')).toLowerCase().includes(q.toLowerCase())).slice(0, 10);
       // Benches + footprints share the Ballistics section, distinguished by icon.
-      const ballistics = benches.map((b) => ({ kind: 'bench', label: b.name, sub: b.tier ? 'Tier ' + b.tier + ' bench' : 'Weapon bench' }))
-        .concat(footprints.map((f) => ({ kind: 'footprint', label: f.signature, sub: [f.weapon].filter(Boolean).join(' · ') || 'Ballistic footprint' })));
+      const ballistics = rows.filter((r) => r.kind === 'bench' || r.kind === 'footprint');
       const sec = (title, items, fmt) => items.length ? `<div><p class="mb-1 text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">${title} (${items.length})</p><div class="space-y-1">${items.map(fmt).join('')}</div></div>` : '';
       const goto = (tab, term, inner) => `<button class="sr sr-goto block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-tab="${tab}"${term ? ` data-term="${esc(term)}"` : ''}>${inner}</button>`;
+      const muted = (s) => s ? ` <span class="text-slate-500">${esc(s)}</span>` : '';
       const box = node.querySelector('#search-results');
       const html = [
-        sec('Cases', cases, (c) => `<button class="sr sr-case block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-id="${c.id}"><span class="font-mono text-blue-300">${esc(c.case_number)}</span> · ${esc(c.title || '')}</button>`),
-        sec('Persons', persons, (p) => goto('persons', p.name, `${esc(p.name)}${p.alias ? ' “' + esc(p.alias) + '”' : ''}`)),
-        sec('Gangs', gangs, (g) => goto('gangs', g.name, `🚩 ${esc(g.name)}`)),
-        sec('Places', places, (p) => goto('places', p.name, `📍 ${esc(p.name)} <span class="text-slate-500">${esc(p.area || '')}</span>`)),
-        sec('Vehicles', vehicles, (v) => goto('vehicles', '', `\ud83d\ude97 <span class="font-mono">${esc(v.plate)}</span> ${esc(v.model || '')} <span class="text-slate-500">${esc(v.color || '')}</span>`)),
-        sec('Narcotics', narcotics, (n) => goto('narcotics', n.name, `💊 ${esc(n.name)}${n.classification ? ' <span class="text-slate-500">' + esc(n.classification) + '</span>' : ''}`)),
-        sec('Ballistics', ballistics, (b) => goto('ballistics', '', `${b.kind === 'bench' ? '🔫' : '🧬'} ${esc(b.label || '')} <span class="text-slate-500">${esc(b.sub || '')}</span>`)),
-        sec('Documents', docs, (d) => `<button class="sr sr-doc block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-id="${esc(d.id)}">📄 ${esc(d.name)} <span class="text-slate-500">${esc(d.folder || '')}</span></button>`),
+        sec('Cases', cases, (c) => `<button class="sr sr-case block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-id="${esc(c.id)}">📁 <span class="font-mono text-blue-300">${esc(c.label)}</span>${muted(c.sublabel)}</button>`),
+        sec('Persons', persons, (r) => goto('persons', r.term, `👤 ${esc(r.label)}${muted(r.sublabel)}`)),
+        sec('Gangs', gangs, (r) => goto('gangs', r.term, `🚩 ${esc(r.label)}${muted(r.sublabel)}`)),
+        sec('Places', places, (r) => goto('places', r.term, `📍 ${esc(r.label)}${muted(r.sublabel)}`)),
+        sec('Vehicles', vehicles, (r) => goto('vehicles', '', `\ud83d\ude97 <span class="font-mono">${esc(r.label)}</span>${muted(r.sublabel)}`)),
+        sec('Narcotics', narcotics, (r) => goto('narcotics', r.term, `💊 ${esc(r.label)}${muted(r.sublabel)}`)),
+        sec('Ballistics', ballistics, (r) => goto('ballistics', '', `${r.kind === 'bench' ? '🔫' : '🧬'} ${esc(r.label)}${muted(r.sublabel)}`)),
+        sec('Documents', docs, (d) => `<button class="sr sr-doc block w-full rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5" data-id="${esc(d.id)}">📄 ${esc(d.label)}${muted(d.sublabel)}</button>`),
         sec('Charges', charges, (c) => `<div class="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm text-slate-200">⚖️ <span class="font-mono text-blue-300">${esc(c.code)}</span> ${esc(c.title)} <span class="text-slate-500">· ${esc(c.level)} · ${penalSentence(c.jail)}${c.fine != null ? ' · ' + fmtUSD(c.fine) : ''}</span></div>`),
       ].join('');
-      // Typo-tolerant fallback: when nothing matched, suggest close names from the
-      // client caches (one-edit or subsequence matches).
-      let fuzzyHtml = '';
-      if (!html) {
-        const ql = q.toLowerCase();
-        const close = (a, b) => {
-          if (!a) return false; a = a.toLowerCase();
-          if (a.includes(b)) return true;
-          if (Math.abs(a.length - b.length) > 1) return sub(b, a);
-          let i = 0, j = 0, edits = 0;
-          while (i < a.length && j < b.length) { if (a[i] === b[j]) { i++; j++; } else { edits++; if (edits > 1) break; if (a.length > b.length) i++; else if (a.length < b.length) j++; else { i++; j++; } } }
-          return (edits + (a.length - i) + (b.length - j)) <= 1 || sub(b, a);
-        };
-        const sub = (needle, hay) => { let i = 0; for (const ch of hay) { if (ch === needle[i]) i++; if (i === needle.length) return true; } return needle.length >= 4 && i >= needle.length; };
-        const sugg = [];
-        (typeof PERSONS !== 'undefined' ? PERSONS : []).forEach((p) => { if (close(p.name, ql) || close(p.alias, ql)) sugg.push({ tab: 'persons', term: p.name, label: '\ud83d\udc64 ' + p.name }); });
-        (typeof GANGS !== 'undefined' ? GANGS : []).forEach((g) => { if (close(g.name, ql)) sugg.push({ tab: 'gangs', term: g.name, label: '\ud83d\udea9 ' + g.name }); });
-        (typeof casesCache !== 'undefined' ? casesCache : []).forEach((c) => { if (close(c.title, ql) || close(c.case_number, ql)) sugg.push({ tab: 'cases', term: '', label: '\ud83d\udcc2 ' + c.case_number + ' \u00b7 ' + (c.title || '') }); });
-        (typeof VEHICLES !== 'undefined' ? VEHICLES : []).forEach((v) => { if (close(v.plate, ql)) sugg.push({ tab: 'vehicles', term: '', label: '\ud83d\ude97 ' + v.plate }); });
-        if (sugg.length) fuzzyHtml = sec('Close matches \u2014 did you mean\u2026', sugg.slice(0, 8), (x) => goto(x.tab, x.term || '', esc(x.label)));
-      }
       const recentsBar = recents.length > 1 ? `<div class="border-t border-white/5 pt-3"><p class="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Recent searches</p><div class="flex flex-wrap gap-1.5">${recents.slice(1).map((r) => `<button class="sr-recent rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-300 transition hover:bg-white/10" data-q="${esc(r)}">${esc(r)}</button>`).join('')}</div></div>` : '';
-      box.innerHTML = (html || fuzzyHtml || '<p class="text-sm text-slate-500">No matches across cases, persons, gangs, places, vehicles, narcotics, ballistics, documents or charges.</p>') + recentsBar;
+      box.innerHTML = (html || '<p class="text-sm text-slate-500">No matches across cases, persons, gangs, places, vehicles, narcotics, ballistics, documents or charges.</p>') + recentsBar;
       box.querySelectorAll('.sr-recent').forEach((b) => b.onclick = () => { closeModal(); supaSearch(b.dataset.q); });
       box.querySelectorAll('.sr-case').forEach((b) => b.onclick = () => { closeModal(); navigate('cases'); setTimeout(() => openCaseDetail(b.dataset.id), 120); });
       box.querySelectorAll('.sr-doc').forEach((b) => b.onclick = () => { closeModal(); const d = (typeof DOCS !== 'undefined' ? DOCS : []).find((x) => x.id === b.dataset.id); if (d && typeof reopenDoc === 'function') reopenDoc(d, null); });
