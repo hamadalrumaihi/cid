@@ -150,7 +150,7 @@
       const named = (id) => (typeof officerName === 'function' && officerName(id)) || 'System';
       const rows = AUDIT_LOG.filter((r) => !q || [r.action, r.entity, r.entity_id, named(r.actor_id), JSON.stringify(r.detail || '')].join(' ').toLowerCase().includes(q));
       wrap.innerHTML = `<div class="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <div class="mb-3 flex flex-wrap items-center justify-between gap-2"><span class="text-xs text-slate-400">${AUDIT_LOG.length} total${q ? ' · ' + rows.length + ' match' + (rows.length === 1 ? '' : 'es') : ''}</span><input id="audit-search" value="${esc(q)}" placeholder="Filter action / entity / officer…" class="w-60 rounded-lg border border-white/10 bg-ink-900 px-3 py-1.5 text-xs text-white outline-none focus:border-badge-500" /></div>
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2"><span class="text-xs text-slate-400">${AUDIT_LOG.length} total${q ? ' · ' + rows.length + ' match' + (rows.length === 1 ? '' : 'es') : ''}</span><input id="audit-search" type="search" value="${esc(q)}" placeholder="Filter action / entity / officer…" class="w-60 rounded-lg border border-white/10 bg-ink-900 px-3 py-1.5 text-xs text-white outline-none focus:border-badge-500" /></div>
         <div id="audit-table"></div>
       </div>`;
       renderDataTable($('#audit-table'), {
