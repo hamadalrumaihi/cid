@@ -101,7 +101,8 @@
         personsNotice(PERSONS.length ? 'No persons match your filter.' : 'NO PERSONS ON FILE // INDEX EMPTY.' + (DB() && DB().canEdit() ? ' Use “+ New Person”.' : '')); return;
       }
       grid.innerHTML = '';
-      items.forEach((p, i) => {
+      const pg = cardPage('persons', items, q, 24);
+      pg.slice.forEach((p, i) => {
         const flag = (p.felony_count || 0) >= 8;
         const card = el('div', { class: 'person-card rounded-2xl border border-white/5 bg-ink-900/60 p-5' });
         card.style.setProperty('--i', String(i));
@@ -127,6 +128,7 @@
         const chk = card.querySelector('.p-check'); if (chk) chk.onchange = () => { if (chk.checked) personSel.add(p.id); else personSel.delete(p.id); updatePersonBulkBar(); };
         grid.appendChild(card);
       });
+      pg.appendControl(grid, renderPersons);
       updatePersonBulkBar();
     }
     function openPersonModal(record, prefill) {

@@ -15,7 +15,8 @@
       g.innerHTML = '';
       const myId = (DB() && DB().me) ? DB().me.id : null;
       const admin = DB() && DB().isAdmin();
-      roster.forEach((p) => {
+      const pg = cardPage('roster', roster, '', 30);
+      pg.slice.forEach((p) => {
         const init = (p.display_name || '?').split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
         const isMe = myId && p.id === myId;
         const roleLabel = (typeof ROLE_LABEL !== 'undefined' && ROLE_LABEL[p.role]) || p.role;
@@ -44,6 +45,7 @@
         };
         g.appendChild(card);
       });
+      pg.appendControl(g, renderRoster);
     }
 
     /* ---- Commendations (Supabase) ---- */

@@ -40,7 +40,8 @@
       const addBtn = $('#add-gang'); if (addBtn) addBtn.classList.toggle('hidden', !(DB() && DB().canEdit()));
       if (!items.length) { gangsNotice(GANGS.length ? 'No gangs match your filter.' : 'No gangs on file.' + (DB() && DB().canEdit() ? ' Use “+ New Gang”.' : '')); return; }
       grid.innerHTML = '';
-      items.forEach((g) => {
+      const pg = cardPage('gangs', items, q, 24);
+      pg.slice.forEach((g) => {
         const card = el('div', { class: 'cursor-pointer rounded-2xl border border-white/5 bg-ink-900/60 p-6 transition hover:border-blue-500/30 hover:bg-white/5' });
         card.innerHTML = `
           <div class="flex flex-wrap items-start justify-between gap-3">
@@ -58,6 +59,7 @@
         const gchk = card.querySelector('.g-check'); if (gchk) { gchk.addEventListener('click', (e) => e.stopPropagation()); gchk.onchange = () => { if (gchk.checked) gangSel.add(g.id); else gangSel.delete(g.id); updateGangBulkBar(); }; }
         grid.appendChild(card);
       });
+      pg.appendControl(grid, renderGangs);
       updateGangBulkBar();
     }
     function openGangModal(record) {
