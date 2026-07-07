@@ -440,7 +440,21 @@
     // Debounce: collapse rapid input/sync bursts into one call (perf, #10).
     const debounce = (fn, ms = 200) => { let t; return function () { const a = arguments, c = this; clearTimeout(t); t = setTimeout(() => fn.apply(c, a), ms); }; };
 
+    // Map raw Postgres/PostgREST error text to human copy so DB internals never
+    // surface in a toast (audit M6: "permission denied for table profiles"). Any
+    // message without a known pattern passes through unchanged.
+    function humanizeError(message) {
+      const s = String(message == null ? '' : message);
+      if (/permission denied|row-level security|not authorized|violates .*(policy|row-level)/i.test(s)) return 'You don’t have permission to do that.';
+      if (/duplicate key|already exists|23505/i.test(s)) return 'That already exists — use a unique value.';
+      if (/foreign key|23503|still referenced/i.test(s)) return 'That’s still linked to other records and can’t be removed yet.';
+      if (/\bJWT\b|not authenticated|invalid (token|claim)|token .*expired/i.test(s)) return 'Your session expired — please sign in again.';
+      if (/could not find .*column|column .* does not exist|schema cache|PGRST\d+/i.test(s)) return 'Something didn’t save correctly — please retry.';
+      if (/fetch|network|failed to load|connection/i.test(s)) return 'Connection problem — check your network and retry.';
+      return s;
+    }
     function toast(message, type = 'info') {
+      message = humanizeError(message);
       const colors = { info:'border-blue-500/30 bg-blue-500/10 text-blue-200', success:'border-emerald-500/30 bg-emerald-500/10 text-emerald-200', warn:'border-amber-500/30 bg-amber-500/10 text-amber-200', danger:'border-rose-500/30 bg-rose-500/10 text-rose-200' };
       const icons = { info:'ℹ️', success:'✅', warn:'⚠️', danger:'🚨' };
       const t = el('div', { class: `flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium shadow-glow backdrop-blur-xl ${colors[type] || colors.info}` }, `<span>${icons[type] || icons.info}</span><span>${esc(message)}</span>`);

@@ -797,3 +797,11 @@ body { background: radial-gradient(circle at 50% 20%, #10151d 0%, #06090d 100%);
 .sop-fe-bar { display: flex; gap: .5rem; margin-top: .55rem; }
 .sop-fe-add { font-family: var(--mono); font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: #94a3b8; border: 1px solid rgba(148,163,184,.2); border-radius: 2px; padding: 4px 10px; transition: all .15s ease; }
 .sop-fe-add:hover { color: #fff; border-color: var(--t-cyan); background: rgba(34,211,238,.06); }
+
+/* Phase 1 legibility (audit C2): lift the two low-contrast grey TEXT utilities
+   one step lighter (slate-500 -> slate-400, slate-600 -> slate-500) so small
+   secondary labels — timestamps, record IDs, readouts — clear WCAG AA on the
+   dark theme. Text color only; bg-/border- of the same scale are untouched, and
+   opacity variants (e.g. text-slate-500/70) are separate classes and unaffected. */
+.text-slate-500{color:#94a3b8}
+.text-slate-600{color:#64748b}
