@@ -1,6 +1,9 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { PAGE_META } from '@/lib/nav'
 import { ViewPlaceholder } from '@/components/ViewPlaceholder'
+import { CasesView } from '@/components/cases/CasesView'
+import { OperationsView } from '@/components/operations/OperationsView'
 
 /** One route per leaf tab. Placeholder views are replaced slice-by-slice as
  *  each vanilla view is ported (see docs/REACT-PARITY.md for the order). */
@@ -11,9 +14,23 @@ export function generateStaticParams() {
 
 export default async function TabPage({ params }: { params: Promise<{ tab: string }> }) {
   const { tab } = await params
-  // Vanilla navigate() fallbacks (core.js:909-915): the legacy 'reports' leaf
-  // folded into the case detail → cases; anything unknown → command.
+  // Vanilla navigate() fallbacks: the legacy reports leaf folded into cases;
+  // anything unknown falls back to command.
   if (tab === 'reports') redirect('/cases')
   if (!(tab in PAGE_META)) redirect('/command')
+  if (tab === 'cases') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="cases" />}>
+        <CasesView />
+      </Suspense>
+    )
+  }
+  if (tab === 'operations') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="operations" />}>
+        <OperationsView />
+      </Suspense>
+    )
+  }
   return <ViewPlaceholder tab={tab} />
 }

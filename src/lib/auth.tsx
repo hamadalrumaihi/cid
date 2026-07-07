@@ -17,6 +17,7 @@ import type { Session } from '@supabase/supabase-js'
 import { isConfigured, supabase } from './supabase'
 import type { Database } from './database.types'
 import { isCommandRole } from './roles'
+import { resetRealtime } from './realtime'
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row']
 
@@ -93,6 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // different account on a shared browser doesn't inherit state.
       setProfile(null)
       try { supabase().removeAllChannels() } catch { /* no channels yet */ }
+      resetRealtime()
       setState('out')
       return
     }

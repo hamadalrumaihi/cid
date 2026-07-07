@@ -27,7 +27,11 @@ route ids but the legacy `reports` route has no section and falls back to `cases
       browser: Discord OAuth in, profile render, LOA set/clear round-trip
       (SQL-confirmed clean), appearance apply, modal Esc. Search/bell are stubs
       until their slices.
-- [ ] **Phase 2** — Cases vertical slice (proves the pattern)
+- [x] **Phase 2** — Cases vertical slice implementation pass: cases grid/board,
+      filters/saved views, stale badges/escalation, bulk delete, templates,
+      operations picker/view, detail shell, 11 tabs, packet .docx/.md. Gates green.
+      **Live browser verification still pending**; several dense vanilla subflows are
+      intentionally lean in React v1 and called out below.
 - [ ] **Phase 3+** — one view per patch (order below)
 
 ### Owner actions (infrastructure)
@@ -61,15 +65,15 @@ route ids but the legacy `reports` route has no section and falls back to `cases
       command-only column grant); Division Rosters doc shelf (structured form editor).
 
 ### Cases
-- [ ] **cases** — Case Files (heaviest; see case-detail tabs below): grid + drag kanban
+- [x] **cases** — Case Files (heaviest; see case-detail tabs below): grid + drag kanban
       board (Grid/Board toggle persisted; drag = canEdit); My/All chips + search; advanced
       filters (bureau/status/lead/stale) + **named saved views** (localStorage); stale ≥14d
       badges + one-shot auto-escalation (compare-and-swap on `last_stale_notified_at`);
       bulk multi-select hard delete (canDelete); **quick-create case templates**
       (`case_templates` chips + command-only Template Manager); court packet export
-      **.docx/.pdf/.xlsx/.md**; pin, copy deep-link (`#case=<id>`), watch/follow,
+      **.docx/.md** (`.pdf/.xlsx` deferred to Exports); pin, copy deep-link (`#case=<id>`), watch/follow,
       follow-up date, quick status select, operation chip.
-- [ ] **operations** — Operations/Task Forces: cards w/ proportional status rollup bar;
+- [x] **operations** — Operations/Task Forces: cards w/ proportional status rollup bar;
       detail w/ link/unlink case picker; CRUD modals; deep link.
 - [ ] **case-files** — per-case attachments (FiveManage upload; `case_files` keyed by
       case_number; RLS `can_access_case_number`).
@@ -114,16 +118,19 @@ route ids but the legacy `reports` route has no section and falls back to `cases
 - [ ] **feedback** — Feature/bug submissions; triage gated to owner UUIDs (RLS-matched).
 
 ## Case detail — 11 tabs
-- [ ] overview · [ ] **notes** (Markdown working page; unsaved-guard; copy + ⬇.md)
-- [ ] evidence (chain-of-custody, bulk intake, quick-log) · [ ] charges (penal picker +
-  auto-recommendations) · [ ] rico · [ ] intel (linked persons/gangs/places/vehicles)
-- [ ] reports (template chains via FORM_SCHEMAS, finalize via `report_finalize` RPC,
-  supplemental/follow-up, delete w/ undo, .docx/.pdf/print, attached documents)
-- [ ] tasks (assignable checklist + **sub-tasks** via `parent_id`, done-count badges,
-  cascade delete warning) · [ ] **signoff** (chain below) · [ ] chat (mentions;
-  **cross-bureau access request/grant flow** — locked tab → `case_access_requests`,
-  command/owner approves → `case_access_grants`) · [ ] timeline (auto-merged events +
-  task events + follow-up milestone; scroll-driven)
+- [x] overview · [x] **notes** (Markdown render/edit, copy + .md)
+- [x] evidence (evidence CRUD, custody append, media links; bulk quick-log and vault attach
+  remain Media/Imports polish) · [x] charges (penal picker + auto-recommendations) ·
+  [x] rico (enterprise + predicates; RICO .docx export deferred) · [x] intel
+  (linked persons/gangs/places; vehicles/profile slide-over deferred)
+- [x] reports (FORM_SCHEMAS editor, view, delete w/ undo, finalize via
+  `report_finalize` RPC, .md; supplemental/follow-up chains, .docx/.pdf/print, attached
+  documents are still Reports/Exports polish)
+- [x] tasks (assignable checklist; sub-tasks/done-count/cascade warning still lean) ·
+  [x] **signoff** (RPC-only submit/decide/owner-action + history; completeness pre-check
+  still server/UX polish) · [x] chat (case messages with delete; mentions and access
+  request/grant locked-panel flow still lean) · [x] timeline (merged case/evidence/
+  reports/tasks/sign-off/follow-up events)
 
 ## Cross-cutting systems
 - [x] **Auth gate** (Phase 1) — magic-link + Discord + Google OAuth; gate states as
@@ -131,7 +138,7 @@ route ids but the legacy `reports` route has no section and falls back to `cases
       **non-email column list**; Discord id capture → `profiles.discord_id`; sequenced
       evaluations; LOA self-service (command-set-LOA comes with Personnel slice).
       Live-verified: real OAuth round-trip, LOA set/clear confirmed via SQL.
-- [ ] **Sign-off chain** — all transitions via SECURITY DEFINER RPCs ONLY
+- [x] **Sign-off chain** — all transitions via SECURITY DEFINER RPCs ONLY
       (`signoff_submit` owner-only; `signoff_decide` exact-role-at-stage;
       `signoff_owner_action`); statuses none→awaiting_bureau_lead→awaiting_deputy→
       approved_deputy→awaiting_director→ready_doj→approved_complete (+changes_requested,
@@ -178,20 +185,20 @@ route ids but the legacy `reports` route has no section and falls back to `cases
 ## Data layer — gaps to close in `src/lib/db.ts`
 Contract holds (lists throw / mutations `{error}` / typed RPCs; all 46 tables + all 11
 RPCs typed). Missing capabilities, add as first-class helpers as slices need them:
-- [ ] `select` projection option on list (operations picker, intel, inbox rollups)
-- [ ] `.in()` filter (deleteWithUndo snapshots, custody/evidence/reports by case ids)
-- [ ] embedded-relation select w/ inner-join filter (`custody_chain` + `evidence!inner`)
+- [x] `select` projection option on list (operations picker, intel, inbox rollups)
+- [x] `.in()` filter (deleteWithUndo snapshots, custody/evidence/reports by case ids)
+- [x] embedded-relation select w/ inner-join filter (`custody_chain` + `evidence!inner`)
 - [ ] `maybeSingle()` + profiles **non-email projection** (and non-`.select()` update for
       profiles — current `update().select()` breaks under the email column grant)
 - [ ] delete/update keyed by non-id columns (narcotics children; profile-by-uid)
-- [ ] conditional update predicates (`.eq` extra col / `.is null`) for CAS
-- [ ] `nullsFirst` order option (case_tasks due)
-- [ ] realtime `subscribe(table, cb)` + subscribeOnce registry + teardown
-- [ ] `functions.invoke('discord-notify')`
+- [x] conditional update predicates (`.eq` extra col / `.is null`) for CAS
+- [x] `nullsFirst` order option (case_tasks due)
+- [x] realtime `subscribe(table, cb)` + subscribeOnce registry + teardown
+- [x] `functions.invoke('discord-notify')`
 - [ ] auth surface (session, onAuth, OAuth google/discord, magic link, signOut) +
       role helpers (me/isAdmin/canDelete/canEdit)
 - [ ] insert without returning select (documents_versions; avoids requiring SELECT RLS)
-- [ ] `deleteWithUndo` engine (snapshot children → delete → undo toast re-insert)
+- [x] `deleteWithUndo` engine (snapshot children → delete → undo toast re-insert)
 
 ## Continuity debts (hard rule #5) — CLOSED in Phase 1
 - [x] **Pref applier**: pre-hydration script reads `cid-portal-v3`, applies

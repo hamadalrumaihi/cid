@@ -1,9 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
-
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
-const jetbrains = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains' })
 
 export const metadata: Metadata = {
   title: 'CID Portal — Criminal Investigation Division | State of San Andreas',
@@ -38,7 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body
         suppressHydrationWarning
-        className={`${inter.variable} ${jetbrains.variable} font-sans antialiased selection:bg-blue-500/30`}
+        className="font-sans antialiased selection:bg-blue-500/30"
       >
         <script dangerouslySetInnerHTML={{ __html: PREF_APPLIER }} />
         {children}
