@@ -63,7 +63,14 @@
       return r.data || [];
     },
     insert(table, row) { return client.from(table).insert(row).select(); },
-    update(table, id, patch) { return client.from(table).update(patch).eq('id', id).select(); },
+    update(table, id, patch) {
+      var q = client.from(table).update(patch).eq('id', id);
+      // profiles.email is column-restricted to command; returning * would be
+      // denied for the authenticated role, so return the non-email columns.
+      return table === 'profiles'
+        ? q.select('id,display_name,avatar_url,badge_number,division,role,active,created_at,updated_at,loa,loa_since,discord_id,removed_at')
+        : q.select();
+    },
     remove(table, id) { return client.from(table).delete().eq('id', id); },
     rpc(fn, args) { return client.rpc(fn, args); },
     subscribe(table, cb) {
