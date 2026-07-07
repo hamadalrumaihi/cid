@@ -901,3 +901,9 @@ body[data-accent="rose"] .focus\:ring-badge-500\/30:focus{--tw-ring-color:rgb(24
 body[data-accent="rose"] .to-blue-700\/5{--tw-gradient-to:rgb(190 18 60 / .05) var(--tw-gradient-to-position)}
 body[data-accent="rose"] .from-blue-500{--tw-gradient-from:rgb(244 63 94) var(--tw-gradient-from-position);--tw-gradient-to:rgb(244 63 94 / 0) var(--tw-gradient-to-position);--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to)}
 body[data-accent="rose"] .from-blue-500\/20{--tw-gradient-from:rgb(244 63 94 / .2) var(--tw-gradient-from-position);--tw-gradient-to:rgb(244 63 94 / 0) var(--tw-gradient-to-position);--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to)}
+
+/* Skeleton loaders (audit M3): a self-contained shimmer so first-load shows
+   placeholders instead of a blank grid / plain "Loading…". */
+@keyframes cid-skel{0%,100%{opacity:.9}50%{opacity:.4}}
+.skel{animation:cid-skel 1.4s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){ .skel{animation:none} }

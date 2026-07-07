@@ -10,6 +10,7 @@
     async function fetchGangs() {
       if (!dbReady()) { gangsNotice('Live gang records require sign-in.'); return; }
       $('#gangs-live').classList.remove('hidden'); $('#gangs-live').classList.add('inline-flex');
+      if (!GANGS.length) skeletonCards($('#gang-grid'), 4);
       try { GANGS = await DB().list('gangs', { order: 'name', ascending: true }); renderGangs(); }
       catch (e) { gangsNotice('Could not load gangs: ' + escapeHTML(e.message || String(e))); }
     }

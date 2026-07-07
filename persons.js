@@ -63,6 +63,7 @@
     async function fetchPersons() {
       if (!dbReady()) { personsNotice('Live person records require sign-in.'); return; }
       $('#persons-live').classList.remove('hidden'); $('#persons-live').classList.add('inline-flex');
+      if (!PERSONS.length) skeletonCards($('#persons-grid'), 6);
       try { PERSONS = await DB().list('persons', { order: 'updated_at', ascending: false }); renderPersons(); }
       catch (e) { personsNotice('Could not load persons: ' + escapeHTML(e.message || String(e))); }
     }

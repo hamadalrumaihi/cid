@@ -784,6 +784,19 @@
        header/pager click so the caller re-renders. Columns:
          { key, label, cell(row)->html, sortVal(row)->comparable?, mono, nowrap,
            align:'right'?, tint? }.  Density: 'comfortable' (default) | 'compact'. */
+    /* ---- Skeleton loaders (audit M3) -----------------------------------------
+       Fill a grid/table with pulsing placeholders during the first data fetch,
+       instead of a blank area. Replaced by the real render when data arrives. */
+    function skeletonCards(grid, count) {
+      if (!grid) return;
+      const card = '<div class="skel rounded-2xl border border-white/5 bg-ink-900/60 p-5"><div class="flex items-center gap-3"><div class="h-12 w-12 flex-shrink-0 rounded-xl bg-white/10"></div><div class="min-w-0 flex-1"><div class="mb-2 h-3 w-2/3 rounded bg-white/10"></div><div class="h-2.5 w-1/2 rounded bg-white/5"></div></div></div><div class="mt-4 h-2.5 w-full rounded bg-white/5"></div></div>';
+      grid.innerHTML = new Array(count || 6).fill(card).join('');
+    }
+    function skeletonTable(mount, count) {
+      if (!mount) return;
+      const row = '<div class="skel flex items-center gap-3 px-3 py-2.5"><div class="h-3 w-24 rounded bg-white/10"></div><div class="h-3 w-28 rounded bg-white/5"></div><div class="h-3 w-16 rounded bg-white/10"></div><div class="h-3 flex-1 rounded bg-white/5"></div></div>';
+      mount.innerHTML = '<div class="divide-y divide-white/5 rounded-lg border border-white/5">' + new Array(count || 8).fill(row).join('') + '</div>';
+    }
     /* ---- Lazy loaders for the export libraries (audit M4) --------------------
        jsPDF (~350KB) and SheetJS (~900KB) are only needed for .pdf/.xlsx
        export/import. They no longer load at startup; each is fetched on first

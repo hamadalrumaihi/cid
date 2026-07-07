@@ -135,6 +135,7 @@
     function onEnterAudit() { if (dbReady()) fetchAuditLog(); else renderAuditLog(); }
     async function fetchAuditLog() {
       if (!dbReady() || !canViewAudit()) { renderAuditLog(); return; }
+      if (!AUDIT_LOG.length) skeletonTable($('#audit-panel'), 8);
       try { AUDIT_LOG = await DB().list('audit_log', { order: 'created_at', ascending: false }); } catch (e) { AUDIT_LOG = []; }
       renderAuditLog();
     }

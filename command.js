@@ -160,7 +160,7 @@
       renderKPIs();
     }
 
-    async function fetchTickets() { if (!dbReady()) { renderTickets(); return; } try { TICKETS_CACHE = await DB().list('tickets', { order: 'created_at', ascending: false }); } catch (e) { toast('Could not load the ticket queue — check your connection.', 'danger'); } renderTickets(); }
+    async function fetchTickets() { if (!dbReady()) { renderTickets(); return; } if (!TICKETS_CACHE.length) skeletonTable($('#ticket-table'), 6); try { TICKETS_CACHE = await DB().list('tickets', { order: 'created_at', ascending: false }); } catch (e) { toast('Could not load the ticket queue — check your connection.', 'danger'); } renderTickets(); }
     let ticketState = { sortKey: null, sortDir: 'asc', page: 0 };
     function renderTickets() {
       const mount = $('#ticket-table'); if (!mount) return;
