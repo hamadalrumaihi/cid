@@ -129,9 +129,9 @@
       openModal(node);
     }
 
-    /* ---- Audit Log viewer (own tab; Bureau Lead and above) ---- */
+    /* ---- Audit Log viewer (own tab; owner-only, server-enforced by audit_sel RLS) ---- */
     let AUDIT_LOG = [];
-    function canViewAudit() { const me = DB() && DB().me; return !!(me && me.active && typeof CMD_ROLES !== 'undefined' && CMD_ROLES.includes(me.role)); }
+    function canViewAudit() { return typeof isAuditOwner === 'function' && isAuditOwner(); }
     function onEnterAudit() { if (dbReady()) fetchAuditLog(); else renderAuditLog(); }
     async function fetchAuditLog() {
       if (!dbReady() || !canViewAudit()) { renderAuditLog(); return; }
@@ -141,7 +141,7 @@
     function renderAuditLog() {
       const wrap = $('#audit-panel'); if (!wrap) return;
       if (!dbReady()) { wrap.innerHTML = '<p class="text-sm text-slate-500">Sign in to view the audit log.</p>'; return; }
-      if (!canViewAudit()) { wrap.innerHTML = '<p class="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-amber-200">Restricted — the audit log is accessible to Bureau Lead and above.</p>'; return; }
+      if (!canViewAudit()) { wrap.innerHTML = '<p class="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-amber-200">Restricted — the audit log is owner-only.</p>'; return; }
       const q = ($('#audit-search') ? $('#audit-search').value : '').trim().toLowerCase();
       const named = (id) => (typeof officerName === 'function' && officerName(id)) || 'System';
       const rows = AUDIT_LOG.filter((r) => !q || [r.action, r.entity, r.entity_id, named(r.actor_id), JSON.stringify(r.detail || '')].join(' ').toLowerCase().includes(q)).slice(0, 200);

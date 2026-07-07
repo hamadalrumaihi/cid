@@ -699,7 +699,7 @@
       heatmap:    { title: 'Commander Heatmap', sub: 'Gang turf, places, raids & case concentration by area' },
       inbox:      { title: 'My Desk', sub: 'Everything waiting on you — sign-off, overdue cases, mentions & draft reports' },
       shifts:     { title: 'Weekly Shift Reports', sub: 'Detective activity rolled up to bureau leadership' },
-      audit:      { title: 'Audit Log', sub: 'Division-wide action history (Bureau Lead and above)' },
+      audit:      { title: 'Audit Log', sub: 'Division-wide action history (owner-only)' },
       feedback:   { title: 'Feedback', sub: 'Suggest a feature or report a bug' },
       vehicles:   { title: 'Vehicle Registry', sub: 'Plates, owners & cross-case matches' },
       bolo:       { title: 'BOLO Board', sub: 'At-large subjects — be on the lookout' },
@@ -758,12 +758,17 @@
       const view = $('.view.active');
       return view && view.id ? view.id.replace(/^view-/, '') : Store.get('tab', 'command');
     }
+    // Audit log is owner-only (server-enforced by the audit_sel RLS policy).
+    // This gates the UI to match: the sub-tab is hidden and the view shows a
+    // restricted notice for anyone who isn't the owner.
+    const AUDIT_OWNER_ID = '25466146-c512-4497-8ee8-88cbf3b1d22d';
+    const isAuditOwner = () => { const me = DB() && DB().me; return !!(me && me.active && me.id === AUDIT_OWNER_ID); };
     function renderSubtabs(activeTab, cat) {
       const bar = $('#subtabs'); if (!bar) return;
       const def = NAV_CATEGORIES.find((c) => c.id === cat);
       if (!def) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
       bar.classList.remove('hidden');
-      bar.innerHTML = def.tabs.map((t) => {
+      bar.innerHTML = def.tabs.filter((t) => t !== 'audit' || isAuditOwner()).map((t) => {
         const on = t === activeTab;
         return `<button class="subtab flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition ${on ? 'bg-blue-500/15 text-white shadow-[inset_0_-2px_0_0_#3b82f6]' : 'text-slate-400 hover:bg-white/5 hover:text-white'}" data-tab="${t}" role="tab" aria-selected="${on}">${esc(TAB_LABEL[t] || t)}</button>`;
       }).join('');
