@@ -27,7 +27,7 @@
   <title>CID Portal — Criminal Investigation Division | State of San Andreas</title>
 
   <!-- Tailwind CSS — precompiled & inlined (production-safe, offline, no runtime warning) -->
-    <link rel="stylesheet" href="styles.css?v=20260708m" />
+    <link rel="stylesheet" href="styles.css?v=20260708n" />
 
   <!-- Typefaces -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -653,12 +653,10 @@
 
   <!-- Supabase JS client (public CDN, version-pinned) for the live CID Records system -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.108.2"></script>
-  <!-- jsPDF (public CDN) for report PDF export; gracefully optional if offline -->
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-  <!-- SheetJS (official CDN) for Excel (.xlsx) import/export; gracefully optional if offline.
-       Served from cdn.sheetjs.com, the authoritative source — npm's xlsx@0.18.5 is no longer
-       maintained and carries known advisories (CVE-2023-30533 prototype pollution + ReDoS). -->
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <!-- jsPDF (report PDF export) and SheetJS (Excel import/export) are loaded
+       on demand at their call sites (see ensureJsPDF/ensureXLSX in core.js), so
+       ~1.2MB of export libraries no longer block app startup. SheetJS is pinned
+       to cdn.sheetjs.com 0.20.3 (npm's xlsx@0.18.5 carries CVE-2023-30533). -->
   <script>
     /* ============================================================================
      *  SUPABASE CONFIG — public values, safe to commit. Anon/publishable key is
@@ -680,37 +678,37 @@
   </script>
 
   <!-- ===== APPLICATION JS (feature-split classic scripts; shared global scope, load order matters) ===== -->
-  <script src="supabase.js?v=20260708m"></script>
-  <script src="roles.js?v=20260708m"></script>
-  <script src="core.js?v=20260708m"></script>
-  <script src="penal.js?v=20260708m"></script>
-  <script src="casefiles.js?v=20260708m"></script>
-  <script src="command.js?v=20260708m"></script>
-  <script src="narcotics.js?v=20260708m"></script>
-  <script src="ballistics.js?v=20260708m"></script>
-  <script src="personnel.js?v=20260708m"></script>
-  <script src="modus.js?v=20260708m"></script>
-  <script src="drive.js?v=20260708m"></script>
-  <script src="persons.js?v=20260708m"></script>
-  <script src="gangs.js?v=20260708m"></script>
-  <script src="intel.js?v=20260708m"></script>
-  <script src="places.js?v=20260708m"></script>
-  <script src="network.js?v=20260708m"></script>
-  <script src="reports.js?v=20260708m"></script>
-  <script src="rico.js?v=20260708m"></script>
-  <script src="docx.js?v=20260708m"></script>
-  <script src="records.js?v=20260708m"></script>
-  <script src="signoff.js?v=20260708m"></script>
-  <script src="inbox.js?v=20260708m"></script>
-  <script src="collab.js?v=20260708m"></script>
-  <script src="heatmap.js?v=20260708m"></script>
-  <script src="shifts.js?v=20260708m"></script>
-  <script src="fivemanage.js?v=20260708m"></script>
-  <script src="vehicles.js?v=20260708m"></script>
-  <script src="watchlist.js?v=20260708m"></script>
-  <script src="feedback.js?v=20260708m"></script>
-  <script src="app.js?v=20260708m"></script>
-  <script src="auth.js?v=20260708m"></script>
+  <script src="supabase.js?v=20260708n"></script>
+  <script src="roles.js?v=20260708n"></script>
+  <script src="core.js?v=20260708n"></script>
+  <script src="penal.js?v=20260708n"></script>
+  <script src="casefiles.js?v=20260708n"></script>
+  <script src="command.js?v=20260708n"></script>
+  <script src="narcotics.js?v=20260708n"></script>
+  <script src="ballistics.js?v=20260708n"></script>
+  <script src="personnel.js?v=20260708n"></script>
+  <script src="modus.js?v=20260708n"></script>
+  <script src="drive.js?v=20260708n"></script>
+  <script src="persons.js?v=20260708n"></script>
+  <script src="gangs.js?v=20260708n"></script>
+  <script src="intel.js?v=20260708n"></script>
+  <script src="places.js?v=20260708n"></script>
+  <script src="network.js?v=20260708n"></script>
+  <script src="reports.js?v=20260708n"></script>
+  <script src="rico.js?v=20260708n"></script>
+  <script src="docx.js?v=20260708n"></script>
+  <script src="records.js?v=20260708n"></script>
+  <script src="signoff.js?v=20260708n"></script>
+  <script src="inbox.js?v=20260708n"></script>
+  <script src="collab.js?v=20260708n"></script>
+  <script src="heatmap.js?v=20260708n"></script>
+  <script src="shifts.js?v=20260708n"></script>
+  <script src="fivemanage.js?v=20260708n"></script>
+  <script src="vehicles.js?v=20260708n"></script>
+  <script src="watchlist.js?v=20260708n"></script>
+  <script src="feedback.js?v=20260708n"></script>
+  <script src="app.js?v=20260708n"></script>
+  <script src="auth.js?v=20260708n"></script>
 
   
 </body>

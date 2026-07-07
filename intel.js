@@ -233,7 +233,7 @@
           const d = await gatherPersonDossier(id);
           let ok = true;
           if (b.dataset.fmt === 'docx') downloadDocx('Person Dossier — ' + (d.person.name || ''), dossierParas(d.person, d), 'dossier-' + String(d.person.name || 'person').replace(/[^a-z0-9]/gi, '-') + '.docx');
-          else ok = dossierPdf(d.person, d);
+          else { await ensureJsPDF(); ok = dossierPdf(d.person, d); }
           if (ok) { toast('Dossier exported (.' + b.dataset.fmt + ')', 'success'); closeModal(); } else m.textContent = '';
         } catch (e) { m.textContent = 'Export failed: ' + (e.message || e); }
       });

@@ -616,10 +616,11 @@
       node.querySelector('.close-x').onclick = closeModal;
       const ta = node.querySelector('#imp-text'), msg = node.querySelector('#imp-msg');
       const tpl = node.querySelector('#imp-tpl'); if (tpl) tpl.onclick = () => { if (typeof downloadCsv === 'function') downloadCsv(String(cfg.label).replace(/\s+/g, '-') + '-template.csv', cfg.allow, []); };
-      node.querySelector('#imp-file').onchange = (e) => {
+      node.querySelector('#imp-file').onchange = async (e) => {
         const f = e.target.files[0]; if (!f) return;
         const isXlsx = /\.(xlsx|xls)$/i.test(f.name);
         if (isXlsx) {
+          await ensureXLSX();
           if (!window.XLSX) { msg.innerHTML = '<span class="text-rose-300">Excel library unavailable (offline). Use CSV/JSON.</span>'; return; }
           const rd = new FileReader();
           rd.onload = () => { try { const wb = window.XLSX.read(rd.result, { type: 'array' }); ta.value = window.XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]); msg.textContent = 'Loaded sheet "' + wb.SheetNames[0] + '" — review then Import.'; } catch (err) { msg.innerHTML = '<span class="text-rose-300">Could not read workbook.</span>'; } };
@@ -783,6 +784,23 @@
        header/pager click so the caller re-renders. Columns:
          { key, label, cell(row)->html, sortVal(row)->comparable?, mono, nowrap,
            align:'right'?, tint? }.  Density: 'comfortable' (default) | 'compact'. */
+    /* ---- Lazy loaders for the export libraries (audit M4) --------------------
+       jsPDF (~350KB) and SheetJS (~900KB) are only needed for .pdf/.xlsx
+       export/import. They no longer load at startup; each is fetched on first
+       use at the call site. On failure the downstream `if (!window.jspdf)` /
+       `if (!window.XLSX)` guards show the graceful offline toast. */
+    const _loadedScripts = {};
+    function loadScript(src) {
+      if (_loadedScripts[src]) return _loadedScripts[src];
+      _loadedScripts[src] = new Promise((resolve, reject) => {
+        const s = document.createElement('script'); s.src = src; s.async = true;
+        s.onload = () => resolve(); s.onerror = () => { _loadedScripts[src] = null; reject(new Error('script load failed: ' + src)); };
+        document.head.appendChild(s);
+      });
+      return _loadedScripts[src];
+    }
+    function ensureJsPDF() { return window.jspdf ? Promise.resolve() : loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js').catch(() => {}); }
+    function ensureXLSX() { return window.XLSX ? Promise.resolve() : loadScript('https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js').catch(() => {}); }
     function copyId(full) {
       const s = String(full == null ? '' : full);
       if (!s) return '';
