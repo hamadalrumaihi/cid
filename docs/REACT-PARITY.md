@@ -21,9 +21,24 @@ route ids but the legacy `reports` route has no section and falls back to `cases
 - [x] **Step 0** — rebased onto main f592234; live types regenerated; gates green
       (`tsc --noEmit` / `eslint` / `next build`); anon RLS probe verified
       (`cases` → 200 `[]`, `search_all` callable, RLS-scoped).
-- [ ] **Phase 1** — app shell (auth gate, two-tier nav, modal, toasts, route guards)
+- [x] **Phase 1** — app shell: auth gate (all 6 states), two-tier nav + drawer +
+      bottom bar + collapse, modal/dialog/toast primitives, appearance, route
+      placeholders + legacy-hash shim, continuity fixes. Live-verified in a real
+      browser: Discord OAuth in, profile render, LOA set/clear round-trip
+      (SQL-confirmed clean), appearance apply, modal Esc. Search/bell are stubs
+      until their slices.
 - [ ] **Phase 2** — Cases vertical slice (proves the pattern)
 - [ ] **Phase 3+** — one view per patch (order below)
+
+### Owner actions (infrastructure)
+- [x] Supabase Auth redirect allow-list: `http://localhost:3777/**` added
+      (2026-07-07) — OAuth used to bounce to the Site URL (vanilla prod).
+- [ ] Add the react-rebuild Vercel **preview URL pattern** to the same allow-list
+      before preview testing, and the production domain at cutover.
+- Found along the way (vanilla, `main`): console error `cannot add
+  postgres_changes callbacks for realtime:rt_cases after subscribe()` from
+  supabase.js:79 via inbox.js onAuthed re-registration — pre-existing, not
+  caused by the rebuild; fix on `main` separately.
 
 ---
 
@@ -111,10 +126,11 @@ route ids but the legacy `reports` route has no section and falls back to `cases
   task events + follow-up milestone; scroll-driven)
 
 ## Cross-cutting systems
-- [ ] **Auth gate** — magic-link + Discord + Google OAuth; gate states out/in via
-      `body[data-auth]` (+ setup/offline, pending-approval, removed); profile fetch with
-      **non-email column list**; Discord id capture → `profiles.discord_id`; one-time
-      onAuthed guard (`lastAuthedUid`); LOA self-service + command set.
+- [x] **Auth gate** (Phase 1) — magic-link + Discord + Google OAuth; gate states as
+      conditional rendering (loading/setup/out/pending/error/in); profile fetch with
+      **non-email column list**; Discord id capture → `profiles.discord_id`; sequenced
+      evaluations; LOA self-service (command-set-LOA comes with Personnel slice).
+      Live-verified: real OAuth round-trip, LOA set/clear confirmed via SQL.
 - [ ] **Sign-off chain** — all transitions via SECURITY DEFINER RPCs ONLY
       (`signoff_submit` owner-only; `signoff_decide` exact-role-at-stage;
       `signoff_owner_action`); statuses none→awaiting_bureau_lead→awaiting_deputy→
@@ -143,20 +159,21 @@ route ids but the legacy `reports` route has no section and falls back to `cases
       widens access"; feeds My Desk.
 - [ ] **Never-lose-work** — `cid-draft:<key>` form drafts; dirty-guard on modal close;
       beforeunload prompt.
-- [ ] **Connection watch** — offline banner + `withRetry` single silent retry;
-      data-stale pulse.
-- [ ] **Deep links** — `#case=<id>` (React: `/cases/<id>` + redirect shim for old hash
-      links); tab persistence.
+- [ ] **Connection watch** — offline banner ✅ (Phase 1) · `withRetry` + data-stale
+      pulse pending (land with first data views).
+- [ ] **Deep links** — legacy-hash redirect shim + tab persistence ✅ (Phase 1) ·
+      `/cases?case=<id>` handling lands with the Cases slice.
 - [ ] **Data-table engine** — sortable/sticky/paged (50), click-to-copy IDs, density.
 - [ ] **Card paging** — 24/page (roster 30) + Load-more.
-- [ ] **Theming/appearance** — accent blue|amber|emerald|rose (**default amber**),
-      density comfortable|compact; appearance modal; skeleton loaders; sticky modal
-      action bars; friendly errors (`humanizeError`); a11y pass; tactical
-      hardware-instrument skin (View Transitions, film grain, status stripes).
+- [ ] **Theming/appearance** — accent (default amber) + density + appearance modal +
+      `humanizeError` ✅ (Phase 1) · skeleton loaders, sticky modal action bars, a11y
+      pass, tactical hardware-instrument skin (View Transitions, film grain, status
+      stripes) land with the data views.
 - [ ] **Stale-case auto-escalation** — once/session, CAS-guarded notify lead + bureau
       command.
 - [ ] **What's-new card** — once per version per browser.
-- [ ] **PWA manifest** — keep `manifest.webmanifest`; **NO service worker** (hard rule).
+- [x] **PWA manifest** (Phase 1) — served from `public/manifest.webmanifest`, linked
+      via metadata; **NO service worker** (hard rule).
 
 ## Data layer — gaps to close in `src/lib/db.ts`
 Contract holds (lists throw / mutations `{error}` / typed RPCs; all 46 tables + all 11
@@ -176,17 +193,15 @@ RPCs typed). Missing capabilities, add as first-class helpers as slices need the
 - [ ] insert without returning select (documents_versions; avoids requiring SELECT RLS)
 - [ ] `deleteWithUndo` engine (snapshot children → delete → undo toast re-insert)
 
-## Continuity debts (hard rule #5) — fix in Phase 1
-- [ ] **Pref applier**: pre-hydration inline script reads `cid-portal-v3` and sets
-      `body[data-accent]` (default **amber** — layout.tsx currently hardcodes `blue`)
-      and `html[data-density]` (currently never set). Align `globals.css` :root default.
-- [ ] **penal.ts data loss**: restore `stack` (~25), `arrest` (10), `rico` (~20) charge
-      flags (breaks sentencing math, arrest badges, RICO predicate detection); port
-      `penalByCode` map, `penalSentence`, `penalTotals`, `penalSearch`, `penalRecommend`,
-      `PENAL_LEVEL_TINT`.
-- [ ] **roles.ts gaps**: port `CID_ROLE_ORDER` + `rank()`, `bureauLabel()`,
-      `isSubmitRole()`; make `isCommand()` **active-aware** (vanilla requires
-      `active && command role` — React version checks role only).
+## Continuity debts (hard rule #5) — CLOSED in Phase 1
+- [x] **Pref applier**: pre-hydration script reads `cid-portal-v3`, applies
+      `body[data-accent]` (default **amber**), `html[data-density]`, `nav-collapsed`;
+      values allow-listed. Verified live: vanilla-written blob (emerald/compact)
+      applied before first paint.
+- [x] **penal.ts**: `stack` (25), `arrest` (11), `rico` (24) flags restored +
+      all helpers ported; per-code parity vs penal.js machine-verified.
+- [x] **roles.ts**: `ROLE_ORDER`/`rank()`, `bureauLabel()`, `isSubmitRole()`,
+      active-aware `meIsCommand()` ported.
 - [x] localStorage key/shape (`cid-portal-v3`) — already compatible.
 - [x] `safeUrl` — verbatim-equivalent port, no drift.
 

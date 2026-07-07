@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   title: 'CID Portal — Criminal Investigation Division | State of San Andreas',
   description: 'CID Portal — case management for the San Andreas Criminal Investigations Division.',
   robots: { index: false, follow: false }, // restricted internal tool
+  manifest: '/manifest.webmanifest', // installable PWA — deliberately NO service worker (hard rule #6)
 }
 
 export const viewport: Viewport = {
