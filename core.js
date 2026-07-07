@@ -798,7 +798,10 @@
       if (!mount) return;
       const columns = opts.columns || [];
       const pageSize = opts.pageSize || 50;
-      const rowPad = opts.density === 'compact' ? 'py-1' : 'py-2';
+      // Respect the app-wide density preference (Appearance modal) unless the
+      // caller overrides it explicitly.
+      const density = opts.density || (typeof Store !== 'undefined' ? Store.get('density', 'comfortable') : 'comfortable');
+      const rowPad = density === 'compact' ? 'py-1' : 'py-2';
       const rows = opts.rows || [];
       const sortKey = opts.sortKey || null;
       const sortDir = opts.sortDir === 'desc' ? 'desc' : 'asc';
