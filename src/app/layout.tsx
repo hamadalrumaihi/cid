@@ -16,10 +16,30 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 }
 
+/* Pre-hydration device-pref applier (continuity hard rule #5): reads the SAME
+ * `cid-portal-v3` blob the vanilla app writes and applies accent/density before
+ * first paint, so a returning user keeps their theme with no flash. This is a
+ * STATIC compile-time script (the one sanctioned dangerouslySetInnerHTML — never
+ * user/DB data); localStorage values are allow-listed before touching the DOM
+ * so a tampered blob cannot inject attribute values. Defaults mirror vanilla
+ * applyAppearance(): accent 'amber', density 'comfortable'. */
+const PREF_APPLIER = `(function(){try{
+var d=JSON.parse(localStorage.getItem('cid-portal-v3')||'{}')||{};
+var a=['blue','amber','emerald','rose'].indexOf(d.accent)>=0?d.accent:'amber';
+var den=d.density==='compact'?'compact':'comfortable';
+document.body.dataset.accent=a;
+document.documentElement.dataset.density=den;
+if(d.collapsed===true)document.body.classList.add('nav-collapsed');
+}catch(e){}})();`
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} ${jetbrains.variable} font-sans antialiased`} data-accent="blue">
+      <body
+        suppressHydrationWarning
+        className={`${inter.variable} ${jetbrains.variable} font-sans antialiased selection:bg-blue-500/30`}
+      >
+        <script dangerouslySetInnerHTML={{ __html: PREF_APPLIER }} />
         {children}
       </body>
     </html>

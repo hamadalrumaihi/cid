@@ -64,3 +64,6 @@ next-env.d.ts
 
 # keep the example env (publishable values only)
 !.env.example
+
+# Playwright MCP browser artifacts (local verification)
+.playwright-mcp/
