@@ -72,6 +72,7 @@
 
     async function fetchRecords() {
       if (!dbReady()) return;
+      if (!recCache.length) skeletonCards($('#rec-grid'), 6);
       const { data, error } = await DB().from('cid_records').select('*').order('updated_at', { ascending:false });
       if (error) { $('#rec-notice').classList.remove('hidden'); $('#rec-notice').innerHTML = '⚠️ Could not load records: ' + esc(error.message); return; }
       $('#rec-notice').classList.add('hidden');
