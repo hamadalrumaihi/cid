@@ -161,25 +161,28 @@
     }
 
     async function fetchTickets() { if (!dbReady()) { renderTickets(); return; } try { TICKETS_CACHE = await DB().list('tickets', { order: 'created_at', ascending: false }); } catch (e) { toast('Could not load the ticket queue — check your connection.', 'danger'); } renderTickets(); }
+    let ticketState = { sortKey: null, sortDir: 'asc', page: 0 };
     function renderTickets() {
-      const tb = $('#ticket-tbody'); if (!tb) return;
+      const mount = $('#ticket-table'); if (!mount) return;
       const canEdit = DB() && DB().canEdit();
       const nb = $('#new-ticket-btn'); if (nb) nb.classList.toggle('hidden', !canEdit);
-      if (!dbReady()) { tb.innerHTML = '<tr><td colspan="5" class="px-6 py-6 text-center text-sm text-slate-500">Sign in to view the intake queue.</td></tr>'; return; }
-      if (!TICKETS_CACHE.length) { tb.innerHTML = `<tr><td colspan="5" class="px-6 py-6 text-center text-sm text-slate-500">No tickets in the queue.${canEdit ? ' Use “+ New Ticket”.' : ''}</td></tr>`; return; }
-      tb.innerHTML = '';
-      TICKETS_CACHE.forEach((t) => {
-        const processed = t.status === 'processed';
-        const tr = el('tr', { class: 'transition hover:bg-white/5' });
-        tr.innerHTML = `
-          <td class="px-6 py-4"><span class="rounded-md bg-ink-800 px-2 py-1 font-mono text-xs text-blue-300">${esc(t.ticket_code)}</span></td>
-          <td class="px-6 py-4"><span class="inline-flex items-center gap-1.5 text-slate-300"><span class="h-1.5 w-1.5 rounded-full bg-indigo-400"></span>${esc(t.source || 'Discord')}</span></td>
-          <td class="px-6 py-4 max-w-md text-slate-300">${esc(t.description || '')}</td>
-          <td class="px-6 py-4"><span class="rounded-md border border-white/10 bg-ink-800 px-2 py-1 text-xs font-semibold text-slate-200">${esc(t.reported_dept || '—')}</span></td>
-          <td class="px-6 py-4 text-right">${processed ? `<span class="rounded-md bg-emerald-500/10 px-2 py-1 text-[11px] font-mono text-emerald-300">${esc(caseNumById(t.case_id) || 'processed')}</span>` : (canEdit ? '<button class="process-btn rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110 active:scale-95">Process Ticket</button>' : '<span class="text-[11px] text-amber-300">pending</span>')}</td>`;
-        const pb = tr.querySelector('.process-btn'); if (pb) pb.addEventListener('click', () => openTicketWizard(t));
-        tb.appendChild(tr);
+      if (!dbReady()) { mount.innerHTML = '<p class="px-2 py-6 text-center text-sm text-slate-500">Sign in to view the intake queue.</p>'; return; }
+      renderDataTable(mount, {
+        rows: TICKETS_CACHE, pageSize: 50,
+        sortKey: ticketState.sortKey, sortDir: ticketState.sortDir, page: ticketState.page,
+        empty: 'No tickets in the queue.' + (canEdit ? ' Use “+ New Ticket”.' : ''),
+        onState: (s) => { ticketState = s; renderTickets(); },
+        columns: [
+          { key: 'ticket', label: 'Ticket ID', mono: true, sortVal: (t) => t.ticket_code || '', cell: (t) => '<span class="rounded-md bg-ink-800 px-2 py-1 text-xs text-blue-300">' + esc(t.ticket_code) + '</span>' },
+          { key: 'source', label: 'Source', sortVal: (t) => t.source || '', cell: (t) => '<span class="inline-flex items-center gap-1.5 text-slate-300"><span class="h-1.5 w-1.5 rounded-full bg-indigo-400"></span>' + esc(t.source || 'Discord') + '</span>' },
+          { key: 'desc', label: 'Description', tint: 'text-slate-300', cell: (t) => esc(t.description || '') },
+          { key: 'dept', label: 'Reported Dept', sortVal: (t) => t.reported_dept || '', cell: (t) => '<span class="rounded-md border border-white/10 bg-ink-800 px-2 py-1 text-xs font-semibold text-slate-200">' + esc(t.reported_dept || '—') + '</span>' },
+          { key: 'action', label: 'Action', align: 'right', cell: (t) => t.status === 'processed'
+            ? '<span class="rounded-md bg-emerald-500/10 px-2 py-1 text-[11px] font-mono text-emerald-300">' + esc(caseNumById(t.case_id) || 'processed') + '</span>'
+            : (canEdit ? '<button class="process-btn rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-110" data-id="' + esc(t.id) + '">Process</button>' : '<span class="text-[11px] text-amber-300">pending</span>') },
+        ],
       });
+      mount.querySelectorAll('.process-btn[data-id]').forEach((b) => b.onclick = () => { const t = TICKETS_CACHE.find((x) => x.id === b.dataset.id); if (t) openTicketWizard(t); });
     }
     function openNewTicketModal() {
       if (!(DB() && DB().canEdit())) { toast('Sign-in required.', 'warn'); return; }
