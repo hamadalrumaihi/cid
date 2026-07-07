@@ -695,6 +695,7 @@
     const PAGE_META = {
       command:    { title: 'Central Command', sub: 'Case assignment & operational hub' },
       cases:      { title: 'Case Files', sub: 'Live case records, evidence & chain-of-custody' },
+      operations: { title: 'Operations', sub: 'Task forces — related cases grouped under one umbrella' },
       persons:    { title: 'Persons', sub: 'Suspects & persons of interest (live)' },
       narcotics:  { title: 'Narcotics Intelligence', sub: 'Drug processing & market analytics' },
       ballistics: { title: 'Ballistics & Logistics', sub: 'Weapon benches & component tracing' },
@@ -725,14 +726,14 @@
     // categories + the sub-tab strip are a grouping layer over the same leaves.
     const NAV_CATEGORIES = [
       { id: 'command',   label: 'Command',      tabs: ['command', 'announce', 'heatmap', 'personnel'] },
-      { id: 'cases',     label: 'Cases',        tabs: ['cases', 'case-files', 'rico'] },
+      { id: 'cases',     label: 'Cases',        tabs: ['cases', 'operations', 'case-files', 'rico'] },
       { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'network', 'narcotics', 'ballistics', 'modus', 'media', 'records'] },
       { id: 'reference', label: 'Reference',    tabs: ['penal', 'sops'] },
       { id: 'oversight', label: 'Oversight',    tabs: ['inbox', 'shifts', 'audit'] },
     ];
     const TAB_LABEL = {
       command: 'Dashboard', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
-      cases: 'Case Files', 'case-files': 'Attachments', rico: 'RICO',
+      cases: 'Case Files', operations: 'Operations', 'case-files': 'Attachments', rico: 'RICO',
       persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector', media: 'Media Vault',
       records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', inbox: 'My Desk', shifts: 'Shift Reports', audit: 'Audit Log',
     };
@@ -740,6 +741,7 @@
     const CAT_DEFAULT = {}; NAV_CATEGORIES.forEach((c) => { CAT_DEFAULT[c.id] = c.tabs[0]; });
     const ROUTE_ENTER = {
       cases: 'onEnterCases',
+      operations: 'onEnterOperations',
       penal: 'onEnterPenal',
       sops: 'onEnterSops',
       persons: 'onEnterPersons',
