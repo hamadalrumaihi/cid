@@ -1,6 +1,6 @@
-# React Rebuild Handoff - After Phase 2
+# React Rebuild Handoff - Phase 3 in progress
 
-Last updated: 2026-07-08.
+Last updated: 2026-07-08 (command slice pass).
 
 This branch is `react-rebuild`. The repo root is the Next.js 16 app. The
 legacy root static files (`index.html`, root `*.js`, `styles.css`) remain inert
@@ -19,9 +19,11 @@ Companion source of truth: `docs/REACT-PARITY.md`.
   - `.\node_modules\.bin\next.cmd build`
 - Phase 2 was committed and pushed to `origin/react-rebuild` as
   `b29434d feat(rebuild): finish phase 2 cases slice`.
-- The next slice, `inbox` / My Desk, has an implementation pass in this
-  handoff state.
-- Live browser verification for Phase 2 is still pending.
+- The `inbox` / My Desk slice was committed and pushed as
+  `e24463c feat(rebuild): add my desk inbox slice`.
+- The `command` / Central Command slice has an implementation pass in this
+  handoff state (see "Command slice delivered" below).
+- Live browser verification for Phase 2, inbox, and command is still pending.
 
 ## Phase 2 delivered
 
@@ -78,6 +80,41 @@ Implemented Inbox / My Desk surface:
 - Notifications list with click-to-mark-read.
 - Draft report rows linked back to the case Reports tab.
 
+## Command slice delivered
+
+Implemented `/command` (Central Command dashboard) in
+`src/components/command/`, wired through the `[tab]` dispatcher:
+
+- 9-card KPI grid (open/awaiting/DOJ-ready/avg-resolution/cold/seizures/
+  narcotics/weapons/POI) with tactical `00 // STANDBY` zero-states and
+  click-to-drill status toggles. Drill works for every signed-in member;
+  only the filter bar is command-gated (matches vanilla).
+- Command filter bar (bureau/detective/status/date range) + "X of Y cases"
+  count + matching-cases drill list (first 40, click-through to case detail).
+- Needs-attention widget: stale ≥14d / no-lead / stuck-in-sign-off columns;
+  "all →" routes to Cases with scope=all and the matching saved filter, or
+  toggles the awaiting drill in place.
+- Bureau scorecards (command only; bureau_lead sees own division) and bureau
+  caseload bars (click-to-filter for command) — scorecards stay a standing
+  view over the unfiltered cache.
+- Crime analytics: clearance/open/BOLO/evidence-30d tiles + single-hue bars
+  (cases per month, evidence by type, top gangs by tracked members).
+- Odyssey ticket queue: table, New Ticket modal, and the 3-step processing
+  wizard (jurisdiction routing with misroute auto-rename, bureau-prefixed
+  case number entry with duplicate guard and lead-digit warning, provisioning
+  summary; ticket marked processed with case link).
+- Division activity feed (last 12 `audit_log` rows).
+- GPS trackers: dual-signature flow with self-co-sign blocked, live 1s
+  countdown, first-command-viewer auto-expire, authorize modal, delete.
+- Raid compensation calculator (brackets + payout split, local preview only).
+- Jump-back strip (pins + recents from the shared Store keys) and the
+  encouragement widget (session-only dismiss).
+
+Intentionally lean, tracked in `docs/REACT-PARITY.md`:
+
+- Ticket table sort/paging waits on the shared data-table engine.
+- CSV/XLSX/JSON bulk import on "+ New" waits on the Imports cross-cut.
+
 Implemented shared/data support:
 
 - `db.ts` list projections, `.in`, `updateWhere` CAS predicates, null ordering,
@@ -109,6 +146,17 @@ Minimum verification checklist:
 - Download packet `.md` and `.docx`.
 - Confirm no created test rows remain.
 
+Command slice additions to that checklist:
+
+- KPI numbers match the vanilla dashboard for the same account.
+- KPI card click toggles the drill list; filter bar renders only for command.
+- Needs-attention "all →" lands on Cases with the right filter and scope.
+- Process one ticket end-to-end (then delete the created case + reset the
+  ticket, leaving data clean).
+- Deploy + co-sign a tracker with two command accounts (or verify the
+  self-co-sign block), then remove it.
+- Raid comp calculator matches the vanilla brackets for a few values.
+
 Known local dev-server note:
 
 - Hidden attempts to start port `3777` did not leave a server running.
@@ -138,16 +186,15 @@ These are not silent drops; they remain tracked in `docs/REACT-PARITY.md`.
 ## Remaining React rebuild plan
 
 The rebuild is still not ready for cutover. `docs/REACT-PARITY.md` tracks 25
-views. Done views:
+views. Done views (implementation passes; live verification pending):
 
 - `cases`
 - `operations`
 - `inbox`
+- `command`
 
 Unchecked views remaining:
 
-- `command` - Central Command dashboard, trackers, raid compensation, jump-back
-  strip, command rollups, imports.
 - `announce` - announcements, pin/delete, notification fan-out.
 - `heatmap` - commander heatmap.
 - `personnel` - roster, commendations, member admin, division roster docs.
@@ -215,9 +262,11 @@ Do not cut over to `main` until all of these are true:
 
 ## Suggested next patch order
 
-1. Finish Phase 2 live browser QA and update `docs/REACT-PARITY.md` with results.
-2. Tackle `command`, because it exercises the broadest operational rollups.
-3. Tackle `personnel`, because it closes member admin and role-management flows.
+1. Finish live browser QA (Phase 2 + inbox + command) and update
+   `docs/REACT-PARITY.md` with results.
+2. Tackle `personnel`, because it closes member admin and role-management flows
+   (assign_member, LOA, remove/restore, admin_member_emails).
+3. Tackle `announce`, because it starts the notifications fan-out cross-cut.
 4. Continue one view per patch, keeping each patch gated and live-verified.
 
 ## Prompt for the next LLM
@@ -241,21 +290,26 @@ Hard rules:
 Committed baseline:
 - Phase 2 Cases + Operations is pushed as
   `b29434d feat(rebuild): finish phase 2 cases slice`.
-- Inbox / My Desk has now been implemented after that baseline.
+- Inbox / My Desk is pushed as
+  `e24463c feat(rebuild): add my desk inbox slice`.
+- Command / Central Command has been implemented after that baseline
+  (src/components/command/, wired in src/app/(app)/[tab]/page.tsx).
 
 Current completed implementation passes:
 - Phase 1 app shell/auth.
 - Phase 2 Cases + Operations.
 - Oversight `inbox` / My Desk.
+- Command `command` / Central Command dashboard.
 
 Known local junk to ignore unless the user explicitly asks otherwise:
 - `.serena/`
 - `bash.exe.stackdump`
 
 Next recommended slice:
-- `command` / Central Command dashboard, because it exercises the broadest
-  operational rollups and consumes pins, recents, stale cases, task/signoff
-  signals, trackers, and imports.
+- `personnel` / Roster & Commendations, because it closes member admin and
+  role-management flows (approve pending, `assign_member`, LOA, permanent
+  removal/restore via `admin_remove_member`/`admin_restore_member`, emails
+  via the command-gated `admin_member_emails` RPC).
 
 Before changing code:
 - Read `docs/REACT-PARITY.md` and this handoff.

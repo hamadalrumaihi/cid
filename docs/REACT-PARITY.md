@@ -32,7 +32,9 @@ route ids but the legacy `reports` route has no section and falls back to `cases
       operations picker/view, detail shell, 11 tabs, packet .docx/.md. Gates green.
       **Live browser verification still pending**; several dense vanilla subflows are
       intentionally lean in React v1 and called out below.
-- [ ] **Phase 3+** — one view per patch (order below)
+- [ ] **Phase 3+** — one view per patch (order below). Done so far: `inbox` (My Desk)
+      and `command` (Central Command) implementation passes, gates green; live browser
+      verification for both still pending.
 
 ### Owner actions (infrastructure)
 - [x] Supabase Auth redirect allow-list: `http://localhost:3777/**` added
@@ -49,13 +51,20 @@ route ids but the legacy `reports` route has no section and falls back to `cases
 ## Views (25) — by nav category
 
 ### Command
-- [ ] **command** — Central Command dashboard: KPI grid w/ drill-down; command-only filter
-      bar (bureau/detective/status/date) + bureau scorecards (CMD_ROLES; bureau_lead sees
-      own bureau only); needs-attention widget (stale ≥14d / unassigned / stuck sign-off);
-      crime analytics tiles + bars; Odyssey ticket queue + 3-step wizard → case; division
-      activity feed; bureau caseload bars; GPS trackers w/ dual digital signatures
-      (self-co-sign blocked) + live countdown; raid compensation calculator; jump-back
-      strip (pins + recents); encourage widget; CSV/XLSX/JSON bulk import on every "+ New".
+- [x] **command** — implementation pass (live browser verification pending): 9-card KPI
+      grid w/ click-to-drill (drill works for every member; filter BAR is command-only);
+      filter bar (bureau/detective/status/date) + matching-cases drill list (first 40);
+      bureau scorecards (bureau_lead sees own division only; standing view, unfiltered);
+      needs-attention widget (stale ≥14d / unassigned / stuck sign-off; "all →" routes to
+      the Cases list with scope=all + matching filter); crime analytics tiles + bars;
+      Odyssey ticket queue + New Ticket modal + 3-step wizard → case (misroute rename,
+      bureau-prefixed number, duplicate guard, ticket → processed); division activity feed
+      (audit_log, last 12); bureau caseload bars (click-to-filter for command); GPS
+      trackers w/ dual digital signatures (self-co-sign blocked) + live 1s countdown +
+      first-command-viewer auto-expire; raid compensation calculator; jump-back strip
+      (pins + recents); encourage widget (session dismiss). **Lean in v1**: ticket table
+      sort/paging waits on the Data-table engine; CSV/XLSX/JSON bulk import on "+ New"
+      waits on the Imports cross-cut.
 - [ ] **announce** — Announcements: post/pin/delete (LEAD_ROLES gate), notification fan-out.
 - [ ] **heatmap** — Commander heatmap (stylized SA map, incident density).
 - [ ] **personnel** — Personnel/Roster & Commendations: roster cards w/ strike-point bars +

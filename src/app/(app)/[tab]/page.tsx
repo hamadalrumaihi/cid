@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { PAGE_META } from '@/lib/nav'
 import { ViewPlaceholder } from '@/components/ViewPlaceholder'
 import { CasesView } from '@/components/cases/CasesView'
+import { CommandView } from '@/components/command/CommandView'
 import { OperationsView } from '@/components/operations/OperationsView'
 import { InboxView } from '@/components/inbox/InboxView'
 
@@ -19,6 +20,13 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
   // anything unknown falls back to command.
   if (tab === 'reports') redirect('/cases')
   if (!(tab in PAGE_META)) redirect('/command')
+  if (tab === 'command') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="command" />}>
+        <CommandView />
+      </Suspense>
+    )
+  }
   if (tab === 'cases') {
     return (
       <Suspense fallback={<ViewPlaceholder tab="cases" />}>
