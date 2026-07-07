@@ -81,7 +81,7 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
 ## Views (25) — by nav category
 
 ### Command
-- [x] **command** — implementation pass (live browser verification pending): 9-card KPI
+- [x] **command** — implementation pass, live-verified 2026-07-08: 9-card KPI
       grid w/ click-to-drill (drill works for every member; filter BAR is command-only);
       filter bar (bureau/detective/status/date) + matching-cases drill list (first 40);
       bureau scorecards (bureau_lead sees own division only; standing view, unfiltered);
@@ -95,7 +95,7 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       (pins + recents); encourage widget (session dismiss). **Lean in v1**: ticket table
       sort/paging waits on the Data-table engine; CSV/XLSX/JSON bulk import on "+ New"
       waits on the Imports cross-cut.
-- [x] **announce** — implementation pass (live browser verification pending):
+- [x] **announce** — implementation pass, live-verified 2026-07-08:
       announcement cards (pinned amber-first sort, audience scoping to my division,
       mention/link chips); per-user dismiss + restore-all on the vanilla `annDismissed`
       Store key; `annSeen` stamped for the future unread badge; read modal with linked-
@@ -105,7 +105,7 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       and join even outside the audience). **Lean in v1**: the announce unread nav badge
       lands with the Notifications cross-cut.
 - [ ] **heatmap** — Commander heatmap (stylized SA map, incident density).
-- [x] **personnel** — implementation pass (live browser verification pending): roster
+- [x] **personnel** — implementation pass, live-verified 2026-07-08: roster
       cards (LOA state, badge/bureau/status tiles, 30/page load-more); self LOA toggle +
       My Profile editor (also wired to the sidebar officer card; saves via the new
       non-returning profile update); member admin panel (pending-first table, one-click
@@ -161,10 +161,10 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       guard); content synced by `sops-sync` edge function (backend — unaffected by rebuild).
 
 ### Oversight
-- [x] **inbox** — My Desk implementation pass: sign-off review/returned/in-flight
-      queues, due follow-ups, stale visible cases, my open tasks, recent mentions,
-      followed cases, unread notifications, and draft report rows. Live browser
-      verification and richer followed-item delta/badge behavior still pending.
+- [x] **inbox** — My Desk implementation pass, live-verified 2026-07-08: sign-off
+      review/returned/in-flight queues, due follow-ups, stale visible cases, my open
+      tasks, recent mentions, followed cases, unread notifications (click-to-mark-read),
+      and draft report rows. Richer followed-item delta/badge behavior still pending.
 - [ ] **shifts** — Weekly shift reports (author-or-command RLS).
 - [ ] **audit** — Audit log on the data-table engine (sort/paginate/copy-ID); owner-only
       (RLS + hidden subtab; writes happen ONLY via `private.audit()` trigger on 16 tables).
