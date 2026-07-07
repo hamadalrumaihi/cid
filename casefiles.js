@@ -595,7 +595,7 @@
     }
     function renderCaseDetailShell() {
       const c = detailCase, canEdit = DB() && DB().canEdit(), canDel = DB() && DB().canDelete();
-      const tabs = ['overview', 'evidence', 'charges', 'rico', 'intel', 'reports', 'tasks', 'signoff', 'chat', 'timeline'];
+      const tabs = ['overview', 'notes', 'evidence', 'charges', 'rico', 'intel', 'reports', 'tasks', 'signoff', 'chat', 'timeline'];
       $('#case-detail').innerHTML = `
         <div class="mb-4 flex items-center gap-1.5 text-sm text-slate-400"><button id="case-back" class="inline-flex items-center gap-1 text-slate-300 transition hover:text-white">← Cases</button><span class="text-slate-600">/</span><span class="font-mono text-blue-300">${escapeHTML(c.case_number)}</span><span class="text-slate-600">/</span><span class="capitalize text-slate-300">${escapeHTML(detailTab)}</span></div>
         <div class="case-hero mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6" data-status="${escapeHTML(c.status || '')}">
@@ -723,6 +723,48 @@
       const cl = node.querySelector('#fu-clear'); if (cl) cl.onclick = () => save(null);
       openModal(node);
     }
+    // Free-form per-case Markdown notes — the "vault" scratchpad. Rendered with
+    // the same escape-first Markdown renderer as SOPs (sopArticle); edited as raw
+    // Markdown. Stored on cases.notes; rides along in the court-packet export.
+    function renderCaseNotes(body, c, canEdit) {
+      const md = c.notes || '';
+      const rendered = md.trim()
+        ? '<div class="sop-prose max-h-[60vh] overflow-y-auto rounded-lg border border-white/5 bg-ink-900 p-5">' + (typeof sopArticle === 'function' ? sopArticle(md, 'Case Notes') : esc(md)) + '</div>'
+        : '<div class="rounded-lg border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-500">No notes yet.' + (canEdit ? ' Use “✎ Edit” to start a free-form working page — paste, jot, list; it renders as a clean document and rides along in the court packet.' : '') + '</div>';
+      body.innerHTML = `
+        <div class="mb-3 flex items-center justify-between gap-2">
+          <div><h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Case Notes</h4><p class="text-[11px] text-slate-500">Free-form working notes for this case — Markdown.</p></div>
+          ${canEdit ? '<button id="cn-edit" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">✎ Edit</button>' : ''}
+        </div>
+        ${rendered}`;
+      const eb = $('#cn-edit', body); if (eb) eb.onclick = () => renderCaseNotesEditor(body, c);
+    }
+    function renderCaseNotesEditor(body, c) {
+      body.innerHTML = `
+        <div class="mb-3 flex items-center justify-between gap-2">
+          <h4 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Case Notes — editing</h4>
+          <span class="text-[11px] text-slate-500"># heading · **bold** · - list · &gt; note · | table |</span>
+        </div>
+        <textarea id="cn-text" rows="16" class="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 font-mono text-sm leading-relaxed text-slate-100 outline-none focus:border-badge-500" placeholder="Dump your working notes here — paste, jot, list. Renders as a clean page when you save.">${esc(c.notes || '')}</textarea>
+        <div class="mt-3 flex items-center gap-2">
+          <button id="cn-save" class="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save notes</button>
+          <button id="cn-cancel" class="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10">Cancel</button>
+          <span id="cn-state" class="text-[11px] text-slate-500"></span>
+        </div>`;
+      const ta = $('#cn-text', body);
+      const baseline = c.notes || '';
+      Guard.set(() => ta.value !== baseline);   // warn on unsaved leave
+      $('#cn-cancel', body).onclick = () => { Guard.clear(); renderCaseNotes(body, c, true); };
+      $('#cn-save', body).onclick = async () => {
+        const notes = ta.value;
+        const st = $('#cn-state', body); if (st) st.textContent = 'Saving…';
+        const res = await DB().update('cases', c.id, { notes: notes });
+        if (res && res.error) { if (st) st.textContent = ''; toast('Save failed: ' + res.error.message, 'danger'); return; }
+        c.notes = notes; if (typeof detailCase !== 'undefined' && detailCase && detailCase.id === c.id) detailCase.notes = notes;
+        Guard.clear(); toast('Case notes saved', 'success');
+        renderCaseNotes(body, c, true);
+      };
+    }
     async function loadDetailTab() {
       const body = $('#detail-body'); const cid = detailCase.id; const canEdit = DB() && DB().canEdit();
       try {
@@ -792,6 +834,8 @@
             if (res.error) { toast('Detach failed: ' + res.error.message, 'danger'); return; }
             toast('Media detached', 'info'); if (typeof fetchMedia === 'function') fetchMedia(); loadDetailTab();
           });
+        } else if (detailTab === 'notes') {
+          renderCaseNotes(body, detailCase, canEdit);
         } else if (detailTab === 'charges') {
           renderCaseCharges(body);
         } else if (detailTab === 'rico') {
