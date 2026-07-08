@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { uiPrompt } from '@/components/ui/dialog'
@@ -21,6 +22,12 @@ import { PENAL_CODE, penalByCode, penalRecommend, penalSentence, penalSearch, pe
 import { notify } from '@/lib/notify'
 import { toast } from '@/lib/toast'
 import { isPinnedCase, pushRecentCase, togglePinCase } from './caseUtils'
+
+// React Flow is heavy — load the graph only when its tab is opened.
+const CaseGraphTab = dynamic(() => import('./CaseGraphTab').then((m) => m.CaseGraphTab), {
+  ssr: false,
+  loading: () => <p className="py-10 text-center text-sm text-slate-500">Building the link chart…</p>,
+})
 
 /** One-click row mutations (delete chips, detach) previously discarded the
  *  returned {error}, so an RLS-denied or failed write looked like a silent
@@ -48,7 +55,7 @@ type IntelRow = Tables<'case_intel_links'>
 type PersonRow = Tables<'persons'>
 type PlaceRow = Tables<'places'>
 
-const TABS = ['overview', 'evidence', 'notes', 'charges', 'rico', 'intel', 'reports', 'tasks', 'signoff', 'chat', 'timeline'] as const
+const TABS = ['overview', 'graph', 'evidence', 'notes', 'charges', 'rico', 'intel', 'reports', 'tasks', 'signoff', 'chat', 'timeline'] as const
 type TabId = (typeof TABS)[number]
 
 export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () => void; onChanged: () => void }) {
@@ -152,6 +159,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       </div>
       <section className="rounded-2xl border border-white/10 bg-ink-900/45 p-4">
         {tab === 'overview' && <OverviewTab c={c} canEdit={canEdit} canDelete={canDelete} />}
+        {tab === 'graph' && <CaseGraphTab c={c} />}
         {tab === 'evidence' && <EvidenceTab c={c} canEdit={canEdit} canDelete={canDelete} />}
         {tab === 'notes' && <NotesTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
         {tab === 'charges' && <ChargesTab c={c} canEdit={canEdit} onChanged={fetchCase} />}

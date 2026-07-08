@@ -15,6 +15,10 @@ type CaseRow = Tables<'cases'>
 type CaseTemplateRow = Tables<'case_templates'>
 const BUREAUS = ['LSB', 'BCB', 'SAB', 'JTF'] as const
 
+/** Task checklist stored on a template (jsonb array of title strings). */
+const tplTasks = (t: CaseTemplateRow | null): string[] =>
+  Array.isArray(t?.tasks) ? t.tasks.filter((x): x is string => typeof x === 'string' && !!x.trim()) : []
+
 interface Props {
   open: boolean
   record: CaseRow | null
@@ -40,16 +44,20 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
     summary: record?.summary ?? '',
   }), [record, profile])
   const [form, setForm] = useState(initial)
+  // Checklist carried by the selected template — auto-created as case_tasks
+  // on save (flowintel-style template task lists). New cases only.
+  const [checklist, setChecklist] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const fetchTemplates = async () => {
     try {
       setTemplates((await list('case_templates', { order: 'sort_order' })).filter((t) => t.active !== false))
     } catch { setTemplates([]) }
   }
-  useEffect(() => { if (open) queueMicrotask(() => { setForm(initial); void fetchOps(); void fetchTemplates() }) }, [open, initial, fetchOps, templatesVersion])
+  useEffect(() => { if (open) queueMicrotask(() => { setForm(initial); setChecklist([]); void fetchOps(); void fetchTemplates() }) }, [open, initial, fetchOps, templatesVersion])
   const dirty = () => JSON.stringify(form) !== JSON.stringify(initial)
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
   const applyTemplate = (tpl: CaseTemplateRow | null) => {
+    setChecklist(tplTasks(tpl))
     if (!tpl) { setForm(initial); return }
     setForm((f) => ({
       ...f,
@@ -76,10 +84,15 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
       summary: form.summary.trim() || null,
     }
     const res = record ? await update('cases', record.id, patch) : await insert('cases', patch)
+    if (res.error) { setSaving(false); toast(res.error.message, 'danger'); return }
+    const caseId = res.data?.[0]?.id ?? record?.id
+    if (!record && caseId && checklist.length) {
+      const t = await insert('case_tasks', checklist.map((title) => ({ case_id: caseId, title })))
+      if (t.error) toast(`Case created, but checklist tasks failed: ${t.error.message}`, 'warn')
+    }
     setSaving(false)
-    if (res.error) { toast(res.error.message, 'danger'); return }
-    toast(record ? 'Case updated.' : 'Case created.', 'success')
-    onSaved(res.data?.[0]?.id ?? record?.id)
+    toast(record ? 'Case updated.' : `Case created.${checklist.length ? ` ${checklist.length} checklist task${checklist.length === 1 ? '' : 's'} added.` : ''}`, 'success')
+    onSaved(caseId)
   }
 
   return (
@@ -94,8 +107,11 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
             </div>
             <div className="flex flex-wrap gap-2">
               <button onClick={() => applyTemplate(null)} className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold text-slate-200">Blank</button>
-              {templates.map((tpl) => <button key={tpl.id} onClick={() => applyTemplate(tpl)} className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold text-slate-200 hover:bg-white/10">{tpl.icon || ''} {tpl.name}</button>)}
+              {templates.map((tpl) => <button key={tpl.id} onClick={() => applyTemplate(tpl)} className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold text-slate-200 hover:bg-white/10">{tpl.icon || ''} {tpl.name}{tplTasks(tpl).length > 0 && <span className="ml-1 text-emerald-300">☑{tplTasks(tpl).length}</span>}</button>)}
             </div>
+            {checklist.length > 0 && (
+              <p className="mt-2 text-xs text-emerald-200">☑ Saving will add {checklist.length} standard task{checklist.length === 1 ? '' : 's'}: {checklist.join(' · ')}</p>
+            )}
           </div>
         )}
         <div className="grid gap-3 md:grid-cols-2">
@@ -149,8 +165,11 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
 
 function TemplateManager({ open, templates, onClose, onChanged }: { open: boolean; templates: CaseTemplateRow[]; onClose: () => void; onChanged: () => void }) {
   const [drafts, setDrafts] = useState<CaseTemplateRow[]>(templates)
-  const [newRow, setNewRow] = useState({ name: '', icon: '', bureau: 'LSB', status: 'open', title: '', summary: '' })
-  useEffect(() => { if (open) queueMicrotask(() => setDrafts(templates)) }, [open, templates])
+  const [newRow, setNewRow] = useState({ name: '', icon: '', bureau: 'LSB', status: 'open', title: '', summary: '', tasks: '' })
+  // Raw textarea text per row — parsed only on save so Enter/blank lines type naturally.
+  const [taskDrafts, setTaskDrafts] = useState<Record<string, string>>({})
+  const parseTasks = (v: string): string[] => v.split('\n').map((x) => x.trim()).filter(Boolean)
+  useEffect(() => { if (open) queueMicrotask(() => { setDrafts(templates); setTaskDrafts({}) }) }, [open, templates])
   const saveRow = async (row: CaseTemplateRow) => {
     const res = await update('case_templates', row.id, {
       name: row.name,
@@ -159,6 +178,7 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
       status: row.status,
       title: row.title || null,
       summary: row.summary || null,
+      tasks: taskDrafts[row.id] !== undefined ? parseTasks(taskDrafts[row.id]) : (Array.isArray(row.tasks) ? row.tasks : []),
       active: row.active,
       sort_order: row.sort_order,
     })
@@ -174,10 +194,11 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
       status: newRow.status as CaseTemplateRow['status'],
       title: newRow.title || null,
       summary: newRow.summary || null,
+      tasks: parseTasks(newRow.tasks),
       sort_order: templates.length + 1,
     })
     if (res.error) toast(res.error.message, 'danger')
-    else { setNewRow({ name: '', icon: '', bureau: 'LSB', status: 'open', title: '', summary: '' }); toast('Template added.', 'success'); onChanged() }
+    else { setNewRow({ name: '', icon: '', bureau: 'LSB', status: 'open', title: '', summary: '', tasks: '' }); toast('Template added.', 'success'); onChanged() }
   }
   const patchDraft = (id: string, patch: Partial<CaseTemplateRow>) => setDrafts((rows) => rows.map((row) => row.id === id ? { ...row, ...patch } : row))
   return (
@@ -192,6 +213,7 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
             <select value={row.status} onChange={(e) => patchDraft(row.id, { status: e.target.value as CaseTemplateRow['status'] })} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white">{CASE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
             <input value={row.title || ''} onChange={(e) => patchDraft(row.id, { title: e.target.value })} placeholder="Prefill title" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
             <input value={row.summary || ''} onChange={(e) => patchDraft(row.id, { summary: e.target.value })} placeholder="Prefill summary" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
+            <textarea value={taskDrafts[row.id] ?? tplTasks(row).join('\n')} onChange={(e) => setTaskDrafts((m) => ({ ...m, [row.id]: e.target.value }))} rows={3} placeholder={'Checklist tasks — one per line, auto-created with each new case\nCanvass witnesses\nPull CCTV'} className="md:col-span-4 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />
             <div className="md:col-span-4 flex justify-end gap-2"><button onClick={() => void saveRow(row)} className="rounded-lg bg-badge-600 px-3 py-2 text-xs font-bold text-white">Save</button><button onClick={() => { void remove('case_templates', row.id).then((r) => { if (r.error) toast(`Delete failed: ${r.error.message}`, 'danger'); else onChanged() }) }} className="rounded-lg border border-rose-400/30 px-3 py-2 text-xs font-bold text-rose-300">Delete</button></div>
           </div>)}
         </div>
@@ -202,6 +224,7 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
           <select value={newRow.status} onChange={(e) => setNewRow({ ...newRow, status: e.target.value })} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white">{CASE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
           <input value={newRow.title} onChange={(e) => setNewRow({ ...newRow, title: e.target.value })} placeholder="Prefill title" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
           <input value={newRow.summary} onChange={(e) => setNewRow({ ...newRow, summary: e.target.value })} placeholder="Prefill summary" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
+          <textarea value={newRow.tasks} onChange={(e) => setNewRow({ ...newRow, tasks: e.target.value })} rows={3} placeholder={'Checklist tasks — one per line, auto-created with each new case'} className="md:col-span-4 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />
           <button onClick={add} className="md:col-span-4 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white">Add template</button>
         </div>
       </div>

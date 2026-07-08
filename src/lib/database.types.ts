@@ -619,6 +619,7 @@ export type Database = {
           sort_order: number
           status: Database["public"]["Enums"]["case_status"]
           summary: string | null
+          tasks: Json
           title: string | null
           updated_at: string
         }
@@ -634,6 +635,7 @@ export type Database = {
           sort_order?: number
           status?: Database["public"]["Enums"]["case_status"]
           summary?: string | null
+          tasks?: Json
           title?: string | null
           updated_at?: string
         }
@@ -649,6 +651,7 @@ export type Database = {
           sort_order?: number
           status?: Database["public"]["Enums"]["case_status"]
           summary?: string | null
+          tasks?: Json
           title?: string | null
           updated_at?: string
         }

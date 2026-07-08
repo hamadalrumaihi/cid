@@ -28,6 +28,7 @@ import { MediaView } from '@/components/media/MediaView'
 import { CaseFilesView } from '@/components/casefiles/CaseFilesView'
 import { SopsView } from '@/components/sops/SopsView'
 import { GuideView } from '@/components/guide/GuideView'
+import { CalendarView } from '@/components/calendar/CalendarView'
 
 /** One route per leaf tab. Placeholder views are replaced slice-by-slice as
  *  each vanilla view is ported (see docs/REACT-PARITY.md for the order). */
@@ -221,6 +222,13 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="guide" />}>
         <GuideView />
+      </Suspense>
+    )
+  }
+  if (tab === 'calendar') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="calendar" />}>
+        <CalendarView />
       </Suspense>
     )
   }
