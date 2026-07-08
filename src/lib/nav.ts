@@ -10,6 +10,7 @@ export interface PageMeta {
 
 export const PAGE_META: Record<string, PageMeta> = {
   command:    { title: 'Central Command', sub: 'Case assignment & operational hub' },
+  analytics:  { title: 'Division Analytics', sub: 'Caseload, clearance & activity trends' },
   cases:      { title: 'Case Files', sub: 'Live case records, evidence & chain-of-custody' },
   operations: { title: 'Operations', sub: 'Task forces — related cases grouped under one umbrella' },
   persons:    { title: 'Persons', sub: 'Suspects & persons of interest (live)' },
@@ -48,7 +49,7 @@ export interface NavCategory {
 }
 
 export const NAV_CATEGORIES: NavCategory[] = [
-  { id: 'command',   label: 'Command',      tabs: ['command', 'announce', 'heatmap', 'personnel'] },
+  { id: 'command',   label: 'Command',      tabs: ['command', 'analytics', 'announce', 'heatmap', 'personnel'] },
   { id: 'cases',     label: 'Cases',        tabs: ['cases', 'operations', 'case-files', 'rico'] },
   { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'network', 'narcotics', 'ballistics', 'modus', 'media', 'records'] },
   { id: 'reference', label: 'Reference',    tabs: ['penal', 'sops', 'guide'] },
@@ -56,7 +57,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
 ]
 
 export const TAB_LABEL: Record<string, string> = {
-  command: 'Dashboard', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
+  command: 'Dashboard', analytics: 'Analytics', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
   cases: 'Case Files', operations: 'Operations', 'case-files': 'Attachments', rico: 'RICO',
   persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',

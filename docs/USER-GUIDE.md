@@ -41,11 +41,11 @@ What you can see and change depends on your **role and bureau** — the server e
 
 ### The left sidebar (desktop)
 
-The sidebar groups all 27 screens into **5 categories**:
+The sidebar groups all 28 screens into **5 categories**:
 
 | Category | What's inside |
 |---|---|
-| **Command** | Dashboard, Announcements, Heatmap, Roster & Commendations |
+| **Command** | Dashboard, Analytics, Announcements, Heatmap, Roster & Commendations |
 | **Cases** | Case Files, Operations, Attachments, RICO |
 | **Intelligence** | Persons, BOLO Board, Gangs, Places, Vehicles, Network, Narcotics, Ballistics, M.O. Detector, Media Vault, Records |
 | **Reference** | Penal Code, SOPs & Library, User Guide |
@@ -112,6 +112,10 @@ Open a case → **Graph** tab. The case sits at the center; suspects, witnesses,
 ### Work your desk
 
 **My Desk** (Oversight) shows, in one screen: sign-offs waiting on **you**, your returned cases, due follow-ups, stale cases, your open tasks, recent @mentions, your followed items, notifications and draft reports. If the Command dot in the nav is lit, this is where the work is.
+
+### Read the division's pulse — analytics
+
+**Command → Analytics** turns the live records into trends: stat tiles for **open cases**, the **clearance rate**, **average days to close** and **active BOLOs**; weekly bars of cases **opened vs closed**; an **evidence logged** trend line; and a **caseload by detective** chart. Hover any bar for exact numbers. Everything is computed from the cases you're allowed to see, so leadership and detectives each get their own true picture.
 
 ### See what's due — the calendar
 
