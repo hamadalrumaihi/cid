@@ -29,6 +29,8 @@ import { CaseFilesView } from '@/components/casefiles/CaseFilesView'
 import { SopsView } from '@/components/sops/SopsView'
 import { GuideView } from '@/components/guide/GuideView'
 import { CalendarView } from '@/components/calendar/CalendarView'
+import { AnalyticsView } from '@/components/analytics/AnalyticsView'
+import { IndicatorsView } from '@/components/indicators/IndicatorsView'
 
 /** One route per leaf tab. Placeholder views are replaced slice-by-slice as
  *  each vanilla view is ported (see docs/REACT-PARITY.md for the order). */
@@ -229,6 +231,20 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="calendar" />}>
         <CalendarView />
+      </Suspense>
+    )
+  }
+  if (tab === 'analytics') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="analytics" />}>
+        <AnalyticsView />
+      </Suspense>
+    )
+  }
+  if (tab === 'indicators') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="indicators" />}>
+        <IndicatorsView />
       </Suspense>
     )
   }

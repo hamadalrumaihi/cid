@@ -2,7 +2,6 @@
  *  (no --- rules or italics). Keep the two in sync when either changes. */
 export const USER_GUIDE_MD = `Welcome to the **CID Portal**, the live case-management system for the San Andreas Criminal Investigation Division. This guide walks a first-time member from signing in to running their first case.
 
-
 ## Introduction
 
 The CID Portal is a private, real-time investigation workspace. Everything in it is **live and shared**: when another detective updates a case, adds a suspect, or posts an announcement, your screen updates within seconds — no refresh needed. The portal covers the full life of an investigation:
@@ -14,7 +13,6 @@ The CID Portal is a private, real-time investigation workspace. Everything in it
 - **Oversight** — your personal desk, the division calendar, weekly shift reports and the audit log.
 
 What you can see and change depends on your **role and bureau** — the server enforces this, so you'll simply never see records that aren't yours to see.
-
 
 ## Getting Started
 
@@ -33,20 +31,19 @@ What you can see and change depends on your **role and bureau** — the server e
 - Click the **Appearance** control in the sidebar to pick your accent color and compact/comfortable density.
 - Open **My Desk** (Oversight section) — this is your personal to-do view and the best page to start every session on.
 
-
 ## Main Interface Navigation
 
 ### The left sidebar (desktop)
 
-The sidebar groups all 27 screens into **5 categories**:
+The sidebar groups all 29 screens into **5 categories**:
 
 | Category | What's inside |
 |---|---|
-| **Command** | Dashboard, Announcements, Heatmap, Roster & Commendations |
+| **Command** | Dashboard, Analytics, Announcements, Heatmap, Roster & Commendations |
 | **Cases** | Case Files, Operations, Attachments, RICO |
-| **Intelligence** | Persons, BOLO Board, Gangs, Places, Vehicles, Network, Narcotics, Ballistics, M.O. Detector, Media Vault, Records |
+| **Intelligence** | Persons, BOLO Board, Gangs, Places, Vehicles, Indicators, Network, Narcotics, Ballistics, M.O. Detector, Media Vault, Records |
 | **Reference** | Penal Code, SOPs & Library, User Guide |
-| **Oversight** | My Desk, Calendar, Shift Reports, Audit Log |
+| **Oversight** | My Desk, Calendar, Shift Reports, Audit Log (sortable, filterable, exports to CSV) |
 
 Click a **category** to jump to its first screen; a **sub-tab strip** appears under the header to switch between the screens inside that category. Colored dots on the Command button are live counters (pending member approvals, unread announcements, items waiting on you).
 
@@ -62,7 +59,6 @@ Click a **category** to jump to its first screen; a **sub-tab strip** appears un
 
 The sidebar becomes a **bottom navigation bar** with the same 5 categories; a dot on Command means something needs your attention.
 
-
 ## Core Features Step-by-Step
 
 ### Open and read a case
@@ -70,6 +66,7 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 1. Go to **Cases → Case Files**.
 2. Use the search box or status filters to find the case, then **click its card**.
 3. Inside, work through the tabs: **Overview** (assignments & stats), **Graph** (the investigation link chart), **Evidence**, **Reports**, **Tasks**, **Charges**, **Chat** (case room with @mentions), **Timeline**, **Files**, **Intel** (linked people/gangs/places), **RICO**, and **Sign-off**.
+4. The **Timeline** tab opens with a zoomable chronology band — every event on its own lane (evidence, reports, tasks, sign-off). **Scroll to zoom** in on a busy day, **drag to pan**, and hover any dot for the details.
 
 ### Create a case
 
@@ -88,11 +85,14 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 - **A person:** Intelligence → Persons → **+ New Person**. Click any person's card to open their full intel profile (cases, gang ties, vehicles, dossier export).
 - **A vehicle:** Intelligence → Vehicles → **+ New Vehicle** — plate, model, owner. The registry automatically flags plates that appear across multiple cases.
 - **A gang:** Intelligence → Gangs → pick or create a gang, then use **Add member** and **Add Turf** inside it.
+- **A hard identifier:** Intelligence → Indicators → **+ New Indicator** — log a burner phone, bank account, weapon serial, alias or address against its case. The registry deconflicts automatically: if the same value is already logged on another case, both cases get a ⚡ **Deconfliction alert** naming each other (a case you can't access shows as 🔒 restricted — coordinate through its bureau lead).
 - **Link intel to a case:** open the case → **Intel** tab → link persons/gangs/places so everything cross-references.
 
 ### See the case as a link chart
 
 Open a case → **Graph** tab. The case sits at the center; suspects, witnesses, gangs, places, evidence, vehicles, reports and warrants orbit it, connected by labeled relationships (**owns**, **seen at**, **member of**, **mentioned in**…). Drag nodes to arrange, scroll to zoom, and **click any node** for its details and a jump link. The chart builds itself from the case's Intel links, evidence and reports — nothing extra to maintain.
+
+You can also work the case from the chart itself: **🔗 Link intel** (top-left) connects a person, gang or place without leaving the graph, and a linked node's panel has **Unlink from case**. Click a person and **Show their other cases** to see where else they surface. Your dragged arrangement is remembered per case on this device — **↺ Reset layout** brings back the automatic ring.
 
 ### Attach photos, videos and files
 
@@ -109,6 +109,10 @@ Open a case → **Graph** tab. The case sits at the center; suspects, witnesses,
 
 **My Desk** (Oversight) shows, in one screen: sign-offs waiting on **you**, your returned cases, due follow-ups, stale cases, your open tasks, recent @mentions, your followed items, notifications and draft reports. If the Command dot in the nav is lit, this is where the work is.
 
+### Read the division's pulse — analytics
+
+**Command → Analytics** turns the live records into trends: stat tiles for **open cases**, the **clearance rate**, **average days to close** and **active BOLOs**; weekly bars of cases **opened vs closed**; an **evidence logged** trend line; and a **caseload by detective** chart. Hover any bar for exact numbers. Everything is computed from the cases you're allowed to see, so leadership and detectives each get their own true picture.
+
 ### See what's due — the calendar
 
 **Oversight → Calendar** shows the month at a glance: 📌 case follow-ups, ☑️ open task deadlines, and 📝 shift-report weeks. Days in red have overdue items; click any day to see its items and jump straight to them.
@@ -118,7 +122,6 @@ Open a case → **Graph** tab. The case sits at the center; suspects, witnesses,
 1. Go to **Oversight → Shift Reports** and click **+ This week’s report**.
 2. Pick the week — the form **auto-fills** a rollup of the cases you led and evidence you logged that week.
 3. Add your summary and click **Save**. One report per week; you can edit yours later.
-
 
 ## Troubleshooting
 
@@ -133,7 +136,6 @@ Open a case → **Graph** tab. The case sits at the center; suspects, witnesses,
 | Edits you made elsewhere aren't showing | The portal is live, but a laggy connection can delay it — a banner appears when you're offline; click **Refresh** on My Desk or reload. |
 | You closed a modal and lost your text | Modals with unsaved changes warn you first — click **Cancel** in that warning to keep writing. Drafts of long forms are kept per device. |
 | Clicked **Delete** by accident | Most deletions show an **Undo** toast for a few seconds. Click it. If it's gone, ask Command — records are audit-logged. |
-
 
 Questions or ideas? Use **Feedback** (in the sidebar) — it goes straight to the portal owner, and you can watch your suggestion's status change as it's triaged.
 `

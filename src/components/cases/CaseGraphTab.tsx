@@ -1,12 +1,14 @@
 'use client'
 
-/** Investigation Graph — case-centered link chart (i2/Maltego-style, v1
- *  read-only). Nodes come from data the case already has: intel links
- *  (persons with their roles, gangs, places), evidence, reports & warrant
- *  reports, and vehicles connected by ownership or by their plate appearing
- *  in evidence text. Edges carry the relationship (owns, seen at, linked to,
- *  mentioned in, member of, …). Click a node for a details side panel with
- *  deep links. All queries are RLS-scoped; no new backend. */
+/** Investigation Graph — case-centered link chart (i2/Maltego-style).
+ *  Nodes come from data the case already has: intel links (persons with
+ *  their roles, gangs, places), evidence, reports & warrant reports, and
+ *  vehicles connected by ownership or by their plate appearing in evidence
+ *  text. Edges carry the relationship (owns, seen at, linked to, mentioned
+ *  in, member of, …). Click a node for a details side panel with deep links.
+ *  v2: link/unlink intel without leaving the chart, expand a person's other
+ *  cases, and dragged layouts persist per case on this device. All queries
+ *  are RLS-scoped; no new backend. */
 import '@xyflow/react/dist/style.css'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -22,12 +24,16 @@ import {
   type NodeProps,
 } from '@xyflow/react'
 import type { Tables } from '@/lib/database.types'
-import { list } from '@/lib/db'
+import { insert, list, remove } from '@/lib/db'
+import { useAuth } from '@/lib/auth'
 import { timeAgo } from '@/lib/format'
 import { WARRANT_TPLS, reportTitle, warrantStatusOf, type ReportLike } from '@/lib/forms'
 import { officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { caseStatusTint } from '@/lib/signoff'
+import { Store } from '@/lib/store'
+import { toast } from '@/lib/toast'
+import { uiConfirm } from '@/components/ui/dialog'
 
 type CaseRow = Tables<'cases'>
 type LinkRow = Tables<'case_intel_links'>
@@ -49,6 +55,10 @@ interface NodeData extends Record<string, unknown> {
   fields: [string, string][]
   href?: string
   hrefLabel?: string
+  /** The case_intel_links row behind this node — enables Unlink. */
+  linkId?: string
+  /** Source entity id (person/gang/place) — enables Expand for persons. */
+  refId?: string
 }
 
 const KIND_TINT: Record<Kind, string> = {
@@ -79,15 +89,55 @@ const nodeTypes = { intel: GraphNode }
 
 const norm = (s: string | null | undefined) => (s ?? '').toLowerCase()
 
+interface OtherCase { id: string; case_number: string; title: string | null; status: string }
+
 export function CaseGraphTab({ c }: { c: CaseRow }) {
+  const { canEdit } = useAuth()
+  const layoutKey = `graphLayout:${c.id}`
   const [data, setData] = useState<{
     links: LinkRow[]; persons: PersonRow[]; gangs: GangRow[]; places: PlaceRow[]
     vehicles: VehicleRow[]; evidence: EvidenceRow[]; reports: ReportRow[]
   } | null>(null)
   const [sel, setSel] = useState<string | null>(null)
+  const [savedPos, setSavedPos] = useState<Record<string, { x: number; y: number }>>(() => Store.get(layoutKey, {}))
+  const [expanded, setExpanded] = useState<Record<string, OtherCase[]>>({})
+  const [expandBusy, setExpandBusy] = useState<string | null>(null)
+  const [linker, setLinker] = useState(false)
   const vLinks = useTableVersion('case_intel_links')
   const vEvidence = useTableVersion('evidence')
   const vReports = useTableVersion('reports')
+
+  // Persist dragged positions (skip the empty object so a fresh mount or a
+  // just-reset layout doesn't write a useless entry).
+  useEffect(() => {
+    if (Object.keys(savedPos).length) Store.set(layoutKey, savedPos)
+  }, [savedPos, layoutKey])
+
+  const onDragStop = useCallback((_e: unknown, n: Node) => {
+    setSavedPos((prev) => ({ ...prev, [n.id]: { x: Math.round(n.position.x), y: Math.round(n.position.y) } }))
+  }, [])
+
+  const resetLayout = () => {
+    Store.set(layoutKey, {})
+    setSavedPos({})
+  }
+
+  const expandPerson = async (pid: string) => {
+    setExpandBusy(pid)
+    try {
+      const links = await list('case_intel_links', { eq: { kind: 'person', ref_id: pid } })
+      const ids = [...new Set(links.map((l) => l.case_id).filter((id) => id !== c.id))]
+      const cases = ids.length
+        ? ((await list('cases', { select: 'id,case_number,title,status', in: { id: ids } })) as unknown as OtherCase[])
+        : []
+      setExpanded((prev) => ({ ...prev, [pid]: cases }))
+      if (!cases.length) toast('No other cases for this person (that you can see).', 'info')
+    } catch (e) {
+      toast(`Could not load their cases: ${e instanceof Error ? e.message : String(e)}`, 'danger')
+    } finally {
+      setExpandBusy(null)
+    }
+  }
 
   const refresh = useCallback(async () => {
     try {
@@ -170,6 +220,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
           edgeTone: norm(l.role).includes('suspect') ? '#f43f5e' : undefined,
           data: {
             kind: 'person', icon: '👤', label: p.name || 'Person',
+            linkId: l.id, refId: p.id,
             sub: [l.role, p.alias ? `“${p.alias}”` : ''].filter(Boolean).join(' · '),
             fields: [
               ['Role in case', l.role || '—'],
@@ -192,6 +243,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
           edgeTone: '#f43f5e',
           data: {
             kind: 'gang', icon: '🏴', label: g.name,
+            linkId: l.id, refId: g.id,
             sub: g.threat_level ? `threat: ${g.threat_level}` : 'organization',
             fields: [
               ['Threat level', String(g.threat_level ?? '—')],
@@ -209,6 +261,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
           edgeLabel: l.role || 'linked to',
           data: {
             kind: 'place', icon: '📍', label: p.name,
+            linkId: l.id, refId: p.id,
             sub: [p.type, p.area].filter(Boolean).join(' · '),
             fields: [
               ['Type', p.type || '—'],
@@ -315,8 +368,38 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
       })
     }
 
+    // ---- expanded persons: their other cases (outer ring) ------------------
+    for (const [pid, others] of Object.entries(expanded)) {
+      const anchor = `person:${pid}`
+      if (!nodes.some((n) => n.id === anchor)) continue
+      const base = angleOf(anchor)
+      others.forEach((oc, i) => {
+        const nodeId = `othercase:${oc.id}`
+        if (!nodes.some((n) => n.id === nodeId)) {
+          const a = base + (i - (others.length - 1) / 2) * 0.22
+          nodes.push({
+            id: nodeId, type: 'intel',
+            position: { x: Math.round(620 * Math.cos(a)), y: Math.round(620 * Math.sin(a)) },
+            data: {
+              kind: 'case', icon: '📂', label: oc.case_number, sub: oc.title || 'Untitled',
+              fields: [['Status', oc.status], ['Title', oc.title || '—']],
+              href: `/cases?case=${encodeURIComponent(oc.id)}`, hrefLabel: 'Open case',
+            },
+          })
+        }
+        edge(anchor, nodeId, 'also in', '#f59e0b')
+      })
+    }
+
+    // Dragged layout (persisted per case on this device) wins over the
+    // computed radial positions; the center case node stays pinned.
+    for (const n of nodes) {
+      const p = savedPos[n.id]
+      if (p && n.id !== 'case') n.position = p
+    }
+
     return { nodes, edges }
-  }, [data, c])
+  }, [data, c, expanded, savedPos])
 
   const selData = useMemo(() => graph.nodes.find((n) => n.id === sel)?.data ?? null, [graph, sel])
 
@@ -344,11 +427,34 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
         proOptions={{ hideAttribution: true }}
         onNodeClick={(_, n) => setSel(n.id)}
         onPaneClick={() => setSel(null)}
+        onNodeDragStop={onDragStop}
         colorMode="dark"
       >
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#1e293b" />
         <Controls showInteractive={false} position="bottom-left" />
       </ReactFlow>
+
+      <div className="absolute left-2 top-2 flex gap-2">
+        {canEdit && (
+          <button onClick={() => setLinker((v) => !v)} className="rounded-lg border border-white/10 bg-ink-900/90 px-2.5 py-1.5 text-xs font-semibold text-slate-200 shadow-lg backdrop-blur transition hover:bg-white/10">
+            🔗 Link intel
+          </button>
+        )}
+        {Object.keys(savedPos).length > 0 && (
+          <button onClick={resetLayout} title="Forget the dragged layout and rebuild the radial chart" className="rounded-lg border border-white/10 bg-ink-900/90 px-2.5 py-1.5 text-xs font-semibold text-slate-200 shadow-lg backdrop-blur transition hover:bg-white/10">
+            ↺ Reset layout
+          </button>
+        )}
+      </div>
+
+      {linker && data && (
+        <LinkIntelPanel
+          caseId={c.id}
+          data={data}
+          onClose={() => setLinker(false)}
+          onLinked={() => { setLinker(false); void refresh() }}
+        />
+      )}
 
       {selData && (
         <aside className="absolute right-2 top-2 bottom-2 w-72 overflow-y-auto rounded-xl border border-white/10 bg-ink-900/95 p-4 shadow-2xl backdrop-blur">
@@ -373,10 +479,101 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
               {selData.hrefLabel ?? 'Open'} →
             </Link>
           )}
+          {selData.kind === 'person' && selData.refId && !(selData.refId in expanded) && (
+            <button
+              onClick={() => void expandPerson(selData.refId!)}
+              disabled={expandBusy === selData.refId}
+              className="mt-2 block w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-center text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-60"
+            >
+              {expandBusy === selData.refId ? 'Looking them up…' : '🕸 Show their other cases'}
+            </button>
+          )}
+          {selData.kind === 'person' && selData.refId && (expanded[selData.refId]?.length === 0) && (
+            <p className="mt-2 text-center text-xs text-slate-500">No other visible cases.</p>
+          )}
+          {canEdit && selData.linkId && (
+            <button
+              onClick={() => void (async () => {
+                if (!(await uiConfirm(`Unlink ${selData.label} from this case? The record itself is kept.`, { confirmText: 'Unlink' }))) return
+                const res = await remove('case_intel_links', selData.linkId!)
+                if (res.error) { toast(`Unlink failed: ${res.error.message}`, 'danger'); return }
+                toast('Unlinked from case', 'success')
+                setSel(null)
+                void refresh()
+              })()}
+              className="mt-2 block w-full rounded-lg border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-center text-sm font-semibold text-rose-300 transition hover:bg-rose-500/20"
+            >
+              ⛓️‍💥 Unlink from case
+            </button>
+          )}
         </aside>
       )}
 
-      <p className="pointer-events-none absolute bottom-2 right-3 text-[10px] text-slate-600">drag to arrange · scroll to zoom · click a node for details</p>
+      <p className="pointer-events-none absolute bottom-2 right-3 text-[10px] text-slate-600">drag to arrange (kept per case) · scroll to zoom · click a node for details</p>
+    </div>
+  )
+}
+
+/* ---- Quick-link intel (v2) ------------------------------------------------
+   Link a person/gang/place to the case without leaving the chart. Same
+   case_intel_links insert the Intel tab performs; realtime + refresh put the
+   new node on the ring immediately. */
+
+function LinkIntelPanel({ caseId, data, onClose, onLinked }: {
+  caseId: string
+  data: { links: LinkRow[]; persons: PersonRow[]; gangs: GangRow[]; places: PlaceRow[] }
+  onClose: () => void
+  onLinked: () => void
+}) {
+  const [kind, setKind] = useState<'person' | 'gang' | 'place'>('person')
+  const [refId, setRefId] = useState('')
+  const [role, setRole] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const linked = useMemo(
+    () => new Set(data.links.map((l) => `${l.kind}:${l.ref_id}`)),
+    [data.links],
+  )
+  const options = useMemo(() => {
+    const src = kind === 'person' ? data.persons.map((p) => ({ id: p.id, name: p.name || 'Person' }))
+      : kind === 'gang' ? data.gangs.map((g) => ({ id: g.id, name: g.name }))
+      : data.places.map((p) => ({ id: p.id, name: p.name }))
+    return src.filter((o) => !linked.has(`${kind}:${o.id}`)).sort((a, b) => a.name.localeCompare(b.name))
+  }, [kind, data, linked])
+
+  const add = async () => {
+    if (!refId) { toast('Pick who or what to link.', 'warn'); return }
+    setBusy(true)
+    const res = await insert('case_intel_links', { case_id: caseId, kind, ref_id: refId, role: role.trim() || null })
+    setBusy(false)
+    if (res.error) { toast(`Link failed: ${res.error.message}`, 'danger'); return }
+    toast('Linked to case', 'success')
+    onLinked()
+  }
+
+  const selCls = 'w-full rounded-lg border border-white/10 bg-ink-950 px-2.5 py-1.5 text-xs text-white outline-none focus:border-badge-500'
+  return (
+    <div className="absolute left-2 top-11 z-10 w-64 rounded-xl border border-white/10 bg-ink-900/95 p-3 shadow-2xl backdrop-blur">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-xs font-black uppercase tracking-wider text-slate-400">Link intel to case</p>
+        <button onClick={onClose} aria-label="Close link panel" className="rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-xs text-slate-300 hover:bg-white/10">✕</button>
+      </div>
+      <div className="space-y-2">
+        <select value={kind} onChange={(e) => { setKind(e.target.value as 'person' | 'gang' | 'place'); setRefId('') }} className={selCls} aria-label="Intel type">
+          <option value="person">👤 Person</option>
+          <option value="gang">🏴 Gang</option>
+          <option value="place">📍 Place</option>
+        </select>
+        <select value={refId} onChange={(e) => setRefId(e.target.value)} className={selCls} aria-label="Intel record">
+          <option value="">— pick a {kind} —</option>
+          {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+        </select>
+        {!options.length && <p className="text-[11px] text-slate-500">Every {kind} on file is already linked.</p>}
+        <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Role (suspect, witness, stash…)" className={selCls} />
+        <button onClick={() => void add()} disabled={busy || !refId} className="w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-1.5 text-xs font-bold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50">
+          {busy ? 'Linking…' : 'Link to case'}
+        </button>
+      </div>
     </div>
   )
 }

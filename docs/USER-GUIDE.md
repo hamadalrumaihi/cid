@@ -41,15 +41,15 @@ What you can see and change depends on your **role and bureau** — the server e
 
 ### The left sidebar (desktop)
 
-The sidebar groups all 27 screens into **5 categories**:
+The sidebar groups all 29 screens into **5 categories**:
 
 | Category | What's inside |
 |---|---|
-| **Command** | Dashboard, Announcements, Heatmap, Roster & Commendations |
+| **Command** | Dashboard, Analytics, Announcements, Heatmap, Roster & Commendations |
 | **Cases** | Case Files, Operations, Attachments, RICO |
-| **Intelligence** | Persons, BOLO Board, Gangs, Places, Vehicles, Network, Narcotics, Ballistics, M.O. Detector, Media Vault, Records |
+| **Intelligence** | Persons, BOLO Board, Gangs, Places, Vehicles, Indicators, Network, Narcotics, Ballistics, M.O. Detector, Media Vault, Records |
 | **Reference** | Penal Code, SOPs & Library, User Guide |
-| **Oversight** | My Desk, Calendar, Shift Reports, Audit Log |
+| **Oversight** | My Desk, Calendar, Shift Reports, Audit Log (sortable, filterable, exports to CSV) |
 
 Click a **category** to jump to its first screen; a **sub-tab strip** appears under the header to switch between the screens inside that category. Colored dots on the Command button are live counters (pending member approvals, unread announcements, items waiting on you).
 
@@ -74,6 +74,7 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 1. Go to **Cases → Case Files**.
 2. Use the search box or status filters to find the case, then **click its card**.
 3. Inside, work through the tabs: **Overview** (assignments & stats), **Graph** (the investigation link chart), **Evidence**, **Reports**, **Tasks**, **Charges**, **Chat** (case room with @mentions), **Timeline**, **Files**, **Intel** (linked people/gangs/places), **RICO**, and **Sign-off**.
+4. The **Timeline** tab opens with a zoomable chronology band — every event on its own lane (evidence, reports, tasks, sign-off). **Scroll to zoom** in on a busy day, **drag to pan**, and hover any dot for the details.
 
 ### Create a case
 
@@ -92,11 +93,14 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 - **A person:** Intelligence → Persons → **+ New Person**. Click any person's card to open their full intel profile (cases, gang ties, vehicles, dossier export).
 - **A vehicle:** Intelligence → Vehicles → **+ New Vehicle** — plate, model, owner. The registry automatically flags plates that appear across multiple cases.
 - **A gang:** Intelligence → Gangs → pick or create a gang, then use **Add member** and **Add Turf** inside it.
+- **A hard identifier:** Intelligence → Indicators → **+ New Indicator** — log a burner phone, bank account, weapon serial, alias or address against its case. The registry deconflicts automatically: if the same value is already logged on another case, both cases get a ⚡ **Deconfliction alert** naming each other (a case you can't access shows as 🔒 restricted — coordinate through its bureau lead).
 - **Link intel to a case:** open the case → **Intel** tab → link persons/gangs/places so everything cross-references.
 
 ### See the case as a link chart
 
 Open a case → **Graph** tab. The case sits at the center; suspects, witnesses, gangs, places, evidence, vehicles, reports and warrants orbit it, connected by labeled relationships (**owns**, **seen at**, **member of**, **mentioned in**…). Drag nodes to arrange, scroll to zoom, and **click any node** for its details and a jump link. The chart builds itself from the case's Intel links, evidence and reports — nothing extra to maintain.
+
+You can also work the case from the chart itself: **🔗 Link intel** (top-left) connects a person, gang or place without leaving the graph, and a linked node's panel has **Unlink from case**. Click a person and **Show their other cases** to see where else they surface. Your dragged arrangement is remembered per case on this device — **↺ Reset layout** brings back the automatic ring.
 
 ### Attach photos, videos and files
 
@@ -112,6 +116,10 @@ Open a case → **Graph** tab. The case sits at the center; suspects, witnesses,
 ### Work your desk
 
 **My Desk** (Oversight) shows, in one screen: sign-offs waiting on **you**, your returned cases, due follow-ups, stale cases, your open tasks, recent @mentions, your followed items, notifications and draft reports. If the Command dot in the nav is lit, this is where the work is.
+
+### Read the division's pulse — analytics
+
+**Command → Analytics** turns the live records into trends: stat tiles for **open cases**, the **clearance rate**, **average days to close** and **active BOLOs**; weekly bars of cases **opened vs closed**; an **evidence logged** trend line; and a **caseload by detective** chart. Hover any bar for exact numbers. Everything is computed from the cases you're allowed to see, so leadership and detectives each get their own true picture.
 
 ### See what's due — the calendar
 
