@@ -35,13 +35,13 @@ What you can see and change depends on your **role and bureau** — the server e
 
 ### The left sidebar (desktop)
 
-The sidebar groups all 28 screens into **5 categories**:
+The sidebar groups all 29 screens into **5 categories**:
 
 | Category | What's inside |
 |---|---|
 | **Command** | Dashboard, Analytics, Announcements, Heatmap, Roster & Commendations |
 | **Cases** | Case Files, Operations, Attachments, RICO |
-| **Intelligence** | Persons, BOLO Board, Gangs, Places, Vehicles, Network, Narcotics, Ballistics, M.O. Detector, Media Vault, Records |
+| **Intelligence** | Persons, BOLO Board, Gangs, Places, Vehicles, Indicators, Network, Narcotics, Ballistics, M.O. Detector, Media Vault, Records |
 | **Reference** | Penal Code, SOPs & Library, User Guide |
 | **Oversight** | My Desk, Calendar, Shift Reports, Audit Log |
 
@@ -84,6 +84,7 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 - **A person:** Intelligence → Persons → **+ New Person**. Click any person's card to open their full intel profile (cases, gang ties, vehicles, dossier export).
 - **A vehicle:** Intelligence → Vehicles → **+ New Vehicle** — plate, model, owner. The registry automatically flags plates that appear across multiple cases.
 - **A gang:** Intelligence → Gangs → pick or create a gang, then use **Add member** and **Add Turf** inside it.
+- **A hard identifier:** Intelligence → Indicators → **+ New Indicator** — log a burner phone, bank account, weapon serial, alias or address against its case. The registry deconflicts automatically: if the same value is already logged on another case, both cases get a ⚡ **Deconfliction alert** naming each other (a case you can't access shows as 🔒 restricted — coordinate through its bureau lead).
 - **Link intel to a case:** open the case → **Intel** tab → link persons/gangs/places so everything cross-references.
 
 ### See the case as a link chart

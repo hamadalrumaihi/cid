@@ -34,6 +34,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   audit:      { title: 'Audit Log', sub: 'Division-wide action history (owner-only)' },
   feedback:   { title: 'Feedback', sub: 'Suggest a feature or report a bug' },
   vehicles:   { title: 'Vehicle Registry', sub: 'Plates, owners & cross-case matches' },
+  indicators: { title: 'Indicators Registry', sub: 'Phones, accounts, serials, aliases & addresses — deconflicted across cases' },
   bolo:       { title: 'BOLO Board', sub: 'At-large subjects — be on the lookout' },
   guide:      { title: 'User Guide', sub: 'How to sign in, navigate & work a case — new member orientation' },
   calendar:   { title: 'Division Calendar', sub: 'Follow-ups, task deadlines & shift weeks at a glance' },
@@ -51,7 +52,7 @@ export interface NavCategory {
 export const NAV_CATEGORIES: NavCategory[] = [
   { id: 'command',   label: 'Command',      tabs: ['command', 'analytics', 'announce', 'heatmap', 'personnel'] },
   { id: 'cases',     label: 'Cases',        tabs: ['cases', 'operations', 'case-files', 'rico'] },
-  { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'network', 'narcotics', 'ballistics', 'modus', 'media', 'records'] },
+  { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'indicators', 'network', 'narcotics', 'ballistics', 'modus', 'media', 'records'] },
   { id: 'reference', label: 'Reference',    tabs: ['penal', 'sops', 'guide'] },
   { id: 'oversight', label: 'Oversight',    tabs: ['inbox', 'calendar', 'shifts', 'audit'] },
 ]
@@ -59,7 +60,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
 export const TAB_LABEL: Record<string, string> = {
   command: 'Dashboard', analytics: 'Analytics', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
   cases: 'Case Files', operations: 'Operations', 'case-files': 'Attachments', rico: 'RICO',
-  persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles',
+  persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', indicators: 'Indicators',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
   media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide',
   inbox: 'My Desk', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log',
