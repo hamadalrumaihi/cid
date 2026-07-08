@@ -39,6 +39,7 @@ function mutateThen(p: Promise<{ error: { message: string } | null }>, refresh: 
 import { StaleBadge } from './StaleBadge'
 import { WatchButton } from './WatchButton'
 import { CaseModal } from './CaseModal'
+import { TimelineBand, type BandEvent } from './TimelineBand'
 
 type CaseRow = Tables<'cases'>
 type TaskRow = Tables<'case_tasks'>
@@ -805,7 +806,7 @@ function ChatTab({ c }: { c: CaseRow }) {
 }
 
 function TimelineTab({ c }: { c: CaseRow }) {
-  const [rows, setRows] = useState<{ at: string; label: string; sub?: string }[]>([])
+  const [rows, setRows] = useState<BandEvent[]>([])
   const vE = useTableVersion('evidence')
   const vR = useTableVersion('reports')
   const vT = useTableVersion('case_tasks')
@@ -818,16 +819,21 @@ function TimelineTab({ c }: { c: CaseRow }) {
         list('case_tasks', { eq: { case_id: c.id } }) as Promise<TaskRow[]>,
         list('case_signoff_history', { eq: { case_id: c.id } }) as Promise<HistoryRow[]>,
       ])
-      setRows([
-        { at: c.created_at, label: 'Case opened', sub: c.case_number },
-        ...(c.follow_up_at ? [{ at: c.follow_up_at, label: 'Follow-up due' }] : []),
-        ...e.map((x) => ({ at: x.collected_at || x.created_at, label: `Evidence ${x.item_code || ''}`, sub: x.description || undefined })),
-        ...r.map((x) => ({ at: x.created_at, label: `${x.template} report`, sub: x.finalized ? 'Finalized' : 'Draft' })),
-        ...t.map((x) => ({ at: x.created_at, label: `Task: ${x.title}`, sub: x.done ? 'Done' : 'Open' })),
-        ...s.map((x) => ({ at: x.created_at, label: SIGNOFF_ACTION_VERB[x.action] || x.action, sub: x.actor_name || officerName(x.actor_id) || undefined })),
-      ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()))
+      setRows(([
+        { at: c.created_at, label: 'Case opened', sub: c.case_number, type: 'opened' },
+        ...(c.follow_up_at ? [{ at: c.follow_up_at, label: 'Follow-up due', type: 'followup' as const }] : []),
+        ...e.map((x) => ({ at: x.collected_at || x.created_at, label: `Evidence ${x.item_code || ''}`, sub: x.description || undefined, type: 'evidence' as const })),
+        ...r.map((x) => ({ at: x.created_at, label: `${x.template} report`, sub: x.finalized ? 'Finalized' : 'Draft', type: 'report' as const })),
+        ...t.map((x) => ({ at: x.created_at, label: `Task: ${x.title}`, sub: x.done ? 'Done' : 'Open', type: 'task' as const })),
+        ...s.map((x) => ({ at: x.created_at, label: SIGNOFF_ACTION_VERB[x.action] || x.action, sub: x.actor_name || officerName(x.actor_id) || undefined, type: 'signoff' as const })),
+      ] as BandEvent[]).sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()))
     } catch { /* stale */ }
   }, [c])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vE, vR, vT, vS])
-  return <div className="space-y-2">{rows.map((r, i) => <div key={`${r.at}-${i}`} className="rounded-xl border border-white/10 bg-ink-950/50 p-3"><p className="font-semibold text-white">{r.label}</p><p className="text-sm text-slate-500">{timeAgo(r.at)}{r.sub ? ` - ${r.sub}` : ''}</p></div>)}</div>
+  return (
+    <div>
+      <TimelineBand events={rows} />
+      <div className="space-y-2">{rows.map((r, i) => <div key={`${r.at}-${i}`} className="rounded-xl border border-white/10 bg-ink-950/50 p-3"><p className="font-semibold text-white">{r.label}</p><p className="text-sm text-slate-500">{timeAgo(r.at)}{r.sub ? ` - ${r.sub}` : ''}</p></div>)}</div>
+    </div>
+  )
 }

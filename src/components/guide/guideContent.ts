@@ -66,6 +66,7 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 1. Go to **Cases → Case Files**.
 2. Use the search box or status filters to find the case, then **click its card**.
 3. Inside, work through the tabs: **Overview** (assignments & stats), **Graph** (the investigation link chart), **Evidence**, **Reports**, **Tasks**, **Charges**, **Chat** (case room with @mentions), **Timeline**, **Files**, **Intel** (linked people/gangs/places), **RICO**, and **Sign-off**.
+4. The **Timeline** tab opens with a zoomable chronology band — every event on its own lane (evidence, reports, tasks, sign-off). **Scroll to zoom** in on a busy day, **drag to pan**, and hover any dot for the details.
 
 ### Create a case
 
