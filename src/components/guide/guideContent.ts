@@ -1,8 +1,7 @@
-# CID Portal — New User Guide
+/** The in-app copy of docs/USER-GUIDE.md, adapted for src/lib/markdown
+ *  (no --- rules or italics). Keep the two in sync when either changes. */
+export const USER_GUIDE_MD = `Welcome to the **CID Portal**, the live case-management system for the San Andreas Criminal Investigation Division. This guide walks a first-time member from signing in to running their first case.
 
-Welcome to the **CID Portal**, the live case-management system for the San Andreas Criminal Investigation Division. This guide walks a first-time member from signing in to running their first case.
-
----
 
 ## Introduction
 
@@ -16,7 +15,6 @@ The CID Portal is a private, real-time investigation workspace. Everything in it
 
 What you can see and change depends on your **role and bureau** — the server enforces this, so you'll simply never see records that aren't yours to see.
 
----
 
 ## Getting Started
 
@@ -27,7 +25,7 @@ What you can see and change depends on your **role and bureau** — the server e
    - Click **Continue with Discord** (most members use this),
    - Click **Continue with Google**, or
    - Type your email and click **Email link** — you'll get a one-time sign-in link in your inbox ("Magic link sent — check your inbox.").
-3. First time here? After signing in you'll see: *"…signed in but not yet approved."* That's normal — a Command member must activate your profile. Ping your supervisor, then just reload once they've approved you.
+3. First time here? After signing in you'll see: "…signed in but not yet approved." That's normal — a Command member must activate your profile. Ping your supervisor, then just reload once they've approved you.
 
 ### First five minutes after approval
 
@@ -35,7 +33,6 @@ What you can see and change depends on your **role and bureau** — the server e
 - Click the **Appearance** control in the sidebar to pick your accent color and compact/comfortable density.
 - Open **My Desk** (Oversight section) — this is your personal to-do view and the best page to start every session on.
 
----
 
 ## Main Interface Navigation
 
@@ -65,7 +62,6 @@ Click a **category** to jump to its first screen; a **sub-tab strip** appears un
 
 The sidebar becomes a **bottom navigation bar** with the same 5 categories; a dot on Command means something needs your attention.
 
----
 
 ## Core Features Step-by-Step
 
@@ -79,7 +75,7 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 
 1. On **Case Files**, click **New Case**.
 2. Fill in the title, bureau, and summary (a template can prefill these), then click **Save**.
-3. The case gets an auto-numbered ID (like `SAB-9000041`) and appears for your bureau instantly.
+3. The case gets an auto-numbered ID (like \`SAB-9000041\`) and appears for your bureau instantly.
 
 ### Move a case through its life
 
@@ -115,13 +111,12 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 2. Pick the week — the form **auto-fills** a rollup of the cases you led and evidence you logged that week.
 3. Add your summary and click **Save**. One report per week; you can edit yours later.
 
----
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| *"…signed in but not yet approved"* | Normal for new accounts — ask a Command member to approve you, then reload. |
+| "…signed in but not yet approved" | Normal for new accounts — ask a Command member to approve you, then reload. |
 | A page says **Sign in to view…** after you were away | Your session expired — sign back in; your drafts and settings are kept on this device. |
 | You can't see a case a colleague mentions | It belongs to another bureau. Access is enforced server-side; ask the case lead or your bureau lead. |
 | **Save failed / Delete failed** toast | The server refused the write (usually permissions). The message says why — nothing was silently lost. |
@@ -131,6 +126,6 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 | You closed a modal and lost your text | Modals with unsaved changes warn you first — click **Cancel** in that warning to keep writing. Drafts of long forms are kept per device. |
 | Clicked **Delete** by accident | Most deletions show an **Undo** toast for a few seconds. Click it. If it's gone, ask Command — records are audit-logged. |
 
----
 
-*Questions or ideas? Use **Feedback** (in the sidebar) — it goes straight to the portal owner, and you can watch your suggestion's status change as it's triaged.*
+Questions or ideas? Use **Feedback** (in the sidebar) — it goes straight to the portal owner, and you can watch your suggestion's status change as it's triaged.
+`

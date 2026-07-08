@@ -27,6 +27,7 @@ import { ModusView } from '@/components/modus/ModusView'
 import { MediaView } from '@/components/media/MediaView'
 import { CaseFilesView } from '@/components/casefiles/CaseFilesView'
 import { SopsView } from '@/components/sops/SopsView'
+import { GuideView } from '@/components/guide/GuideView'
 
 /** One route per leaf tab. Placeholder views are replaced slice-by-slice as
  *  each vanilla view is ported (see docs/REACT-PARITY.md for the order). */
@@ -213,6 +214,13 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="sops" />}>
         <SopsView />
+      </Suspense>
+    )
+  }
+  if (tab === 'guide') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="guide" />}>
+        <GuideView />
       </Suspense>
     )
   }
