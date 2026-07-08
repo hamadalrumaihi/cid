@@ -32,13 +32,13 @@ route ids but the legacy `reports` route has no section and falls back to `cases
       operations picker/view, detail shell, 11 tabs, packet .docx/.md. Gates green.
       **Live-verified 2026-07-08** (see "Live QA results" below); several dense vanilla
       subflows are intentionally lean in React v1 and called out below.
-- [ ] **Phase 3+** — one view per patch (order below). Done so far: `inbox` (My Desk),
-      `command` (Central Command), `personnel` (Roster & Member Admin), `announce`
-      (Announcements), `persons` (Persons of Interest), `gangs` (Gangs & Turf),
-      `bolo` (BOLO Board), and `places` (Criminal Places & Production). The first
-      four are **live-verified 2026-07-08** alongside Phase 2; `persons`, `gangs`,
-      `bolo`, and `places` are implementation-complete with local gates green, live
-      verification pending.
+- [x] **Phase 3+** — COMPLETE 2026-07-08: all 25 views implemented. Live-verified:
+      inbox, command, personnel, announce (+ Phase 2 cases/operations). Gates-green
+      with live verification pending: persons, gangs, bolo, places, vehicles, penal,
+      records, shifts, audit, feedback, narcotics, ballistics, rico, heatmap,
+      network, modus, media, case-files, sops. Next: cross-cut polish (exports/
+      imports, nav badges, data-table engine), the remaining live QA pass, then
+      cutover.
 
 ### Live QA results (2026-07-08, real browser + live Supabase, director account)
 All flows exercised with throwaway rows; SQL sweep confirmed **zero QA rows left**
@@ -253,10 +253,17 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       penalSearch), level tint + sentence + fine + RICO badge, live count
       readout; `?q=` seeds the search box so global-search charge hits land
       prefiltered (palette Q_SEEDED_TABS includes penal).
-- [ ] **sops** — SOPs & Library: doc cards; reader engine (sop-prose typography,
-      pipe-tables, safe mini-Markdown, roster visuals); doc/sheet/form/matrix viewers;
-      version history; structured roster form editor; command-only writes (RLS folder
-      guard); content synced by `sops-sync` edge function (backend — unaffected by rebuild).
+- [x] **sops** — implementation pass 2026-07-08, local gates green (live
+      verification pending): doc shelf (SOPs + Resources folders, excerpt
+      cards, folder tags, gdrive-sync badge), reader through the shared
+      lib/markdown engine (same safe renderer as case notes: pipe tables,
+      status chips, note blocks — no dangerouslySetInnerHTML), command-only
+      New/Edit/Delete (UI matches the documents RLS folder guard),
+      edit-captures-a-version-snapshot-first (documents_versions) + History
+      modal with snapshot-then-restore, delete w/ undo. Content sync stays
+      on the sops-sync edge function (backend, untouched). **Lean in v1**:
+      the structured roster form editor (sopFormEditor), sheet/form/matrix
+      viewers, and the Personnel/Gang-Intel doc shelves land as polish.
 
 ### Oversight
 - [x] **inbox** — My Desk implementation pass, live-verified 2026-07-08: sign-off
