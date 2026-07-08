@@ -108,7 +108,14 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       post only** via `create_notification` (mentioned officers get "You were mentioned"
       and join even outside the audience). **Lean in v1**: the announce unread nav badge
       is still pending (nav-badge polish; the header bell itself landed 2026-07-08).
-- [ ] **heatmap** — Commander heatmap (stylized SA map, incident density).
+- [x] **heatmap** — implementation pass 2026-07-08, local gates green (live
+      verification pending): 4 toggleable layers (cases×3 raids×3 turf×2
+      places×1) re-weighting live, created_at window slider (commit on
+      release so dragging keeps focus), stylized SA silhouette SVG with
+      intensity dots (fixed positions for 36 known areas, tooltip
+      breakdown, unplaced-areas note), tile grid with lvl1-3 tints (hm-tile
+      CSS ported into globals.css), formula legend. Window cutoff is
+      stamped per data load (lint-pure).
 - [x] **personnel** — implementation pass, live-verified 2026-07-08: roster
       cards (LOA state, badge/bureau/status tiles, 30/page load-more); self LOA toggle +
       My Profile editor (also wired to the sidebar officer card; saves via the new
@@ -135,7 +142,11 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       detail w/ link/unlink case picker; CRUD modals; deep link.
 - [ ] **case-files** — per-case attachments (FiveManage upload; `case_files` keyed by
       case_number; RLS `can_access_case_number`).
-- [ ] **rico** — RICO element tracker: enterprise + predicate acts; .docx export.
+- [x] **rico** — implementation pass 2026-07-08, local gates green (live
+      verification pending): standalone view wraps the SAME RicoTab the case
+      detail embeds (single tracker implementation) with a case picker +
+      RICO Predicate Summary .docx export (letterhead + prosecutor
+      disclaimer, matching vanilla exportRicoDocx).
 
 ### Intelligence
 - [x] **persons** — implementation pass, local gates green 2026-07-08: paged

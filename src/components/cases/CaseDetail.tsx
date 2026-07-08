@@ -459,7 +459,7 @@ function ChargesTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boolean; o
   )
 }
 
-function RicoTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; canDelete: boolean }) {
+export function RicoTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; canDelete: boolean }) {
   const [rico, setRico] = useState<RicoRow | null>(null)
   const [preds, setPreds] = useState<PredicateRow[]>([])
   const [gangs, setGangs] = useState<GangRow[]>([])

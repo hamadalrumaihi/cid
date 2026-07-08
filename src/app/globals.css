@@ -209,3 +209,10 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
     animation: none !important;
   }
 }
+
+/* Commander Heatmap tiles — ported from the vanilla hand-written layer. */
+.hm-tile{border:1px solid rgba(255,255,255,.06);border-radius:1rem;padding:1.25rem;background:linear-gradient(135deg,rgba(100,116,139,.12),rgba(30,41,59,.04))}
+.hm-tile.lvl1{background:linear-gradient(135deg,rgba(59,130,246,.18),rgba(29,78,216,.04));border-color:rgba(59,130,246,.28)}
+.hm-tile.lvl2{background:linear-gradient(135deg,rgba(245,158,11,.20),rgba(146,64,14,.05));border-color:rgba(245,158,11,.30)}
+.hm-tile.lvl3{background:linear-gradient(135deg,rgba(244,63,94,.22),rgba(136,19,55,.06));border-color:rgba(244,63,94,.42)}
+.hm-bar{height:100%;background:linear-gradient(90deg,#3b82f6,#f59e0b,#f43f5e)}

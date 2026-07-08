@@ -20,6 +20,8 @@ import { AuditView } from '@/components/audit/AuditView'
 import { FeedbackView } from '@/components/feedback/FeedbackView'
 import { NarcoticsView } from '@/components/narcotics/NarcoticsView'
 import { BallisticsView } from '@/components/ballistics/BallisticsView'
+import { RicoView } from '@/components/rico/RicoView'
+import { HeatmapView } from '@/components/heatmap/HeatmapView'
 
 /** One route per leaf tab. Placeholder views are replaced slice-by-slice as
  *  each vanilla view is ported (see docs/REACT-PARITY.md for the order). */
@@ -157,6 +159,20 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="ballistics" />}>
         <BallisticsView />
+      </Suspense>
+    )
+  }
+  if (tab === 'rico') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="rico" />}>
+        <RicoView />
+      </Suspense>
+    )
+  }
+  if (tab === 'heatmap') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="heatmap" />}>
+        <HeatmapView />
       </Suspense>
     )
   }
