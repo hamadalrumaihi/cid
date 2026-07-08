@@ -155,10 +155,12 @@ function TrackerModal({ cases, onClose, onSaved }: { cases: CaseRow[]; onClose: 
   const [caseId, setCaseId] = useState('')
   const [director, setDirector] = useState(profile?.display_name || '')
   const [duration, setDuration] = useState('24')
+  const [busy, setBusy] = useState(false)
 
   const deploy = async () => {
     if (!profile) return
     if (!target.trim() || !director.trim()) { toast('Target + Director signature are required.', 'warn'); return }
+    setBusy(true)
     const dur = Math.max(1, Number(duration) || 24)
     const linked = cases.find((c) => c.id === caseId)
     const payload = {
@@ -171,7 +173,7 @@ function TrackerModal({ cases, onClose, onSaved }: { cases: CaseRow[]; onClose: 
       status: 'pending' as const,
     }
     const res = await insert('trackers', payload)
-    if (res.error) { toast(`Deploy failed: ${res.error.message}`, 'danger'); return }
+    if (res.error) { setBusy(false); toast(`Deploy failed: ${res.error.message}`, 'danger'); return }
     void notify(profile.id, 'tracker_pending', { tracker_code: payload.tracker_code, target: payload.target })
     toast('Tracker logged — awaiting deputy co-sign', 'success')
     onSaved()
@@ -209,8 +211,8 @@ function TrackerModal({ cases, onClose, onSaved }: { cases: CaseRow[]; onClose: 
             </div>
           </div>
         </div>
-        <button onClick={() => void deploy()} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
-          Deploy (awaiting deputy co-sign)
+        <button onClick={() => void deploy()} disabled={busy} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+          {busy ? 'Deploying…' : 'Deploy (awaiting deputy co-sign)'}
         </button>
       </div>
     </Modal>

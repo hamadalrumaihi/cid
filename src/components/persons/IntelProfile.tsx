@@ -126,11 +126,20 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
   const gangsRef = useRef(gangs)
   useEffect(() => { gangsRef.current = gangs })
 
+  // Re-centering (person → gang → person) fires overlapping loads; only the
+  // newest may land, or a slow earlier fan-out overwrites the current target's
+  // data (SearchPalette/VehiclesView use the same seq guard).
+  const seqRef = useRef(0)
   const load = useCallback(async () => {
+    const seq = ++seqRef.current
     setData(null)
     setErr(null)
-    try { setData(await loadProfile(target.type, target.id, gangsRef.current)) }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+    try {
+      const d = await loadProfile(target.type, target.id, gangsRef.current)
+      if (seq === seqRef.current) setData(d)
+    } catch (e) {
+      if (seq === seqRef.current) setErr(e instanceof Error ? e.message : String(e))
+    }
   }, [target])
 
   useEffect(() => {

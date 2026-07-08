@@ -13,7 +13,9 @@ import { useTableVersion } from '@/lib/realtime'
 import { caseStaleDays, isStaleCase } from '@/components/cases/caseUtils'
 import { StaleBadge } from '@/components/cases/StaleBadge'
 import { caseStatusTint, signoffLabel, signoffTint } from '@/lib/signoff'
+import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
+import { markWatchSeen, type WatchType } from '@/lib/watchlist'
 
 type CaseRow = Tables<'cases'>
 type TaskRow = Tables<'case_tasks'>
@@ -21,6 +23,8 @@ type MessageRow = Tables<'case_messages'>
 type NotificationRow = Tables<'notifications'>
 type ReportRow = Tables<'reports'>
 type WatchRow = Tables<'watchlist'>
+type PersonRow = Tables<'persons'>
+type VehicleRow = Tables<'vehicles'>
 
 interface InboxData {
   cases: CaseRow[]
@@ -29,9 +33,48 @@ interface InboxData {
   notifications: NotificationRow[]
   reports: ReportRow[]
   watchlist: WatchRow[]
+  persons: PersonRow[]
+  vehicles: VehicleRow[]
 }
 
-const EMPTY: InboxData = { cases: [], tasks: [], messages: [], notifications: [], reports: [], watchlist: [] }
+const EMPTY: InboxData = { cases: [], tasks: [], messages: [], notifications: [], reports: [], watchlist: [], persons: [], vehicles: [] }
+
+/** Followed target resolved against the desk caches — port of vanilla
+ *  watchlist.js resolveWatchTarget/isWatchNew. Targets hidden by RLS (or
+ *  deleted) resolve to nothing and are skipped, exactly like vanilla. */
+interface WatchItem {
+  w: WatchRow
+  icon: string
+  title: string
+  sub: string
+  ts: string | null
+  href: string
+  fresh: boolean
+}
+
+function resolveWatchItems(data: InboxData, seen: Record<string, string>): WatchItem[] {
+  const items: WatchItem[] = []
+  for (const w of data.watchlist) {
+    let it: Omit<WatchItem, 'fresh' | 'w'> | null = null
+    if (w.target_type === 'case') {
+      const c = data.cases.find((x) => x.id === w.target_id)
+      if (c) it = { icon: '🗂️', title: `${c.case_number} · ${c.title || 'Untitled'}`, sub: `${c.bureau} · ${c.status}`, ts: c.updated_at, href: caseHref(c.id) }
+    } else if (w.target_type === 'person') {
+      const p = data.persons.find((x) => x.id === w.target_id)
+      if (p) it = { icon: '👤', title: p.name || 'Person', sub: [p.alias ? `“${p.alias}”` : '', p.status || ''].filter(Boolean).join(' · ') || 'Person of interest', ts: p.updated_at, href: `/persons?q=${encodeURIComponent(p.name ?? '')}` }
+    } else if (w.target_type === 'vehicle') {
+      const v = data.vehicles.find((x) => x.id === w.target_id)
+      if (v) it = { icon: '🚗', title: v.plate, sub: [v.model, v.color].filter(Boolean).join(' · ') || 'Registered plate', ts: v.updated_at, href: `/vehicles?q=${encodeURIComponent(v.plate)}` }
+    }
+    if (!it) continue
+    const stamp = seen[`${w.target_type}:${w.target_id}`]
+    // No activity ts → nothing new; followed before the marker existed → new-ish.
+    const fresh = !!it.ts && (!stamp || it.ts > stamp)
+    items.push({ ...it, w, fresh })
+  }
+  items.sort((a, b) => Number(b.fresh) - Number(a.fresh) || String(b.ts ?? '').localeCompare(String(a.ts ?? '')))
+  return items
+}
 const CLOSED_SIGNOFF = new Set(['none', 'ready_doj', 'approved_complete'])
 
 const isJsonArray = (v: Json): v is Json[] => Array.isArray(v)
@@ -107,12 +150,15 @@ function CaseLine({ c, meta }: { c: CaseRow; meta?: React.ReactNode }) {
   )
 }
 
-function Panel({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+function Panel({ title, count, action, children }: { title: string; count: number; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="rounded-lg border border-white/10 bg-ink-900/55 p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="text-sm font-black uppercase tracking-wide text-slate-100">{title}</h3>
-        <span className="rounded border border-white/10 px-2 py-0.5 text-xs font-black text-slate-300">{count}</span>
+        <span className="flex items-center gap-2">
+          {action}
+          <span className="rounded border border-white/10 px-2 py-0.5 text-xs font-black text-slate-300">{count}</span>
+        </span>
       </div>
       <div className="space-y-2">{children}</div>
     </section>
@@ -125,6 +171,8 @@ export function InboxView() {
   const [data, setData] = useState<InboxData>(EMPTY)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
+  // Bumped whenever a watchSeen stamp is written so `fresh` chips recompute.
+  const [seenVer, setSeenVer] = useState(0)
 
   const vCases = useTableVersion('cases')
   const vTasks = useTableVersion('case_tasks')
@@ -132,6 +180,8 @@ export function InboxView() {
   const vNotifications = useTableVersion('notifications')
   const vReports = useTableVersion('reports')
   const vWatch = useTableVersion('watchlist')
+  const vPersons = useTableVersion('persons')
+  const vVehicles = useTableVersion('vehicles')
 
   const refresh = useCallback(async () => {
     if (state !== 'in' || !profile) return
@@ -140,15 +190,18 @@ export function InboxView() {
     setErr(null)
     try {
       await fetchProfiles()
-      const [cases, tasks, messages, notifications, reports, watchlist] = await Promise.all([
+      const [cases, tasks, messages, notifications, reports, watchlist, persons, vehicles] = await Promise.all([
         list('cases', { order: 'updated_at', ascending: false }),
         list('case_tasks', { order: 'due', nullsFirst: false }),
         list('case_messages', { order: 'created_at', ascending: false, limit: 120 }),
         list('notifications', { eq: { user_id: profile.id }, order: 'created_at', ascending: false, limit: 40 }),
         list('reports', { order: 'updated_at', ascending: false, limit: 120 }),
         list('watchlist', { eq: { user_id: profile.id }, order: 'created_at', ascending: false }),
+        // Only needed to resolve followed targets — a failure shouldn't sink the desk.
+        list('persons', {}).catch(() => [] as PersonRow[]),
+        list('vehicles', {}).catch(() => [] as VehicleRow[]),
       ])
-      setData({ cases, tasks, messages, notifications, reports, watchlist })
+      setData({ cases, tasks, messages, notifications, reports, watchlist, persons, vehicles })
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
     } finally {
@@ -159,7 +212,7 @@ export function InboxView() {
   useEffect(() => {
     const id = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(id)
-  }, [refresh, vCases, vTasks, vMessages, vNotifications, vReports, vWatch])
+  }, [refresh, vCases, vTasks, vMessages, vNotifications, vReports, vWatch, vPersons, vVehicles])
 
   const model = useMemo(() => {
     const myId = profile?.id ?? ''
@@ -171,12 +224,12 @@ export function InboxView() {
     const tasks = data.tasks.filter((t) => !t.done && (t.assignee === myId || t.created_by === myId)).sort((a, b) => String(a.due || '9999').localeCompare(String(b.due || '9999')))
     const overdueTasks = tasks.filter((t) => isDue(t.due))
     const mentions = data.messages.filter((m) => m.author_id !== myId && (jsonHasId(m.mentions, myId) || (profile?.display_name && m.body.toLowerCase().includes(`@${profile.display_name.toLowerCase()}`)))).slice(0, 12)
-    const watchedIds = new Set(data.watchlist.filter((w) => w.target_type === 'case').map((w) => w.target_id))
-    const watchedCases = data.cases.filter((c) => watchedIds.has(c.id)).slice(0, 12)
+    const watched = resolveWatchItems(data, Store.get<Record<string, string>>('watchSeen', {}))
     const draftReports = data.reports.filter((r) => r.author_id === myId && !r.finalized).slice(0, 12)
     const unread = data.notifications.filter((n) => !n.read)
-    return { review, bounced, mineInFlight, followUps, stale, tasks, overdueTasks, mentions, watchedCases, draftReports, unread }
-  }, [data, profile])
+    return { review, bounced, mineInFlight, followUps, stale, tasks, overdueTasks, mentions, watched, draftReports, unread }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seenVer invalidates the Store-read watchSeen map
+  }, [data, profile, seenVer])
 
   async function markNotificationRead(n: NotificationRow) {
     const res = await update('notifications', n.id, { read: true })
@@ -265,8 +318,35 @@ export function InboxView() {
           )) : <EmptyLine text="No recent case-chat mentions." />}
         </Panel>
 
-        <Panel title="Followed cases" count={model.watchedCases.length}>
-          {model.watchedCases.length ? model.watchedCases.map((c) => <CaseLine key={c.id} c={c} />) : <EmptyLine text="Follow cases to pin their changes here." />}
+        <Panel
+          title="Following"
+          count={model.watched.length}
+          action={model.watched.some((it) => it.fresh) ? (
+            <span className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold text-amber-300">{model.watched.filter((it) => it.fresh).length} updated</span>
+              <button
+                onClick={() => { for (const it of model.watched) markWatchSeen(it.w.target_type as WatchType, it.w.target_id, it.ts ?? undefined); setSeenVer((v) => v + 1) }}
+                className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10"
+              >
+                Mark all seen
+              </button>
+            </span>
+          ) : undefined}
+        >
+          {model.watched.length ? model.watched.map((it) => (
+            <Link
+              key={it.w.id}
+              href={it.href}
+              onClick={() => { markWatchSeen(it.w.target_type as WatchType, it.w.target_id, it.ts ?? undefined); setSeenVer((v) => v + 1) }}
+              className={`block rounded border p-3 transition hover:bg-white/[0.06] ${it.fresh ? 'border-amber-400/25 bg-amber-500/[0.04]' : 'border-white/10 bg-white/[0.03] hover:border-amber-300/30'}`}
+            >
+              <p className="truncate text-sm font-bold text-white">
+                <span aria-hidden>{it.icon}</span> {it.title}
+                {it.fresh && <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-black uppercase text-amber-300">updated</span>}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">{it.sub}{it.ts ? ` · ${timeAgo(it.ts)}` : ''}</p>
+            </Link>
+          )) : <EmptyLine text="Follow cases, persons or vehicles (the ☆ Follow button) to pin their changes here." />}
         </Panel>
 
         <Panel title="Notifications" count={model.unread.length}>

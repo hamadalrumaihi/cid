@@ -267,7 +267,11 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
 - [x] **inbox** — My Desk implementation pass, live-verified 2026-07-08: sign-off
       review/returned/in-flight queues, due follow-ups, stale visible cases, my open
       tasks, recent mentions, followed cases, unread notifications (click-to-mark-read),
-      and draft report rows. Richer followed-item delta/badge behavior still pending.
+      and draft report rows. Followed-item parity completed in the 2026-07-08 audit
+      pass: the Following panel now resolves persons + vehicles (not just cases),
+      shows "updated" chips from the shared `watchSeen` read-marker (vanilla
+      isWatchNew semantics), sorts fresh items first, stamps seen on open, and
+      offers Mark-all-seen — the full deskWatchlist port.
 - [x] **shifts** — implementation pass 2026-07-08, local gates green (live
       verification pending): weekly report list (bureau + author + "you"
       badge, own-report edit), new/edit modal with the auto-fill rollup

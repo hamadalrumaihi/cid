@@ -532,10 +532,12 @@ function MemberModal({ gangId, member, people, cases, canDelete, onClose, onSave
 
   const personKnown = !personId || people.some((p) => p.id === personId)
   const caseKnown = !caseId || cases.some((c) => c.id === caseId)
+  const [busy, setBusy] = useState(false)
   const input = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
 
   const save = async () => {
     if (!name.trim()) { toast('Name is required.', 'warn'); return }
+    setBusy(true)
     const payload = {
       gang_id: gangId,
       name: name.trim(),
@@ -550,6 +552,7 @@ function MemberModal({ gangId, member, people, cases, canDelete, onClose, onSave
       mugshot_url: mugshot.trim() || null,
     }
     const res = member ? await update('gang_members', member.id, payload) : await insert('gang_members', payload)
+    setBusy(false)
     if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
     toast('Member saved', 'success')
     onSaved()
@@ -594,8 +597,8 @@ function MemberModal({ gangId, member, people, cases, canDelete, onClose, onSave
           <div className="sm:col-span-2"><label className="mb-1 block text-xs font-semibold text-slate-400">Mugshot URL</label><input value={mugshot} onChange={(e) => setMugshot(e.target.value)} className={input} /></div>
         </div>
         <div className="mt-5 flex gap-2">
-          <button onClick={() => void save()} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
-            {member ? 'Save' : 'Add member'}
+          <button onClick={() => void save()} disabled={busy} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+            {busy ? 'Saving…' : member ? 'Save' : 'Add member'}
           </button>
           {member && canDelete && <button onClick={() => onDelete(member)} className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
         </div>
@@ -608,11 +611,14 @@ function TurfModal({ gangId, onClose, onSaved }: { gangId: string; onClose: () =
   const [block, setBlock] = useState('')
   const [density, setDensity] = useState<Density>('low')
   const [hotspot, setHotspot] = useState('')
+  const [busy, setBusy] = useState(false)
   const input = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
 
   const save = async () => {
     if (!block.trim()) { toast('Block is required.', 'warn'); return }
+    setBusy(true)
     const res = await insert('gang_turf', { gang_id: gangId, block: block.trim(), density, hotspot_area: hotspot.trim() || null })
+    setBusy(false)
     if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
     toast('Turf added', 'success')
     onSaved()
@@ -634,7 +640,7 @@ function TurfModal({ gangId, onClose, onSaved }: { gangId: string; onClose: () =
           </div>
           <div><label className="mb-1 block text-xs font-semibold text-slate-400">Hotspot Area</label><input value={hotspot} onChange={(e) => setHotspot(e.target.value)} className={input} /></div>
         </div>
-        <button onClick={() => void save()} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Add Turf</button>
+        <button onClick={() => void save()} disabled={busy} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">{busy ? 'Saving…' : 'Add Turf'}</button>
       </div>
     </Modal>
   )
