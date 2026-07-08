@@ -55,7 +55,7 @@ Click a **category** to jump to its first screen; a **sub-tab strip** appears un
 
 ### The header (top bar)
 
-- **Search everything…** — the global search box. Press **/** to focus it, or **Ctrl-K** (**⌘K** on Mac) anywhere to open the search palette. It finds cases, people, gangs, vehicles (by plate), places, penal codes and more; press **↑/↓** then **Enter** to jump straight to a result.
+- **Search everything…** — the global search box. Press **/** to focus it, or **Ctrl-K** (**⌘K** on Mac) anywhere to open the search palette. It finds cases, people, gangs, vehicles (by plate), places, penal codes and more; press **↑/↓** then **Enter** to jump straight to a result. It also runs **commands**: type "new case", "loa", "sign out" or "go to heatmap" and hit Enter — the everyday actions appear as soon as the palette opens.
 - **Bell icon** — your notifications (mentions, sign-off events, tracker approvals). Click one to jump to its case.
 - **Access chip** — hover to see exactly what your role lets you do.
 - **Set LOA / Clear LOA** — mark yourself on leave; sign-off routing will skip you while you're away.
