@@ -167,6 +167,17 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
     ) : null
   }
 
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const exportPdf = async () => {
+    if (!data?.person || pdfBusy) return
+    setPdfBusy(true)
+    try {
+      const d = await gatherPersonDossier(data.person, gangName(data.person.gang_id))
+      const { downloadPdf } = await import('@/lib/pdf')
+      await downloadPdf(`Person Dossier — ${d.person.name || ''}`, dossierParas(d), `dossier-${slug(d.person.name || 'person')}.pdf`)
+      setDossierOpen(false)
+    } finally { setPdfBusy(false) }
+  }
   const exportDocx = async () => {
     if (!data?.person) return
     const d = await gatherPersonDossier(data.person, gangName(data.person.gang_id))
@@ -315,7 +326,7 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
             </p>
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => void exportDocx()} className="rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm font-semibold text-white transition hover:bg-white/10">📄<br />.docx</button>
-              <button disabled title="Lazy jsPDF lands with the Exports slice" className="cursor-not-allowed rounded-lg border border-white/5 bg-white/[0.02] px-3 py-4 text-sm font-semibold text-slate-600">📕<br />.pdf — Exports slice</button>
+              <button onClick={() => void exportPdf()} disabled={pdfBusy} className="rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60">📕<br />{pdfBusy ? 'Rendering…' : '.pdf'}</button>
             </div>
           </div>
         </Modal>

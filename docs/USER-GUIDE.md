@@ -85,7 +85,7 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 
 - Drag a case card between the status columns on the board, **or** open the case and change **Status**.
 - When investigation is done, open the **Sign-off** tab and click **Submit for sign-off**. It routes automatically: bureau lead → deputy director → director. You'll get a notification at every step, and returned cases land in **My Desk → Returned or in-flight sign-off**.
-- Need the paperwork? In the case, open the **Case packet** dialog and click **Download DOCX** or **Download Markdown** for the full record.
+- Need the paperwork? In the case, open the **Case packet** dialog and click **Download PDF**, **Download DOCX** or **Download Markdown** for the full record — the PDF comes letterheaded and paginated, ready for court.
 
 ### Log intelligence
 

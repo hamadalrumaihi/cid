@@ -14,7 +14,7 @@ const LETTERHEAD = {
   banner: 'LAW ENFORCEMENT SENSITIVE',
 }
 
-function brandParas(): DocxPara[] {
+export function brandParas(): DocxPara[] {
   return [
     { text: LETTERHEAD.agency.toUpperCase(), style: 'letterhead' },
     { text: LETTERHEAD.jurisdiction, style: 'subtitle' },
