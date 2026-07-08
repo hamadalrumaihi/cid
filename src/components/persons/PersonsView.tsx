@@ -5,6 +5,7 @@
  *  empty search, bulk multi-select delete (command), per-card intel profile /
  *  edit / attach-to-case, mugshots via safeUrl with graceful fallback. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { deleteWithUndo, insert, list, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
@@ -22,12 +23,14 @@ type EditorState = { record: PersonRow | null; prefillName?: string } | null
 
 export function PersonsView() {
   const { state, canEdit, canDelete } = useAuth()
+  const sp = useSearchParams()
   const [persons, setPersons] = useState<PersonRow[]>([])
   const [gangs, setGangs] = useState<GangRow[]>([])
   const [caseOptions, setCaseOptions] = useState<CaseOption[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
+  // `?q=` seeds the filter — how global-search results land here prefiltered.
+  const [query, setQuery] = useState(() => sp.get('q') ?? '')
   const [page, setPage] = useState({ q: '', shown: PAGE })
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [editor, setEditor] = useState<EditorState>(null)

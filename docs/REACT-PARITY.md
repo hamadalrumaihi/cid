@@ -56,8 +56,8 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
 - operations: create → detail (deep link `?op=<id>`, link-case picker) → delete.
 - inbox: all 9 panels live; stat tiles; click-to-mark-read (unread 1→0);
   tracker_pending fan-out landed. **Finding**: tracker/stale notification payloads
-  render raw JSON via payloadText fallback — proper per-type rendering goes with the
-  Notifications cross-cut.
+  render raw JSON via payloadText fallback — **closed 2026-07-08** by the
+  Notifications cross-cut (shared `lib/notifText` vocabulary; payloadText removed).
 - personnel: roster + emails via `admin_member_emails` (command); removed-member list
   renders w/ Restore; My Profile LOA round-trip (modal set → sidebar badge → roster
   card clear); commendation award/delete w/ undo.
@@ -107,7 +107,7 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       pin, @mentions (all/role/officer) and case links; **notification fan-out on first
       post only** via `create_notification` (mentioned officers get "You were mentioned"
       and join even outside the audience). **Lean in v1**: the announce unread nav badge
-      lands with the Notifications cross-cut.
+      is still pending (nav-badge polish; the header bell itself landed 2026-07-08).
 - [ ] **heatmap** — Commander heatmap (stylized SA map, incident density).
 - [x] **personnel** — implementation pass, live-verified 2026-07-08: roster
       cards (LOA state, badge/bureau/status tiles, 30/page load-more); self LOA toggle +
@@ -120,7 +120,7 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       commendations grid + award/edit modal + command delete w/ undo. **Lean in v1**:
       Division Rosters doc shelf (reader + structured roster form editor + strike-point/
       headcount visuals) lands with the `sops` doc engine; pending-approval nav badge
-      lands with the Notifications cross-cut.
+      is still pending (nav-badge polish; the header bell itself landed 2026-07-08).
 
 ### Cases
 - [x] **cases** — Case Files (heaviest; see case-detail tabs below): grid + drag kanban
@@ -234,8 +234,17 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
 - [ ] **Realtime** — ~31 subscriptions: 27 tables bulk-registered once per authed session
       + `cid_records` channel + per-case chat; dedupe registry; teardown on sign-out
       (`removeAllChannels`).
-- [ ] **Notifications** — bell + unread count; `create_notification` RPC (forgery-guarded);
-      19 types; discord-notify edge function DMs.
+- [x] **Notifications** — implementation pass 2026-07-08 (live verification pending):
+      header bell + unread badge (9+ cap, hidden at 0), realtime-bumped via
+      `rt_notifications`; panel modal with per-type titles from the shared
+      `lib/notifText` vocabulary (vanilla NOTIF_LABEL + `member_approved`/`mention`/
+      both stale-case spellings — unknown types show the raw type string, never JSON);
+      mono detail line (case number/tracker/target + actor) + reason line; row click
+      marks read (optimistic, rolls back on error) and deep-links `?case=` when the
+      payload carries one; mark-all-read. My Desk's unread panel now renders through
+      the same helper — closes the raw-JSON `payloadText` finding from the inbox QA.
+      Writes were already live via the forgery-guarded `create_notification` RPC +
+      fire-and-forget discord-notify (lib/notify.ts).
 - [ ] **Exports** — dependency-free OOXML .docx writer (letterhead + LES banner); lazy
       jsPDF/XLSX (npm packages in React — CDN pins were a vanilla workaround; keep
       xlsx CVE-2023-30533 in mind: use ≥0.20.x); case packet 4 formats; report/dossier/
@@ -243,9 +252,17 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       notes download; clipboard copy helpers.
 - [ ] **Imports** — CSV/JSON/XLSX bulk import on every "+ New" (template CSV download,
       dedupe probe).
-- [ ] **Global search** — top-bar + command palette (Cmd/Ctrl+K, arrows/enter/esc);
-      `search_all` pg_trgm RPC (typo-tolerant, ranked, RLS-scoped SECURITY INVOKER);
-      recent-search memory; `/` focuses search.
+- [x] **Global search** — implementation pass 2026-07-08 (live verification pending):
+      one palette merges the vanilla top-bar deep search + Cmd-K command palette,
+      backed by the `search_all` pg_trgm RPC (typo-tolerant, ranked, RLS-scoped
+      SECURITY INVOKER) + client-side penal-charge matches (static reference data,
+      vanilla parity). Cmd/Ctrl-K opens anywhere; Enter in the header box opens
+      seeded with the query; `/` focuses the box; arrows/enter/esc; 200ms debounce
+      with sequence guard; distinct loading/error/no-match states. Recent searches
+      on the SAME Store key (`recentSearches`) so history survives cutover. Result
+      navigation: case → `/cases?case=<id>`; persons/gangs land with `?q=<term>`
+      seeding the view filter (new `?q=` support in those views); other kinds route
+      to their tab (placeholders until their slices land).
 - [ ] **Watchlist/follow** — cases/persons implemented; vehicles pending. Owner-only
       RLS; "following never widens access"; feeds My Desk.
 - [ ] **Never-lose-work** — `cid-draft:<key>` form drafts; dirty-guard on modal close;

@@ -7,6 +7,7 @@ import { list, update } from '@/lib/db'
 import { todayISO, timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { ROLE_LABEL } from '@/lib/roles'
+import { notifDetail, notifSub, notifTitle } from '@/lib/notifText'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { caseStaleDays, isStaleCase } from '@/components/cases/caseUtils'
@@ -41,18 +42,6 @@ function jsonHasId(v: Json, id: string): boolean {
   if (isJsonArray(v)) return v.some((x) => jsonHasId(x, id))
   if (v && typeof v === 'object') return Object.values(v).some((x) => jsonHasId((x ?? null) as Json, id))
   return false
-}
-
-function payloadText(payload: Json | null): string {
-  if (!payload) return ''
-  if (typeof payload === 'string') return payload
-  if (typeof payload === 'number' || typeof payload === 'boolean') return String(payload)
-  if (Array.isArray(payload)) return payload.map(payloadText).filter(Boolean).join(', ')
-  const obj = payload as Record<string, Json | undefined>
-  const preferred = [obj.title, obj.message, obj.body, obj.case_number, obj.caseId, obj.case_id]
-    .map((x) => payloadText((x ?? null) as Json))
-    .filter(Boolean)
-  return preferred.join(' - ') || JSON.stringify(payload)
 }
 
 function isDue(date?: string | null): boolean {
@@ -283,8 +272,8 @@ export function InboxView() {
         <Panel title="Notifications" count={model.unread.length}>
           {data.notifications.length ? data.notifications.slice(0, 12).map((n) => (
             <button key={n.id} onClick={() => { if (!n.read) void markNotificationRead(n) }} className={`block w-full rounded border p-3 text-left ${n.read ? 'border-white/10 bg-white/[0.02] text-slate-500' : 'border-emerald-400/20 bg-emerald-500/10 text-emerald-100'}`}>
-              <p className="text-xs font-black uppercase tracking-wide">{n.type}</p>
-              <p className="mt-1 line-clamp-2 text-sm">{payloadText(n.payload) || 'Notification'}</p>
+              <p className="text-xs font-black uppercase tracking-wide">{notifTitle(n)}</p>
+              <p className="mt-1 line-clamp-2 text-sm">{[notifDetail(n), notifSub(n)].filter(Boolean).join(' — ') || 'Notification'}</p>
               <p className="mt-1 text-xs opacity-70">{timeAgo(n.created_at)}{n.read ? '' : ' - click to mark read'}</p>
             </button>
           )) : <EmptyLine text="No notifications yet." />}

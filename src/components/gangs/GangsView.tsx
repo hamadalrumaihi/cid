@@ -5,6 +5,7 @@
  *  profile, and undo-backed deletes. The Gang Intel document shelf waits on
  *  the shared SOP/document engine slice. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { deleteWithUndo, insert, list, remove, update, withRetry } from '@/lib/db'
 import type { Database, Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
@@ -51,12 +52,14 @@ const GANG_NULL_REFS = [{ table: 'persons' as const, column: 'gang_id' }]
 
 export function GangsView() {
   const { state, canEdit, canDelete } = useAuth()
+  const sp = useSearchParams()
   const [gangs, setGangs] = useState<GangRow[]>([])
   const [people, setPeople] = useState<PersonRow[]>([])
   const [caseOptions, setCaseOptions] = useState<CaseOption[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
+  // `?q=` seeds the filter — how global-search results land here prefiltered.
+  const [query, setQuery] = useState(() => sp.get('q') ?? '')
   const [page, setPage] = useState({ q: '', shown: PAGE })
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [detailId, setDetailId] = useState<string | null>(null)
