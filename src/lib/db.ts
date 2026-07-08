@@ -96,6 +96,18 @@ export async function remove<T extends TableName>(table: T, id: string): Promise
   return { data: null, error: asDbError(error) }
 }
 
+/** Delete keyed by non-id column(s) — the delete-then-reinsert children
+ *  pattern (narcotic precursors/hotspots keyed by narcotic_id). */
+export async function removeWhere<T extends TableName>(
+  table: T,
+  eq: Partial<Record<keyof Tables<T> & string, unknown>>,
+): Promise<MutationResult<null>> {
+  let q = raw().from(table).delete()
+  for (const [k, v] of Object.entries(eq)) q = q.eq(k, v)
+  const { error } = await q
+  return { data: null, error: asDbError(error) }
+}
+
 type Fn = keyof Database['public']['Functions']
 export async function rpc<F extends Fn>(fn: F, args: Database['public']['Functions'][F]['Args']): Promise<MutationResult<Database['public']['Functions'][F]['Returns']>> {
   const { data, error } = await raw().rpc(fn, args)

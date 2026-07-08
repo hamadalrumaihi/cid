@@ -185,9 +185,18 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       `search_all_vehicle_term`, backward-compatible) so palette results land
       here prefiltered.
 - [ ] **network** — Relationship network graph.
-- [ ] **narcotics** — Narcotics intel: precursors + hotspots (delete-then-reinsert
-      children pattern).
-- [ ] **ballistics** — Ballistics & logistics benches + footprints.
+- [x] **narcotics** — implementation pass 2026-07-08, local gates green (live
+      verification pending): accordion registry (first open) with what-if
+      purity sliders (client-only, keyed by precursor id), pricing matrix
+      bars, hotspot list (density tint + case chip), tracked/hotspot count
+      tiles; CRUD modal with dynamic precursor/hotspot row editors using the
+      delete-then-reinsert children pattern via the new `removeWhere` db.ts
+      helper (closes that data-layer gap).
+- [x] **ballistics** — implementation pass 2026-07-08, local gates green (live
+      verification pending): street/organized bench tabs (persisted on the
+      vanilla `benchType` Store key), tier/heat tints, outputs + component
+      tracing, linked-case chips, bench CRUD modal (datalist tier/heat);
+      ballistic footprint log with gang/case links + CRUD modal.
 - [ ] **modus** — M.O. detector & profiler: `mo_crossref` RPC (deliberate cross-bureau
       leak valve: case_number+bureau+indicator only → "request access" flow).
 - [ ] **media** — Media vault (universal intake via FiveManage; paste-URL fallback).
@@ -330,7 +339,8 @@ RPCs typed). Missing capabilities, add as first-class helpers as slices need the
 - [ ] `maybeSingle()` as a first-class db.ts helper (auth.tsx still calls the raw client).
       Profiles **non-email projection** ✅ (ROSTER_COLS/PROFILE_COLS) and non-`.select()`
       profile update ✅ (`updateNoSelect`, Personnel slice) are closed.
-- [ ] delete/update keyed by non-id columns (narcotics children; profile-by-uid)
+- [x] delete keyed by non-id columns (`removeWhere` — narcotics children;
+      profile-by-uid update still via updateWhere)
 - [x] conditional update predicates (`.eq` extra col / `.is null`) for CAS
 - [x] `nullsFirst` order option (case_tasks due)
 - [x] realtime `subscribe(table, cb)` + subscribeOnce registry + teardown
