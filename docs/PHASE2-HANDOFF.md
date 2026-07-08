@@ -27,8 +27,9 @@ Companion source of truth: `docs/REACT-PARITY.md`.
   `d849b77 feat(rebuild): add personnel roster and member admin slice`.
 - The `announce` / Announcements slice was committed and pushed as
   `1a42119 feat(rebuild): add announcements slice with notification fan-out`.
-- The `persons` / Persons of Interest slice is implemented locally in this
-  patch and passes all local gates; live browser verification is still pending.
+- The `persons` / Persons of Interest slice was committed and pushed as
+  `2d2dcf4 feat(rebuild): add persons intelligence slice`; live browser
+  verification is still pending.
 - **Live browser QA completed 2026-07-08** for Phase 2 + inbox + command +
   personnel + announce against the live Supabase project (director account,
   dev server on :3777, Playwright-driven). Full results in
@@ -418,7 +419,8 @@ Committed baseline:
   `d849b77 feat(rebuild): add personnel roster and member admin slice`.
 - Announce / Announcements has been implemented after that baseline
   (src/components/announce/, wired in src/app/(app)/[tab]/page.tsx).
-- Persons / Persons of Interest is implemented in the current patch
+- Persons / Persons of Interest was pushed as
+  `2d2dcf4 feat(rebuild): add persons intelligence slice`
   (src/components/persons/, wired in src/app/(app)/[tab]/page.tsx).
 
 Current completed implementation passes:
