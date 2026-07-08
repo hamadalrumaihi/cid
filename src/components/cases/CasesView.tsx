@@ -36,6 +36,18 @@ export function CasesView() {
   const [selected, setSelected] = useState<string[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [editRecord, setEditRecord] = useState<CaseRow | null>(null)
+
+  // `?new=1` (palette "New case…" command) opens the create modal once, then
+  // strips the param so refresh/back doesn't reopen it.
+  useEffect(() => {
+    if (sp.get('new') !== '1' || !canEdit) return
+    const t = window.setTimeout(() => {
+      setEditRecord(null)
+      setModalOpen(true)
+      router.replace('/cases')
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [sp, canEdit, router])
   const casesV = useTableVersion('cases')
   const templatesV = useTableVersion('case_templates')
   const caseId = sp.get('case')
