@@ -15,6 +15,9 @@ import { PlacesView } from '@/components/places/PlacesView'
 import { VehiclesView } from '@/components/vehicles/VehiclesView'
 import { PenalView } from '@/components/penal/PenalView'
 import { RecordsView } from '@/components/records/RecordsView'
+import { ShiftsView } from '@/components/shifts/ShiftsView'
+import { AuditView } from '@/components/audit/AuditView'
+import { FeedbackView } from '@/components/feedback/FeedbackView'
 
 /** One route per leaf tab. Placeholder views are replaced slice-by-slice as
  *  each vanilla view is ported (see docs/REACT-PARITY.md for the order). */
@@ -117,6 +120,27 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="records" />}>
         <RecordsView />
+      </Suspense>
+    )
+  }
+  if (tab === 'shifts') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="shifts" />}>
+        <ShiftsView />
+      </Suspense>
+    )
+  }
+  if (tab === 'audit') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="audit" />}>
+        <AuditView />
+      </Suspense>
+    )
+  }
+  if (tab === 'feedback') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="feedback" />}>
+        <FeedbackView />
       </Suspense>
     )
   }

@@ -216,12 +216,27 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       review/returned/in-flight queues, due follow-ups, stale visible cases, my open
       tasks, recent mentions, followed cases, unread notifications (click-to-mark-read),
       and draft report rows. Richer followed-item delta/badge behavior still pending.
-- [ ] **shifts** — Weekly shift reports (author-or-command RLS).
-- [ ] **audit** — Audit log on the data-table engine (sort/paginate/copy-ID); owner-only
-      (RLS + hidden subtab; writes happen ONLY via `private.audit()` trigger on 16 tables).
+- [x] **shifts** — implementation pass 2026-07-08, local gates green (live
+      verification pending): weekly report list (bureau + author + "you"
+      badge, own-report edit), new/edit modal with the auto-fill rollup
+      (cases I led that moved in the chosen week + evidence I collected),
+      Monday-normalized week picker, friendly duplicate-week error
+      ("edit it instead"), realtime refresh.
+- [x] **audit** — implementation pass 2026-07-08, local gates green (live
+      verification pending): owner-only view (AUDIT_OWNER_ID UI gate matching
+      the audit_sel RLS policy; restricted notice otherwise), filter across
+      action/entity/officer/detail, 4 sortable columns, 50/page pager,
+      click-to-copy entity ids. Uses a compact local table for now — the
+      shared data-table engine cross-cut will absorb it later. Writes remain
+      server-trigger-only (no client write path).
 
 ### Standalone
-- [ ] **feedback** — Feature/bug submissions; triage gated to owner UUIDs (RLS-matched).
+- [x] **feedback** — implementation pass 2026-07-08, local gates green (live
+      verification pending): submit form (kind/title/details, Enter submits),
+      member view (own submissions + withdraw), owner triage (open/closed
+      sections, done / reopen / won't-fix, delete) gated by
+      FEEDBACK_OWNER_IDS (now exported from lib/nav; RLS enforces
+      server-side).
 
 ## Case detail — 11 tabs
 - [x] overview · [x] **notes** (Markdown render/edit, copy + .md)

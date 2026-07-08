@@ -73,6 +73,8 @@ for (const c of NAV_CATEGORIES) {
  *  this constant only gates the UI to match (hide the sub-tab). */
 export const AUDIT_OWNER_ID = '25466146-c512-4497-8ee8-88cbf3b1d22d'
 
-/** Feedback triage owners (vanilla feedback.js FEEDBACK_OWNER_IDS gate the
- *  standalone Feedback nav leaf's visibility; RLS enforces server-side). */
+/** Feedback triage owners (vanilla feedback.js FEEDBACK_OWNER_IDS): both
+ *  accounts belong to the app owner; RLS grants triage by these UUIDs. */
+export const FEEDBACK_OWNER_IDS = ['25466146-c512-4497-8ee8-88cbf3b1d22d', '6554181a-e2ed-4993-a66f-420c08f1471c']
+
 export const isValidTab = (tab: string): boolean => tab in PAGE_META
