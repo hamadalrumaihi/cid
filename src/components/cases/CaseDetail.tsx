@@ -15,7 +15,7 @@ import { useOperationsStore } from '@/lib/operations'
 import { caseCourtHint, caseStatusTint, CASE_STATUSES, signoffLabel, signoffTint, SIGNOFF_ACTION_VERB } from '@/lib/signoff'
 import { officerName, activeProfiles } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
-import { gatherCasePacket, packetDocx, packetMarkdown } from '@/lib/packet'
+import { gatherCasePacket, packetDocx, packetMarkdown, packetPdfSpec } from '@/lib/packet'
 import { safeUrl } from '@/lib/safeUrl'
 import { FORM_SCHEMAS, REPORT_TEMPLATES, formToText, reportTitle, type FormValues } from '@/lib/forms'
 import { PENAL_CODE, penalByCode, penalRecommend, penalSentence, penalSearch, penalTotals, type CaseCharge } from '@/lib/penal'
@@ -198,8 +198,8 @@ function PacketButton({ c }: { c: CaseRow }) {
     setPdfBusy(true)
     try {
       const data = await gatherCasePacket(c)
-      const [{ downloadPdf }, { packetParas }] = await Promise.all([import('@/lib/pdf'), import('@/lib/packet')])
-      await downloadPdf(`Case Packet — ${c.case_number}`, packetParas(c, data), `${slug(c.case_number)}-packet.pdf`)
+      const { downloadPdf } = await import('@/lib/pdf')
+      await downloadPdf(packetPdfSpec(c, data), `${slug(c.case_number)}-packet.pdf`)
       setOpen(false)
     } catch (e) { toast(e instanceof Error ? e.message : e, 'danger') }
     finally { setPdfBusy(false) }

@@ -98,6 +98,60 @@ export function packetParas(c: CaseRow, d: PacketData): DocxPara[] {
   return P
 }
 
+/** Structured spec for the formal PDF export (lib/pdf downloadPdf). */
+export function packetPdfSpec(c: CaseRow, d: PacketData): import('./pdf').PdfDocSpec {
+  const sections: import('./pdf').PdfDocSpec['sections'] = [
+    { title: 'Case summary', paras: [c.summary || 'No summary on file.'] },
+    {
+      title: `Evidence (${d.ev.length})`,
+      headers: ['Item', 'Description', 'Chain'],
+      widths: [1, 3, 0.8],
+      rows: d.ev.map((e) => [e.item_code || '—', e.description || e.type || 'item', String(e.tamper ?? 'ok')]),
+    },
+    {
+      title: `Charges (${d.charges.length})`,
+      headers: ['Code', 'Offense', 'Count', 'Sentence', 'Fine'],
+      widths: [0.9, 2.6, 0.6, 1.1, 0.9],
+      rows: d.charges.map((x) => [x.code, `${x.title}${x.level ? ` [${x.level}]` : ''}`, `×${x.count}`, x.jail != null ? penalSentence(x.jail) : '—', x.fine != null ? fmtUSD(x.fine) : '—']),
+    },
+    {
+      title: `Reports (${d.rep.length})`,
+      headers: ['Report', 'Status', 'Filed'],
+      widths: [2.6, 1, 1],
+      rows: d.rep.map((r) => [reportTitle(r), r.finalized ? 'Finalized' : 'Draft', new Date(r.created_at).toLocaleDateString('en-US')]),
+    },
+    {
+      title: `Named persons (${d.persons.length})`,
+      headers: ['Name', 'Alias', 'Status'],
+      widths: [1.6, 1.2, 1],
+      rows: d.persons.map((p) => [p.name || '—', p.alias || '—', p.status || '—']),
+    },
+    {
+      title: `Media (${d.media.length})`,
+      headers: ['Title', 'Reference'],
+      widths: [1.2, 2.4],
+      rows: d.media.map((m) => [m.title || m.type, m.external_url || m.storage_path || '—']),
+    },
+    { title: 'RICO', paras: [d.rico[0] ? `Enterprise linked; ${d.preds.length} predicate act(s) on record.` : 'No RICO tracker for this case.'] },
+  ]
+  if (c.notes?.trim()) sections.push({ title: 'Case notes', paras: c.notes.replace(/\r\n?/g, '\n').split('\n').filter(Boolean) })
+  return {
+    docType: 'CASE PACKET',
+    refCode: c.case_number,
+    subtitle: `${c.title || 'Untitled'} · prepared ${new Date().toLocaleString('en-US')}`,
+    meta: [
+      ['Status', String(c.status).toUpperCase()],
+      ['Bureau', c.bureau],
+      ['Area', c.area || '—'],
+      ['Evidence items', String(d.ev.length)],
+      ['Charges', String(d.charges.length)],
+      ['Reports', String(d.rep.length)],
+    ],
+    sections,
+    signatures: ['Prepared by (Detective)', 'Reviewed by (Bureau Lead)', 'Date'],
+  }
+}
+
 export function packetDocx(c: CaseRow, d: PacketData): void {
   downloadDocx(`Case Packet — ${c.case_number}`, packetParas(c, d), `${slug(c.case_number)}-packet.docx`)
 }

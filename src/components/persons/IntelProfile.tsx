@@ -17,7 +17,7 @@ import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { WatchButton } from '@/components/cases/WatchButton'
-import { dossierParas, gatherPersonDossier } from './dossier'
+import { dossierParas, dossierPdfSpec, gatherPersonDossier } from './dossier'
 import type { GangRow, PersonRow } from './PersonModal'
 import { parseProperties } from './PersonModal'
 
@@ -174,7 +174,7 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
     try {
       const d = await gatherPersonDossier(data.person, gangName(data.person.gang_id))
       const { downloadPdf } = await import('@/lib/pdf')
-      await downloadPdf(`Person Dossier — ${d.person.name || ''}`, dossierParas(d), `dossier-${slug(d.person.name || 'person')}.pdf`)
+      await downloadPdf(dossierPdfSpec(d), `dossier-${slug(d.person.name || 'person')}.pdf`)
       setDossierOpen(false)
     } finally { setPdfBusy(false) }
   }

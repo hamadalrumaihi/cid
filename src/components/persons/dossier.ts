@@ -87,6 +87,78 @@ export async function gatherPersonDossier(person: PersonRow, gangName: string | 
   }
 }
 
+/** Structured spec for the formal PDF export (lib/pdf downloadPdf). */
+export function dossierPdfSpec(d: PersonDossier): import('@/lib/pdf').PdfDocSpec {
+  const p = d.person
+  const caseNum = (id: string | null) => (id && d.cases.find((c) => c.id === id)?.case_number) || '—'
+  const sections: import('@/lib/pdf').PdfDocSpec['sections'] = []
+  if (p.notes) sections.push({ title: 'Intelligence notes', paras: [p.notes] })
+  sections.push(
+    {
+      title: `Linked cases (${d.cases.length})`,
+      headers: ['Case', 'Title', 'Status', 'Bureau'],
+      widths: [1, 2.2, 0.9, 0.7],
+      rows: d.cases.map((c) => [c.case_number, c.title || 'Untitled', String(c.status), c.bureau]),
+    },
+  )
+  if (d.caseIds.length > d.cases.length) {
+    sections.push({ title: 'Restricted', paras: [`${d.caseIds.length - d.cases.length} additional linked case(s) exist but are access-restricted to other bureaus.`] })
+  }
+  sections.push(
+    {
+      title: `Warrants naming subject (${d.warrants.length})`,
+      headers: ['Warrant', 'Status', 'Filed'],
+      widths: [2.2, 1, 1],
+      rows: d.warrants.map((r) => [reportTitle(r), warrantStatusOf(r), new Date(r.created_at).toLocaleDateString('en-US')]),
+    },
+    {
+      title: `Known properties (${d.props.length})`,
+      headers: ['Address', 'Type', 'Notes'],
+      widths: [1.6, 0.9, 1.6],
+      rows: d.props.map((pr) => [pr.address || '—', pr.type || '—', pr.notes || '—']),
+    },
+    {
+      title: `Registered vehicles (${d.vehicles.length})`,
+      headers: ['Plate', 'Model', 'Color'],
+      widths: [1, 1.6, 1],
+      rows: d.vehicles.map((v) => [v.plate, v.model || '—', v.color || '—']),
+    },
+    {
+      title: `Gang memberships (${d.members.length})`,
+      headers: ['Rank / Status', 'Per case'],
+      widths: [1.6, 1],
+      rows: d.members.map((m) => [m.rank || m.status || 'member', caseNum(m.case_id)]),
+    },
+    {
+      title: `Evidence in linked cases (${d.evidence.length})`,
+      headers: ['Item', 'Chain', 'Case'],
+      widths: [2.6, 0.8, 1],
+      rows: d.evidence.map((e) => [(e.item_code ? `${e.item_code} — ` : '') + (e.description || e.type || 'item'), String(e.tamper), caseNum(e.case_id)]),
+    },
+    {
+      title: `Media (${d.media.length})`,
+      headers: ['Title', 'Reference'],
+      widths: [1.2, 2.4],
+      rows: d.media.map((m) => [m.title || m.type, m.external_url || m.storage_path || '—']),
+    },
+  )
+  return {
+    docType: 'PERSON DOSSIER',
+    refCode: p.name || 'Unknown subject',
+    subtitle: `${p.alias ? `"${p.alias}" · ` : ''}${p.status || 'Person of interest'} · prepared ${new Date().toLocaleString('en-US')}`,
+    meta: [
+      ['Gang affiliation', d.gang || '—'],
+      ['CCW', p.ccw ? 'Yes' : 'No'],
+      ['VCH', String(p.vch || 0)],
+      ['Felony count', String(p.felony_count || 0)],
+      ['DOB', p.dob || '—'],
+      ['BOLO', p.bolo ? 'ACTIVE' : 'No'],
+    ],
+    sections,
+    signatures: ['Compiled by (Detective)', 'Date'],
+  }
+}
+
 /** Dossier paragraph stream for the shared OOXML writer (intel.js dossierParas). */
 export function dossierParas(d: PersonDossier): DocxPara[] {
   const p = d.person
