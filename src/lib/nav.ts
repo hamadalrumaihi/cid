@@ -34,6 +34,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   feedback:   { title: 'Feedback', sub: 'Suggest a feature or report a bug' },
   vehicles:   { title: 'Vehicle Registry', sub: 'Plates, owners & cross-case matches' },
   bolo:       { title: 'BOLO Board', sub: 'At-large subjects — be on the lookout' },
+  guide:      { title: 'User Guide', sub: 'How to sign in, navigate & work a case — new member orientation' },
 }
 // NOTE: vanilla PAGE_META also declares a legacy 'reports' route with no view
 // (authoring lives in the case-detail Reports tab); its fallback-to-cases
@@ -49,7 +50,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
   { id: 'command',   label: 'Command',      tabs: ['command', 'announce', 'heatmap', 'personnel'] },
   { id: 'cases',     label: 'Cases',        tabs: ['cases', 'operations', 'case-files', 'rico'] },
   { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'network', 'narcotics', 'ballistics', 'modus', 'media', 'records'] },
-  { id: 'reference', label: 'Reference',    tabs: ['penal', 'sops'] },
+  { id: 'reference', label: 'Reference',    tabs: ['penal', 'sops', 'guide'] },
   { id: 'oversight', label: 'Oversight',    tabs: ['inbox', 'shifts', 'audit'] },
 ]
 
@@ -58,7 +59,7 @@ export const TAB_LABEL: Record<string, string> = {
   cases: 'Case Files', operations: 'Operations', 'case-files': 'Attachments', rico: 'RICO',
   persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
-  media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library',
+  media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide',
   inbox: 'My Desk', shifts: 'Shift Reports', audit: 'Audit Log',
 }
 
