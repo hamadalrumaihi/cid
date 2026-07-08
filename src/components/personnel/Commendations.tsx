@@ -75,11 +75,14 @@ function CommendModal({ record, onClose, onSaved }: { record: CommendationRow | 
   const [icon, setIcon] = useState(record?.icon || '🎖️')
   const [tint, setTint] = useState(record?.tint || 'amber')
   const [note, setNote] = useState(record?.note || '')
+  const [busy, setBusy] = useState(false)
 
   const save = async () => {
     if (!title.trim()) { toast('Title required.', 'warn'); return }
+    setBusy(true)
     const patch = { title: title.trim(), recipient_name: recipient.trim(), icon: icon.trim(), tint, note: note.trim() }
     const res = record ? await update('commendations', record.id, patch) : await insert('commendations', patch)
+    setBusy(false)
     if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
     toast(record ? 'Commendation updated' : 'Commendation awarded', 'success')
     onSaved()
@@ -125,8 +128,8 @@ function CommendModal({ record, onClose, onSaved }: { record: CommendationRow | 
           </div>
         </div>
         <div className="mt-5 flex gap-2">
-          <button onClick={() => void save()} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
-            {record ? 'Save' : 'Award'}
+          <button onClick={() => void save()} disabled={busy} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+            {busy ? 'Saving…' : record ? 'Save' : 'Award'}
           </button>
           {record && canDelete && (
             <button onClick={() => void del()} className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">

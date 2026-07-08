@@ -261,13 +261,33 @@ function NarcoticModal({ drug, cases, canDelete, onClose, onSaved }: {
     if (res.error) { setBusy(false); toast(`Save failed: ${res.error.message}`, 'danger'); return }
     const nid = n?.id ?? res.data?.[0]?.id
     if (nid) {
-      // Replace children (vanilla delete-then-reinsert pattern).
-      await removeWhere('narcotic_precursors', { narcotic_id: nid })
-      await removeWhere('narcotic_hotspots', { narcotic_id: nid })
+      // Replace children (vanilla delete-then-reinsert pattern). Every step is
+      // checked: a failed re-insert after a successful delete would otherwise
+      // silently wipe purity/hotspot data behind a "saved" toast. On failure,
+      // best-effort restore the snapshot the modal was opened with.
       const precRows = precs.map((p, i) => ({ narcotic_id: nid, name: p.name.trim(), default_purity: Number(p.purity) || 0, sort_order: i })).filter((p) => p.name)
       const hotRows = hots.map((h) => ({ narcotic_id: nid, area: h.area.trim(), density: h.density as HotspotRow['density'], case_id: h.caseId || null })).filter((h) => h.area)
-      if (precRows.length) await insert('narcotic_precursors', precRows)
-      if (hotRows.length) await insert('narcotic_hotspots', hotRows)
+      const restore = async () => {
+        await removeWhere('narcotic_precursors', { narcotic_id: nid })
+        await removeWhere('narcotic_hotspots', { narcotic_id: nid })
+        if (drug?.precursors.length) await insert('narcotic_precursors', drug.precursors)
+        if (drug?.hotspots.length) await insert('narcotic_hotspots', drug.hotspots)
+      }
+      const steps: (() => Promise<{ error: { message: string } | null }>)[] = [
+        () => removeWhere('narcotic_precursors', { narcotic_id: nid }),
+        () => removeWhere('narcotic_hotspots', { narcotic_id: nid }),
+        ...(precRows.length ? [() => insert('narcotic_precursors', precRows)] : []),
+        ...(hotRows.length ? [() => insert('narcotic_hotspots', hotRows)] : []),
+      ]
+      for (const step of steps) {
+        const r = await step()
+        if (r.error) {
+          await restore()
+          setBusy(false)
+          toast(`Save failed (precursors/hotspots): ${r.error.message} — previous rows restored.`, 'danger')
+          return
+        }
+      }
     }
     setBusy(false)
     toast(n ? 'Narcotic updated' : 'Narcotic created', 'success')

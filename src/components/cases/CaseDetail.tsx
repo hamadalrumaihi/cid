@@ -20,6 +20,13 @@ import { FORM_SCHEMAS, REPORT_TEMPLATES, formToText, reportTitle, type FormValue
 import { PENAL_CODE, penalByCode, penalRecommend, penalSentence, penalSearch, penalTotals, type CaseCharge } from '@/lib/penal'
 import { toast } from '@/lib/toast'
 import { isPinnedCase, pushRecentCase, togglePinCase } from './caseUtils'
+
+/** One-click row mutations (delete chips, detach) previously discarded the
+ *  returned {error}, so an RLS-denied or failed write looked like a silent
+ *  no-op. Toast the reason on failure; refresh on success. */
+function mutateThen(p: Promise<{ error: { message: string } | null }>, refresh: () => void): void {
+  void p.then((r) => { if (r.error) toast(r.error.message, 'danger'); else refresh() })
+}
 import { StaleBadge } from './StaleBadge'
 import { WatchButton } from './WatchButton'
 import { CaseModal } from './CaseModal'
@@ -241,10 +248,14 @@ function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; 
   }, [c.id])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vA, vE, vR])
 
+  const [assignBusy, setAssignBusy] = useState(false)
   const addAssignment = async () => {
+    if (assignBusy) return
     const officer = activeProfiles()[0]?.id
     if (!officer) { toast('No active officers found.', 'warn'); return }
+    setAssignBusy(true)
     const res = await insert('case_assignments', { case_id: c.id, officer_id: officer, role: 'support' })
+    setAssignBusy(false)
     if (res.error) toast(res.error.message, 'danger')
     else { toast('Officer assigned.', 'success'); void refresh() }
   }
@@ -260,13 +271,13 @@ function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; 
       <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="font-bold text-white">Assigned Officers</h3>
-          {canEdit && <button onClick={addAssignment} className="rounded-lg bg-white/10 px-3 py-2 text-sm font-semibold text-white">Add support</button>}
+          {canEdit && <button onClick={() => void addAssignment()} disabled={assignBusy} className="rounded-lg bg-white/10 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Add support</button>}
         </div>
         <div className="flex flex-wrap gap-2">
           {assignments.map((a) => (
             <span key={a.id} className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-sm text-slate-200">
               {officerName(a.officer_id) || 'Officer'} <span className="text-xs uppercase text-slate-500">{a.role}</span>
-              {canDelete && <button onClick={() => { void remove('case_assignments', a.id).then(() => refresh()) }} className="text-rose-300">x</button>}
+              {canDelete && <button onClick={() => mutateThen(remove('case_assignments', a.id), refresh)} className="text-rose-300">x</button>}
             </span>
           ))}
           {!assignments.length && <p className="text-sm text-slate-500">No support assignments recorded.</p>}
@@ -393,7 +404,7 @@ function EvidenceTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; 
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           {media.map((m) => {
             const url = safeUrl(m.external_url || m.storage_path)
-            return <div key={m.id} className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm"><p className="font-bold text-white">{m.title}</p><p className="text-xs uppercase text-slate-500">{m.type}</p>{url && <a href={url} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-badge-200 hover:text-white">Open</a>}{canEdit && <button onClick={() => { void update('media', m.id, { case_id: null }).then(() => refresh()) }} className="ml-3 text-xs font-bold text-rose-300">Detach</button>}</div>
+            return <div key={m.id} className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm"><p className="font-bold text-white">{m.title}</p><p className="text-xs uppercase text-slate-500">{m.type}</p>{url && <a href={url} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-badge-200 hover:text-white">Open</a>}{canEdit && <button onClick={() => mutateThen(update('media', m.id, { case_id: null }), refresh)} className="ml-3 text-xs font-bold text-rose-300">Detach</button>}</div>
           })}
           {!media.length && <p className="text-sm text-slate-500">No linked media.</p>}
         </div>
@@ -516,7 +527,7 @@ export function RicoTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolea
         <button onClick={addPredicate} className="md:col-span-2 rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Add predicate act</button>
       </div>}
       <div className="space-y-2">
-        {preds.map((p) => <div key={p.id} className="rounded-xl border border-white/10 bg-ink-950/50 p-3"><p className="font-bold text-white">{p.predicate_type}</p><p className="text-sm text-slate-500">{p.act_date || 'No date'}{p.evidence_ref ? ` - ${p.evidence_ref}` : ''}</p>{p.note && <p className="mt-1 text-sm text-slate-300">{p.note}</p>}{canDelete && <button onClick={() => { void remove('predicate_acts', p.id).then(() => refresh()) }} className="mt-2 text-xs font-bold text-rose-300">Delete</button>}</div>)}
+        {preds.map((p) => <div key={p.id} className="rounded-xl border border-white/10 bg-ink-950/50 p-3"><p className="font-bold text-white">{p.predicate_type}</p><p className="text-sm text-slate-500">{p.act_date || 'No date'}{p.evidence_ref ? ` - ${p.evidence_ref}` : ''}</p>{p.note && <p className="mt-1 text-sm text-slate-300">{p.note}</p>}{canDelete && <button onClick={() => mutateThen(remove('predicate_acts', p.id), refresh)} className="mt-2 text-xs font-bold text-rose-300">Delete</button>}</div>)}
         {!preds.length && <p className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-500">No predicate acts recorded.</p>}
       </div>
     </div>
@@ -561,7 +572,7 @@ function IntelTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; can
         <input value={role} onChange={(e) => setRole(e.target.value)} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
         <button onClick={add} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Link</button>
       </div>}
-      {(['person', 'gang', 'place'] as const).map((section) => <div key={section} className="rounded-xl border border-white/10 bg-ink-950/50 p-4"><h3 className="mb-2 font-bold capitalize text-white">{section}s</h3><div className="flex flex-wrap gap-2">{links.filter((l) => l.kind === section).map((l) => <span key={l.id} className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-sm text-slate-200">{label(l)} <span className="text-xs text-slate-500">{l.role}</span>{canDelete && <button onClick={() => { void remove('case_intel_links', l.id).then(() => refresh()) }} className="text-rose-300">x</button>}</span>)}{!links.some((l) => l.kind === section) && <p className="text-sm text-slate-500">None linked.</p>}</div></div>)}
+      {(['person', 'gang', 'place'] as const).map((section) => <div key={section} className="rounded-xl border border-white/10 bg-ink-950/50 p-4"><h3 className="mb-2 font-bold capitalize text-white">{section}s</h3><div className="flex flex-wrap gap-2">{links.filter((l) => l.kind === section).map((l) => <span key={l.id} className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-sm text-slate-200">{label(l)} <span className="text-xs text-slate-500">{l.role}</span>{canDelete && <button onClick={() => mutateThen(remove('case_intel_links', l.id), refresh)} className="text-rose-300">x</button>}</span>)}{!links.some((l) => l.kind === section) && <p className="text-sm text-slate-500">None linked.</p>}</div></div>)}
     </div>
   )
 }
@@ -636,9 +647,12 @@ function TasksTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; can
   const v = useTableVersion('case_tasks')
   const refresh = useCallback(async () => { try { setTasks(await list('case_tasks', { eq: { case_id: c.id }, order: 'due', nullsFirst: false })) } catch { /* stale ok */ } }, [c.id])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, v])
+  const [adding, setAdding] = useState(false)
   const add = async () => {
-    if (!title.trim()) return
+    if (!title.trim() || adding) return
+    setAdding(true)
     const res = await insert('case_tasks', { case_id: c.id, title: title.trim(), assignee: assignee || null, due: due || null })
+    setAdding(false)
     if (res.error) toast(res.error.message, 'danger')
     else { setTitle(''); setAssignee(''); setDue(''); toast('Task added.', 'success'); void refresh() }
   }
@@ -653,12 +667,12 @@ function TasksTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; can
         <input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void add() }} placeholder="New task" className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />
         <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Unassigned</option>{activeProfiles().map((p) => <option key={p.id} value={p.id}>{officerName(p.id) || p.display_name}</option>)}</select>
         <input type="date" value={due} onChange={(e) => setDue(e.target.value)} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />
-        <button onClick={add} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Add</button>
+        <button onClick={() => void add()} disabled={adding} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-60">Add</button>
       </div>}
       {tasks.map((t) => <div key={t.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3">
         <input type="checkbox" checked={t.done} disabled={!canEdit} onChange={() => void toggle(t)} />
         <div className="min-w-0 flex-1"><p className={`font-semibold ${t.done ? 'text-slate-500 line-through' : 'text-white'}`}>{t.title}</p><p className="text-xs text-slate-500">{officerName(t.assignee) || 'Unassigned'}{t.due ? ` - due ${t.due}` : ''}</p></div>
-        {canDelete && <button onClick={() => { void remove('case_tasks', t.id).then(() => refresh()) }} className="text-sm font-bold text-rose-300">Delete</button>}
+        {canDelete && <button onClick={() => mutateThen(remove('case_tasks', t.id), refresh)} className="text-sm font-bold text-rose-300">Delete</button>}
       </div>)}
       {!tasks.length && <p className="py-8 text-center text-sm text-slate-500">No tasks yet.</p>}
     </div>
@@ -709,20 +723,23 @@ function ChatTab({ c }: { c: CaseRow }) {
   const v = useTableVersion('case_messages')
   const refresh = useCallback(async () => { try { setMsgs(await list('case_messages', { eq: { case_id: c.id }, order: 'created_at' })) } catch { /* stale */ } }, [c.id])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, v])
+  const [sending, setSending] = useState(false)
   const send = async () => {
-    if (!body.trim()) return
+    if (!body.trim() || sending) return
+    setSending(true)
     const res = await insert('case_messages', { case_id: c.id, body: body.trim(), author_id: profile?.id ?? null, author_name: profile?.display_name ?? null })
+    setSending(false)
     if (res.error) toast(res.error.message, 'danger')
     else { setBody(''); void refresh() }
   }
   return (
     <div className="space-y-3">
       <div className="max-h-[48vh] space-y-3 overflow-y-auto rounded-xl border border-white/10 bg-ink-950/50 p-3">
-        {msgs.map((m) => <div key={m.id} className={`rounded-xl p-3 ${m.author_id === profile?.id ? 'ml-auto max-w-[85%] bg-badge-600/20' : 'max-w-[85%] bg-white/5'}`}><p className="text-xs font-bold text-slate-400">{m.author_name || officerName(m.author_id) || 'Officer'} - {timeAgo(m.created_at)}</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-100">{m.body}</p>{(m.author_id === profile?.id || isCommand) && <button onClick={() => { void remove('case_messages', m.id).then(() => refresh()) }} className="mt-2 text-xs font-bold text-rose-300">Delete</button>}</div>)}
+        {msgs.map((m) => <div key={m.id} className={`rounded-xl p-3 ${m.author_id === profile?.id ? 'ml-auto max-w-[85%] bg-badge-600/20' : 'max-w-[85%] bg-white/5'}`}><p className="text-xs font-bold text-slate-400">{m.author_name || officerName(m.author_id) || 'Officer'} - {timeAgo(m.created_at)}</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-100">{m.body}</p>{(m.author_id === profile?.id || isCommand) && <button onClick={() => mutateThen(remove('case_messages', m.id), refresh)} className="mt-2 text-xs font-bold text-rose-300">Delete</button>}</div>)}
         {!msgs.length && <p className="py-8 text-center text-sm text-slate-500">No messages yet.</p>}
       </div>
       <textarea value={body} onChange={(e) => setBody(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }} rows={3} className="w-full rounded-xl border border-white/10 bg-ink-950 p-3 text-sm text-white" placeholder="Message the case room..." />
-      <div className="flex justify-end"><button onClick={send} className="rounded-lg bg-badge-600 px-4 py-2 text-sm font-bold text-white">Send</button></div>
+      <div className="flex justify-end"><button onClick={() => void send()} disabled={sending} className="rounded-lg bg-badge-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">Send</button></div>
     </div>
   )
 }
