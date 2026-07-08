@@ -106,8 +106,7 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       record navigation; post/edit/delete modal (LEAD_ROLES gate) with audience select,
       pin, @mentions (all/role/officer) and case links; **notification fan-out on first
       post only** via `create_notification` (mentioned officers get "You were mentioned"
-      and join even outside the audience). **Lean in v1**: the announce unread nav badge
-      is still pending (nav-badge polish; the header bell itself landed 2026-07-08).
+      and join even outside the audience). The announce unread nav badge landed with the nav-badges cross-cut (2026-07-08).
 - [x] **heatmap** — implementation pass 2026-07-08, local gates green (live
       verification pending): 4 toggleable layers (cases×3 raids×3 turf×2
       places×1) re-weighting live, created_at window slider (commit on
@@ -126,8 +125,7 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       command-gated `admin_member_emails`); roster-card deactivate (set_active=false);
       commendations grid + award/edit modal + command delete w/ undo. **Lean in v1**:
       Division Rosters doc shelf (reader + structured roster form editor + strike-point/
-      headcount visuals) lands with the `sops` doc engine; pending-approval nav badge
-      is still pending (nav-badge polish; the header bell itself landed 2026-07-08).
+      headcount visuals) lands with the `sops` doc engine; pending-approval nav badge landed with the nav-badges cross-cut (2026-07-08).
 
 ### Cases
 - [x] **cases** — Case Files (heaviest; see case-detail tabs below): grid + drag kanban
@@ -335,7 +333,13 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       payload carries one; mark-all-read. My Desk's unread panel now renders through
       the same helper — closes the raw-JSON `payloadText` finding from the inbox QA.
       Writes were already live via the forgery-guarded `create_notification` RPC +
-      fire-and-forget discord-notify (lib/notify.ts).
+      fire-and-forget discord-notify (lib/notify.ts). **Nav badges landed
+      2026-07-08** (useNavBadges): pending approvals (amber, command-only),
+      unread announcements (rose, audience-scoped vs the `annSeen` stamp), and
+      the My Desk needs-attention count (blue: reviews + bounced + unread
+      mentions + my stale/follow-up cases — vanilla inboxActionCount) on the
+      Command sidebar button, plus a summed dot on the mobile bottom nav.
+      All realtime-bumped; all inputs RLS-scoped.
 - [ ] **Exports** — dependency-free OOXML .docx writer (letterhead + LES banner); lazy
       jsPDF/XLSX (npm packages in React — CDN pins were a vanilla workaround; keep
       xlsx CVE-2023-30533 in mind: use ≥0.20.x); case packet 4 formats; report/dossier/

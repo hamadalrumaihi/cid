@@ -14,6 +14,7 @@ import { AppearanceModal } from './AppearanceModal'
 import { MyProfileModal } from './MyProfileModal'
 import { CategoryIcon, ChevronIcon, CloseIcon, ShieldIcon } from './icons'
 import { useNav } from './useNav'
+import { useNavBadges } from './useNavBadges'
 
 /* eslint-disable @next/next/no-img-element -- avatars are tiny external
    Discord/Google CDN images; the optimizer adds nothing but a proxy hop. */
@@ -75,6 +76,7 @@ const readCollapsed = () => document.body.classList.contains('nav-collapsed')
 
 export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; onCloseDrawer: () => void }) {
   const { activeCategory, activeTab, navigate, navigateCategory } = useNav()
+  const badges = useNavBadges()
   const [appearanceOpen, setAppearanceOpen] = useState(false)
   const collapsed = useSyncExternalStore(subscribeCollapse, readCollapsed, () => false)
 
@@ -133,7 +135,20 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
               }`}
             >
               <span className="nav-icon flex-shrink-0"><CategoryIcon cat={c.id} /></span>
-              <span className="nav-label">{c.label}</span>
+              <span className="nav-label">
+                {c.label}
+                {/* Vanilla puts all three badges on the Command button
+                    (#pending/#ann/#signoff-nav-badge). */}
+                {c.id === 'command' && badges.pending > 0 && (
+                  <span role="status" aria-label={`${badges.pending} member${badges.pending === 1 ? '' : 's'} awaiting approval`} className="ml-1 rounded-full bg-amber-500 px-1.5 text-[9px] font-bold text-white" title="Members awaiting approval">{badges.pending}</span>
+                )}
+                {c.id === 'command' && badges.announcements > 0 && (
+                  <span className="ml-1 rounded-full bg-rose-500 px-1.5 text-[9px] font-bold text-white" title="Unread announcements">{badges.announcements > 9 ? '9+' : badges.announcements}</span>
+                )}
+                {c.id === 'command' && badges.signoff > 0 && (
+                  <span className="ml-1 rounded-full bg-badge-500 px-1.5 text-[9px] font-bold text-white" title="Sign-off actions awaiting you">{badges.signoff}</span>
+                )}
+              </span>
             </button>
           )
         })}
