@@ -34,9 +34,10 @@ route ids but the legacy `reports` route has no section and falls back to `cases
       subflows are intentionally lean in React v1 and called out below.
 - [ ] **Phase 3+** — one view per patch (order below). Done so far: `inbox` (My Desk),
       `command` (Central Command), `personnel` (Roster & Member Admin), `announce`
-      (Announcements), `persons` (Persons of Interest), and `gangs` (Gangs & Turf).
-      The first four are **live-verified 2026-07-08** alongside Phase 2; `persons`
-      and `gangs` are implementation-complete with local gates green, live
+      (Announcements), `persons` (Persons of Interest), `gangs` (Gangs & Turf),
+      and `bolo` (BOLO Board). The first four are **live-verified 2026-07-08**
+      alongside Phase 2; `persons`, `gangs`, and `bolo` are implementation-
+      complete with local gates green, live
       verification pending.
 
 ### Live QA results (2026-07-08, real browser + live Supabase, director account)
@@ -146,7 +147,13 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       intel profile slide-over for persons and gangs with RLS-restricted linked
       case stubs, and RLS-scoped dossier export `.docx`. **Lean in v1**: dossier
       `.pdf` waits on the Exports slice; live browser verification still pending.
-- [ ] **bolo** — BOLO board (persons + vehicles).
+- [x] **bolo** — implementation pass, local gates green 2026-07-08:
+      RLS-scoped active BOLO person board, search by name/alias/status/gang,
+      latest warrant-status chip from accessible warrant reports naming the
+      subject, mugshots via `safeUrl`, armed/felony/gang/status chips, shared
+      intel profile, edit person, and clear-BOLO action. **Lean in v1**:
+      vehicle-specific BOLO behavior waits on the `vehicles` slice; live
+      browser verification still pending.
 - [x] **gangs** — implementation pass, local gates green 2026-07-08: gang
       cards with 24/page load-more, search, threat chips, bulk command delete
       with undo snapshotting `gang_members`/`gang_ranks`/`gang_turf` and

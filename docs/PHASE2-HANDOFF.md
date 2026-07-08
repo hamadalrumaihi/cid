@@ -1,6 +1,6 @@
 # React Rebuild Handoff - Phase 3 in progress
 
-Last updated: 2026-07-08 (gangs slice implementation pass).
+Last updated: 2026-07-08 (bolo slice implementation pass).
 
 This branch is `react-rebuild`. The repo root is the Next.js 16 app. The
 legacy root static files (`index.html`, root `*.js`, `styles.css`) remain inert
@@ -33,6 +33,8 @@ Companion source of truth: `docs/REACT-PARITY.md`.
 - The `gangs` / Gangs & Turf slice was committed and pushed as
   `0f1329f feat(rebuild): add gangs intelligence slice`; live browser
   verification is still pending.
+- The `bolo` / BOLO Board slice is implemented locally in this patch and passes
+  all local gates; live browser verification is still pending.
 - **Live browser QA completed 2026-07-08** for Phase 2 + inbox + command +
   personnel + announce against the live Supabase project (director account,
   dev server on :3777, Playwright-driven). Full results in
@@ -248,6 +250,24 @@ Intentionally lean, tracked in `docs/REACT-PARITY.md`:
 - CSV/XLSX/JSON bulk import on "+ New" waits on the Imports cross-cut.
 - Live browser QA for `/gangs` is still pending.
 
+## BOLO slice delivered
+
+Implemented `/bolo` in `src/components/bolo/`, wired through the `[tab]`
+dispatcher:
+
+- Active BOLO person board from RLS-scoped `persons` where `bolo=true`.
+- Search by name, alias, status, and gang.
+- Latest warrant-status chip from accessible warrant reports naming the
+  subject.
+- Mugshots via `safeUrl` with fallback; status, gang, armed-risk, and felony
+  chips.
+- Shared person intel profile, edit person modal, and clear-BOLO action.
+
+Intentionally lean, tracked in `docs/REACT-PARITY.md`:
+
+- Vehicle-specific BOLO behavior waits on the `vehicles` slice.
+- Live browser QA for `/bolo` is still pending.
+
 Implemented shared/data support:
 
 - `db.ts` list projections, `.in`, `updateWhere` CAS predicates, null ordering,
@@ -347,13 +367,13 @@ views. Done views (implementation passes; live verification pending):
 - `announce`
 - `persons`
 - `gangs`
+- `bolo`
 
 Unchecked views remaining:
 
 - `heatmap` - commander heatmap.
 - `case-files` - per-case attachments and FiveManage upload.
 - `rico` - standalone RICO tracker route and export.
-- `bolo` - BOLO board.
 - `places` - criminal places and production steps.
 - `vehicles` - vehicle registry and cross-reference engine.
 - `network` - relationship graph.
@@ -413,8 +433,7 @@ Do not cut over to `main` until all of these are true:
 
 ## Suggested next patch order
 
-1. Tackle `bolo` or `places` next. `bolo` can now compose the person/gang
-   intelligence surfaces; `places` feeds gang-linked properties and production
+1. Tackle `places` next. It feeds gang-linked properties and production
    workflows used by narcotics.
 2. Continue one view per patch, keeping each patch gated and live-verified.
 3. Fold the remaining targeted-QA flows (second account / real-data mutations
@@ -455,6 +474,8 @@ Committed baseline:
 - Gangs / Gangs & Turf was pushed as
   `0f1329f feat(rebuild): add gangs intelligence slice`
   (src/components/gangs/, wired in src/app/(app)/[tab]/page.tsx).
+- BOLO / BOLO Board is implemented in the current patch
+  (src/components/bolo/, wired in src/app/(app)/[tab]/page.tsx).
 
 Current completed implementation passes:
 - Phase 1 app shell/auth.
@@ -465,14 +486,15 @@ Current completed implementation passes:
 - Command `announce` / Announcements + first-post notification fan-out.
 - Intelligence `persons` / Persons of Interest + intel profile + dossier export.
 - Intelligence `gangs` / Gangs & Turf + roster/turf + shared intel profile.
+- Intelligence `bolo` / BOLO Board + warrant status + clear/edit/profile.
 
 Known local junk to ignore unless the user explicitly asks otherwise:
 - `.serena/`
 - `bash.exe.stackdump`
 
 Next recommended slice:
-- `bolo` / BOLO Board for a smaller intelligence follow-up, or `places` if the
-  next patch should keep building the gang/narcotics data chain.
+- `places` / Criminal Places & Production, because it feeds gang-linked
+  properties and the later narcotics production workflow.
 
 Before changing code:
 - Read `docs/REACT-PARITY.md` and this handoff.
