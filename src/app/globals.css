@@ -216,3 +216,15 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
 .hm-tile.lvl2{background:linear-gradient(135deg,rgba(245,158,11,.20),rgba(146,64,14,.05));border-color:rgba(245,158,11,.30)}
 .hm-tile.lvl3{background:linear-gradient(135deg,rgba(244,63,94,.22),rgba(136,19,55,.06));border-color:rgba(244,63,94,.42)}
 .hm-bar{height:100%;background:linear-gradient(90deg,#3b82f6,#f59e0b,#f43f5e)}
+
+/* Tiptap rich editor content (RichEditor.tsx) — markdown-equivalent styling */
+.rich-editor-content p { margin: 0.35rem 0; line-height: 1.55; }
+.rich-editor-content h2 { margin: 0.8rem 0 0.35rem; font-size: 1.05rem; font-weight: 800; color: #93c5fd; text-transform: uppercase; letter-spacing: 0.04em; }
+.rich-editor-content h3 { margin: 0.7rem 0 0.3rem; font-size: 0.95rem; font-weight: 700; color: #bfdbfe; }
+.rich-editor-content ul { margin: 0.35rem 0; padding-left: 1.25rem; list-style: disc; }
+.rich-editor-content ol { margin: 0.35rem 0; padding-left: 1.25rem; list-style: decimal; }
+.rich-editor-content li { margin: 0.15rem 0; }
+.rich-editor-content blockquote { margin: 0.5rem 0; border-left: 2px solid rgba(245, 158, 11, 0.5); background: rgba(245, 158, 11, 0.05); padding: 0.35rem 0.75rem; color: #fde68a; border-radius: 0 0.5rem 0.5rem 0; }
+.rich-editor-content code { background: rgba(255, 255, 255, 0.1); border-radius: 0.25rem; padding: 0.1rem 0.3rem; font-size: 0.85em; font-family: ui-monospace, monospace; }
+.rich-editor-content pre { background: rgba(255, 255, 255, 0.06); border-radius: 0.5rem; padding: 0.6rem 0.8rem; margin: 0.5rem 0; overflow-x: auto; }
+.rich-editor-content hr { border-color: rgba(255, 255, 255, 0.1); margin: 0.8rem 0; }

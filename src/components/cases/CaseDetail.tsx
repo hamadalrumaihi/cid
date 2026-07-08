@@ -21,6 +21,7 @@ import { FORM_SCHEMAS, REPORT_TEMPLATES, formToText, reportTitle, type FormValue
 import { PENAL_CODE, penalByCode, penalRecommend, penalSentence, penalSearch, penalTotals, type CaseCharge } from '@/lib/penal'
 import { notify } from '@/lib/notify'
 import { toast } from '@/lib/toast'
+import { RichEditor } from '@/components/ui/RichEditor'
 import { isPinnedCase, pushRecentCase, togglePinCase } from './caseUtils'
 
 // React Flow is heavy — load the graph only when its tab is opened.
@@ -323,7 +324,7 @@ function NotesTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boolean; onC
   }
   if (editing) return (
     <div className="space-y-3">
-      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={14} className="w-full rounded-xl border border-white/10 bg-ink-950 p-3 text-sm text-white" />
+      <RichEditor value={text} onChange={setText} />
       <div className="flex justify-end gap-2"><button onClick={() => setEditing(false)} className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-200">Cancel</button><button onClick={save} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Save</button></div>
     </div>
   )

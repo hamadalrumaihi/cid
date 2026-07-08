@@ -11,7 +11,7 @@
  *  equal-length window, and click-to-drill-down (tile or map dot) listing
  *  the underlying records with case deep-links. */
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
@@ -50,6 +50,10 @@ const HM_XY: Record<string, [number, number]> = {
   'davis': [51, 95], 'chamberlain hills': [41, 93], 'la mesa': [58, 85], 'el burro heights': [66, 87],
   'cypress flats': [62, 93], 'murrieta heights': [62, 81], 'rancho': [54, 96], 'port of los santos': [55, 104],
   'la puerta': [36, 93], 'fort zancudo': [22, 40], 'route 68': [40, 48], 'humane labs': [72, 44],
+  'legion square': [46, 83], 'textile city': [50, 87], 'hawick': [50, 76], 'alta': [51, 79],
+  'east vinewood': [53, 74], 'del perro pier': [16, 84], 'elysian island': [58, 100],
+  'terminal': [61, 98], 'palomino highlands': [72, 78], 'great chaparral': [30, 55],
+  'stab city': [48, 30], 'grape seed': [57, 20], 'north chumash': [12, 48], 'galilee': [60, 26],
 }
 
 /** Strip a trailing ".0" on bare numbers (legacy imports: postal "21.0"). */
@@ -312,36 +316,137 @@ function DetailBlock({ title, children }: { title: string; children: React.React
 }
 
 function HeatSvg({ rows, max, layers, onPick }: { rows: AreaRow[]; max: number; layers: Record<LayerKey, boolean>; onPick: (area: string) => void }) {
+  // Pan/zoom via viewBox math — self-contained vector map, no tiles, no CSP
+  // changes. Wheel zooms on the cursor, drag pans, buttons cover touch.
+  const HOME = { x: 0, y: 0, w: 100, h: 130 }
+  const [vb, setVb] = useState(HOME)
+  const svgRef = useRef<SVGSVGElement>(null)
+  const drag = useRef<{ px: number; py: number; vb: typeof HOME; moved: boolean } | null>(null)
+  const movedRef = useRef(false)
+  const [panning, setPanning] = useState(false)
+
+  const zoomAt = useCallback((factor: number, cx?: number, cy?: number) => {
+    setVb((v) => {
+      const w = Math.min(140, Math.max(12, v.w * factor))
+      const h = w * (HOME.h / HOME.w)
+      const fx = cx ?? v.x + v.w / 2
+      const fy = cy ?? v.y + v.h / 2
+      const kx = (fx - v.x) / v.w
+      const ky = (fy - v.y) / v.h
+      return { x: fx - kx * w, y: fy - ky * h, w, h }
+    })
+  }, [HOME.h, HOME.w])
+
+  // Wheel must be a non-passive native listener to preventDefault page scroll.
+  // All math runs inside the functional setVb, so the listener never closes
+  // over stale viewBox state.
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const r = el.getBoundingClientRect()
+      const factor = e.deltaY > 0 ? 1.15 : 0.87
+      setVb((v) => {
+        const w = Math.min(140, Math.max(12, v.w * factor))
+        const h = w * (130 / 100)
+        const cx = v.x + ((e.clientX - r.left) / r.width) * v.w
+        const cy = v.y + ((e.clientY - r.top) / r.height) * v.h
+        const kx = (cx - v.x) / v.w
+        const ky = (cy - v.y) / v.h
+        return { x: cx - kx * w, y: cy - ky * h, w, h }
+      })
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+
+  const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (e.button !== 0) return
+    drag.current = { px: e.clientX, py: e.clientY, vb, moved: false }
+    movedRef.current = false
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    const d = drag.current
+    const el = svgRef.current
+    if (!d || !el) return
+    const r = el.getBoundingClientRect()
+    const dx = ((e.clientX - d.px) / r.width) * d.vb.w
+    const dy = ((e.clientY - d.py) / r.height) * d.vb.h
+    if (Math.abs(e.clientX - d.px) + Math.abs(e.clientY - d.py) > 6) { d.moved = true; movedRef.current = true; setPanning(true) }
+    if (d.moved) setVb({ ...d.vb, x: d.vb.x - dx, y: d.vb.y - dy })
+  }
+  const onPointerUp = () => { drag.current = null; setPanning(false) }
+  const pick = (area: string) => { if (!movedRef.current) onPick(area) }
+
   const placed = rows.filter((r) => HM_XY[r.area.toLowerCase()])
   if (!placed.length) return null
   const unplaced = rows.length - placed.length
   const dotColor = (pct: number) => (pct >= 75 ? '#f43f5e' : pct >= 50 ? '#f59e0b' : '#3b82f6')
+  const zoom = HOME.w / vb.w
+  const fs = (base: number) => Math.max(base / Math.max(zoom, 1) ** 0.7, base * 0.35)
+  const btn = 'grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-ink-900/90 text-sm font-black text-slate-200 hover:bg-white/10'
+
   return (
-    <div className="mb-6 overflow-hidden rounded-2xl border border-white/5 bg-ink-950/60">
-      <svg viewBox="0 0 100 130" preserveAspectRatio="xMidYMid meet" style={{ width: '100%', maxHeight: 520, height: 'auto', display: 'block' }} role="img" aria-label="San Andreas intensity map">
-        <path d="M28,3 C45,1 62,6 68,14 C76,22 80,34 78,46 C86,54 88,66 84,78 C80,92 72,102 60,110 C52,116 40,118 30,112 C18,106 10,96 10,84 C6,72 8,60 14,50 C10,38 12,24 18,14 C21,8 24,5 28,3 Z" fill="#0f1726" stroke="#26385a" strokeWidth="0.8" />
-        <text x="30" y="7" fontSize="3" fill="#64748b">PALETO</text>
-        <text x="52" y="38" fontSize="3" fill="#64748b">BLAINE COUNTY</text>
-        <text x="40" y="102" fontSize="3" fill="#64748b">LOS SANTOS</text>
+    <div className="relative mb-6 overflow-hidden rounded-2xl border border-white/5 bg-ink-950/60">
+      <svg
+        ref={svgRef}
+        viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+        preserveAspectRatio="xMidYMid meet"
+        style={{ width: '100%', maxHeight: 560, height: 'auto', display: 'block', touchAction: 'none', cursor: panning ? 'grabbing' : 'grab' }}
+        role="img"
+        aria-label="San Andreas intensity map — drag to pan, scroll to zoom"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
+      >
+        {/* Ocean + landmass */}
+        <rect x={-60} y={-60} width={220} height={250} fill="#070d1a" />
+        <path d="M28,3 C45,1 62,6 68,14 C76,22 80,34 78,46 C86,54 88,66 84,78 C80,92 72,102 60,110 C52,116 40,118 30,112 C18,106 10,96 10,84 C6,72 8,60 14,50 C10,38 12,24 18,14 C21,8 24,5 28,3 Z" fill="#0f1726" stroke="#26385a" strokeWidth={0.8} />
+        {/* Terrain tints: Chiliad forest, Senora desert, LS urban */}
+        <ellipse cx={38} cy={18} rx={16} ry={11} fill="#14532d" opacity={0.14} />
+        <ellipse cx={50} cy={40} rx={20} ry={13} fill="#b45309" opacity={0.10} />
+        <ellipse cx={46} cy={88} rx={22} ry={15} fill="#475569" opacity={0.16} />
+        {/* Alamo Sea + Zancudo river */}
+        <path d="M44,26 C49,23 58,24 61,27 C63,30 60,34 54,34 C48,34 41,30 44,26 Z" fill="#123047" stroke="#26507a" strokeWidth={0.4} />
+        <path d="M22,38 C19,42 16,45 13,49" fill="none" stroke="#123047" strokeWidth={1.1} strokeLinecap="round" />
+        {/* Highways: Great Ocean Hwy, Route 68, Senora Fwy, LS loop */}
+        <path d="M24,6 C16,16 12,28 12,40 C11,50 12,60 17,66 C20,72 19,78 20,84" fill="none" stroke="#33415588" strokeWidth={0.7} strokeDasharray="1.6 1" />
+        <path d="M20,48 L70,45" fill="none" stroke="#33415588" strokeWidth={0.7} strokeDasharray="1.6 1" />
+        <path d="M62,14 C60,28 58,44 55,60 C52,70 50,76 48,82" fill="none" stroke="#33415588" strokeWidth={0.7} strokeDasharray="1.6 1" />
+        <path d="M30,84 C34,78 46,74 56,78 C64,82 66,90 60,96 C52,102 38,102 32,96 C28,92 28,88 30,84 Z" fill="none" stroke="#33415588" strokeWidth={0.7} strokeDasharray="1.6 1" />
+        {/* Region labels */}
+        <text x={30} y={7} fontSize={fs(3)} fill="#64748b">PALETO</text>
+        <text x={60} y={38} fontSize={fs(3)} fill="#64748b">BLAINE COUNTY</text>
+        <text x={40} y={104} fontSize={fs(3)} fill="#64748b">LOS SANTOS</text>
+        <text x={46} y={31} fontSize={fs(2.2)} fill="#3b6186">ALAMO SEA</text>
+        <text x={16} y={44} fontSize={fs(2.2)} fill="#64748b">ZANCUDO</text>
         {placed.map((r) => {
           const [x, y] = HM_XY[r.area.toLowerCase()]
           const pct = Math.round((r.score / max) * 100)
-          const rad = 2 + (pct / 100) * 4.5
+          const rad = (2 + (pct / 100) * 4.5) / Math.max(zoom, 1) ** 0.5
           const parts = LAYER_META.filter((L) => layers[L.key] && r.v[L.key]).map((L) => `${r.v[L.key]} ${L.label.toLowerCase()}`).join(', ')
           return (
-            <g key={r.area} onClick={() => onPick(r.area)} className="cursor-pointer">
-              <circle cx={x} cy={y} r={rad.toFixed(1)} fill={dotColor(pct)} fillOpacity={0.75} stroke="#0b1120" strokeWidth={0.6}>
+            <g key={r.area} onClick={() => pick(r.area)} className="cursor-pointer">
+              <circle cx={x} cy={y} r={rad.toFixed(2)} fill={dotColor(pct)} fillOpacity={0.75} stroke="#0b1120" strokeWidth={0.6 / Math.max(zoom, 1) ** 0.5}>
                 <title>{r.area} — intensity {pct} ({parts}) — click for records</title>
               </circle>
-              <text x={x} y={Number((y - rad - 1.5).toFixed(1))} textAnchor="middle" fontSize="3.2" fill="#cbd5e1">
+              <text x={x} y={Number((y - rad - 1.5 / Math.max(zoom, 1) ** 0.5).toFixed(1))} textAnchor="middle" fontSize={fs(3.2)} fill="#cbd5e1">
                 {r.area.length > 16 ? `${r.area.slice(0, 15)}…` : r.area}
               </text>
             </g>
           )
         })}
       </svg>
+      <div className="absolute right-2 top-2 flex flex-col gap-1">
+        <button className={btn} aria-label="Zoom in" onClick={() => zoomAt(0.75)}>+</button>
+        <button className={btn} aria-label="Zoom out" onClick={() => zoomAt(1.33)}>−</button>
+        <button className={btn} aria-label="Reset view" onClick={() => setVb(HOME)}>⌂</button>
+      </div>
       <p className="border-t border-white/5 px-4 py-2 text-[11px] text-slate-500">
-        Stylized map — dot size &amp; color follow area intensity (hover for the breakdown, click for records).
+        Vector map — drag to pan, scroll or use +/− to zoom, dot size &amp; color follow intensity, click a dot for records.
         {unplaced > 0 && ` ${unplaced} area${unplaced === 1 ? '' : 's'} without a map position (postals etc.) appear in the tiles below.`}
       </p>
     </div>

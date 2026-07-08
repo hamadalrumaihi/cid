@@ -13,6 +13,7 @@ import type { Json, Tables } from '@/lib/database.types'
 import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { renderMarkdown } from '@/lib/markdown'
+import { RichEditor } from '@/components/ui/RichEditor'
 import { officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
@@ -187,7 +188,7 @@ function EditorModal({ record, onClose, onSaved }: { record: DocRow | null; onCl
       <label className="mb-1 block text-xs font-semibold text-slate-400">Title *</label>
       <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Use of Force Policy" className="mb-3 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
       <label className="mb-1 block text-xs font-semibold text-slate-400">Procedure text * <span className="font-normal text-slate-500">(Markdown: # headings, **bold**, &gt; notes, lists, | tables |)</span></label>
-      <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={14} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-xs text-white outline-none focus:border-badge-500" />
+      <RichEditor value={body} onChange={setBody} minHeight="22rem" />
       <button onClick={() => void save()} disabled={busy} className="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
         {record ? 'Save changes' : 'Publish SOP'}
       </button>
