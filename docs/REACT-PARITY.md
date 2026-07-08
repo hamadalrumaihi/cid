@@ -134,7 +134,7 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       badges + one-shot auto-escalation (compare-and-swap on `last_stale_notified_at`);
       bulk multi-select hard delete (canDelete); **quick-create case templates**
       (`case_templates` chips + command-only Template Manager); court packet export
-      **.docx/.md** (`.pdf/.xlsx` deferred to Exports); pin, copy deep-link (`#case=<id>`), watch/follow,
+      **.docx/.md** (`.pdf` shipped with the Exports pass; `.xlsx` affordance dropped); pin, copy deep-link (`#case=<id>`), watch/follow,
       follow-up date, quick status select, operation chip.
 - [x] **operations** — Operations/Task Forces: cards w/ proportional status rollup bar;
       detail w/ link/unlink case picker; CRUD modals; deep link.
@@ -162,7 +162,7 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       `safeUrl`, attach-to-case reference posting, person follow/watch, unified
       intel profile slide-over for persons and gangs with RLS-restricted linked
       case stubs, and RLS-scoped dossier export `.docx`. **Lean in v1**: dossier
-      `.pdf` waits on the Exports slice; live browser verification still pending.
+      `.pdf` shipped with the Exports pass; live browser verification still pending.
 - [x] **bolo** — implementation pass, local gates green 2026-07-08:
       RLS-scoped active BOLO person board, search by name/alias/status/gang,
       latest warrant-status chip from accessible warrant reports naming the

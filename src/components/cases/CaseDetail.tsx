@@ -8,14 +8,14 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { uiPrompt } from '@/components/ui/dialog'
 import { deleteWithUndo, insert, list, remove, rpc, update, withRetry } from '@/lib/db'
 import type { Json, Tables } from '@/lib/database.types'
-import { fmtUSD, timeAgo, todayISO, copyText, downloadTextFile } from '@/lib/format'
+import { fmtUSD, timeAgo, todayISO, copyText, downloadTextFile, slug } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { renderMarkdown } from '@/lib/markdown'
 import { useOperationsStore } from '@/lib/operations'
 import { caseCourtHint, caseStatusTint, CASE_STATUSES, signoffLabel, signoffTint, SIGNOFF_ACTION_VERB } from '@/lib/signoff'
 import { officerName, activeProfiles } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
-import { gatherCasePacket, packetDocx, packetMarkdown } from '@/lib/packet'
+import { gatherCasePacket, packetDocx, packetMarkdown, packetPdfSpec } from '@/lib/packet'
 import { safeUrl } from '@/lib/safeUrl'
 import { FORM_SCHEMAS, REPORT_TEMPLATES, formToText, reportTitle, type FormValues } from '@/lib/forms'
 import { PENAL_CODE, penalByCode, penalRecommend, penalSentence, penalSearch, penalTotals, type CaseCharge } from '@/lib/penal'
@@ -192,6 +192,18 @@ function PacketButton({ c }: { c: CaseRow }) {
       setOpen(false)
     } catch (e) { toast(e instanceof Error ? e.message : e, 'danger') }
   }
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const exportPdf = async () => {
+    if (pdfBusy) return
+    setPdfBusy(true)
+    try {
+      const data = await gatherCasePacket(c)
+      const { downloadPdf } = await import('@/lib/pdf')
+      await downloadPdf(packetPdfSpec(c, data), `${slug(c.case_number)}-packet.pdf`)
+      setOpen(false)
+    } catch (e) { toast(e instanceof Error ? e.message : e, 'danger') }
+    finally { setPdfBusy(false) }
+  }
   return (
     <>
       <button onClick={() => setOpen(true)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Packet</button>
@@ -201,7 +213,7 @@ function PacketButton({ c }: { c: CaseRow }) {
           <div className="grid gap-2">
             <button onClick={exportDocx} className="rounded-lg bg-badge-600 px-4 py-3 text-sm font-bold text-white">Download DOCX</button>
             <button onClick={exportMd} className="rounded-lg bg-badge-600 px-4 py-3 text-sm font-bold text-white">Download Markdown</button>
-            <button disabled className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-500">PDF/XLSX exports continue in the Exports slice</button>
+            <button onClick={() => void exportPdf()} disabled={pdfBusy} className="rounded-lg bg-badge-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">{pdfBusy ? 'Rendering PDF…' : 'Download PDF'}</button>
           </div>
         </div>
       </Modal>
