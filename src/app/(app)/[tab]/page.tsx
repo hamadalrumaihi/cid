@@ -24,6 +24,8 @@ import { RicoView } from '@/components/rico/RicoView'
 import { HeatmapView } from '@/components/heatmap/HeatmapView'
 import { NetworkView } from '@/components/network/NetworkView'
 import { ModusView } from '@/components/modus/ModusView'
+import { MediaView } from '@/components/media/MediaView'
+import { CaseFilesView } from '@/components/casefiles/CaseFilesView'
 
 /** One route per leaf tab. Placeholder views are replaced slice-by-slice as
  *  each vanilla view is ported (see docs/REACT-PARITY.md for the order). */
@@ -189,6 +191,20 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="modus" />}>
         <ModusView />
+      </Suspense>
+    )
+  }
+  if (tab === 'media') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="media" />}>
+        <MediaView />
+      </Suspense>
+    )
+  }
+  if (tab === 'case-files') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="case-files" />}>
+        <CaseFilesView />
       </Suspense>
     )
   }

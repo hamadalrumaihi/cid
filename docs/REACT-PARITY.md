@@ -140,8 +140,15 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       follow-up date, quick status select, operation chip.
 - [x] **operations** — Operations/Task Forces: cards w/ proportional status rollup bar;
       detail w/ link/unlink case picker; CRUD modals; deep link.
-- [ ] **case-files** — per-case attachments (FiveManage upload; `case_files` keyed by
-      case_number; RLS `can_access_case_number`).
+- [x] **case-files** — implementation pass 2026-07-08, local gates green
+      (live verification pending): case-number picker w/ datalist (cases +
+      existing attachments), multi-file FiveManage attach, grouped-by-case
+      grid with typed thumbnails, inline preview modal (image/video/audio/
+      pdf/iframe), command-only remove. **Found + fixed a vanilla bug**:
+      `case_files.drive_file_id` is NOT NULL with no default, but vanilla's
+      cfAttachFile inserted null — every FiveManage attach on main fails
+      (live table has 0 rows). React inserts the FiveManage URL as the
+      file's unique id; fix vanilla separately on main.
 - [x] **rico** — implementation pass 2026-07-08, local gates green (live
       verification pending): standalone view wraps the SAME RicoTab the case
       detail embeds (single tracker implementation) with a case picker +
@@ -223,7 +230,14 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       rendered as locked existence-only cards (filtered against the viewer's
       own RLS-visible cases) with the request-access flow (insert
       case_access_requests + notify command deciders).
-- [ ] **media** — Media vault (universal intake via FiveManage; paste-URL fallback).
+- [x] **media** — implementation pass 2026-07-08, local gates green (live
+      verification pending): filter chips (all/by-case/by-gang + 7 preset
+      tags w/ legacy-mugshot fallback), thumbnail cards (image zoom, video/
+      embed placeholders, graceful img fallback), tag chips (case deep link,
+      gang/location/person/labels), lightbox (image/video/audio/iframe),
+      forward-to-case modal, tags editor preserving non-label keys, ingest
+      modal with FiveManage upload via the new lib/fivemanage.ts (env-keyed;
+      paste-URL fallback when unconfigured).
 - [x] **records** — implementation pass 2026-07-08, local gates green (live
       verification pending): live shared registry on `cid_records` (realtime via
       the rt_ registry — one channel per table, replacing vanilla's bespoke
