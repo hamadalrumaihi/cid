@@ -100,6 +100,8 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 
 Open a case → **Graph** tab. The case sits at the center; suspects, witnesses, gangs, places, evidence, vehicles, reports and warrants orbit it, connected by labeled relationships (**owns**, **seen at**, **member of**, **mentioned in**…). Drag nodes to arrange, scroll to zoom, and **click any node** for its details and a jump link. The chart builds itself from the case's Intel links, evidence and reports — nothing extra to maintain.
 
+You can also work the case from the chart itself: **🔗 Link intel** (top-left) connects a person, gang or place without leaving the graph, and a linked node's panel has **Unlink from case**. Click a person and **Show their other cases** to see where else they surface. Your dragged arrangement is remembered per case on this device — **↺ Reset layout** brings back the automatic ring.
+
 ### Attach photos, videos and files
 
 1. Go to **Cases → Attachments** (or a case's **Files** tab).
