@@ -1,14 +1,11 @@
 {
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://discord.com https://*.discord.com https://api.fivemanage.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" }
-      ]
+  "framework": "nextjs",
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_SUPABASE_URL": "https://jhxuflzmqspidkvjckox.supabase.co",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_sshJXQoxX0NZqUeU-uBObQ_aSgQaHRa",
+      "NEXT_PUBLIC_FIVEMANAGE_API_KEY": "Z3ctM38GCUw5aPam9xscHYcxjghj8iTE",
+      "NEXT_PUBLIC_FIVEMANAGE_BASE_URL": "https://api.fivemanage.com"
     }
-  ]
+  }
 }

@@ -1,0 +1,83 @@
+'use client'
+
+/** Client-side case helpers — staleness, pins/recents, filters and saved
+ *  views. All persistence uses the SAME Store keys as vanilla casefiles.js
+ *  (casesScope/casesView/caseFilters/caseViews/recentCases/pinnedCases) so
+ *  personal presets carry over between the legacy site and this app. */
+import type { Tables } from '@/lib/database.types'
+import { Store } from '@/lib/store'
+
+export type CaseRow = Tables<'cases'>
+
+export const CASE_GRID_CLASS = 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3'
+
+/** Days since a case last moved (casefiles.js:312). */
+export const caseStaleDays = (c: CaseRow): number =>
+  Math.floor((Date.now() - new Date(c.updated_at).getTime()) / 86400000)
+
+/** Open/active case gone quiet ≥14d (closed/cold never count). */
+export const isStaleCase = (c: CaseRow): boolean =>
+  c.status !== 'closed' && c.status !== 'cold' && caseStaleDays(c) >= 14
+
+/* ---- Pins + recents (Jump-back data; the strip renders on Command) ------- */
+export const recentCaseIds = (): string[] => Store.get<string[]>('recentCases', [])
+export const pinnedCaseIds = (): string[] => Store.get<string[]>('pinnedCases', [])
+
+export function pushRecentCase(id: string): void {
+  if (!id) return
+  const r = recentCaseIds().filter((x) => x !== id)
+  Store.set('recentCases', [id, ...r].slice(0, 8))
+}
+export const isPinnedCase = (id: string): boolean => pinnedCaseIds().includes(id)
+export function togglePinCase(id: string): void {
+  const p = pinnedCaseIds()
+  Store.set('pinnedCases', (p.includes(id) ? p.filter((x) => x !== id) : [id, ...p]).slice(0, 12))
+}
+
+/* ---- Advanced filters + saved views (casefiles.js:53-124) ---------------- */
+export interface CaseFilters {
+  bureau: string
+  status: string
+  /** '' anyone · 'me' · 'unassigned' · a profile id */
+  assignee: string
+  /** '' any · 'stale' ≥14d · 'fresh' <14d */
+  stale: string
+}
+
+export const EMPTY_FILTERS: CaseFilters = { bureau: '', status: '', assignee: '', stale: '' }
+
+export function loadCaseFilters(): CaseFilters {
+  const f = Store.get<Partial<CaseFilters>>('caseFilters', {})
+  return {
+    bureau: typeof f.bureau === 'string' ? f.bureau : '',
+    status: typeof f.status === 'string' ? f.status : '',
+    assignee: typeof f.assignee === 'string' ? f.assignee : '',
+    stale: typeof f.stale === 'string' ? f.stale : '',
+  }
+}
+export const persistCaseFilters = (f: CaseFilters): void => Store.set('caseFilters', f)
+export const activeCaseFilterCount = (f: CaseFilters): number =>
+  (['bureau', 'status', 'assignee', 'stale'] as const).filter((k) => f[k]).length
+
+export function applyCaseFilters(items: CaseRow[], f: CaseFilters, meId: string | null): CaseRow[] {
+  return items.filter((c) => {
+    if (f.bureau && c.bureau !== f.bureau) return false
+    if (f.status && c.status !== f.status) return false
+    if (f.assignee === 'me') { if (c.lead_detective_id !== meId) return false }
+    else if (f.assignee === 'unassigned') { if (c.lead_detective_id) return false }
+    else if (f.assignee && c.lead_detective_id !== f.assignee) return false
+    if (f.stale === 'stale') { if (c.status === 'closed' || c.status === 'cold' || caseStaleDays(c) < 14) return false }
+    else if (f.stale === 'fresh') { if (caseStaleDays(c) >= 14) return false }
+    return true
+  })
+}
+
+export interface SavedCaseView {
+  name: string
+  filters: Partial<CaseFilters>
+  scope?: string
+  q?: string
+}
+
+export const caseViews = (): SavedCaseView[] => Store.get<SavedCaseView[]>('caseViews', [])
+export const setCaseViews = (v: SavedCaseView[]): void => Store.set('caseViews', v)

@@ -1,0 +1,71 @@
+/** Notification rendering — one shared vocabulary for the bell panel and the
+ *  My Desk unread list (port of vanilla NOTIF_LABEL + the openNotifications
+ *  row shape, app.js). Keeping it in lib/ means every surface renders a
+ *  notification the same way instead of falling back to raw payload JSON. */
+import type { Json, Tables } from './database.types'
+
+export type NotificationRow = Tables<'notifications'>
+
+/** Human titles per type — vanilla app.js NOTIF_LABEL, plus the types emitted
+ *  outside that map (`member_approved`, `mention`, stale-case escalation —
+ *  vanilla wrote `case_stale`, the rebuild's cases slice writes `stale_case`;
+ *  both are mapped so history from either app renders). Unknown types fall
+ *  back to the raw type string, never to JSON. */
+export const NOTIF_LABEL: Record<string, string> = {
+  tracker_pending: 'Tracker awaiting co-sign',
+  tracker_authorized: 'Tracker authorized',
+  case_assigned: 'Case assigned',
+  report_finalized: 'Report finalized',
+  rico_ready: 'RICO elements satisfied',
+  signoff_waiting: 'Case awaiting your sign-off',
+  signoff_approved: 'Case sign-off approved',
+  signoff_denied: 'Case sign-off denied',
+  signoff_changes: 'Sign-off — changes requested',
+  signoff_escalated: 'Case auto-escalated (LOA)',
+  signoff_heads_up: 'Deputy approved a case',
+  chat_mention: 'You were mentioned',
+  mention: 'You were mentioned',
+  access_requested: 'Case access requested',
+  access_granted: 'Case access granted',
+  access_denied: 'Case access denied',
+  announcement: '📣 Announcement',
+  member_approved: 'Access approved',
+  case_stale: 'Case going stale',
+  stale_case: 'Case going stale',
+}
+
+interface NotifPayload {
+  case_id?: string
+  case_number?: string
+  tracker_code?: string
+  target?: string
+  detective?: string
+  reason?: string
+  title?: string
+}
+
+const asPayload = (p: Json | null): NotifPayload => (p && typeof p === 'object' && !Array.isArray(p) ? (p as NotifPayload) : {})
+
+export function notifTitle(n: NotificationRow): string {
+  return NOTIF_LABEL[n.type] ?? n.type
+}
+
+/** Mono identifier line — case number / tracker code / target (+ actor),
+ *  matching the vanilla row's blue mono line. Null when nothing applies. */
+export function notifDetail(n: NotificationRow): string | null {
+  const p = asPayload(n.payload)
+  const detail = p.case_number || p.tracker_code || p.target
+  if (!detail) return null
+  return p.detective ? `${detail} · ${p.detective}` : detail
+}
+
+/** Secondary human line — the reason (or tracker/target context). */
+export function notifSub(n: NotificationRow): string | null {
+  const p = asPayload(n.payload)
+  return p.reason || p.title || [p.tracker_code, p.target].filter(Boolean).join(' · ') || null
+}
+
+/** Case deep-link target when the payload carries one. */
+export function notifCaseId(n: NotificationRow): string | null {
+  return asPayload(n.payload).case_id ?? null
+}

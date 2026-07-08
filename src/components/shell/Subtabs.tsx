@@ -1,0 +1,46 @@
+'use client'
+
+/** Sub-tab strip — tools within the active top-level category, port of
+ *  vanilla renderSubtabs (core.js:897-907). The audit tab is hidden unless
+ *  the signed-in member is the audit owner (UI mirror of the owner-only
+ *  audit_sel RLS policy — the server enforces the real rule). */
+import { useAuth } from '@/lib/auth'
+import { AUDIT_OWNER_ID, NAV_CATEGORIES, TAB_LABEL } from '@/lib/nav'
+import { useNav } from './useNav'
+
+export function Subtabs() {
+  const { activeCategory, activeTab, navigate } = useNav()
+  const { profile } = useAuth()
+  const def = NAV_CATEGORIES.find((c) => c.id === activeCategory)
+  if (!def) return null // standalone leaves (feedback) hide the strip
+
+  const isAuditOwner = !!profile?.active && profile.id === AUDIT_OWNER_ID
+  const tabs = def.tabs.filter((t) => t !== 'audit' || isAuditOwner)
+
+  return (
+    <nav
+      className="z-10 flex items-center gap-1 overflow-x-auto border-b border-white/5 bg-ink-950/60 px-4 py-2 sm:px-8"
+      role="tablist"
+      aria-label="Section tools"
+    >
+      {tabs.map((t) => {
+        const on = t === activeTab
+        return (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={on}
+            onClick={() => navigate(t)}
+            className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+              on
+                ? 'bg-blue-500/15 text-white shadow-[inset_0_-2px_0_0_#3b82f6]'
+                : 'text-slate-400 hover:bg-white/5 hover:text-white'
+            }`}
+          >
+            {TAB_LABEL[t] || t}
+          </button>
+        )
+      })}
+    </nav>
+  )
+}
