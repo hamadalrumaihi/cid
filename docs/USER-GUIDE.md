@@ -49,7 +49,7 @@ The sidebar groups all 29 screens into **5 categories**:
 | **Cases** | Case Files, Operations, Attachments, RICO |
 | **Intelligence** | Persons, BOLO Board, Gangs, Places, Vehicles, Indicators, Network, Narcotics, Ballistics, M.O. Detector, Media Vault, Records |
 | **Reference** | Penal Code, SOPs & Library, User Guide |
-| **Oversight** | My Desk, Calendar, Shift Reports, Audit Log |
+| **Oversight** | My Desk, Calendar, Shift Reports, Audit Log (sortable, filterable, exports to CSV) |
 
 Click a **category** to jump to its first screen; a **sub-tab strip** appears under the header to switch between the screens inside that category. Colored dots on the Command button are live counters (pending member approvals, unread announcements, items waiting on you).
 
