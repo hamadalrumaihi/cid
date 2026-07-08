@@ -36,9 +36,9 @@ Companion source of truth: `docs/REACT-PARITY.md`.
 - The `bolo` / BOLO Board slice was committed and pushed as
   `e2e6750 feat(rebuild): add bolo board slice`; live browser verification is
   still pending.
-- The `places` / Criminal Places & Production slice is implemented locally in
-  this patch and passes all local gates; live browser verification is still
-  pending.
+- The `places` / Criminal Places & Production slice was committed and pushed as
+  `7f8a86d feat(rebuild): add places intelligence slice`; live browser
+  verification is still pending.
 - **Live browser QA completed 2026-07-08** for Phase 2 + inbox + command +
   personnel + announce against the live Supabase project (director account,
   dev server on :3777, Playwright-driven). Full results in
@@ -505,7 +505,8 @@ Committed baseline:
 - BOLO / BOLO Board was pushed as
   `e2e6750 feat(rebuild): add bolo board slice`
   (src/components/bolo/, wired in src/app/(app)/[tab]/page.tsx).
-- Places / Criminal Places & Production is implemented in the current patch
+- Places / Criminal Places & Production was pushed as
+  `7f8a86d feat(rebuild): add places intelligence slice`
   (src/components/places/, wired in src/app/(app)/[tab]/page.tsx).
 
 Current completed implementation passes:
