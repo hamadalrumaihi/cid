@@ -33,8 +33,9 @@ Companion source of truth: `docs/REACT-PARITY.md`.
 - The `gangs` / Gangs & Turf slice was committed and pushed as
   `0f1329f feat(rebuild): add gangs intelligence slice`; live browser
   verification is still pending.
-- The `bolo` / BOLO Board slice is implemented locally in this patch and passes
-  all local gates; live browser verification is still pending.
+- The `bolo` / BOLO Board slice was committed and pushed as
+  `e2e6750 feat(rebuild): add bolo board slice`; live browser verification is
+  still pending.
 - **Live browser QA completed 2026-07-08** for Phase 2 + inbox + command +
   personnel + announce against the live Supabase project (director account,
   dev server on :3777, Playwright-driven). Full results in
@@ -474,7 +475,8 @@ Committed baseline:
 - Gangs / Gangs & Turf was pushed as
   `0f1329f feat(rebuild): add gangs intelligence slice`
   (src/components/gangs/, wired in src/app/(app)/[tab]/page.tsx).
-- BOLO / BOLO Board is implemented in the current patch
+- BOLO / BOLO Board was pushed as
+  `e2e6750 feat(rebuild): add bolo board slice`
   (src/components/bolo/, wired in src/app/(app)/[tab]/page.tsx).
 
 Current completed implementation passes:
