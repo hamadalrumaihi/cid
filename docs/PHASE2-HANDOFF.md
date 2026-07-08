@@ -30,8 +30,9 @@ Companion source of truth: `docs/REACT-PARITY.md`.
 - The `persons` / Persons of Interest slice was committed and pushed as
   `2d2dcf4 feat(rebuild): add persons intelligence slice`; live browser
   verification is still pending.
-- The `gangs` / Gangs & Turf slice is implemented locally in this patch and
-  passes all local gates; live browser verification is still pending.
+- The `gangs` / Gangs & Turf slice was committed and pushed as
+  `0f1329f feat(rebuild): add gangs intelligence slice`; live browser
+  verification is still pending.
 - **Live browser QA completed 2026-07-08** for Phase 2 + inbox + command +
   personnel + announce against the live Supabase project (director account,
   dev server on :3777, Playwright-driven). Full results in
@@ -451,7 +452,8 @@ Committed baseline:
 - Persons / Persons of Interest was pushed as
   `2d2dcf4 feat(rebuild): add persons intelligence slice`
   (src/components/persons/, wired in src/app/(app)/[tab]/page.tsx).
-- Gangs / Gangs & Turf is implemented in the current patch
+- Gangs / Gangs & Turf was pushed as
+  `0f1329f feat(rebuild): add gangs intelligence slice`
   (src/components/gangs/, wired in src/app/(app)/[tab]/page.tsx).
 
 Current completed implementation passes:
