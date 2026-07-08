@@ -23,7 +23,7 @@ interface Row {
 
 /** Tabs whose views seed their filter input from `?q=` (persons/gangs/vehicles
  *  today; others navigate plain until their slices land or have no filter box). */
-const Q_SEEDED_TABS = new Set(['persons', 'gangs', 'vehicles'])
+const Q_SEEDED_TABS = new Set(['persons', 'gangs', 'vehicles', 'penal'])
 
 export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; initialQuery: string; onClose: () => void }) {
   const router = useRouter()

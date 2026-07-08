@@ -191,12 +191,21 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
 - [ ] **modus** — M.O. detector & profiler: `mo_crossref` RPC (deliberate cross-bureau
       leak valve: case_number+bureau+indicator only → "request access" flow).
 - [ ] **media** — Media vault (universal intake via FiveManage; paste-URL fallback).
-- [ ] **records** — CID Records: separate live registry (`cid_records`), own realtime
-      channel + status dot.
+- [x] **records** — implementation pass 2026-07-08, local gates green (live
+      verification pending): live shared registry on `cid_records` (realtime via
+      the rt_ registry — one channel per table, replacing vanilla's bespoke
+      `cid_records_live` channel), live dot, filter + 24/page load-more, mugshot
+      via safeUrl with graceful fallback, create/edit modal (11 REC_FIELDS,
+      dirty-guarded). Vanilla's zero-row-update rule preserved: an RLS-blocked
+      edit (not creator/command) surfaces "You can only edit records you
+      created", never a false success.
 
 ### Reference
-- [ ] **penal** — Penal Code catalog (read-only searchable; same 162-charge dataset as
-      the charge picker).
+- [x] **penal** — implementation pass 2026-07-08, local gates green (live
+      verification pending): read-only searchable statute list (162 charges via
+      penalSearch), level tint + sentence + fine + RICO badge, live count
+      readout; `?q=` seeds the search box so global-search charge hits land
+      prefiltered (palette Q_SEEDED_TABS includes penal).
 - [ ] **sops** — SOPs & Library: doc cards; reader engine (sop-prose typography,
       pipe-tables, safe mini-Markdown, roster visuals); doc/sheet/form/matrix viewers;
       version history; structured roster form editor; command-only writes (RLS folder
