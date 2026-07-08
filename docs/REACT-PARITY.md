@@ -152,7 +152,7 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       latest warrant-status chip from accessible warrant reports naming the
       subject, mugshots via `safeUrl`, armed/felony/gang/status chips, shared
       intel profile, edit person, and clear-BOLO action. **Lean in v1**:
-      vehicle-specific BOLO behavior waits on the `vehicles` slice; live
+      vehicle-specific BOLO behavior now has its registry (vehicles slice); live
       browser verification still pending.
 - [x] **gangs** — implementation pass, local gates green 2026-07-08: gang
       cards with 24/page load-more, search, threat chips, bulk command delete
@@ -170,7 +170,20 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       and command delete/bulk delete with undo snapshotting process steps.
       **Lean in v1**: manual process-step editing and bulk import wait on later
       cross-cuts; live browser verification still pending.
-- [ ] **vehicles** — Vehicle registry + cross-reference engine; watch/follow.
+- [x] **vehicles** — implementation pass 2026-07-08, local gates green (live
+      verification pending): plate-card registry (owner/gang chips via slim
+      projections, notes, plate chip), filter box seeded from global-search
+      `?q=`, create/edit modal with FK-preservation guard on owner/gang
+      selects (a failed options fetch can't silently null a link), uppercase
+      plate + friendly duplicate-plate error, delete w/ undo, per-vehicle
+      follow (WatchButton type='vehicle' — closes the watchlist vehicles gap).
+      Cross-reference engine ported: RLS-scoped scan of reports +
+      case_intel_links flags phones / registered plates / linked persons in
+      2+ cases, with clickable case-number deep links; a failed scan shows a
+      Retry banner, never a false "no matches". `search_all` now returns the
+      plate as `term` for vehicle hits (live migration
+      `search_all_vehicle_term`, backward-compatible) so palette results land
+      here prefiltered.
 - [ ] **network** — Relationship network graph.
 - [ ] **narcotics** — Narcotics intel: precursors + hotspots (delete-then-reinsert
       children pattern).
@@ -263,8 +276,9 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       navigation: case → `/cases?case=<id>`; persons/gangs land with `?q=<term>`
       seeding the view filter (new `?q=` support in those views); other kinds route
       to their tab (placeholders until their slices land).
-- [ ] **Watchlist/follow** — cases/persons implemented; vehicles pending. Owner-only
-      RLS; "following never widens access"; feeds My Desk.
+- [x] **Watchlist/follow** — cases/persons/vehicles all wired (vehicles landed
+      with the vehicles slice 2026-07-08). Owner-only RLS; "following never
+      widens access"; feeds My Desk.
 - [ ] **Never-lose-work** — `cid-draft:<key>` form drafts; dirty-guard on modal close;
       beforeunload prompt.
 - [ ] **Connection watch** — offline banner ✅ (Phase 1) · `withRetry` + data-stale
