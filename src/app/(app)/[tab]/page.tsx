@@ -9,6 +9,7 @@ import { InboxView } from '@/components/inbox/InboxView'
 import { PersonnelView } from '@/components/personnel/PersonnelView'
 import { AnnounceView } from '@/components/announce/AnnounceView'
 import { PersonsView } from '@/components/persons/PersonsView'
+import { GangsView } from '@/components/gangs/GangsView'
 
 /** One route per leaf tab. Placeholder views are replaced slice-by-slice as
  *  each vanilla view is ported (see docs/REACT-PARITY.md for the order). */
@@ -69,6 +70,13 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="persons" />}>
         <PersonsView />
+      </Suspense>
+    )
+  }
+  if (tab === 'gangs') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="gangs" />}>
+        <GangsView />
       </Suspense>
     )
   }

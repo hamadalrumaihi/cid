@@ -1,6 +1,6 @@
 # React Rebuild Handoff - Phase 3 in progress
 
-Last updated: 2026-07-08 (persons slice implementation pass).
+Last updated: 2026-07-08 (gangs slice implementation pass).
 
 This branch is `react-rebuild`. The repo root is the Next.js 16 app. The
 legacy root static files (`index.html`, root `*.js`, `styles.css`) remain inert
@@ -30,6 +30,8 @@ Companion source of truth: `docs/REACT-PARITY.md`.
 - The `persons` / Persons of Interest slice was committed and pushed as
   `2d2dcf4 feat(rebuild): add persons intelligence slice`; live browser
   verification is still pending.
+- The `gangs` / Gangs & Turf slice is implemented locally in this patch and
+  passes all local gates; live browser verification is still pending.
 - **Live browser QA completed 2026-07-08** for Phase 2 + inbox + command +
   personnel + announce against the live Supabase project (director account,
   dev server on :3777, Playwright-driven). Full results in
@@ -218,6 +220,33 @@ Intentionally lean, tracked in `docs/REACT-PARITY.md`:
 - Dossier `.pdf` waits on the Exports slice.
 - Live browser QA for `/persons` is still pending.
 
+## Gangs slice delivered
+
+Implemented `/gangs` in `src/components/gangs/`, wired through the `[tab]`
+dispatcher:
+
+- Gang cards: live search, 24/page load-more, threat chips, colors/notes, and
+  quick jump into detail or shared intel profile.
+- Gang create/edit modal for name, colors, threat level, and notes.
+- Command bulk delete and single delete use the shared undo engine, snapshotting
+  `gang_members`, `gang_ranks`, and `gang_turf`, plus restoring nulled
+  `persons.gang_id` links on undo.
+- Detail view: roster grouped by rank, turf panel, linked properties from
+  `places.controlling_gang_id`, edit/delete/profile/attach actions.
+- Member create/edit/delete: name, rank, callsign, status, linked person,
+  linked case, CCW, VCH, felony count, mugshot URL; preserves linked
+  person/case options when the current viewer cannot see the referenced row.
+- Turf create/delete: block, density, hotspot area.
+- Attach-to-case flow posts a gang intel reference into the selected case
+  channel.
+- Unified gang intel profile reuses the `persons` slice `IntelProfile`.
+
+Intentionally lean, tracked in `docs/REACT-PARITY.md`:
+
+- Gang Intel Library doc shelf lands with the `sops`/document engine.
+- CSV/XLSX/JSON bulk import on "+ New" waits on the Imports cross-cut.
+- Live browser QA for `/gangs` is still pending.
+
 Implemented shared/data support:
 
 - `db.ts` list projections, `.in`, `updateWhere` CAS predicates, null ordering,
@@ -316,6 +345,7 @@ views. Done views (implementation passes; live verification pending):
 - `personnel`
 - `announce`
 - `persons`
+- `gangs`
 
 Unchecked views remaining:
 
@@ -323,7 +353,6 @@ Unchecked views remaining:
 - `case-files` - per-case attachments and FiveManage upload.
 - `rico` - standalone RICO tracker route and export.
 - `bolo` - BOLO board.
-- `gangs` - gangs, ranks, members, turf, gang intel library.
 - `places` - criminal places and production steps.
 - `vehicles` - vehicle registry and cross-reference engine.
 - `network` - relationship graph.
@@ -383,9 +412,9 @@ Do not cut over to `main` until all of these are true:
 
 ## Suggested next patch order
 
-1. Tackle `gangs` or `bolo` next. `gangs` reuses the intel-profile patterns
-   just landed in `persons`; `bolo` can be a smaller follow-up that composes
-   the new person cards with the future vehicle registry.
+1. Tackle `bolo` or `places` next. `bolo` can now compose the person/gang
+   intelligence surfaces; `places` feeds gang-linked properties and production
+   workflows used by narcotics.
 2. Continue one view per patch, keeping each patch gated and live-verified.
 3. Fold the remaining targeted-QA flows (second account / real-data mutations
    — see the parity doc's Live QA results) into a later joint session.
@@ -422,6 +451,8 @@ Committed baseline:
 - Persons / Persons of Interest was pushed as
   `2d2dcf4 feat(rebuild): add persons intelligence slice`
   (src/components/persons/, wired in src/app/(app)/[tab]/page.tsx).
+- Gangs / Gangs & Turf is implemented in the current patch
+  (src/components/gangs/, wired in src/app/(app)/[tab]/page.tsx).
 
 Current completed implementation passes:
 - Phase 1 app shell/auth.
@@ -431,15 +462,15 @@ Current completed implementation passes:
 - Command `personnel` / Roster, Member Admin & Commendations.
 - Command `announce` / Announcements + first-post notification fan-out.
 - Intelligence `persons` / Persons of Interest + intel profile + dossier export.
+- Intelligence `gangs` / Gangs & Turf + roster/turf + shared intel profile.
 
 Known local junk to ignore unless the user explicitly asks otherwise:
 - `.serena/`
 - `bash.exe.stackdump`
 
 Next recommended slice:
-- `gangs` / Gangs & Turf, because `persons` already landed the shared intel
-  profile and cross-link patterns it can reuse. `bolo` is also a reasonable
-  smaller next patch once vehicle registry shape is clear.
+- `bolo` / BOLO Board for a smaller intelligence follow-up, or `places` if the
+  next patch should keep building the gang/narcotics data chain.
 
 Before changing code:
 - Read `docs/REACT-PARITY.md` and this handoff.
