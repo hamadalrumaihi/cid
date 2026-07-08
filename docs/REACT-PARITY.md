@@ -195,7 +195,14 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       plate as `term` for vehicle hits (live migration
       `search_all_vehicle_term`, backward-compatible) so palette results land
       here prefiltered.
-- [ ] **network** — Relationship network graph.
+- [x] **network** — implementation pass 2026-07-08, local gates green (live
+      verification pending): hand-rolled SVG ego/overview graph (no graph
+      dependency) — gangs as hubs, gang-linked persons/places orbiting;
+      deterministic ring layouts; click-to-recentre, centred-node click opens
+      the shared IntelProfile slide-over; drag-pan (ref-based mechanics,
+      cursor via state), wheel/+/− zoom (native non-passive listener),
+      reset; `?focus=g:<id>|p:<id>` deep link replaces vanilla
+      openIntelGraph.
 - [x] **narcotics** — implementation pass 2026-07-08, local gates green (live
       verification pending): accordion registry (first open) with what-if
       purity sliders (client-only, keyed by precursor id), pricing matrix
@@ -208,8 +215,14 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       vanilla `benchType` Store key), tier/heat tints, outputs + component
       tracing, linked-case chips, bench CRUD modal (datalist tier/heat);
       ballistic footprint log with gang/case links + CRUD modal.
-- [ ] **modus** — M.O. detector & profiler: `mo_crossref` RPC (deliberate cross-bureau
-      leak valve: case_number+bureau+indicator only → "request access" flow).
+- [x] **modus** — implementation pass 2026-07-08, local gates green (live
+      verification pending): MO_DICT indicator extraction (4 categories,
+      chips), sample loader, stored-profile scoring with tinted match cards +
+      case deep links, save-as-case-profile modal (indicators jsonb);
+      cross-bureau matches via the `mo_crossref` SECURITY DEFINER RPC
+      rendered as locked existence-only cards (filtered against the viewer's
+      own RLS-visible cases) with the request-access flow (insert
+      case_access_requests + notify command deciders).
 - [ ] **media** — Media vault (universal intake via FiveManage; paste-URL fallback).
 - [x] **records** — implementation pass 2026-07-08, local gates green (live
       verification pending): live shared registry on `cid_records` (realtime via
