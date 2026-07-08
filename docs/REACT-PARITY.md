@@ -35,9 +35,9 @@ route ids but the legacy `reports` route has no section and falls back to `cases
 - [ ] **Phase 3+** — one view per patch (order below). Done so far: `inbox` (My Desk),
       `command` (Central Command), `personnel` (Roster & Member Admin), `announce`
       (Announcements), `persons` (Persons of Interest), `gangs` (Gangs & Turf),
-      and `bolo` (BOLO Board). The first four are **live-verified 2026-07-08**
-      alongside Phase 2; `persons`, `gangs`, and `bolo` are implementation-
-      complete with local gates green, live
+      `bolo` (BOLO Board), and `places` (Criminal Places & Production). The first
+      four are **live-verified 2026-07-08** alongside Phase 2; `persons`, `gangs`,
+      `bolo`, and `places` are implementation-complete with local gates green, live
       verification pending.
 
 ### Live QA results (2026-07-08, real browser + live Supabase, director account)
@@ -163,7 +163,13 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
       reference posting, and unified gang intel profile via the shared
       `IntelProfile`. **Lean in v1**: Gang Intel Library document shelf waits
       on the `sops`/document engine; live browser verification still pending.
-- [ ] **places** — Criminal places & production (process steps).
+- [x] **places** — implementation pass, local gates green 2026-07-08:
+      criminal-place cards, linked gang/case/narcotic chips, production
+      process display from stored `place_process_steps` or generated drug-lab
+      recipe, FK-preserving create/edit modal, attach-to-case reference posting,
+      and command delete/bulk delete with undo snapshotting process steps.
+      **Lean in v1**: manual process-step editing and bulk import wait on later
+      cross-cuts; live browser verification still pending.
 - [ ] **vehicles** — Vehicle registry + cross-reference engine; watch/follow.
 - [ ] **network** — Relationship network graph.
 - [ ] **narcotics** — Narcotics intel: precursors + hotspots (delete-then-reinsert

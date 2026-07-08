@@ -1,6 +1,6 @@
 # React Rebuild Handoff - Phase 3 in progress
 
-Last updated: 2026-07-08 (bolo slice implementation pass).
+Last updated: 2026-07-08 (places slice implementation pass).
 
 This branch is `react-rebuild`. The repo root is the Next.js 16 app. The
 legacy root static files (`index.html`, root `*.js`, `styles.css`) remain inert
@@ -36,6 +36,9 @@ Companion source of truth: `docs/REACT-PARITY.md`.
 - The `bolo` / BOLO Board slice was committed and pushed as
   `e2e6750 feat(rebuild): add bolo board slice`; live browser verification is
   still pending.
+- The `places` / Criminal Places & Production slice is implemented locally in
+  this patch and passes all local gates; live browser verification is still
+  pending.
 - **Live browser QA completed 2026-07-08** for Phase 2 + inbox + command +
   personnel + announce against the live Supabase project (director account,
   dev server on :3777, Playwright-driven). Full results in
@@ -269,6 +272,30 @@ Intentionally lean, tracked in `docs/REACT-PARITY.md`:
 - Vehicle-specific BOLO behavior waits on the `vehicles` slice.
 - Live browser QA for `/bolo` is still pending.
 
+## Places slice delivered
+
+Implemented `/places` in `src/components/places/`, wired through the `[tab]`
+dispatcher:
+
+- Criminal-place card grid from RLS-scoped `places`.
+- Linked gang, case, and narcotic chips from `gangs`, slim `cases`, and
+  `narcotics`.
+- Drug-lab production process display: stored `place_process_steps` when
+  present, otherwise the vanilla generated narcotic recipe using precursors and
+  hotspots.
+- Create/edit modal with FK-preserving selects for controlling gang, linked
+  case, and produced narcotic so unrelated saves do not null hidden links.
+- Attach-to-case flow posts a place intel reference into the selected case
+  channel.
+- Command delete and bulk delete use the shared undo engine and snapshot
+  `place_process_steps`.
+
+Intentionally lean, tracked in `docs/REACT-PARITY.md`:
+
+- Manual process-step editing waits on a later workflow polish pass.
+- CSV/XLSX/JSON bulk import on "+ New" waits on the Imports cross-cut.
+- Live browser QA for `/places` is still pending.
+
 Implemented shared/data support:
 
 - `db.ts` list projections, `.in`, `updateWhere` CAS predicates, null ordering,
@@ -369,13 +396,13 @@ views. Done views (implementation passes; live verification pending):
 - `persons`
 - `gangs`
 - `bolo`
+- `places`
 
 Unchecked views remaining:
 
 - `heatmap` - commander heatmap.
 - `case-files` - per-case attachments and FiveManage upload.
 - `rico` - standalone RICO tracker route and export.
-- `places` - criminal places and production steps.
 - `vehicles` - vehicle registry and cross-reference engine.
 - `network` - relationship graph.
 - `narcotics` - narcotics intel, precursors, hotspots.
@@ -434,8 +461,8 @@ Do not cut over to `main` until all of these are true:
 
 ## Suggested next patch order
 
-1. Tackle `places` next. It feeds gang-linked properties and production
-   workflows used by narcotics.
+1. Tackle `vehicles` or `narcotics` next. `vehicles` closes the plate/watchlist
+   side of Intelligence; `narcotics` builds on the place production data chain.
 2. Continue one view per patch, keeping each patch gated and live-verified.
 3. Fold the remaining targeted-QA flows (second account / real-data mutations
    — see the parity doc's Live QA results) into a later joint session.
@@ -478,6 +505,8 @@ Committed baseline:
 - BOLO / BOLO Board was pushed as
   `e2e6750 feat(rebuild): add bolo board slice`
   (src/components/bolo/, wired in src/app/(app)/[tab]/page.tsx).
+- Places / Criminal Places & Production is implemented in the current patch
+  (src/components/places/, wired in src/app/(app)/[tab]/page.tsx).
 
 Current completed implementation passes:
 - Phase 1 app shell/auth.
@@ -489,14 +518,15 @@ Current completed implementation passes:
 - Intelligence `persons` / Persons of Interest + intel profile + dossier export.
 - Intelligence `gangs` / Gangs & Turf + roster/turf + shared intel profile.
 - Intelligence `bolo` / BOLO Board + warrant status + clear/edit/profile.
+- Intelligence `places` / Criminal Places & Production + generated process flow.
 
 Known local junk to ignore unless the user explicitly asks otherwise:
 - `.serena/`
 - `bash.exe.stackdump`
 
 Next recommended slice:
-- `places` / Criminal Places & Production, because it feeds gang-linked
-  properties and the later narcotics production workflow.
+- `vehicles` / Vehicle Registry to close plate intel + vehicle watchlist, or
+  `narcotics` to continue the production/hotspot workflow chain.
 
 Before changing code:
 - Read `docs/REACT-PARITY.md` and this handoff.
