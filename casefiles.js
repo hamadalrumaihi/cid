@@ -228,7 +228,9 @@
     async function cfAttachFile(file, cn) {
       if (typeof fmUpload !== 'function') throw new Error('FiveManage module unavailable');
       const out = await fmUpload(file);   // → { url, kind }
-      const row = { case_number: cn, drive_file_id: null, name: file.name, mime_type: file.type || null, icon_url: null, web_view_link: out.url, added_by: DB().me.id };
+      // drive_file_id is NOT NULL (legacy Drive column repurposed as the file's
+      // unique id) — the FiveManage URL is unique per uploaded file.
+      const row = { case_number: cn, drive_file_id: out.url, name: file.name, mime_type: file.type || null, icon_url: null, web_view_link: out.url, added_by: DB().me.id };
       const res = await DB().insert('case_files', row);
       if (res && res.error) throw new Error(res.error.message);
     }
