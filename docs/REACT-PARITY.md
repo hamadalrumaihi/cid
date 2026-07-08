@@ -33,8 +33,10 @@ route ids but the legacy `reports` route has no section and falls back to `cases
       **Live-verified 2026-07-08** (see "Live QA results" below); several dense vanilla
       subflows are intentionally lean in React v1 and called out below.
 - [ ] **Phase 3+** — one view per patch (order below). Done so far: `inbox` (My Desk),
-      `command` (Central Command), `personnel` (Roster & Member Admin), and `announce`
-      (Announcements) — all four **live-verified 2026-07-08** alongside Phase 2.
+      `command` (Central Command), `personnel` (Roster & Member Admin), `announce`
+      (Announcements), and `persons` (Persons of Interest). The first four are
+      **live-verified 2026-07-08** alongside Phase 2; `persons` is implementation-
+      complete with local gates green, live verification pending.
 
 ### Live QA results (2026-07-08, real browser + live Supabase, director account)
 All flows exercised with throwaway rows; SQL sweep confirmed **zero QA rows left**
@@ -134,9 +136,15 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
 - [ ] **rico** — RICO element tracker: enterprise + predicate acts; .docx export.
 
 ### Intelligence
-- [ ] **persons** — Persons of Interest: paged card grid (24/page), warrants lifecycle,
-      BOLO flag, watch/follow, intel profile slide-over, **dossier export .docx/.pdf**
-      (RLS-scoped), mugshots via `safeUrl`.
+- [x] **persons** — implementation pass, local gates green 2026-07-08: paged
+      card grid (24/page + load-more, search reset), quick-add from empty
+      search, bulk delete with undo restoring nulled `gang_members.person_id`
+      and `vehicles.owner_id`, CRUD modal with known-properties editor and
+      gang-preservation guard, BOLO/8-felony/CCW/VCH card signals, mugshots via
+      `safeUrl`, attach-to-case reference posting, person follow/watch, unified
+      intel profile slide-over for persons and gangs with RLS-restricted linked
+      case stubs, and RLS-scoped dossier export `.docx`. **Lean in v1**: dossier
+      `.pdf` waits on the Exports slice; live browser verification still pending.
 - [ ] **bolo** — BOLO board (persons + vehicles).
 - [ ] **gangs** — Gangs & Turf: gang cards, ranks, members, turf; Gang Intel Library doc
       shelf; intel profile.
@@ -217,8 +225,8 @@ notifications. Zero app console errors (incl. NO vanilla rt_cases double-subscri
 - [ ] **Global search** — top-bar + command palette (Cmd/Ctrl+K, arrows/enter/esc);
       `search_all` pg_trgm RPC (typo-tolerant, ranked, RLS-scoped SECURITY INVOKER);
       recent-search memory; `/` focuses search.
-- [ ] **Watchlist/follow** — cases/persons/vehicles; owner-only RLS; "following never
-      widens access"; feeds My Desk.
+- [ ] **Watchlist/follow** — cases/persons implemented; vehicles pending. Owner-only
+      RLS; "following never widens access"; feeds My Desk.
 - [ ] **Never-lose-work** — `cid-draft:<key>` form drafts; dirty-guard on modal close;
       beforeunload prompt.
 - [ ] **Connection watch** — offline banner ✅ (Phase 1) · `withRetry` + data-stale

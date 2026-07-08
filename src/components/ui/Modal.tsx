@@ -26,6 +26,10 @@ export interface ModalProps {
 const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
 
+// Reference-counted body scroll lock — with stacked modals (e.g. a dialog over
+// a slide-over) the first close must not unlock the page under the survivor.
+let scrollLocks = 0
+
 export function Modal({ open, onClose, children, wide, slide, dismissible = true, dirty }: ModalProps) {
   const cardRef = useRef<HTMLDivElement>(null)
   const lastFocused = useRef<Element | null>(null)
@@ -59,6 +63,7 @@ export function Modal({ open, onClose, children, wide, slide, dismissible = true
   useEffect(() => {
     if (!open) return
     lastFocused.current = document.activeElement
+    scrollLocks++
     document.body.classList.add('overflow-hidden')
     const card = cardRef.current
     const first = card?.querySelector<HTMLElement>(FOCUSABLE)
@@ -88,7 +93,8 @@ export function Modal({ open, onClose, children, wide, slide, dismissible = true
       document.removeEventListener('keydown', onKey)
       document.removeEventListener('focusin', onFocusIn)
       window.removeEventListener('beforeunload', onBeforeUnload)
-      document.body.classList.remove('overflow-hidden')
+      scrollLocks = Math.max(0, scrollLocks - 1)
+      if (scrollLocks === 0) document.body.classList.remove('overflow-hidden')
       const lf = lastFocused.current
       if (lf instanceof HTMLElement && document.contains(lf)) lf.focus()
     }

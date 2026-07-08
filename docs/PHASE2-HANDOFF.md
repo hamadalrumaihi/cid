@@ -1,6 +1,6 @@
 # React Rebuild Handoff - Phase 3 in progress
 
-Last updated: 2026-07-08 (announce slice pass).
+Last updated: 2026-07-08 (persons slice implementation pass).
 
 This branch is `react-rebuild`. The repo root is the Next.js 16 app. The
 legacy root static files (`index.html`, root `*.js`, `styles.css`) remain inert
@@ -27,6 +27,8 @@ Companion source of truth: `docs/REACT-PARITY.md`.
   `d849b77 feat(rebuild): add personnel roster and member admin slice`.
 - The `announce` / Announcements slice was committed and pushed as
   `1a42119 feat(rebuild): add announcements slice with notification fan-out`.
+- The `persons` / Persons of Interest slice is implemented locally in this
+  patch and passes all local gates; live browser verification is still pending.
 - **Live browser QA completed 2026-07-08** for Phase 2 + inbox + command +
   personnel + announce against the live Supabase project (director account,
   dev server on :3777, Playwright-driven). Full results in
@@ -182,6 +184,39 @@ Intentionally lean, tracked in `docs/REACT-PARITY.md`:
 
 - The announce unread nav badge lands with the Notifications cross-cut.
 
+## Persons slice delivered
+
+Implemented `/persons` in `src/components/persons/`, wired through the `[tab]`
+dispatcher:
+
+- Persons card grid: 24/page load-more, search reset, quick-add from empty
+  search, live refresh, BOLO/8-felony/CCW/VCH/gang/property card signals, and
+  mugshots via `safeUrl` with fallback.
+- Person create/edit modal: status, alias, gang, CCW, BOLO, VCH, felony count,
+  mugshot URL, notes, repeatable known-properties rows, and a gang-preservation
+  guard so saving during a partial gang-cache load does not null the current
+  gang.
+- Command delete flows: one-off delete and bulk multi-select delete using the
+  shared undo engine, restoring nulled `gang_members.person_id` and
+  `vehicles.owner_id` references on undo.
+- Attach-to-case flow posts an intel reference into the selected case channel.
+- Unified intel profile slide-over for persons and gangs: linked cases,
+  memberships, properties, turf, places, ballistic footprints, media, evidence,
+  in-place person/gang cross-links, RLS-restricted linked-case stubs, and case
+  deep links.
+- Person follow/watch is wired through the shared watchlist store; following
+  remains owner-only and never widens case access.
+- Person dossier export `.docx` is RLS-scoped and includes profile facts,
+  linked cases, warrant reports naming the subject, properties, vehicles,
+  memberships, evidence, and media.
+- Shared modal scroll lock is now reference-counted so a dialog stacked over a
+  slide-over cannot unlock body scrolling while the parent modal remains open.
+
+Intentionally lean, tracked in `docs/REACT-PARITY.md`:
+
+- Dossier `.pdf` waits on the Exports slice.
+- Live browser QA for `/persons` is still pending.
+
 Implemented shared/data support:
 
 - `db.ts` list projections, `.in`, `updateWhere` CAS predicates, null ordering,
@@ -279,13 +314,13 @@ views. Done views (implementation passes; live verification pending):
 - `command`
 - `personnel`
 - `announce`
+- `persons`
 
 Unchecked views remaining:
 
 - `heatmap` - commander heatmap.
 - `case-files` - per-case attachments and FiveManage upload.
 - `rico` - standalone RICO tracker route and export.
-- `persons` - POI cards, warrants, BOLO, watch/follow, dossiers.
 - `bolo` - BOLO board.
 - `gangs` - gangs, ranks, members, turf, gang intel library.
 - `places` - criminal places and production steps.
@@ -311,7 +346,7 @@ Unchecked views remaining:
   document exports, CSV formula-injection guard.
 - Imports for CSV/JSON/XLSX.
 - Global search and command palette using `search_all`.
-- Watchlist beyond cases: persons and vehicles.
+- Watchlist beyond cases: vehicles.
 - Never-lose-work coverage for all modal/form drafts.
 - Connection watch polish: stale data pulse and retry UX.
 - Data-table engine: sort, sticky header, paging, copy IDs, density.
@@ -347,8 +382,9 @@ Do not cut over to `main` until all of these are true:
 
 ## Suggested next patch order
 
-1. Tackle `persons`, because it is the heaviest Intelligence view and seeds
-   the card-paging/watchlist/dossier patterns the other intel views reuse.
+1. Tackle `gangs` or `bolo` next. `gangs` reuses the intel-profile patterns
+   just landed in `persons`; `bolo` can be a smaller follow-up that composes
+   the new person cards with the future vehicle registry.
 2. Continue one view per patch, keeping each patch gated and live-verified.
 3. Fold the remaining targeted-QA flows (second account / real-data mutations
    — see the parity doc's Live QA results) into a later joint session.
@@ -382,6 +418,8 @@ Committed baseline:
   `d849b77 feat(rebuild): add personnel roster and member admin slice`.
 - Announce / Announcements has been implemented after that baseline
   (src/components/announce/, wired in src/app/(app)/[tab]/page.tsx).
+- Persons / Persons of Interest is implemented in the current patch
+  (src/components/persons/, wired in src/app/(app)/[tab]/page.tsx).
 
 Current completed implementation passes:
 - Phase 1 app shell/auth.
@@ -390,16 +428,16 @@ Current completed implementation passes:
 - Command `command` / Central Command dashboard.
 - Command `personnel` / Roster, Member Admin & Commendations.
 - Command `announce` / Announcements + first-post notification fan-out.
+- Intelligence `persons` / Persons of Interest + intel profile + dossier export.
 
 Known local junk to ignore unless the user explicitly asks otherwise:
 - `.serena/`
 - `bash.exe.stackdump`
 
 Next recommended slice:
-- `persons` / Persons of Interest, because it is the heaviest Intelligence
-  view and seeds patterns the other intel views reuse: paged card grid
-  (24/page), warrants lifecycle, BOLO flag, watch/follow beyond cases,
-  intel profile slide-over, dossier export, mugshots via `safeUrl`.
+- `gangs` / Gangs & Turf, because `persons` already landed the shared intel
+  profile and cross-link patterns it can reuse. `bolo` is also a reasonable
+  smaller next patch once vehicle registry shape is clear.
 
 Before changing code:
 - Read `docs/REACT-PARITY.md` and this handoff.
