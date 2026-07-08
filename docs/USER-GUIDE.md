@@ -73,7 +73,7 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 
 1. Go to **Cases → Case Files**.
 2. Use the search box or status filters to find the case, then **click its card**.
-3. Inside, work through the tabs: **Overview** (assignments & stats), **Evidence**, **Reports**, **Tasks**, **Charges**, **Chat** (case room with @mentions), **Timeline**, **Files**, **Intel** (linked people/gangs/places), **RICO**, and **Sign-off**.
+3. Inside, work through the tabs: **Overview** (assignments & stats), **Graph** (the investigation link chart), **Evidence**, **Reports**, **Tasks**, **Charges**, **Chat** (case room with @mentions), **Timeline**, **Files**, **Intel** (linked people/gangs/places), **RICO**, and **Sign-off**.
 
 ### Create a case
 
@@ -93,6 +93,10 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 - **A vehicle:** Intelligence → Vehicles → **+ New Vehicle** — plate, model, owner. The registry automatically flags plates that appear across multiple cases.
 - **A gang:** Intelligence → Gangs → pick or create a gang, then use **Add member** and **Add Turf** inside it.
 - **Link intel to a case:** open the case → **Intel** tab → link persons/gangs/places so everything cross-references.
+
+### See the case as a link chart
+
+Open a case → **Graph** tab. The case sits at the center; suspects, witnesses, gangs, places, evidence, vehicles, reports and warrants orbit it, connected by labeled relationships (**owns**, **seen at**, **member of**, **mentioned in**…). Drag nodes to arrange, scroll to zoom, and **click any node** for its details and a jump link. The chart builds itself from the case's Intel links, evidence and reports — nothing extra to maintain.
 
 ### Attach photos, videos and files
 
