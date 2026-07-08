@@ -5,16 +5,23 @@
  *  criminal places (places.area), raid sites (raid_compensations → case
  *  area). Bureau isolation is automatic — cases/raids are RLS-scoped to the
  *  viewer; shared intel (turf/places) is division-wide by design. Layers
- *  re-weight the score live; a created_at slider windows the data. */
+ *  re-weight the score live; a created_at slider windows the data.
+ *
+ *  Beyond vanilla: top-3 hotspot strip, per-area trend vs the previous
+ *  equal-length window, and click-to-drill-down (tile or map dot) listing
+ *  the underlying records with case deep-links. */
+import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
+import { caseStatusTint } from '@/lib/signoff'
 
 type CaseRow = Tables<'cases'>
 type PlaceRow = Tables<'places'>
 type TurfRow = Tables<'gang_turf'>
 type RaidRow = Tables<'raid_compensations'>
+type GangRow = Tables<'gangs'>
 
 const LAYER_META = [
   { key: 'cases', icon: '📂', label: 'Cases', w: 3 },
@@ -45,15 +52,25 @@ const HM_XY: Record<string, [number, number]> = {
   'la puerta': [36, 93], 'fort zancudo': [22, 40], 'route 68': [40, 48], 'humane labs': [72, 44],
 }
 
-interface AreaRow { area: string; v: Record<LayerKey, number>; score: number }
+/** Strip a trailing ".0" on bare numbers (legacy imports: postal "21.0"). */
+const norm = (s: string | null | undefined) => String(s ?? '').replace(/(\d)\.0\b/g, '$1').trim()
+
+interface AreaRow {
+  area: string
+  v: Record<LayerKey, number>
+  score: number
+  /** Weighted score in the previous equal-length window; null on "All time". */
+  prev: number | null
+}
 
 export function HeatmapView() {
   const { state } = useAuth()
-  const [data, setData] = useState<{ cases: CaseRow[]; places: PlaceRow[]; turf: TurfRow[]; raids: RaidRow[] }>({ cases: [], places: [], turf: [], raids: [] })
+  const [data, setData] = useState<{ cases: CaseRow[]; places: PlaceRow[]; turf: TurfRow[]; raids: RaidRow[]; gangs: GangRow[] }>({ cases: [], places: [], turf: [], raids: [], gangs: [] })
   const [loading, setLoading] = useState(true)
   const [layers, setLayers] = useState<Record<LayerKey, boolean>>({ cases: true, raids: true, turf: true, places: true })
   const [win, setWin] = useState(0)
   const [winPreview, setWinPreview] = useState(0)
+  const [sel, setSel] = useState<string | null>(null)
   // "Now" is stamped per data load (not read inside the memo) so the window
   // cutoff stays deterministic for a given dataset — and lint-pure.
   const [loadedAt, setLoadedAt] = useState(0)
@@ -63,13 +80,14 @@ export function HeatmapView() {
     await Promise.resolve()
     setLoading(true)
     try {
-      const [cases, places, turf, raids] = await Promise.all([
+      const [cases, places, turf, raids, gangs] = await Promise.all([
         list('cases', {}).catch(() => [] as CaseRow[]),
         list('places', {}).catch(() => [] as PlaceRow[]),
         list('gang_turf', {}).catch(() => [] as TurfRow[]),
         list('raid_compensations', {}).catch(() => [] as RaidRow[]),
+        list('gangs', {}).catch(() => [] as GangRow[]),
       ])
-      setData({ cases, places, turf, raids })
+      setData({ cases, places, turf, raids, gangs })
       setLoadedAt(Date.now())
     } finally { setLoading(false) }
   }, [state])
@@ -84,27 +102,36 @@ export function HeatmapView() {
   const rows = useMemo<AreaRow[]>(() => {
     const days = WINDOWS[win].days
     const cutoff = days && loadedAt ? loadedAt - days * 86400000 : null
-    const inWin = (createdAt: string | null | undefined) => !cutoff || !createdAt || Date.parse(createdAt) >= cutoff
-    // Strip a trailing ".0" on bare numbers (legacy imports: postal "21.0").
-    const norm = (s: string | null | undefined) => String(s ?? '').replace(/(\d)\.0\b/g, '$1').trim()
-    const areas: Record<string, Record<LayerKey, number>> = {}
-    const bump = (area: string | null | undefined, key: LayerKey) => {
-      const a = norm(area)
-      if (!a) return
-      const v = (areas[a] = areas[a] ?? { cases: 0, places: 0, turf: 0, raids: 0 })
-      v[key] += 1
-    }
+    const prevCutoff = cutoff && days ? cutoff - days * 86400000 : null
     const caseArea: Record<string, string> = {}
     for (const c of data.cases) caseArea[c.id] = norm(c.area)
 
-    if (layers.cases) data.cases.filter((c) => inWin(c.created_at)).forEach((c) => bump(c.area, 'cases'))
-    if (layers.places) data.places.filter((p) => inWin(p.created_at)).forEach((p) => bump(p.area, 'places'))
-    if (layers.turf) data.turf.filter((t) => inWin(t.created_at)).forEach((t) => bump(t.hotspot_area || t.block, 'turf'))
-    if (layers.raids) data.raids.filter((r) => inWin(r.created_at)).forEach((r) => { const a = r.case_id ? caseArea[r.case_id] : ''; if (a) bump(a, 'raids') })
+    // One aggregation pass per window (current + previous) with shared logic.
+    const aggregate = (from: number | null, to: number | null) => {
+      const within = (createdAt: string | null | undefined) => {
+        if (!createdAt) return to === null // undated rows count only in the open-ended current window
+        const t = Date.parse(createdAt)
+        return (from === null || t >= from) && (to === null || t < to)
+      }
+      const areas: Record<string, Record<LayerKey, number>> = {}
+      const bump = (area: string | null | undefined, key: LayerKey) => {
+        const a = norm(area)
+        if (!a) return
+        const v = (areas[a] = areas[a] ?? { cases: 0, places: 0, turf: 0, raids: 0 })
+        v[key] += 1
+      }
+      if (layers.cases) data.cases.filter((c) => within(c.created_at)).forEach((c) => bump(c.area, 'cases'))
+      if (layers.places) data.places.filter((p) => within(p.created_at)).forEach((p) => bump(p.area, 'places'))
+      if (layers.turf) data.turf.filter((t) => within(t.created_at)).forEach((t) => bump(t.hotspot_area || t.block, 'turf'))
+      if (layers.raids) data.raids.filter((r) => within(r.created_at)).forEach((r) => { const a = r.case_id ? caseArea[r.case_id] : ''; if (a) bump(a, 'raids') })
+      return areas
+    }
 
     const score = (v: Record<LayerKey, number>) => enabled.reduce((s, L) => s + v[L.key] * L.w, 0)
-    return Object.entries(areas)
-      .map(([area, v]) => ({ area, v, score: score(v) }))
+    const current = aggregate(cutoff, null)
+    const previous = cutoff ? aggregate(prevCutoff, cutoff) : null
+    return Object.entries(current)
+      .map(([area, v]) => ({ area, v, score: score(v), prev: previous ? score(previous[area] ?? { cases: 0, places: 0, turf: 0, raids: 0 }) : null }))
       .filter((r) => r.score > 0)
       .sort((a, b) => b.score - a.score)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `enabled` derives from `layers`
@@ -152,26 +179,41 @@ export function HeatmapView() {
         <Notice text="No area data in this window. Widen the time range, enable more layers, or add an Area to cases, places, or gang turf." />
       ) : (
         <>
-          <HeatSvg rows={rows} max={max} layers={layers} />
+          {rows.length > 1 && (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {rows.slice(0, 3).map((r, i) => (
+                <button key={r.area} onClick={() => setSel(r.area)} className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-left transition hover:bg-amber-500/10">
+                  <span className="text-lg" aria-hidden>{['🥇', '🥈', '🥉'][i]}</span>
+                  <span>
+                    <span className="block text-sm font-bold text-white">{r.area}</span>
+                    <span className="text-[11px] text-amber-200/80">intensity {Math.round((r.score / max) * 100)}<Trend r={r} /></span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          <HeatSvg rows={rows} max={max} layers={layers} onPick={setSel} />
+          {sel && <AreaDetail area={sel} data={data} win={win} loadedAt={loadedAt} onClose={() => setSel(null)} />}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {rows.map((r) => {
               const pct = Math.round((r.score / max) * 100)
               const lvl = pct >= 75 ? 'lvl3' : pct >= 50 ? 'lvl2' : pct >= 25 ? 'lvl1' : ''
               return (
-                <div key={r.area} className={`hm-tile ${lvl}`}>
-                  <div className="flex items-center justify-between"><h4 className="text-base font-bold text-white">{r.area}</h4><span className="font-mono text-lg font-bold text-white">{pct}</span></div>
+                <button key={r.area} onClick={() => setSel(r.area)} className={`hm-tile ${lvl} block w-full text-left transition hover:brightness-110`} aria-label={`Show ${r.area} details`}>
+                  <div className="flex items-center justify-between"><h4 className="text-base font-bold text-white">{r.area}</h4><span className="font-mono text-lg font-bold text-white">{pct}<Trend r={r} /></span></div>
                   <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-ink-900"><div className="hm-bar" style={{ width: `${pct}%` }} /></div>
                   <div className="mt-3 grid grid-cols-2 gap-1 text-[11px] text-slate-300">
                     {enabled.map((L) => <span key={L.key}>{L.icon} {r.v[L.key]} {L.label.toLowerCase()}</span>)}
                   </div>
-                </div>
+                </button>
               )
             })}
           </div>
           <p className="mt-4 text-[11px] text-slate-500">
             Intensity = {enabled.map((L) => `${L.label.toLowerCase()}×${L.w}`).join(' + ')}. Window:{' '}
             <span className="text-slate-300">{WINDOWS[win].label}</span> (by creation date). Scoped to cases you can
-            access (bureau + JTF + grants). {rows.length} area{rows.length === 1 ? '' : 's'}.
+            access (bureau + JTF + grants). {rows.length} area{rows.length === 1 ? '' : 's'}. Click an area for its
+            records{WINDOWS[win].days ? '; ▲▼ compare with the preceding window of the same length' : ''}.
           </p>
         </>
       )}
@@ -179,7 +221,97 @@ export function HeatmapView() {
   )
 }
 
-function HeatSvg({ rows, max, layers }: { rows: AreaRow[]; max: number; layers: Record<LayerKey, boolean> }) {
+/** ▲ rising / ▼ cooling vs the previous equal-length window (windowed views only). */
+function Trend({ r }: { r: AreaRow }) {
+  if (r.prev === null) return null
+  const d = r.score - r.prev
+  if (!d) return <span className="ml-1 text-[11px] font-semibold text-slate-500" title="No change vs previous window">＝</span>
+  return d > 0
+    ? <span className="ml-1 text-[11px] font-semibold text-rose-300" title={`Up ${d} vs previous window`}>▲{d}</span>
+    : <span className="ml-1 text-[11px] font-semibold text-emerald-300" title={`Down ${-d} vs previous window`}>▼{-d}</span>
+}
+
+/** Drill-down: the records behind one area in the active window. */
+function AreaDetail({ area, data, win, loadedAt, onClose }: {
+  area: string
+  data: { cases: CaseRow[]; places: PlaceRow[]; turf: TurfRow[]; raids: RaidRow[]; gangs: GangRow[] }
+  win: number
+  loadedAt: number
+  onClose: () => void
+}) {
+  const days = WINDOWS[win].days
+  const cutoff = days && loadedAt ? loadedAt - days * 86400000 : null
+  const inWin = (createdAt: string | null | undefined) => !cutoff || !createdAt || Date.parse(createdAt) >= cutoff
+  const a = area.toLowerCase()
+  const match = (s: string | null | undefined) => norm(s).toLowerCase() === a
+
+  const cases = data.cases.filter((c) => match(c.area) && inWin(c.created_at))
+  const caseById = new Map(data.cases.map((c) => [c.id, c]))
+  const raids = data.raids.filter((r) => { const c = r.case_id ? caseById.get(r.case_id) : null; return c && match(c.area) && inWin(r.created_at) })
+  const turf = data.turf.filter((t) => match(t.hotspot_area || t.block) && inWin(t.created_at))
+  const places = data.places.filter((p) => match(p.area) && inWin(p.created_at))
+  const gangName = (id: string | null) => (id && data.gangs.find((g) => g.id === id)?.name) || 'Unknown gang'
+
+  return (
+    <div className="mb-6 rounded-2xl border border-blue-500/20 bg-ink-900/70 p-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-base font-bold text-white">📌 {area} <span className="ml-1 text-xs font-medium text-slate-500">{WINDOWS[win].label}</span></h3>
+        <button onClick={onClose} aria-label="Close area details" className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-white/10">✕ Close</button>
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <DetailBlock title={`📂 Cases (${cases.length})`}>
+          {cases.map((c) => (
+            <Link key={c.id} href={`/cases?case=${encodeURIComponent(c.id)}`} className="flex items-center gap-2 rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-sm hover:border-blue-300/30">
+              <span className="font-mono text-xs font-bold text-blue-300">{c.case_number}</span>
+              <span className="min-w-0 flex-1 truncate text-slate-200">{c.title || 'Untitled'}</span>
+              <span className={`rounded px-1.5 py-0.5 text-[10px] font-black uppercase ${caseStatusTint(c.status)}`}>{c.status}</span>
+            </Link>
+          ))}
+        </DetailBlock>
+        <DetailBlock title={`💥 Raids (${raids.length})`}>
+          {raids.map((r) => {
+            const c = r.case_id ? caseById.get(r.case_id) : null
+            return (
+              <Link key={r.id} href={c ? `/cases?case=${encodeURIComponent(c.id)}` : '/cases'} className="flex items-center gap-2 rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-sm hover:border-blue-300/30">
+                <span className="font-mono text-xs font-bold text-blue-300">{c?.case_number ?? 'Case'}</span>
+                <span className="min-w-0 flex-1 truncate text-slate-200">Raid — net ${Number(r.net_value ?? 0).toLocaleString('en-US')}</span>
+              </Link>
+            )
+          })}
+        </DetailBlock>
+        <DetailBlock title={`🚩 Turf (${turf.length})`}>
+          {turf.map((t) => (
+            <div key={t.id} className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-sm text-slate-200">
+              {t.block}{t.hotspot_area ? ` · ${t.hotspot_area}` : ''} — <span className="text-rose-300">{gangName(t.gang_id)}</span>
+              <span className="ml-1 text-[10px] uppercase text-slate-500">{t.density} density</span>
+            </div>
+          ))}
+        </DetailBlock>
+        <DetailBlock title={`📍 Places (${places.length})`}>
+          {places.map((p) => (
+            <div key={p.id} className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-sm text-slate-200">
+              {p.name} <span className="text-[10px] uppercase text-slate-500">{p.type}</span>
+              {p.controlling_gang_id && <span className="ml-1 text-xs text-rose-300">· {gangName(p.controlling_gang_id)}</span>}
+            </div>
+          ))}
+        </DetailBlock>
+      </div>
+    </div>
+  )
+}
+
+function DetailBlock({ title, children }: { title: string; children: React.ReactNode[] }) {
+  return (
+    <div>
+      <h4 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-400">{title}</h4>
+      <div className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
+        {children.length ? children : <p className="text-sm text-slate-600">None in this window.</p>}
+      </div>
+    </div>
+  )
+}
+
+function HeatSvg({ rows, max, layers, onPick }: { rows: AreaRow[]; max: number; layers: Record<LayerKey, boolean>; onPick: (area: string) => void }) {
   const placed = rows.filter((r) => HM_XY[r.area.toLowerCase()])
   if (!placed.length) return null
   const unplaced = rows.length - placed.length
@@ -197,9 +329,9 @@ function HeatSvg({ rows, max, layers }: { rows: AreaRow[]; max: number; layers: 
           const rad = 2 + (pct / 100) * 4.5
           const parts = LAYER_META.filter((L) => layers[L.key] && r.v[L.key]).map((L) => `${r.v[L.key]} ${L.label.toLowerCase()}`).join(', ')
           return (
-            <g key={r.area}>
+            <g key={r.area} onClick={() => onPick(r.area)} className="cursor-pointer">
               <circle cx={x} cy={y} r={rad.toFixed(1)} fill={dotColor(pct)} fillOpacity={0.75} stroke="#0b1120" strokeWidth={0.6}>
-                <title>{r.area} — intensity {pct} ({parts})</title>
+                <title>{r.area} — intensity {pct} ({parts}) — click for records</title>
               </circle>
               <text x={x} y={Number((y - rad - 1.5).toFixed(1))} textAnchor="middle" fontSize="3.2" fill="#cbd5e1">
                 {r.area.length > 16 ? `${r.area.slice(0, 15)}…` : r.area}
@@ -209,7 +341,7 @@ function HeatSvg({ rows, max, layers }: { rows: AreaRow[]; max: number; layers: 
         })}
       </svg>
       <p className="border-t border-white/5 px-4 py-2 text-[11px] text-slate-500">
-        Stylized map — dot size &amp; color follow area intensity (hover a dot for the breakdown).
+        Stylized map — dot size &amp; color follow area intensity (hover for the breakdown, click for records).
         {unplaced > 0 && ` ${unplaced} area${unplaced === 1 ? '' : 's'} without a map position (postals etc.) appear in the tiles below.`}
       </p>
     </div>
