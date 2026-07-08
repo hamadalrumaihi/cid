@@ -12,7 +12,7 @@ The CID Portal is a private, real-time investigation workspace. Everything in it
 - **Intelligence** — the people, gangs, vehicles, places and networks behind those cases.
 - **Command** — dashboards, announcements, roster, heatmaps and approvals for leadership.
 - **Reference** — the Penal Code, division SOPs, and this guide (Reference → User Guide).
-- **Oversight** — your personal desk, weekly shift reports and the audit log.
+- **Oversight** — your personal desk, the division calendar, weekly shift reports and the audit log.
 
 What you can see and change depends on your **role and bureau** — the server enforces this, so you'll simply never see records that aren't yours to see.
 
@@ -41,7 +41,7 @@ What you can see and change depends on your **role and bureau** — the server e
 
 ### The left sidebar (desktop)
 
-The sidebar groups all 26 screens into **5 categories**:
+The sidebar groups all 27 screens into **5 categories**:
 
 | Category | What's inside |
 |---|---|
@@ -49,7 +49,7 @@ The sidebar groups all 26 screens into **5 categories**:
 | **Cases** | Case Files, Operations, Attachments, RICO |
 | **Intelligence** | Persons, BOLO Board, Gangs, Places, Vehicles, Network, Narcotics, Ballistics, M.O. Detector, Media Vault, Records |
 | **Reference** | Penal Code, SOPs & Library, User Guide |
-| **Oversight** | My Desk, Shift Reports, Audit Log |
+| **Oversight** | My Desk, Calendar, Shift Reports, Audit Log |
 
 Click a **category** to jump to its first screen; a **sub-tab strip** appears under the header to switch between the screens inside that category. Colored dots on the Command button are live counters (pending member approvals, unread announcements, items waiting on you).
 
@@ -78,8 +78,8 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 ### Create a case
 
 1. On **Case Files**, click **New Case**.
-2. Fill in the title, bureau, and summary (a template can prefill these), then click **Save**.
-3. The case gets an auto-numbered ID (like `SAB-9000041`) and appears for your bureau instantly.
+2. Fill in the title, bureau, and summary — or click a **template** chip to prefill them. Templates with a ☑ number also carry a task checklist.
+3. Click **Save**. The case gets an auto-numbered ID (like `SAB-9000041`), appears for your bureau instantly, and any template checklist tasks are already waiting on its **Tasks** tab.
 
 ### Move a case through its life
 
@@ -108,6 +108,10 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 ### Work your desk
 
 **My Desk** (Oversight) shows, in one screen: sign-offs waiting on **you**, your returned cases, due follow-ups, stale cases, your open tasks, recent @mentions, your followed items, notifications and draft reports. If the Command dot in the nav is lit, this is where the work is.
+
+### See what's due — the calendar
+
+**Oversight → Calendar** shows the month at a glance: 📌 case follow-ups, ☑️ open task deadlines, and 📝 shift-report weeks. Days in red have overdue items; click any day to see its items and jump straight to them.
 
 ### File your weekly shift report
 
