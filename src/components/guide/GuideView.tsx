@@ -296,7 +296,9 @@ export function GuideView() {
                 <CategoryIcon cat={c.id} size={16} /> {c.label}
               </p>
               <div className="mt-2 flex flex-wrap gap-1">
-                {c.tabs.map((t) => (
+                {/* The guide orients NEW MEMBERS — owner-only tabs (the
+                    Developer Handbook) don't belong on their map. */}
+                {c.tabs.filter((t) => t !== 'devdocs').map((t) => (
                   <span key={t} className="rounded-md bg-ink-950/60 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300">{TAB_LABEL[t] ?? t}</span>
                 ))}
               </div>
