@@ -6,7 +6,8 @@ import type { Tables } from './database.types'
 import { downloadDocx, type DocxPara } from './docx'
 import { downloadTextFile, fmtUSD, slug } from './format'
 import { reportTitle } from './forms'
-import { penalByCode, penalSentence, type CaseCharge } from './penal'
+import { penalByCode, penalSentence } from './penal'
+import { parseCharges } from '@/lib/jsonShapes'
 
 type CaseRow = Tables<'cases'>
 
@@ -41,7 +42,7 @@ export async function gatherCasePacket(c: CaseRow): Promise<PacketData> {
         .map((p) => ({ name: p.name, alias: p.alias, status: p.status }))
     }
   } catch { /* partial packet is better than none; sections render as empty */ }
-  const charges = (Array.isArray(c.charges) ? (c.charges as unknown as CaseCharge[]) : []).map((x) => {
+  const charges = parseCharges(c.charges).map((x) => {
     const pc = penalByCode(x.code)
     return { code: x.code, count: Math.max(1, x.count || 1), title: pc ? pc.title : '(unknown)', level: pc ? pc.level : '', jail: pc ? pc.jail : null, fine: pc ? pc.fine : null }
   })

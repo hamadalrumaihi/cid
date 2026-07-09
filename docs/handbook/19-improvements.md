@@ -23,7 +23,7 @@ M = days, L = week+.
 | Idea | Why / benefit | Risk |
 |---|---|---|
 | **Commit the SQL schema** (`schema.sql` dump + migration log for post-folder changes) | Today the live DB is the only source of truth — no reviewable history | none |
-| **Split `CaseDetail.tsx`** into per-tab files (keep the `RicoTab` export) | The hottest, biggest file becomes reviewable | low (gates cover it) |
+| ~~**Split `CaseDetail.tsx`** into per-tab files (keep the `RicoTab` export)~~ **done v1.1.0** — tabs live in `cases/tabs/` | The hottest, biggest file becomes reviewable | low (gates cover it) |
 | **Type the JSON columns** (`reports.fields`, `media.tags`, `cases.charges`, announcement mentions/links) with zod at the read boundary | Today's casts hide shape drift | low |
 | Extract a `useRegistry` hook from the ~10× repeated registry skeleton | Hundreds of duplicated lines; new registries in minutes | medium — migrate incrementally |
 | Nonce-based CSP (drop `unsafe-inline` scripts) | Defense in depth | medium (Next runtime quirks) |

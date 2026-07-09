@@ -65,9 +65,10 @@ function), and backend READMEs. Details: [Ch. 8](08-database.md).
 ### `docs/` — documentation
 This handbook (`handbook/`), `USER-GUIDE.md` (canonical text of the in-app
 guide — the in-app copy `src/components/guide/guideContent.ts` is
-**generated from it**), `HARDENING.md` (security checklist status), plus
-historical build-era notes (HANDOFF, ROADMAP, REACT-PARITY, BACKLOG,
-DEFERRED — kept for reference).
+**generated from it**), `HARDENING.md` (security checklist status),
+`DEFERRED.md` (parked work with triggers), `RELEASE-READINESS.md` (v1.0.0
+verification). Historical build-era notes (HANDOFF, ROADMAP, REACT-PARITY,
+BACKLOG…) are parked in `archive/` — see `archive/README.md`.
 
 ### `.github/` — quality gates
 `workflows/ci.yml` (typecheck → lint → test → build on every push/PR) and

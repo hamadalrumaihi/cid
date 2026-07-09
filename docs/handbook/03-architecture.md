@@ -61,7 +61,8 @@ not hypotheticals.
 - **Responsibility**: the screens. Uniform shape: fetch on mount + version
   bump → `refresh()`; permission-gated buttons; fresh-mounted modals;
   toasts + Undo for deletes.
-- **Risk: varies.** `cases/CaseDetail.tsx` (~840 lines, 12 tabs) is the
+- **Risk: varies.** `cases/CaseDetail.tsx` (12 tabs, one file per tab in
+  `cases/tabs/` since v1.1.0) is the
   highest-risk file; registry views are the safest and most uniform.
 - **Common mistakes**: breaking the deferred-effect pattern ([Ch. 15](15-conventions.md));
   editing a delete's cascade config without checking the FK schema.

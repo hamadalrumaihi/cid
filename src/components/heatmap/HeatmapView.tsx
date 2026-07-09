@@ -429,12 +429,21 @@ function HeatSvg({ rows, max, layers, onPick }: { rows: AreaRow[]; max: number; 
           const rad = (2 + (pct / 100) * 4.5) / Math.max(zoom, 1) ** 0.5
           const parts = LAYER_META.filter((L) => layers[L.key] && r.v[L.key]).map((L) => `${r.v[L.key]} ${L.label.toLowerCase()}`).join(', ')
           return (
-            <g key={r.area} onClick={() => pick(r.area)} className="cursor-pointer">
+            <g
+              key={r.area}
+              onClick={() => pick(r.area)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(r.area) } }}
+              tabIndex={0}
+              role="button"
+              aria-label={`${r.area} — intensity ${pct}${parts ? ` (${parts})` : ''} — open records`}
+              className="cursor-pointer focus:outline-none"
+            >
               <circle cx={x} cy={y} r={rad.toFixed(2)} fill={dotColor(pct)} fillOpacity={0.75} stroke="#0b1120" strokeWidth={0.6 / Math.max(zoom, 1) ** 0.5}>
                 <title>{r.area} — intensity {pct} ({parts}) — click for records</title>
               </circle>
+              {/* The number rides along so intensity never depends on color alone. */}
               <text x={x} y={Number((y - rad - 1.5 / Math.max(zoom, 1) ** 0.5).toFixed(1))} textAnchor="middle" fontSize={fs(3.2)} fill="#cbd5e1">
-                {r.area.length > 16 ? `${r.area.slice(0, 15)}…` : r.area}
+                {r.area.length > 16 ? `${r.area.slice(0, 15)}…` : r.area} · {pct}
               </text>
             </g>
           )
@@ -446,7 +455,10 @@ function HeatSvg({ rows, max, layers, onPick }: { rows: AreaRow[]; max: number; 
         <button className={btn} aria-label="Reset view" onClick={() => setVb(HOME)}>⌂</button>
       </div>
       <p className="border-t border-white/5 px-4 py-2 text-[11px] text-slate-500">
-        Vector map — drag to pan, scroll or use +/− to zoom, dot size &amp; color follow intensity, click a dot for records.
+        Vector map — drag to pan, scroll or use +/− to zoom, click a dot (or Tab + Enter) for records. Each label carries
+        the intensity number; size &amp; color repeat it:{' '}
+        <span className="text-rose-300">● 75–100</span> · <span className="text-amber-300">● 50–74</span> ·{' '}
+        <span className="text-blue-300">● 0–49</span>.
         {unplaced > 0 && ` ${unplaced} area${unplaced === 1 ? '' : 's'} without a map position (postals etc.) appear in the tiles below.`}
       </p>
     </div>
