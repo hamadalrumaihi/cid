@@ -1,0 +1,61 @@
+# Advisory code-quality gates — static analysis (Semgrep) and a performance
+# budget (Lighthouse). Deliberately NON-BLOCKING (continue-on-error) so an
+# untuned rule or a flaky perf run never blocks a merge; the blocking gates
+# stay in ci.yml. Both run FULLY LOCAL on the runner — Semgrep scans with
+# public OSS rulesets downloaded to the runner and never uploads findings to
+# any cloud platform; Lighthouse writes results to the filesystem only. No
+# case data, no repository data, and no secrets are involved.
+# Promote a job to blocking (drop continue-on-error) once its baseline is
+# trusted. See docs/DEV-TOOLING.md.
+name: Code Quality (advisory)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  sast:
+    name: Semgrep SAST (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Semgrep (OSS)
+        run: pip install semgrep
+      - name: Scan (local rulesets, no cloud upload)
+        # `semgrep scan --config p/...` fetches the public rulesets and scans
+        # locally. We intentionally do NOT use `semgrep ci`, which would upload
+        # findings to the Semgrep AppSec Platform.
+        run: |
+          semgrep scan \
+            --config p/typescript \
+            --config p/react \
+            --config p/nextjs \
+            --config p/secrets \
+            --error --metrics=off
+
+  perf:
+    name: Lighthouse budget (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://jhxuflzmqspidkvjckox.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_sshJXQoxX0NZqUeU-uBObQ_aSgQaHRa
+      NEXT_PUBLIC_FIVEMANAGE_API_KEY: Z3ctM38GCUw5aPam9xscHYcxjghj8iTE
+      NEXT_PUBLIC_FIVEMANAGE_BASE_URL: https://api.fivemanage.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Lighthouse (local, filesystem output)
+        # ubuntu-latest ships Chrome; LHCI auto-detects it (CHROME_PATH overrides).
+        run: npx --yes @lhci/cli@0.14.x autorun --config=lighthouserc.json

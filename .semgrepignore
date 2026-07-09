@@ -1,0 +1,15 @@
+# Semgrep scan scope — keep it to our own source. Everything here is either
+# generated, vendored, or not application code.
+node_modules/
+.next/
+out/
+coverage/
+playwright-report/
+test-results/
+.lighthouseci/
+
+# Generated / vendored data — not hand-written logic worth scanning.
+src/lib/database.types.ts
+src/components/devdocs/handbookContent.ts
+src/components/guide/guideContent.ts
+supabase/schema-snapshot.sql
