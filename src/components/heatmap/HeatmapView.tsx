@@ -265,7 +265,7 @@ function AreaDetail({ area, data, win, loadedAt, onClose }: {
     <div className="mb-6 rounded-2xl border border-blue-500/20 bg-ink-900/70 p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="text-base font-bold text-white">📌 {area} <span className="ml-1 text-xs font-medium text-slate-400">{WINDOWS[win].label}</span></h3>
-        <button onClick={onClose} aria-label="Close area details" className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-white/10">✕ Close</button>
+        <button onClick={onClose} aria-label="Close area details" className="-my-1 rounded-md border border-white/10 bg-white/5 p-2 text-xs font-semibold text-slate-300 hover:bg-white/10">✕ Close</button>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <DetailBlock title={`📂 Cases (${cases.length})`}>

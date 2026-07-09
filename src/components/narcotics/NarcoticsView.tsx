@@ -15,6 +15,7 @@ import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { inputCls, labelCls } from '@/components/ui/Field'
 
 type NarcoticRow = Tables<'narcotics'>
@@ -81,25 +82,28 @@ export function NarcoticsView() {
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <div>
-          <h3 className="text-xl font-bold text-white">💊 Narcotics Intelligence</h3>
-          <p className="text-sm text-slate-400">Street-narcotics registry, deep processing analyzer &amp; market analytics</p>
-        </div>
-        <div className="flex items-center gap-3 text-center">
-          <div className="rounded-xl border border-white/10 bg-ink-850 px-4 py-2">
-            <p className="font-mono text-lg font-bold text-emerald-300">{drugs.length}</p>
-            <p className="text-[10px] uppercase tracking-wider text-slate-400">Tracked</p>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-ink-850 px-4 py-2">
-            <p className="font-mono text-lg font-bold text-blue-300">{hotspotCount}</p>
-            <p className="text-[10px] uppercase tracking-wider text-slate-400">Hotspots</p>
-          </div>
-          {canEdit && (
-            <button onClick={() => setEditor({ drug: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
-              + New Narcotic
-            </button>
-          )}
-        </div>
+        <PageHeader
+          className="flex-1"
+          title="💊 Narcotics Intelligence"
+          subtitle="Street-narcotics registry, deep processing analyzer & market analytics"
+          actions={
+            <div className="flex items-center gap-3 text-center">
+              <div className="rounded-xl border border-white/10 bg-ink-850 px-4 py-2">
+                <p className="font-mono text-lg font-bold text-emerald-300">{drugs.length}</p>
+                <p className="text-[10px] uppercase tracking-wider text-slate-400">Tracked</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-ink-850 px-4 py-2">
+                <p className="font-mono text-lg font-bold text-blue-300">{hotspotCount}</p>
+                <p className="text-[10px] uppercase tracking-wider text-slate-400">Hotspots</p>
+              </div>
+              {canEdit && (
+                <button onClick={() => setEditor({ drug: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+                  + New Narcotic
+                </button>
+              )}
+            </div>
+          }
+        />
       </div>
 
       {loading ? (
@@ -157,7 +161,7 @@ function DrugCard({ drug, defaultOpen, canEdit, caseNum, onEdit }: {
       <summary className="flex cursor-pointer flex-wrap items-center gap-4 px-6 py-4">
         <span className="text-2xl" aria-hidden>{n.icon || '💊'}</span>
         <div className="min-w-0">
-          <h3 className="text-base font-semibold text-white">{n.name}</h3>
+          <h2 className="text-base font-semibold text-white">{n.name}</h2>
           <p className="text-xs text-slate-400">{n.classification || ''}</p>
         </div>
         <div className="ml-auto flex items-center gap-4 text-right">

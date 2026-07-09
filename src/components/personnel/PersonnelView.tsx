@@ -14,6 +14,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { ROLE_LABEL } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { useNav } from '@/components/shell/useNav'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { Commendations, type CommendationRow } from './Commendations'
 
 const ROSTER_PAGE = 30
@@ -47,8 +48,7 @@ export function PersonnelView() {
   return (
     <section className="view-in space-y-6">
       <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <h3 className="text-xl font-bold text-white">👥 Personnel, Roster &amp; Commendations</h3>
-        <p className="text-sm text-slate-400">CID roster &amp; digital commendations</p>
+        <PageHeader title="👥 Personnel, Roster & Commendations" subtitle="CID roster & digital commendations" />
       </div>
 
       {state === 'in' && isCommand && (
@@ -65,7 +65,7 @@ export function PersonnelView() {
       )}
 
       <div>
-        <h4 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">Active Roster</h4>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">Active Roster</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {state !== 'in' ? (
             <p className="text-sm text-slate-500 sm:col-span-2 xl:col-span-3">Sign in to view the roster.</p>

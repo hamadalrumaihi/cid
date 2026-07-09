@@ -7,6 +7,7 @@
  *  app's own design language. The full written manual (docs/USER-GUIDE.md)
  *  stays available in a collapsible at the end. Static content, no fetches. */
 import { NAV_CATEGORIES, TAB_LABEL } from '@/lib/nav'
+import { statusTint } from '@/lib/tint'
 import { renderMarkdown } from '@/lib/markdown'
 import { CategoryIcon, BellIcon, SearchIcon } from '@/components/shell/icons'
 import { USER_GUIDE_MD } from './guideContent'
@@ -331,13 +332,15 @@ export function GuideView() {
         <div className="flex flex-wrap items-center gap-y-2" aria-label="Case status flow">
           <span className="rounded-lg border border-white/10 bg-gradient-to-r from-badge-500/30 to-blue-700/30 px-2.5 py-1.5 text-xs font-black text-white">＋ New Case</span>
           <Arrow />
-          <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-bold uppercase text-amber-300">open</span>
+          {/* statusTint is the same map the board + command pills use, so this
+              legend can no longer drift from what the app actually shows. */}
+          <span className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase ${statusTint('open')}`}>open</span>
           <Arrow />
-          <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-bold uppercase text-emerald-300">active</span>
+          <span className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase ${statusTint('active')}`}>active</span>
           <Arrow />
-          <span className="rounded-full bg-blue-500/15 px-2.5 py-1 text-xs font-bold uppercase text-blue-300">cold</span>
+          <span className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase ${statusTint('cold')}`}>cold</span>
           <Arrow />
-          <span className="rounded-full bg-slate-500/20 px-2.5 py-1 text-xs font-bold uppercase text-slate-300">closed</span>
+          <span className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase ${statusTint('closed')}`}>closed</span>
         </div>
 
         <p className="mt-4 mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">Inside a case — the tab rail</p>

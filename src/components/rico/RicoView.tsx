@@ -12,6 +12,7 @@ import { downloadDocx, type DocxPara } from '@/lib/docx'
 import { slug } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { Notice } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { RicoTab } from '@/components/cases/CaseDetail'
 
 type CaseRow = Tables<'cases'>
@@ -82,8 +83,10 @@ export function RicoView() {
   return (
     <div>
       <div className="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <h3 className="text-xl font-bold text-white">⚖️ RICO Element Tracker</h3>
-        <p className="text-sm text-slate-400">Assemble &amp; track enterprise + pattern-of-racketeering elements per case.</p>
+        <PageHeader
+          title="⚖️ RICO Element Tracker"
+          subtitle="Assemble & track enterprise + pattern-of-racketeering elements per case."
+        />
         <p className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
           ⚠️ Organizational tool only — not legal advice. Predicate-act sufficiency and charging decisions are a prosecutor&rsquo;s determination.
         </p>

@@ -49,7 +49,7 @@ export function PromotionsTransfers() {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-2xl border border-white/10 bg-ink-900/45 p-5">
+      <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-bold text-white">Change rank or bureau</h3>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find officer…" aria-label="Find officer" className="w-52 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
@@ -66,7 +66,7 @@ export function PromotionsTransfers() {
         <p className="mt-3 text-[11px] text-slate-500">Promotions, demotions and transfers all go through <b>Manage Officer</b> — the same <code>assign_member</code> RPC used on the Personnel admin panel. Bureau Leads can only manage their own bureau and can’t promote above Senior Detective.</p>
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-ink-900/45 p-5">
+      <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
         <h3 className="mb-1 font-bold text-white">Role-change history <span className="text-slate-500">({events.length})</span></h3>
         {events.length ? (
           <div className="space-y-1.5">

@@ -9,26 +9,32 @@
 
 const NEUTRAL = 'bg-slate-500/20 text-slate-300'
 
-/** Case / operation lifecycle status. Covers the vocabularies used by
- *  CommandView (open/active/cold/closed), OperationsView (planning/active/
- *  paused/closed) and the guide legend. */
+/** Case lifecycle status — the CID board convention (CaseBoard columns +
+ *  guide legend): open = amber (new, needs attention), active = emerald
+ *  (being worked), cold = blue, closed = slate. Sign-off states follow the
+ *  same temperature: awaiting = amber, DOJ-ready/complete = emerald.
+ *  (CommandView's drill pill had silently drifted from this — folding the
+ *  maps here is what keeps them aligned.) */
 export function statusTint(status?: string | null): string {
   switch ((status ?? '').toLowerCase()) {
     case 'open':
+    case 'awaiting':
+    case 'paused':
+    case 'waiting':
+      return 'bg-amber-500/15 text-amber-300'
     case 'active':
     case 'planning':
     case 'in_progress':
-      return 'bg-blue-500/15 text-blue-300'
-    case 'paused':
-    case 'waiting':
-    case 'cold':
-      return 'bg-amber-500/15 text-amber-300'
     case 'resolved':
-    case 'closed':
     case 'done':
     case 'complete':
     case 'completed':
+    case 'doj-ready':
       return 'bg-emerald-500/15 text-emerald-300'
+    case 'cold':
+      return 'bg-blue-500/15 text-blue-300'
+    case 'closed':
+      return NEUTRAL
     case 'archived':
       return 'bg-white/5 text-slate-500'
     default:

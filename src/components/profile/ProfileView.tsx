@@ -59,7 +59,7 @@ export function ProfileView() {
   }
 
   if (!profile) {
-    return <div className="rounded-2xl border border-white/10 bg-ink-900/60 p-8 text-center text-sm text-slate-400">Sign in to view your profile.</div>
+    return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">Sign in to view your profile.</div>
   }
 
   const avatar = safeUrl(profile.avatar_url ?? '')
@@ -92,7 +92,7 @@ export function ProfileView() {
   function IdentityHeader() {
     const dot = profile!.loa ? { cls: 'bg-amber-400', t: 'On LOA' } : { cls: 'bg-emerald-400', t: 'On duty' }
     return (
-      <section className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/10 bg-ink-900/60 p-5">
+      <section className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-5">
         <div className="grid h-20 w-20 flex-shrink-0 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-slate-600 to-slate-700 text-2xl font-bold text-white">
           {avatar ? <img src={avatar} className="h-20 w-20 rounded-2xl object-cover" alt="" /> : initials(profile!.display_name)}
         </div>
@@ -180,7 +180,7 @@ function ProfileSection() {
   }
 
   return (
-    <section className="space-y-4 rounded-2xl border border-white/10 bg-ink-900/45 p-5">
+    <section className="space-y-4 rounded-2xl border border-white/5 bg-ink-900/45 p-5">
       <div className="flex flex-wrap items-center gap-4">
         <div className="grid h-16 w-16 flex-shrink-0 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-slate-600 to-slate-700 text-lg font-bold text-white">
           {preview ? <img src={preview} className="h-16 w-16 rounded-2xl object-cover" alt="Avatar preview" /> : initials(name)}
@@ -243,7 +243,7 @@ function AppearanceSection() {
   const pickDensity = (k: string) => { Store.set('density', k); setDen(k); applyAppearance() }
 
   return (
-    <section className="space-y-5 rounded-2xl border border-white/10 bg-ink-900/45 p-5">
+    <section className="space-y-5 rounded-2xl border border-white/5 bg-ink-900/45 p-5">
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Accent</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -301,7 +301,7 @@ function AccountSection() {
 
   return (
     <section className="space-y-4">
-      <div className="rounded-2xl border border-white/10 bg-ink-900/45 p-5">
+      <div className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
         <h3 className="mb-1 font-bold text-white">Account</h3>
         <AccountRow k="Email" v={<span className="font-mono">{user?.email || profile?.email || '—'}</span>} />
         <AccountRow k="Sign-in method" v={<span className="flex gap-1.5">{providers.map((p) => <span key={p} className="rounded bg-white/5 px-2 py-0.5 text-xs capitalize text-slate-300">{p}</span>)}</span>} />
@@ -311,7 +311,7 @@ function AccountSection() {
         <p className="mt-3 text-[11px] text-slate-500">Sign-in is handled by your provider (Google, Discord, or an email magic link) — there’s no password to manage here.</p>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-ink-900/45 p-5">
+      <div className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
         <h3 className="mb-2 font-bold text-white">Sessions</h3>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => void signOut()} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">Sign out</button>
@@ -332,7 +332,7 @@ function NotificationsSection() {
   const router = useRouter()
   const linked = !!profile?.discord_id
   return (
-    <section className="space-y-3 rounded-2xl border border-white/10 bg-ink-900/45 p-5">
+    <section className="space-y-3 rounded-2xl border border-white/5 bg-ink-900/45 p-5">
       <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-ink-950/50 p-4">
         <div>
           <p className="font-semibold text-white">In-app notifications</p>

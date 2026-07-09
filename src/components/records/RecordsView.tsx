@@ -15,6 +15,8 @@ import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { inputCls, labelCls } from '@/components/ui/Field'
 import { SearchIcon } from '@/components/shell/icons'
 
@@ -73,16 +75,19 @@ export function RecordsView() {
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <div>
-          <h3 className="flex items-center gap-2 text-xl font-bold text-white">
-            🗃️ CID Records
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
-              <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
-            </span>
-          </h3>
-          <p className="text-sm text-slate-400">Shared, two-way records — synced for everyone via Supabase.</p>
-        </div>
-        <span className="rounded-lg bg-white/5 px-3 py-2 text-xs text-slate-300">👤 {profile?.display_name || 'Signed in'}</span>
+        <PageHeader
+          className="flex-1"
+          title="🗃️ CID Records"
+          subtitle="Shared, two-way records — synced for everyone via Supabase."
+          actions={
+            <>
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
+                <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
+              </span>
+              <span className="rounded-lg bg-white/5 px-3 py-2 text-xs text-slate-300">👤 {profile?.display_name || 'Signed in'}</span>
+            </>
+          }
+        />
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -109,8 +114,8 @@ export function RecordsView() {
 
       {err && <ErrorNotice message={err} onRetry={() => void refresh()} className="mb-6" />}
 
-      {loading ? (
-        <Notice text="Loading records…" />
+      {loading && !records.length ? (
+        <CardGridSkeleton cols="sm:grid-cols-2 xl:grid-cols-3" />
       ) : !items.length ? (
         records.length ? (
           <Notice text="No records match your filter." />

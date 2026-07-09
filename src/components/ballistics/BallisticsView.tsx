@@ -14,6 +14,7 @@ import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { inputCls, labelCls } from '@/components/ui/Field'
 
 type BenchRow = Tables<'ballistics_benches'>
@@ -68,30 +69,33 @@ export function BallisticsView() {
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <div>
-          <h3 className="text-xl font-bold text-white">🛠️ Ballistics &amp; Logistics</h3>
-          <p className="text-sm text-slate-400">Criminal weapon-manufacturing hubs, component tracing &amp; ballistic footprints</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-lg border border-white/10 bg-ink-850 p-1" role="tablist" aria-label="Bench type">
-            {[['street', 'Street Gang Bench'], ['organized', 'Organized Crime Bench']].map(([t, label]) => (
-              <button
-                key={t}
-                role="tab"
-                aria-selected={benchType === t}
-                onClick={() => pick(t)}
-                className={`rounded-md px-4 py-2 text-xs font-semibold transition ${benchType === t ? 'bg-gradient-to-r from-badge-500 to-blue-700 text-white shadow-glow' : 'text-slate-300 hover:text-white'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {canEdit && (
-            <button onClick={() => setBenchEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
-              + Bench
-            </button>
-          )}
-        </div>
+        <PageHeader
+          className="flex-1"
+          title="🛠️ Ballistics & Logistics"
+          subtitle="Criminal weapon-manufacturing hubs, component tracing & ballistic footprints"
+          actions={
+            <div className="flex items-center gap-2">
+              <div className="inline-flex rounded-lg border border-white/10 bg-ink-850 p-1" role="tablist" aria-label="Bench type">
+                {[['street', 'Street Gang Bench'], ['organized', 'Organized Crime Bench']].map(([t, label]) => (
+                  <button
+                    key={t}
+                    role="tab"
+                    aria-selected={benchType === t}
+                    onClick={() => pick(t)}
+                    className={`rounded-md px-4 py-2 text-xs font-semibold transition ${benchType === t ? 'bg-gradient-to-r from-badge-500 to-blue-700 text-white shadow-glow' : 'text-slate-300 hover:text-white'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {canEdit && (
+                <button onClick={() => setBenchEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
+                  + Bench
+                </button>
+              )}
+            </div>
+          }
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -113,7 +117,7 @@ export function BallisticsView() {
                 <div key={b.id} className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h4 className="text-base font-semibold text-white">{b.name}</h4>
+                      <h2 className="text-base font-semibold text-white">{b.name}</h2>
                       <p className="mt-1 text-xs text-slate-400">
                         Linked investigation: {cn ? <span className="font-mono text-blue-300">{cn}</span> : <span className="text-slate-400">none</span>}
                       </p>
@@ -152,7 +156,7 @@ export function BallisticsView() {
 
         <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
           <div className="mb-3 flex items-center justify-between">
-            <h4 className="flex items-center gap-2 text-sm font-semibold text-white"><span aria-hidden>🧬</span> Ballistic Footprint Log</h4>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-white"><span aria-hidden>🧬</span> Ballistic Footprint Log</h2>
             {canEdit && (
               <button onClick={() => setFpEditor({ record: null })} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">
                 + Footprint
@@ -167,7 +171,7 @@ export function BallisticsView() {
               <div key={l.id} className="rounded-xl border border-white/10 bg-ink-900 p-3">
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-mono text-xs text-violet-300">{l.signature}</p>
-                  {canEdit && <button onClick={() => setFpEditor({ record: l })} className="text-[11px] text-slate-400 hover:text-white">edit</button>}
+                  {canEdit && <button onClick={() => setFpEditor({ record: l })} className="-m-2 p-2 text-[11px] text-slate-400 hover:text-white">edit</button>}
                 </div>
                 <p className="mt-1 text-sm text-white">{l.weapon || '—'}</p>
                 <div className="mt-1.5 flex items-center justify-between text-[11px]">

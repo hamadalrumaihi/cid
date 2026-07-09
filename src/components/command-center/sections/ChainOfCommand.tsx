@@ -58,7 +58,7 @@ export function ChainOfCommand() {
             const seniors = inB.filter((p) => p.role === 'senior_detective')
             const dets = inB.filter((p) => p.role === 'detective')
             return (
-              <div key={b} className="rounded-2xl border border-white/10 bg-ink-900/45 p-4">
+              <div key={b} className="rounded-2xl border border-white/5 bg-ink-900/45 p-4">
                 <p className="font-bold text-white">{b} <span className="text-xs font-normal text-slate-500">· {BUREAUS[b]} ({DEPT_OF_BUREAU[b]})</span></p>
                 <div className="mt-3 space-y-3">
                   <Tier title="Bureau Lead" people={leads} tint="border-blue-500/25 bg-blue-500/5" />
@@ -71,7 +71,7 @@ export function ChainOfCommand() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-ink-900/45 p-4">
+      <div className="rounded-2xl border border-white/5 bg-ink-900/45 p-4">
         <h3 className="mb-2 font-bold text-white">Case sign-off chain</h3>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           {['Detective (submits)', 'Bureau Lead', 'Deputy Director', 'Director'].map((step, i) => (

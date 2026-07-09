@@ -208,11 +208,11 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
           <div className="flex flex-shrink-0 items-center gap-2">
             {target.type === 'person' && <WatchButton type="person" id={target.id} label={p?.name} />}
             {target.type === 'person' && (
-              <button onClick={() => setDossierOpen(true)} title="Export the full dossier as .docx" className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10">
+              <button onClick={() => setDossierOpen(true)} title="Export the full dossier as .docx" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10">
                 📇 Dossier
               </button>
             )}
-            <button aria-label="Close" onClick={onClose} className="text-2xl leading-none text-slate-400 hover:text-white">&times;</button>
+            <button aria-label="Close" onClick={onClose} className="-m-2 p-2 text-2xl leading-none text-slate-400 hover:text-white">&times;</button>
           </div>
         </div>
 

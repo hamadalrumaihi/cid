@@ -5,6 +5,8 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
+import { uiConfirm } from '@/components/ui/dialog'
 import { deleteWithUndo, list, update, withRetry } from '@/lib/db'
 import { todayISO, copyText, slug } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
@@ -84,6 +86,12 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const pinned = isPinnedCase(c.id)
 
   const quickStatus = async (status: CaseRow['status']) => {
+    // Closing stamps closed_at and takes the case off the active board — worth
+    // a beat of confirmation. It stays reversible (set it back to reopen).
+    if (status === 'closed' && c.status !== 'closed') {
+      const ok = await uiConfirm(`Close ${c.case_number}? It moves to the Closed column and drops off active dashboards. You can reopen it by changing the status back.`, { title: 'Close case', confirmText: 'Close case', danger: false })
+      if (!ok) { void fetchCase(); return }
+    }
     const res = await update('cases', c.id, { status, closed_at: status === 'closed' && !c.closed_at ? new Date().toISOString() : c.closed_at })
     if (res.error) toast(res.error.message, 'danger')
     else { toast('Status updated.', 'success'); onChanged(); void fetchCase() }
@@ -106,7 +114,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
 
   return (
     <div className="space-y-4">
-      <button onClick={onBack} className="text-sm font-semibold text-badge-200 hover:text-white">Back to cases</button>
+      <Breadcrumbs items={[{ label: 'Cases', onClick: onBack }, { label: c.case_number }]} />
       <section className="rounded-2xl border border-white/10 bg-ink-900/60 p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

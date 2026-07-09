@@ -17,6 +17,7 @@ import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { markWatchSeen, type WatchType } from '@/lib/watchlist'
 import { canReviewCase } from '@/components/command-center/lib/approvals'
+import { PageHeader } from '@/components/ui/PageHeader'
 
 type CaseRow = Tables<'cases'>
 type TaskRow = Tables<'case_tasks'>
@@ -146,7 +147,7 @@ function Panel({ title, count, action, children }: { title: string; count: numbe
   return (
     <section className="rounded-lg border border-white/10 bg-ink-900/55 p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-black uppercase tracking-wide text-slate-100">{title}</h3>
+        <h2 className="text-sm font-black uppercase tracking-wide text-slate-100">{title}</h2>
         <span className="flex items-center gap-2">
           {action}
           <span className="rounded border border-white/10 px-2 py-0.5 text-xs font-black text-slate-300">{count}</span>
@@ -236,19 +237,20 @@ export function InboxView() {
 
   return (
     <section className="view-in space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="t-readout inline-flex items-center gap-2 rounded border border-emerald-400/20 bg-emerald-500/10 px-2 py-1 text-[10px] uppercase tracking-widest text-emerald-200">
-            <span className="t-dot t-dot-emerald" /> Live desk
-          </p>
-          <h2 className="mt-2 text-xl font-black text-white">My Desk</h2>
-          <p className="text-sm text-slate-400">
-            {profile?.display_name || 'Officer'} - {ROLE_LABEL[profile?.role ?? ''] || profile?.role || 'Member'}
-          </p>
-        </div>
-        <button onClick={() => { void refresh() }} className="rounded border border-white/10 px-3 py-2 text-sm font-bold text-slate-200 hover:border-amber-300/30 hover:text-amber-100">
-          Refresh
-        </button>
+      <div>
+        <p className="t-readout inline-flex items-center gap-2 rounded border border-emerald-400/20 bg-emerald-500/10 px-2 py-1 text-[10px] uppercase tracking-widest text-emerald-200">
+          <span className="t-dot t-dot-emerald" /> Live desk
+        </p>
+        <PageHeader
+          className="mt-2"
+          title="My Desk"
+          subtitle={`${profile?.display_name || 'Officer'} - ${ROLE_LABEL[profile?.role ?? ''] || profile?.role || 'Member'}`}
+          actions={
+            <button onClick={() => { void refresh() }} className="rounded border border-white/10 px-3 py-2 text-sm font-bold text-slate-200 hover:border-amber-300/30 hover:text-amber-100">
+              Refresh
+            </button>
+          }
+        />
       </div>
 
       {err && <p className="rounded border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">Desk refresh failed: {err}</p>}
@@ -318,7 +320,7 @@ export function InboxView() {
               <span className="text-[11px] font-semibold text-amber-300">{model.watched.filter((it) => it.fresh).length} updated</span>
               <button
                 onClick={() => { for (const it of model.watched) markWatchSeen(it.w.target_type as WatchType, it.w.target_id, it.ts ?? undefined); setSeenVer((v) => v + 1) }}
-                className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10"
+                className="-my-1.5 rounded border border-white/10 bg-white/5 px-2 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10"
               >
                 Mark all seen
               </button>

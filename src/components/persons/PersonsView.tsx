@@ -14,6 +14,8 @@ import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { IntelProfile, type IntelTarget } from './IntelProfile'
 import { PERSON_NULL_REFS, PersonModal, type GangRow, type PersonRow } from './PersonModal'
 
@@ -103,23 +105,25 @@ export function PersonsView() {
 
   return (
     <section className="view-in space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <div>
-          <h3 className="flex items-center gap-2 text-xl font-bold text-white">
-            🧑‍⚖️ Persons of Interest
-            {state === 'in' && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
-                <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
-              </span>
-            )}
-          </h3>
-          <p className="text-sm text-slate-400">Suspects &amp; persons of interest — linked to gangs &amp; cases. ≥8 violent felonies flagged.</p>
-        </div>
-        {canEdit && (
-          <button onClick={() => setEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
-            + New Person
-          </button>
-        )}
+      <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+        <PageHeader
+          title="🧑‍⚖️ Persons of Interest"
+          subtitle="Suspects & persons of interest — linked to gangs & cases. ≥8 violent felonies flagged."
+          actions={
+            <>
+              {state === 'in' && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
+                  <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
+                </span>
+              )}
+              {canEdit && (
+                <button onClick={() => setEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+                  + New Person
+                </button>
+              )}
+            </>
+          }
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -149,7 +153,9 @@ export function PersonsView() {
         ) : err ? (
           <ErrorNotice message={err} onRetry={refresh} className="sm:col-span-2 xl:col-span-3" />
         ) : loading && !persons.length ? (
-          <Notice text="Loading persons…" className="sm:col-span-2 xl:col-span-3" />
+          <div className="sm:col-span-2 xl:col-span-3">
+            <CardGridSkeleton cols="sm:grid-cols-2 xl:grid-cols-3" />
+          </div>
         ) : !items.length ? (
           query.trim() && canEdit ? (
             <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center sm:col-span-2 xl:col-span-3">
@@ -248,14 +254,14 @@ function PersonCard({ p, gang, canEdit, canDelete, selected, onSelect, onProfile
             {gang ? `🚩 ${gang} · ` : ''}CCW {p.ccw ? 'Yes' : 'No'} · VCH {p.vch || 0} · Felonies {p.felony_count || 0}{propCount ? ` · 🏠 ${propCount}` : ''}
           </p>
         </div>
-        <button onClick={onProfile} title="Unified intel profile" className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-white/10">🔎 Profile</button>
-        {canEdit && <button onClick={onEdit} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>}
+        <button onClick={onProfile} title="Unified intel profile" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold text-blue-200 transition hover:bg-white/10">🔎 Profile</button>
+        {canEdit && <button onClick={onEdit} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>}
         {canDelete && (
           <label className="flex flex-shrink-0 items-center pl-1" title="Select for bulk delete">
             <input type="checkbox" checked={selected} onChange={(e) => onSelect(e.target.checked)} aria-label={`Select ${p.name} for bulk delete`} className="h-4 w-4 accent-rose-500" />
           </label>
         )}
-        {canDelete && <button onClick={onDelete} title="Delete person (command only)" className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
+        {canDelete && <button onClick={onDelete} title="Delete person (command only)" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
       </div>
       {canEdit && (
         <button onClick={onAttach} className="mt-3 w-full rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-blue-200 transition hover:bg-white/10">

@@ -181,7 +181,7 @@ export function CaseFilesView() {
                         </span>
                       </button>
                       {canDelete && (
-                        <button onClick={() => void rm(f)} title="Remove attachment" className="flex-shrink-0 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-rose-300 hover:bg-rose-500/10">✕</button>
+                        <button onClick={() => void rm(f)} title="Remove attachment" aria-label="Remove attachment" className="-m-1 flex-shrink-0 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-rose-300 hover:bg-rose-500/10">✕</button>
                       )}
                     </div>
                   )

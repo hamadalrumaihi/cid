@@ -18,6 +18,7 @@ import { toast } from '@/lib/toast'
 import { uiPrompt } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
 
 type MoProfileRow = Tables<'mo_profiles'>
 type CaseRow = Tables<'cases'>
@@ -128,8 +129,10 @@ export function ModusView() {
   return (
     <div>
       <div className="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <h3 className="text-xl font-bold text-white">🔍 Modus Operandi (M.O.) Detector &amp; Criminal Profiler</h3>
-        <p className="text-sm text-slate-400">Paste narrative incident updates, scene notes or witness statements — the engine extracts tactical indicators and cross-references open / cold files.</p>
+        <PageHeader
+          title="🔍 Modus Operandi (M.O.) Detector & Criminal Profiler"
+          subtitle="Paste narrative incident updates, scene notes or witness statements — the engine extracts tactical indicators and cross-references open / cold files."
+        />
       </div>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
@@ -164,7 +167,7 @@ export function ModusView() {
           )}
         </div>
         <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-          <h4 className="mb-1 text-sm font-semibold text-white">🎯 M.O. Cross-Reference</h4>
+          <h2 className="mb-1 text-sm font-semibold text-white">🎯 M.O. Cross-Reference</h2>
           <p className="mb-4 text-xs text-slate-400">Matching open / cold files sharing tactical operational profiles.</p>
           <div className="space-y-3">
             {!scan && <p className="text-sm text-slate-400">Run an analysis to surface matching case files.</p>}

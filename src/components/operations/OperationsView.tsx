@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { deleteWithUndo, list, insert, update } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
@@ -46,7 +47,7 @@ export function OperationsView() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {operations.map((op) => <OperationCard key={op.id} op={op} cases={cases.filter((c) => c.operation_id === op.id)} onOpen={() => router.push(`/operations?op=${op.id}`)} />)}
       </div>
-      {!operations.length && <p className="rounded-2xl border border-white/10 bg-ink-900/50 p-8 text-center text-sm text-slate-400">No operations yet.</p>}
+      {!operations.length && <p className="rounded-2xl border border-white/5 bg-ink-900/50 p-8 text-center text-sm text-slate-400">No operations yet.</p>}
       <OperationModal open={!!modal} record={modal === 'new' ? null : modal} onClose={() => setModal(null)} onSaved={() => { setModal(null); void refresh() }} />
     </div>
   )
@@ -56,7 +57,7 @@ function OperationCard({ op, cases, onOpen }: { op: OperationRow; cases: OpsCase
   const counts = OP_STATUSES.map((s) => cases.filter((c) => c.status === s).length)
   const total = Math.max(1, cases.length)
   return (
-    <button onClick={onOpen} className="rounded-2xl border border-white/10 bg-ink-900/60 p-4 text-left transition hover:border-badge-400/50">
+    <button onClick={onOpen} className="rounded-2xl border border-white/5 bg-ink-900/60 p-4 text-left transition hover:border-badge-400/50">
       <div className="flex items-start justify-between gap-3">
         <h3 className="text-lg font-black text-white">{op.name}</h3>
         <span className={`rounded-full px-2 py-1 text-xs font-bold uppercase ${opStatusTint(op.status)}`}>{op.status}</span>
@@ -90,20 +91,20 @@ function OperationDetail({ op, cases, unlinked, canEdit, canDelete, onBack, onCh
   }
   return (
     <div className="space-y-4">
-      <button onClick={onBack} className="text-sm font-semibold text-badge-200 hover:text-white">Back to operations</button>
-      <section className="rounded-2xl border border-white/10 bg-ink-900/60 p-5">
+      <Breadcrumbs items={[{ label: 'Operations', onClick: onBack }, { label: op.name }]} />
+      <section className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><p className={`mb-2 inline-flex rounded-full px-2 py-1 text-xs font-bold uppercase ${opStatusTint(op.status)}`}>{op.status}</p><h2 className="text-2xl font-black text-white">{op.name}</h2><p className="mt-2 max-w-3xl text-sm text-slate-300">{op.description || 'No description recorded.'}</p></div>
           <div className="flex gap-2">{canEdit && <button onClick={onEdit} className="rounded-lg bg-white/10 px-3 py-2 text-sm font-bold text-white">Edit</button>}{canDelete && <button onClick={() => void del()} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white">Delete</button>}</div>
         </div>
       </section>
-      {canEdit && <div className="flex gap-2 rounded-2xl border border-white/10 bg-ink-900/50 p-3">
+      {canEdit && <div className="flex gap-2 rounded-2xl border border-white/5 bg-ink-900/50 p-3">
         <select value={pick} onChange={(e) => setPick(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white"><option value="">Link a case...</option>{unlinked.map((c) => <option key={c.id} value={c.id}>{c.case_number} - {c.title}</option>)}</select>
         <button onClick={linkCase} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Link</button>
       </div>}
       <div className="space-y-2">
         {cases.map((c) => <div key={c.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3"><button onClick={() => router.push(`/cases?case=${c.id}`)} className="min-w-0 flex-1 text-left"><p className="font-mono text-sm font-bold text-badge-200">{c.case_number}</p><p className="font-semibold text-white">{c.title || 'Untitled case'}</p><p className="text-xs text-slate-500">{c.bureau} - {c.status} - {officerName(c.lead_detective_id) || 'Unassigned'}</p></button>{canEdit && <button onClick={() => void unlink(c.id)} className="text-sm font-bold text-rose-300">Unlink</button>}</div>)}
-        {!cases.length && <p className="rounded-2xl border border-white/10 bg-ink-900/50 p-8 text-center text-sm text-slate-400">No cases linked to this operation.</p>}
+        {!cases.length && <p className="rounded-2xl border border-white/5 bg-ink-900/50 p-8 text-center text-sm text-slate-400">No cases linked to this operation.</p>}
       </div>
     </div>
   )

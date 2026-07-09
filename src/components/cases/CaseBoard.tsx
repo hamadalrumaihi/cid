@@ -4,6 +4,7 @@ import { update } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { officerName } from '@/lib/profiles'
 import { caseStatusTint } from '@/lib/signoff'
+import { uiConfirm } from '@/components/ui/dialog'
 import { toast } from '@/lib/toast'
 import { isStaleCase } from './caseUtils'
 import { StaleBadge } from './StaleBadge'
@@ -16,14 +17,22 @@ const BOARD_COLS = [
   ['closed', 'Closed', 'text-slate-300'],
 ] as const
 
+const STATUS_LABEL: Record<string, string> = { open: 'Open', active: 'Active', cold: 'Cold', closed: 'Closed' }
+
 export function CaseBoard({ items, canEdit, onOpen, onMoved }: { items: CaseRow[]; canEdit: boolean; onOpen: (id: string) => void; onMoved: () => void }) {
   const move = async (id: string, status: CaseRow['status']) => {
     const row = items.find((c) => c.id === id)
     if (!row || row.status === status) return
+    // Dropping a card on Closed stamps closed_at — confirm before it leaves
+    // the active board. Reversible: drag it back out to reopen.
+    if (status === 'closed') {
+      const ok = await uiConfirm(`Close ${row.case_number}? It moves to the Closed column and drops off active dashboards. Drag it back out to reopen.`, { title: 'Close case', confirmText: 'Close case', danger: false })
+      if (!ok) { onMoved(); return }
+    }
     row.status = status
     const res = await update('cases', id, { status, closed_at: status === 'closed' ? new Date().toISOString() : row.closed_at })
     if (res.error) toast(res.error.message, 'danger')
-    else toast(`Status -> ${status.toUpperCase()}`, 'success')
+    else toast(`Case marked ${STATUS_LABEL[status] ?? status}.`, 'success')
     onMoved()
   }
 

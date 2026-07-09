@@ -66,7 +66,7 @@ export function AuditView() {
             <button
               onClick={() => copyText(r.entity_id!, 'ID')}
               title={`Copy id ${r.entity_id}`}
-              className="ml-1 rounded bg-white/5 px-1 text-[10px] text-slate-500 hover:text-white"
+              className="-my-1 ml-1 rounded bg-white/5 px-1 py-1 text-[10px] text-slate-500 hover:text-white"
             >
               ⧉ {r.entity_id.slice(0, 8)}
             </button>

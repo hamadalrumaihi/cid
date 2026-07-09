@@ -161,7 +161,7 @@ export function CalendarView() {
         <div className="mt-4 rounded-2xl border border-blue-500/20 bg-ink-900/70 p-4">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-black uppercase tracking-wide text-slate-100">{sel}{sel === today ? ' — today' : sel < today ? ' — past' : ''}</h3>
-            <button onClick={() => setSel(null)} aria-label="Close day details" className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-white/10">✕</button>
+            <button onClick={() => setSel(null)} aria-label="Close day details" className="-my-1 rounded-md border border-white/10 bg-white/5 p-2 text-xs font-semibold text-slate-300 hover:bg-white/10">✕</button>
           </div>
           <div className="space-y-1.5">
             {(byDay[sel] ?? []).map((it) => (

@@ -8,7 +8,7 @@ import { PERMISSIONS_MATRIX, MATRIX_NOTE } from '@/components/owner/ownerData'
 export function PermissionsOverview() {
   return (
     <div className="space-y-4">
-      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-ink-900/45">
+      <div className="overflow-x-auto rounded-2xl border border-white/5 bg-ink-900/45">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-white/10 text-[11px] uppercase tracking-wider text-slate-400">

@@ -20,6 +20,8 @@ import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { CardGridSkeleton } from '@/components/ui/Skeleton'
 
 type DocRow = Tables<'documents'>
 type VersionRow = Tables<'documents_versions'>
@@ -69,19 +71,20 @@ export function SopsView() {
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <div>
-          <h3 className="text-xl font-bold text-white">📚 SOPs &amp; Library</h3>
-          <p className="text-sm text-slate-400">Division policy &amp; reference library, managed by command staff.</p>
-        </div>
-        {isCommand && (
-          <button onClick={() => setEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
-            + New SOP
-          </button>
-        )}
+        <PageHeader
+          className="flex-1"
+          title="📚 SOPs & Library"
+          subtitle="Division policy & reference library, managed by command staff."
+          actions={isCommand && (
+            <button onClick={() => setEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+              + New SOP
+            </button>
+          )}
+        />
       </div>
 
-      {loading ? (
-        <Notice text="Loading library…" />
+      {loading && !shelf.length ? (
+        <CardGridSkeleton cols="sm:grid-cols-2 xl:grid-cols-3" />
       ) : !shelf.length ? (
         <EmptyState
           icon="📚"

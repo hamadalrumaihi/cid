@@ -12,6 +12,8 @@ import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { CardGridSkeleton } from '@/components/ui/Skeleton'
 
 type PlaceRow = Tables<'places'>
 type GangRow = Tables<'gangs'>
@@ -153,23 +155,25 @@ export function PlacesView() {
 
   return (
     <section className="view-in space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <div>
-          <h3 className="flex items-center gap-2 text-xl font-bold text-white">
-            Criminal Places &amp; Production
-            {state === 'in' && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
-                <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
-              </span>
-            )}
-          </h3>
-          <p className="text-sm text-slate-400">Drug labs, stash houses, dead drops and fronts with production process flows.</p>
-        </div>
-        {canEdit && (
-          <button onClick={() => setEditor('new')} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
-            + New Location
-          </button>
-        )}
+      <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+        <PageHeader
+          title="Criminal Places & Production"
+          subtitle="Drug labs, stash houses, dead drops and fronts with production process flows."
+          actions={
+            <>
+              {state === 'in' && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
+                  <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
+                </span>
+              )}
+              {canEdit && (
+                <button onClick={() => setEditor('new')} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
+                  + New Location
+                </button>
+              )}
+            </>
+          }
+        />
       </div>
 
       {selected.size > 0 && (
@@ -188,7 +192,9 @@ export function PlacesView() {
         ) : err ? (
           <ErrorNotice message={err} onRetry={refresh} className="lg:col-span-2" />
         ) : loading && !places.length ? (
-          <Notice text="Loading locations..." className="lg:col-span-2" />
+          <div className="lg:col-span-2">
+            <CardGridSkeleton count={4} cols="lg:grid-cols-2" />
+          </div>
         ) : !places.length ? (
           <EmptyState
             title="No locations logged yet"
@@ -255,9 +261,9 @@ function PlaceCard({ place, gang, caseNumber, drug, customSteps, canEdit, canDel
           <p className="mt-0.5 text-xs text-slate-400">{locLabel(place.type)} · {place.area || '-'}</p>
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
-          {canEdit && <button onClick={onAttach} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-blue-200 transition hover:bg-white/10" title="Attach to case">Attach</button>}
-          {canEdit && <button onClick={onEdit} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
-          {canDelete && <button aria-label="Remove location" onClick={onDelete} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
+          {canEdit && <button onClick={onAttach} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-blue-200 transition hover:bg-white/10" title="Attach to case">Attach</button>}
+          {canEdit && <button onClick={onEdit} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
+          {canDelete && <button aria-label="Remove location" onClick={onDelete} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
           {canDelete && (
             <label className="flex items-center pl-0.5" title="Select for bulk delete">
               <input type="checkbox" checked={selected} onChange={(e) => onSelect(e.target.checked)} aria-label={`Select ${place.name} for bulk delete`} className="h-4 w-4 accent-rose-500" />

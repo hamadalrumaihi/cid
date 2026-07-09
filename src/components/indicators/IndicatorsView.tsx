@@ -17,6 +17,7 @@ import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { inputCls, labelCls } from '@/components/ui/Field'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 
@@ -110,28 +111,30 @@ export function IndicatorsView() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <div>
-          <h3 className="text-xl font-bold text-white">🧷 Indicators Registry</h3>
-          <p className="text-sm text-slate-400">Hard identifiers — phones, accounts, serials, aliases &amp; addresses — deconflicted across every case</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {rows.length > 0 && (
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filter value, note, case…"
-              aria-label="Filter indicators"
-              className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
-            />
-          )}
-          {canEdit && (
-            <button onClick={() => setEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
-              + New Indicator
-            </button>
-          )}
-        </div>
+      <div className="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+        <PageHeader
+          title="🧷 Indicators Registry"
+          subtitle="Hard identifiers — phones, accounts, serials, aliases & addresses — deconflicted across every case"
+          actions={
+            <>
+              {rows.length > 0 && (
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Filter value, note, case…"
+                  aria-label="Filter indicators"
+                  className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
+                />
+              )}
+              {canEdit && (
+                <button onClick={() => setEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
+                  + New Indicator
+                </button>
+              )}
+            </>
+          }
+        />
       </div>
 
       {!loading && !err && (
@@ -210,8 +213,8 @@ export function IndicatorsView() {
                     </p>
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-2">
-                    {canEdit && <button onClick={() => setEditor({ record: r })} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
-                    {canDelete && <button onClick={() => void onDelete(r)} aria-label="Delete indicator" className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10">✕</button>}
+                    {canEdit && <button onClick={() => setEditor({ record: r })} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
+                    {canDelete && <button onClick={() => void onDelete(r)} aria-label="Delete indicator" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10">✕</button>}
                   </div>
                 </div>
                 <p className="mt-3 text-xs">
