@@ -1,0 +1,34 @@
+# CI — every push and PR runs the same four gates used locally:
+# typecheck, lint (0 warnings), unit tests, production build.
+# The env values are the public-by-design client keys (same ones committed
+# in vercel.json); no secrets belong here.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://jhxuflzmqspidkvjckox.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_sshJXQoxX0NZqUeU-uBObQ_aSgQaHRa
+      NEXT_PUBLIC_FIVEMANAGE_API_KEY: Z3ctM38GCUw5aPam9xscHYcxjghj8iTE
+      NEXT_PUBLIC_FIVEMANAGE_BASE_URL: https://api.fivemanage.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Lint (zero warnings)
+        run: npx eslint src --max-warnings 0
+      - name: Unit tests
+        run: npm test
+      - name: Production build
+        run: npm run build

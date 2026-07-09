@@ -24,7 +24,8 @@ export interface DataColumn<T> {
   className?: string
 }
 
-const csvCell = (raw: string): string => {
+/** Exported for unit tests — the CSV formula-injection guard. */
+export const csvCell = (raw: string): string => {
   let v = raw
   if (/^[=+\-@\t\r]/.test(v)) v = `'${v}`
   if (/[",\n\r]/.test(v)) v = `"${v.replace(/"/g, '""')}"`
