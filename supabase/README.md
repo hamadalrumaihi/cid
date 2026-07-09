@@ -7,9 +7,11 @@ Supabase Storage.
 
 > Live project: **`cid`** (`jhxuflzmqspidkvjckox`). The migrations in
 > `migrations/` are applied; later additions (operations, sub-tasks, full-text
-> search, indicators, FK indexes/hardening) were applied directly to the live
-> project, so **the live schema is the source of truth** — mirrored in
-> `src/lib/database.types.ts` and documented in `docs/HANDBOOK.md` §8.
+> search, indicators, owner role, FK indexes/hardening) were applied directly
+> to the live project, so **the live schema is the source of truth** — captured
+> in [`schema-snapshot.sql`](schema-snapshot.sql) (generated reference snapshot),
+> itemized in [`MIGRATION-HISTORY.md`](MIGRATION-HISTORY.md), mirrored in
+> `src/lib/database.types.ts`, and documented in `docs/HANDBOOK.md` §8.
 
 ## RBAC model
 Two axes enforced in the database via RLS, off the caller's `profiles` row:
@@ -62,6 +64,20 @@ original `sahp-rbac` init/storage/seed-catalog migrations were superseded and
 were never applied to this project — they are parked in `migrations/archive/`
 (not replayed). See `migrations/archive/README.md` and
 `20260615120300_reconcile_retired_init.sql`.
+
+**Live-only migrations & schema snapshot.** The live project's migration
+history has grown past this folder — 21 later migrations were applied directly
+(dashboard/MCP) and have no standalone file here. Two companion documents keep
+the repo honest about that gap:
+
+- [`schema-snapshot.sql`](schema-snapshot.sql) — a **generated, reference-only**
+  dump of the full live schema (enums, tables, constraints, indexes, functions,
+  triggers, RLS policies, realtime publication, grants). It is *not* replayed
+  by `supabase db reset` and is not ordered for replay; regenerate it after
+  applying new migrations.
+- [`MIGRATION-HISTORY.md`](MIGRATION-HISTORY.md) — every entry in the live
+  `supabase_migrations.schema_migrations` history mapped to its repo file
+  (or marked *applied live only*).
 
 ## Notes
 - **No Supabase Storage.** Media references are external URLs; there are no

@@ -55,7 +55,12 @@ the `service_role` key in the client.
 
 ## 4. Bootstrap the first Command user
 1. Deploy + sign in once with your Google or Discord (creates an **inactive** profile).
-2. SQL Editor: `select public.bootstrap_command('your-login-email@example.com');`
+2. SQL Editor (the old `bootstrap_*` helper functions were removed):
+   ```sql
+   update public.profiles set role = 'director', active = true
+   where email = 'your-login-email@example.com';
+   -- optionally also: set is_owner = true  (grants the Owner Portal)
+   ```
 3. You're now Command (active). Use the in-app **Personnel/Admin** screen to approve
    and assign other officers (`role`, `division`, `active`) — no SQL needed after this.
 

@@ -6,6 +6,35 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.0.1] — 2026-07-09
+
+Housekeeping + one live bug fix.
+
+### Fixed
+- **Feedback triage inbox was fully broken**: the `private.audit()` trigger
+  assumed every audited table has an `id` column, so every write to
+  `feedback_meta` (primary key `feedback_id`) failed. The trigger now derives
+  the entity id tolerantly (live migration `audit_trigger_tolerant_pk`);
+  identical audit rows for all id-keyed tables.
+- Case chat now **persists unsent drafts** per case (`src/lib/drafts.ts` was
+  shipped but never wired): a draft survives navigation/refresh, restores on
+  return, and clears on send.
+
+### Removed
+- Unused dependencies `react-hook-form`, `zod`, `@tanstack/react-query`
+  (never imported; ~2.6 MB of `node_modules`).
+- Dead privileged SQL: `public.bootstrap_command` / `public.bootstrap_director`
+  (SECURITY DEFINER escalation-by-email helpers; already unexecutable by
+  clients, dropped from the live DB — live migration `drop_bootstrap_functions`).
+  `SETUP.md` now bootstraps the first Command user with a direct `update`.
+
+### Documentation
+- `supabase/schema-snapshot.sql` — generated reference snapshot of the full
+  live schema (48 tables, 168 RLS policies, 37 functions, 56 triggers, enums,
+  indexes, grants, realtime publication).
+- `supabase/MIGRATION-HISTORY.md` — all 75 live migrations mapped to their
+  repo files; the 21 live-only ones are now itemized instead of implied.
+
 ## [1.0.0] — 2026-07-09
 
 First stable release of the **React platform** (Next.js 16 + Supabase),
