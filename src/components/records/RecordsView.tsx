@@ -14,13 +14,13 @@ import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { inputCls, labelCls } from '@/components/ui/Field'
 import { SearchIcon } from '@/components/shell/icons'
 
 type RecordRow = Tables<'cid_records'>
 
 const PAGE = 24
-const inputCls = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
-const labelCls = 'mb-1 block text-xs font-semibold text-slate-400'
 
 const statusTint = (s: string | null) =>
   s === 'Wanted' ? 'bg-rose-500/15 text-rose-300'
@@ -107,12 +107,21 @@ export function RecordsView() {
         </button>
       </div>
 
-      {err && <div className="mb-6 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200">⚠️ Could not load records: {err}</div>}
+      {err && <ErrorNotice message={err} onRetry={() => void refresh()} className="mb-6" />}
 
       {loading ? (
         <Notice text="Loading records…" />
       ) : !items.length ? (
-        <Notice text={records.length ? 'No records match your filter.' : `No records yet.${canEdit ? ' Use “+ New Record”.' : ''}`} />
+        records.length ? (
+          <Notice text="No records match your filter." />
+        ) : (
+          <EmptyState
+            icon="🗃️"
+            title="No records yet"
+            hint={canEdit ? 'Create the first record to start the shared, two-way registry.' : 'No records have been created yet.'}
+            action={canEdit ? { label: '+ New Record', onClick: () => setEditor({ record: null }) } : undefined}
+          />
+        )
       ) : (
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -140,10 +149,6 @@ export function RecordsView() {
   )
 }
 
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
-}
-
 function RecordCard({ r, canEdit, onEdit }: { r: RecordRow; canEdit: boolean; onEdit: () => void }) {
   const [imgFailed, setImgFailed] = useState(false)
   const mug = safeUrl(r.mugshot_url ?? '')
@@ -169,7 +174,7 @@ function RecordCard({ r, canEdit, onEdit }: { r: RecordRow; canEdit: boolean; on
           {r.charges && <p className="mt-2 line-clamp-3 text-xs text-slate-300">{r.charges}</p>}
         </div>
       </div>
-      <div className="flex items-center justify-between border-t border-white/5 px-5 py-2.5 text-[11px] text-slate-500">
+      <div className="flex items-center justify-between border-t border-white/5 px-5 py-2.5 text-[11px] text-slate-400">
         <span>{r.officer || 'Unassigned'}{r.last_seen && ` · last seen ${r.last_seen}`}</span>
         {canEdit && <button onClick={onEdit} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>}
       </div>
@@ -225,8 +230,8 @@ function RecordModal({ record, meId, onClose, onSaved }: {
 
   const text = (label: string, k: keyof typeof f, span2 = false) => (
     <div className={span2 ? 'sm:col-span-2' : undefined}>
-      <label className={labelCls}>{label}{k === 'name' && <span className="text-rose-400"> *</span>}</label>
-      <input value={f[k]} onChange={set(k)} className={inputCls} />
+      <label htmlFor={`rec-${k}`} className={labelCls}>{label}{k === 'name' && <span className="text-rose-400"> *</span>}</label>
+      <input id={`rec-${k}`} value={f[k]} onChange={set(k)} className={inputCls} />
     </div>
   )
 
@@ -238,28 +243,28 @@ function RecordModal({ record, meId, onClose, onSaved }: {
         {text('Callsign', 'callsign')}
         {text('Case Number', 'case_number')}
         <div>
-          <label className={labelCls}>Bureau</label>
-          <select value={f.bureau} onChange={set('bureau')} className={inputCls}>
+          <label htmlFor="rec-bureau" className={labelCls}>Bureau</label>
+          <select id="rec-bureau" value={f.bureau} onChange={set('bureau')} className={inputCls}>
             {BUREAU_OPTS.map((o) => <option key={o} value={o}>{o || '—'}</option>)}
           </select>
         </div>
         {text('Gang / Affiliation', 'gang')}
         <div>
-          <label className={labelCls}>Status</label>
-          <select value={f.status} onChange={set('status')} className={inputCls}>
+          <label htmlFor="rec-status" className={labelCls}>Status</label>
+          <select id="rec-status" value={f.status} onChange={set('status')} className={inputCls}>
             {STATUS_OPTS.map((o) => <option key={o}>{o}</option>)}
           </select>
         </div>
         <div className="sm:col-span-2">
-          <label className={labelCls}>Charges</label>
-          <textarea value={f.charges} onChange={set('charges')} rows={3} className={inputCls} />
+          <label htmlFor="rec-charges" className={labelCls}>Charges</label>
+          <textarea id="rec-charges" value={f.charges} onChange={set('charges')} rows={3} className={inputCls} />
         </div>
         {text('Assigned Officer', 'officer')}
         {text('Last Seen', 'last_seen')}
         {text('Mugshot URL', 'mugshot_url', true)}
         <div className="sm:col-span-2">
-          <label className={labelCls}>Notes</label>
-          <textarea value={f.notes} onChange={set('notes')} rows={3} className={inputCls} />
+          <label htmlFor="rec-notes" className={labelCls}>Notes</label>
+          <textarea id="rec-notes" value={f.notes} onChange={set('notes')} rows={3} className={inputCls} />
         </div>
       </div>
       <button onClick={() => void save()} disabled={busy} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">

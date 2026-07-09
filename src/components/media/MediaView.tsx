@@ -15,6 +15,8 @@ import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Notice, EmptyState } from '@/components/ui/Notice'
+import { labelCls } from '@/components/ui/Field'
 import { parseFormValues, parseStringArray } from '@/lib/jsonShapes'
 
 type MediaRow = Tables<'media'>
@@ -23,7 +25,6 @@ interface GangOption { id: string; name: string }
 
 const PRESET_TAGS = ['Mugshot', 'Scene', 'Weapon', 'Surveillance', 'Document', 'Vehicle', 'Evidence']
 const inputCls = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500'
-const labelCls = 'mb-1 block text-xs font-semibold text-slate-400'
 
 const mediaSrc = (m: MediaRow) => m.external_url || m.storage_path || ''
 const tagsOf = (m: MediaRow): Record<string, unknown> => parseFormValues(m.tags)
@@ -101,7 +102,16 @@ export function MediaView() {
       </div>
 
       {!items.length ? (
-        <Notice text={media.length ? 'No assets match this filter.' : `No media yet.${canEdit ? ' Use “+ Ingest Media”.' : ''}`} />
+        media.length ? (
+          <Notice text="No assets match this filter." />
+        ) : (
+          <EmptyState
+            icon="🖼️"
+            title="No media yet"
+            hint={canEdit ? 'Ingest an image, video, or CDN embed to start building the evidence vault.' : 'No media has been added to the vault yet.'}
+            action={canEdit ? { label: '+ Ingest Media', onClick: () => setIngest(true) } : undefined}
+          />
+        )
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {items.map((m) => (
@@ -133,10 +143,6 @@ export function MediaView() {
       {ingest && <IngestModal cases={cases} gangs={gangs} onClose={() => setIngest(false)} onSaved={() => { setIngest(false); void refresh() }} />}
     </div>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
 }
 
 function TagChips({ m, caseNum, gangName, onCase }: { m: MediaRow; caseNum: (id: string | null) => string | null; gangName: (id: string | null) => string | null; onCase?: (cid: string) => void }) {
@@ -242,8 +248,8 @@ function TagsField({ value, onChange }: { value: string; onChange: (v: string) =
   }
   return (
     <div>
-      <label className={labelCls}>Tags</label>
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Mugshot, Scene, Weapon…" className={inputCls} />
+      <label htmlFor="mv-tags" className={labelCls}>Tags</label>
+      <input id="mv-tags" value={value} onChange={(e) => onChange(e.target.value)} placeholder="Mugshot, Scene, Weapon…" className={inputCls} />
       <div className="mt-1.5 flex flex-wrap gap-1">
         {PRESET_TAGS.map((t) => (
           <button key={t} type="button" onClick={() => addPreset(t)} className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-slate-300 transition hover:bg-white/10">
@@ -290,7 +296,7 @@ function ForwardModal({ m, cases, onClose, onDone }: { m: MediaRow; cases: CaseO
           <button key={c.id} onClick={() => void send(c)} className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-blue-500/15 hover:text-white">
             <span className="font-mono">{c.case_number}</span>
           </button>
-        )) : <p className="px-3 py-2 text-xs text-slate-500">No cases</p>}
+        )) : <p className="px-3 py-2 text-xs text-slate-400">No cases available.</p>}
       </div>
     </Modal>
   )
@@ -345,18 +351,18 @@ function IngestModal({ cases, gangs, onClose, onSaved }: { cases: CaseOption[]; 
     <Modal open onClose={onClose} dirty={() => !!(title || src)}>
       <ModalHeader title="Ingest Media Asset" onClose={onClose} />
       <div className="space-y-3">
-        <div><label className={labelCls}>Title *</label><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Dashcam — Vinewood pursuit" className={inputCls} /></div>
+        <div><label htmlFor="mv-title" className={labelCls}>Title *</label><input id="mv-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Dashcam — Vinewood pursuit" className={inputCls} /></div>
         <div>
-          <label className={labelCls}>Source Type</label>
-          <select value={type} onChange={(e) => setType(e.target.value)} className={inputCls}>
+          <label htmlFor="mv-type" className={labelCls}>Source Type</label>
+          <select id="mv-type" value={type} onChange={(e) => setType(e.target.value)} className={inputCls}>
             <option value="image">Direct Image URL</option>
             <option value="video">MP4 Video Link</option>
             <option value="fivemanage">FiveManage CDN Embed</option>
           </select>
         </div>
         <div>
-          <label className={labelCls}>URL / Embed ID</label>
-          <input value={src} onChange={(e) => setSrc(e.target.value)} placeholder="https://… or fm_xxxxx" className={`${inputCls} font-mono text-xs`} />
+          <label htmlFor="mv-src" className={labelCls}>URL / Embed ID</label>
+          <input id="mv-src" value={src} onChange={(e) => setSrc(e.target.value)} placeholder="https://… or fm_xxxxx" className={`${inputCls} font-mono text-xs`} />
           {fmConfigured() ? (
             <div className="mt-1.5">
               <input ref={fileRef} type="file" accept="image/*,video/*,audio/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = '' }} />
@@ -371,21 +377,21 @@ function IngestModal({ cases, gangs, onClose, onSaved }: { cases: CaseOption[]; 
         <p className="pt-1 text-[10px] font-semibold uppercase tracking-wider text-blue-300/70">Evidence Tags</p>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={labelCls}>Case</label>
-            <select value={caseId} onChange={(e) => setCaseId(e.target.value)} className={inputCls}>
+            <label htmlFor="mv-case" className={labelCls}>Case</label>
+            <select id="mv-case" value={caseId} onChange={(e) => setCaseId(e.target.value)} className={inputCls}>
               <option value="">— none —</option>
               {cases.map((c) => <option key={c.id} value={c.id}>{c.case_number}</option>)}
             </select>
           </div>
           <div>
-            <label className={labelCls}>Gang</label>
-            <select value={gangId} onChange={(e) => setGangId(e.target.value)} className={inputCls}>
+            <label htmlFor="mv-gang" className={labelCls}>Gang</label>
+            <select id="mv-gang" value={gangId} onChange={(e) => setGangId(e.target.value)} className={inputCls}>
               <option value="">— none —</option>
               {gangs.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
           </div>
-          <div><label className={labelCls}>Location</label><input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Area / place" className={inputCls} /></div>
-          <div><label className={labelCls}>Person (mugshot)</label><input value={person} onChange={(e) => setPerson(e.target.value)} placeholder="Subject name" className={inputCls} /></div>
+          <div><label htmlFor="mv-location" className={labelCls}>Location</label><input id="mv-location" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Area / place" className={inputCls} /></div>
+          <div><label htmlFor="mv-person" className={labelCls}>Person (mugshot)</label><input id="mv-person" value={person} onChange={(e) => setPerson(e.target.value)} placeholder="Subject name" className={inputCls} /></div>
         </div>
         <TagsField value={tags} onChange={setTags} />
       </div>

@@ -101,35 +101,35 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
       <div className="p-6">
         <ModalHeader title={`${record ? 'Edit' : 'New'} Person`} onClose={onClose} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div><label className="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input value={name} onChange={(e) => setName(e.target.value)} className={input} /></div>
-          <div><label className="mb-1 block text-xs font-semibold text-slate-400">Alias</label><input value={alias} onChange={(e) => setAlias(e.target.value)} className={input} /></div>
+          <div><label htmlFor="person-name" className="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input id="person-name" value={name} onChange={(e) => setName(e.target.value)} className={input} /></div>
+          <div><label htmlFor="person-alias" className="mb-1 block text-xs font-semibold text-slate-400">Alias</label><input id="person-alias" value={alias} onChange={(e) => setAlias(e.target.value)} className={input} /></div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-400">Gang</label>
-            <select value={gangId} onChange={(e) => setGangId(e.target.value)} className={input}>
+            <label htmlFor="person-gang" className="mb-1 block text-xs font-semibold text-slate-400">Gang</label>
+            <select id="person-gang" value={gangId} onChange={(e) => setGangId(e.target.value)} className={input}>
               <option value="">— no gang —</option>
               {!gangKnown && <option value={gangId}>(current gang — loading…)</option>}
               {gangs.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
           </div>
-          <div><label className="mb-1 block text-xs font-semibold text-slate-400">Status</label><input value={status} onChange={(e) => setStatus(e.target.value)} className={input} /></div>
+          <div><label htmlFor="person-status" className="mb-1 block text-xs font-semibold text-slate-400">Status</label><input id="person-status" value={status} onChange={(e) => setStatus(e.target.value)} className={input} /></div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-400">CCW</label>
-            <select value={ccw ? 'true' : 'false'} onChange={(e) => setCcw(e.target.value === 'true')} className={input}>
+            <label htmlFor="person-ccw" className="mb-1 block text-xs font-semibold text-slate-400">CCW</label>
+            <select id="person-ccw" value={ccw ? 'true' : 'false'} onChange={(e) => setCcw(e.target.value === 'true')} className={input}>
               <option value="false">No</option><option value="true">Yes</option>
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-400">Active BOLO</label>
-            <select value={bolo ? 'true' : 'false'} onChange={(e) => setBolo(e.target.value === 'true')} className={input}>
+            <label htmlFor="person-bolo" className="mb-1 block text-xs font-semibold text-slate-400">Active BOLO</label>
+            <select id="person-bolo" value={bolo ? 'true' : 'false'} onChange={(e) => setBolo(e.target.value === 'true')} className={input}>
               <option value="false">No</option><option value="true">Yes — be on the lookout</option>
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="mb-1 block text-xs font-semibold text-slate-400">VCH</label><input type="number" value={vch} onChange={(e) => setVch(e.target.value)} className={input} /></div>
-            <div><label className="mb-1 block text-xs font-semibold text-slate-400">Felonies</label><input type="number" value={felonies} onChange={(e) => setFelonies(e.target.value)} className={input} /></div>
+            <div><label htmlFor="person-vch" className="mb-1 block text-xs font-semibold text-slate-400">VCH</label><input id="person-vch" type="number" value={vch} onChange={(e) => setVch(e.target.value)} className={input} /></div>
+            <div><label htmlFor="person-felonies" className="mb-1 block text-xs font-semibold text-slate-400">Felonies</label><input id="person-felonies" type="number" value={felonies} onChange={(e) => setFelonies(e.target.value)} className={input} /></div>
           </div>
-          <div className="sm:col-span-2"><label className="mb-1 block text-xs font-semibold text-slate-400">Mugshot URL</label><input value={mugshot} onChange={(e) => setMugshot(e.target.value)} className={input} /></div>
-          <div className="sm:col-span-2"><label className="mb-1 block text-xs font-semibold text-slate-400">Notes</label><textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} className={input} /></div>
+          <div className="sm:col-span-2"><label htmlFor="person-mugshot" className="mb-1 block text-xs font-semibold text-slate-400">Mugshot URL</label><input id="person-mugshot" value={mugshot} onChange={(e) => setMugshot(e.target.value)} className={input} /></div>
+          <div className="sm:col-span-2"><label htmlFor="person-notes" className="mb-1 block text-xs font-semibold text-slate-400">Notes</label><textarea id="person-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} className={input} /></div>
           <div className="sm:col-span-2">
             <div className="mb-1 flex items-center justify-between">
               <label className="block text-xs font-semibold text-slate-400">Known Properties</label>

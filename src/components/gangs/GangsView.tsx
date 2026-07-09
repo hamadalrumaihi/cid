@@ -10,11 +10,12 @@ import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { useRegistry } from '@/lib/useRegistry'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { IntelProfile, type IntelTarget } from '@/components/persons/IntelProfile'
 import { GangCard, GangDetail } from './gangCards'
 import { GangModal, AttachGangModal } from './gangModals'
-import { GANG_DELETE_CHILDREN, GANG_NULL_REFS, Notice, PAGE, type CaseOption, type GangRow, type PersonRow } from './gangShared'
+import { GANG_DELETE_CHILDREN, GANG_NULL_REFS, PAGE, type CaseOption, type GangRow, type PersonRow } from './gangShared'
 
 export function GangsView() {
   const { state, canEdit, canDelete } = useAuth()
@@ -159,13 +160,21 @@ export function GangsView() {
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {state !== 'in' ? (
-          <Notice text="Live gang records require sign-in." />
+          <Notice text="Live gang records require sign-in." className="xl:col-span-2" />
         ) : err ? (
-          <Notice text={`Could not load gangs: ${err}`} />
+          <ErrorNotice message={err} onRetry={refresh} className="xl:col-span-2" />
         ) : loading && !gangs.length ? (
           <CardGridSkeleton count={4} cols="xl:grid-cols-2" />
         ) : !items.length ? (
-          <Notice text={gangs.length ? 'No gangs match your filter.' : `No gangs on file.${canEdit ? ' Use "+ New Gang".' : ''}`} />
+          gangs.length ? (
+            <Notice text="No gangs match your filter." className="xl:col-span-2" />
+          ) : (
+            <EmptyState
+              title="No gangs on file yet"
+              hint={canEdit ? 'Add one with the New Gang button.' : undefined}
+              className="xl:col-span-2"
+            />
+          )
         ) : (
           <>
             {visible.map((g) => (

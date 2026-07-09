@@ -14,15 +14,14 @@ import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { inputCls, labelCls } from '@/components/ui/Field'
 import { WatchButton } from '@/components/cases/WatchButton'
 
 type VehicleRow = Tables<'vehicles'>
 interface PersonOption { id: string; name: string }
 interface GangOption { id: string; name: string }
 interface CaseOption { id: string; case_number: string }
-
-const inputCls = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
-const labelCls = 'mb-1 block text-xs font-semibold text-slate-400'
 
 export function VehiclesView() {
   const { state, canEdit, canDelete } = useAuth()
@@ -112,9 +111,12 @@ export function VehiclesView() {
       {loading ? (
         <Notice text="Loading vehicle registry…" />
       ) : err ? (
-        <Notice text={`Could not load vehicles: ${err}`} />
+        <ErrorNotice message={err} onRetry={refresh} />
       ) : !vehicles.length ? (
-        <Notice text={`NO VEHICLES ON FILE // REGISTRY EMPTY.${canEdit ? ' Use “+ New Vehicle” to log the first plate.' : ''}`} />
+        <EmptyState
+          title="No vehicles on file yet"
+          hint={canEdit ? 'Log the first plate with the New Vehicle button.' : undefined}
+        />
       ) : !rows.length ? (
         <Notice text={`No vehicles match “${query.trim()}”.`} />
       ) : (
@@ -160,10 +162,6 @@ export function VehiclesView() {
       )}
     </div>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
 }
 
 /* ---- Create / edit modal ------------------------------------------------ */
@@ -214,22 +212,22 @@ function VehicleModal({ record, persons, gangs, onClose, onSaved }: {
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={labelCls}>Plate *</label>
-            <input value={plate} onChange={(e) => setPlate(e.target.value)} className={`${inputCls} font-mono uppercase tracking-widest`} />
+            <label htmlFor="vehicle-plate" className={labelCls}>Plate *</label>
+            <input id="vehicle-plate" value={plate} onChange={(e) => setPlate(e.target.value)} className={`${inputCls} font-mono uppercase tracking-widest`} />
           </div>
           <div>
-            <label className={labelCls}>Model</label>
-            <input value={model} onChange={(e) => setModel(e.target.value)} className={inputCls} />
+            <label htmlFor="vehicle-model" className={labelCls}>Model</label>
+            <input id="vehicle-model" value={model} onChange={(e) => setModel(e.target.value)} className={inputCls} />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={labelCls}>Color</label>
-            <input value={color} onChange={(e) => setColor(e.target.value)} className={inputCls} />
+            <label htmlFor="vehicle-color" className={labelCls}>Color</label>
+            <input id="vehicle-color" value={color} onChange={(e) => setColor(e.target.value)} className={inputCls} />
           </div>
           <div>
-            <label className={labelCls}>Registered Owner</label>
-            <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={inputCls}>
+            <label htmlFor="vehicle-owner" className={labelCls}>Registered Owner</label>
+            <select id="vehicle-owner" value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={inputCls}>
               <option value="">— unknown —</option>
               {!ownerKnown && record?.owner_id && <option value={record.owner_id}>(current owner — loading…)</option>}
               {persons.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -237,16 +235,16 @@ function VehicleModal({ record, persons, gangs, onClose, onSaved }: {
           </div>
         </div>
         <div>
-          <label className={labelCls}>Gang Association</label>
-          <select value={gangId} onChange={(e) => setGangId(e.target.value)} className={inputCls}>
+          <label htmlFor="vehicle-gang" className={labelCls}>Gang Association</label>
+          <select id="vehicle-gang" value={gangId} onChange={(e) => setGangId(e.target.value)} className={inputCls}>
             <option value="">— none —</option>
             {!gangKnown && record?.gang_id && <option value={record.gang_id}>(current gang — loading…)</option>}
             {gangs.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
         </div>
         <div>
-          <label className={labelCls}>Notes</label>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className={inputCls} />
+          <label htmlFor="vehicle-notes" className={labelCls}>Notes</label>
+          <textarea id="vehicle-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className={inputCls} />
         </div>
       </div>
       <div className="mt-5">
@@ -345,7 +343,7 @@ function CrossrefPanel({ vehicles, persons, ownerName }: {
   }, [state, vehicles, persons, retry])
 
   if (state !== 'in') return null
-  if (scan === 'loading') return <p className="mb-6 text-sm text-slate-500">Scanning for cross-case matches…</p>
+  if (scan === 'loading') return <p className="mb-6 text-sm text-slate-400">Scanning for cross-case matches…</p>
   if (scan === 'failed') {
     return (
       <div className="mb-6 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 text-sm text-amber-200">
@@ -355,7 +353,13 @@ function CrossrefPanel({ vehicles, persons, ownerName }: {
     )
   }
   if (!alerts.length) {
-    return <div className="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-5 text-sm text-slate-500">NO CROSS-CASE MATCHES // SCAN COMPLETE. Alerts appear here when the same phone, plate, or person surfaces in two or more cases.</div>
+    return (
+      <EmptyState
+        title="No cross-case matches yet"
+        hint="Alerts appear here when the same phone, plate, or person surfaces in two or more cases."
+        className="mb-6"
+      />
+    )
   }
   return (
     <div className="mb-6">

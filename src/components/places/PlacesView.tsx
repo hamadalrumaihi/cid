@@ -11,6 +11,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 
 type PlaceRow = Tables<'places'>
 type GangRow = Tables<'gangs'>
@@ -183,13 +184,17 @@ export function PlacesView() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {state !== 'in' ? (
-          <Notice text="Live location records require sign-in." />
+          <Notice text="Live location records require sign-in." className="lg:col-span-2" />
         ) : err ? (
-          <Notice text={`Could not load locations: ${err}`} />
+          <ErrorNotice message={err} onRetry={refresh} className="lg:col-span-2" />
         ) : loading && !places.length ? (
-          <Notice text="Loading locations..." />
+          <Notice text="Loading locations..." className="lg:col-span-2" />
         ) : !places.length ? (
-          <Notice text={`No locations logged.${canEdit ? ' Use "+ New Location".' : ''}`} />
+          <EmptyState
+            title="No locations logged yet"
+            hint={canEdit ? 'Add a drug lab, stash house, dead drop or front with the New Location button.' : undefined}
+            className="lg:col-span-2"
+          />
         ) : (
           places.map((place) => (
             <PlaceCard
@@ -224,10 +229,6 @@ export function PlacesView() {
       {attach && <AttachPlaceModal place={attach} caseOptions={cases} onClose={() => setAttach(null)} />}
     </section>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400 lg:col-span-2">{text}</div>
 }
 
 function PlaceCard({ place, gang, caseNumber, drug, customSteps, canEdit, canDelete, selected, onSelect, onEdit, onDelete, onAttach }: {
@@ -335,28 +336,28 @@ function PlaceModal({ record, gangs, cases, drugs, onClose, onSaved }: {
       <div className="p-6">
         <ModalHeader title={`${record ? 'Edit' : 'New'} Location`} onClose={onClose} />
         <div className="space-y-3">
-          <div><label className="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input value={name} onChange={(e) => setName(e.target.value)} className={input} /></div>
+          <div><label htmlFor="place-name" className="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input id="place-name" value={name} onChange={(e) => setName(e.target.value)} className={input} /></div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-400">Type</label>
-              <select value={type} onChange={(e) => setType(e.target.value as LocationType)} className={input}>
+              <label htmlFor="place-type" className="mb-1 block text-xs font-semibold text-slate-400">Type</label>
+              <select id="place-type" value={type} onChange={(e) => setType(e.target.value as LocationType)} className={input}>
                 {LOC_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
-            <div><label className="mb-1 block text-xs font-semibold text-slate-400">Area</label><input value={area} onChange={(e) => setArea(e.target.value)} className={input} /></div>
+            <div><label htmlFor="place-area" className="mb-1 block text-xs font-semibold text-slate-400">Area</label><input id="place-area" value={area} onChange={(e) => setArea(e.target.value)} className={input} /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-400">Controlling Gang</label>
-              <select value={gangId} onChange={(e) => setGangId(e.target.value)} className={input}>
+              <label htmlFor="place-gang" className="mb-1 block text-xs font-semibold text-slate-400">Controlling Gang</label>
+              <select id="place-gang" value={gangId} onChange={(e) => setGangId(e.target.value)} className={input}>
                 <option value="">- none -</option>
                 {!gangKnown && <option value={gangId}>(current gang - loading...)</option>}
                 {gangs.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-400">Linked Case</label>
-              <select value={caseId} onChange={(e) => setCaseId(e.target.value)} className={input}>
+              <label htmlFor="place-case" className="mb-1 block text-xs font-semibold text-slate-400">Linked Case</label>
+              <select id="place-case" value={caseId} onChange={(e) => setCaseId(e.target.value)} className={input}>
                 <option value="">- none -</option>
                 {!caseKnown && <option value={caseId}>(linked case - other bureau)</option>}
                 {cases.map((c) => <option key={c.id} value={c.id}>{c.case_number}</option>)}
@@ -365,15 +366,15 @@ function PlaceModal({ record, gangs, cases, drugs, onClose, onSaved }: {
           </div>
           {type === 'drug_lab' && (
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-400">Produced Narcotic</label>
-              <select value={narcoticId} onChange={(e) => setNarcoticId(e.target.value)} className={input}>
+              <label htmlFor="place-narcotic" className="mb-1 block text-xs font-semibold text-slate-400">Produced Narcotic</label>
+              <select id="place-narcotic" value={narcoticId} onChange={(e) => setNarcoticId(e.target.value)} className={input}>
                 <option value="">- none -</option>
                 {!drugKnown && <option value={narcoticId}>(current narcotic - loading...)</option>}
                 {drugs.map((d) => <option key={d.row.id} value={d.row.id}>{d.row.name}</option>)}
               </select>
             </div>
           )}
-          <div><label className="mb-1 block text-xs font-semibold text-slate-400">Notes</label><textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className={input} /></div>
+          <div><label htmlFor="place-notes" className="mb-1 block text-xs font-semibold text-slate-400">Notes</label><textarea id="place-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className={input} /></div>
         </div>
         <button onClick={() => void save()} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
           {record ? 'Save changes' : 'Create location'}
@@ -422,7 +423,7 @@ function AttachPlaceModal({ place, caseOptions, onClose }: { place: PlaceRow; ca
             </button>
           </>
         ) : (
-          <p className="text-sm text-slate-500">No cases available to attach to.</p>
+          <p className="text-sm text-slate-400">No cases available to attach to.</p>
         )}
       </div>
     </Modal>

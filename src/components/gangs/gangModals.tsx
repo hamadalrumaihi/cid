@@ -32,17 +32,17 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
       <div className="p-6">
         <ModalHeader title={`${record ? 'Edit' : 'New'} Gang`} onClose={onClose} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div><label className="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input value={name} onChange={(e) => setName(e.target.value)} className={input} /></div>
-          <div><label className="mb-1 block text-xs font-semibold text-slate-400">Colors</label><input value={colors} onChange={(e) => setColors(e.target.value)} className={input} /></div>
+          <div><label htmlFor="gang-name" className="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input id="gang-name" value={name} onChange={(e) => setName(e.target.value)} className={input} /></div>
+          <div><label htmlFor="gang-colors" className="mb-1 block text-xs font-semibold text-slate-400">Colors</label><input id="gang-colors" value={colors} onChange={(e) => setColors(e.target.value)} className={input} /></div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-400">Threat Level</label>
-            <select value={threat} onChange={(e) => setThreat(e.target.value as ThreatLevel)} className={input}>
+            <label htmlFor="gang-threat" className="mb-1 block text-xs font-semibold text-slate-400">Threat Level</label>
+            <select id="gang-threat" value={threat} onChange={(e) => setThreat(e.target.value as ThreatLevel)} className={input}>
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
             </select>
           </div>
-          <div className="sm:col-span-2"><label className="mb-1 block text-xs font-semibold text-slate-400">Notes</label><textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} className={input} /></div>
+          <div className="sm:col-span-2"><label htmlFor="gang-notes" className="mb-1 block text-xs font-semibold text-slate-400">Notes</label><textarea id="gang-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} className={input} /></div>
         </div>
         <button onClick={() => void save()} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
           {record ? 'Save changes' : 'Create gang'}
@@ -106,38 +106,38 @@ export function MemberModal({ gangId, member, people, cases, canDelete, onClose,
       <div className="p-6">
         <ModalHeader title={`${member ? 'Edit' : 'Add'} Member`} onClose={onClose} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div><label className="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input value={name} onChange={(e) => setName(e.target.value)} className={input} /></div>
-          <div><label className="mb-1 block text-xs font-semibold text-slate-400">Rank</label><input list="gang-rank-list" value={rank} onChange={(e) => setRank(e.target.value)} className={input} /><datalist id="gang-rank-list">{RANK_SUGGEST.map((r) => <option key={r} value={r} />)}</datalist></div>
-          <div><label className="mb-1 block text-xs font-semibold text-slate-400">Callsign</label><input value={callsign} onChange={(e) => setCallsign(e.target.value)} className={input} /></div>
-          <div><label className="mb-1 block text-xs font-semibold text-slate-400">Status</label><input value={status} onChange={(e) => setStatus(e.target.value)} className={input} /></div>
+          <div><label htmlFor="member-name" className="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input id="member-name" value={name} onChange={(e) => setName(e.target.value)} className={input} /></div>
+          <div><label htmlFor="member-rank" className="mb-1 block text-xs font-semibold text-slate-400">Rank</label><input id="member-rank" list="gang-rank-list" value={rank} onChange={(e) => setRank(e.target.value)} className={input} /><datalist id="gang-rank-list">{RANK_SUGGEST.map((r) => <option key={r} value={r} />)}</datalist></div>
+          <div><label htmlFor="member-callsign" className="mb-1 block text-xs font-semibold text-slate-400">Callsign</label><input id="member-callsign" value={callsign} onChange={(e) => setCallsign(e.target.value)} className={input} /></div>
+          <div><label htmlFor="member-status" className="mb-1 block text-xs font-semibold text-slate-400">Status</label><input id="member-status" value={status} onChange={(e) => setStatus(e.target.value)} className={input} /></div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-400">Link Person</label>
-            <select value={personId} onChange={(e) => setPersonId(e.target.value)} className={input}>
+            <label htmlFor="member-person" className="mb-1 block text-xs font-semibold text-slate-400">Link Person</label>
+            <select id="member-person" value={personId} onChange={(e) => setPersonId(e.target.value)} className={input}>
               <option value="">- link person (optional) -</option>
               {!personKnown && <option value={personId}>(linked person - loading...)</option>}
               {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-400">Link Case</label>
-            <select value={caseId} onChange={(e) => setCaseId(e.target.value)} className={input}>
+            <label htmlFor="member-case" className="mb-1 block text-xs font-semibold text-slate-400">Link Case</label>
+            <select id="member-case" value={caseId} onChange={(e) => setCaseId(e.target.value)} className={input}>
               <option value="">- link case (optional) -</option>
               {!caseKnown && <option value={caseId}>(linked case - other bureau)</option>}
               {cases.map((c) => <option key={c.id} value={c.id}>{c.case_number}</option>)}
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-400">CCW</label>
-            <select value={ccw ? 'true' : 'false'} onChange={(e) => setCcw(e.target.value === 'true')} className={input}>
+            <label htmlFor="member-ccw" className="mb-1 block text-xs font-semibold text-slate-400">CCW</label>
+            <select id="member-ccw" value={ccw ? 'true' : 'false'} onChange={(e) => setCcw(e.target.value === 'true')} className={input}>
               <option value="false">No</option>
               <option value="true">Yes</option>
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="mb-1 block text-xs font-semibold text-slate-400">VCH</label><input type="number" value={vch} onChange={(e) => setVch(e.target.value)} className={input} /></div>
-            <div><label className="mb-1 block text-xs font-semibold text-slate-400">Felonies</label><input type="number" value={felonies} onChange={(e) => setFelonies(e.target.value)} className={input} /></div>
+            <div><label htmlFor="member-vch" className="mb-1 block text-xs font-semibold text-slate-400">VCH</label><input id="member-vch" type="number" value={vch} onChange={(e) => setVch(e.target.value)} className={input} /></div>
+            <div><label htmlFor="member-felonies" className="mb-1 block text-xs font-semibold text-slate-400">Felonies</label><input id="member-felonies" type="number" value={felonies} onChange={(e) => setFelonies(e.target.value)} className={input} /></div>
           </div>
-          <div className="sm:col-span-2"><label className="mb-1 block text-xs font-semibold text-slate-400">Mugshot URL</label><input value={mugshot} onChange={(e) => setMugshot(e.target.value)} className={input} /></div>
+          <div className="sm:col-span-2"><label htmlFor="member-mugshot" className="mb-1 block text-xs font-semibold text-slate-400">Mugshot URL</label><input id="member-mugshot" value={mugshot} onChange={(e) => setMugshot(e.target.value)} className={input} /></div>
         </div>
         <div className="mt-5 flex gap-2">
           <button onClick={() => void save()} disabled={busy} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
@@ -172,16 +172,16 @@ export function TurfModal({ gangId, onClose, onSaved }: { gangId: string; onClos
       <div className="p-6">
         <ModalHeader title="Add Turf Block" onClose={onClose} />
         <div className="space-y-3">
-          <div><label className="mb-1 block text-xs font-semibold text-slate-400">Block / Territory *</label><input value={block} onChange={(e) => setBlock(e.target.value)} className={input} /></div>
+          <div><label htmlFor="turf-block" className="mb-1 block text-xs font-semibold text-slate-400">Block / Territory *</label><input id="turf-block" value={block} onChange={(e) => setBlock(e.target.value)} className={input} /></div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-400">Density</label>
-            <select value={density} onChange={(e) => setDensity(e.target.value as Density)} className={input}>
+            <label htmlFor="turf-density" className="mb-1 block text-xs font-semibold text-slate-400">Density</label>
+            <select id="turf-density" value={density} onChange={(e) => setDensity(e.target.value as Density)} className={input}>
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
             </select>
           </div>
-          <div><label className="mb-1 block text-xs font-semibold text-slate-400">Hotspot Area</label><input value={hotspot} onChange={(e) => setHotspot(e.target.value)} className={input} /></div>
+          <div><label htmlFor="turf-hotspot" className="mb-1 block text-xs font-semibold text-slate-400">Hotspot Area</label><input id="turf-hotspot" value={hotspot} onChange={(e) => setHotspot(e.target.value)} className={input} /></div>
         </div>
         <button onClick={() => void save()} disabled={busy} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">{busy ? 'Saving…' : 'Add Turf'}</button>
       </div>
@@ -228,7 +228,7 @@ export function AttachGangModal({ gang, caseOptions, onClose }: { gang: GangRow;
             </button>
           </>
         ) : (
-          <p className="text-sm text-slate-500">No cases available to attach to.</p>
+          <p className="text-sm text-slate-400">No cases available to attach to.</p>
         )}
       </div>
     </Modal>

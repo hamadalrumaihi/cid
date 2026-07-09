@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/auth'
 import { officerName } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Notice, EmptyState } from '@/components/ui/Notice'
 
 type FeedbackRow = Tables<'feedback'>
 
@@ -87,7 +88,7 @@ export function FeedbackView() {
           <div className="min-w-0">
             <p className="text-sm font-semibold text-white">{k.icon} {f.title}</p>
             {f.details && <p className="mt-1 whitespace-pre-wrap text-xs text-slate-400">{f.details}</p>}
-            <p className="mt-1.5 text-[11px] text-slate-500">{owner ? `${who} · ${when}` : when}</p>
+            <p className="mt-1.5 text-[11px] text-slate-400">{owner ? `${who} · ${when}` : when}</p>
           </div>
           <span className="flex flex-shrink-0 items-center gap-1.5">
             <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${k.tint}`}>{k.label}</span>
@@ -151,11 +152,15 @@ export function FeedbackView() {
         )}
       </div>
       {!items.length ? (
-        <p className="text-sm text-slate-500">{owner ? 'No submissions yet.' : 'You haven’t submitted anything yet — add a feature idea or a bug above.'}</p>
+        <EmptyState
+          icon="💡"
+          title={owner ? 'No submissions yet' : 'Nothing submitted yet'}
+          hint={owner ? 'Members’ feature requests and bug reports will land here.' : 'Add a feature idea or a bug above.'}
+        />
       ) : owner ? (
         <>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Open ({open.length})</p>
-          <div className="space-y-3">{open.length ? open.map(card) : <p className="text-sm text-slate-500">No open items — nice.</p>}</div>
+          <div className="space-y-3">{open.length ? open.map(card) : <EmptyState title="No open items — nice." />}</div>
           {closed.length > 0 && (
             <>
               <p className="mb-2 mt-6 text-xs font-semibold uppercase tracking-wider text-slate-400">Closed ({closed.length})</p>
@@ -171,8 +176,4 @@ export function FeedbackView() {
       )}
     </div>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
 }

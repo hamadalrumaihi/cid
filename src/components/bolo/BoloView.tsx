@@ -11,6 +11,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { WARRANT_TINT, WARRANT_TPLS, warrantStatusOf } from '@/lib/forms'
 import { IntelProfile, type IntelTarget } from '@/components/persons/IntelProfile'
 import { PersonModal, type GangRow, type PersonRow } from '@/components/persons/PersonModal'
@@ -139,15 +140,19 @@ export function BoloView() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {state !== 'in' ? (
-          <Notice text="Sign in to view the BOLO board." />
+          <Notice text="Sign in to view the BOLO board." className="sm:col-span-2 xl:col-span-3" />
         ) : err ? (
-          <Notice text={`Could not load BOLOs: ${err}`} />
+          <ErrorNotice message={err} onRetry={refresh} className="sm:col-span-2 xl:col-span-3" />
         ) : loading && !persons.length ? (
-          <Notice text="Loading BOLO board..." />
+          <Notice text="Loading BOLO board..." className="sm:col-span-2 xl:col-span-3" />
         ) : !allBolos.length ? (
-          <Notice text="NO ACTIVE BOLOS // SECTOR QUIET. Flag a person via Persons -> Edit -> Active BOLO." />
+          <EmptyState
+            title="No active BOLOs"
+            hint="Flag a person as be-on-the-lookout via Persons → Edit → Active BOLO."
+            className="sm:col-span-2 xl:col-span-3"
+          />
         ) : !items.length ? (
-          <Notice text={`No BOLOs match "${query.trim()}".`} />
+          <Notice text={`No BOLOs match "${query.trim()}".`} className="sm:col-span-2 xl:col-span-3" />
         ) : (
           items.map((p) => (
             <BoloCard
@@ -168,10 +173,6 @@ export function BoloView() {
       {editor && <PersonModal record={editor} gangs={gangs} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); void refresh() }} />}
     </section>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400 sm:col-span-2 xl:col-span-3">{text}</div>
 }
 
 function BoloCard({ person, gang, warrant, canEdit, onProfile, onEdit, onClear }: {

@@ -70,7 +70,7 @@ export function ChatTab({ c }: { c: CaseRow }) {
           {mentions.map((m) => (
             <span key={m.id} className="inline-flex items-center gap-1 rounded bg-blue-500/10 px-1.5 py-0.5 text-[11px] text-blue-300">
               @{m.name}
-              <button onClick={() => setMentions((prev) => prev.filter((x) => x.id !== m.id))} title="Remove mention" className="text-blue-300/60 hover:text-rose-300">✕</button>
+              <button onClick={() => setMentions((prev) => prev.filter((x) => x.id !== m.id))} aria-label={`Remove mention of ${m.name}`} title="Remove mention" className="text-blue-300/60 hover:text-rose-300">✕</button>
             </span>
           ))}
         </div>

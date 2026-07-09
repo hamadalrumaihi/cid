@@ -16,6 +16,7 @@ import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { caseStatusTint } from '@/lib/signoff'
+import { Notice, EmptyState } from '@/components/ui/Notice'
 
 type CaseRow = Tables<'cases'>
 type PlaceRow = Tables<'places'>
@@ -178,9 +179,13 @@ export function HeatmapView() {
       {loading ? (
         <Notice text="Loading heatmap data…" />
       ) : !enabled.length ? (
-        <Notice text="No layers selected — enable at least one layer above." />
+        <EmptyState icon="🗂️" title="No layers selected" hint="Enable at least one layer above to plot the heatmap." />
       ) : !rows.length ? (
-        <Notice text="No area data in this window. Widen the time range, enable more layers, or add an Area to cases, places, or gang turf." />
+        <EmptyState
+          icon="🗺️"
+          title="No area data in this window"
+          hint="Widen the time range, enable more layers, or add an Area to cases, places, or gang turf."
+        />
       ) : (
         <>
           {rows.length > 1 && (
@@ -213,7 +218,7 @@ export function HeatmapView() {
               )
             })}
           </div>
-          <p className="mt-4 text-[11px] text-slate-500">
+          <p className="mt-4 text-[11px] text-slate-400">
             Intensity = {enabled.map((L) => `${L.label.toLowerCase()}×${L.w}`).join(' + ')}. Window:{' '}
             <span className="text-slate-300">{WINDOWS[win].label}</span> (by creation date). Scoped to cases you can
             access (bureau + JTF + grants). {rows.length} area{rows.length === 1 ? '' : 's'}. Click an area for its
@@ -259,7 +264,7 @@ function AreaDetail({ area, data, win, loadedAt, onClose }: {
   return (
     <div className="mb-6 rounded-2xl border border-blue-500/20 bg-ink-900/70 p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="text-base font-bold text-white">📌 {area} <span className="ml-1 text-xs font-medium text-slate-500">{WINDOWS[win].label}</span></h3>
+        <h3 className="text-base font-bold text-white">📌 {area} <span className="ml-1 text-xs font-medium text-slate-400">{WINDOWS[win].label}</span></h3>
         <button onClick={onClose} aria-label="Close area details" className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-white/10">✕ Close</button>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -454,7 +459,7 @@ function HeatSvg({ rows, max, layers, onPick }: { rows: AreaRow[]; max: number; 
         <button className={btn} aria-label="Zoom out" onClick={() => zoomAt(1.33)}>−</button>
         <button className={btn} aria-label="Reset view" onClick={() => setVb(HOME)}>⌂</button>
       </div>
-      <p className="border-t border-white/5 px-4 py-2 text-[11px] text-slate-500">
+      <p className="border-t border-white/5 px-4 py-2 text-[11px] text-slate-400">
         Vector map — drag to pan, scroll or use +/− to zoom, click a dot (or Tab + Enter) for records. Each label carries
         the intensity number; size &amp; color repeat it:{' '}
         <span className="text-rose-300">● 75–100</span> · <span className="text-amber-300">● 50–74</span> ·{' '}
@@ -463,8 +468,4 @@ function HeatSvg({ rows, max, layers, onPick }: { rows: AreaRow[]; max: number; 
       </p>
     </div>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
 }

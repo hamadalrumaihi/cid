@@ -14,6 +14,8 @@ import { fmtUSD } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { inputCls, labelCls } from '@/components/ui/Field'
 
 type NarcoticRow = Tables<'narcotics'>
 type PrecursorRow = Tables<'narcotic_precursors'>
@@ -26,8 +28,6 @@ interface Drug {
   hotspots: HotspotRow[]
 }
 
-const inputCls = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
-const labelCls = 'mb-1 block text-xs font-semibold text-slate-400'
 const rowInputCls = 'rounded border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white'
 
 const densTint = (d: string | null) =>
@@ -105,9 +105,14 @@ export function NarcoticsView() {
       {loading ? (
         <Notice text="Loading narcotics registry…" />
       ) : err ? (
-        <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-rose-300">Could not load narcotics: {err}</div>
+        <ErrorNotice message={err} onRetry={() => void refresh()} />
       ) : !drugs.length ? (
-        <Notice text={`No narcotics on file.${canEdit ? ' Use “+ New Narcotic”.' : ''}`} />
+        <EmptyState
+          icon="💊"
+          title="No narcotics on file"
+          hint={canEdit ? 'Add a street-narcotic to start building the registry and market analytics.' : 'No narcotics have been added to the registry yet.'}
+          action={canEdit ? { label: '+ New Narcotic', onClick: () => setEditor({ drug: null }) } : undefined}
+        />
       ) : (
         <div className="space-y-4">
           {drugs.map((d, i) => (
@@ -127,10 +132,6 @@ export function NarcoticsView() {
       )}
     </div>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
 }
 
 function DrugCard({ drug, defaultOpen, canEdit, caseNum, onEdit }: {
@@ -181,7 +182,7 @@ function DrugCard({ drug, defaultOpen, canEdit, caseNum, onEdit }: {
                   className="w-full"
                 />
               </div>
-            )) : <p className="text-xs text-slate-500">No precursors logged.</p>}
+            )) : <p className="text-xs text-slate-400">No precursors logged.</p>}
           </div>
           <div className="mt-4 flex items-center justify-between rounded-lg border border-white/10 bg-ink-850 p-3">
             <span className="text-xs font-semibold text-slate-300">Batch Purity → Adj. Street Value</span>
@@ -202,10 +203,10 @@ function DrugCard({ drug, defaultOpen, canEdit, caseNum, onEdit }: {
                 <span className="text-slate-200">{h.area}</span>
                 <span className="flex items-center gap-2">
                   <span className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${densTint(h.density)}`}>{cap(h.density)}</span>
-                  {caseNum(h.case_id) ? <span className="font-mono text-[11px] text-blue-300">{caseNum(h.case_id)}</span> : <span className="text-[11px] text-slate-500">unlinked</span>}
+                  {caseNum(h.case_id) ? <span className="font-mono text-[11px] text-blue-300">{caseNum(h.case_id)}</span> : <span className="text-[11px] text-slate-400">unlinked</span>}
                 </span>
               </div>
-            )) : <p className="text-xs text-slate-500">No hotspots logged.</p>}
+            )) : <p className="text-xs text-slate-400">No hotspots logged.</p>}
           </div>
           {canEdit && (
             <div className="mt-4 text-right">
@@ -307,12 +308,12 @@ function NarcoticModal({ drug, cases, canDelete, onClose, onSaved }: {
     <Modal open onClose={onClose} wide>
       <ModalHeader title={n ? 'Edit Narcotic' : 'New Narcotic'} onClose={onClose} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="sm:col-span-2"><label className={labelCls}>Name *</label><input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} /></div>
-        <div><label className={labelCls}>Icon</label><input value={icon} onChange={(e) => setIcon(e.target.value)} className={inputCls} /></div>
-        <div className="sm:col-span-3"><label className={labelCls}>Classification</label><input value={classification} onChange={(e) => setClassification(e.target.value)} className={inputCls} /></div>
-        <div><label className={labelCls}>Popularity</label><input type="number" value={popularity} onChange={(e) => setPopularity(e.target.value)} className={inputCls} /></div>
-        <div><label className={labelCls}>Street $</label><input type="number" value={street} onChange={(e) => setStreet(e.target.value)} className={inputCls} /></div>
-        <div><label className={labelCls}>Wholesale $</label><input type="number" value={wholesale} onChange={(e) => setWholesale(e.target.value)} className={inputCls} /></div>
+        <div className="sm:col-span-2"><label htmlFor="narc-name" className={labelCls}>Name *</label><input id="narc-name" value={name} onChange={(e) => setName(e.target.value)} className={inputCls} /></div>
+        <div><label htmlFor="narc-icon" className={labelCls}>Icon</label><input id="narc-icon" value={icon} onChange={(e) => setIcon(e.target.value)} className={inputCls} /></div>
+        <div className="sm:col-span-3"><label htmlFor="narc-classification" className={labelCls}>Classification</label><input id="narc-classification" value={classification} onChange={(e) => setClassification(e.target.value)} className={inputCls} /></div>
+        <div><label htmlFor="narc-popularity" className={labelCls}>Popularity</label><input id="narc-popularity" type="number" value={popularity} onChange={(e) => setPopularity(e.target.value)} className={inputCls} /></div>
+        <div><label htmlFor="narc-street" className={labelCls}>Street $</label><input id="narc-street" type="number" value={street} onChange={(e) => setStreet(e.target.value)} className={inputCls} /></div>
+        <div><label htmlFor="narc-wholesale" className={labelCls}>Wholesale $</label><input id="narc-wholesale" type="number" value={wholesale} onChange={(e) => setWholesale(e.target.value)} className={inputCls} /></div>
       </div>
 
       <div className="mt-4">

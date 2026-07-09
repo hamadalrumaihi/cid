@@ -11,6 +11,7 @@ import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { IntelProfile, type IntelTarget } from '@/components/persons/IntelProfile'
+import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 
 type GangRow = Tables<'gangs'>
 
@@ -140,9 +141,15 @@ export function NetworkView() {
   }, [graph])
 
   if (state !== 'in') return <Notice text="Live relationship data requires sign-in." />
-  if (err) return <Notice text={`Could not build network: ${err}`} />
+  if (err) return <ErrorNotice message={err} onRetry={refresh} />
   if (!graph || !layout) return <Notice text="Building network…" />
-  if (!Object.keys(graph.nodes).length) return <Notice text="No relationships on file yet. Link persons or places to a gang, then revisit." />
+  if (!Object.keys(graph.nodes).length) return (
+    <EmptyState
+      icon="🕸️"
+      title="No relationships on file yet"
+      hint="Link persons or places to a gang, then revisit to see the network."
+    />
+  )
 
   const { nodes, adj } = graph
   const { pos, visible } = layout
@@ -167,7 +174,7 @@ export function NetworkView() {
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Relationship network</p>
           <h3 className="truncate text-lg font-bold text-white">{focusNd ? `${ICON[focusNd.type]} ${focusNd.label}` : 'Overview — all gangs & their networks'}</h3>
-          <p className="mt-0.5 text-xs text-slate-500">{visible.size} node{visible.size === 1 ? '' : 's'} shown · click a node to re-centre{focusNd ? ' · click the centre to open its profile' : ''}</p>
+          <p className="mt-0.5 text-xs text-slate-400">{visible.size} node{visible.size === 1 ? '' : 's'} shown · click a node to re-centre{focusNd ? ' · click the centre to open its profile' : ''}</p>
         </div>
         <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
           <span className="hidden items-center gap-3 text-[11px] text-slate-400 sm:flex">
@@ -228,8 +235,4 @@ export function NetworkView() {
       {profile && <IntelProfile initial={profile} gangs={gangs} onClose={() => setProfile(null)} />}
     </div>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
 }

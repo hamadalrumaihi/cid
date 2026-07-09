@@ -13,7 +13,9 @@ import { useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { deptLabel } from '@/lib/roles'
 import { Store } from '@/lib/store'
+import { toast } from '@/lib/toast'
 import { Modal } from '@/components/ui/Modal'
+import { EmptyState } from '@/components/ui/Notice'
 import { AnnouncementModal } from './AnnouncementModal'
 import {
   REC_LINK, mentionLabel, parseLinks, parseMentions, visibleAnnouncements,
@@ -49,7 +51,7 @@ export function AnnounceView() {
       ])
       setRows(anns)
       setCaseOptions(cases)
-    } catch { setRows([]) }
+    } catch { setRows([]); toast("Couldn't load announcements — check your connection.", 'danger') }
   }, [state, fetchProfiles])
 
   useEffect(() => {
@@ -99,19 +101,22 @@ export function AnnounceView() {
 
       <div className="space-y-4">
         {state !== 'in' ? (
-          <p className="text-sm text-slate-500">Sign in to view announcements.</p>
+          <p className="text-sm text-slate-400">Sign in to view announcements.</p>
         ) : !items.length ? (
-          <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-10 text-center">
-            <p className="text-3xl" aria-hidden="true">📣</p>
-            <p className="mt-2 text-sm text-slate-400">
-              {dismissedCount ? 'All announcements dismissed.' : `No announcements yet.${isCommand ? ' Use "+ New Announcement" to post the first.' : ''}`}
-            </p>
-            {dismissedCount > 0 && (
-              <button onClick={restoreAll} className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">
-                Show {dismissedCount} dismissed
-              </button>
-            )}
-          </div>
+          dismissedCount ? (
+            <EmptyState
+              icon="📣"
+              title="All announcements dismissed"
+              hint="You’ve hidden every current notice."
+              action={{ label: `Show ${dismissedCount} dismissed`, onClick: restoreAll }}
+            />
+          ) : (
+            <EmptyState
+              icon="📣"
+              title="No announcements yet"
+              hint={isCommand ? 'Use “+ New Announcement” to post the first.' : 'Division-wide notices from CID command will appear here.'}
+            />
+          )
         ) : (
           <>
             {items.map((a) => (
@@ -175,7 +180,7 @@ function AnnouncementCard({ a, canManage, onOpen, onEdit, onDismiss }: {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h4 className="flex items-center gap-2 text-base font-bold text-white">{a.pinned ? '📌 ' : ''}{a.title}</h4>
-          <p className="mt-0.5 text-[11px] text-slate-500">
+          <p className="mt-0.5 text-[11px] text-slate-400">
             {a.author_name || 'Command'} · {new Date(a.created_at).toLocaleString('en-US')}
             {a.audience !== 'all' ? ` · ${deptLabel(a.audience)} only` : ''}
           </p>
@@ -208,7 +213,7 @@ function AnnouncementViewModal({ a, onClose }: { a: AnnouncementRow; onClose: ()
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h3 className="text-xl font-bold text-white">{a.pinned ? '📌 ' : ''}{a.title}</h3>
-            <p className="mt-1 text-[11px] text-slate-500">
+            <p className="mt-1 text-[11px] text-slate-400">
               {a.author_name || 'Command'} · {new Date(a.created_at).toLocaleString('en-US')}
               {a.audience !== 'all' ? ` · ${deptLabel(a.audience)} only` : ''}
             </p>

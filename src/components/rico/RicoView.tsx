@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/auth'
 import { downloadDocx, type DocxPara } from '@/lib/docx'
 import { slug } from '@/lib/format'
 import { toast } from '@/lib/toast'
+import { Notice } from '@/components/ui/Notice'
 import { RicoTab } from '@/components/cases/CaseDetail'
 
 type CaseRow = Tables<'cases'>
@@ -29,7 +30,10 @@ export function RicoView() {
       const rows = await list('cases', { order: 'updated_at', ascending: false })
       setCases(rows)
       setCaseId((prev) => prev || rows[0]?.id || '')
-    } catch { setCases([]) }
+    } catch {
+      setCases([])
+      toast("Couldn't load cases — check your connection.", 'danger')
+    }
     finally { setLoading(false) }
   }, [state])
 
@@ -103,8 +107,4 @@ export function RicoView() {
       )}
     </div>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
 }

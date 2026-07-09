@@ -104,7 +104,7 @@ function Section({ title, count, children }: { title: string; count: number; chi
         <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">{title}</p>
         <span className="text-[11px] text-slate-500">{count}</span>
       </div>
-      {count ? <div className="space-y-1.5">{children}</div> : <p className="text-xs text-slate-500">None on file.</p>}
+      {count ? <div className="space-y-1.5">{children}</div> : <p className="text-xs text-slate-400">None on file.</p>}
     </div>
   )
 }
@@ -218,7 +218,7 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
 
         <div className="flex-1 space-y-6 px-6 py-5">
           {err && <p className="text-sm text-rose-300">Could not build profile: {err}</p>}
-          {!err && !data && <p className="text-sm text-slate-500">Building rollup…</p>}
+          {!err && !data && <p className="text-sm text-slate-400">Building rollup…</p>}
 
           {p && data && (
             <>

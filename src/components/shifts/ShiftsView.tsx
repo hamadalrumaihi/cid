@@ -12,11 +12,10 @@ import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Notice, EmptyState } from '@/components/ui/Notice'
+import { inputCls, labelCls } from '@/components/ui/Field'
 
 type ShiftRow = Tables<'shift_reports'>
-
-const inputCls = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
-const labelCls = 'mb-1 block text-xs font-semibold text-slate-400'
 
 function mondayOf(d: Date): string {
   const c = new Date(d)
@@ -36,7 +35,7 @@ export function ShiftsView() {
     await Promise.resolve()
     setLoading(true)
     try { setShifts(await withRetry(() => list('shift_reports', { order: 'week_start', ascending: false }))) }
-    catch { setShifts([]) }
+    catch { setShifts([]); toast("Couldn't load shift reports — check your connection.", 'danger') }
     finally { setLoading(false) }
   }, [state])
 
@@ -63,7 +62,12 @@ export function ShiftsView() {
       {loading ? (
         <Notice text="Loading shift reports…" />
       ) : !shifts.length ? (
-        <Notice text="No shift reports yet. Use “+ This week’s report”." />
+        <EmptyState
+          icon="🗓️"
+          title="No shift reports yet"
+          hint="Log your weekly activity so it rolls up to your Bureau Lead and Command."
+          action={canEdit ? { label: "+ This week’s report", onClick: () => setEditor({ record: null }) } : undefined}
+        />
       ) : (
         <div className="space-y-3">
           {shifts.map((s) => {
@@ -75,7 +79,7 @@ export function ShiftsView() {
                     <span className="font-mono text-sm font-semibold text-blue-300">{s.bureau}</span>
                     {' · '}
                     <span className="text-sm text-white">{s.author_name || 'Officer'}</span>
-                    <span className="ml-1 text-[11px] text-slate-500">week of {s.week_start}</span>
+                    <span className="ml-1 text-[11px] text-slate-400">week of {s.week_start}</span>
                     {mine && <span className="ml-1 rounded bg-blue-500/15 px-1.5 text-[9px] font-semibold uppercase text-blue-300">you</span>}
                   </div>
                   {mine && (
@@ -100,10 +104,6 @@ export function ShiftsView() {
       )}
     </div>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
 }
 
 function ShiftModal({ record, onClose, onSaved }: { record: ShiftRow | null; onClose: () => void; onSaved: () => void }) {
@@ -176,28 +176,28 @@ function ShiftModal({ record, onClose, onSaved }: { record: ShiftRow | null; onC
         <button onClick={() => void rollup()} disabled={rolling} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-blue-200 transition hover:bg-white/10 disabled:opacity-60">
           {rolling ? 'Computing…' : '↻ Auto-fill from my activity'}
         </button>
-        <span className="ml-2 text-[11px] text-slate-500">fills cases you led + evidence you collected this week</span>
+        <span className="ml-2 text-[11px] text-slate-400">fills cases you led + evidence you collected this week</span>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
-          <label className={labelCls}>Week starting (Mon)</label>
-          <input type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} className={inputCls} />
+          <label htmlFor="shift-week" className={labelCls}>Week starting (Mon)</label>
+          <input id="shift-week" type="date" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} className={inputCls} />
         </div>
         <div>
-          <label className={labelCls}>Arrests</label>
-          <input type="number" min={0} value={arrests} onChange={(e) => setArrests(e.target.value)} className={inputCls} />
+          <label htmlFor="shift-arrests" className={labelCls}>Arrests</label>
+          <input id="shift-arrests" type="number" min={0} value={arrests} onChange={(e) => setArrests(e.target.value)} className={inputCls} />
         </div>
         <div className="sm:col-span-2">
-          <label className={labelCls}>Cases worked</label>
-          <input value={casesWorked} onChange={(e) => setCasesWorked(e.target.value)} placeholder="SAB-900001, SAB-900007 …" className={inputCls} />
+          <label htmlFor="shift-cases" className={labelCls}>Cases worked</label>
+          <input id="shift-cases" value={casesWorked} onChange={(e) => setCasesWorked(e.target.value)} placeholder="SAB-900001, SAB-900007 …" className={inputCls} />
         </div>
         <div>
-          <label className={labelCls}>Evidence collected (#)</label>
-          <input type="number" min={0} value={evidenceCount} onChange={(e) => setEvidenceCount(e.target.value)} className={inputCls} />
+          <label htmlFor="shift-evidence" className={labelCls}>Evidence collected (#)</label>
+          <input id="shift-evidence" type="number" min={0} value={evidenceCount} onChange={(e) => setEvidenceCount(e.target.value)} className={inputCls} />
         </div>
         <div className="sm:col-span-2">
-          <label className={labelCls}>Notes</label>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} className={inputCls} />
+          <label htmlFor="shift-notes" className={labelCls}>Notes</label>
+          <textarea id="shift-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} className={inputCls} />
         </div>
       </div>
       <button onClick={() => void save()} disabled={busy} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">

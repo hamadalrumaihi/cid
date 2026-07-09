@@ -35,7 +35,3 @@ export const GANG_DELETE_CHILDREN = [
 ]
 
 export const GANG_NULL_REFS = [{ table: 'persons' as const, column: 'gang_id' }]
-
-export function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400 xl:col-span-2">{text}</div>
-}

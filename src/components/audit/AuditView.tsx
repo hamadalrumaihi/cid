@@ -12,7 +12,9 @@ import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { officerName } from '@/lib/profiles'
 import { copyText } from '@/lib/format'
+import { toast } from '@/lib/toast'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
+import { Notice } from '@/components/ui/Notice'
 
 type AuditRow = Tables<'audit_log'>
 
@@ -26,7 +28,7 @@ export function AuditView() {
     await Promise.resolve()
     setLoading(true)
     try { setRows(await list('audit_log', { order: 'created_at', ascending: false })) }
-    catch { setRows([]) }
+    catch { setRows([]); toast("Couldn't load the audit log — check your connection.", 'danger') }
     finally { setLoading(false) }
   }, [state, isOwner])
 
@@ -96,8 +98,4 @@ export function AuditView() {
       )}
     </div>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-xl border border-white/5 bg-ink-900 p-6 text-center text-sm text-slate-500">{text}</div>
 }

@@ -13,6 +13,7 @@ import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { IntelProfile, type IntelTarget } from './IntelProfile'
 import { PERSON_NULL_REFS, PersonModal, type GangRow, type PersonRow } from './PersonModal'
 
@@ -144,11 +145,11 @@ export function PersonsView() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {state !== 'in' ? (
-          <Notice text="Live person records require sign-in." />
+          <Notice text="Live person records require sign-in." className="sm:col-span-2 xl:col-span-3" />
         ) : err ? (
-          <Notice text={`Could not load persons: ${err}`} />
+          <ErrorNotice message={err} onRetry={refresh} className="sm:col-span-2 xl:col-span-3" />
         ) : loading && !persons.length ? (
-          <Notice text="Loading persons…" />
+          <Notice text="Loading persons…" className="sm:col-span-2 xl:col-span-3" />
         ) : !items.length ? (
           query.trim() && canEdit ? (
             <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center sm:col-span-2 xl:col-span-3">
@@ -157,8 +158,14 @@ export function PersonsView() {
                 ➕ Add &ldquo;{query.trim()}&rdquo; to registry
               </button>
             </div>
+          ) : persons.length ? (
+            <Notice text="No persons match your filter." className="sm:col-span-2 xl:col-span-3" />
           ) : (
-            <Notice text={persons.length ? 'No persons match your filter.' : `NO PERSONS ON FILE // INDEX EMPTY.${canEdit ? ' Use "+ New Person".' : ''}`} />
+            <EmptyState
+              title="No persons on file yet"
+              hint={canEdit ? 'Add one with the New Person button.' : undefined}
+              className="sm:col-span-2 xl:col-span-3"
+            />
           )
         ) : (
           <>
@@ -201,10 +208,6 @@ export function PersonsView() {
       {attach && <AttachToCaseModal person={attach} caseOptions={caseOptions} onClose={() => setAttach(null)} />}
     </section>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400 sm:col-span-2 xl:col-span-3">{text}</div>
 }
 
 interface PersonCardProps {
@@ -306,7 +309,7 @@ function AttachToCaseModal({ person, caseOptions, onClose }: { person: PersonRow
             </button>
           </>
         ) : (
-          <p className="text-sm text-slate-500">No cases available to attach to.</p>
+          <p className="text-sm text-slate-400">No cases available to attach to.</p>
         )}
       </div>
     </Modal>
