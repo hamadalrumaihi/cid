@@ -2477,8 +2477,6 @@ export type Database = {
         }
         Returns: undefined
       }
-      bootstrap_command: { Args: { p_email: string }; Returns: string }
-      bootstrap_director: { Args: { p_email: string }; Returns: string }
       create_notification: {
         Args: { p_payload?: Json; p_type: string; p_user_id: string }
         Returns: undefined

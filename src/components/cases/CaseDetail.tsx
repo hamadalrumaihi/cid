@@ -22,6 +22,7 @@ import { PENAL_CODE, penalByCode, penalRecommend, penalSentence, penalSearch, pe
 import { notify } from '@/lib/notify'
 import { toast } from '@/lib/toast'
 import { RichEditor } from '@/components/ui/RichEditor'
+import { Drafts } from '@/lib/drafts'
 import { isPinnedCase, pushRecentCase, togglePinCase } from './caseUtils'
 
 // React Flow is heavy — load the graph only when its tab is opened.
@@ -757,6 +758,15 @@ function ChatTab({ c }: { c: CaseRow }) {
   const v = useTableVersion('case_messages')
   const refresh = useCallback(async () => { try { setMsgs(await list('case_messages', { eq: { case_id: c.id }, order: 'created_at' })) } catch { /* stale */ } }, [c.id])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, v])
+  // Never-lose-work: restore a half-typed message for THIS case on mount;
+  // keep the stash current while typing; clear it on successful send.
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      const d = Drafts.load<string>(`chat:${c.id}`)
+      if (d?.data) setBody((prev) => prev || d.data)
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [c.id])
   const [sending, setSending] = useState(false)
   const addMention = (val: string) => {
     if (!val) return
@@ -774,7 +784,7 @@ function ChatTab({ c }: { c: CaseRow }) {
     for (const m of mentions) {
       if (m.id !== profile?.id) void notify(m.id, 'chat_mention', { case_id: c.id, case_number: c.case_number, detective: profile?.display_name ?? 'Officer', reason: `${profile?.display_name ?? 'An officer'} mentioned you in the ${c.case_number} channel.` })
     }
-    setBody(''); setMentions([]); void refresh()
+    setBody(''); setMentions([]); Drafts.clear(`chat:${c.id}`); void refresh()
   }
   const rowMentions = (m: MessageRow): string[] => (Array.isArray(m.mentions) ? m.mentions.filter((x): x is string => typeof x === 'string') : [])
   return (
@@ -793,7 +803,7 @@ function ChatTab({ c }: { c: CaseRow }) {
           ))}
         </div>
       )}
-      <textarea value={body} onChange={(e) => setBody(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }} rows={3} className="w-full rounded-xl border border-white/10 bg-ink-950 p-3 text-sm text-white" placeholder="Message the case room..." />
+      <textarea value={body} onChange={(e) => { setBody(e.target.value); if (e.target.value.trim()) Drafts.save(`chat:${c.id}`, e.target.value); else Drafts.clear(`chat:${c.id}`) }} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }} rows={3} className="w-full rounded-xl border border-white/10 bg-ink-950 p-3 text-sm text-white" placeholder="Message the case room..." />
       <div className="flex items-center justify-between gap-2">
         <select value="" onChange={(e) => addMention(e.target.value)} aria-label="Mention an officer" className="rounded-lg border border-white/10 bg-ink-900 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-badge-500">
           <option value="">＠ Mention…</option>
