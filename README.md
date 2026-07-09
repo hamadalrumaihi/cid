@@ -44,6 +44,8 @@ npm run dev                  # http://localhost:3000
 | `npm run lint` | ESLint (`--max-warnings 0` in CI) |
 | `npm test` | Unit tests (vitest) |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run test:rls` | RLS/RPC security-wall suite against the live DB (opt-in — `tests/rls/README.md`) |
+| `npm run test:e2e` | Playwright smoke test (opt-in — `tests/e2e/README.md`) |
 
 ## Environment
 

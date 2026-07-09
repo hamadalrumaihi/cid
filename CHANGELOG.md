@@ -6,6 +6,34 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.1.1] — 2026-07-09
+
+The testing investments from the review (suggestions #9 and #10) — and the
+live bug the first run caught.
+
+### Fixed
+- **`private.is_owner()` was missing its EXECUTE grant**, so every statement
+  whose RLS evaluation touched an `is_owner`-based policy failed with
+  `permission denied` for *all* authenticated users: member feedback
+  submission, the owner's triage writes, and the owner's audit view. Found by
+  the new RLS suite on its first run; fixed live (migration
+  `grant_execute_is_owner`).
+
+### Added
+- **RLS/RPC security-wall suite** (`npm run test:rls`, 17 tests): bureau
+  isolation, deny-by-default, sign-off/finalize lockdown triggers, RPC caller
+  checks, owner gates, `is_owner` self-grant immunity, the email column
+  grant, and anonymous access — running against the live project as three
+  dedicated `rls-test-*` accounts (detective LSB / detective BCB / inactive).
+  Opt-in via env credentials; teardown via the new `rls_test_cleanup()` RPC
+  (callable only by the test accounts, deletes only rows they authored).
+- **Playwright E2E smoke** (`npm run test:e2e`): signed-out gate →
+  programmatic session (password grant) → shell → create a case through the
+  real UI → detail renders → cleanup. Same opt-in credentials.
+- Live migrations: `rls_test_cleanup_rpc`, `grant_execute_is_owner`,
+  `rls_test_cleanup_case_files_fix`; schema snapshot + migration history
+  regenerated (78 live migrations, 38 functions).
+
 ## [1.1.0] — 2026-07-09
 
 The remaining "safe now" improvements from the post-release review

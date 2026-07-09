@@ -23,6 +23,10 @@ preview deployment before it reaches production.** Production tracks
    write failure.
 3. **Gate** before pushing:
    `npm run typecheck && npm run lint && npm test && npm run build`
+   (Two further suites are **opt-in** because they talk to the live project
+   with dedicated test accounts: `npm run test:rls` — the RLS/RPC
+   security-wall tests — and `npm run test:e2e` — the Playwright smoke test.
+   See `tests/rls/README.md`.)
 4. **PR** — the template's merge checklist is the definition of done.
    CI runs the same gates plus the handbook drift check.
 5. **Verify the preview** (the Vercel bot comments the URL): sign in,

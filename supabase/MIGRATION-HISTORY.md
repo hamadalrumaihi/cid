@@ -3,7 +3,7 @@
 The live Supabase project (`cid`, `jhxuflzmqspidkvjckox`) is the source of
 truth for the schema. This file records every migration in the live
 project's `supabase_migrations.schema_migrations` history (as of
-**2026-07-09**) and maps each to its file in `supabase/migrations/`, where
+**2026-07-09**, post-v1.1.1) and maps each to its file in `supabase/migrations/`, where
 one exists. Entries marked *applied live only* were applied directly to the
 live project (via the dashboard/MCP) and have no standalone file — their
 effects are captured in [`schema-snapshot.sql`](schema-snapshot.sql), a
@@ -15,7 +15,7 @@ Regenerate the snapshot after new migrations: query the Postgres catalogs
 --schema-only` if you have direct DB access — and refresh this table from
 `supabase_migrations.schema_migrations`.
 
-**75 live migrations** (54 with a repo file, 21 live-only).
+**78 live migrations** (54 with a repo file, 24 live-only).
 
 | # | Version (live) | Name | Repo file |
 |---|---|---|---|
@@ -94,6 +94,9 @@ Regenerate the snapshot after new migrations: query the Postgres catalogs
 | 73 | `20260709073641` | grant_is_owner_select | — (applied live only) |
 | 74 | `20260709081004` | audit_trigger_tolerant_pk | — (applied live only) |
 | 75 | `20260709081317` | drop_bootstrap_functions | — (applied live only) |
+| 76 | `20260709085827` | rls_test_cleanup_rpc | — (applied live only) |
+| 77 | `20260709090142` | grant_execute_is_owner | — (applied live only) |
+| 78 | `20260709090245` | rls_test_cleanup_case_files_fix | — (applied live only) |
 
 ## Repo files with no live history entry
 
