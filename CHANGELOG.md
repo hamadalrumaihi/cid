@@ -6,10 +6,32 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.3.1] — 2026-07-09
+
+The "polish" half of the v1.3 phase — accessibility and loading states.
+
+### Added
+- **Loading-skeleton primitives** (`src/components/ui/Skeleton.tsx`):
+  `Skeleton`, `CardSkeleton`, `CardGridSkeleton` built on the existing
+  `.skel` pulse (reduced-motion-safe). First-fetch states now render the
+  *shape* of the incoming content instead of a bare "Loading…" line;
+  applied to the Indicators and Gangs registries as the pilot.
+
+### Fixed
+- **Accessibility — main landmarks.** The screens that render outside the app
+  shell (the auth **Gate**, the route **error boundary**, **404**, and the
+  init shim) had no `<main>`, so axe flagged `landmark-one-main` and `region`
+  (content not in a landmark) on those states. Each now supplies its own
+  `<main>`. WCAG 2.1 A/AA scans across the pages are clean; these were the
+  remaining best-practice findings.
+
+*(The Lighthouse-budget item from the v1.3 plan is deferred — tracked in
+`docs/CTO-REVIEW.md`.)*
+
 ## [1.3.0] — 2026-07-09
 
 The "pattern & debt" half of the v1.3 roadmap phase (the accessibility,
-skeleton, and Lighthouse-budget items follow separately).
+skeleton, and Lighthouse-budget items followed separately).
 
 ### Added
 - **`src/lib/useRegistry.ts`** — the shared skeleton behind every list screen

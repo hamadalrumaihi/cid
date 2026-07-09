@@ -16,6 +16,7 @@ import { useRegistry } from '@/lib/useRegistry'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { CardGridSkeleton } from '@/components/ui/Skeleton'
 
 type IndicatorRow = Tables<'indicators'>
 interface CaseOption { id: string; case_number: string; title: string }
@@ -180,7 +181,7 @@ export function IndicatorsView() {
       )}
 
       {loading ? (
-        <Notice text="Loading indicators…" />
+        <CardGridSkeleton count={6} />
       ) : err ? (
         <Notice text={`Could not load indicators: ${err}`} />
       ) : !rows.length ? (

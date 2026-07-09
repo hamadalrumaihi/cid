@@ -120,7 +120,9 @@ function SetupBody() {
 export function Gate() {
   const { state } = useAuth()
   return (
-    <div className="flex min-h-screen items-center justify-center bg-ink-950 p-6">
+    // The gate replaces the app shell (and its <main>) while signed out /
+    // booting, so it supplies the page's sole main landmark itself.
+    <main className="flex min-h-screen items-center justify-center bg-ink-950 p-6">
       <div className="gate-boot w-full max-w-md rounded-2xl border border-white/10 bg-ink-900 p-8 shadow-glow">
         <div className="mb-6 flex items-center gap-3">
           <ShieldLogo />
@@ -140,6 +142,6 @@ export function Gate() {
           {state === 'error' && <ErrorBody />}
         </div>
       </div>
-    </div>
+    </main>
   )
 }
