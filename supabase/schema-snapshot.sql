@@ -17,10 +17,8 @@
 --     comments, not executable statements.
 --
 -- Contents: 13 enum types, 48 tables (public + private),
--- 103 standalone indexes, 37 functions, 56 triggers,
+-- 103 standalone indexes, 38 functions, 56 triggers,
 -- 168 RLS policies, realtime publication members, grants.
--- ============================================================
-
 -- ============================================================
 -- Enum types
 -- ============================================================
@@ -1428,6 +1426,50 @@ begin
         updated_at = now()
     where id = p_report returning * into r;
   return r;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.rls_test_cleanup()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  ids uuid[];
+  caller uuid := (select auth.uid());
+  case_ids uuid[];
+  n_cases int; n_reports int; n_evidence int; n_feedback int;
+begin
+  select array_agg(id) into ids from auth.users
+  where email like 'rls-test-%@cidportal.test';
+  if caller is null or ids is null or not (caller = any(ids)) then
+    raise exception 'rls_test_cleanup: caller is not an RLS test account';
+  end if;
+
+  select coalesce(array_agg(id), '{}') into case_ids from public.cases where created_by = any(ids);
+
+  delete from public.case_messages where case_id = any(case_ids);
+  delete from public.case_tasks where case_id = any(case_ids);
+  delete from public.case_signoff_history where case_id = any(case_ids);
+  delete from public.case_assignments where case_id = any(case_ids);
+  delete from public.case_intel_links where case_id = any(case_ids);
+  delete from public.case_files where case_number in (select case_number from public.cases where id = any(case_ids));
+  delete from public.custody_chain where evidence_id in (select id from public.evidence where case_id = any(case_ids));
+  delete from public.evidence where case_id = any(case_ids);
+  get diagnostics n_evidence = row_count;
+  delete from public.media where case_id = any(case_ids);
+  delete from public.predicate_acts where rico_case_id in (select id from public.rico_cases where case_id = any(case_ids));
+  delete from public.rico_cases where case_id = any(case_ids);
+  delete from public.reports where case_id = any(case_ids) or author_id = any(ids);
+  get diagnostics n_reports = row_count;
+  delete from public.feedback where created_by = any(ids);
+  get diagnostics n_feedback = row_count;
+  delete from public.notifications where user_id = any(ids);
+  delete from public.cases where id = any(case_ids);
+  get diagnostics n_cases = row_count;
+
+  return jsonb_build_object('cases', n_cases, 'reports', n_reports, 'evidence', n_evidence, 'feedback', n_feedback);
 end $function$
 ;
 

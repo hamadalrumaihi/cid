@@ -67,3 +67,10 @@ next-env.d.ts
 
 # Playwright MCP browser artifacts (local verification)
 .playwright-mcp/
+
+# RLS test-account credentials (never commit)
+.env.rls.local
+
+# Playwright artifacts
+test-results/
+playwright-report/
