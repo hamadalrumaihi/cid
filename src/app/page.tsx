@@ -52,8 +52,8 @@ export default function RootRedirect() {
   // Rendered for at most a frame on plain loads; visible only while an
   // OAuth/magic-link callback is being consumed. Matches the gate boot copy.
   return (
-    <div className="flex min-h-screen items-center justify-center bg-ink-950 p-6">
+    <main className="flex min-h-screen items-center justify-center bg-ink-950 p-6">
       <p className="text-sm text-slate-400">Initializing secure session…</p>
-    </div>
+    </main>
   )
 }

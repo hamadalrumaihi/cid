@@ -5,7 +5,9 @@
  *  the stale-deployment case (new build shipped while the tab was open). */
 export default function ErrorScreen({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
-    <div className="grid min-h-[60vh] place-items-center p-6">
+    // A route error replaces the app shell (and its <main>), so this boundary
+    // supplies the page's sole main landmark itself.
+    <main className="grid min-h-[60vh] place-items-center p-6">
       <div className="w-full max-w-md rounded-2xl border border-rose-500/20 bg-ink-900/80 p-8 text-center">
         <p className="text-4xl" aria-hidden>⚠️</p>
         <h1 className="mt-2 text-lg font-black text-white">Something broke on this screen</h1>
@@ -28,6 +30,6 @@ export default function ErrorScreen({ error, reset }: { error: Error & { digest?
           </button>
         </div>
       </div>
-    </div>
+    </main>
   )
 }

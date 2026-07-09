@@ -4,7 +4,7 @@ import Link from 'next/link'
  *  tab slugs already redirect to /command; this catches everything else. */
 export default function NotFound() {
   return (
-    <div className="grid min-h-screen place-items-center bg-ink-950 p-6">
+    <main className="grid min-h-screen place-items-center bg-ink-950 p-6">
       <div className="w-full max-w-md rounded-2xl border border-white/10 bg-ink-900/80 p-8 text-center">
         <p className="font-mono text-5xl font-black text-slate-700">404</p>
         <h1 className="mt-2 text-lg font-black text-white">No such record</h1>
@@ -18,6 +18,6 @@ export default function NotFound() {
           ← Back to the Dashboard
         </Link>
       </div>
-    </div>
+    </main>
   )
 }

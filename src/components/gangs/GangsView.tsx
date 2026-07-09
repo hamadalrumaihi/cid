@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { useRegistry } from '@/lib/useRegistry'
 import { uiConfirm } from '@/components/ui/dialog'
+import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { IntelProfile, type IntelTarget } from '@/components/persons/IntelProfile'
 import { GangCard, GangDetail } from './gangCards'
 import { GangModal, AttachGangModal } from './gangModals'
@@ -162,7 +163,7 @@ export function GangsView() {
         ) : err ? (
           <Notice text={`Could not load gangs: ${err}`} />
         ) : loading && !gangs.length ? (
-          <Notice text="Loading gangs..." />
+          <CardGridSkeleton count={4} cols="xl:grid-cols-2" />
         ) : !items.length ? (
           <Notice text={gangs.length ? 'No gangs match your filter.' : `No gangs on file.${canEdit ? ' Use "+ New Gang".' : ''}`} />
         ) : (
