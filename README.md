@@ -124,6 +124,8 @@ handbook covering architecture, the database, every file, and a
 recommended learning order. End users get the in-app guide
 (Reference → User Guide, canonical copy in
 [`docs/USER-GUIDE.md`](docs/USER-GUIDE.md)).
+The current roadmap and maturity assessment live in
+[`docs/CTO-REVIEW.md`](docs/CTO-REVIEW.md).
 
 ## Backend
 
