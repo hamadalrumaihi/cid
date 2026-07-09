@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { insert, list, remove } from '@/lib/db'
+import { insert, list, deleteWithUndo } from '@/lib/db'
 import { timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { Drafts } from '@/lib/drafts'
@@ -10,7 +10,7 @@ import { officerName, activeProfiles } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { parseStringArray } from '@/lib/jsonShapes'
 import { toast } from '@/lib/toast'
-import { mutateThen, type CaseRow, type MessageRow } from './shared'
+import { type CaseRow, type MessageRow } from './shared'
 
 /** Highlight @Name tokens inside an (auto-escaped) message body — the React
  *  version of vanilla collab.js:111's regex-to-span pass. */
@@ -62,7 +62,7 @@ export function ChatTab({ c }: { c: CaseRow }) {
   return (
     <div className="space-y-3">
       <div className="max-h-[48vh] space-y-3 overflow-y-auto rounded-xl border border-white/10 bg-ink-950/50 p-3">
-        {msgs.map((m) => <div key={m.id} className={`rounded-xl p-3 ${m.author_id === profile?.id ? 'ml-auto max-w-[85%] bg-badge-600/20' : 'max-w-[85%] bg-white/5'}`}><p className="text-xs font-bold text-slate-400">{m.author_name || officerName(m.author_id) || 'Officer'} - {timeAgo(m.created_at)}</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-100">{chatBody(m.body)}</p>{rowMentions(m).length > 0 && <span className="mt-1 flex flex-wrap gap-1">{rowMentions(m).map((id) => <span key={id} className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[11px] text-blue-300">@{officerName(id) || 'Officer'}</span>)}</span>}{(m.author_id === profile?.id || isCommand) && <button onClick={() => mutateThen(remove('case_messages', m.id), refresh)} className="mt-2 text-xs font-bold text-rose-300">Delete</button>}</div>)}
+        {msgs.map((m) => <div key={m.id} className={`rounded-xl p-3 ${m.author_id === profile?.id ? 'ml-auto max-w-[85%] bg-badge-600/20' : 'max-w-[85%] bg-white/5'}`}><p className="text-xs font-bold text-slate-400">{m.author_name || officerName(m.author_id) || 'Officer'} - {timeAgo(m.created_at)}</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-100">{chatBody(m.body)}</p>{rowMentions(m).length > 0 && <span className="mt-1 flex flex-wrap gap-1">{rowMentions(m).map((id) => <span key={id} className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[11px] text-blue-300">@{officerName(id) || 'Officer'}</span>)}</span>}{(m.author_id === profile?.id || isCommand) && <button aria-label="Delete this message" onClick={() => void deleteWithUndo('case_messages', m, { confirmTitle: 'Delete message', confirmMessage: 'Delete this message from the case room? You can undo this for a few seconds.', confirmText: 'Delete message', label: 'message', after: refresh })} className="mt-2 text-xs font-bold text-rose-300 hover:text-rose-200">Delete</button>}</div>)}
         {!msgs.length && <p className="py-8 text-center text-sm text-slate-500">No messages yet.</p>}
       </div>
       {mentions.length > 0 && (

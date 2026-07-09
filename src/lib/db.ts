@@ -156,6 +156,14 @@ export interface DeleteWithUndoOptions {
   label?: string
   /** Callers that already showed their own uiConfirm pass true. */
   noConfirm?: boolean
+  /** Override the confirm body with an intelligent message that names exactly
+   *  what is being removed and warns about related records. Falls back to the
+   *  generic "Delete {label}?" phrasing. */
+  confirmMessage?: string
+  /** Confirm dialog heading (e.g. "Delete task"). */
+  confirmTitle?: string
+  /** Confirm button label (e.g. "Delete task" instead of the generic "Delete"). */
+  confirmText?: string
   after?: () => void
   children?: { table: TableName; column: string }[]
   setNullRefs?: { table: TableName; column: string }[]
@@ -168,7 +176,10 @@ export async function deleteWithUndo<T extends TableName>(
 ): Promise<boolean> {
   const listRows = (Array.isArray(rows) ? rows.slice() : [rows]) as (Tables<T> & { id: string })[]
   if (!listRows.length) return false
-  if (!opts.noConfirm && !(await uiConfirm(`Delete ${opts.label || 'this record'}? Restorable via Undo for a short while.`, { confirmText: 'Delete' }))) return false
+  if (!opts.noConfirm && !(await uiConfirm(
+    opts.confirmMessage || `Delete ${opts.label || 'this record'}? You can undo this for a few seconds.`,
+    { title: opts.confirmTitle, confirmText: opts.confirmText || 'Delete' },
+  ))) return false
   const ids = listRows.map((r) => r.id)
 
   // Snapshot cascade children BEFORE the delete removes them. If a snapshot

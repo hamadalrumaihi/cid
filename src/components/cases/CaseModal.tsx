@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
-import { insert, list, remove, update } from '@/lib/db'
+import { insert, list, update, deleteWithUndo } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { useOperationsStore } from '@/lib/operations'
@@ -215,7 +215,7 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
             <input value={row.title || ''} onChange={(e) => patchDraft(row.id, { title: e.target.value })} placeholder="Prefill title" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
             <input value={row.summary || ''} onChange={(e) => patchDraft(row.id, { summary: e.target.value })} placeholder="Prefill summary" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
             <textarea value={taskDrafts[row.id] ?? tplTasks(row).join('\n')} onChange={(e) => setTaskDrafts((m) => ({ ...m, [row.id]: e.target.value }))} rows={3} placeholder={'Checklist tasks — one per line, auto-created with each new case\nCanvass witnesses\nPull CCTV'} className="md:col-span-4 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />
-            <div className="md:col-span-4 flex justify-end gap-2"><button onClick={() => void saveRow(row)} className="rounded-lg bg-badge-600 px-3 py-2 text-xs font-bold text-white">Save</button><button onClick={() => { void remove('case_templates', row.id).then((r) => { if (r.error) toast(`Delete failed: ${r.error.message}`, 'danger'); else onChanged() }) }} className="rounded-lg border border-rose-400/30 px-3 py-2 text-xs font-bold text-rose-300">Delete</button></div>
+            <div className="md:col-span-4 flex justify-end gap-2"><button onClick={() => void saveRow(row)} className="rounded-lg bg-badge-600 px-3 py-2 text-xs font-bold text-white">Save</button><button onClick={() => void deleteWithUndo('case_templates', row, { confirmTitle: 'Delete template', confirmMessage: `Delete the “${row.name}” case template? Existing cases are unaffected — only the template is removed. You can undo this for a few seconds.`, confirmText: 'Delete template', label: 'template', after: onChanged })} className="rounded-lg border border-rose-400/30 px-3 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/10">Delete</button></div>
           </div>)}
         </div>
         <div className="mt-4 grid gap-2 rounded-xl border border-white/10 bg-white/5 p-3 md:grid-cols-[4rem_1fr_6rem_7rem]">
