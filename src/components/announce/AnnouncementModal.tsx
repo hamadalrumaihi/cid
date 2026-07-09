@@ -114,17 +114,17 @@ export function AnnouncementModal({ record, caseOptions, onClose, onSaved }: Ann
         <ModalHeader title={`${record ? 'Edit' : 'New'} Announcement`} onClose={onClose} />
         <div className="space-y-3">
           <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-400">Title *</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
+            <label htmlFor="ann-title" className="mb-1 block text-xs font-semibold text-slate-400">Title *</label>
+            <input id="ann-title" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-400">Message *</label>
-            <textarea rows={5} value={body} onChange={(e) => setBody(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
+            <label htmlFor="ann-body" className="mb-1 block text-xs font-semibold text-slate-400">Message *</label>
+            <textarea id="ann-body" rows={5} value={body} onChange={(e) => setBody(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-400">Audience</label>
-              <select value={audience} onChange={(e) => setAudience(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">
+              <label htmlFor="ann-audience" className="mb-1 block text-xs font-semibold text-slate-400">Audience</label>
+              <select id="ann-audience" value={audience} onChange={(e) => setAudience(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">
                 {AUDIENCE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
@@ -134,8 +134,8 @@ export function AnnouncementModal({ record, caseOptions, onClose, onSaved }: Ann
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-400">Mention</label>
-              <select value="" onChange={(e) => addMention(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">
+              <label htmlFor="ann-mention" className="mb-1 block text-xs font-semibold text-slate-400">Mention</label>
+              <select id="ann-mention" value="" onChange={(e) => addMention(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">
                 <option value="">＠ add…</option>
                 <option value="all|All Officers">@All Officers</option>
                 {ROLE_ORDER.map((r) => (
@@ -147,8 +147,8 @@ export function AnnouncementModal({ record, caseOptions, onClose, onSaved }: Ann
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-400">Link case</label>
-              <select value="" onChange={(e) => addLink(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">
+              <label htmlFor="ann-link" className="mb-1 block text-xs font-semibold text-slate-400">Link case</label>
+              <select id="ann-link" value="" onChange={(e) => addLink(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">
                 <option value="">🔗 add…</option>
                 {caseOptions.map((c) => <option key={c.id} value={`${c.id}|${c.case_number}`}>{c.case_number}</option>)}
               </select>

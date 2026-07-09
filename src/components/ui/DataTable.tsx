@@ -105,8 +105,8 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = 50, initialSort
       </div>
 
       {!slice.length ? (
-        <div className="rounded-xl border border-white/5 bg-ink-900 p-6 text-center text-sm text-slate-500">
-          {rows.length ? 'No entries match.' : emptyText}
+        <div className="rounded-xl border border-white/5 bg-ink-900 p-6 text-center text-sm text-slate-400">
+          {rows.length ? 'No rows match your filter — try a broader search.' : emptyText}
         </div>
       ) : (
         <>

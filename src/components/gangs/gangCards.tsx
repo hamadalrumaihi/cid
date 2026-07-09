@@ -5,6 +5,7 @@ import { deleteWithUndo, list, remove } from '@/lib/db'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { ErrorNotice } from '@/components/ui/Notice'
 import { MemberModal, TurfModal } from './gangModals'
 import { cap, densityTint, threatTint, type CaseOption, type GangRow, type MemberRow, type PersonRow, type PlaceRow, type TurfRow } from './gangShared'
 
@@ -28,7 +29,7 @@ export function GangCard({ gang, canDelete, selected, onSelect, onOpen, onProfil
           <button
             onClick={(e) => { e.stopPropagation(); onProfile() }}
             title="Unified intel profile"
-            className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10"
+            className="-my-1 rounded-md border border-white/10 bg-white/5 px-2 py-2 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10"
           >
             Profile
           </button>
@@ -120,15 +121,15 @@ export function GangDetail({ gang, people, caseOptions, canEdit, canDelete, onBa
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className={`rounded-md border px-2.5 py-1 text-[10px] font-semibold uppercase ${threatTint(gang.threat_level)}`}>{cap(gang.threat_level)} Threat</span>
-            <button onClick={onProfile} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-white/10">Intel profile</button>
-            {canEdit && <button onClick={onAttach} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-white/10">Attach to case</button>}
-            {canEdit && <button onClick={onEdit} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>}
-            {canDelete && <button onClick={onDelete} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
+            <button onClick={onProfile} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold text-blue-200 transition hover:bg-white/10">Intel profile</button>
+            {canEdit && <button onClick={onAttach} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold text-blue-200 transition hover:bg-white/10">Attach to case</button>}
+            {canEdit && <button onClick={onEdit} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>}
+            {canDelete && <button onClick={onDelete} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
           </div>
         </div>
       </div>
 
-      {err && <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">Could not load gang detail: {err}</div>}
+      {err && <ErrorNotice message={err} onRetry={load} />}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6 lg:col-span-2">
@@ -150,7 +151,7 @@ export function GangDetail({ gang, people, caseOptions, canEdit, canDelete, onBa
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-500">No members yet.{canEdit ? ' Use "+ Member" above to add the first.' : ''}</p>
+            <p className="text-sm text-slate-400">No members yet.{canEdit ? ' Use "+ Member" above to add the first.' : ''}</p>
           )}
         </div>
 
@@ -166,10 +167,10 @@ export function GangDetail({ gang, people, caseOptions, canEdit, canDelete, onBa
                   <span className="min-w-0 truncate text-slate-200">{t.block}{t.hotspot_area ? ` · ${t.hotspot_area}` : ''}</span>
                   <span className="flex flex-shrink-0 items-center gap-2">
                     <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${densityTint(t.density)}`}>{cap(t.density)}</span>
-                    {canDelete && <button aria-label="Remove turf" onClick={() => void deleteTurf(t)} className="text-rose-300">x</button>}
+                    {canDelete && <button aria-label="Remove turf" onClick={() => void deleteTurf(t)} className="-m-2 p-2 text-rose-300">x</button>}
                   </span>
                 </div>
-              )) : <p className="text-xs text-slate-500">No turf logged.{canEdit ? ' Use "+ Turf" above.' : ''}</p>}
+              )) : <p className="text-xs text-slate-400">No turf logged.{canEdit ? ' Use "+ Turf" above.' : ''}</p>}
             </div>
           </div>
 
@@ -178,7 +179,7 @@ export function GangDetail({ gang, people, caseOptions, canEdit, canDelete, onBa
             <div className="space-y-2">
               {places.length ? places.map((p) => (
                 <div key={p.id} className="rounded-lg bg-ink-850 px-3 py-1.5 text-xs text-slate-200">{p.name} <span className="text-slate-500">· {p.type || ''}</span></div>
-              )) : <p className="text-xs text-slate-500">No linked places. Set a controlling gang on a Place.</p>}
+              )) : <p className="text-xs text-slate-400">No linked places. Set a controlling gang on a Place.</p>}
             </div>
           </div>
         </div>
@@ -218,7 +219,7 @@ export function MemberCard({ member, canEdit, onEdit }: { member: MemberRow; can
         <p className="truncate text-sm font-semibold text-white">{member.name}{flag ? <span title="8 or more violent felonies"> !</span> : null}</p>
         <p className="text-[11px] text-slate-400">{member.status || ''} · CCW {member.ccw ? 'Yes' : 'No'} · VCH {member.vch || 0}</p>
       </div>
-      {canEdit && <button onClick={onEdit} className="flex-shrink-0 rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10">Edit</button>}
+      {canEdit && <button onClick={onEdit} className="-my-1 flex-shrink-0 rounded border border-white/10 bg-white/5 px-2 py-2 text-[11px] text-slate-200 hover:bg-white/10">Edit</button>}
     </div>
   )
 }

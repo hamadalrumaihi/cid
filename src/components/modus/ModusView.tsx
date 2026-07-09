@@ -17,6 +17,8 @@ import { COMMAND_ROLES } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { uiPrompt } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Notice } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
 
 type MoProfileRow = Tables<'mo_profiles'>
 type CaseRow = Tables<'cases'>
@@ -127,8 +129,10 @@ export function ModusView() {
   return (
     <div>
       <div className="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <h3 className="text-xl font-bold text-white">🔍 Modus Operandi (M.O.) Detector &amp; Criminal Profiler</h3>
-        <p className="text-sm text-slate-400">Paste narrative incident updates, scene notes or witness statements — the engine extracts tactical indicators and cross-references open / cold files.</p>
+        <PageHeader
+          title="🔍 Modus Operandi (M.O.) Detector & Criminal Profiler"
+          subtitle="Paste narrative incident updates, scene notes or witness statements — the engine extracts tactical indicators and cross-references open / cold files."
+        />
       </div>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
@@ -158,17 +162,17 @@ export function ModusView() {
                     {scan.indicators[c].map((t) => <span key={t} className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${CAT_META[c].t}`}>{t}</span>)}
                   </div>
                 </div>
-              )) : <p className="text-sm text-slate-500">No known indicators detected.</p>}
+              )) : <p className="text-sm text-slate-400">No known indicators detected.</p>}
             </div>
           )}
         </div>
         <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-          <h4 className="mb-1 text-sm font-semibold text-white">🎯 M.O. Cross-Reference</h4>
+          <h2 className="mb-1 text-sm font-semibold text-white">🎯 M.O. Cross-Reference</h2>
           <p className="mb-4 text-xs text-slate-400">Matching open / cold files sharing tactical operational profiles.</p>
           <div className="space-y-3">
-            {!scan && <p className="text-sm text-slate-500">Run an analysis to surface matching case files.</p>}
+            {!scan && <p className="text-sm text-slate-400">Run an analysis to surface matching case files.</p>}
             {scan && !matches.length && !crossRows.length && (
-              <p className="text-sm text-slate-500">No cross-reference matches found{profiles.length ? '' : ' — no case M.O. profiles saved yet'}.</p>
+              <p className="text-sm text-slate-400">No cross-reference matches found{profiles.length ? '' : ' — no case M.O. profiles saved yet'}.</p>
             )}
             {matches.map((m, i) => {
               const tint = m.pct >= 70 ? 'border-rose-500/40 bg-rose-500/5' : m.pct >= 40 ? 'border-amber-500/30 bg-amber-500/5' : 'border-white/10 bg-ink-900'
@@ -254,8 +258,4 @@ function SaveProfileModal({ indicators, narrative, cases, onClose, onSaved }: {
       </button>
     </Modal>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
 }

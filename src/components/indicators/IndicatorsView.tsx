@@ -16,13 +16,13 @@ import { useRegistry } from '@/lib/useRegistry'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { inputCls, labelCls } from '@/components/ui/Field'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 
 type IndicatorRow = Tables<'indicators'>
 interface CaseOption { id: string; case_number: string; title: string }
-
-const inputCls = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
-const labelCls = 'mb-1 block text-xs font-semibold text-slate-400'
 
 const KINDS = ['phone', 'account', 'serial', 'alias', 'address', 'other'] as const
 const KIND_META: Record<string, { icon: string; label: string }> = {
@@ -111,28 +111,30 @@ export function IndicatorsView() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <div>
-          <h3 className="text-xl font-bold text-white">🧷 Indicators Registry</h3>
-          <p className="text-sm text-slate-400">Hard identifiers — phones, accounts, serials, aliases &amp; addresses — deconflicted across every case</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {rows.length > 0 && (
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filter value, note, case…"
-              aria-label="Filter indicators"
-              className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
-            />
-          )}
-          {canEdit && (
-            <button onClick={() => setEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
-              + New Indicator
-            </button>
-          )}
-        </div>
+      <div className="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+        <PageHeader
+          title="🧷 Indicators Registry"
+          subtitle="Hard identifiers — phones, accounts, serials, aliases & addresses — deconflicted across every case"
+          actions={
+            <>
+              {rows.length > 0 && (
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Filter value, note, case…"
+                  aria-label="Filter indicators"
+                  className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
+                />
+              )}
+              {canEdit && (
+                <button onClick={() => setEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
+                  + New Indicator
+                </button>
+              )}
+            </>
+          }
+        />
       </div>
 
       {!loading && !err && (
@@ -167,7 +169,11 @@ export function IndicatorsView() {
             </div>
           </div>
         ) : rows.length > 0 ? (
-          <div className="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-5 text-sm text-slate-500">NO CROSS-CASE MATCHES // DECONFLICTION CLEAN. Alerts appear here the moment the same identifier is logged on two different cases.</div>
+          <EmptyState
+            title="No cross-case matches yet"
+            hint="Alerts appear here the moment the same identifier is logged on two different cases."
+            className="mb-6"
+          />
         ) : null
       )}
 
@@ -183,9 +189,12 @@ export function IndicatorsView() {
       {loading ? (
         <CardGridSkeleton count={6} />
       ) : err ? (
-        <Notice text={`Could not load indicators: ${err}`} />
+        <ErrorNotice message={err} onRetry={refresh} />
       ) : !rows.length ? (
-        <Notice text={`NO INDICATORS ON FILE // REGISTRY EMPTY.${canEdit ? ' Use “+ New Indicator” to log the first identifier — a burner number, account, weapon serial, alias or address.' : ''}`} />
+        <EmptyState
+          title="No indicators on file yet"
+          hint={canEdit ? 'Log the first identifier — a burner number, account, weapon serial, alias or address — with the New Indicator button.' : undefined}
+        />
       ) : !filtered.length ? (
         <Notice text="No indicators match the current filter." />
       ) : (
@@ -204,8 +213,8 @@ export function IndicatorsView() {
                     </p>
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-2">
-                    {canEdit && <button onClick={() => setEditor({ record: r })} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
-                    {canDelete && <button onClick={() => void onDelete(r)} aria-label="Delete indicator" className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10">✕</button>}
+                    {canEdit && <button onClick={() => setEditor({ record: r })} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
+                    {canDelete && <button onClick={() => void onDelete(r)} aria-label="Delete indicator" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10">✕</button>}
                   </div>
                 </div>
                 <p className="mt-3 text-xs">
@@ -233,10 +242,6 @@ export function IndicatorsView() {
       )}
     </div>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
 }
 
 function KindChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
@@ -294,8 +299,8 @@ function IndicatorModal({ record, cases, onClose, onSaved }: {
       <ModalHeader title={record ? 'Edit Indicator' : 'New Indicator'} onClose={onClose} />
       <div className="space-y-3">
         <div>
-          <label className={labelCls}>Case *</label>
-          <select value={caseId} onChange={(e) => setCaseId(e.target.value)} className={inputCls}>
+          <label htmlFor="indicator-case" className={labelCls}>Case *</label>
+          <select id="indicator-case" value={caseId} onChange={(e) => setCaseId(e.target.value)} className={inputCls}>
             <option value="">— pick a case —</option>
             {!caseKnown && record?.case_id && <option value={record.case_id}>(current case — outside your access)</option>}
             {cases.map((c) => <option key={c.id} value={c.id}>{c.case_number} — {c.title}</option>)}
@@ -303,19 +308,19 @@ function IndicatorModal({ record, cases, onClose, onSaved }: {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={labelCls}>Type</label>
-            <select value={kind} onChange={(e) => setKind(e.target.value)} className={inputCls}>
+            <label htmlFor="indicator-type" className={labelCls}>Type</label>
+            <select id="indicator-type" value={kind} onChange={(e) => setKind(e.target.value)} className={inputCls}>
               {KINDS.map((k) => <option key={k} value={k}>{KIND_META[k].icon} {KIND_META[k].label}</option>)}
             </select>
           </div>
           <div>
-            <label className={labelCls}>Value *</label>
-            <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="e.g. (555) 201-3344" className={`${inputCls} font-mono`} />
+            <label htmlFor="indicator-value" className={labelCls}>Value *</label>
+            <input id="indicator-value" value={value} onChange={(e) => setValue(e.target.value)} placeholder="e.g. (555) 201-3344" className={`${inputCls} font-mono`} />
           </div>
         </div>
         <div>
-          <label className={labelCls}>Note</label>
-          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Where it surfaced, who it belongs to…" className={inputCls} />
+          <label htmlFor="indicator-note" className={labelCls}>Note</label>
+          <textarea id="indicator-note" value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Where it surfaced, who it belongs to…" className={inputCls} />
         </div>
       </div>
       <div className="mt-5">

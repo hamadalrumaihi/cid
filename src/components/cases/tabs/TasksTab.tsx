@@ -1,11 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { insert, list, remove, update } from '@/lib/db'
+import { insert, list, update, deleteWithUndo } from '@/lib/db'
 import { officerName, activeProfiles } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
-import { mutateThen, type CaseRow, type TaskRow } from './shared'
+import { type CaseRow, type TaskRow } from './shared'
 
 export function TasksTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; canDelete: boolean }) {
   const [tasks, setTasks] = useState<TaskRow[]>([])
@@ -40,7 +40,7 @@ export function TasksTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boole
       {tasks.map((t) => <div key={t.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3">
         <input type="checkbox" checked={t.done} disabled={!canEdit} onChange={() => void toggle(t)} />
         <div className="min-w-0 flex-1"><p className={`font-semibold ${t.done ? 'text-slate-500 line-through' : 'text-white'}`}>{t.title}</p><p className="text-xs text-slate-500">{officerName(t.assignee) || 'Unassigned'}{t.due ? ` - due ${t.due}` : ''}</p></div>
-        {canDelete && <button onClick={() => mutateThen(remove('case_tasks', t.id), refresh)} className="text-sm font-bold text-rose-300">Delete</button>}
+        {canDelete && <button aria-label={`Delete task: ${t.title}`} onClick={() => void deleteWithUndo('case_tasks', t, { confirmTitle: 'Delete task', confirmMessage: `Delete “${t.title}”? Any sub-tasks under it are removed too. You can undo this for a few seconds.`, confirmText: 'Delete task', label: 'task', children: [{ table: 'case_tasks', column: 'parent_id' }], after: refresh })} className="text-sm font-bold text-rose-300 hover:text-rose-200">Delete</button>}
       </div>)}
       {!tasks.length && <p className="py-8 text-center text-sm text-slate-500">No tasks yet.</p>}
     </div>

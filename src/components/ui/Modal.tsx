@@ -112,6 +112,7 @@ export function Modal({ open, onClose, children, wide, slide, dismissible = true
         data-modal-card
         role="dialog"
         aria-modal="true"
+        aria-labelledby="cid-modal-title"
         tabIndex={-1}
         className={
           slide
@@ -130,8 +131,8 @@ export function Modal({ open, onClose, children, wide, slide, dismissible = true
 export function ModalHeader({ title, onClose }: { title: React.ReactNode; onClose: () => void }) {
   return (
     <div className="mb-4 flex items-center justify-between">
-      <h3 className="text-xl font-bold text-white">{title}</h3>
-      <button aria-label="Close" onClick={onClose} className="text-2xl leading-none text-slate-400 hover:text-white">
+      <h3 id="cid-modal-title" className="text-xl font-bold text-white">{title}</h3>
+      <button aria-label="Close" onClick={onClose} className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg text-2xl leading-none text-slate-400 transition hover:bg-white/5 hover:text-white">
         &times;
       </button>
     </div>

@@ -128,7 +128,7 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
               aria-current={on ? 'page' : undefined}
               onClick={() => go(() => navigateCategory(c.id))}
               className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
-                on ? 'bg-white/10 text-white' : 'text-slate-300'
+                on ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-badge-500' : 'text-slate-300'
               }`}
             >
               <span className="nav-icon flex-shrink-0"><CategoryIcon cat={c.id} /></span>
@@ -154,7 +154,7 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
           onClick={() => go(() => navigate('feedback'))}
           title="Suggest a feature or report a bug"
           className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
-            activeTab === 'feedback' ? 'bg-white/10 text-white' : 'text-slate-300'
+            activeTab === 'feedback' ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-badge-500' : 'text-slate-300'
           }`}
         >
           <span className="nav-icon flex-shrink-0"><CategoryIcon cat="feedback" /></span>
@@ -168,7 +168,7 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
             onClick={() => go(() => navigate('command-center'))}
             title="Command Center — personnel, approvals, promotions & chain of command"
             className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
-              activeTab === 'command-center' ? 'bg-white/10 text-white' : 'text-slate-300'
+              activeTab === 'command-center' ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-badge-500' : 'text-slate-300'
             }`}
           >
             <span className="nav-icon flex-shrink-0" aria-hidden>🛡️</span>
@@ -184,7 +184,7 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
             onClick={() => go(() => navigate('owner'))}
             title="Owner Portal — project intelligence & engineering operations"
             className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
-              activeTab === 'owner' ? 'bg-white/10 text-white' : 'text-slate-300'
+              activeTab === 'owner' ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-badge-500' : 'text-slate-300'
             }`}
           >
             <span className="nav-icon flex-shrink-0" aria-hidden>🛠️</span>

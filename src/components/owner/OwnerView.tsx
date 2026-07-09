@@ -470,7 +470,7 @@ function FeedbackInbox() {
             <option value="priority">Priority</option><option value="status">Status</option>
             <option value="updated">Recently updated</option>
           </select>
-          <button onClick={() => void refresh()} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">↻</button>
+          <button aria-label="Refresh" title="Refresh" onClick={() => void refresh()} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">↻</button>
         </div>
 
         {loading ? <p className="text-xs text-slate-500">Loading submissions…</p>

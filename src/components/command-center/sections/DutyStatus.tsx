@@ -23,7 +23,7 @@ export function DutyStatus() {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-2xl border border-white/10 bg-ink-900/60 p-4"><p className="font-mono text-2xl font-black text-white">{roster.length}</p><p className="text-xs uppercase tracking-wider text-slate-400">Active</p></div>
+        <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-4"><p className="font-mono text-2xl font-black text-white">{roster.length}</p><p className="text-xs uppercase tracking-wider text-slate-400">Active</p></div>
         <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4"><p className="font-mono text-2xl font-black text-emerald-300">{onDuty}</p><p className="text-xs uppercase tracking-wider text-emerald-300/80">On duty</p></div>
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="font-mono text-2xl font-black text-amber-300">{onLoa}</p><p className="text-xs uppercase tracking-wider text-amber-300/80">On LOA</p></div>
       </div>
@@ -32,7 +32,7 @@ export function DutyStatus() {
         {BUREAU_KEYS.map((b) => {
           const inB = roster.filter((p) => p.division === b)
           return (
-            <div key={b} className="rounded-2xl border border-white/10 bg-ink-900/45 p-4">
+            <div key={b} className="rounded-2xl border border-white/5 bg-ink-900/45 p-4">
               <p className="mb-3 font-bold text-white">{b} <span className="text-xs font-normal text-slate-500">· {BUREAUS[b]} · {inB.length} active</span></p>
               <div className="space-y-1.5">
                 {inB.length ? inB.slice().sort((a, b2) => Number(a.loa) - Number(b2.loa)).map((p) => (

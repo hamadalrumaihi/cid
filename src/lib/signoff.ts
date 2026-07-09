@@ -1,4 +1,5 @@
 import type { Tables } from './database.types'
+import { statusTint } from './tint'
 
 /** Sign-off chain vocabulary — ported from vanilla signoff.js:11-38. The
  *  workflow itself is server-authoritative (SECURITY DEFINER RPCs
@@ -63,12 +64,10 @@ export const SIGNOFF_ACTION_VERB: Record<string, string> = {
   completed: 'marked complete',
 }
 
-/** Case lifecycle tint (open/active/cold/closed) — vanilla casefiles.js:9. */
-export const caseStatusTint = (s?: string | null): string =>
-  s === 'closed' ? 'bg-slate-500/20 text-slate-300'
-  : s === 'cold' ? 'bg-blue-500/15 text-blue-300'
-  : s === 'active' ? 'bg-emerald-500/15 text-emerald-300'
-  : 'bg-amber-500/15 text-amber-300'
+/** Case lifecycle tint (open/active/cold/closed) — delegates to the shared
+ *  statusTint map (lib/tint) so the board, command pills, guide legend and
+ *  case header can never drift apart again. */
+export const caseStatusTint = (s?: string | null): string => statusTint(s || 'open')
 
 export const CASE_STATUSES = ['open', 'active', 'cold', 'closed'] as const
 

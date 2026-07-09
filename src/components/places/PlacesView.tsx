@@ -11,6 +11,9 @@ import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { CardGridSkeleton } from '@/components/ui/Skeleton'
 
 type PlaceRow = Tables<'places'>
 type GangRow = Tables<'gangs'>
@@ -152,23 +155,25 @@ export function PlacesView() {
 
   return (
     <section className="view-in space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <div>
-          <h3 className="flex items-center gap-2 text-xl font-bold text-white">
-            Criminal Places &amp; Production
-            {state === 'in' && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
-                <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
-              </span>
-            )}
-          </h3>
-          <p className="text-sm text-slate-400">Drug labs, stash houses, dead drops and fronts with production process flows.</p>
-        </div>
-        {canEdit && (
-          <button onClick={() => setEditor('new')} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
-            + New Location
-          </button>
-        )}
+      <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+        <PageHeader
+          title="Criminal Places & Production"
+          subtitle="Drug labs, stash houses, dead drops and fronts with production process flows."
+          actions={
+            <>
+              {state === 'in' && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
+                  <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
+                </span>
+              )}
+              {canEdit && (
+                <button onClick={() => setEditor('new')} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
+                  + New Location
+                </button>
+              )}
+            </>
+          }
+        />
       </div>
 
       {selected.size > 0 && (
@@ -183,13 +188,19 @@ export function PlacesView() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {state !== 'in' ? (
-          <Notice text="Live location records require sign-in." />
+          <Notice text="Live location records require sign-in." className="lg:col-span-2" />
         ) : err ? (
-          <Notice text={`Could not load locations: ${err}`} />
+          <ErrorNotice message={err} onRetry={refresh} className="lg:col-span-2" />
         ) : loading && !places.length ? (
-          <Notice text="Loading locations..." />
+          <div className="lg:col-span-2">
+            <CardGridSkeleton count={4} cols="lg:grid-cols-2" />
+          </div>
         ) : !places.length ? (
-          <Notice text={`No locations logged.${canEdit ? ' Use "+ New Location".' : ''}`} />
+          <EmptyState
+            title="No locations logged yet"
+            hint={canEdit ? 'Add a drug lab, stash house, dead drop or front with the New Location button.' : undefined}
+            className="lg:col-span-2"
+          />
         ) : (
           places.map((place) => (
             <PlaceCard
@@ -226,10 +237,6 @@ export function PlacesView() {
   )
 }
 
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400 lg:col-span-2">{text}</div>
-}
-
 function PlaceCard({ place, gang, caseNumber, drug, customSteps, canEdit, canDelete, selected, onSelect, onEdit, onDelete, onAttach }: {
   place: PlaceRow
   gang: string | null
@@ -254,9 +261,9 @@ function PlaceCard({ place, gang, caseNumber, drug, customSteps, canEdit, canDel
           <p className="mt-0.5 text-xs text-slate-400">{locLabel(place.type)} · {place.area || '-'}</p>
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
-          {canEdit && <button onClick={onAttach} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-blue-200 transition hover:bg-white/10" title="Attach to case">Attach</button>}
-          {canEdit && <button onClick={onEdit} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
-          {canDelete && <button aria-label="Remove location" onClick={onDelete} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
+          {canEdit && <button onClick={onAttach} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-blue-200 transition hover:bg-white/10" title="Attach to case">Attach</button>}
+          {canEdit && <button onClick={onEdit} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
+          {canDelete && <button aria-label="Remove location" onClick={onDelete} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
           {canDelete && (
             <label className="flex items-center pl-0.5" title="Select for bulk delete">
               <input type="checkbox" checked={selected} onChange={(e) => onSelect(e.target.checked)} aria-label={`Select ${place.name} for bulk delete`} className="h-4 w-4 accent-rose-500" />
@@ -335,28 +342,28 @@ function PlaceModal({ record, gangs, cases, drugs, onClose, onSaved }: {
       <div className="p-6">
         <ModalHeader title={`${record ? 'Edit' : 'New'} Location`} onClose={onClose} />
         <div className="space-y-3">
-          <div><label className="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input value={name} onChange={(e) => setName(e.target.value)} className={input} /></div>
+          <div><label htmlFor="place-name" className="mb-1 block text-xs font-semibold text-slate-400">Name *</label><input id="place-name" value={name} onChange={(e) => setName(e.target.value)} className={input} /></div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-400">Type</label>
-              <select value={type} onChange={(e) => setType(e.target.value as LocationType)} className={input}>
+              <label htmlFor="place-type" className="mb-1 block text-xs font-semibold text-slate-400">Type</label>
+              <select id="place-type" value={type} onChange={(e) => setType(e.target.value as LocationType)} className={input}>
                 {LOC_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
-            <div><label className="mb-1 block text-xs font-semibold text-slate-400">Area</label><input value={area} onChange={(e) => setArea(e.target.value)} className={input} /></div>
+            <div><label htmlFor="place-area" className="mb-1 block text-xs font-semibold text-slate-400">Area</label><input id="place-area" value={area} onChange={(e) => setArea(e.target.value)} className={input} /></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-400">Controlling Gang</label>
-              <select value={gangId} onChange={(e) => setGangId(e.target.value)} className={input}>
+              <label htmlFor="place-gang" className="mb-1 block text-xs font-semibold text-slate-400">Controlling Gang</label>
+              <select id="place-gang" value={gangId} onChange={(e) => setGangId(e.target.value)} className={input}>
                 <option value="">- none -</option>
                 {!gangKnown && <option value={gangId}>(current gang - loading...)</option>}
                 {gangs.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-400">Linked Case</label>
-              <select value={caseId} onChange={(e) => setCaseId(e.target.value)} className={input}>
+              <label htmlFor="place-case" className="mb-1 block text-xs font-semibold text-slate-400">Linked Case</label>
+              <select id="place-case" value={caseId} onChange={(e) => setCaseId(e.target.value)} className={input}>
                 <option value="">- none -</option>
                 {!caseKnown && <option value={caseId}>(linked case - other bureau)</option>}
                 {cases.map((c) => <option key={c.id} value={c.id}>{c.case_number}</option>)}
@@ -365,15 +372,15 @@ function PlaceModal({ record, gangs, cases, drugs, onClose, onSaved }: {
           </div>
           {type === 'drug_lab' && (
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-400">Produced Narcotic</label>
-              <select value={narcoticId} onChange={(e) => setNarcoticId(e.target.value)} className={input}>
+              <label htmlFor="place-narcotic" className="mb-1 block text-xs font-semibold text-slate-400">Produced Narcotic</label>
+              <select id="place-narcotic" value={narcoticId} onChange={(e) => setNarcoticId(e.target.value)} className={input}>
                 <option value="">- none -</option>
                 {!drugKnown && <option value={narcoticId}>(current narcotic - loading...)</option>}
                 {drugs.map((d) => <option key={d.row.id} value={d.row.id}>{d.row.name}</option>)}
               </select>
             </div>
           )}
-          <div><label className="mb-1 block text-xs font-semibold text-slate-400">Notes</label><textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className={input} /></div>
+          <div><label htmlFor="place-notes" className="mb-1 block text-xs font-semibold text-slate-400">Notes</label><textarea id="place-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className={input} /></div>
         </div>
         <button onClick={() => void save()} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
           {record ? 'Save changes' : 'Create location'}
@@ -422,7 +429,7 @@ function AttachPlaceModal({ place, caseOptions, onClose }: { place: PlaceRow; ca
             </button>
           </>
         ) : (
-          <p className="text-sm text-slate-500">No cases available to attach to.</p>
+          <p className="text-sm text-slate-400">No cases available to attach to.</p>
         )}
       </div>
     </Modal>

@@ -12,6 +12,7 @@ import { fmtUSD } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
+import { statusTint } from '@/lib/tint'
 import { ActivityFeed } from './ActivityFeed'
 import { Analytics } from './Analytics'
 import { AttentionWidget } from './AttentionWidget'
@@ -87,12 +88,9 @@ const drillStatusPill = (c: CaseRow) => {
   const s = /^awaiting_/.test(c.signoff_status || '') ? 'awaiting'
     : c.signoff_status === 'ready_doj' || c.signoff_status === 'approved_complete' ? 'DOJ-ready'
     : c.status
-  const tint: Record<string, string> = {
-    open: 'bg-blue-500/15 text-blue-300', active: 'bg-blue-500/15 text-blue-300',
-    cold: 'bg-slate-500/15 text-slate-300', closed: 'bg-emerald-500/15 text-emerald-300',
-    awaiting: 'bg-amber-500/15 text-amber-300', 'DOJ-ready': 'bg-emerald-500/15 text-emerald-300',
-  }
-  return <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${tint[s] || 'bg-white/10 text-slate-300'}`}>{s}</span>
+  // Shared statusTint keeps this pill aligned with the case-board columns —
+  // it had silently drifted (open showed blue here, amber on the board).
+  return <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${statusTint(s)}`}>{s}</span>
 }
 
 export function CommandView() {

@@ -110,7 +110,7 @@ export function Header({ onOpenDrawer }: { onOpenDrawer: () => void }) {
       <div className="flex min-w-0 items-center gap-3">
         <button
           onClick={onOpenDrawer}
-          className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg border border-white/10 bg-ink-850 text-slate-200 transition hover:bg-white/10 lg:hidden"
+          className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-lg border border-white/10 bg-ink-850 text-slate-200 transition hover:bg-white/10 lg:hidden"
           aria-label="Open navigation"
           aria-controls="sidebar"
         >
@@ -138,6 +138,15 @@ export function Header({ onOpenDrawer }: { onOpenDrawer: () => void }) {
             }}
           />
         </div>
+        {/* Below md the full search box is hidden — this icon opens the same
+            palette so mobile keeps a search entry point (⌘K is desktop-only). */}
+        <button
+          onClick={() => setPalette({ open: true, query: '' })}
+          aria-label="Search records"
+          className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-lg border border-white/10 bg-ink-850 text-slate-200 transition hover:bg-white/10 md:hidden"
+        >
+          <SearchIcon className="h-5 w-5" />
+        </button>
         <SearchPalette open={palette.open} initialQuery={palette.query} onClose={() => setPalette({ open: false, query: '' })} />
         <NotificationsBell />
         <div className="hidden flex-shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-ink-850 px-2.5 py-2 text-xs font-medium text-slate-300 sm:flex sm:px-3">

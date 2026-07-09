@@ -11,6 +11,7 @@ import { list } from '@/lib/db'
 import { todayISO } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
+import { Notice } from '@/components/ui/Notice'
 
 type CaseRow = Tables<'cases'>
 type TaskRow = Tables<'case_tasks'>
@@ -116,7 +117,7 @@ export function CalendarView() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/5 bg-ink-900/60 p-4">
-        <h2 className="text-lg font-black text-white">{MONTHS[month.m]} {month.y} <span className="ml-2 text-xs font-medium text-slate-500">{monthTotal} item{monthTotal === 1 ? '' : 's'}</span></h2>
+        <h2 className="text-lg font-black text-white">{MONTHS[month.m]} {month.y} <span className="ml-2 text-xs font-medium text-slate-400">{monthTotal} item{monthTotal === 1 ? '' : 's'}</span></h2>
         <div className="flex gap-2">
           <button onClick={() => nav(-1)} aria-label="Previous month" className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-bold text-slate-200 hover:bg-white/10">←</button>
           <button onClick={goToday} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-bold text-slate-200 hover:bg-white/10">Today</button>
@@ -160,27 +161,23 @@ export function CalendarView() {
         <div className="mt-4 rounded-2xl border border-blue-500/20 bg-ink-900/70 p-4">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-black uppercase tracking-wide text-slate-100">{sel}{sel === today ? ' — today' : sel < today ? ' — past' : ''}</h3>
-            <button onClick={() => setSel(null)} aria-label="Close day details" className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs font-semibold text-slate-300 hover:bg-white/10">✕</button>
+            <button onClick={() => setSel(null)} aria-label="Close day details" className="-my-1 rounded-md border border-white/10 bg-white/5 p-2 text-xs font-semibold text-slate-300 hover:bg-white/10">✕</button>
           </div>
           <div className="space-y-1.5">
             {(byDay[sel] ?? []).map((it) => (
               <Link key={it.key} href={it.href} className="flex items-center gap-2 rounded border border-white/10 bg-white/[0.03] px-3 py-2 text-sm hover:border-blue-300/30">
                 <span aria-hidden>{it.icon}</span>
                 <span className="min-w-0 flex-1 truncate font-semibold text-white">{it.label}</span>
-                <span className="truncate text-xs text-slate-500">{it.sub}</span>
+                <span className="truncate text-xs text-slate-400">{it.sub}</span>
               </Link>
             ))}
           </div>
         </div>
       )}
 
-      <p className="mt-4 text-[11px] text-slate-500">
+      <p className="mt-4 text-[11px] text-slate-400">
         📌 case follow-ups · ☑️ open task deadlines · 📝 shift-report weeks. Scoped to records you can access; days in red have overdue items. Click a day for details.
       </p>
     </div>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
 }

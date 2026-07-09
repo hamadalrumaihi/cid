@@ -13,14 +13,14 @@ import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Notice, EmptyState } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { inputCls, labelCls } from '@/components/ui/Field'
 
 type BenchRow = Tables<'ballistics_benches'>
 type FootprintRow = Tables<'ballistic_footprints'>
 interface CaseOption { id: string; case_number: string }
 interface GangOption { id: string; name: string }
-
-const inputCls = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
-const labelCls = 'mb-1 block text-xs font-semibold text-slate-400'
 
 export function BallisticsView() {
   const { state, canEdit, canDelete } = useAuth()
@@ -69,39 +69,46 @@ export function BallisticsView() {
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <div>
-          <h3 className="text-xl font-bold text-white">🛠️ Ballistics &amp; Logistics</h3>
-          <p className="text-sm text-slate-400">Criminal weapon-manufacturing hubs, component tracing &amp; ballistic footprints</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-lg border border-white/10 bg-ink-850 p-1" role="tablist" aria-label="Bench type">
-            {[['street', 'Street Gang Bench'], ['organized', 'Organized Crime Bench']].map(([t, label]) => (
-              <button
-                key={t}
-                role="tab"
-                aria-selected={benchType === t}
-                onClick={() => pick(t)}
-                className={`rounded-md px-4 py-2 text-xs font-semibold transition ${benchType === t ? 'bg-gradient-to-r from-badge-500 to-blue-700 text-white shadow-glow' : 'text-slate-300 hover:text-white'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {canEdit && (
-            <button onClick={() => setBenchEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
-              + Bench
-            </button>
-          )}
-        </div>
+        <PageHeader
+          className="flex-1"
+          title="🛠️ Ballistics & Logistics"
+          subtitle="Criminal weapon-manufacturing hubs, component tracing & ballistic footprints"
+          actions={
+            <div className="flex items-center gap-2">
+              <div className="inline-flex rounded-lg border border-white/10 bg-ink-850 p-1" role="tablist" aria-label="Bench type">
+                {[['street', 'Street Gang Bench'], ['organized', 'Organized Crime Bench']].map(([t, label]) => (
+                  <button
+                    key={t}
+                    role="tab"
+                    aria-selected={benchType === t}
+                    onClick={() => pick(t)}
+                    className={`rounded-md px-4 py-2 text-xs font-semibold transition ${benchType === t ? 'bg-gradient-to-r from-badge-500 to-blue-700 text-white shadow-glow' : 'text-slate-300 hover:text-white'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {canEdit && (
+                <button onClick={() => setBenchEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
+                  + Bench
+                </button>
+              )}
+            </div>
+          }
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="space-y-4">
             {loading ? (
-              <p className="text-sm text-slate-500">Loading benches…</p>
+              <p className="text-sm text-slate-400">Loading benches…</p>
             ) : !shown.length ? (
-              <p className="text-sm text-slate-500">No {benchType === 'street' ? 'street-gang' : 'organized-crime'} benches logged.{canEdit && ' Use “+ Bench”.'}</p>
+              <EmptyState
+                title={`No ${benchType === 'street' ? 'street-gang' : 'organized-crime'} benches yet`}
+                hint={canEdit ? 'Log a manufacturing bench to trace its outputs and components.' : 'No benches have been logged for this type yet.'}
+                action={canEdit ? { label: '+ Bench', onClick: () => setBenchEditor({ record: null }) } : undefined}
+              />
             ) : shown.map((b) => {
               const tierTint = /high/i.test(b.tier ?? '') ? 'border-rose-500/30 bg-rose-500/5 text-rose-300' : 'border-amber-500/30 bg-amber-500/5 text-amber-300'
               const heatTint = b.heat === 'Active' ? 'bg-rose-500/10 text-rose-300' : b.heat === 'Raid Pending' ? 'bg-amber-500/10 text-amber-300' : 'bg-blue-500/10 text-blue-300'
@@ -110,9 +117,9 @@ export function BallisticsView() {
                 <div key={b.id} className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h4 className="text-base font-semibold text-white">{b.name}</h4>
+                      <h2 className="text-base font-semibold text-white">{b.name}</h2>
                       <p className="mt-1 text-xs text-slate-400">
-                        Linked investigation: {cn ? <span className="font-mono text-blue-300">{cn}</span> : <span className="text-slate-500">none</span>}
+                        Linked investigation: {cn ? <span className="font-mono text-blue-300">{cn}</span> : <span className="text-slate-400">none</span>}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -149,7 +156,7 @@ export function BallisticsView() {
 
         <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
           <div className="mb-3 flex items-center justify-between">
-            <h4 className="flex items-center gap-2 text-sm font-semibold text-white"><span aria-hidden>🧬</span> Ballistic Footprint Log</h4>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-white"><span aria-hidden>🧬</span> Ballistic Footprint Log</h2>
             {canEdit && (
               <button onClick={() => setFpEditor({ record: null })} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">
                 + Footprint
@@ -159,12 +166,12 @@ export function BallisticsView() {
           <p className="mb-4 text-xs text-slate-400">Seized weapon signatures linked to active gang investigations.</p>
           <div className="space-y-3">
             {!footprints.length ? (
-              <p className="text-sm text-slate-500">No footprints logged.{canEdit && ' Use “+ Footprint”.'}</p>
+              <p className="text-sm text-slate-400">No footprints logged yet.{canEdit && ' Use “+ Footprint”.'}</p>
             ) : footprints.map((l) => (
               <div key={l.id} className="rounded-xl border border-white/10 bg-ink-900 p-3">
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-mono text-xs text-violet-300">{l.signature}</p>
-                  {canEdit && <button onClick={() => setFpEditor({ record: l })} className="text-[11px] text-slate-400 hover:text-white">edit</button>}
+                  {canEdit && <button onClick={() => setFpEditor({ record: l })} className="-m-2 p-2 text-[11px] text-slate-400 hover:text-white">edit</button>}
                 </div>
                 <p className="mt-1 text-sm text-white">{l.weapon || '—'}</p>
                 <div className="mt-1.5 flex items-center justify-between text-[11px]">
@@ -185,10 +192,6 @@ export function BallisticsView() {
       )}
     </div>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
 }
 
 function BenchModal({ record, cases, canDelete, onClose, onSaved }: {
@@ -240,38 +243,38 @@ function BenchModal({ record, cases, canDelete, onClose, onSaved }: {
     <Modal open onClose={onClose} wide>
       <ModalHeader title={record ? 'Edit Weapon Bench' : 'New Weapon Bench'} onClose={onClose} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="sm:col-span-2"><label className={labelCls}>Name *</label><input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} /></div>
+        <div className="sm:col-span-2"><label htmlFor="bench-name" className={labelCls}>Name *</label><input id="bench-name" value={name} onChange={(e) => setName(e.target.value)} className={inputCls} /></div>
         <div>
-          <label className={labelCls}>Bench Type</label>
-          <select value={type} onChange={(e) => setType(e.target.value)} className={inputCls}>
+          <label htmlFor="bench-type" className={labelCls}>Bench Type</label>
+          <select id="bench-type" value={type} onChange={(e) => setType(e.target.value)} className={inputCls}>
             <option value="street">Street Gang</option>
             <option value="organized">Organized Crime</option>
           </select>
         </div>
         <div>
-          <label className={labelCls}>Tier</label>
-          <input value={tier} onChange={(e) => setTier(e.target.value)} list="tier-list" className={inputCls} />
+          <label htmlFor="bench-tier" className={labelCls}>Tier</label>
+          <input id="bench-tier" value={tier} onChange={(e) => setTier(e.target.value)} list="tier-list" className={inputCls} />
           <datalist id="tier-list"><option value="Low" /><option value="High" /></datalist>
         </div>
         <div>
-          <label className={labelCls}>Heat</label>
-          <input value={heat} onChange={(e) => setHeat(e.target.value)} list="heat-list" className={inputCls} />
+          <label htmlFor="bench-heat" className={labelCls}>Heat</label>
+          <input id="bench-heat" value={heat} onChange={(e) => setHeat(e.target.value)} list="heat-list" className={inputCls} />
           <datalist id="heat-list"><option value="Active" /><option value="Surveillance" /><option value="Raid Pending" /></datalist>
         </div>
         <div>
-          <label className={labelCls}>Linked Case</label>
-          <select value={caseId} onChange={(e) => setCaseId(e.target.value)} className={inputCls}>
+          <label htmlFor="bench-case" className={labelCls}>Linked Case</label>
+          <select id="bench-case" value={caseId} onChange={(e) => setCaseId(e.target.value)} className={inputCls}>
             <option value="">— none —</option>
             {cases.map((c) => <option key={c.id} value={c.id}>{c.case_number}</option>)}
           </select>
         </div>
         <div className="sm:col-span-2">
-          <label className={labelCls}>Outputs <span className="text-slate-500">(one per line)</span></label>
-          <textarea value={outputs} onChange={(e) => setOutputs(e.target.value)} rows={3} className={inputCls} />
+          <label htmlFor="bench-outputs" className={labelCls}>Outputs <span className="text-slate-400">(one per line)</span></label>
+          <textarea id="bench-outputs" value={outputs} onChange={(e) => setOutputs(e.target.value)} rows={3} className={inputCls} />
         </div>
         <div className="sm:col-span-2">
-          <label className={labelCls}>Components <span className="text-slate-500">(one per line)</span></label>
-          <textarea value={components} onChange={(e) => setComponents(e.target.value)} rows={3} className={inputCls} />
+          <label htmlFor="bench-components" className={labelCls}>Components <span className="text-slate-400">(one per line)</span></label>
+          <textarea id="bench-components" value={components} onChange={(e) => setComponents(e.target.value)} rows={3} className={inputCls} />
         </div>
       </div>
       <div className="mt-5 flex gap-2">
@@ -325,24 +328,24 @@ function FootprintModal({ record, cases, gangs, canDelete, onClose, onSaved }: {
       <ModalHeader title={record ? 'Edit Ballistic Footprint' : 'New Ballistic Footprint'} onClose={onClose} />
       <div className="space-y-3">
         <div>
-          <label className={labelCls}>Signature *</label>
-          <input value={signature} onChange={(e) => setSignature(e.target.value)} placeholder="BLSTC-77-A · 9mm striations" className={`${inputCls} font-mono`} />
+          <label htmlFor="fp-signature" className={labelCls}>Signature *</label>
+          <input id="fp-signature" value={signature} onChange={(e) => setSignature(e.target.value)} placeholder="BLSTC-77-A · 9mm striations" className={`${inputCls} font-mono`} />
         </div>
         <div>
-          <label className={labelCls}>Weapon</label>
-          <input value={weapon} onChange={(e) => setWeapon(e.target.value)} className={inputCls} />
+          <label htmlFor="fp-weapon" className={labelCls}>Weapon</label>
+          <input id="fp-weapon" value={weapon} onChange={(e) => setWeapon(e.target.value)} className={inputCls} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={labelCls}>Linked Gang</label>
-            <select value={gangId} onChange={(e) => setGangId(e.target.value)} className={inputCls}>
+            <label htmlFor="fp-gang" className={labelCls}>Linked Gang</label>
+            <select id="fp-gang" value={gangId} onChange={(e) => setGangId(e.target.value)} className={inputCls}>
               <option value="">— none —</option>
               {gangs.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
           </div>
           <div>
-            <label className={labelCls}>Linked Case</label>
-            <select value={caseId} onChange={(e) => setCaseId(e.target.value)} className={inputCls}>
+            <label htmlFor="fp-case" className={labelCls}>Linked Case</label>
+            <select id="fp-case" value={caseId} onChange={(e) => setCaseId(e.target.value)} className={inputCls}>
               <option value="">— none —</option>
               {cases.map((c) => <option key={c.id} value={c.id}>{c.case_number}</option>)}
             </select>

@@ -19,6 +19,9 @@ import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Notice, EmptyState } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { CardGridSkeleton } from '@/components/ui/Skeleton'
 
 type DocRow = Tables<'documents'>
 type VersionRow = Tables<'documents_versions'>
@@ -47,7 +50,10 @@ export function SopsView() {
     await Promise.resolve()
     setLoading(true)
     try { setDocs(await withRetry(() => list('documents', { order: 'name' }))) }
-    catch { setDocs([]) }
+    catch {
+      setDocs([])
+      toast("Couldn't load the SOP library — check your connection.", 'danger')
+    }
     finally { setLoading(false) }
   }, [state])
 
@@ -65,21 +71,27 @@ export function SopsView() {
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <div>
-          <h3 className="text-xl font-bold text-white">📚 SOPs &amp; Library</h3>
-          <p className="text-sm text-slate-400">Division policy &amp; reference library, managed by command staff.</p>
-        </div>
-        {isCommand && (
-          <button onClick={() => setEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
-            + New SOP
-          </button>
-        )}
+        <PageHeader
+          className="flex-1"
+          title="📚 SOPs & Library"
+          subtitle="Division policy & reference library, managed by command staff."
+          actions={isCommand && (
+            <button onClick={() => setEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+              + New SOP
+            </button>
+          )}
+        />
       </div>
 
-      {loading ? (
-        <Notice text="Loading library…" />
+      {loading && !shelf.length ? (
+        <CardGridSkeleton cols="sm:grid-cols-2 xl:grid-cols-3" />
       ) : !shelf.length ? (
-        <Notice text={`NO SOPS PUBLISHED // POLICY QUEUE EMPTY.${isCommand ? ' Use “+ New SOP”.' : ''}`} />
+        <EmptyState
+          icon="📚"
+          title="No SOPs published yet"
+          hint={isCommand ? 'Publish a division SOP or reference document to start the library.' : 'Command staff haven’t published any SOPs yet.'}
+          action={isCommand ? { label: '+ New SOP', onClick: () => setEditor({ record: null }) } : undefined}
+        />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {shelf.map((d) => (
@@ -106,10 +118,6 @@ export function SopsView() {
       {history && <HistoryModal d={history} canManage={isCommand} onClose={() => setHistory(null)} onRestored={() => { setHistory(null); void refresh() }} />}
     </div>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
 }
 
 function ReaderModal({ d, canManage, onClose, onEdit, onHistory, onDeleted }: {
@@ -185,9 +193,9 @@ function EditorModal({ record, onClose, onSaved }: { record: DocRow | null; onCl
     <Modal open onClose={onClose} wide dirty={dirty}>
       <ModalHeader title={record ? 'Edit SOP' : 'New SOP'} onClose={onClose} />
       {synced && <p className="t-readout mb-3 text-[10px] uppercase tracking-widest text-amber-400/80">SYNCED FROM GOOGLE DRIVE // THE NEXT DRIVE EDIT OVERWRITES PORTAL CHANGES</p>}
-      <label className="mb-1 block text-xs font-semibold text-slate-400">Title *</label>
-      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Use of Force Policy" className="mb-3 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
-      <label className="mb-1 block text-xs font-semibold text-slate-400">Procedure text * <span className="font-normal text-slate-500">(Markdown: # headings, **bold**, &gt; notes, lists, | tables |)</span></label>
+      <label htmlFor="sop-title" className="mb-1 block text-xs font-semibold text-slate-400">Title *</label>
+      <input id="sop-title" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Use of Force Policy" className="mb-3 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
+      <label className="mb-1 block text-xs font-semibold text-slate-400">Procedure text * <span className="font-normal text-slate-400">(Markdown: # headings, **bold**, &gt; notes, lists, | tables |)</span></label>
       <RichEditor value={body} onChange={setBody} minHeight="22rem" />
       <button onClick={() => void save()} disabled={busy} className="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
         {record ? 'Save changes' : 'Publish SOP'}
@@ -221,16 +229,16 @@ function HistoryModal({ d, canManage, onClose, onRestored }: { d: DocRow; canMan
     <Modal open onClose={onClose}>
       <ModalHeader title={`History — ${sopTitle(d)}`} onClose={onClose} />
       {!versions ? (
-        <p className="text-sm text-slate-500">Loading versions…</p>
+        <p className="text-sm text-slate-400">Loading versions…</p>
       ) : !versions.length ? (
-        <p className="text-sm text-slate-500">No saved versions yet — a snapshot is captured each time the document is edited.</p>
+        <p className="text-sm text-slate-400">No saved versions yet — a snapshot is captured each time the document is edited.</p>
       ) : (
         <div className="max-h-[60vh] space-y-2 overflow-y-auto">
           {versions.map((v, i) => (
             <div key={v.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-ink-900 px-3 py-2">
               <div className="min-w-0">
                 <p className="truncate text-sm text-slate-200">{v.name ?? d.name} {i === 0 && <span className="ml-1 rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-slate-400">latest snapshot</span>}</p>
-                <p className="text-[11px] text-slate-500">{new Date(v.saved_at).toLocaleString('en-US')} · {officerName(v.saved_by) ?? 'Unknown'}</p>
+                <p className="text-[11px] text-slate-400">{new Date(v.saved_at).toLocaleString('en-US')} · {officerName(v.saved_by) ?? 'Unknown'}</p>
               </div>
               {canManage && (
                 <button onClick={() => void restore(v)} className="flex-shrink-0 rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-white/10">

@@ -11,6 +11,9 @@ import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { WARRANT_TINT, WARRANT_TPLS, warrantStatusOf } from '@/lib/forms'
 import { IntelProfile, type IntelTarget } from '@/components/persons/IntelProfile'
 import { PersonModal, type GangRow, type PersonRow } from '@/components/persons/PersonModal'
@@ -113,41 +116,49 @@ export function BoloView() {
 
   return (
     <section className="view-in space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-rose-500/20 bg-ink-900/60 p-6">
-        <div>
-          <h3 className="flex items-center gap-2 text-xl font-bold text-white">
-            BOLO Board
-            {state === 'in' && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 py-0.5 text-[11px] font-medium text-rose-300">
-                <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-rose-400" />live
-              </span>
-            )}
-          </h3>
-          <p className="text-sm text-slate-400">At-large subjects flagged be-on-the-lookout, with warrant status where one exists.</p>
-        </div>
-        {allBolos.length > 0 && (
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filter name, alias, gang..."
-            aria-label="Filter BOLOs"
-            className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
-          />
-        )}
+      <div className="rounded-2xl border border-rose-500/20 bg-ink-900/60 p-6">
+        <PageHeader
+          title="BOLO Board"
+          subtitle="At-large subjects flagged be-on-the-lookout, with warrant status where one exists."
+          actions={
+            <>
+              {state === 'in' && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-rose-500/20 bg-rose-500/10 px-2.5 py-0.5 text-[11px] font-medium text-rose-300">
+                  <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-rose-400" />live
+                </span>
+              )}
+              {allBolos.length > 0 && (
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Filter name, alias, gang..."
+                  aria-label="Filter BOLOs"
+                  className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
+                />
+              )}
+            </>
+          }
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {state !== 'in' ? (
-          <Notice text="Sign in to view the BOLO board." />
+          <Notice text="Sign in to view the BOLO board." className="sm:col-span-2 xl:col-span-3" />
         ) : err ? (
-          <Notice text={`Could not load BOLOs: ${err}`} />
+          <ErrorNotice message={err} onRetry={refresh} className="sm:col-span-2 xl:col-span-3" />
         ) : loading && !persons.length ? (
-          <Notice text="Loading BOLO board..." />
+          <div className="sm:col-span-2 xl:col-span-3">
+            <CardGridSkeleton cols="sm:grid-cols-2 xl:grid-cols-3" />
+          </div>
         ) : !allBolos.length ? (
-          <Notice text="NO ACTIVE BOLOS // SECTOR QUIET. Flag a person via Persons -> Edit -> Active BOLO." />
+          <EmptyState
+            title="No active BOLOs"
+            hint="Flag a person as be-on-the-lookout via Persons → Edit → Active BOLO."
+            className="sm:col-span-2 xl:col-span-3"
+          />
         ) : !items.length ? (
-          <Notice text={`No BOLOs match "${query.trim()}".`} />
+          <Notice text={`No BOLOs match "${query.trim()}".`} className="sm:col-span-2 xl:col-span-3" />
         ) : (
           items.map((p) => (
             <BoloCard
@@ -168,10 +179,6 @@ export function BoloView() {
       {editor && <PersonModal record={editor} gangs={gangs} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); void refresh() }} />}
     </section>
   )
-}
-
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400 sm:col-span-2 xl:col-span-3">{text}</div>
 }
 
 function BoloCard({ person, gang, warrant, canEdit, onProfile, onEdit, onClear }: {
@@ -212,9 +219,9 @@ function BoloCard({ person, gang, warrant, canEdit, onProfile, onEdit, onClear }
         </div>
       </div>
       <div className="flex gap-2 border-t border-white/5 px-4 py-2.5">
-        <button onClick={onProfile} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10">Profile</button>
-        {canEdit && <button onClick={onEdit} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10">Edit</button>}
-        {canEdit && <button onClick={onClear} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10">Clear BOLO</button>}
+        <button onClick={onProfile} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10">Profile</button>
+        {canEdit && <button onClick={onEdit} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10">Edit</button>}
+        {canEdit && <button onClick={onClear} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10">Clear BOLO</button>}
       </div>
     </div>
   )

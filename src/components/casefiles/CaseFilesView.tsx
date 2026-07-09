@@ -15,6 +15,7 @@ import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Notice, EmptyState } from '@/components/ui/Notice'
 
 type FileRow = Tables<'case_files'>
 
@@ -54,7 +55,10 @@ export function CaseFilesView() {
       for (const c of cs as unknown as { case_number: string }[]) if (c.case_number) nums.add(c.case_number)
       for (const r of rows) if (r.case_number) nums.add(r.case_number)
       setCaseNumbers([...nums].sort())
-    } catch { setFiles([]) }
+    } catch {
+      setFiles([])
+      toast("Couldn't load case files — check your connection.", 'danger')
+    }
   }, [state])
 
   useEffect(() => {
@@ -141,7 +145,15 @@ export function CaseFilesView() {
       </div>
 
       {!grouped.length ? (
-        <Notice text={files.length ? 'No files match your filter.' : 'No case files attached yet. Pick a case number and use “Attach file”.'} />
+        files.length ? (
+          <Notice text="No files match your filter." />
+        ) : (
+          <EmptyState
+            icon="🗂️"
+            title="No case files attached yet"
+            hint="Pick a case number above and use “Attach file” to upload evidence to a case."
+          />
+        )
       ) : (
         <div className="space-y-4">
           {grouped.map(([cn, rows]) => (
@@ -149,7 +161,7 @@ export function CaseFilesView() {
               <div className="mb-3 flex items-center gap-2">
                 <span className="text-lg" aria-hidden>🗂️</span>
                 <h3 className="font-mono text-sm font-semibold text-blue-300">{cn}</h3>
-                <span className="text-[11px] text-slate-500">{rows.length} file{rows.length === 1 ? '' : 's'}</span>
+                <span className="text-[11px] text-slate-400">{rows.length} file{rows.length === 1 ? '' : 's'}</span>
               </div>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {rows.map((f) => {
@@ -169,7 +181,7 @@ export function CaseFilesView() {
                         </span>
                       </button>
                       {canDelete && (
-                        <button onClick={() => void rm(f)} title="Remove attachment" className="flex-shrink-0 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-rose-300 hover:bg-rose-500/10">✕</button>
+                        <button onClick={() => void rm(f)} title="Remove attachment" aria-label="Remove attachment" className="-m-1 flex-shrink-0 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-rose-300 hover:bg-rose-500/10">✕</button>
                       )}
                     </div>
                   )
@@ -216,6 +228,3 @@ function PreviewModal({ f, onClose }: { f: FileRow; onClose: () => void }) {
   )
 }
 
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
-}

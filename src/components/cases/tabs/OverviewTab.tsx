@@ -1,12 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { insert, list, remove } from '@/lib/db'
+import { insert, list, deleteWithUndo } from '@/lib/db'
 import { timeAgo } from '@/lib/format'
 import { officerName, activeProfiles } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
-import { mutateThen, Stat, type AssignmentRow, type CaseRow } from './shared'
+import { Stat, type AssignmentRow, type CaseRow } from './shared'
 
 export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; canDelete: boolean }) {
   const [assignments, setAssignments] = useState<AssignmentRow[]>([])
@@ -56,7 +56,7 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
           {assignments.map((a) => (
             <span key={a.id} className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-sm text-slate-200">
               {officerName(a.officer_id) || 'Officer'} <span className="text-xs uppercase text-slate-500">{a.role}</span>
-              {canDelete && <button onClick={() => mutateThen(remove('case_assignments', a.id), refresh)} className="text-rose-300">x</button>}
+              {canDelete && <button aria-label={`Remove ${officerName(a.officer_id) || 'officer'} from case`} onClick={() => void deleteWithUndo('case_assignments', a, { confirmTitle: 'Remove officer', confirmMessage: `Remove ${officerName(a.officer_id) || 'this officer'} from the case? You can undo this for a few seconds.`, confirmText: 'Remove', label: 'assignment', after: refresh })} className="text-rose-300 hover:text-rose-200">×</button>}
             </span>
           ))}
           {!assignments.length && <p className="text-sm text-slate-500">No support assignments recorded.</p>}

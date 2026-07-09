@@ -23,9 +23,9 @@ function Tile({ label, value, hint, onClick }: { label: string; value: number | 
     </>
   )
   return onClick ? (
-    <button onClick={onClick} className="rounded-2xl border border-white/10 bg-ink-900/60 p-4 text-left transition hover:border-badge-400/50 hover:bg-white/5">{body}</button>
+    <button onClick={onClick} className="rounded-2xl border border-white/5 bg-ink-900/60 p-4 text-left transition hover:border-badge-400/50 hover:bg-white/5">{body}</button>
   ) : (
-    <div className="rounded-2xl border border-white/10 bg-ink-900/60 p-4">{body}</div>
+    <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-4">{body}</div>
   )
 }
 
@@ -61,7 +61,7 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
         <Tile label="On LOA" value={onLoa} hint="active but on leave" onClick={() => onGo('duty')} />
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-ink-900/45 p-5">
+      <div className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
         <h3 className="mb-2 font-bold text-white">Jump to</h3>
         <div className="flex flex-wrap gap-2">
           {[

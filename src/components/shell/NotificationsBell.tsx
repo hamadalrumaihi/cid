@@ -69,7 +69,7 @@ export function NotificationsBell() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="relative hidden h-9 w-9 flex-shrink-0 place-items-center rounded-lg border border-white/10 bg-ink-850 text-slate-200 transition hover:bg-white/10 lg:grid"
+        className="relative grid h-11 w-11 flex-shrink-0 place-items-center rounded-lg border border-white/10 bg-ink-850 text-slate-200 transition hover:bg-white/10 lg:h-9 lg:w-9"
         aria-label={unread ? `Notifications — ${unread} unread` : 'Notifications'}
       >
         <BellIcon />

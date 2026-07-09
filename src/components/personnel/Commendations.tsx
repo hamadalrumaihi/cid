@@ -30,7 +30,7 @@ export function Commendations({ rows, onChanged }: { rows: CommendationRow[]; on
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Medals &amp; Support Commendations</h4>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Medals &amp; Support Commendations</h2>
         {canEdit && (
           <button onClick={() => setEditing('new')} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">
             + Award Commendation
@@ -50,7 +50,7 @@ export function Commendations({ rows, onChanged }: { rows: CommendationRow[]; on
                 <p className="font-semibold text-white">{c.title}</p>
                 <p className="text-xs text-slate-300">{c.recipient_name || officerName(c.recipient_id) || '—'}</p>
               </div>
-              {canEdit && <button onClick={() => setEditing(c)} className="text-[11px] text-slate-400 hover:text-white">edit</button>}
+              {canEdit && <button onClick={() => setEditing(c)} className="-m-2 p-2 text-[11px] text-slate-400 hover:text-white">edit</button>}
             </div>
             <p className="mt-3 text-xs text-slate-300">{c.note || ''}</p>
           </div>

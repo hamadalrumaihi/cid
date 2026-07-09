@@ -6,6 +6,58 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.6.0] — 2026-07-09
+
+### UI/UX modernization pass (polish, not a rebuild)
+Identity, workflows, permissions and data behavior are unchanged — this
+release makes the existing design consistent, safer and more accessible.
+
+#### Design system
+- New shared primitives in `src/components/ui/`: **Button** (primary /
+  secondary / danger / ghost — one danger shade), **Card** (padding scale,
+  canonical border), **Badge**, **Field / Input / Select / Textarea** (+
+  exported `inputCls`/`labelCls`, replacing 8+ local copies),
+  **PageHeader / SectionHeader**, **Breadcrumbs**, and
+  **Notice / EmptyState / ErrorNotice** (replacing 23 copy-pasted `Notice`s).
+- New `lib/tint.ts` — one `statusTint`/`priorityTint`/`roleTint` home. The
+  case-status colors are now a single map shared by the board, the case
+  header, the Command drill pill and the guide legend; the Command pill had
+  silently drifted (showed *open* as blue where the board shows amber) and is
+  realigned. Command Center / Profile / Operations card borders normalized to
+  the app-wide `border-white/5`.
+
+#### States & microcopy
+- Registry views show **card-grid skeletons** on first load instead of a
+  "Loading…" line; empty states explain what to do next (with a
+  call-to-action where you can act); ALL-CAPS "terminal" empties retired.
+- Load failures now show a humanized message with **Try again** — raw
+  database errors no longer reach the screen, and the 7 views that silently
+  showed an empty list when a fetch failed now say so.
+- Case board toast reads "Case marked Active." instead of `Status -> ACTIVE`.
+
+#### Safety
+- The 6 case-tab deletes that fired instantly (assignments, tasks, chat
+  messages, intel links, RICO predicate acts, case templates) now confirm
+  with specific dialogs that name the item, warn about related records, and
+  keep the 6-second **Undo** (task sub-tasks are snapshotted and restored).
+- **Closing a case** (quick-status or drag to Closed) asks for confirmation
+  and explains how to reopen.
+
+#### Mobile & navigation
+- The **notifications bell** is now visible below desktop width (it was
+  completely hidden on phones) and a **search button** opens the search
+  palette on mobile; header touch targets are 44px.
+- **Breadcrumbs** on case and operation detail replace the bare "Back to X"
+  links; the sidebar's active item gains a left accent bar.
+
+#### Accessibility
+- One real `<h1>` per view via PageHeader; heading outlines fixed.
+- Form labels programmatically associated (`htmlFor`/`id`) across ~20 form
+  files; modals expose `aria-labelledby`; RichEditor toolbar buttons are
+  labelled and the editor shows a visible focus ring.
+- Muted informational text bumped `slate-500` → `slate-400` (WCAG AA);
+  small card action chips enlarged to ~40px hit areas without layout shift.
+
 ## [1.5.0] — 2026-07-09
 
 ### Added — Command Center

@@ -1,12 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { insert, list, remove, update } from '@/lib/db'
+import { insert, list, update, deleteWithUndo } from '@/lib/db'
 import { todayISO } from '@/lib/format'
 import { PENAL_CODE } from '@/lib/penal'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
-import { mutateThen, type CaseRow, type EvidenceRow, type GangRow, type PredicateRow, type RicoRow } from './shared'
+import { type CaseRow, type EvidenceRow, type GangRow, type PredicateRow, type RicoRow } from './shared'
 
 export function RicoTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; canDelete: boolean }) {
   const [rico, setRico] = useState<RicoRow | null>(null)
@@ -65,7 +65,7 @@ export function RicoTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolea
         <button onClick={addPredicate} className="md:col-span-2 rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Add predicate act</button>
       </div>}
       <div className="space-y-2">
-        {preds.map((p) => <div key={p.id} className="rounded-xl border border-white/10 bg-ink-950/50 p-3"><p className="font-bold text-white">{p.predicate_type}</p><p className="text-sm text-slate-500">{p.act_date || 'No date'}{p.evidence_ref ? ` - ${p.evidence_ref}` : ''}</p>{p.note && <p className="mt-1 text-sm text-slate-300">{p.note}</p>}{canDelete && <button onClick={() => mutateThen(remove('predicate_acts', p.id), refresh)} className="mt-2 text-xs font-bold text-rose-300">Delete</button>}</div>)}
+        {preds.map((p) => <div key={p.id} className="rounded-xl border border-white/10 bg-ink-950/50 p-3"><p className="font-bold text-white">{p.predicate_type}</p><p className="text-sm text-slate-500">{p.act_date || 'No date'}{p.evidence_ref ? ` - ${p.evidence_ref}` : ''}</p>{p.note && <p className="mt-1 text-sm text-slate-300">{p.note}</p>}{canDelete && <button aria-label={`Delete predicate act: ${p.predicate_type}`} onClick={() => void deleteWithUndo('predicate_acts', p, { confirmTitle: 'Delete predicate act', confirmMessage: `Delete the predicate act “${p.predicate_type}”? You can undo this for a few seconds.`, confirmText: 'Delete act', label: 'predicate act', after: refresh })} className="mt-2 text-xs font-bold text-rose-300 hover:text-rose-200">Delete</button>}</div>)}
         {!preds.length && <p className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-500">No predicate acts recorded.</p>}
       </div>
     </div>

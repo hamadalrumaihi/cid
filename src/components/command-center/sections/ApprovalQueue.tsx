@@ -50,7 +50,7 @@ export function ApprovalQueue() {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-2xl border border-white/10 bg-ink-900/45 p-5">
+      <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
         <h3 className="mb-1 font-bold text-white">Pending member approvals <span className="text-slate-500">({pending.length})</span></h3>
         <p className="mb-3 text-xs text-slate-400">New sign-ins are inactive until a command user activates them.</p>
         {pending.length ? (
@@ -65,7 +65,7 @@ export function ApprovalQueue() {
         ) : <p className="text-sm text-emerald-300">✓ No pending sign-ins.</p>}
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-ink-900/45 p-5">
+      <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
         <h3 className="mb-1 font-bold text-white">Sign-offs awaiting your decision <span className="text-slate-500">({reviews.length})</span></h3>
         <p className="mb-3 text-xs text-slate-400">Cases at a stage your role can decide. Opens the case Sign-off tab, where the decision is recorded.</p>
         {reviews.length ? (

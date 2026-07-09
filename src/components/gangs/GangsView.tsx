@@ -10,11 +10,13 @@ import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { useRegistry } from '@/lib/useRegistry'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { IntelProfile, type IntelTarget } from '@/components/persons/IntelProfile'
 import { GangCard, GangDetail } from './gangCards'
 import { GangModal, AttachGangModal } from './gangModals'
-import { GANG_DELETE_CHILDREN, GANG_NULL_REFS, Notice, PAGE, type CaseOption, type GangRow, type PersonRow } from './gangShared'
+import { GANG_DELETE_CHILDREN, GANG_NULL_REFS, PAGE, type CaseOption, type GangRow, type PersonRow } from './gangShared'
 
 export function GangsView() {
   const { state, canEdit, canDelete } = useAuth()
@@ -117,23 +119,25 @@ export function GangsView() {
 
   return (
     <section className="view-in space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <div>
-          <h3 className="flex items-center gap-2 text-xl font-bold text-white">
-            Gangs &amp; Turf
-            {state === 'in' && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
-                <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
-              </span>
-            )}
-          </h3>
-          <p className="text-sm text-slate-400">Organizations, rank structure, linked properties, and territory control.</p>
-        </div>
-        {canEdit && (
-          <button onClick={() => setEditor('new')} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
-            + New Gang
-          </button>
-        )}
+      <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+        <PageHeader
+          title="Gangs & Turf"
+          subtitle="Organizations, rank structure, linked properties, and territory control."
+          actions={
+            <>
+              {state === 'in' && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
+                  <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
+                </span>
+              )}
+              {canEdit && (
+                <button onClick={() => setEditor('new')} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+                  + New Gang
+                </button>
+              )}
+            </>
+          }
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -159,13 +163,23 @@ export function GangsView() {
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {state !== 'in' ? (
-          <Notice text="Live gang records require sign-in." />
+          <Notice text="Live gang records require sign-in." className="xl:col-span-2" />
         ) : err ? (
-          <Notice text={`Could not load gangs: ${err}`} />
+          <ErrorNotice message={err} onRetry={refresh} className="xl:col-span-2" />
         ) : loading && !gangs.length ? (
-          <CardGridSkeleton count={4} cols="xl:grid-cols-2" />
+          <div className="xl:col-span-2">
+            <CardGridSkeleton count={4} cols="xl:grid-cols-2" />
+          </div>
         ) : !items.length ? (
-          <Notice text={gangs.length ? 'No gangs match your filter.' : `No gangs on file.${canEdit ? ' Use "+ New Gang".' : ''}`} />
+          gangs.length ? (
+            <Notice text="No gangs match your filter." className="xl:col-span-2" />
+          ) : (
+            <EmptyState
+              title="No gangs on file yet"
+              hint={canEdit ? 'Add one with the New Gang button.' : undefined}
+              className="xl:col-span-2"
+            />
+          )
         ) : (
           <>
             {visible.map((g) => (
