@@ -771,6 +771,7 @@ function WorkflowSection() {
       <Panel title="Branching & gates"><p className="text-xs text-slate-300">{WORKFLOW.branch}</p><p className="mt-2 font-mono text-[11px] text-slate-400">{WORKFLOW.gates}</p></Panel>
       <Panel title="Database changes"><p className="text-xs text-slate-300">{WORKFLOW.db}</p></Panel>
       <Panel title="Deploy & verify"><p className="text-xs text-slate-300">{WORKFLOW.deploy}</p></Panel>
+      <Panel title="Releases & the merge checklist"><p className="text-xs text-slate-300">{WORKFLOW.versioning}</p></Panel>
       <Panel title="Rollback & emergencies"><p className="text-xs text-slate-300">{WORKFLOW.rollback}</p><p className="mt-2 text-xs text-slate-300">{WORKFLOW.emergency}</p></Panel>
       <Panel title="Permissions matrix" sub={MATRIX_NOTE}>
         <div className="overflow-x-auto">

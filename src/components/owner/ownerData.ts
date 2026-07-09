@@ -132,6 +132,7 @@ export const WORKFLOW = {
   db: 'Database changes are ADDITIVE-ONLY migrations applied to the live project (open browser tabs keep running the old bundle). Update src/lib/database.types.ts in the same PR. Re-run the Supabase security/performance advisors after.',
   deploy: 'Merge to main → Vercel builds and atomically flips the production alias. Verify the preview BEFORE merging: sign in, exercise the changed feature, test realtime with two browsers.',
   rollback: 'Vercel → Deployments → ⋯ → Instant Rollback (deployments are immutable; seconds, zero downtime). Because migrations are additive, an app rollback never needs a schema rollback.',
+  versioning: 'SemVer as of v1.0.0 — release PRs bump package.json and add a CHANGELOG.md entry listing the merged PRs. The merge checklist (.github/PULL_REQUEST_TEMPLATE.md) is the definition of done; CONTRIBUTING.md is the short guide; docs/RELEASE-READINESS.md holds the stabilization audit and readiness scores.',
   emergency: 'Roll back first, diagnose second. If the DB is implicated: check Supabase logs + advisors; never hot-edit policies without writing the migration down.',
   notVerified: 'GitHub branch protection (require PR + green CI before merge) is NOT verified as configured — it is a repository setting outside this codebase. Recommended: protect main, require the CI check, disallow force-push. Until then, discipline is the guard: never push directly to main.',
 }

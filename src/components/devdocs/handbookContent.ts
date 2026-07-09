@@ -1093,6 +1093,25 @@ Dependabot PRs: read the changelog, let CI pass, spot-check the preview
 (especially after \`next\`/\`@supabase\` bumps — CSP and auth flows are the
 sensitive spots). Majors: update deliberately, one at a time.
 
+## Releases & versioning
+
+[SemVer](https://semver.org) as of **v1.0.0**: MINOR for feature releases,
+PATCH for fixes, MAJOR for breaking platform changes. A release PR bumps
+\`package.json\` and adds a \`CHANGELOG.md\` entry listing the merged PRs.
+Not every merge is a release — group related merges into one entry.
+
+The **merge checklist** lives in \`.github/PULL_REQUEST_TEMPLATE.md\` (gates,
+preview verification, permissions, the DB ritual, docs sync, secrets) and
+is the definition of done for every PR. The short contributor guide is
+\`CONTRIBUTING.md\`; the stabilization audit and readiness scores are in
+\`docs/RELEASE-READINESS.md\`.
+
+> **The isolation rule**: all development happens on a branch and is
+> verified on its PR preview before merge — production tracks \`main\` and
+> deploys immediately. GitHub branch protection is a repository *setting*
+> (not verified as configured; see RELEASE-READINESS §7) — until enabled,
+> discipline is the guard.
+
 ## Database changes — the ritual
 
 Additive SQL → apply to the live project → verify with the Supabase
