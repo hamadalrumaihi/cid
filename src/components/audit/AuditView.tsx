@@ -10,7 +10,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
-import { AUDIT_OWNER_ID } from '@/lib/nav'
 import { officerName } from '@/lib/profiles'
 import { copyText } from '@/lib/format'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
@@ -18,11 +17,9 @@ import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 type AuditRow = Tables<'audit_log'>
 
 export function AuditView() {
-  const { state, profile } = useAuth()
+  const { state, isOwner } = useAuth()
   const [rows, setRows] = useState<AuditRow[]>([])
   const [loading, setLoading] = useState(true)
-
-  const isOwner = !!profile?.active && profile.id === AUDIT_OWNER_ID
 
   const refresh = useCallback(async () => {
     if (state !== 'in' || !isOwner) return

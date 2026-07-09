@@ -1,12 +1,15 @@
 # CID Portal — Supabase backend
 
-Backend for the **CID Portal** single-page app (vanilla JS, no build step — see the
-root `README.md`). **Postgres-only:** all data lives in Supabase Postgres behind
+Backend for the **CID Portal** single-page app (Next.js / React — see the root
+`README.md`). **Postgres-only:** all data lives in Supabase Postgres behind
 Row-Level Security; media is stored as **external (FiveManage) URLs**, not in
 Supabase Storage.
 
 > Live project: **`cid`** (`jhxuflzmqspidkvjckox`). The migrations in
-> `migrations/` are applied and reflect production.
+> `migrations/` are applied; later additions (operations, sub-tasks, full-text
+> search, indicators, FK indexes/hardening) were applied directly to the live
+> project, so **the live schema is the source of truth** — mirrored in
+> `src/lib/database.types.ts` and documented in `docs/HANDBOOK.md` §8.
 
 ## RBAC model
 Two axes enforced in the database via RLS, off the caller's `profiles` row:
@@ -63,6 +66,7 @@ were never applied to this project — they are parked in `migrations/archive/`
 ## Notes
 - **No Supabase Storage.** Media references are external URLs; there are no
   buckets or storage policies.
-- **Report templates / RICO predicates** are client-side constants
-  (`REPORT_TEMPLATES` / `RICO_PREDICATES` in `persons.js`); the live RICO data
-  lives in `rico_cases` + `predicate_acts`.
+- **Report templates** are client-side constants (`FORM_SCHEMAS` /
+  `REPORT_TEMPLATES` in `src/lib/forms.ts`); RICO predicate types are picked
+  in the case RICO tab. The live RICO data lives in `rico_cases` +
+  `predicate_acts`.

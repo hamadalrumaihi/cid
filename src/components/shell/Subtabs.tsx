@@ -1,21 +1,20 @@
 'use client'
 
 /** Sub-tab strip — tools within the active top-level category, port of
- *  vanilla renderSubtabs (core.js:897-907). The audit tab is hidden unless
- *  the signed-in member is the audit owner (UI mirror of the owner-only
- *  audit_sel RLS policy — the server enforces the real rule). */
+ *  vanilla renderSubtabs (core.js:897-907). The audit and devdocs tabs are
+ *  hidden unless the signed-in member is the portal owner (UI mirror; the
+ *  audit RLS policy and the DevDocsView gate enforce the real rule). */
 import { useAuth } from '@/lib/auth'
-import { AUDIT_OWNER_ID, NAV_CATEGORIES, TAB_LABEL } from '@/lib/nav'
+import { NAV_CATEGORIES, TAB_LABEL } from '@/lib/nav'
 import { useNav } from './useNav'
 
 export function Subtabs() {
   const { activeCategory, activeTab, navigate } = useNav()
-  const { profile } = useAuth()
+  const { isOwner } = useAuth()
   const def = NAV_CATEGORIES.find((c) => c.id === activeCategory)
   if (!def) return null // standalone leaves (feedback) hide the strip
 
-  const isAuditOwner = !!profile?.active && profile.id === AUDIT_OWNER_ID
-  const tabs = def.tabs.filter((t) => t !== 'audit' || isAuditOwner)
+  const tabs = def.tabs.filter((t) => (t !== 'audit' && t !== 'devdocs') || isOwner)
 
   return (
     <nav

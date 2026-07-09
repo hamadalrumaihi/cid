@@ -55,6 +55,15 @@ export async function list<T extends TableName>(table: T, opts: ListOptions<T> =
   return (data ?? []) as Tables<T>[]
 }
 
+/** Row count without fetching rows (HEAD + count=exact). THROWS like list().
+ *  RLS applies — the caller sees the count of rows THEY can see. Powers the
+ *  Owner Portal statistics; cheap even on the larger tables. */
+export async function countRows<T extends TableName>(table: T): Promise<number> {
+  const { count, error } = await raw().from(table).select('*', { count: 'exact', head: true })
+  if (error) throw Object.assign(new Error(error.message), { code: error.code })
+  return count ?? 0
+}
+
 export async function insert<T extends TableName>(table: T, values: TablesInsert<T> | TablesInsert<T>[]): Promise<MutationResult<Tables<T>[]>> {
   const { data, error } = await raw().from(table).insert(values).select()
   return { data: data as Tables<T>[] | null, error: asDbError(error) }

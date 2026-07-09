@@ -24,6 +24,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Handbook content in sync with docs
+        # -I ignores the volatile git-derived date line (shallow CI checkouts can't reproduce it)
+        run: npm run gen:handbook && git diff -I'HANDBOOK_UPDATED' --exit-code src/components/devdocs/handbookContent.ts
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Lint (zero warnings)
