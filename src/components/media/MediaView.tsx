@@ -15,6 +15,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { parseFormValues, parseStringArray } from '@/lib/jsonShapes'
 
 type MediaRow = Tables<'media'>
 interface CaseOption { id: string; case_number: string }
@@ -25,8 +26,8 @@ const inputCls = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.
 const labelCls = 'mb-1 block text-xs font-semibold text-slate-400'
 
 const mediaSrc = (m: MediaRow) => m.external_url || m.storage_path || ''
-const tagsOf = (m: MediaRow): Record<string, unknown> => (m.tags && typeof m.tags === 'object' && !Array.isArray(m.tags) ? (m.tags as Record<string, unknown>) : {})
-const labelsOf = (m: MediaRow): string[] => { const l = tagsOf(m).labels; return Array.isArray(l) ? (l as string[]) : [] }
+const tagsOf = (m: MediaRow): Record<string, unknown> => parseFormValues(m.tags)
+const labelsOf = (m: MediaRow): string[] => parseStringArray(tagsOf(m).labels)
 const parseTags = (s: string) => [...new Set(s.split(',').map((x) => x.trim()).filter(Boolean))]
 
 export function MediaView() {

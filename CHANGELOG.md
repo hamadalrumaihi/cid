@@ -6,6 +6,28 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.3.0] — 2026-07-09
+
+The "pattern & debt" half of the v1.3 roadmap phase (the accessibility,
+skeleton, and Lighthouse-budget items follow separately).
+
+### Added
+- **`src/lib/useRegistry.ts`** — the shared skeleton behind every list screen
+  (rows/loading/error state, a sign-in-gated `refresh`, and a deferred,
+  realtime-version-driven refetch), extracted so a view supplies only its
+  query. **Piloted on the Indicators registry**; the hook returns `refresh`
+  and `setRows` so filtering/modals/delete stay in the view.
+
+### Changed
+- **`GangsView.tsx` split** (693 → 196-line container) into
+  `gangShared.tsx` (types/constants/helpers/Notice), `gangModals.tsx`
+  (gang/member/turf/attach modals) and `gangCards.tsx` (card + detail +
+  member card) — the last remaining monolith. Also migrated to `useRegistry`.
+- More jsonb read boundaries routed through `src/lib/jsonShapes.ts`: case
+  template checklists (`CaseModal`) and media tags/labels (`MediaView`) now
+  use the shared `parseStringArray` / `parseFormValues` instead of
+  re-implementing the guard inline.
+
 ## [1.2.0] — 2026-07-09
 
 The "close the loop" ops release — the operational leg the CTO review
