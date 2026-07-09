@@ -10,6 +10,7 @@ import { activeProfiles, officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { CASE_STATUSES } from '@/lib/signoff'
 import { toast } from '@/lib/toast'
+import { parseStringArray } from '@/lib/jsonShapes'
 
 type CaseRow = Tables<'cases'>
 type CaseTemplateRow = Tables<'case_templates'>
@@ -17,7 +18,7 @@ const BUREAUS = ['LSB', 'BCB', 'SAB', 'JTF'] as const
 
 /** Task checklist stored on a template (jsonb array of title strings). */
 const tplTasks = (t: CaseTemplateRow | null): string[] =>
-  Array.isArray(t?.tasks) ? t.tasks.filter((x): x is string => typeof x === 'string' && !!x.trim()) : []
+  parseStringArray(t?.tasks).filter((x) => x.trim())
 
 interface Props {
   open: boolean

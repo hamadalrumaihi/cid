@@ -6,12 +6,13 @@
  *  alert. The indicators table is shared intel (all active members see every
  *  value), but case titles are RLS-scoped — a match into a case the viewer
  *  cannot open renders as a restricted stub instead of leaking its details. */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
 import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
+import { useRegistry } from '@/lib/useRegistry'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -48,39 +49,27 @@ export function IndicatorsView() {
   const { state, canEdit, canDelete } = useAuth()
   const sp = useSearchParams()
   const router = useRouter()
-  const [rows, setRows] = useState<IndicatorRow[]>([])
   const [cases, setCases] = useState<CaseOption[]>([])
-  const [loading, setLoading] = useState(true)
-  const [err, setErr] = useState<string | null>(null)
   const [query, setQuery] = useState(() => sp.get('q') ?? '')
   const [kindFilter, setKindFilter] = useState('')
   const [editor, setEditor] = useState<{ record: IndicatorRow | null } | null>(null)
-  const vIndicators = useTableVersion('indicators')
   const vCases = useTableVersion('cases')
 
-  const refresh = useCallback(async () => {
-    if (state !== 'in') return
-    await Promise.resolve()
-    setLoading(true)
-    setErr(null)
-    try {
+  // Registry owns rows/loading/error + the deferred, version-driven refetch.
+  // Case titles are a side-load (for labelling matches) — fetched here and
+  // held separately so the modal's case picker stays populated.
+  const { rows, loading, error: err, refresh } = useRegistry<IndicatorRow>({
+    table: 'indicators',
+    watch: [vCases],
+    load: async () => {
       const [ind, cs] = await Promise.all([
         withRetry(() => list('indicators', { order: 'created_at', ascending: false })),
         list('cases', { select: 'id,case_number,title', order: 'created_at', ascending: false }).catch(() => [] as Tables<'cases'>[]),
       ])
-      setRows(ind)
       setCases(cs as unknown as CaseOption[])
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
-    } finally {
-      setLoading(false)
-    }
-  }, [state])
-
-  useEffect(() => {
-    const t = window.setTimeout(() => { void refresh() }, 0)
-    return () => window.clearTimeout(t)
-  }, [refresh, vIndicators, vCases])
+      return ind
+    },
+  })
 
   const caseById = useMemo(() => new Map(cases.map((c) => [c.id, c])), [cases])
 
