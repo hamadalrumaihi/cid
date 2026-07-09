@@ -78,7 +78,7 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 `audit/AuditView` (owner-only) · `auth/Gate` ·
 `ballistics/BallisticsView` · `bolo/BoloView` (warrant chips) ·
 `calendar/CalendarView` · `casefiles/CaseFilesView` (uploads) ·
-`cases/`: ⚠`CasesView`, ⚠`CaseDetail` (12 tabs), ⚠`CaseModal`,
+`cases/`: ⚠`CasesView`, ⚠`CaseDetail` (12 tabs, one file each in `tabs/`), ⚠`CaseModal`,
 `CaseBoard`, `CaseFilterBar`, ⚠`CaseGraphTab`, `TimelineBand`,
 `caseUtils`, `StaleBadge`, `WatchButton` ·
 `command/`: ⚠`CommandView` + 8 widgets + `commandUtils` ·

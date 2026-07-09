@@ -44,27 +44,39 @@ export function CaseBoard({ items, canEdit, onOpen, onMoved }: { items: CaseRow[
             </div>
             <div className="space-y-3">
               {col.map((c) => (
-                <button
+                <article
                   key={c.id}
                   draggable={canEdit}
                   onDragStart={(e) => { e.dataTransfer.setData('text/case-id', c.id); e.currentTarget.style.opacity = '.45' }}
                   onDragEnd={(e) => { e.currentTarget.style.opacity = '1' }}
-                  onClick={() => onOpen(c.id)}
                   data-status={c.status}
                   data-bureau={c.bureau}
                   data-stale={isStaleCase(c) ? 'true' : 'false'}
-                  className="board-card w-full rounded-xl border border-white/10 bg-ink-950/70 p-3 text-left transition hover:border-badge-400/50"
+                  className="board-card rounded-xl border border-white/10 bg-ink-950/70 p-3 transition hover:border-badge-400/50"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="font-mono text-sm font-bold text-white">{c.case_number.replaceAll('-', ' - ')}</p>
-                    <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${caseStatusTint(c.status)}`}>{c.bureau}</span>
-                  </div>
-                  <p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-100">{c.title || 'Untitled case'}</p>
-                  <div className="mt-3 flex items-center justify-between gap-2 text-xs text-slate-400">
-                    <span>{officerName(c.lead_detective_id) || 'Unassigned'}</span>
-                    <StaleBadge c={c} />
-                  </div>
-                </button>
+                  <button onClick={() => onOpen(c.id)} className="w-full text-left">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-mono text-sm font-bold text-white">{c.case_number.replaceAll('-', ' - ')}</p>
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${caseStatusTint(c.status)}`}>{c.bureau}</span>
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-100">{c.title || 'Untitled case'}</p>
+                    <div className="mt-3 flex items-center justify-between gap-2 text-xs text-slate-400">
+                      <span>{officerName(c.lead_detective_id) || 'Unassigned'}</span>
+                      <StaleBadge c={c} />
+                    </div>
+                  </button>
+                  {/* Keyboard/screen-reader path for the drag-and-drop move. */}
+                  {canEdit && (
+                    <select
+                      value={c.status}
+                      onChange={(e) => void move(c.id, e.target.value as CaseRow['status'])}
+                      aria-label={`Change status of ${c.case_number}`}
+                      className="mt-2 w-full rounded-lg border border-white/10 bg-ink-900 px-2 py-1 text-[11px] font-bold uppercase text-slate-300 outline-none focus:border-badge-500"
+                    >
+                      {BOARD_COLS.map(([s, label]) => <option key={s} value={s}>{label}</option>)}
+                    </select>
+                  )}
+                </article>
               ))}
             </div>
           </section>

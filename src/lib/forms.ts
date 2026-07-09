@@ -2,6 +2,7 @@
  *  core.js FORM_SCHEMAS (:79-360), persons.js REPORT_TEMPLATES (:31-45) and
  *  reports.js pure helpers. Rendering lives in components/cases/FormBody.tsx;
  *  everything here is data + pure functions. */
+import { parseFormValues } from '@/lib/jsonShapes'
 
 export type FormFieldType = 'text' | 'date' | 'money' | 'select' | 'textarea' | 'checks'
 
@@ -433,7 +434,7 @@ export function collectPersonNames(schema: FormSchema, fields: FormValues): stri
 export function reportFinalizeGaps(r: ReportLike): string[] {
   const tpl = tplById(r.template)
   if (!tpl) return []
-  const f = (r.fields as FormValues) || {}
+  const f = parseFormValues(r.fields)
   const keys = new Set<string>()
   tpl.schema.sections.forEach((s) => {
     if (s.type === 'kv') s.fields.forEach((fl) => keys.add(fl.key))

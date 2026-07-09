@@ -6,6 +6,36 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.1.0] — 2026-07-09
+
+The remaining "safe now" improvements from the post-release review
+(suggestions #4, #6, #7, #8).
+
+### Added
+- **Keyboard & screen-reader path for board status moves**: every case card
+  on the board now carries a compact status select (edit-capable users), so
+  drag-and-drop is no longer the only way to move a case between columns.
+- **Heatmap without color reliance**: map dots now print the intensity
+  number in their label, the footer legend maps each dot color to its
+  numeric range, and dots are keyboard-focusable (Tab + Enter opens the
+  area's records).
+- `src/lib/jsonShapes.ts` — dependency-free runtime parsers for the loose
+  `jsonb` columns (`cases.charges`, `reports.fields`, tags/mentions
+  string-arrays). Every read boundary now degrades malformed rows to safe
+  fallbacks instead of trusting a cast; unit tests included (17 tests total).
+
+### Changed
+- **`CaseDetail.tsx` split into per-tab files** (`cases/tabs/` — 12 tabs +
+  shared helpers, 849 lines → ~240 line composer). Pure mechanical
+  extraction; `RicoTab` is re-exported for RicoView.
+- Owner Portal suggestions now show a **done \<release\>** badge on shipped
+  items (8 of 14 marked).
+
+### Documentation
+- Historical build-era docs (`HANDOFF`, `PHASE2-HANDOFF`, `ROADMAP`,
+  `REACT-PARITY`, `BACKLOG`, `superpowers/`) moved to `docs/archive/` with
+  an index README; all inbound references updated; handbook regenerated.
+
 ## [1.0.1] — 2026-07-09
 
 Housekeeping + one live bug fix.

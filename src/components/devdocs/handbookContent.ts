@@ -208,9 +208,10 @@ function), and backend READMEs. Details: [Ch. 8](08-database.md).
 ### \`docs/\` — documentation
 This handbook (\`handbook/\`), \`USER-GUIDE.md\` (canonical text of the in-app
 guide — the in-app copy \`src/components/guide/guideContent.ts\` is
-**generated from it**), \`HARDENING.md\` (security checklist status), plus
-historical build-era notes (HANDOFF, ROADMAP, REACT-PARITY, BACKLOG,
-DEFERRED — kept for reference).
+**generated from it**), \`HARDENING.md\` (security checklist status),
+\`DEFERRED.md\` (parked work with triggers), \`RELEASE-READINESS.md\` (v1.0.0
+verification). Historical build-era notes (HANDOFF, ROADMAP, REACT-PARITY,
+BACKLOG…) are parked in \`archive/\` — see \`archive/README.md\`.
 
 ### \`.github/\` — quality gates
 \`workflows/ci.yml\` (typecheck → lint → test → build on every push/PR) and
@@ -286,7 +287,8 @@ not hypotheticals.
 - **Responsibility**: the screens. Uniform shape: fetch on mount + version
   bump → \`refresh()\`; permission-gated buttons; fresh-mounted modals;
   toasts + Undo for deletes.
-- **Risk: varies.** \`cases/CaseDetail.tsx\` (~840 lines, 12 tabs) is the
+- **Risk: varies.** \`cases/CaseDetail.tsx\` (12 tabs, one file per tab in
+  \`cases/tabs/\` since v1.1.0) is the
   highest-risk file; registry views are the safest and most uniform.
 - **Common mistakes**: breaking the deferred-effect pattern ([Ch. 15](15-conventions.md));
   editing a delete's cascade config without checking the FK schema.
@@ -463,7 +465,7 @@ leaf nodes, safe to study, intricate to edit.`,
 \`audit/AuditView\` (owner-only) · \`auth/Gate\` ·
 \`ballistics/BallisticsView\` · \`bolo/BoloView\` (warrant chips) ·
 \`calendar/CalendarView\` · \`casefiles/CaseFilesView\` (uploads) ·
-\`cases/\`: ⚠\`CasesView\`, ⚠\`CaseDetail\` (12 tabs), ⚠\`CaseModal\`,
+\`cases/\`: ⚠\`CasesView\`, ⚠\`CaseDetail\` (12 tabs, one file each in \`tabs/\`), ⚠\`CaseModal\`,
 \`CaseBoard\`, \`CaseFilterBar\`, ⚠\`CaseGraphTab\`, \`TimelineBand\`,
 \`caseUtils\`, \`StaleBadge\`, \`WatchButton\` ·
 \`command/\`: ⚠\`CommandView\` + 8 widgets + \`commandUtils\` ·
@@ -1362,8 +1364,9 @@ memoized heavy derivations; slim \`select\` projections on picker queries.
    O(vehicles × cases) with regexes over report text; InboxView JSON-scans
    messages for mentions. Bounded today (limits on messages); keep limits
    when touching them.
-3. **Large files as edit-risk hotspots**: \`CaseDetail.tsx\` (~840 lines,
-   12 lazy-fetching tabs) and \`GangsView\` (~690). Runtime is fine; review
+3. **Large files as edit-risk hotspots**: \`GangsView\` (~690 lines) — and
+   formerly \`CaseDetail.tsx\`, whose 12 lazy-fetching tabs were split into
+   one file each (\`cases/tabs/\`) in v1.1.0. Runtime is fine; review
    care isn't.
 4. **Re-render sources**: the 1s tick in Trackers (small, fine);
    AuthProvider re-rendering on hourly token refresh (mitigated by
@@ -1398,7 +1401,7 @@ M = days, L = week+.
 | Idea | Why / benefit | Risk |
 |---|---|---|
 | **Commit the SQL schema** (\`schema.sql\` dump + migration log for post-folder changes) | Today the live DB is the only source of truth — no reviewable history | none |
-| **Split \`CaseDetail.tsx\`** into per-tab files (keep the \`RicoTab\` export) | The hottest, biggest file becomes reviewable | low (gates cover it) |
+| ~~**Split \`CaseDetail.tsx\`** into per-tab files (keep the \`RicoTab\` export)~~ **done v1.1.0** — tabs live in \`cases/tabs/\` | The hottest, biggest file becomes reviewable | low (gates cover it) |
 | **Type the JSON columns** (\`reports.fields\`, \`media.tags\`, \`cases.charges\`, announcement mentions/links) with zod at the read boundary | Today's casts hide shape drift | low |
 | Extract a \`useRegistry\` hook from the ~10× repeated registry skeleton | Hundreds of duplicated lines; new registries in minutes | medium — migrate incrementally |
 | Nonce-based CSP (drop \`unsafe-inline\` scripts) | Defense in depth | medium (Next runtime quirks) |

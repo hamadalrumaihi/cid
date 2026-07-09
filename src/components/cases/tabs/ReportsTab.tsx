@@ -1,0 +1,75 @@
+'use client'
+
+import { useCallback, useEffect, useState } from 'react'
+import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
+import type { Json } from '@/lib/database.types'
+import { downloadTextFile, timeAgo } from '@/lib/format'
+import { useAuth } from '@/lib/auth'
+import { useTableVersion } from '@/lib/realtime'
+import { FORM_SCHEMAS, REPORT_TEMPLATES, formToText, reportTitle, type FormValues } from '@/lib/forms'
+import { parseFormValues } from '@/lib/jsonShapes'
+import { toast } from '@/lib/toast'
+import type { CaseRow, ReportRow } from './shared'
+
+export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; canDelete: boolean }) {
+  const { profile } = useAuth()
+  const [reports, setReports] = useState<ReportRow[]>([])
+  const [editing, setEditing] = useState<{ template: string; values: FormValues; report?: ReportRow } | null>(null)
+  const [view, setView] = useState<ReportRow | null>(null)
+  const v = useTableVersion('reports')
+  const refresh = useCallback(async () => { try { setReports(await list('reports', { eq: { case_id: c.id }, order: 'created_at', ascending: false })) } catch { /* stale */ } }, [c.id])
+  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, v])
+  const seed = (): FormValues => ({ case_number: c.case_number, report_type: 'Initial', filed_at: new Date().toLocaleString('en-US'), det_name: profile?.display_name || '', narrative: c.summary || '', summary: c.summary || '' })
+  const save = async () => {
+    if (!editing) return
+    const seq = reports.filter((r) => r.template === editing.template).length + 1
+    const patch = { case_id: c.id, template: editing.template, kind: 'initial' as const, seq, fields: editing.values as Json, author_id: profile?.id ?? null }
+    const res = editing.report ? await update('reports', editing.report.id, patch) : await insert('reports', patch)
+    if (res.error) toast(res.error.message, 'danger')
+    else { setEditing(null); toast('Report saved.', 'success'); void refresh() }
+  }
+  const finalize = async (r: ReportRow) => {
+    const res = await rpc('report_finalize', { p_report: r.id, p_badge: profile?.badge_number || undefined })
+    if (res.error) toast(res.error.message, 'danger')
+    else { toast('Report finalized.', 'success'); void refresh() }
+  }
+  return (
+    <div className="space-y-4">
+      {canEdit && <div className="flex flex-wrap gap-2">{REPORT_TEMPLATES.map((tpl) => <button key={tpl.id} onClick={() => setEditing({ template: tpl.id, values: seed() })} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-slate-200 hover:bg-white/10">{tpl.icon} {tpl.name}</button>)}</div>}
+      <div className="space-y-2">
+        {reports.map((r) => <div key={r.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3"><button onClick={() => setView(r)} className="min-w-0 flex-1 text-left"><p className="font-bold text-white">{reportTitle(r)}</p><p className="text-xs text-slate-500">{r.finalized ? 'Finalized' : 'Draft'} - {timeAgo(r.created_at)}</p></button>{!r.finalized && canEdit && <button onClick={() => void finalize(r)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Finalize</button>}{canEdit && <button onClick={() => setEditing({ template: r.template, values: parseFormValues(r.fields), report: r })} className="text-sm font-bold text-badge-200">Edit</button>}{canDelete && <button onClick={() => { void deleteWithUndo('reports', r, { label: reportTitle(r), after: refresh }) }} className="text-sm font-bold text-rose-300">Delete</button>}</div>)}
+        {!reports.length && <p className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-500">No reports yet.</p>}
+      </div>
+      <Modal open={!!editing} onClose={() => setEditing(null)} wide>
+        <div className="p-5">
+          <ModalHeader title={editing ? FORM_SCHEMAS[editing.template]?.title || 'Report' : 'Report'} onClose={() => setEditing(null)} />
+          {editing && <FormEditor template={editing.template} values={editing.values} onChange={(values) => setEditing({ ...editing, values })} />}
+          <div className="mt-5 flex justify-end gap-2"><button onClick={() => setEditing(null)} className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-200">Cancel</button><button onClick={save} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Save</button></div>
+        </div>
+      </Modal>
+      <Modal open={!!view} onClose={() => setView(null)} wide>
+        <div className="p-5">
+          <ModalHeader title={view ? reportTitle(view) : 'Report'} onClose={() => setView(null)} />
+          {view && <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{formToText(FORM_SCHEMAS[view.template], parseFormValues(view.fields))}</pre>}
+          {view && <div className="mt-4 flex justify-end"><button onClick={() => downloadTextFile(`${c.case_number}-${view.template}.md`, formToText(FORM_SCHEMAS[view.template], parseFormValues(view.fields)), 'text/markdown')} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Download .md</button></div>}
+        </div>
+      </Modal>
+    </div>
+  )
+}
+
+function FormEditor({ template, values, onChange }: { template: string; values: FormValues; onChange: (v: FormValues) => void }) {
+  const schema = FORM_SCHEMAS[template]
+  if (!schema) return <p className="text-sm text-slate-400">Unknown report template.</p>
+  const set = (key: string, value: unknown) => onChange({ ...values, [key]: value })
+  return <div className="space-y-4">{schema.sections.map((s) => {
+    if (s.type === 'note') return <p key={s.id} className="rounded-lg bg-white/5 p-3 text-sm text-slate-300">{s.text}</p>
+    if (s.type === 'textarea') return <label key={s.id} className="block text-sm font-bold text-white">{s.label}<textarea value={String(values[s.key] ?? '')} onChange={(e) => set(s.key, e.target.value)} rows={5} className="mt-2 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 font-normal text-white" /></label>
+    if (s.type === 'grid') {
+      const rows = (Array.isArray(values[s.id]) ? values[s.id] : [{}]) as Record<string, string>[]
+      return <div key={s.id} className="rounded-xl border border-white/10 p-3"><h4 className="mb-2 font-bold text-white">{s.label}</h4>{rows.map((row, i) => <div key={i} className="mb-2 grid gap-2 md:grid-cols-2">{s.cols.map((col) => <input key={col.key} value={row[col.key] || ''} onChange={(e) => set(s.id, rows.map((r, idx) => idx === i ? { ...r, [col.key]: e.target.value } : r))} placeholder={col.label} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white" />)}</div>)}<button onClick={() => set(s.id, [...rows, {}])} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-200">Add row</button></div>
+    }
+    return <div key={s.id} className="rounded-xl border border-white/10 p-3"><h4 className="mb-2 font-bold text-white">{s.label}</h4><div className="grid gap-2 md:grid-cols-2">{s.fields.map((f) => f.type === 'select' ? <select key={f.key} value={String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white"><option value="">{f.label}</option>{(f.opts || []).filter(Boolean).map((o) => <option key={o} value={o}>{o}</option>)}</select> : <input key={f.key} value={Array.isArray(values[f.key]) ? (values[f.key] as string[]).join(', ') : String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} placeholder={f.label} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white" />)}</div></div>
+  })}</div>
+}

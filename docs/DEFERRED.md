@@ -3,7 +3,8 @@
 > Items intentionally **not** done yet, each with the trigger that should bring it
 > back. Most are gated on a **Supabase/Vercel Pro upgrade**, an **environment/network
 > change**, or **data scale** — not on effort. Revisit this list whenever you change
-> plans or the app grows. Keep in sync with `ROADMAP.md`.
+> plans or the app grows. Keep in sync with the Owner Portal's improvement
+> roadmap (`src/components/owner/ownerData.ts`).
 
 ---
 

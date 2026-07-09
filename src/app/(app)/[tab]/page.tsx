@@ -34,8 +34,7 @@ import { IndicatorsView } from '@/components/indicators/IndicatorsView'
 import { DevDocsView } from '@/components/devdocs/DevDocsView'
 import { OwnerView } from '@/components/owner/OwnerView'
 
-/** One route per leaf tab. Placeholder views are replaced slice-by-slice as
- *  each vanilla view is ported (see docs/REACT-PARITY.md for the order). */
+/** One route per leaf tab, statically prerendered via generateStaticParams. */
 
 export function generateStaticParams() {
   return Object.keys(PAGE_META).map((tab) => ({ tab }))

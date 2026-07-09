@@ -1,0 +1,38 @@
+/** Runtime shape-checks for the JSON columns we read back from Supabase.
+ *  These columns are written by the app but stored as loose `jsonb` — a
+ *  migration script, a manual SQL edit, or an old vanilla-era row can hand
+ *  back any shape. Every read boundary goes through one of these parsers:
+ *  malformed entries are dropped and wholesale-wrong values degrade to the
+ *  empty fallback, so a bad row renders as "empty" instead of crashing the
+ *  screen. (Hand-rolled on purpose — the shapes are tiny and this keeps the
+ *  dependency surface at zero.) */
+
+import type { CaseCharge } from '@/lib/penal'
+import type { FormValues } from '@/lib/forms'
+
+/** `cases.charges` — an array of `{ code, count? }`. Entries without a
+ *  string `code` are dropped; a non-numeric `count` becomes 1. */
+export function parseCharges(v: unknown): CaseCharge[] {
+  if (!Array.isArray(v)) return []
+  const out: CaseCharge[] = []
+  for (const x of v) {
+    if (!x || typeof x !== 'object' || Array.isArray(x)) continue
+    const code = (x as { code?: unknown }).code
+    if (typeof code !== 'string' || !code) continue
+    const count = (x as { count?: unknown }).count
+    out.push({ code, count: typeof count === 'number' && Number.isFinite(count) && count > 0 ? count : 1 })
+  }
+  return out
+}
+
+/** `reports.fields` — a string-keyed value map. Arrays/scalars degrade to `{}`. */
+export function parseFormValues(v: unknown): FormValues {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
+  return v as FormValues
+}
+
+/** String-array columns (`feedback_meta.tags`, `case_messages.mentions`):
+ *  keeps only the string elements. */
+export function parseStringArray(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+}

@@ -28,6 +28,7 @@ import {
   ENV_VARS, FB_PRIORITIES, FB_PRIORITY_TINT, FB_STATUSES, FB_STATUS_TINT, FB_TYPES,
   LEARNING, MATRIX_NOTE, PERMISSIONS_MATRIX, REALTIME_DOC, ROUTES, SUGGESTIONS, WORKFLOW, fbLabel,
 } from './ownerData'
+import { parseStringArray } from '@/lib/jsonShapes'
 
 type FeedbackRow = Tables<'feedback'>
 type MetaRow = Tables<'feedback_meta'>
@@ -464,7 +465,7 @@ function FeedbackDetailModal({ item, onClose, onSaved }: { item: FbItem; onClose
   const [type, setType] = useState(m?.type ?? (item.fb.kind === 'bug' ? 'bug' : 'feature_request'))
   const [priority, setPriority] = useState(m?.priority ?? '')
   const [category, setCategory] = useState(m?.category ?? '')
-  const [tags, setTags] = useState(Array.isArray(m?.tags) ? (m.tags as string[]).join(', ') : '')
+  const [tags, setTags] = useState(parseStringArray(m?.tags).join(', '))
   const [feature, setFeature] = useState(m?.related_feature ?? '')
   const [route, setRoute] = useState(m?.related_route ?? '')
   const [notes, setNotes] = useState(m?.internal_notes ?? '')
@@ -594,7 +595,9 @@ function SuggestionsSection() {
               <p className="min-w-0 flex-1 text-sm font-bold text-white">{s.title}</p>
               <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] uppercase text-slate-400">{s.group}</span>
               <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${s.difficulty === 'S' ? 'bg-emerald-500/15 text-emerald-300' : s.difficulty === 'M' ? 'bg-amber-500/15 text-amber-300' : 'bg-rose-500/15 text-rose-300'}`}>{s.difficulty === 'S' ? 'small' : s.difficulty === 'M' ? 'medium' : 'large'}</span>
-              <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${s.safeNow ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-500/20 text-slate-400'}`}>{s.safeNow ? 'safe now' : 'wait'}</span>
+              {s.done
+                ? <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-300">done {s.done}</span>
+                : <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${s.safeNow ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-500/20 text-slate-400'}`}>{s.safeNow ? 'safe now' : 'wait'}</span>}
             </div>
             <p className="mt-1 text-xs text-slate-400">{s.why}</p>
             <p className="mt-1 text-[11px] text-slate-500">
