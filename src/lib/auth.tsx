@@ -18,6 +18,7 @@ import { isConfigured, supabase } from './supabase'
 import type { Database } from './database.types'
 import { isCommandRole } from './roles'
 import { resetRealtime } from './realtime'
+import { installErrorReporter } from './errorReport'
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row']
 
@@ -134,6 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isConfigured) return
+    installErrorReporter()
     // supabase-js fires INITIAL_SESSION on subscribe, so this one callback
     // covers boot AND every later auth event (sign-in, sign-out, hourly
     // token refresh) — the versions of vanilla boot() + onAuth() combined.

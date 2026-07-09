@@ -27,6 +27,10 @@ jobs:
       - name: Handbook content in sync with docs
         # -I ignores the volatile git-derived date line (shallow CI checkouts can't reproduce it)
         run: npm run gen:handbook && git diff -I'HANDBOOK_UPDATED' --exit-code src/components/devdocs/handbookContent.ts
+      - name: User guide drift check
+        run: npm run gen:guide && git diff --exit-code src/components/guide/guideContent.ts
+      - name: Schema artifacts sync check
+        run: npm run check:schema
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Lint (zero warnings)
@@ -35,3 +39,37 @@ jobs:
         run: npm test
       - name: Production build
         run: npm run build
+
+  # Live security suites — run only when the rls-test-* account passwords are
+  # configured as repository secrets (Settings → Secrets → Actions). Without
+  # them the vitest suite self-skips (exit 0) and the Playwright steps are
+  # bypassed, so forks and secretless clones stay green.
+  security-suites:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://jhxuflzmqspidkvjckox.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_sshJXQoxX0NZqUeU-uBObQ_aSgQaHRa
+      NEXT_PUBLIC_FIVEMANAGE_API_KEY: Z3ctM38GCUw5aPam9xscHYcxjghj8iTE
+      NEXT_PUBLIC_FIVEMANAGE_BASE_URL: https://api.fivemanage.com
+      RLS_TEST_PASSWORD_LSB: ${{ secrets.RLS_TEST_PASSWORD_LSB }}
+      RLS_TEST_PASSWORD_BCB: ${{ secrets.RLS_TEST_PASSWORD_BCB }}
+      RLS_TEST_PASSWORD_INACTIVE: ${{ secrets.RLS_TEST_PASSWORD_INACTIVE }}
+      RLS_TEST_PASSWORD_OWNER: ${{ secrets.RLS_TEST_PASSWORD_OWNER }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: RLS/RPC security-wall suite (self-skips without secrets)
+        run: npm run test:rls
+      - name: Install Playwright browser
+        if: env.RLS_TEST_PASSWORD_LSB != ''
+        run: npx playwright install chromium --with-deps
+      - name: Build for E2E
+        if: env.RLS_TEST_PASSWORD_LSB != ''
+        run: npm run build
+      - name: E2E smoke
+        if: env.RLS_TEST_PASSWORD_LSB != ''
+        run: npm run test:e2e

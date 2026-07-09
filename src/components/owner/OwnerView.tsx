@@ -13,11 +13,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
-import { countRows, insert, list, update, updateWhere, withRetry } from '@/lib/db'
+import { countRows, insert, list, remove, update, updateWhere, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { isConfigured } from '@/lib/supabase'
 import { fmConfigured } from '@/lib/fivemanage'
-import { useRealtimeStore } from '@/lib/realtime'
+import { useRealtimeStore, useTableVersion } from '@/lib/realtime'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
@@ -308,7 +308,57 @@ function HealthSection() {
           {loading ? 'Refreshing…' : '↻ Refresh'}
         </button>
       </Panel>
+
+      <ClientErrorsPanel />
     </div>
+  )
+}
+
+/** Uncaught client exceptions reported by src/lib/errorReport.ts. Live via
+ *  realtime; owners also get a throttled bell notification (DB trigger). */
+function ClientErrorsPanel() {
+  const [rows, setRows] = useState<Tables<'client_errors'>[]>([])
+  const [busy, setBusy] = useState(false)
+  const v = useTableVersion('client_errors')
+  const refresh = useCallback(async () => {
+    try { setRows((await list('client_errors', { order: 'created_at', ascending: false })).slice(0, 25)) }
+    catch { /* offline — panel shows empty */ }
+  }, [])
+  useEffect(() => {
+    const t = window.setTimeout(() => { void refresh() }, 0)
+    return () => window.clearTimeout(t)
+  }, [refresh, v])
+  const clearAll = async () => {
+    setBusy(true)
+    for (const r of rows) {
+      const res = await remove('client_errors', r.id)
+      if (res.error) { toast(res.error.message, 'danger'); break }
+    }
+    setBusy(false)
+    void refresh()
+  }
+  return (
+    <Panel title="Client errors" sub="Uncaught exceptions reported from members' browsers (max 5 per session per user, deduplicated). You also get a bell notification, throttled to one per 15 minutes.">
+      {rows.length === 0 ? (
+        <p className="text-xs text-emerald-300">✓ No errors reported.</p>
+      ) : (
+        <div className="space-y-2">
+          {rows.map((r) => (
+            <details key={r.id} className="rounded-xl border border-rose-400/20 bg-rose-500/5 p-3">
+              <summary className="cursor-pointer text-xs text-slate-200">
+                <span className="font-bold text-rose-200">{r.message.slice(0, 120)}</span>
+                <span className="ml-2 text-slate-500">{r.route || ''} · {officerName(r.reporter_id) || 'unknown'} · {timeAgo(r.created_at)}</span>
+              </summary>
+              {r.stack && <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-ink-950 p-2 text-[10px] text-slate-400">{r.stack}</pre>}
+              {r.user_agent && <p className="mt-1 text-[10px] text-slate-600">{r.user_agent}</p>}
+            </details>
+          ))}
+          <button onClick={() => void clearAll()} disabled={busy} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50">
+            {busy ? 'Clearing…' : 'Clear shown'}
+          </button>
+        </div>
+      )}
+    </Panel>
   )
 }
 

@@ -21,6 +21,7 @@ const PW = {
   lsb: process.env.RLS_TEST_PASSWORD_LSB,
   bcb: process.env.RLS_TEST_PASSWORD_BCB,
   inactive: process.env.RLS_TEST_PASSWORD_INACTIVE,
+  owner: process.env.RLS_TEST_PASSWORD_OWNER,
 }
 const enabled = !!(ANON && PW.lsb && PW.bcb && PW.inactive)
 if (!enabled) console.warn('[rls] RLS_TEST_PASSWORD_* not set — suite skipped')
@@ -187,5 +188,72 @@ describe.skipIf(!enabled)('RLS security wall (live project, test accounts)', () 
   it('cleanup RPC rejects anonymous callers', async () => {
     const { error } = await anon.rpc('rls_test_cleanup')
     expect(error).not.toBeNull()
+  })
+})
+
+/** Owner-POSITIVE coverage — proves the owner paths keep working, not just
+ *  that non-owners are denied. This is the block that would have caught the
+ *  missing is_owner() EXECUTE grant before it shipped. Separate account and
+ *  env var so the denial suite still runs without it. */
+describe.skipIf(!enabled || !PW.owner)('Owner role (positive paths)', () => {
+  let owner: SupabaseClient
+  let ownerId = ''
+  let feedbackId = ''
+
+  beforeAll(async () => {
+    owner = mk()
+    const { data, error } = await owner.auth.signInWithPassword({ email: 'rls-test-owner@cidportal.test', password: PW.owner! })
+    if (error) throw new Error(`owner sign-in failed: ${error.message}`)
+    ownerId = data.user!.id
+    const fb = await owner.from('feedback').insert({ kind: 'feature', title: 'RLS owner-path test feedback' }).select('id')
+    if (fb.error) throw new Error(`feedback insert failed: ${fb.error.message}`)
+    feedbackId = fb.data![0].id
+  })
+
+  afterAll(async () => {
+    if (!owner) return
+    const { error } = await owner.rpc('rls_test_cleanup')
+    if (error) throw new Error(`rls_test_cleanup failed: ${error.message}`)
+    await owner.auth.signOut()
+  })
+
+  it('owner profile carries is_owner', async () => {
+    const { data, error } = await owner.from('profiles').select('id,is_owner').eq('id', ownerId)
+    expect(error).toBeNull()
+    expect(data![0].is_owner).toBe(true)
+  })
+
+  it('owner can read the audit log', async () => {
+    const { data, error } = await owner.from('audit_log').select('id').limit(1)
+    expect(error).toBeNull()
+    expect(data).toHaveLength(1)
+  })
+
+  it('owner can create and update feedback triage metadata', async () => {
+    // Exercises BOTH previously-shipped live bugs: the audit trigger that
+    // assumed an id column (feedback_meta keys by feedback_id) and the
+    // missing is_owner() EXECUTE grant.
+    const ins = await owner.from('feedback_meta')
+      .insert({ feedback_id: feedbackId, status: 'triaged', priority: 'low', updated_by: ownerId })
+      .select('feedback_id,status')
+    expect(ins.error).toBeNull()
+    expect(ins.data).toHaveLength(1)
+    const upd = await owner.from('feedback_meta')
+      .update({ status: 'planned', internal_notes: 'owner-path test note' })
+      .eq('feedback_id', feedbackId)
+      .select('status')
+    expect(upd.error).toBeNull()
+    expect(upd.data![0].status).toBe('planned')
+  })
+
+  it('owner can read internal triage fields back', async () => {
+    const { data, error } = await owner.from('feedback_meta').select('feedback_id,internal_notes').eq('feedback_id', feedbackId)
+    expect(error).toBeNull()
+    expect(data![0].internal_notes).toBe('owner-path test note')
+  })
+
+  it('owner still cannot self-modify role/active (guard_profile)', async () => {
+    const upd = await owner.from('profiles').update({ role: 'director' }).eq('id', ownerId).select('role')
+    if (!upd.error) expect(upd.data![0].role).toBe('detective') // silently reverted
   })
 })

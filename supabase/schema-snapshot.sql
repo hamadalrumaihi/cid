@@ -16,9 +16,9 @@
 --   * The grants / ACL / realtime sections are informational
 --     comments, not executable statements.
 --
--- Contents: 13 enum types, 48 tables (public + private),
--- 103 standalone indexes, 38 functions, 56 triggers,
--- 168 RLS policies, realtime publication members, grants.
+-- Contents: 13 enum types, 49 tables (public + private),
+-- 104 standalone indexes, 40 functions, 57 triggers,
+-- 171 RLS policies, realtime publication members, grants.
 -- ============================================================
 -- Enum types
 -- ============================================================
@@ -320,6 +320,19 @@ create table public.cid_records (
 alter table public.cid_records add constraint cid_records_pkey PRIMARY KEY (id);
 alter table public.cid_records add constraint cid_records_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.cid_records enable row level security;
+
+create table public.client_errors (
+  id uuid not null default gen_random_uuid(),
+  message text not null,
+  stack text,
+  route text,
+  user_agent text,
+  reporter_id uuid default auth.uid(),
+  created_at timestamp with time zone not null default now()
+);
+alter table public.client_errors add constraint client_errors_pkey PRIMARY KEY (id);
+alter table public.client_errors add constraint client_errors_reporter_id_fkey FOREIGN KEY (reporter_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.client_errors enable row level security;
 
 create table public.commendations (
   id uuid not null default gen_random_uuid(),
@@ -1196,6 +1209,29 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.notify_owners_client_error()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare o record;
+begin
+  for o in select id from public.profiles where is_owner and active loop
+    -- throttle: at most one unread client_error ping per owner per 15 min
+    if not exists (
+      select 1 from public.notifications n
+      where n.user_id = o.id and n.type = 'client_error'
+        and not n.read and n.created_at > now() - interval '15 minutes'
+    ) then
+      insert into public.notifications (user_id, type, payload)
+      values (o.id, 'client_error', jsonb_build_object('reason', left(new.message, 160), 'route', new.route));
+    end if;
+  end loop;
+  return new;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.role()
  RETURNS public.app_role
  LANGUAGE sql
@@ -1730,6 +1766,7 @@ CREATE TRIGGER cases_touch BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FU
 CREATE TRIGGER trg_block_direct_signoff BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_signoff();
 CREATE TRIGGER trg_case_closed_at BEFORE UPDATE OF status ON public.cases FOR EACH ROW EXECUTE FUNCTION public.set_case_closed_at();
 CREATE TRIGGER cid_records_touch BEFORE UPDATE ON public.cid_records FOR EACH ROW EXECUTE FUNCTION public.cid_touch_updated_at();
+CREATE TRIGGER client_errors_notify AFTER INSERT ON public.client_errors FOR EACH ROW EXECUTE FUNCTION private.notify_owners_client_error();
 CREATE TRIGGER commendations_touch BEFORE UPDATE ON public.commendations FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER custody_chain_audit AFTER INSERT OR DELETE OR UPDATE ON public.custody_chain FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER documents_audit AFTER INSERT OR DELETE OR UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION private.audit();
@@ -1980,6 +2017,18 @@ create policy cid_update on public.cid_records
   as permissive for update to authenticated
   using ((( SELECT private.is_active() AS is_active) AND ((created_by = ( SELECT auth.uid() AS uid)) OR ( SELECT private.is_command() AS is_command))))
   with check ((( SELECT private.is_active() AS is_active) AND ((created_by = ( SELECT auth.uid() AS uid)) OR ( SELECT private.is_command() AS is_command))));
+
+create policy client_errors_ins on public.client_errors
+  as permissive for insert to authenticated
+  with check (true);
+
+create policy client_errors_owner_del on public.client_errors
+  as permissive for delete to authenticated
+  using (private.is_owner());
+
+create policy client_errors_owner_sel on public.client_errors
+  as permissive for select to authenticated
+  using (private.is_owner());
 
 create policy comm_del on public.commendations
   as permissive for delete to authenticated
@@ -2522,6 +2571,7 @@ create policy wl_sel on public.watchlist
 --   public.case_templates
 --   public.cases
 --   public.cid_records
+--   public.client_errors
 --   public.commendations
 --   public.custody_chain
 --   public.documents
@@ -2584,6 +2634,8 @@ create policy wl_sel on public.watchlist
 --   cases -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   cid_records -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   cid_records -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   client_errors -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   client_errors -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   commendations -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   commendations -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   custody_chain -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
