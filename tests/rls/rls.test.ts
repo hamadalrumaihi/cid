@@ -22,6 +22,9 @@ const PW = {
   bcb: process.env.RLS_TEST_PASSWORD_BCB,
   inactive: process.env.RLS_TEST_PASSWORD_INACTIVE,
   owner: process.env.RLS_TEST_PASSWORD_OWNER,
+  lead: process.env.RLS_TEST_PASSWORD_LEAD,
+  director: process.env.RLS_TEST_PASSWORD_DIRECTOR,
+  target: process.env.RLS_TEST_PASSWORD_TARGET,
 }
 const enabled = !!(ANON && PW.lsb && PW.bcb && PW.inactive)
 if (!enabled) console.warn('[rls] RLS_TEST_PASSWORD_* not set — suite skipped')
@@ -255,5 +258,86 @@ describe.skipIf(!enabled || !PW.owner)('Owner role (positive paths)', () => {
   it('owner still cannot self-modify role/active (guard_profile)', async () => {
     const upd = await owner.from('profiles').update({ role: 'director' }).eq('id', ownerId).select('role')
     if (!upd.error) expect(upd.data![0].role).toBe('detective') // silently reverted
+  })
+})
+
+/** Command Center — assign_member bureau-lead scoping. Proves a Bureau Lead is
+ *  confined to their own bureau and can't over-promote, while a Director keeps
+ *  the broad power. Uses dedicated lead/director accounts (never mutated) and a
+ *  throwaway `target` (detective/LSB) that a test promotes and afterAll
+ *  restores. Skips unless all three passwords are set. */
+const ccEnabled = enabled && !!(PW.lead && PW.director && PW.target)
+describe.skipIf(!ccEnabled)('Command Center — assign_member scoping', () => {
+  let lead: SupabaseClient
+  let director: SupabaseClient
+  let plainDet: SupabaseClient
+  let targetId = ''
+  let bcbId = ''
+
+  beforeAll(async () => {
+    lead = mk(); director = mk(); plainDet = mk()
+    const t = mk(); const b = mk()
+    const signIn = async (c: SupabaseClient, email: string, pw: string) => {
+      const { data, error } = await c.auth.signInWithPassword({ email, password: pw })
+      if (error) throw new Error(`sign-in failed for ${email}: ${error.message}`)
+      return data.user!.id
+    }
+    await signIn(lead, 'rls-test-lead@cidportal.test', PW.lead!)
+    await signIn(director, 'rls-test-director@cidportal.test', PW.director!)
+    await signIn(plainDet, 'rls-test-lsb@cidportal.test', PW.lsb!)
+    targetId = await signIn(t, 'rls-test-target@cidportal.test', PW.target!)
+    bcbId = await signIn(b, 'rls-test-bcb@cidportal.test', PW.bcb!)
+    await t.auth.signOut(); await b.auth.signOut()
+  })
+
+  afterAll(async () => {
+    if (director) {
+      // restore the throwaway target to its baseline, then purge the
+      // role_events this block created (cleanup deletes them for test ids)
+      await director.rpc('assign_member', { target: targetId, new_role: 'detective', new_division: 'LSB', set_active: true })
+      await director.rpc('rls_test_cleanup')
+    }
+    await Promise.all([lead, director, plainDet].filter(Boolean).map((c) => c.auth.signOut()))
+  })
+
+  it('Bureau Lead may manage a member in their own bureau (no-op update succeeds)', async () => {
+    const { error } = await lead.rpc('assign_member', { target: targetId, new_role: 'detective', new_division: 'LSB', set_active: true })
+    expect(error).toBeNull()
+  })
+
+  it('Bureau Lead cannot promote above senior detective', async () => {
+    const { error } = await lead.rpc('assign_member', { target: targetId, new_role: 'bureau_lead', new_division: 'LSB', set_active: true })
+    expect(error).not.toBeNull()
+  })
+
+  it('Bureau Lead cannot transfer a member out of their bureau', async () => {
+    const { error } = await lead.rpc('assign_member', { target: targetId, new_role: 'detective', new_division: 'BCB', set_active: true })
+    expect(error).not.toBeNull()
+  })
+
+  it('Bureau Lead cannot manage a member in another bureau', async () => {
+    const { error } = await lead.rpc('assign_member', { target: bcbId, new_role: 'detective', new_division: 'BCB', set_active: true })
+    expect(error).not.toBeNull()
+  })
+
+  it('Bureau Lead may promote to senior detective within their bureau', async () => {
+    const up = await lead.rpc('assign_member', { target: targetId, new_role: 'senior_detective', new_division: 'LSB', set_active: true })
+    expect(up.error).toBeNull()
+    await director.rpc('assign_member', { target: targetId, new_role: 'detective', new_division: 'LSB', set_active: true })
+  })
+
+  it('Director can promote across bureaus and to command roles', async () => {
+    const up = await director.rpc('assign_member', { target: targetId, new_role: 'bureau_lead', new_division: 'BCB', set_active: true })
+    expect(up.error).toBeNull()
+    // restore
+    const back = await director.rpc('assign_member', { target: targetId, new_role: 'detective', new_division: 'LSB', set_active: true })
+    expect(back.error).toBeNull()
+  })
+
+  it('role_events history is readable by command but not by a plain detective', async () => {
+    const cmd = await director.from('role_events').select('id').limit(1)
+    expect(cmd.error).toBeNull()
+    const det = await plainDet.from('role_events').select('id').limit(1)
+    expect(det.data ?? []).toHaveLength(0)
   })
 })

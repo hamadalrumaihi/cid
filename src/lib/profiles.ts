@@ -8,12 +8,12 @@ import { list } from './db'
 import type { Tables } from './database.types'
 
 export const ROSTER_COLS =
-  'id,display_name,avatar_url,badge_number,division,role,active,created_at,updated_at,loa,loa_since,discord_id,removed_at' as const
+  'id,display_name,avatar_url,badge_number,division,role,active,created_at,updated_at,loa,loa_since,discord_id,removed_at,is_owner' as const
 
 export type RosterProfile = Pick<
   Tables<'profiles'>,
   'id' | 'display_name' | 'avatar_url' | 'badge_number' | 'division' | 'role'
-  | 'active' | 'created_at' | 'updated_at' | 'loa' | 'loa_since' | 'discord_id' | 'removed_at'
+  | 'active' | 'created_at' | 'updated_at' | 'loa' | 'loa_since' | 'discord_id' | 'removed_at' | 'is_owner'
 >
 
 interface ProfilesState {

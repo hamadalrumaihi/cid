@@ -6,6 +6,51 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.5.0] — 2026-07-09
+
+### Added — Command Center
+- A new top-level **`/command-center`** tab: the single home for command
+  administration, gated to command roles (Bureau Lead / Deputy Director /
+  Director) and the portal owner. The visible gate is UX only — every action
+  still flows through the existing SECURITY DEFINER RPCs and RLS
+  (`private.is_command()` / `is_owner()`), which remain the real wall.
+  Section-nav pattern with `?s=` deep-links (mirrors the Owner Portal):
+  - **Overview** — command KPIs (pending approvals, sign-offs awaiting you,
+    active officers, on-LOA) that deep-link to the relevant section.
+  - **Chain of Command** — org chart from the roster (owners → director →
+    deputies → per-bureau leads/seniors/detectives) plus the sign-off chain.
+  - **Personnel & Admin** — the AdminPanel + AssignModal member-management
+    controls, **moved here** from the Personnel tab.
+  - **Approval Queue** — pending member approvals (one-click approve) plus
+    sign-offs awaiting your decision, deep-linking to the case sign-off tab.
+  - **Promotions & Transfers** — officer search + role/bureau changes, with a
+    **role-change history** from the new `role_events` table.
+  - **Duty Status** — active / on-duty / LOA counts and per-bureau officer
+    lists.
+  - **Permissions** — the access matrix (reuses the Owner Portal matrix).
+  - **Announcements & Analytics** — embeds the announcement composer and the
+    division analytics view.
+
+### Changed
+- **Personnel** is now a read-only member-facing directory: member
+  administration (approve / manage / promote / transfer / remove) moved to the
+  Command Center. Command staff see a link banner; officers keep their own LOA
+  toggle and an "edit my profile" shortcut. The existing sign-off, member
+  approval, owner-only audit and dashboard/analytics tabs are unchanged.
+- Extracted the shared `canReviewCase()` sign-off predicate to
+  `command-center/lib/approvals.ts` (used by both the Inbox and the Approval
+  Queue).
+
+### Security / Database
+- New **`role_events`** history table (actor, target, old/new role/division/
+  active), populated only by the `assign_member` RPC; command-readable RLS,
+  realtime-published.
+- **`assign_member` tightened for Bureau Leads**: a non-owner Bureau Lead may
+  only manage members **in their own bureau**, may **not** promote above
+  `senior_detective`, may **not** transfer members out of their bureau, and may
+  **not** manage other command staff. Deputy Director / Director / Owner scope
+  is unchanged (broader). Enforced in the database, not just the UI.
+
 ## [1.4.0] — 2026-07-09
 
 ### Added — native profile & settings page

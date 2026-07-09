@@ -55,6 +55,9 @@ jobs:
       RLS_TEST_PASSWORD_BCB: ${{ secrets.RLS_TEST_PASSWORD_BCB }}
       RLS_TEST_PASSWORD_INACTIVE: ${{ secrets.RLS_TEST_PASSWORD_INACTIVE }}
       RLS_TEST_PASSWORD_OWNER: ${{ secrets.RLS_TEST_PASSWORD_OWNER }}
+      RLS_TEST_PASSWORD_LEAD: ${{ secrets.RLS_TEST_PASSWORD_LEAD }}
+      RLS_TEST_PASSWORD_DIRECTOR: ${{ secrets.RLS_TEST_PASSWORD_DIRECTOR }}
+      RLS_TEST_PASSWORD_TARGET: ${{ secrets.RLS_TEST_PASSWORD_TARGET }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

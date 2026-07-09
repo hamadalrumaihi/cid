@@ -72,7 +72,7 @@ const subscribeCollapse = (cb: () => void) => {
 const readCollapsed = () => document.body.classList.contains('nav-collapsed')
 
 export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; onCloseDrawer: () => void }) {
-  const { isOwner } = useAuth()
+  const { isCommand, isOwner } = useAuth()
   const { activeCategory, activeTab, navigate, navigateCategory } = useNav()
   const badges = useNavBadges()
   const collapsed = useSyncExternalStore(subscribeCollapse, readCollapsed, () => false)
@@ -160,6 +160,21 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
           <span className="nav-icon flex-shrink-0"><CategoryIcon cat="feedback" /></span>
           <span className="nav-label">Feedback</span>
         </button>
+        {/* Command Center — standalone leaf for command staff + owner.
+            Hiding is cosmetic; the view gate + RLS/RPCs are the real rule. */}
+        {(isCommand || isOwner) && (
+          <button
+            data-label="Command Center"
+            onClick={() => go(() => navigate('command-center'))}
+            title="Command Center — personnel, approvals, promotions & chain of command"
+            className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
+              activeTab === 'command-center' ? 'bg-white/10 text-white' : 'text-slate-300'
+            }`}
+          >
+            <span className="nav-icon flex-shrink-0" aria-hidden>🛡️</span>
+            <span className="nav-label">Command Center</span>
+          </button>
+        )}
         {/* Owner Portal — standalone leaf, rendered ONLY for the project
             owner (profiles.is_owner). Hiding is cosmetic; OwnerView and RLS
             (private.is_owner()) enforce the real rule. */}
