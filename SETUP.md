@@ -1,7 +1,7 @@
 # CID Portal — Setup & Deployment
 
-Multi-file vanilla-JS front-end (static host) + Supabase backend. No custom server,
-no build step.
+Next.js front-end (statically pre-rendered, hosted on Vercel) + Supabase
+backend. No custom server — see the root `README.md` for local development.
 
 ## 0. Prerequisites
 - Supabase project **`cid`** (`jhxuflzmqspidkvjckox`). Resume it if paused.
@@ -40,16 +40,15 @@ Dashboard → **Authentication → Providers**:
 
 ### URL configuration
 Authentication → **URL Configuration**:
-- **Site URL:** your Pages URL, e.g. `https://<user>.github.io/<repo>/`
-- **Redirect URLs:** add the Pages URL (and `http://localhost:*` for local testing).
+- **Site URL:** your deployed origin, e.g. `https://<project>.vercel.app`
+- **Redirect URLs:** add the deployed origin (and `http://localhost:*` for local testing).
 
 ## 3. Front-end config (public anon key only)
-In the front-end config block (`window.CID_SUPABASE`):
-```js
-window.CID_SUPABASE = {
-  url: 'https://jhxuflzmqspidkvjckox.supabase.co',   // prewired
-  anonKey: 'PASTE_ANON_OR_PUBLISHABLE_KEY'           // Settings → API → anon/publishable
-};
+The front-end reads its config from environment variables (see `.env.example`;
+locally copy it to `.env.local`, on Vercel they ship in `vercel.json`'s build env):
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://jhxuflzmqspidkvjckox.supabase.co   # prewired
+NEXT_PUBLIC_SUPABASE_ANON_KEY=PASTE_ANON_OR_PUBLISHABLE_KEY        # Settings → API
 ```
 The anon/publishable key is **public by design** (RLS protects data). **Never** put
 the `service_role` key in the client.
@@ -85,12 +84,13 @@ Two axes, both off the caller's `profiles` row: **role** (`profiles.role`) and
 If `anonKey` is unset or Supabase is unreachable, the app shows a clear setup
 notice instead of failing.
 
-## 7. Tables (27)
-profiles, cases, case_assignments, persons, evidence, custody_chain (append-only),
-gangs, gang_ranks, gang_members, places, place_process_steps, narcotics,
-narcotic_precursors, narcotic_hotspots, ballistics_benches, ballistic_footprints,
-reports, trackers, rico_cases, predicate_acts, media, documents, tickets,
-raid_compensations, mo_profiles, notifications, audit_log.
+## 7. Tables
+The live schema has grown to **47 tables** (the original 27 plus case chat,
+tasks, templates, intel links, sign-off history, access grants/requests,
+watchlist, operations, indicators, shift reports, calendar/feedback support,
+and more). The authoritative list — with each table's RLS pattern — is in
+[`docs/HANDBOOK.md`](docs/HANDBOOK.md) §8; the TypeScript mirror is
+`src/lib/database.types.ts`.
 
-No seed/demo data is inserted — every module starts empty with "Create first…" CTAs
-and per-module CSV/JSON import (Phase 2).
+No seed/demo data is inserted — every module starts empty with "Create first…"
+CTAs.
