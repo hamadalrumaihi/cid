@@ -1,6 +1,6 @@
 # RLS / RPC security-wall tests
 
-Integration tests that hit the **live Supabase project** as four dedicated,
+Integration tests that hit the **live Supabase project** as several dedicated,
 low-privilege test accounts and assert that the security wall holds:
 
 | Account | State | Used to prove |
@@ -9,12 +9,15 @@ low-privilege test accounts and assert that the security wall holds:
 | `rls-test-bcb@cidportal.test` | detective, BCB, active | bureau isolation (read/write/create) |
 | `rls-test-inactive@cidportal.test` | inactive | deny-by-default |
 | `rls-test-owner@cidportal.test` | detective, SAB, active, **is_owner** | owner-POSITIVE paths (triage writes, audit reads) |
+| `rls-test-lead@cidportal.test` | **bureau_lead**, LSB, active | Command Center: bureau-lead scoping (own bureau only, no over-promotion) |
+| `rls-test-director@cidportal.test` | **director**, SAB, active | Command Center: director keeps broad promote/transfer power |
+| `rls-test-target@cidportal.test` | detective, LSB, active | throwaway target the scoping tests promote/transfer and restore |
 
 Covered: bureau isolation (read, update, insert, child rows), deny-by-default
 for inactive accounts, the sign-off/finalize **lockdown triggers**, RPC caller
 checks (`signoff_decide` as non-assignee), owner gates (`feedback_meta`,
 `audit_log`), `is_owner` self-grant immunity, the `profiles.email`
-column-grant, and anonymous access.
+column-grant, anonymous access, and the Command Center's `assign_member` bureau-lead scoping (own-bureau-only, no over-promotion; director stays broad).
 
 ## Running
 
@@ -29,6 +32,9 @@ RLS_TEST_PASSWORD_LSB=…
 RLS_TEST_PASSWORD_BCB=…
 RLS_TEST_PASSWORD_INACTIVE=…
 RLS_TEST_PASSWORD_OWNER=…   # optional — enables the owner-positive block
+RLS_TEST_PASSWORD_LEAD=…    # optional — enables the Command Center scoping block
+RLS_TEST_PASSWORD_DIRECTOR=…
+RLS_TEST_PASSWORD_TARGET=…
 # optional overrides: RLS_TEST_SUPABASE_URL, RLS_TEST_ANON_KEY
 ```
 

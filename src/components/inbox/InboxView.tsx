@@ -16,6 +16,7 @@ import { caseStatusTint, signoffLabel, signoffTint } from '@/lib/signoff'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { markWatchSeen, type WatchType } from '@/lib/watchlist'
+import { canReviewCase } from '@/components/command-center/lib/approvals'
 
 type CaseRow = Tables<'cases'>
 type TaskRow = Tables<'case_tasks'>
@@ -100,15 +101,6 @@ function daysUntil(date?: string | null): number | null {
 
 function caseHref(id: string): string {
   return `/cases?case=${encodeURIComponent(id)}`
-}
-
-function canReviewCase(c: CaseRow, profile: { id: string; role?: string | null; division?: string | null } | null): boolean {
-  if (!profile) return false
-  if (c.signoff_assignee_id === profile.id) return true
-  if (c.signoff_status === 'awaiting_bureau_lead') return profile.role === 'bureau_lead' && c.bureau === profile.division
-  if (c.signoff_status === 'awaiting_deputy' || c.signoff_status === 'approved_deputy') return profile.role === 'deputy_director'
-  if (c.signoff_status === 'awaiting_director') return profile.role === 'director'
-  return false
 }
 
 function Stat({ label, value, tone = 'slate' }: { label: string; value: number; tone?: 'slate' | 'amber' | 'rose' | 'emerald' | 'blue' }) {

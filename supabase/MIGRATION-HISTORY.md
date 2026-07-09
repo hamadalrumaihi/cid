@@ -3,7 +3,7 @@
 The live Supabase project (`cid`, `jhxuflzmqspidkvjckox`) is the source of
 truth for the schema. This file records every migration in the live
 project's `supabase_migrations.schema_migrations` history (as of
-**2026-07-09**, post-v1.2) and maps each to its file in `supabase/migrations/`, where
+**2026-07-09**, post-v1.5) and maps each to its file in `supabase/migrations/`, where
 one exists. Entries marked *applied live only* were applied directly to the
 live project (via the dashboard/MCP) and have no standalone file — their
 effects are captured in [`schema-snapshot.sql`](schema-snapshot.sql), a
@@ -15,7 +15,7 @@ Regenerate the snapshot after new migrations: query the Postgres catalogs
 --schema-only` if you have direct DB access — and refresh this table from
 `supabase_migrations.schema_migrations`.
 
-**79 live migrations** (54 with a repo file, 25 live-only).
+**82 live migrations** (54 with a repo file, 28 live-only).
 
 | # | Version (live) | Name | Repo file |
 |---|---|---|---|
@@ -98,6 +98,9 @@ Regenerate the snapshot after new migrations: query the Postgres catalogs
 | 77 | `20260709090142` | grant_execute_is_owner | — (applied live only) |
 | 78 | `20260709090245` | rls_test_cleanup_case_files_fix | — (applied live only) |
 | 79 | `20260709101108` | client_errors_table | — (applied live only) |
+| 80 | `20260709120400` | role_events_history | — (applied live only) |
+| 81 | `20260709120857` | assign_member_bureau_lead_scoping | — (applied live only) |
+| 82 | `20260709121127` | rls_test_cleanup_role_events | — (applied live only) |
 
 ## Repo files with no live history entry
 

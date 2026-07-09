@@ -2220,6 +2220,45 @@ export type Database = {
           },
         ]
       }
+      role_events: {
+        Row: {
+          actor_id: string | null
+          created_at: string
+          id: string
+          new_active: boolean | null
+          new_division: Database["public"]["Enums"]["bureau"] | null
+          new_role: Database["public"]["Enums"]["app_role"] | null
+          old_active: boolean | null
+          old_division: Database["public"]["Enums"]["bureau"] | null
+          old_role: Database["public"]["Enums"]["app_role"] | null
+          target_id: string
+        }
+        Insert: {
+          actor_id?: string | null
+          created_at?: string
+          id?: string
+          new_active?: boolean | null
+          new_division?: Database["public"]["Enums"]["bureau"] | null
+          new_role?: Database["public"]["Enums"]["app_role"] | null
+          old_active?: boolean | null
+          old_division?: Database["public"]["Enums"]["bureau"] | null
+          old_role?: Database["public"]["Enums"]["app_role"] | null
+          target_id: string
+        }
+        Update: {
+          actor_id?: string | null
+          created_at?: string
+          id?: string
+          new_active?: boolean | null
+          new_division?: Database["public"]["Enums"]["bureau"] | null
+          new_role?: Database["public"]["Enums"]["app_role"] | null
+          old_active?: boolean | null
+          old_division?: Database["public"]["Enums"]["bureau"] | null
+          old_role?: Database["public"]["Enums"]["app_role"] | null
+          target_id?: string
+        }
+        Relationships: []
+      }
       shift_reports: {
         Row: {
           arrests: number

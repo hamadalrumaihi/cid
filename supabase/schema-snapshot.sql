@@ -16,9 +16,9 @@
 --   * The grants / ACL / realtime sections are informational
 --     comments, not executable statements.
 --
--- Contents: 13 enum types, 49 tables (public + private),
--- 104 standalone indexes, 40 functions, 57 triggers,
--- 171 RLS policies, realtime publication members, grants.
+-- Contents: 13 enum types, 50 tables (public + private),
+-- 105 standalone indexes, 41 functions, 57 triggers,
+-- 172 RLS policies, realtime publication members, grants.
 -- ============================================================
 -- Enum types
 -- ============================================================
@@ -773,6 +773,23 @@ alter table public.rico_cases add constraint rico_cases_case_id_fkey FOREIGN KEY
 alter table public.rico_cases add constraint rico_cases_enterprise_gang_id_fkey FOREIGN KEY (enterprise_gang_id) REFERENCES public.gangs(id) ON DELETE SET NULL;
 alter table public.rico_cases enable row level security;
 
+create table public.role_events (
+  id uuid not null default gen_random_uuid(),
+  target_id uuid not null,
+  actor_id uuid,
+  old_role public.app_role,
+  new_role public.app_role,
+  old_division public.bureau,
+  new_division public.bureau,
+  old_active boolean,
+  new_active boolean,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.role_events add constraint role_events_pkey PRIMARY KEY (id);
+alter table public.role_events add constraint role_events_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.role_events add constraint role_events_target_id_fkey FOREIGN KEY (target_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.role_events enable row level security;
+
 create table public.shift_reports (
   id uuid not null default gen_random_uuid(),
   author_id uuid not null default auth.uid(),
@@ -1376,9 +1393,53 @@ CREATE OR REPLACE FUNCTION public.assign_member(target uuid, new_role public.app
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
+declare
+  actor uuid := (select auth.uid());
+  actor_role public.app_role;
+  actor_div public.bureau;
+  actor_owner boolean;
+  cur_role public.app_role;
+  cur_div public.bureau;
+  cur_active boolean;
 begin
-  if not private.is_command() then raise exception 'not authorized'; end if;
-  update public.profiles set role=new_role, division=new_division, active=set_active where id=target;
+  select role, division, is_owner into actor_role, actor_div, actor_owner
+    from public.profiles where id = actor;
+  -- Base gate: active command staff, or the owner.
+  if not (private.is_active() and (private.is_command() or coalesce(actor_owner, false))) then
+    raise exception 'not authorized';
+  end if;
+
+  select role, division, active into cur_role, cur_div, cur_active
+    from public.profiles where id = target;
+  if not found then raise exception 'target not found'; end if;
+
+  -- Bureau Lead restrictions (owner override bypasses these).
+  if actor_role = 'bureau_lead' and not coalesce(actor_owner, false) then
+    if cur_div is distinct from actor_div then
+      raise exception 'bureau leads may only manage members in their own bureau';
+    end if;
+    if new_division is distinct from actor_div then
+      raise exception 'bureau leads cannot transfer members out of their bureau';
+    end if;
+    if new_role in ('bureau_lead','deputy_director','director') then
+      raise exception 'bureau leads cannot promote above senior detective';
+    end if;
+    if cur_role in ('bureau_lead','deputy_director','director') then
+      raise exception 'bureau leads cannot manage command staff';
+    end if;
+  end if;
+
+  update public.profiles
+    set role = new_role, division = new_division, active = set_active
+    where id = target;
+
+  -- Record the change (only when something actually changed).
+  if cur_role is distinct from new_role
+     or cur_div is distinct from new_division
+     or cur_active is distinct from set_active then
+    insert into public.role_events (target_id, actor_id, old_role, new_role, old_division, new_division, old_active, new_active)
+      values (target, actor, cur_role, new_role, cur_div, new_division, cur_active, set_active);
+  end if;
 end $function$
 ;
 
@@ -1477,8 +1538,7 @@ declare
   case_ids uuid[];
   n_cases int; n_reports int; n_evidence int; n_feedback int;
 begin
-  select array_agg(id) into ids from auth.users
-  where email like 'rls-test-%@cidportal.test';
+  select array_agg(id) into ids from auth.users where email like 'rls-test-%@cidportal.test';
   if caller is null or ids is null or not (caller = any(ids)) then
     raise exception 'rls_test_cleanup: caller is not an RLS test account';
   end if;
@@ -1502,6 +1562,8 @@ begin
   delete from public.feedback where created_by = any(ids);
   get diagnostics n_feedback = row_count;
   delete from public.notifications where user_id = any(ids);
+  delete from public.role_events where target_id = any(ids) or actor_id = any(ids);
+  delete from public.client_errors where reporter_id = any(ids);
   delete from public.cases where id = any(case_ids);
   get diagnostics n_cases = row_count;
 
@@ -2468,6 +2530,10 @@ create policy rico_cases_upd on public.rico_cases
   using (private.can_access_case(case_id))
   with check (private.can_access_case(case_id));
 
+create policy role_events_sel on public.role_events
+  as permissive for select to authenticated
+  using ((private.is_command() OR private.is_owner()));
+
 create policy shift_reports_del on public.shift_reports
   as permissive for delete to authenticated
   using (((author_id = ( SELECT auth.uid() AS uid)) OR private.can_delete()));
@@ -2595,6 +2661,7 @@ create policy wl_sel on public.watchlist
 --   public.raid_compensations
 --   public.reports
 --   public.rico_cases
+--   public.role_events
 --   public.shift_reports
 --   public.tickets
 --   public.trackers
@@ -2690,6 +2757,8 @@ create policy wl_sel on public.watchlist
 --   reports -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   rico_cases -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   rico_cases -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   role_events -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   role_events -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   shift_reports -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   shift_reports -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   tickets -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE

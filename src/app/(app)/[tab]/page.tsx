@@ -34,6 +34,7 @@ import { IndicatorsView } from '@/components/indicators/IndicatorsView'
 import { DevDocsView } from '@/components/devdocs/DevDocsView'
 import { OwnerView } from '@/components/owner/OwnerView'
 import { ProfileView } from '@/components/profile/ProfileView'
+import { CommandCenterView } from '@/components/command-center/CommandCenterView'
 
 /** One route per leaf tab, statically prerendered via generateStaticParams. */
 
@@ -268,6 +269,13 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="profile" />}>
         <ProfileView />
+      </Suspense>
+    )
+  }
+  if (tab === 'command-center') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="command-center" />}>
+        <CommandCenterView />
       </Suspense>
     )
   }
