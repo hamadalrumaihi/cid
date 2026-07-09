@@ -1,4 +1,45 @@
-# CHANGELOG — CID Portal → Production Platform
+# Changelog — CID Portal
+
+This project follows [Semantic Versioning](https://semver.org) as of
+**v1.0.0** (adopted 2026-07-09). Given the app has a single deployed
+instance, versions mark *release milestones*: MAJOR for breaking platform
+changes, MINOR for feature releases, PATCH for fixes. Each release lists
+the merged PRs that compose it.
+
+## [1.0.0] — 2026-07-09
+
+First stable release of the **React platform** (Next.js 16 + Supabase),
+declaring the post-cutover application production-ready.
+
+### The platform (cutover + parity)
+- Full React/TypeScript rebuild of the vanilla portal — 29 member screens,
+  RLS-authoritative Supabase backend, realtime everywhere (#61 cutover and
+  the parity waves before it; legacy runtime removed in #105).
+
+### Features since cutover
+- Live upload fix for case attachments (#103); audit/completion sweep with
+  watchlist, silent-failure hardening and the My Desk Following panel (#104)
+- In-app User Guide (#105), mention + heatmap improvements (#106)
+- Checklist templates + division calendar (#107)
+- Investigation graph (#107), court-styled PDF exports (#108, CSP #109),
+  ⌘K command palette (#110), Tiptap rich editor + interactive heatmap (#111)
+- Division analytics, indicators registry with deconfliction, zoomable case
+  chronology, DataTable engine with CSV export, graph v2 (#112)
+- Visual-first User Guide (#113)
+- Security/performance hardening: anon RPC lockdown, 68 FK indexes, custom
+  error screens, first unit tests, CI, Dependabot (#114)
+- Documentation platform: developer handbook (#121), README/docs audit,
+  in-app Developer Handbook, **Owner Portal & Control Center** with the
+  is_owner role and the feedback triage inbox (#122)
+
+### Database (live migrations, additive)
+`case_templates.tasks`, `indicators`, `security_hardening_and_fk_indexes`,
+`owner_role_and_feedback_meta`, `grant_is_owner_select` — the live schema
+is the source of truth (mirrored in `src/lib/database.types.ts`).
+
+---
+
+# Pre-1.0 development log (vanilla era)
 
 ## Link intel directly to a case (2026-06-22)
 - New **Intel tab** on the case detail view: link a **person, gang, or place**

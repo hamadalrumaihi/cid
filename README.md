@@ -148,10 +148,13 @@ screen.*
 
 ## Contributing
 
-- Branch from `main`; keep database migrations **additive**.
-- Before opening a PR, run the same gates CI enforces:
-  `npm run typecheck && npm run lint && npm test && npm run build`.
-- Schema changes must update `src/lib/database.types.ts` in the same PR.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) — the short version: branch from
+`main`, run the four gates (`npm run typecheck && npm run lint && npm test
+&& npm run build`), open a PR (the template's checklist is the definition
+of done), verify the Vercel preview, then merge. Database migrations are
+**additive-only** and must update `src/lib/database.types.ts` in the same
+PR. Releases follow [SemVer](https://semver.org) with entries in
+[`CHANGELOG.md`](CHANGELOG.md).
 
 ## License
 
