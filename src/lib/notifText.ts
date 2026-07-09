@@ -30,6 +30,7 @@ export const NOTIF_LABEL: Record<string, string> = {
   access_denied: 'Case access denied',
   announcement: '📣 Announcement',
   member_approved: 'Access approved',
+  client_error: '⚠ App error reported',
   case_stale: 'Case going stale',
   stale_case: 'Case going stale',
 }

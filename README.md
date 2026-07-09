@@ -126,6 +126,8 @@ recommended learning order. End users get the in-app guide
 [`docs/USER-GUIDE.md`](docs/USER-GUIDE.md)).
 The current roadmap and maturity assessment live in
 [`docs/CTO-REVIEW.md`](docs/CTO-REVIEW.md).
+Operational procedures (monitoring, backups, disaster recovery) are in
+[`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ## Backend
 

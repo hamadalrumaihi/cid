@@ -59,7 +59,13 @@ the `service_role` key in the client.
    ```sql
    update public.profiles set role = 'director', active = true
    where email = 'your-login-email@example.com';
-   -- optionally also: set is_owner = true  (grants the Owner Portal)
+   ```
+   To also grant the **Owner Portal** (`is_owner`), step around the
+   `profiles_guard` trigger — it makes the flag immutable even for direct SQL:
+   ```sql
+   alter table public.profiles disable trigger profiles_guard;
+   update public.profiles set is_owner = true where email = 'your-login-email@example.com';
+   alter table public.profiles enable trigger profiles_guard;
    ```
 3. You're now Command (active). Use the in-app **Personnel/Admin** screen to approve
    and assign other officers (`role`, `division`, `active`) — no SQL needed after this.

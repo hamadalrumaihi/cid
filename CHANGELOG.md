@@ -6,6 +6,49 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.2.0] — 2026-07-09
+
+The "close the loop" ops release — the operational leg the CTO review
+(`docs/CTO-REVIEW.md`) flagged as weakest. No new member-facing features.
+
+### Added — monitoring & error tracking
+- **In-app error tracking.** `src/lib/errorReport.ts` reports uncaught
+  exceptions and unhandled rejections to a new `client_errors` table
+  (deduplicated, capped 5/session, noise-filtered). Owners see them in
+  **Owner Portal → Health → Client errors** and get a bell notification
+  (`client_error` type), throttled by a DB trigger to one per 15 minutes.
+  Live migration `client_errors_table`; verified end-to-end (member insert,
+  owner read, non-owner denied, owner ping fired, cleaned up).
+- **Operations runbook** (`docs/RUNBOOK.md`): monitoring signals, incident
+  response, backup/restore drill procedure, and disaster-recovery options
+  including the recommended baseline-migration squash.
+
+### Added — CI & tests
+- **`security-suites` CI job** runs the RLS suite (and, with a browser, the
+  E2E smoke) whenever the `RLS_TEST_PASSWORD_*` repository secrets exist;
+  self-skips otherwise, so forks stay green.
+- **Owner-positive RLS tests** + a fourth `rls-test-owner` account: proves
+  the owner's triage-write and audit-read paths *work* (the block that would
+  have caught the v1.1.1 `is_owner` grant bug before shipping). 22 RLS tests.
+- **`check:schema`** — offline CI check that `schema-snapshot.sql` and
+  `database.types.ts` agree on every table/column, both directions.
+- **`gen:guide`** — the in-app User Guide is now generated from
+  `docs/USER-GUIDE.md` (mirror of `gen:handbook`) with a CI drift check.
+
+### Added — never-lose-work
+- Report editors now persist drafts per case/template (and per report when
+  editing), restore them on reopen, and clear on save — extending the case
+  chat draft behavior to the report forms.
+
+### Fixed
+- `SETUP.md` `is_owner` bootstrap now shows the correct recipe (the
+  `profiles_guard` trigger makes the flag immutable even for direct SQL; it
+  must be disabled around the update).
+
+### Database
+- Live migration `client_errors_table`; schema snapshot regenerated (49
+  tables, 40 functions, 171 policies); `MIGRATION-HISTORY.md` → 79 entries.
+
 ## [1.1.1] — 2026-07-09
 
 The testing investments from the review (suggestions #9 and #10) — and the

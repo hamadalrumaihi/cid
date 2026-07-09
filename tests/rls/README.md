@@ -1,6 +1,6 @@
 # RLS / RPC security-wall tests
 
-Integration tests that hit the **live Supabase project** as three dedicated,
+Integration tests that hit the **live Supabase project** as four dedicated,
 low-privilege test accounts and assert that the security wall holds:
 
 | Account | State | Used to prove |
@@ -8,6 +8,7 @@ low-privilege test accounts and assert that the security wall holds:
 | `rls-test-lsb@cidportal.test` | detective, LSB, active | baseline member behavior |
 | `rls-test-bcb@cidportal.test` | detective, BCB, active | bureau isolation (read/write/create) |
 | `rls-test-inactive@cidportal.test` | inactive | deny-by-default |
+| `rls-test-owner@cidportal.test` | detective, SAB, active, **is_owner** | owner-POSITIVE paths (triage writes, audit reads) |
 
 Covered: bureau isolation (read, update, insert, child rows), deny-by-default
 for inactive accounts, the sign-off/finalize **lockdown triggers**, RPC caller
@@ -27,25 +28,31 @@ Credentials come from the environment (or a git-ignored `.env.rls.local`):
 RLS_TEST_PASSWORD_LSB=…
 RLS_TEST_PASSWORD_BCB=…
 RLS_TEST_PASSWORD_INACTIVE=…
+RLS_TEST_PASSWORD_OWNER=…   # optional — enables the owner-positive block
 # optional overrides: RLS_TEST_SUPABASE_URL, RLS_TEST_ANON_KEY
 ```
 
-Without them the whole suite **skips** (so plain `npm test` and CI stay
-offline). To run it in CI, add the three passwords as repository secrets and
-export them in the workflow step — deliberately not wired up by default.
+Without them the whole suite **skips**, so plain `npm test` stays offline.
+CI's `security-suites` job runs this suite (and the E2E smoke) whenever the
+passwords exist as repository secrets — add them under Settings → Secrets →
+Actions to turn it on; forks and secretless clones stay green.
 
 ## Safety design
 
-- The accounts sign in with the **anon key + password grant**; they hold no
-  command role and no `is_owner`. Their passwords live only in env/secret
-  storage — rotate them any time in the Supabase dashboard (Auth → Users).
-- Every assertion is a **denial**; the suite never drives the real sign-off
-  chain, so it can't route work or notifications to real officers.
+- The accounts sign in with the **anon key + password grant**; none holds a
+  command role (the owner account carries only `is_owner`). Passwords live
+  only in env/secret storage — rotate them any time in the Supabase
+  dashboard (Auth → Users).
+- The core suite asserts **denials**; the separate owner block asserts the
+  owner's positive paths (triage metadata, audit reads). Neither drives the
+  real sign-off chain, so tests can't route work or notifications to real
+  officers. The owner account holds no command role — its blast radius is
+  feedback triage + audit reads.
 - Fixtures (one case + one report + one feedback row per run) are removed in
   `afterAll` by the `rls_test_cleanup()` RPC (migration `rls_test_cleanup_rpc`),
   which only the `rls-test-*` accounts may call and which deletes **only rows
   they authored**.
-- The two active accounts are visible in the roster as "RLS Test — …". If they
+- The active accounts are visible in the roster as "RLS Test — …". If they
   bother you, deactivate them; the suite then fails its sanity check instead
   of silently passing.
 
