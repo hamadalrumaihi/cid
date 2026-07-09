@@ -281,7 +281,7 @@ export function GuideView() {
         <div className="flex flex-wrap items-center text-xs">
           <span className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-200">1 · <b>Name card</b> (sidebar) → badge &amp; display name</span>
           <Arrow />
-          <span className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-200">2 · <b>Appearance</b> → accent &amp; density</span>
+          <span className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-200">2 · <b>My Profile</b> → name, avatar, appearance</span>
           <Arrow />
           <span className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-200">3 · Open <b>My Desk</b> — your to-do view</span>
         </div>

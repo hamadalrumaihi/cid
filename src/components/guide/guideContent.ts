@@ -28,8 +28,8 @@ What you can see and change depends on your **role and bureau** — the server e
 
 ### First five minutes after approval
 
-- Click your **name card** at the bottom of the left sidebar to open **My Profile** — set your display name and badge number so your work is attributed correctly.
-- Click the **Appearance** control in the sidebar to pick your accent color and compact/comfortable density.
+- Click your **name card** at the bottom of the left sidebar (or your name in the top bar) to open **My Profile** — set your display name, badge number and avatar, link Discord for DMs, and review your account. Your work is attributed by your display name and badge.
+- The **Appearance** control opens the same page's Appearance tab — pick your accent color and compact/comfortable density (saved on this device).
 - Open **My Desk** (Oversight section) — this is your personal to-do view and the best page to start every session on.
 
 ## Main Interface Navigation

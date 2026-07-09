@@ -33,6 +33,7 @@ import { AnalyticsView } from '@/components/analytics/AnalyticsView'
 import { IndicatorsView } from '@/components/indicators/IndicatorsView'
 import { DevDocsView } from '@/components/devdocs/DevDocsView'
 import { OwnerView } from '@/components/owner/OwnerView'
+import { ProfileView } from '@/components/profile/ProfileView'
 
 /** One route per leaf tab, statically prerendered via generateStaticParams. */
 
@@ -260,6 +261,13 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="owner" />}>
         <OwnerView />
+      </Suspense>
+    )
+  }
+  if (tab === 'profile') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="profile" />}>
+        <ProfileView />
       </Suspense>
     )
   }

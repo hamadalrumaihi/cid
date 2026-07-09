@@ -4,14 +4,12 @@
  *  restricted banner, 5 category buttons + standalone Feedback leaf,
  *  appearance/collapse controls, officer card. Collapse uses the same
  *  body.nav-collapsed class contract as the legacy styles.css. */
-import { useState, useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react'
 import { useAuth } from '@/lib/auth'
 import { NAV_CATEGORIES } from '@/lib/nav'
 import { deptLabel, roleLabel } from '@/lib/roles'
 import { safeUrl } from '@/lib/safeUrl'
 import { Store } from '@/lib/store'
-import { AppearanceModal } from './AppearanceModal'
-import { MyProfileModal } from './MyProfileModal'
 import { CategoryIcon, ChevronIcon, CloseIcon, ShieldIcon } from './icons'
 import { useNav } from './useNav'
 import { useNavBadges } from './useNavBadges'
@@ -21,7 +19,7 @@ import { useNavBadges } from './useNavBadges'
 
 function OfficerCard() {
   const { profile, session } = useAuth()
-  const [profileOpen, setProfileOpen] = useState(false)
+  const { navigate } = useNav()
   // Vanilla vocabulary (collab.js renderOfficerCard): 'Badge <n> · <dept
   // abbreviation>' with amber On-LOA / emerald On-duty status dot. Clicking
   // opens the My Profile editor (collab.js wires #officer-card the same way).
@@ -40,7 +38,7 @@ function OfficerCard() {
   return (
     <div className="border-t border-white/5 p-3">
       <button
-        onClick={() => { if (profile) setProfileOpen(true) }}
+        onClick={() => { if (profile) navigate('profile') }}
         className="flex w-full items-center gap-3 rounded-lg bg-white/5 px-3 py-2.5 text-left transition hover:bg-white/10"
         aria-label="Your profile and status"
       >
@@ -59,7 +57,6 @@ function OfficerCard() {
         )}
         <span className={`sidebar-hide pulse-dot h-2.5 w-2.5 flex-shrink-0 rounded-full ${dot.cls}`} title={dot.title} />
       </button>
-      {profileOpen && <MyProfileModal onClose={() => setProfileOpen(false)} />}
     </div>
   )
 }
@@ -78,7 +75,6 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
   const { isOwner } = useAuth()
   const { activeCategory, activeTab, navigate, navigateCategory } = useNav()
   const badges = useNavBadges()
-  const [appearanceOpen, setAppearanceOpen] = useState(false)
   const collapsed = useSyncExternalStore(subscribeCollapse, readCollapsed, () => false)
 
   const toggleCollapse = () => {
@@ -184,9 +180,9 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
 
       <div className="hidden border-t border-white/5 p-3 lg:block">
         <button
-          onClick={() => setAppearanceOpen(true)}
+          onClick={() => go(() => navigate('profile'))}
           className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white"
-          aria-label="Appearance settings"
+          aria-label="My profile and appearance settings"
         >
           🎨 <span className="nav-label">Appearance</span>
         </button>
@@ -202,7 +198,6 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
       </div>
 
       <OfficerCard />
-      <AppearanceModal open={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
     </aside>
   )
 }
