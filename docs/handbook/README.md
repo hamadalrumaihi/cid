@@ -53,3 +53,7 @@ chapter stands alone and cross-links the rest.
 *Sources: the full repository analysis of July 2026 (every source file read;
 database sections grounded in the live Supabase catalog). When code and
 handbook disagree, the code is right — update the handbook in the same PR.*
+
+*This handbook is also available inside the app (Reference → Developer
+Handbook, owner-only), generated from these files by
+`npm run gen:handbook` — CI fails if the generated copy drifts.*

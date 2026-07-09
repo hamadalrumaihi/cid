@@ -25,6 +25,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   rico:       { title: 'RICO Builder', sub: 'Enterprise & predicate-act element tracker' },
   penal:      { title: 'Penal Code', sub: 'San Andreas statutes, sentences & fines' },
   sops:       { title: 'Standard Operating Procedures', sub: 'Division policy & reference library, managed by command staff' },
+  devdocs:    { title: 'Developer Handbook', sub: 'How the portal works — architecture, database, every file (owner-only)' },
   records:    { title: 'CID Records', sub: 'Live shared division records' },
   announce:   { title: 'Announcements', sub: 'Division-wide notices from command staff' },
   'case-files': { title: 'Case Files — Attachments', sub: 'Files uploaded and linked per case' },
@@ -53,7 +54,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
   { id: 'command',   label: 'Command',      tabs: ['command', 'analytics', 'announce', 'heatmap', 'personnel'] },
   { id: 'cases',     label: 'Cases',        tabs: ['cases', 'operations', 'case-files', 'rico'] },
   { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'indicators', 'network', 'narcotics', 'ballistics', 'modus', 'media', 'records'] },
-  { id: 'reference', label: 'Reference',    tabs: ['penal', 'sops', 'guide'] },
+  { id: 'reference', label: 'Reference',    tabs: ['penal', 'sops', 'guide', 'devdocs'] },
   { id: 'oversight', label: 'Oversight',    tabs: ['inbox', 'calendar', 'shifts', 'audit'] },
 ]
 
@@ -62,7 +63,7 @@ export const TAB_LABEL: Record<string, string> = {
   cases: 'Case Files', operations: 'Operations', 'case-files': 'Attachments', rico: 'RICO',
   persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', indicators: 'Indicators',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
-  media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide',
+  media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide', devdocs: 'Developer Handbook',
   inbox: 'My Desk', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log',
 }
 
