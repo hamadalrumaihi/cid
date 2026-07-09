@@ -1,0 +1,20 @@
+{
+  "$schema-note": "Project-scoped MCP servers for Claude Code on this repo. DEV-TOOLING ONLY — none of these is a runtime dependency and the app runs identically with all of them disconnected. No secrets live here: Vercel uses interactive OAuth, Context7 and Playwright need none. See docs/DEV-TOOLING.md for the governance notes on each.",
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"],
+      "description": "Microsoft Playwright MCP — drives a local Chromium so an agent can author/repair E2E and do visual verification. Fully local/self-hosted; no data leaves the machine. Point it at PREVIEW builds with seeded accounts, never production PII."
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "description": "Context7 — fetches up-to-date library docs (Next.js 16 / React 19 / Tailwind v4). Transmits only the doc query you send; never send case data. No project data stored."
+    },
+    "vercel": {
+      "type": "http",
+      "url": "https://mcp.vercel.com",
+      "description": "Vercel MCP — build logs, runtime logs and deployment status for the existing project. Authorize interactively via OAuth (`/mcp` in an interactive Claude Code session); no token is stored in the repo. Reads logs Vercel already holds; adds no new external processor."
+    }
+  }
+}
