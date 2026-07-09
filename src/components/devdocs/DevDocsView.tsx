@@ -14,7 +14,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
-import { AUDIT_OWNER_ID } from '@/lib/nav'
 import { SearchIcon } from '@/components/shell/icons'
 import { anchorId, docHeadings, renderDocMarkdown, type DocHeading } from './docMarkdown'
 import { DEP_KIND_META, DEP_NODES, dependentsOf, depsOf, type DepNode } from './depGraph'
@@ -30,7 +29,7 @@ const SECTION_ICON: Record<string, string> = {
 }
 
 export function DevDocsView() {
-  const { state, profile } = useAuth()
+  const { state, isOwner } = useAuth()
   const router = useRouter()
   const sp = useSearchParams()
   const [content, setContent] = useState<Content | null>(null)
@@ -38,7 +37,6 @@ export function DevDocsView() {
   const [query, setQuery] = useState('')
   const [navOpen, setNavOpen] = useState(false)
 
-  const isOwner = !!profile?.active && profile.id === AUDIT_OWNER_ID
   const slug = sp.get('page') ?? 'home'
 
   // Lazy-load the generated content (keeps ~90 KB out of the shared bundle).
@@ -382,9 +380,10 @@ function PageToc({ headings }: { headings: DocHeading[] }) {
   )
 }
 
-/* ---- dependency explorer (rendered under the Dependency Map chapter) --- */
+/* ---- dependency explorer (rendered under the Dependency Map chapter;
+   also reused by the Owner Portal's Change Impact Center) ------------------ */
 
-function DepExplorer() {
+export function DepExplorer() {
   const [sel, setSel] = useState<DepNode | null>(null)
   const [kindFilter, setKindFilter] = useState<string>('')
   const panelRef = useRef<HTMLDivElement>(null)

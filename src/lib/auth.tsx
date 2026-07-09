@@ -26,12 +26,13 @@ type ProfileRow = Database['public']['Tables']['profiles']['Row']
  *  member would be DENIED, so it is never in this list; a member's own email
  *  comes from the auth session instead (vanilla supabase.js:36-45). */
 export const PROFILE_COLS =
-  'id,display_name,avatar_url,badge_number,division,role,active,created_at,updated_at,loa,loa_since,discord_id' as const
+  'id,display_name,avatar_url,badge_number,division,role,active,created_at,updated_at,loa,loa_since,discord_id,is_owner' as const
 
 export type Profile = Pick<
   ProfileRow,
   | 'id' | 'display_name' | 'avatar_url' | 'badge_number' | 'division' | 'role'
   | 'active' | 'created_at' | 'updated_at' | 'loa' | 'loa_since' | 'discord_id'
+  | 'is_owner'
 > & { email?: string | null }
 
 export type GateState = 'loading' | 'setup' | 'out' | 'pending' | 'error' | 'in'
@@ -51,6 +52,11 @@ interface AuthContextValue {
   canEdit: boolean
   canDelete: boolean
   isCommand: boolean
+  /** Project owner (profiles.is_owner, granted via SQL only — the
+   *  guard_profile trigger blocks any client write). Gates the Owner
+   *  Portal, Developer Handbook, Audit Log and feedback triage; RLS
+   *  (private.is_owner()) enforces the data side. */
+  isOwner: boolean
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -182,6 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       canEdit: active,
       canDelete: active && isCommandRole(profile?.role),
       isCommand: active && isCommandRole(profile?.role),
+      isOwner: active && !!profile?.is_owner,
     }
   }, [state, session, profile, evaluate, signInOAuth, signInEmail, signOut, setMyLoa])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

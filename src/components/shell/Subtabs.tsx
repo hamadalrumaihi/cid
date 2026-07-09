@@ -5,16 +5,15 @@
  *  hidden unless the signed-in member is the portal owner (UI mirror; the
  *  audit RLS policy and the DevDocsView gate enforce the real rule). */
 import { useAuth } from '@/lib/auth'
-import { AUDIT_OWNER_ID, NAV_CATEGORIES, TAB_LABEL } from '@/lib/nav'
+import { NAV_CATEGORIES, TAB_LABEL } from '@/lib/nav'
 import { useNav } from './useNav'
 
 export function Subtabs() {
   const { activeCategory, activeTab, navigate } = useNav()
-  const { profile } = useAuth()
+  const { isOwner } = useAuth()
   const def = NAV_CATEGORIES.find((c) => c.id === activeCategory)
   if (!def) return null // standalone leaves (feedback) hide the strip
 
-  const isOwner = !!profile?.active && profile.id === AUDIT_OWNER_ID
   const tabs = def.tabs.filter((t) => (t !== 'audit' && t !== 'devdocs') || isOwner)
 
   return (

@@ -34,6 +34,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   shifts:     { title: 'Weekly Shift Reports', sub: 'Detective activity rolled up to bureau leadership' },
   audit:      { title: 'Audit Log', sub: 'Division-wide action history (owner-only)' },
   feedback:   { title: 'Feedback', sub: 'Suggest a feature or report a bug' },
+  owner:      { title: 'Owner Portal', sub: 'Project intelligence, feedback triage & engineering operations (owner-only)' },
   vehicles:   { title: 'Vehicle Registry', sub: 'Plates, owners & cross-case matches' },
   indicators: { title: 'Indicators Registry', sub: 'Phones, accounts, serials, aliases & addresses — deconflicted across cases' },
   bolo:       { title: 'BOLO Board', sub: 'At-large subjects — be on the lookout' },
@@ -64,7 +65,7 @@ export const TAB_LABEL: Record<string, string> = {
   persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', indicators: 'Indicators',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
   media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide', devdocs: 'Developer Handbook',
-  inbox: 'My Desk', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log',
+  inbox: 'My Desk', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', owner: 'Owner Portal',
 }
 
 export const TAB_CATEGORY: Record<string, string> = {}
@@ -74,12 +75,8 @@ for (const c of NAV_CATEGORIES) {
   CAT_DEFAULT[c.id] = c.tabs[0]
 }
 
-/** Audit log is owner-only (server-enforced by the audit_sel RLS policy);
- *  this constant only gates the UI to match (hide the sub-tab). */
-export const AUDIT_OWNER_ID = '25466146-c512-4497-8ee8-88cbf3b1d22d'
-
-/** Feedback triage owners (vanilla feedback.js FEEDBACK_OWNER_IDS): both
- *  accounts belong to the app owner; RLS grants triage by these UUIDs. */
-export const FEEDBACK_OWNER_IDS = ['25466146-c512-4497-8ee8-88cbf3b1d22d', '6554181a-e2ed-4993-a66f-420c08f1471c']
+/** Ownership is a profiles flag now (profiles.is_owner → useAuth().isOwner;
+ *  private.is_owner() in RLS). The previous hard-coded owner UUIDs were
+ *  migrated into that flag by the owner_role_and_feedback_meta migration. */
 
 export const isValidTab = (tab: string): boolean => tab in PAGE_META

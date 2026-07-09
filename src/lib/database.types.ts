@@ -1142,6 +1142,72 @@ export type Database = {
           },
         ]
       }
+      feedback_meta: {
+        Row: {
+          archived_at: string | null
+          category: string | null
+          feedback_id: string
+          internal_notes: string | null
+          priority: string | null
+          related_feature: string | null
+          related_route: string | null
+          resolution_notes: string | null
+          resolved_at: string | null
+          status: string
+          tags: Json
+          type: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          category?: string | null
+          feedback_id: string
+          internal_notes?: string | null
+          priority?: string | null
+          related_feature?: string | null
+          related_route?: string | null
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          status?: string
+          tags?: Json
+          type?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          category?: string | null
+          feedback_id?: string
+          internal_notes?: string | null
+          priority?: string | null
+          related_feature?: string | null
+          related_route?: string | null
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          status?: string
+          tags?: Json
+          type?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feedback_meta_feedback_id_fkey"
+            columns: ["feedback_id"]
+            isOneToOne: true
+            referencedRelation: "feedback"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feedback_meta_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gang_members: {
         Row: {
           callsign: string | null
@@ -1913,6 +1979,7 @@ export type Database = {
           division: Database["public"]["Enums"]["bureau"]
           email: string | null
           id: string
+          is_owner: boolean
           loa: boolean
           loa_since: string | null
           removed_at: string | null
@@ -1929,6 +1996,7 @@ export type Database = {
           division?: Database["public"]["Enums"]["bureau"]
           email?: string | null
           id: string
+          is_owner?: boolean
           loa?: boolean
           loa_since?: string | null
           removed_at?: string | null
@@ -1945,6 +2013,7 @@ export type Database = {
           division?: Database["public"]["Enums"]["bureau"]
           email?: string | null
           id?: string
+          is_owner?: boolean
           loa?: boolean
           loa_since?: string | null
           removed_at?: string | null

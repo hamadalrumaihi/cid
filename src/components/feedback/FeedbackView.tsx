@@ -8,7 +8,6 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
 import { insert, list, remove, update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
-import { FEEDBACK_OWNER_IDS } from '@/lib/nav'
 import { officerName } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
@@ -35,7 +34,7 @@ export function FeedbackView() {
   const [details, setDetails] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const owner = !!profile && FEEDBACK_OWNER_IDS.includes(profile.id)
+  const owner = useAuth().isOwner
 
   const refresh = useCallback(async () => {
     if (state !== 'in') return
