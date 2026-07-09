@@ -14,7 +14,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { ROLE_LABEL } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
-import { MyProfileModal } from '@/components/shell/MyProfileModal'
+import { useNav } from '@/components/shell/useNav'
 import { AdminPanel } from './AdminPanel'
 import { AssignModal } from './AssignModal'
 import { Commendations, type CommendationRow } from './Commendations'
@@ -23,13 +23,13 @@ const ROSTER_PAGE = 30
 
 export function PersonnelView() {
   const { profile: me, state, isCommand } = useAuth()
+  const { navigate } = useNav()
   const profiles = useProfilesStore((s) => s.profiles)
   const fetchProfiles = useProfilesStore((s) => s.fetch)
   const [emails, setEmails] = useState<Record<string, string>>({})
   const [commendations, setCommendations] = useState<CommendationRow[]>([])
   const [shown, setShown] = useState(ROSTER_PAGE)
   const [assignTarget, setAssignTarget] = useState<RosterProfile | null>(null)
-  const [myProfileOpen, setMyProfileOpen] = useState(false)
   const vProfiles = useTableVersion('profiles')
   const vCommendations = useTableVersion('commendations')
 
@@ -85,7 +85,7 @@ export function PersonnelView() {
                   p={p}
                   isMe={!!me && p.id === me.id}
                   admin={isCommand}
-                  onEdit={() => { if (isCommand) setAssignTarget(p); else setMyProfileOpen(true) }}
+                  onEdit={() => { if (isCommand) setAssignTarget(p); else navigate('profile') }}
                   onChanged={() => void refresh()}
                 />
               ))}
@@ -106,7 +106,6 @@ export function PersonnelView() {
       {assignTarget && (
         <AssignModal p={assignTarget} email={emails[assignTarget.id] || ''} onClose={() => setAssignTarget(null)} onChanged={() => void refresh()} />
       )}
-      {myProfileOpen && <MyProfileModal onClose={() => { setMyProfileOpen(false); void refresh() }} />}
     </section>
   )
 }

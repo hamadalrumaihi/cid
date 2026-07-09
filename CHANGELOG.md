@@ -6,6 +6,29 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.4.0] — 2026-07-09
+
+### Added — native profile & settings page
+- A member-facing **`/profile`** page (standalone leaf tab, all signed-in
+  members) reachable from the sidebar officer card, the header name, the
+  sidebar Appearance button, and Personnel's "edit my profile". Sections:
+  - **Profile** — editable display name, badge number, **avatar** (image URL,
+    **FiveManage upload**, or reset-to-provider), and **Discord link** for
+    DMs, plus the LOA self-toggle. Saves via `updateNoSelect`; role/bureau/
+    activation stay read-only (frozen by `guard_profile`).
+  - **Appearance** — accent + density (device-local `localStorage`), applied
+    live. Notes the portal is single-dark-theme.
+  - **Account & security** — read-only email, sign-in providers, account
+    created / last sign-in, User ID, plus **Sign out** and **Sign out
+    everywhere** (global scope). No password form (OAuth / magic-link only).
+  - **Notifications** — informational: in-app bell always on; Discord DMs
+    gated on the linked Discord ID.
+
+### Changed / Removed
+- Replaced the `MyProfileModal` and `AppearanceModal` with the new page; all
+  four entry points now open `/profile`. Extracted `applyAppearance()` +
+  accent/density constants to `src/lib/appearance.ts`. Guide references updated.
+
 ## [1.3.1] — 2026-07-09
 
 The "polish" half of the v1.3 phase — accessibility and loading states.

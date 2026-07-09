@@ -27,6 +27,7 @@ const ROLE_CAPS: Record<string, string> = {
 
 function AuthBar() {
   const { profile, session, signOut, setMyLoa } = useAuth()
+  const { navigate } = useNav()
   const name = profile?.display_name || session?.user?.email || 'Officer'
   const avatar = safeUrl(profile?.avatar_url ?? '')
   const onLoa = !!profile?.loa
@@ -40,10 +41,14 @@ function AuthBar() {
 
   return (
     <div className="flex flex-shrink-0 items-center gap-2">
-      <span title={`Your access: ${caps}`} className="hidden cursor-help items-center gap-2 rounded-lg bg-white/5 px-2.5 py-2 text-xs text-slate-200 sm:flex">
+      <button
+        onClick={() => navigate('profile')}
+        title={`Open your profile · ${caps}`}
+        className="hidden items-center gap-2 rounded-lg bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10 sm:flex"
+      >
         {avatar ? <img src={avatar} className="h-5 w-5 rounded-full object-cover" alt="" /> : '👤'} {name}
         {profile?.role && <> · <span className="uppercase text-blue-300">{roleShort(profile.role)}</span></>}
-      </span>
+      </button>
       {onLoa && (
         <span className="rounded-lg bg-amber-500/15 px-2 py-2 text-[11px] font-semibold uppercase text-amber-300" title="You are marked On LOA">
           On LOA

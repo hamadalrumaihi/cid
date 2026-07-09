@@ -35,6 +35,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   audit:      { title: 'Audit Log', sub: 'Division-wide action history (owner-only)' },
   feedback:   { title: 'Feedback', sub: 'Suggest a feature or report a bug' },
   owner:      { title: 'Owner Portal', sub: 'Project intelligence, feedback triage & engineering operations (owner-only)' },
+  profile:    { title: 'My Profile', sub: 'Your account, appearance and notification settings' },
   vehicles:   { title: 'Vehicle Registry', sub: 'Plates, owners & cross-case matches' },
   indicators: { title: 'Indicators Registry', sub: 'Phones, accounts, serials, aliases & addresses — deconflicted across cases' },
   bolo:       { title: 'BOLO Board', sub: 'At-large subjects — be on the lookout' },
@@ -65,7 +66,7 @@ export const TAB_LABEL: Record<string, string> = {
   persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', indicators: 'Indicators',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
   media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide', devdocs: 'Developer Handbook',
-  inbox: 'My Desk', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', owner: 'Owner Portal',
+  inbox: 'My Desk', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', owner: 'Owner Portal', profile: 'My Profile',
 }
 
 export const TAB_CATEGORY: Record<string, string> = {}
