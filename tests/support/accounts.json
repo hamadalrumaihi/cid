@@ -1,0 +1,12 @@
+{
+  "note": "Synthetic test accounts for the DEDICATED test Supabase project only. Never provisioned on production. Passwords live in env vars named by `pwEnv` (GitHub Actions secrets), never here. The seed script (scripts/test-seed.mjs) creates these; the role specs sign in as them.",
+  "domain": "@cidportal.test",
+  "accounts": [
+    { "key": "detective", "email": "test-detective@cidportal.test", "name": "Test Detective", "role": "detective", "division": "LSB", "is_owner": false, "pwEnv": "TEST_PW_DETECTIVE" },
+    { "key": "senior", "email": "test-senior@cidportal.test", "name": "Test Senior", "role": "senior_detective", "division": "LSB", "is_owner": false, "pwEnv": "TEST_PW_SENIOR" },
+    { "key": "lead", "email": "test-lead@cidportal.test", "name": "Test Lead", "role": "bureau_lead", "division": "LSB", "is_owner": false, "pwEnv": "TEST_PW_LEAD" },
+    { "key": "deputy", "email": "test-deputy@cidportal.test", "name": "Test Deputy", "role": "deputy_director", "division": "SAB", "is_owner": false, "pwEnv": "TEST_PW_DEPUTY" },
+    { "key": "director", "email": "test-director@cidportal.test", "name": "Test Director", "role": "director", "division": "SAB", "is_owner": false, "pwEnv": "TEST_PW_DIRECTOR" },
+    { "key": "owner", "email": "test-owner@cidportal.test", "name": "Test Owner", "role": "director", "division": "SAB", "is_owner": true, "pwEnv": "TEST_PW_OWNER" }
+  ]
+}

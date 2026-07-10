@@ -1,0 +1,72 @@
+# Role-based functional E2E + visual regression against the DEDICATED test
+# Supabase project. Self-skips unless the TEST_* secrets are configured, so the
+# main branch, forks and secretless clones stay green. Advisory
+# (continue-on-error) until visual baselines are committed and trusted — then
+# drop continue-on-error to make it a required gate. See docs/TEST-ENVIRONMENT.md.
+#
+# Production is never referenced: the app is built against TEST_SUPABASE_* and
+# the seed wrapper hard-blocks the prod project ref. FiveManage/Discord keys are
+# intentionally unset, so uploads fall back to paste-URL and no DMs are sent.
+name: Test E2E + Visual (dedicated project)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  e2e-visual:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      # Points the built app + Playwright sign-in at the TEST project only.
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.TEST_SUPABASE_ANON_KEY }}
+      TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
+      TEST_SUPABASE_ANON_KEY: ${{ secrets.TEST_SUPABASE_ANON_KEY }}
+      TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+      TEST_PW_DETECTIVE: ${{ secrets.TEST_PW_DETECTIVE }}
+      TEST_PW_SENIOR: ${{ secrets.TEST_PW_SENIOR }}
+      TEST_PW_LEAD: ${{ secrets.TEST_PW_LEAD }}
+      TEST_PW_DEPUTY: ${{ secrets.TEST_PW_DEPUTY }}
+      TEST_PW_DIRECTOR: ${{ secrets.TEST_PW_DIRECTOR }}
+      TEST_PW_OWNER: ${{ secrets.TEST_PW_OWNER }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Skip if the test project is not configured
+        id: gate
+        run: |
+          if [ -z "$TEST_SUPABASE_URL" ]; then
+            echo "TEST_SUPABASE_URL not set — skipping the dedicated-project suite."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.gate.outputs.run == 'true'
+        run: npm ci
+      - name: Reset + seed the test project
+        if: steps.gate.outputs.run == 'true'
+        run: node scripts/test-seed.mjs
+      - name: Install Playwright Chromium
+        if: steps.gate.outputs.run == 'true'
+        run: npx playwright install chromium --with-deps
+      - name: Build (against the test project)
+        if: steps.gate.outputs.run == 'true'
+        run: npm run build
+      - name: Functional E2E (roles)
+        if: steps.gate.outputs.run == 'true'
+        run: npm run test:e2e
+      - name: Visual regression (roles)
+        if: steps.gate.outputs.run == 'true'
+        run: npm run test:visual
+      - name: Upload Playwright report
+        if: steps.gate.outputs.run == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
