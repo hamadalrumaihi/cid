@@ -6,6 +6,50 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.7.2] — 2026-07-12
+
+### Phase D3 — Case-detail tab bar & header (visual + a11y)
+Polish on the most-used screen — surgical, single-file; the 12 tabs, their
+order, `?tab=` deep-links, and every tab/action/workflow are unchanged.
+- **Sticky tab bar** below the shell header (`top-[4.5rem]`/`sm:top-[4.75rem]`,
+  `z-10`, blurred background) so it stays visible while scrolling long tabs
+  (evidence, timeline).
+- **Overflow fades** on the tab strip that track the real scroll position
+  (left when scrolled, right while more remains); the active tab scrolls into
+  view on load and on change (reduced-motion-safe).
+- **Accessible tablist** — `role="tablist"/tab/tabpanel"` with stable
+  `id`/`aria-controls`/`aria-selected` pairs and **roving tabindex**:
+  Left/Right/Home/End move focus, Enter/Space/click activate. Focus movement
+  is separate from activation, so the URL isn't churned as focus roams.
+  Tab targets are ≥44px on mobile.
+- **Record / workflow divider** — one hairline before `reports` groups the
+  workflow cluster (reports · tasks · sign-off · chat) without reordering.
+- **Sign-off attention marker** — a dot on the Sign-off tab **only** when the
+  case is awaiting a decision (`signoff_status` `awaiting_*`), with an
+  `sr-only` + `title` "Sign-off requires attention" (never dot-alone).
+- **Header chips** tidied via shared `Badge` into identity (case# · bureau) and
+  workflow (status · sign-off · stale) groups; same data + tint helpers.
+
+## [1.7.1] — 2026-07-12
+
+### Phase D5 — Developer Handbook reading polish (owner/dev-only, visual)
+Long-form readability on the handbook chapters; no content, generation,
+gating, or routing changes.
+- **Capped reading measure** — the article column is centered at `max-w-3xl`
+  (~72ch) so lines stay readable on wide screens; tables and code blocks keep
+  their `overflow-x-auto` and scroll within the measure.
+- **"On this page" TOC** (`OnThisPage.tsx`) — built from the existing
+  `docHeadings()`: a sticky right column at `xl`, a collapsible block above the
+  article below `xl` (≥44px summary). h3 indented under h2; clicks reuse the
+  existing `goTo` deep-link.
+- **Scroll-spy** — one lightweight `IntersectionObserver`, a single active
+  heading at a time, resilient when nothing is intersecting (keeps the last),
+  reduced-motion-safe, and it **never writes the URL hash while scrolling** —
+  the hash changes only on explicit navigation.
+- **Hover/focus heading anchors** — a subtle `#` appears on heading hover or
+  keyboard focus, with an accessible "Link to section: …" label, for copyable
+  deep-links.
+
 ## [1.7.0] — 2026-07-12
 
 ### Phase D2 — Owner Portal cleanup (visual only)

@@ -15,7 +15,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { SearchIcon } from '@/components/shell/icons'
-import { anchorId, docHeadings, renderDocMarkdown, type DocHeading } from './docMarkdown'
+import { anchorId, docHeadings, renderDocMarkdown } from './docMarkdown'
+import { OnThisPage, useActiveHeading } from './OnThisPage'
 import { DEP_KIND_META, DEP_NODES, dependentsOf, depsOf, type DepNode } from './depGraph'
 import type { HandbookPage } from './handbookContent'
 
@@ -53,11 +54,16 @@ export function DevDocsView() {
     setQuery('')
     setNavOpen(false)
     const next = target ?? slug
-    if (target && target !== slug) router.push(`/devdocs?page=${encodeURIComponent(next)}${anchor ? `#${anchor}` : ''}`)
+    const crossPage = !!target && target !== slug
+    if (crossPage) router.push(`/devdocs?page=${encodeURIComponent(next)}${anchor ? `#${anchor}` : ''}`)
     if (anchor) {
+      // Explicit user navigation: reflect the section in the URL hash (same-page
+      // only; cross-page carries it in the pushed URL above).
+      if (!crossPage) history.replaceState(null, '', `#${anchor}`)
       // Same-page (or after navigation) — scroll once the content exists.
-      window.setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), target && target !== slug ? 350 : 0)
-    } else if (target && target !== slug) {
+      const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+      window.setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ behavior, block: 'start' }), crossPage ? 350 : 0)
+    } else if (crossPage) {
       window.setTimeout(() => window.scrollTo({ top: 0 }), 50)
     }
   }, [router, slug])
@@ -327,56 +333,23 @@ function HomePage({ content, sections, onGo }: {
 function ArticlePage({ page, onGo }: { page: HandbookPage; onGo: (slug: string | null, anchor: string | null) => void }) {
   const headings = useMemo(() => docHeadings(page.body), [page.body])
   const rendered = useMemo(() => renderDocMarkdown(page.body, onGo), [page.body, onGo])
+  const activeId = useActiveHeading(page.slug, headings)
+  const goAnchor = useCallback((anchor: string) => onGo(null, anchor), [onGo])
 
   return (
-    <div className="flex items-start gap-6">
-      <article className="min-w-0 flex-1 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-        <h1 className="text-xl font-black text-white">{page.title}</h1>
-        <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{page.section}</p>
-        {rendered}
-        {page.slug === 'dependency-map' && <DepExplorer />}
-      </article>
-      {headings.length > 1 && <PageToc headings={headings} />}
-    </div>
-  )
-}
-
-/** Right-rail table of contents with scroll-spy highlighting. */
-function PageToc({ headings }: { headings: DocHeading[] }) {
-  const [active, setActive] = useState<string | null>(null)
-  const ids = useMemo(() => headings.map((h) => h.id).join(','), [headings])
-
-  useEffect(() => {
-    const els = ids.split(',').map((id) => document.getElementById(id)).filter((e): e is HTMLElement => !!e)
-    if (!els.length) return
-    const obs = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
-        if (visible[0]) setActive(visible[0].target.id)
-      },
-      { rootMargin: '-10% 0px -70% 0px' },
-    )
-    els.forEach((e) => obs.observe(e))
-    return () => obs.disconnect()
-  }, [ids])
-
-  return (
-    <nav aria-label="On this page" className="sticky top-4 hidden w-44 flex-shrink-0 self-start xl:block">
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">On this page</p>
-      <div className="space-y-0.5 border-l border-white/10">
-        {headings.map((h) => (
-          <button
-            key={h.id}
-            onClick={() => document.getElementById(h.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-            className={`block w-full truncate border-l-2 py-1 pr-1 text-left text-[11px] transition ${h.level === 3 ? 'pl-5' : 'pl-3'} ${
-              active === h.id ? 'border-badge-500 font-bold text-white' : 'border-transparent text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            {h.text}
-          </button>
-        ))}
+    <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
+      {/* prose — capped to a readable measure and centred in its space; wide
+          blocks (tables, code) keep their own overflow-x-auto and scroll. */}
+      <div className="order-2 min-w-0 flex-1 xl:order-1">
+        <article className="mx-auto max-w-3xl rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+          <h1 className="text-xl font-black text-white">{page.title}</h1>
+          <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{page.section}</p>
+          {rendered}
+          {page.slug === 'dependency-map' && <DepExplorer />}
+        </article>
       </div>
-    </nav>
+      <OnThisPage headings={headings} activeId={activeId} onGo={goAnchor} />
+    </div>
   )
 }
 
