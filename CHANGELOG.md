@@ -6,6 +6,37 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.7.0] — 2026-07-12
+
+### Phase D2 — Owner Portal cleanup (visual only)
+Readability and consistency pass on the owner console — no schema, workflow,
+RPC, permission, routing, or dependency changes; all data, triage logic, and
+owner-gating unchanged.
+- **Readable type scale + AA contrast** — bumped the pervasive
+  `text-[9/10/11px]` labels to `text-xs`, body to `text-sm`, and muted text to
+  `slate-400`; genuinely tabular data stays compact.
+- **Design-system adoption** — the local `Panel`/`Notice` now compose the
+  shared `Card`/`SectionHeader`/`Notice`/`EmptyState`/`ErrorNotice`; status /
+  priority / type chips render via `Badge` (keeping the domain-correct
+  feedback tint maps); owner inputs use the shared `Field` styles.
+- **Grouped desktop navigation** — the flat 11-item rail is grouped under
+  Overview / Monitor / Improve / Understand / Operate (same ids + `?s=`
+  deep-links), with a left accent bar on the active item. Mobile keeps its
+  section `<select>` picker.
+- **Overview KPI strip** — a compact 4-card row (Database · Open feedback ·
+  Realtime · Last deploy) that deep-links via `?s=`. It **reuses** values the
+  Health and Feedback sections already fetch (a tiny `ownerVitals` store) —
+  Overview never fetches — and degrades to a graceful "—/not checked yet"
+  until those sections have run.
+- **Feedback inbox** — the nine filter views become a cleaner segmented
+  control; every triage action and RPC preserved.
+
+### Also in this release (developer tooling — no runtime impact)
+- Dedicated-test-project harness scaffold (Playwright functional + visual,
+  seed/reset, self-skipping CI) — dormant until a test DB + secrets are
+  configured; see `docs/TEST-ENVIRONMENT.md`.
+- Curated project subagents in `.claude/agents/`.
+
 ## [1.6.0] — 2026-07-09
 
 ### UI/UX modernization pass (polish, not a rebuild)
