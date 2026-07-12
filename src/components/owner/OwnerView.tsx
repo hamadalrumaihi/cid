@@ -22,12 +22,18 @@ import { officerName, useProfilesStore } from '@/lib/profiles'
 import { timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Card } from '@/components/ui/Card'
+import { SectionHeader } from '@/components/ui/PageHeader'
+import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { Badge } from '@/components/ui/Badge'
+import { inputCls, labelCls } from '@/components/ui/Field'
 import { SearchIcon } from '@/components/shell/icons'
 import { DepExplorer } from '@/components/devdocs/DevDocsView'
 import {
   ENV_VARS, FB_PRIORITIES, FB_PRIORITY_TINT, FB_STATUSES, FB_STATUS_TINT, FB_TYPES,
   LEARNING, MATRIX_NOTE, PERMISSIONS_MATRIX, REALTIME_DOC, ROUTES, SUGGESTIONS, WORKFLOW, fbLabel,
 } from './ownerData'
+import { useOwnerVitals } from './ownerVitals'
 import { parseStringArray } from '@/lib/jsonShapes'
 
 type FeedbackRow = Tables<'feedback'>
@@ -46,6 +52,15 @@ const SECTIONS: { id: string; icon: string; label: string; sub: string }[] = [
   { id: 'realtime', icon: '📡', label: 'Realtime', sub: 'Channels, session activity & failure points' },
   { id: 'workflow', icon: '🚦', label: 'Workflow', sub: 'Safe development, deploys, rollback & permissions' },
   { id: 'learning', icon: '🎓', label: 'Learning Center', sub: 'Paths, common mistakes, what to avoid early' },
+]
+
+/** Desktop rail grouping — same section ids + deep-links, grouped by purpose. */
+const NAV_GROUPS: { label: string; ids: string[] }[] = [
+  { label: 'Overview', ids: ['home'] },
+  { label: 'Monitor', ids: ['health', 'realtime'] },
+  { label: 'Improve', ids: ['feedback', 'suggestions', 'impact'] },
+  { label: 'Understand', ids: ['architecture', 'routes', 'env'] },
+  { label: 'Operate', ids: ['workflow', 'learning'] },
 ]
 
 export function OwnerView() {
@@ -118,11 +133,11 @@ export function OwnerView() {
             <div className="absolute right-0 top-full z-20 mt-1 max-h-80 w-full overflow-y-auto rounded-xl border border-white/10 bg-ink-900 p-1 shadow-2xl">
               {results.map((r, i) => (
                 <button key={i} onClick={() => { setQuery(''); r.go() }} className="block w-full rounded-lg px-3 py-2 text-left transition hover:bg-white/5">
-                  <p className="text-xs font-bold text-white">
-                    <span className="mr-1.5 rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-400">{r.type}</span>
+                  <p className="text-sm font-bold text-white">
+                    <span className="mr-1.5 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-black uppercase text-slate-400">{r.type}</span>
                     {r.label}
                   </p>
-                  <p className="truncate text-[11px] text-slate-400">{r.sub}</p>
+                  <p className="truncate text-xs text-slate-400">{r.sub}</p>
                 </button>
               ))}
             </div>
@@ -132,15 +147,25 @@ export function OwnerView() {
 
       <div className="flex gap-6">
         <aside className="sticky top-4 hidden w-52 flex-shrink-0 self-start lg:block" aria-label="Owner Portal navigation">
-          <nav className="space-y-0.5">
-            {SECTIONS.map((s) => (
-              <button
-                key={s.id} onClick={() => go(s.id)}
-                aria-current={s.id === active.id ? 'page' : undefined}
-                className={`block w-full rounded-lg px-3 py-1.5 text-left text-xs transition ${s.id === active.id ? 'bg-blue-500/15 font-bold text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
-              >
-                <span aria-hidden>{s.icon}</span> {s.label}
-              </button>
+          <nav className="space-y-4">
+            {NAV_GROUPS.map((g) => (
+              <div key={g.label} className="space-y-0.5">
+                <p className="px-3 pb-0.5 text-xs font-bold uppercase tracking-wider text-slate-400">{g.label}</p>
+                {g.ids.map((id) => {
+                  const s = SECTIONS.find((x) => x.id === id)
+                  if (!s) return null
+                  const activeItem = s.id === active.id
+                  return (
+                    <button
+                      key={s.id} onClick={() => go(s.id)}
+                      aria-current={activeItem ? 'page' : undefined}
+                      className={`block w-full rounded-lg border-l-2 py-1.5 pl-2.5 pr-3 text-left text-xs transition ${activeItem ? 'border-badge-500 bg-badge-500/15 font-bold text-white' : 'border-transparent text-slate-400 hover:bg-white/5 hover:text-white'}`}
+                    >
+                      <span aria-hidden>{s.icon}</span> {s.label}
+                    </button>
+                  )
+                })}
+              </div>
             ))}
           </nav>
         </aside>
@@ -173,17 +198,12 @@ export function OwnerView() {
   )
 }
 
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
-}
-
 function Panel({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
-      <h3 className="text-sm font-black uppercase tracking-wider text-slate-400">{title}</h3>
-      {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
+    <Card pad="md">
+      <SectionHeader title={title} subtitle={sub} />
       <div className="mt-3">{children}</div>
-    </section>
+    </Card>
   )
 }
 
@@ -191,6 +211,17 @@ function Panel({ title, sub, children }: { title: string; sub?: string; children
 
 function HomeSection({ onGo }: { onGo: (s: string) => void }) {
   const router = useRouter()
+  // KPI values are READ ONLY — no fetch here. Health + open feedback come from
+  // the shared vitals store (written by their own sections after their existing
+  // loads); realtime + deploy come straight from the global store / env.
+  const versions = useRealtimeStore((s) => s.versions)
+  const health = useOwnerVitals((s) => s.health)
+  const openFeedback = useOwnerVitals((s) => s.openFeedback)
+  const liveTables = Object.keys(versions).length
+  const branch = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF ?? null
+  const vercelEnv = process.env.NEXT_PUBLIC_VERCEL_ENV ?? null
+  const commit = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ?? null
+
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
@@ -206,23 +237,67 @@ function HomeSection({ onGo }: { onGo: (s: string) => void }) {
           this portal is for deciding and doing.
         </p>
       </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KpiCard
+          label="Database" onClick={() => onGo('health')}
+          value={health ? (health.ok ? 'OK' : 'Down') : '—'}
+          tone={health ? (health.ok ? 'good' : 'bad') : 'muted'}
+          detail={health ? `${health.ms} ms round-trip` : 'Not checked yet — open Health'}
+        />
+        <KpiCard
+          label="Open feedback" onClick={() => onGo('feedback')}
+          value={openFeedback === null ? '—' : String(openFeedback)}
+          tone={openFeedback === null ? 'muted' : 'accent'}
+          detail={openFeedback === null ? 'Not checked yet — open Feedback' : 'open / unresolved items'}
+        />
+        <KpiCard
+          label="Realtime" onClick={() => onGo('realtime')}
+          value={String(liveTables)} tone={liveTables > 0 ? 'good' : 'muted'}
+          detail={liveTables > 0 ? 'live tables this session' : 'no events yet this session'}
+        />
+        <KpiCard
+          label="Last deploy" onClick={() => onGo('workflow')}
+          value={vercelEnv ?? (process.env.NODE_ENV === 'production' ? 'production' : 'local')}
+          tone="accent"
+          detail={branch ? `${branch}${commit ? ` · ${commit.slice(0, 7)}` : ''}` : 'branch unavailable'}
+        />
+      </div>
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {SECTIONS.filter((s) => s.id !== 'home').map((s) => (
           <button key={s.id} onClick={() => onGo(s.id)} className="rounded-xl border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
             <p className="text-sm font-black text-white"><span aria-hidden>{s.icon}</span> {s.label}</p>
-            <p className="mt-1 text-xs text-slate-400">{s.sub}</p>
+            <p className="mt-1 text-sm text-slate-400">{s.sub}</p>
           </button>
         ))}
         <button onClick={() => router.push('/devdocs')} className="rounded-xl border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
           <p className="text-sm font-black text-white"><span aria-hidden>📘</span> Developer Handbook</p>
-          <p className="mt-1 text-xs text-slate-400">The reference library — 24 chapters, searchable, generated from the repo docs.</p>
+          <p className="mt-1 text-sm text-slate-400">The reference library — 24 chapters, searchable, generated from the repo docs.</p>
         </button>
         <button onClick={() => router.push('/audit')} className="rounded-xl border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
           <p className="text-sm font-black text-white"><span aria-hidden>🧾</span> Audit Log</p>
-          <p className="mt-1 text-xs text-slate-400">Every mutation, trigger-written, exportable to CSV (owner-only screen).</p>
+          <p className="mt-1 text-sm text-slate-400">Every mutation, trigger-written, exportable to CSV (owner-only screen).</p>
         </button>
       </div>
     </div>
+  )
+}
+
+function KpiCard({ label, value, detail, tone, onClick }: {
+  label: string
+  value: string
+  detail: string
+  tone: 'good' | 'bad' | 'accent' | 'muted'
+  onClick: () => void
+}) {
+  const valueColor = tone === 'good' ? 'text-emerald-300' : tone === 'bad' ? 'text-rose-300' : tone === 'accent' ? 'text-white' : 'text-slate-400'
+  return (
+    <button onClick={onClick} className="rounded-2xl border border-white/5 bg-ink-900/60 p-4 text-left transition hover:border-white/10 hover:bg-white/[0.03]">
+      <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
+      <p className={`mt-1 font-mono text-2xl font-black ${valueColor}`}>{value}</p>
+      <p className="mt-0.5 text-xs text-slate-400">{detail}</p>
+    </button>
   )
 }
 
@@ -248,6 +323,8 @@ function HealthSection() {
     let db: HealthState['db'] = null
     try { await countRows('profiles'); db = { ok: true, ms: Math.round(performance.now() - t0) } }
     catch { db = { ok: false, ms: Math.round(performance.now() - t0) } }
+    // Share the DB round-trip with the Overview KPI strip — no extra fetch.
+    useOwnerVitals.getState().setHealth(db)
     const counts: Record<string, number | null> = {}
     await Promise.all(STAT_TABLES.map(async (t) => {
       try { counts[t] = await countRows(t) } catch { counts[t] = null }
@@ -276,7 +353,7 @@ function HealthSection() {
       </div>
 
       <Panel title="Application" sub="Build metadata comes from Vercel system env vars — 'Unavailable' means the project doesn't expose them, not an error.">
-        <div className="grid grid-cols-1 gap-2 text-xs text-slate-300 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 text-sm text-slate-300 sm:grid-cols-2">
           <p>Environment: <b className="text-white">{vercelEnv ?? (process.env.NODE_ENV === 'production' ? 'production build' : 'development')}</b></p>
           <p>Deployed branch: <b className="text-white">{branch ?? 'Unavailable'}</b></p>
           <p>Commit: <b className="font-mono text-white">{commit ? commit.slice(0, 10) : 'Unavailable'}</b></p>
@@ -285,21 +362,21 @@ function HealthSection() {
       </Panel>
 
       <Panel title="Safety" sub="Checks that should always be green.">
-        <ul className="space-y-1.5 text-xs">
+        <ul className="space-y-1.5 text-sm">
           <SafetyLine ok={isConfigured} text="Supabase env vars present" bad="Missing NEXT_PUBLIC_SUPABASE_* — the app cannot function" />
           <SafetyLine ok={fmConfigured()} text="FiveManage configured (optional)" bad="Uploads disabled — Attachments/Media fall back to paste-a-URL" warnOnly />
           <SafetyLine ok={h?.db?.ok ?? true} text="Database reachable" bad="Profile count query failed — check Supabase status/logs" />
-          <li className="text-slate-500">Owner-dashboard items that live OUTSIDE this repo: Supabase OTP expiry + leaked-password protection + backups (see docs/HARDENING.md), GitHub branch protection (see Workflow).</li>
+          <li className="text-slate-400">Owner-dashboard items that live OUTSIDE this repo: Supabase OTP expiry + leaked-password protection + backups (see docs/HARDENING.md), GitHub branch protection (see Workflow).</li>
         </ul>
       </Panel>
 
       <Panel title="Statistics" sub="Live row counts (RLS-scoped — these are the rows YOUR account can see, which for the owner+command account is everything). 'Unavailable' = the count query failed.">
-        {loading && !h ? <p className="text-xs text-slate-500">Counting…</p> : (
+        {loading && !h ? <p className="text-sm text-slate-400">Counting…</p> : (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
             {STAT_TABLES.map((t) => (
               <div key={t} className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
                 <p className="font-mono text-lg font-black text-white">{h?.counts[t] ?? '—'}</p>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{t.replace(/_/g, ' ')}</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t.replace(/_/g, ' ')}</p>
               </div>
             ))}
           </div>
@@ -340,17 +417,17 @@ function ClientErrorsPanel() {
   return (
     <Panel title="Client errors" sub="Uncaught exceptions reported from members' browsers (max 5 per session per user, deduplicated). You also get a bell notification, throttled to one per 15 minutes.">
       {rows.length === 0 ? (
-        <p className="text-xs text-emerald-300">✓ No errors reported.</p>
+        <p className="text-sm text-emerald-300">✓ No errors reported.</p>
       ) : (
         <div className="space-y-2">
           {rows.map((r) => (
             <details key={r.id} className="rounded-xl border border-rose-400/20 bg-rose-500/5 p-3">
-              <summary className="cursor-pointer text-xs text-slate-200">
+              <summary className="cursor-pointer text-sm text-slate-200">
                 <span className="font-bold text-rose-200">{r.message.slice(0, 120)}</span>
-                <span className="ml-2 text-slate-500">{r.route || ''} · {officerName(r.reporter_id) || 'unknown'} · {timeAgo(r.created_at)}</span>
+                <span className="ml-2 text-slate-400">{r.route || ''} · {officerName(r.reporter_id) || 'unknown'} · {timeAgo(r.created_at)}</span>
               </summary>
-              {r.stack && <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-ink-950 p-2 text-[10px] text-slate-400">{r.stack}</pre>}
-              {r.user_agent && <p className="mt-1 text-[10px] text-slate-600">{r.user_agent}</p>}
+              {r.stack && <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-ink-950 p-2 text-xs text-slate-400">{r.stack}</pre>}
+              {r.user_agent && <p className="mt-1 text-xs text-slate-400">{r.user_agent}</p>}
             </details>
           ))}
           <button onClick={() => void clearAll()} disabled={busy} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50">
@@ -368,7 +445,7 @@ function HealthCard({ label, ok, detail }: { label: string; ok: boolean | null; 
       <p className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-400">
         <span className={`t-dot ${ok === true ? 't-dot-green' : ok === false ? 't-dot-rose' : 't-dot-amber'}`} /> {label}
       </p>
-      <p className="mt-1.5 text-xs text-slate-300">{detail}</p>
+      <p className="mt-1.5 text-sm text-slate-300">{detail}</p>
     </div>
   )
 }
@@ -413,7 +490,12 @@ function FeedbackInbox() {
         list('feedback_meta', {}),
       ])
       const byId = new Map(metas.map((m) => [m.feedback_id, m]))
-      setItems(fbs.map((fb) => ({ fb, meta: byId.get(fb.id) ?? null })))
+      const built = fbs.map((fb) => ({ fb, meta: byId.get(fb.id) ?? null }))
+      setItems(built)
+      // Share the open/unresolved count with the Overview KPI strip — no extra
+      // fetch. "Open" = not resolved/archived/rejected/duplicate.
+      const closed = new Set(['resolved', 'archived', 'rejected', 'duplicate'])
+      useOwnerVitals.getState().setOpenFeedback(built.filter((i) => !closed.has(i.meta?.status ?? 'new')).length)
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     finally { setLoading(false) }
   }, [])
@@ -450,22 +532,23 @@ function FeedbackInbox() {
   return (
     <div className="space-y-4">
       <Panel title="Feedback & Bugs — owner inbox" sub="Submissions come in through the existing Feedback screen (unchanged). Cataloging lives in an owner-only side table (feedback_meta) so internal notes can never reach submitters; every triage action is audit-logged automatically.">
-        <div className="mb-3 flex flex-wrap gap-1.5">
+        <div className="mb-3 flex flex-wrap gap-1 rounded-xl border border-white/10 bg-ink-950/40 p-1" role="group" aria-label="Feedback views">
           {FB_VIEWS.map((v) => {
             const n = items.filter((i) => v.match(i)).length
+            const on = view === v.id
             return (
-              <button key={v.id} onClick={() => setView(v.id)}
-                className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${view === v.id ? 'border-badge-500/50 bg-badge-500/15 text-white' : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'}`}>
-                {v.label} <span className="text-slate-500">{n}</span>
+              <button key={v.id} onClick={() => setView(v.id)} aria-pressed={on}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${on ? 'bg-badge-500/15 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
+                {v.label} <span className={on ? 'text-slate-300' : 'text-slate-500'}>{n}</span>
               </button>
             )
           })}
         </div>
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search title, notes, tags, submitter…" aria-label="Search feedback"
-            className="w-64 rounded-lg border border-white/10 bg-ink-900 px-3 py-1.5 text-xs text-white outline-none focus:border-badge-500" />
+            className="w-64 rounded-lg border border-white/10 bg-ink-900 px-3 py-1.5 text-sm text-white outline-none focus:border-badge-500" />
           <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort feedback"
-            className="rounded-lg border border-white/10 bg-ink-900 px-2 py-1.5 text-xs text-white outline-none">
+            className="rounded-lg border border-white/10 bg-ink-900 px-2 py-1.5 text-sm text-white outline-none">
             <option value="newest">Newest</option><option value="oldest">Oldest</option>
             <option value="priority">Priority</option><option value="status">Status</option>
             <option value="updated">Recently updated</option>
@@ -473,9 +556,9 @@ function FeedbackInbox() {
           <button aria-label="Refresh" title="Refresh" onClick={() => void refresh()} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">↻</button>
         </div>
 
-        {loading ? <p className="text-xs text-slate-500">Loading submissions…</p>
-          : err ? <p className="text-xs text-rose-300">Could not load: {err}</p>
-          : !shown.length ? <p className="rounded-xl border border-white/5 bg-ink-950/50 p-6 text-center text-xs text-slate-500">Nothing in this view.</p>
+        {loading ? <p className="text-sm text-slate-400">Loading submissions…</p>
+          : err ? <ErrorNotice message={err} onRetry={() => void refresh()} />
+          : !shown.length ? <EmptyState icon="📭" title="Nothing in this view." hint="Try another filter or clear the search." />
           : (
             <div className="space-y-2">
               {shown.map((i) => (
@@ -483,14 +566,14 @@ function FeedbackInbox() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span aria-hidden>{(i.meta?.type ?? i.fb.kind) === 'bug' ? '🐞' : '✨'}</span>
                     <p className="min-w-0 flex-1 truncate text-sm font-bold text-white">{i.fb.title}</p>
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${FB_STATUS_TINT[i.meta?.status ?? 'new']}`}>{fbLabel(i.meta?.status ?? 'new')}</span>
-                    {i.meta?.priority && <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${FB_PRIORITY_TINT[i.meta.priority]}`}>{fbLabel(i.meta.priority)}</span>}
-                    {i.meta?.type && <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] uppercase text-slate-400">{fbLabel(i.meta.type)}</span>}
+                    <Badge tint={FB_STATUS_TINT[i.meta?.status ?? 'new']}>{fbLabel(i.meta?.status ?? 'new')}</Badge>
+                    {i.meta?.priority && <Badge tint={FB_PRIORITY_TINT[i.meta.priority]}>{fbLabel(i.meta.priority)}</Badge>}
+                    {i.meta?.type && <Badge tone="neutral">{fbLabel(i.meta.type)}</Badge>}
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-500">
+                  <p className="mt-1 text-xs text-slate-400">
                     {officerName(i.fb.created_by) ?? 'Unknown member'} · {timeAgo(i.fb.created_at)}
                     {i.meta?.category && <> · {i.meta.category}</>}
-                    {i.fb.details && <> — <span className="text-slate-400">{i.fb.details.slice(0, 90)}{i.fb.details.length > 90 ? '…' : ''}</span></>}
+                    {i.fb.details && <> — <span className="text-slate-300">{i.fb.details.slice(0, 90)}{i.fb.details.length > 90 ? '…' : ''}</span></>}
                   </p>
                 </button>
               ))}
@@ -554,19 +637,16 @@ function FeedbackDetailModal({ item, onClose, onSaved }: { item: FbItem; onClose
     onSaved()
   }
 
-  const inputCls = 'w-full rounded-lg border border-white/10 bg-ink-950 px-2.5 py-1.5 text-xs text-white outline-none focus:border-badge-500'
-  const labelCls = 'mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500'
-
   return (
     <Modal open onClose={onClose} dirty={dirty} wide>
       <ModalHeader title={item.fb.title} onClose={onClose} />
-      <p className="-mt-2 mb-3 text-[11px] text-slate-500">
+      <p className="-mt-2 mb-3 text-xs text-slate-400">
         {officerName(item.fb.created_by) ?? 'Unknown member'} · submitted {timeAgo(item.fb.created_at)} ·
         public kind: {item.fb.kind}
       </p>
       {item.fb.details && (
         <div className="mb-4 rounded-xl border border-white/10 bg-ink-950/60 p-3">
-          <p className="whitespace-pre-wrap text-xs text-slate-300">{item.fb.details}</p>
+          <p className="whitespace-pre-wrap text-sm text-slate-300">{item.fb.details}</p>
         </div>
       )}
 
@@ -591,7 +671,7 @@ function FeedbackDetailModal({ item, onClose, onSaved }: { item: FbItem; onClose
           </select>
         </div>
         <div>
-          <label className={labelCls}>Public status <span className="normal-case text-slate-600">(submitter sees)</span></label>
+          <label className={labelCls}>Public status <span className="font-normal text-slate-400">(submitter sees)</span></label>
           <select value={publicStatus} onChange={(e) => setPublicStatus(e.target.value)} className={inputCls}>
             <option value="open">open</option><option value="done">done</option><option value="wontfix">wontfix</option>
           </select>
@@ -616,7 +696,7 @@ function FeedbackDetailModal({ item, onClose, onSaved }: { item: FbItem; onClose
           {busy ? 'Saving…' : 'Save catalog'}
         </button>
       </div>
-      <p className="mt-2 text-[10px] text-slate-600">
+      <p className="mt-2 text-xs text-slate-400">
         Archive instead of delete — nothing here is destructive. Status changes to
         &ldquo;resolved&rdquo;/&ldquo;archived&rdquo; stamp their timestamps automatically; all writes are audit-logged.
       </p>
@@ -633,9 +713,9 @@ function SuggestionsSection() {
   return (
     <Panel title="Improvement roadmap" sub="From the July 2026 repository analysis (handbook Ch. 19). Recommendations only — nothing here changes code. 'Wait' = do after a prerequisite or at larger scale.">
       <div className="mb-3 flex flex-wrap gap-1.5">
-        <button onClick={() => setGroup('')} className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${!group ? 'border-badge-500/50 bg-badge-500/15 text-white' : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'}`}>All ({SUGGESTIONS.length})</button>
+        <button onClick={() => setGroup('')} className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${!group ? 'border-badge-500/50 bg-badge-500/15 text-white' : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'}`}>All ({SUGGESTIONS.length})</button>
         {groups.map((g) => (
-          <button key={g} onClick={() => setGroup(group === g ? '' : g)} className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${group === g ? 'border-badge-500/50 bg-badge-500/15 text-white' : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'}`}>{g}</button>
+          <button key={g} onClick={() => setGroup(group === g ? '' : g)} className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${group === g ? 'border-badge-500/50 bg-badge-500/15 text-white' : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'}`}>{g}</button>
         ))}
       </div>
       <div className="space-y-2">
@@ -649,8 +729,8 @@ function SuggestionsSection() {
                 ? <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-300">done {s.done}</span>
                 : <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${s.safeNow ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-500/20 text-slate-400'}`}>{s.safeNow ? 'safe now' : 'wait'}</span>}
             </div>
-            <p className="mt-1 text-xs text-slate-400">{s.why}</p>
-            <p className="mt-1 text-[11px] text-slate-500">
+            <p className="mt-1 text-sm text-slate-400">{s.why}</p>
+            <p className="mt-1 text-xs text-slate-400">
               Files: <span className="font-mono">{s.files}</span> · risk {s.risk} · benefit {s.benefit} · verify: {s.verify}
             </p>
           </div>
@@ -670,7 +750,7 @@ function ImpactSection() {
         <DepExplorer />
       </Panel>
       <Panel title="Before any change — the universal checklist">
-        <ol className="list-decimal space-y-1 pl-5 text-xs text-slate-300">
+        <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-300">
           <li>Branch off main; never experiment on production.</li>
           <li>Check the item above + the handbook&rsquo;s <button onClick={() => router.push('/devdocs?page=change-impact')} className="text-blue-300 underline decoration-blue-300/40">Change Impact tables</button>.</li>
           <li>Schema changes: additive migration + database.types.ts in the same PR.</li>
@@ -700,14 +780,14 @@ function ArchitectureSection() {
    lib/supabase ─ lib/realtime (wss)    FiveManage (media URLs only)
                                         Discord (OAuth + DM edge fn)
    Vercel (hosting/previews/rollback) · GitHub Actions (4 gates + drift check)`}</pre>
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-sm text-slate-400">
           Flows in depth: {link('architecture', 'Architecture Blocks')} (nine blocks, risk levels, common mistakes) ·{' '}
           {link('auth', 'Auth flow')} · {link('api', 'API flow')} · {link('database', 'Database')} ·{' '}
           {link('state', 'State & realtime flow')} · {link('dependency-map', 'Dependency Map')}.
         </p>
       </Panel>
       <Panel title="The nine blocks, one line each" sub="Full detail with common mistakes lives in the handbook chapter.">
-        <ul className="space-y-1 text-xs text-slate-300">
+        <ul className="space-y-1 text-sm text-slate-300">
           <li><b className="text-white">Config & build</b> — CSP + deploy machinery (HIGH risk: exact allow-lists).</li>
           <li><b className="text-white">Routing & shell</b> — one [tab] route + chrome (nav three-way contract).</li>
           <li><b className="text-white">Auth & identity</b> — state machine + capability booleans (~40 consumers).</li>
@@ -729,7 +809,7 @@ function RoutesSection() {
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-white/10 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            <tr className="border-b border-white/10 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
               <th className="px-2 py-2">Path</th><th className="px-2 py-2">Component</th><th className="px-2 py-2">Access</th><th className="px-2 py-2">Data</th><th className="px-2 py-2">Risk</th>
             </tr>
           </thead>
@@ -762,7 +842,7 @@ function EnvSection() {
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b border-white/10 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            <tr className="border-b border-white/10 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
               <th className="px-2 py-2">Variable</th><th className="px-2 py-2">Purpose</th><th className="px-2 py-2">Required</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Used in</th><th className="px-2 py-2">If missing</th>
             </tr>
           </thead>
@@ -790,9 +870,9 @@ function RealtimeSection() {
   return (
     <div className="space-y-4">
       <Panel title="How realtime works here">
-        <p className="text-xs text-slate-300">{REALTIME_DOC.how}</p>
-        <p className="mt-2 text-xs text-slate-400"><b className="text-slate-300">Not published</b> (refresh on remount only, by design): {REALTIME_DOC.notPublished.join(' · ')}</p>
-        <p className="mt-2 text-xs text-slate-400"><b className="text-slate-300">Security:</b> {REALTIME_DOC.security}</p>
+        <p className="text-sm text-slate-300">{REALTIME_DOC.how}</p>
+        <p className="mt-2 text-sm text-slate-400"><b className="text-slate-300">Not published</b> (refresh on remount only, by design): {REALTIME_DOC.notPublished.join(' · ')}</p>
+        <p className="mt-2 text-sm text-slate-400"><b className="text-slate-300">Security:</b> {REALTIME_DOC.security}</p>
       </Panel>
       <Panel title="This session's channel activity" sub="Version counters = events received since you signed in. A quiet table is not a failure — it just hasn't changed.">
         {entries.length ? (
@@ -803,10 +883,10 @@ function RealtimeSection() {
               </span>
             ))}
           </div>
-        ) : <p className="text-xs text-slate-500">No events yet this session.</p>}
+        ) : <p className="text-sm text-slate-400">No events yet this session.</p>}
       </Panel>
       <Panel title="Common failure points">
-        <ul className="list-disc space-y-1 pl-5 text-xs text-slate-300">
+        <ul className="list-disc space-y-1 pl-5 text-sm text-slate-300">
           {REALTIME_DOC.failures.map((f) => <li key={f}>{f}</li>)}
         </ul>
       </Panel>
@@ -819,18 +899,18 @@ function WorkflowSection() {
     <div className="space-y-4">
       <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
         <p className="text-sm font-bold text-amber-200">⚠ All code changes go through a branch + PR preview first.</p>
-        <p className="mt-1 text-xs text-amber-200/80">Production tracks main. A broken merge deploys immediately — the preview deployment IS the safe development version. {WORKFLOW.notVerified}</p>
+        <p className="mt-1 text-sm text-amber-200/80">Production tracks main. A broken merge deploys immediately — the preview deployment IS the safe development version. {WORKFLOW.notVerified}</p>
       </div>
-      <Panel title="Branching & gates"><p className="text-xs text-slate-300">{WORKFLOW.branch}</p><p className="mt-2 font-mono text-[11px] text-slate-400">{WORKFLOW.gates}</p></Panel>
-      <Panel title="Database changes"><p className="text-xs text-slate-300">{WORKFLOW.db}</p></Panel>
-      <Panel title="Deploy & verify"><p className="text-xs text-slate-300">{WORKFLOW.deploy}</p></Panel>
-      <Panel title="Releases & the merge checklist"><p className="text-xs text-slate-300">{WORKFLOW.versioning}</p></Panel>
-      <Panel title="Rollback & emergencies"><p className="text-xs text-slate-300">{WORKFLOW.rollback}</p><p className="mt-2 text-xs text-slate-300">{WORKFLOW.emergency}</p></Panel>
+      <Panel title="Branching & gates"><p className="text-sm text-slate-300">{WORKFLOW.branch}</p><p className="mt-2 font-mono text-xs text-slate-400">{WORKFLOW.gates}</p></Panel>
+      <Panel title="Database changes"><p className="text-sm text-slate-300">{WORKFLOW.db}</p></Panel>
+      <Panel title="Deploy & verify"><p className="text-sm text-slate-300">{WORKFLOW.deploy}</p></Panel>
+      <Panel title="Releases & the merge checklist"><p className="text-sm text-slate-300">{WORKFLOW.versioning}</p></Panel>
+      <Panel title="Rollback & emergencies"><p className="text-sm text-slate-300">{WORKFLOW.rollback}</p><p className="mt-2 text-sm text-slate-300">{WORKFLOW.emergency}</p></Panel>
       <Panel title="Permissions matrix" sub={MATRIX_NOTE}>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-white/10 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <tr className="border-b border-white/10 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 <th className="px-2 py-2">Area</th><th className="px-2 py-2">Owner</th><th className="px-2 py-2">Command</th><th className="px-2 py-2">Member</th><th className="px-2 py-2">Inactive/Guest</th>
               </tr>
             </thead>
@@ -855,9 +935,9 @@ function WorkflowSection() {
 function LearnPath({ title, items }: { title: string; items: { step: string; where: string; why: string }[] }) {
   return (
     <Panel title={title}>
-      <ol className="list-decimal space-y-2 pl-5 text-xs text-slate-300">
+      <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-300">
         {items.map((i) => (
-          <li key={i.step}><b className="text-white">{i.step}</b> — <span className="font-mono text-blue-300">{i.where}</span><br /><span className="text-slate-500">{i.why}</span></li>
+          <li key={i.step}><b className="text-white">{i.step}</b> — <span className="font-mono text-blue-300">{i.where}</span><br /><span className="text-slate-400">{i.why}</span></li>
         ))}
       </ol>
     </Panel>
@@ -877,11 +957,11 @@ function LearningSection() {
         </div>
       </Panel>
       <Panel title="Common mistakes (all real)">
-        <ul className="list-disc space-y-1 pl-5 text-xs text-slate-300">
+        <ul className="list-disc space-y-1 pl-5 text-sm text-slate-300">
           {LEARNING.mistakes.map((mk) => <li key={mk}>{mk}</li>)}
         </ul>
       </Panel>
-      <p className="text-xs text-slate-500">
+      <p className="text-sm text-slate-400">
         The full checklist with milestones lives in the handbook&rsquo;s{' '}
         <button onClick={() => router.push('/devdocs?page=learning-path')} className="text-blue-300 underline decoration-blue-300/40">Learning Path</button>,
         with the <button onClick={() => router.push('/devdocs?page=glossary')} className="text-blue-300 underline decoration-blue-300/40">Glossary</button> and{' '}
