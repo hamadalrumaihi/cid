@@ -6,6 +6,26 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.7.1] — 2026-07-12
+
+### Phase D5 — Developer Handbook reading polish (owner/dev-only, visual)
+Long-form readability on the handbook chapters; no content, generation,
+gating, or routing changes.
+- **Capped reading measure** — the article column is centered at `max-w-3xl`
+  (~72ch) so lines stay readable on wide screens; tables and code blocks keep
+  their `overflow-x-auto` and scroll within the measure.
+- **"On this page" TOC** (`OnThisPage.tsx`) — built from the existing
+  `docHeadings()`: a sticky right column at `xl`, a collapsible block above the
+  article below `xl` (≥44px summary). h3 indented under h2; clicks reuse the
+  existing `goTo` deep-link.
+- **Scroll-spy** — one lightweight `IntersectionObserver`, a single active
+  heading at a time, resilient when nothing is intersecting (keeps the last),
+  reduced-motion-safe, and it **never writes the URL hash while scrolling** —
+  the hash changes only on explicit navigation.
+- **Hover/focus heading anchors** — a subtle `#` appears on heading hover or
+  keyboard focus, with an accessible "Link to section: …" label, for copyable
+  deep-links.
+
 ## [1.7.0] — 2026-07-12
 
 ### Phase D2 — Owner Portal cleanup (visual only)

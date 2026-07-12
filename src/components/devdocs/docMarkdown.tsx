@@ -119,8 +119,19 @@ export function renderDocMarkdown(body: string, onLink: LinkFn): ReactNode {
       const text = h[2]
       const id = anchorId(text)
       const content = inline(text, onLink, `h${key}`)
-      if (level <= 2) blocks.push(<h2 key={key++} id={id} className="mt-8 mb-3 scroll-mt-24 border-b border-white/10 pb-2 text-lg font-black text-white">{content}</h2>)
-      else blocks.push(<h3 key={key++} id={id} className="mt-6 mb-2 scroll-mt-24 text-sm font-black uppercase tracking-wider text-blue-300">{content}</h3>)
+      // Subtle "#" affordance — hidden until the heading is hovered or the
+      // anchor is keyboard-focused. Clicking sets the hash natively.
+      const anchor = (
+        <a
+          href={`#${id}`}
+          aria-label={`Link to section: ${text.replace(/\*\*/g, '')}`}
+          className="ml-2 font-normal text-slate-500 opacity-0 transition hover:text-slate-300 focus:opacity-100 group-hover:opacity-100"
+        >
+          #
+        </a>
+      )
+      if (level <= 2) blocks.push(<h2 key={key++} id={id} className="group mt-8 mb-3 scroll-mt-24 border-b border-white/10 pb-2 text-lg font-black text-white">{content}{anchor}</h2>)
+      else blocks.push(<h3 key={key++} id={id} className="group mt-6 mb-2 scroll-mt-24 text-sm font-black uppercase tracking-wider text-blue-300">{content}{anchor}</h3>)
       i++
       continue
     }
