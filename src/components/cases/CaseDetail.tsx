@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Badge } from '@/components/ui/Badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { uiConfirm } from '@/components/ui/dialog'
 import { deleteWithUndo, list, update, withRetry } from '@/lib/db'
@@ -78,12 +79,74 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     router.replace(`/cases?${params.toString()}`)
   }
 
+  // ── Tab bar mechanics: overflow fades tracked to real scroll position,
+  //    roving-tabindex keyboard focus, and active-tab-into-view on change. ──
+  const stripRef = useRef<HTMLDivElement>(null)
+  const tabRefs = useRef<Partial<Record<TabId, HTMLButtonElement | null>>>({})
+  const rafRef = useRef<number | undefined>(undefined)
+  const [fade, setFade] = useState({ left: false, right: false })
+
+  const readFades = useCallback(() => {
+    const el = stripRef.current
+    if (!el) return
+    const left = el.scrollLeft > 1
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
+    setFade((f) => (f.left === left && f.right === right ? f : { left, right }))
+  }, [])
+
+  const onScroll = useCallback(() => {
+    if (rafRef.current != null) return
+    rafRef.current = requestAnimationFrame(() => { rafRef.current = undefined; readFades() })
+  }, [readFades])
+
+  // Window resize can change what overflows — re-measure (rAF-throttled).
+  useEffect(() => {
+    window.addEventListener('resize', onScroll)
+    return () => {
+      window.removeEventListener('resize', onScroll)
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
+    }
+  }, [onScroll])
+
+  // Bring the active tab into view on first paint and on every tab change,
+  // then re-measure the fades. Respect reduced-motion for the scroll.
+  useEffect(() => {
+    const el = tabRefs.current[tab]
+    if (el) {
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      el.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: reduce ? 'auto' : 'smooth' })
+    }
+    readFades()
+    // c?.id: the strip only mounts once the case has loaded.
+  }, [tab, c?.id, readFades])
+
+  // Roving focus only — arrows/Home/End MOVE focus between tabs; activation
+  // (Enter/Space/click) is left to each button's native onClick → setTab, so
+  // the ?tab= URL is not churned as focus roams the strip.
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
+    e.preventDefault()
+    const active = document.activeElement
+    let idx = TABS.findIndex((t) => tabRefs.current[t] === active)
+    if (idx < 0) idx = TABS.indexOf(tab)
+    const next =
+      e.key === 'Home' ? 0
+      : e.key === 'End' ? TABS.length - 1
+      : e.key === 'ArrowLeft' ? (idx - 1 + TABS.length) % TABS.length
+      : (idx + 1) % TABS.length
+    tabRefs.current[TABS[next]]?.focus()
+  }
+
   if (loading) return <p className="rounded-2xl border border-white/10 bg-ink-900/50 p-6 text-slate-300">Loading case...</p>
   if (!c) return <p className="rounded-2xl border border-white/10 bg-ink-900/50 p-6 text-slate-300">Case not found.</p>
 
   const op = operations.find((x) => x.id === c.operation_id)
   const hint = caseCourtHint(c, profile?.id ?? null, officerName(c.signoff_assignee_id))
   const pinned = isPinnedCase(c.id)
+  // "Awaiting a decision" reuses the established sign-off vocabulary: every
+  // awaiting state is prefixed awaiting_ (lib/signoff), same set caseCourtHint
+  // keys off. No new states invented.
+  const awaitingSignoff = (c.signoff_status ?? '').startsWith('awaiting_')
 
   const quickStatus = async (status: CaseRow['status']) => {
     // Closing stamps closed_at and takes the case off the active board — worth
@@ -119,10 +182,13 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <button onClick={() => copyText(c.case_number, 'Case number copied.')} className="font-mono text-sm font-bold text-badge-200">{c.case_number}</button>
-              <span className={`rounded-full px-2 py-1 text-xs font-bold uppercase ${caseStatusTint(c.status)}`}>{c.status}</span>
-              <span className="rounded-full bg-white/5 px-2 py-1 text-xs font-bold text-slate-300">{c.bureau}</span>
-              <span className={`rounded-full px-2 py-1 text-xs font-bold ${signoffTint(c.signoff_status)}`}>{signoffLabel(c.signoff_status)}</span>
+              {/* Identity group — what the case is. */}
+              <button onClick={() => copyText(c.case_number, 'Case number copied.')} title="Copy case number" className="inline-flex items-center rounded-full bg-white/5 px-2.5 py-0.5 font-mono text-[11px] font-bold text-badge-200 hover:bg-white/10">{c.case_number}</button>
+              <Badge>{c.bureau}</Badge>
+              <span aria-hidden className="mx-0.5 h-4 w-px bg-white/10" />
+              {/* Workflow group — where the case stands. */}
+              <Badge tint={caseStatusTint(c.status)} className="uppercase">{c.status}</Badge>
+              <Badge tint={signoffTint(c.signoff_status)}>{signoffLabel(c.signoff_status)}</Badge>
               <StaleBadge c={c} />
             </div>
             <h2 className="text-2xl font-black text-white">{c.title || 'Untitled case'}</h2>
@@ -147,10 +213,55 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         </div>
       </section>
 
-      <div className="flex gap-2 overflow-x-auto border-b border-white/10 pb-2">
-        {TABS.map((t) => <button key={t} onClick={() => setTab(t)} className={`rounded-lg px-3 py-2 text-sm font-bold capitalize ${tab === t ? 'bg-badge-500 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10'}`}>{t}</button>)}
+      {/* Sticky tab strip — tucks directly under the shell header (sticky
+          top-0). Header ≈ 4.5rem mobile / 4.75rem sm+; z-10 stays below the
+          header's z-20 so the header owns the seam (no gap, no overlap). */}
+      <div className="sticky top-[4.5rem] z-10 -mx-4 border-b border-white/10 bg-ink-950/90 px-4 backdrop-blur sm:top-[4.75rem] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="relative">
+          {fade.left && <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-ink-950 to-transparent" />}
+          {fade.right && <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-ink-950 to-transparent" />}
+          <div
+            ref={stripRef}
+            role="tablist"
+            aria-label="Case sections"
+            onScroll={onScroll}
+            onKeyDown={onTabKeyDown}
+            className="flex gap-2 overflow-x-auto py-2"
+          >
+            {TABS.map((t) => {
+              const on = tab === t
+              const marker = t === 'signoff' && awaitingSignoff
+              return (
+                <Fragment key={t}>
+                  {/* One subtle divider before the workflow cluster (reports ·
+                      tasks · signoff · chat); tab order is untouched. */}
+                  {t === 'reports' && <span aria-hidden className="mx-1 h-6 w-px flex-shrink-0 self-center bg-white/10" />}
+                  <button
+                    ref={(el) => { tabRefs.current[t] = el }}
+                    role="tab"
+                    id={`casetab-${t}`}
+                    aria-selected={on}
+                    aria-controls={`casepanel-${t}`}
+                    tabIndex={on ? 0 : -1}
+                    title={marker ? 'Sign-off requires attention' : undefined}
+                    onClick={() => setTab(t)}
+                    className={`flex min-h-[44px] flex-shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold capitalize sm:min-h-0 ${on ? 'bg-badge-500 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10'}`}
+                  >
+                    {t}
+                    {marker && (
+                      <>
+                        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                        <span className="sr-only">Sign-off requires attention</span>
+                      </>
+                    )}
+                  </button>
+                </Fragment>
+              )
+            })}
+          </div>
+        </div>
       </div>
-      <section className="rounded-2xl border border-white/10 bg-ink-900/45 p-4">
+      <section role="tabpanel" id={`casepanel-${tab}`} aria-labelledby={`casetab-${tab}`} tabIndex={0} className="rounded-2xl border border-white/10 bg-ink-900/45 p-4">
         {tab === 'overview' && <OverviewTab c={c} canEdit={canEdit} canDelete={canDelete} />}
         {tab === 'graph' && <CaseGraphTab c={c} />}
         {tab === 'evidence' && <EvidenceTab c={c} canEdit={canEdit} canDelete={canDelete} />}

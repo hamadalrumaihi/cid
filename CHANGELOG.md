@@ -6,6 +6,30 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.7.2] — 2026-07-12
+
+### Phase D3 — Case-detail tab bar & header (visual + a11y)
+Polish on the most-used screen — surgical, single-file; the 12 tabs, their
+order, `?tab=` deep-links, and every tab/action/workflow are unchanged.
+- **Sticky tab bar** below the shell header (`top-[4.5rem]`/`sm:top-[4.75rem]`,
+  `z-10`, blurred background) so it stays visible while scrolling long tabs
+  (evidence, timeline).
+- **Overflow fades** on the tab strip that track the real scroll position
+  (left when scrolled, right while more remains); the active tab scrolls into
+  view on load and on change (reduced-motion-safe).
+- **Accessible tablist** — `role="tablist"/tab/tabpanel"` with stable
+  `id`/`aria-controls`/`aria-selected` pairs and **roving tabindex**:
+  Left/Right/Home/End move focus, Enter/Space/click activate. Focus movement
+  is separate from activation, so the URL isn't churned as focus roams.
+  Tab targets are ≥44px on mobile.
+- **Record / workflow divider** — one hairline before `reports` groups the
+  workflow cluster (reports · tasks · sign-off · chat) without reordering.
+- **Sign-off attention marker** — a dot on the Sign-off tab **only** when the
+  case is awaiting a decision (`signoff_status` `awaiting_*`), with an
+  `sr-only` + `title` "Sign-off requires attention" (never dot-alone).
+- **Header chips** tidied via shared `Badge` into identity (case# · bureau) and
+  workflow (status · sign-off · stale) groups; same data + tint helpers.
+
 ## [1.7.1] — 2026-07-12
 
 ### Phase D5 — Developer Handbook reading polish (owner/dev-only, visual)
