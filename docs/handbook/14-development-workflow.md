@@ -29,6 +29,12 @@ npm run build       # next build — all routes must prerender
 CI (`.github/workflows/ci.yml`) runs the same four on every push/PR;
 Dependabot opens weekly dependency PRs gated by the same.
 
+The opt-in live security suite (`npm run test:rls`, see
+`tests/rls/README.md`) additionally posts each run's **sanitized** results
+to the Owner Portal's Security Testing dashboard via a vitest reporter
+(`tests/rls/securityReporter.ts`, v1.14) — fixture-authenticated,
+best-effort, and self-skipping when credentials are absent.
+
 ## Shipping
 
 Branch from `main` → PR → the Vercel bot posts a preview URL (check your

@@ -113,6 +113,27 @@ Justice/legal tables are all **SELECT-only** for clients; every write path is a
 SECURITY DEFINER RPC. DOJ roles are **not** in the `app_role` enum — they live
 in `justice_memberships`, a separate identity domain.
 
+## Shared-platform migrations (v1.14.0)
+Three additive migrations promote the DOJ patterns portal-wide (see
+`CHANGELOG.md` 1.14.0 and the adoption register in
+[`../docs/DOJ-INTEGRATION.md`](../docs/DOJ-INTEGRATION.md)):
+
+- `20260715010000_report_versions` — `report_versions` seal snapshots
+  (immutable to clients: UPDATE trigger-blocked, write grants revoked; SELECT
+  follows the report's case access; rows CASCADE with their report);
+  `report_finalize()` amended to snapshot each sealed version.
+- `20260715020000_search_all_legal` — `search_all` gains a `legal` union
+  branch. The function stays SECURITY INVOKER, so sealed requests remain
+  undiscoverable by construction; only header fields are matched, never
+  narratives.
+- `20260715030000_security_testing` — `security_test_runs` (**no client
+  grants at all**) plus its two audited definer RPCs:
+  `security_test_report()` (writer — callable only by the
+  `rls-test-%@cidportal.test` fixture accounts, server-side failure
+  sanitization, newest-50-per-suite retention) and
+  `owner_security_overview()` (reader — `private.is_owner()`-gated; recent
+  runs + live fixture health + leftover test-data counts).
+
 ## Notes
 - **No Supabase Storage.** Media references are external URLs; there are no
   buckets or storage policies.

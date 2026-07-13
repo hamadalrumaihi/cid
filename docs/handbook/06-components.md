@@ -41,6 +41,34 @@ Tiptap v3, **markdown in / markdown out** — storage stays plain text so
 initial-only; mount fresh per session. **Reuse when**: any long-text field
 that renders as markdown elsewhere.
 
+## The v1.14 shared set (extracted from the DOJ build)
+Each of these was proven inside the legal-review UI and extracted once it
+had two or more non-DOJ consumers. **Reuse them for any new adopter** —
+don't re-inline the pattern.
+
+- **`ui/WorkflowTimeline.tsx`** — the vertical actor/action/note history
+  render. Used by: legal request History tab, case sign-off history
+  (SignoffTab), evidence custody chain (EvidenceTab expandable), the
+  Command Center approval-queue history, and the CID + Justice
+  membership-request applicant history panels. **Reuse when**: any
+  append-only history needs displaying.
+- **`shared/RelatedRecordPicker.tsx`** — case-scoped record lookup/attach.
+  Used by: legal exhibit pickers, the report editor's evidence lookup
+  (ReportsTab FormEditor), RICO predicate-act evidence links (RicoTab).
+- **`shared/VersionViewer.tsx`** — immutable version list + snapshot
+  render. Used by: finalized report versions (ReportsTab "Versions" toggle
+  over `report_versions`), the SOP history modal (SopsView).
+- **`shared/SignatureViewer.tsx`** — signature trail render (supports
+  superseded entries). Used by: legal version-bound signatures, report seal
+  signatures incl. superseded seals from the reopen log (ReportsTab),
+  tracker command co-signs (Trackers).
+- **`ui/DeadlineChip.tsx` + `lib/deadlines.ts`** — the shared deadline
+  engine (`lib/justice.ts`'s `deadlineInfo` now delegates to it). Used by:
+  legal expiry/response deadlines, case-task due dates (TasksTab),
+  joint-case access expiry (OverviewTab), case follow-ups (CaseDetail).
+  **Reuse when**: any surface shows a due/expiry timestamp — same
+  vocabulary everywhere.
+
 ## `cases/WatchButton.tsx`
 Follow/unfollow for `case|person|vehicle`. Stops propagation (works inside
 clickable cards). **Reuse when**: a record type becomes followable.

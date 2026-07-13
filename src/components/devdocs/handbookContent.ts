@@ -182,8 +182,12 @@ navigation implementation instead of 29. Details: [Ch. 6](06-components.md).
 
 ### \`src/components/ui/\` — generic widgets
 \`Modal\` (focus trap + dirty guard), \`dialog\` (confirm/prompt), \`Toaster\`,
-\`DataTable\` (sort/filter/CSV), \`RichEditor\` (Tiptap). Feature-agnostic —
-every feature folder builds on these.
+\`DataTable\` (sort/filter/CSV), \`RichEditor\` (Tiptap), and since v1.14
+\`WorkflowTimeline\` (history render) and \`DeadlineChip\` (shared deadline
+vocabulary). Feature-agnostic — every feature folder builds on these.
+\`src/components/shared/\` holds the cross-feature record widgets extracted
+from the DOJ build (\`RelatedRecordPicker\`, \`VersionViewer\`,
+\`SignatureViewer\`) — see [Ch. 6](06-components.md).
 
 ### \`src/components/<feature>/\` — 27 feature folders
 One folder per screen (\`cases/\`, \`gangs/\`, \`heatmap/\`, …). Each is
@@ -192,7 +196,7 @@ router imports them. \`cases/\` (10 files) and \`command/\` (10 files) are the
 big ones. Details: [Ch. 4](04-features.md).
 
 ### \`src/lib/\` — the shared foundation ⭐
-25 files defining every contract the features obey: the data layer
+30+ files defining every contract the features obey: the data layer
 (\`db.ts\`), auth (\`auth.tsx\`), realtime (\`realtime.ts\`), navigation model
 (\`nav.ts\`), domain logic (sign-off, forms, penal code, exports, search,
 notifications), and utilities (toast, format, safeUrl, markdown, store).
@@ -200,7 +204,7 @@ notifications), and utilities (toast, format, safeUrl, markdown, store).
 [File Index](appendix-file-index.md).
 
 ### \`supabase/\` — the backend's paper trail
-\`migrations/\` (59 SQL files replayed by \`supabase db reset\`; note that
+\`migrations/\` (78 SQL files replayed by \`supabase db reset\`; note that
 later changes were applied directly to the live project — the live schema
 is the source of truth), \`functions/\` (the \`discord-notify\` edge
 function), and backend READMEs. Details: [Ch. 8](08-database.md).
@@ -364,6 +368,34 @@ Tiptap v3, **markdown in / markdown out** — storage stays plain text so
 initial-only; mount fresh per session. **Reuse when**: any long-text field
 that renders as markdown elsewhere.
 
+## The v1.14 shared set (extracted from the DOJ build)
+Each of these was proven inside the legal-review UI and extracted once it
+had two or more non-DOJ consumers. **Reuse them for any new adopter** —
+don't re-inline the pattern.
+
+- **\`ui/WorkflowTimeline.tsx\`** — the vertical actor/action/note history
+  render. Used by: legal request History tab, case sign-off history
+  (SignoffTab), evidence custody chain (EvidenceTab expandable), the
+  Command Center approval-queue history, and the CID + Justice
+  membership-request applicant history panels. **Reuse when**: any
+  append-only history needs displaying.
+- **\`shared/RelatedRecordPicker.tsx\`** — case-scoped record lookup/attach.
+  Used by: legal exhibit pickers, the report editor's evidence lookup
+  (ReportsTab FormEditor), RICO predicate-act evidence links (RicoTab).
+- **\`shared/VersionViewer.tsx\`** — immutable version list + snapshot
+  render. Used by: finalized report versions (ReportsTab "Versions" toggle
+  over \`report_versions\`), the SOP history modal (SopsView).
+- **\`shared/SignatureViewer.tsx\`** — signature trail render (supports
+  superseded entries). Used by: legal version-bound signatures, report seal
+  signatures incl. superseded seals from the reopen log (ReportsTab),
+  tracker command co-signs (Trackers).
+- **\`ui/DeadlineChip.tsx\` + \`lib/deadlines.ts\`** — the shared deadline
+  engine (\`lib/justice.ts\`'s \`deadlineInfo\` now delegates to it). Used by:
+  legal expiry/response deadlines, case-task due dates (TasksTab),
+  joint-case access expiry (OverviewTab), case follow-ups (CaseDetail).
+  **Reuse when**: any surface shows a due/expiry timestamp — same
+  vocabulary everywhere.
+
 ## \`cases/WatchButton.tsx\`
 Follow/unfollow for \`case|person|vehicle\`. Stops propagation (works inside
 clickable cards). **Reuse when**: a record type becomes followable.
@@ -402,6 +434,7 @@ leaf nodes, safe to study, intricate to edit.`,
 | \`src/app/\` | Routes, HTML skeleton, error pages, global CSS |
 | \`src/components/<feature>/\` | One folder per screen (27) |
 | \`src/components/shell/\` | Navigation chrome |
+| \`src/components/shared/\` | Cross-feature record widgets (v1.14 extractions) |
 | \`src/components/ui/\` | Generic widgets |
 | \`src/lib/\` | ⚠ All shared logic |
 | \`supabase/\` | Backend migrations, edge functions, backend docs |
@@ -414,7 +447,8 @@ leaf nodes, safe to study, intricate to edit.`,
 | \`database.types.ts\` | ⚠ Hand-maintained TS mirror of the live schema |
 | \`db.ts\` | ⚠ THE data layer: list/insert/update/remove/rpc/deleteWithUndo/withRetry |
 | \`docx.ts\` | Dependency-free OOXML writer (byte-fragile ZIP) |
-| \`drafts.ts\` | Unused never-lose-work localStorage util (zero importers) |
+| \`deadlines.ts\` | Shared deadline engine (v1.14) — feeds \`ui/DeadlineChip\`; \`justice.ts\` delegates to it |
+| \`drafts.ts\` | Never-lose-work localStorage stash — reports, chat, and (v1.14) the legal create/edit forms |
 | \`fivemanage.ts\` | Media upload (multipart → hosted URL) |
 | \`format.ts\` | timeAgo/todayISO/fmtUSD/slug/downloadBlob/copyText |
 | \`forms.ts\` | 8 report schemas + warrant helpers + finalize-gap check |
@@ -428,6 +462,7 @@ leaf nodes, safe to study, intricate to edit.`,
 | \`realtime.ts\` | ⚠ One channel per table → version counters (\`useTableVersion\`) |
 | \`roles.ts\` | Role/bureau vocabulary + seniority + command predicates |
 | \`safeUrl.ts\` | ⚠ XSS scheme allow-list for DB-sourced URLs (tested) |
+| \`schemas.ts\` | Zod tolerant parsers for structured JSON payloads (v1.14) — legal form_data, packet manifests, notification payloads, report signatures/reopen logs, security overview |
 | \`search.ts\` | \`search_all\` RPC wrapper + penal hits + recents |
 | \`signoff.ts\` | Read-only sign-off vocabulary/tints/"whose court" hint |
 | \`store.ts\` | The shared localStorage blob (legacy-compatible keys) |
@@ -458,6 +493,8 @@ leaf nodes, safe to study, intricate to edit.`,
 | \`ui/DataTable.tsx\` | Sort/filter/CSV table (+ injection-guarded \`csvCell\`) |
 | \`ui/RichEditor.tsx\` | Tiptap markdown editor |
 | \`ui/Toaster.tsx\` | Toast renderer |
+| \`ui/WorkflowTimeline.tsx\` / \`ui/DeadlineChip.tsx\` | v1.14 shared history render / deadline chip (see [Ch. 6](06-components.md)) |
+| \`shared/RelatedRecordPicker.tsx\` / \`VersionViewer.tsx\` / \`SignatureViewer.tsx\` | v1.14 cross-feature record picker / version list / signature trail |
 
 ## Feature views (main file per folder)
 
@@ -556,7 +593,11 @@ dossiers.
 \`Header\` shortcut → \`SearchPalette\` → debounced \`runSearch\` → \`search_all\`
 RPC (pg_trgm fuzzy, RLS-scoped, SECURITY INVOKER) + static penal-code
 hits + quick actions (New case, LOA, sign out, go-to-tab). A sequence
-guard drops out-of-order responses. Enter deep-links (\`?case=\`, \`?q=\`).
+guard drops out-of-order responses. Enter deep-links (\`?case=\`, \`?q=\`,
+and since v1.14 \`/legal?request=\` for legal-request hits). v1.14 added a
+\`legal\` kind to \`search_all\`: header fields only, and because the function
+is SECURITY INVOKER every hit passes the \`legal_requests\` SELECT policy —
+sealed requests never surface.
 
 ## 4.5 Command tools
 
@@ -680,11 +721,11 @@ SECURITY DEFINER (run privileged, then check the caller inside) except
 
 | RPC | Request | Response | Called from | Why it exists |
 |---|---|---|---|---|
-| \`search_all(q)\` | search string | ranked hits across 9 tables | SearchPalette | one round-trip fuzzy search, RLS-scoped |
+| \`search_all(q)\` | search string | ranked hits across 10 tables (v1.14 adds \`legal\` — header fields only, never narratives; INVOKER + RLS keep sealed requests undiscoverable) | SearchPalette | one round-trip fuzzy search, RLS-scoped |
 | \`signoff_submit(p_case)\` | case id | updated case | CaseDetail | atomically route + stamp + history + notify; columns are trigger-locked |
 | \`signoff_decide(p_case, p_decision, p_note)\` | case id, approve/deny/changes, note | updated case | CaseDetail | reviewer decision, validated against the current assignee |
 | \`signoff_owner_action(p_case, p_action)\` | case id, complete/escalate/… | updated case | CaseDetail | owner-side chain actions |
-| \`report_finalize(p_report, p_badge)\` | report id, badge | report row | CaseDetail Reports | the ONLY way to set \`finalized\`; stamps signer |
+| \`report_finalize(p_report, p_badge)\` | report id, badge | report row | CaseDetail Reports | the ONLY way to set \`finalized\`; stamps signer; since v1.14 also snapshots the sealed fields + signature into \`report_versions\` |
 | \`assign_member(target, role, division, active)\` | profile id + assignment | void | AssignModal/AdminPanel | command-checked role/bureau/activation (guard trigger blocks direct writes) |
 | \`admin_member_emails()\` | — | roster emails | PersonnelView | command-only bypass of the email column grant |
 | \`admin_remove_member\` / \`admin_restore_member(p_target)\` | profile id | void | AdminPanel | soft remove/restore (\`removed_at\`) |
@@ -732,6 +773,17 @@ SELECT-only for clients; these definer RPCs are the only write path.
 | \`legal_internal_notes(p_request)\` | prosecution/judicial-side internal notes (column-revoked otherwise) |
 | \`justice_directory()\` / \`legal_request_people(p_request)\` | name resolution for justice-only users (no roster access) |
 | \`mdt_wanted_current()\` | classification-safe wanted projection; effective status computed at read time |
+
+### Security-testing RPCs (v1.14.0)
+
+The \`security_test_runs\` table has **no client grants at all** (not even
+SELECT) — these two audited definer RPCs are the only path in or out. The
+browser never runs privileged tests and never sees fixture credentials.
+
+| RPC | Purpose |
+|---|---|
+| \`security_test_report(p_suite, p_passed, p_failed, p_skipped, p_failures, p_commit, p_branch, p_release, p_source, p_duration_ms)\` | writer, callable **only by \`rls-test-%@cidportal.test\` accounts** — the live RLS suites report their own sanitized results (a vitest reporter posts after every \`npm run test:rls\`). Failures are re-sanitized server-side (short name/expected/actual strings only); newest 50 runs kept per suite; audit-logged |
+| \`owner_security_overview()\` | reader, \`private.is_owner()\`-gated + audited — recent runs, live fixture-roster health checks, and leftover test-data counts for the Owner Portal's Security Testing section |
 
 **Error handling**: RPCs come back through \`rpc()\` as \`{error}\` — callers
 toast it. RPC-internal permission failures raise exceptions that surface
@@ -782,7 +834,11 @@ means division-wide visibility) plus its satellites: \`case_assignments\`
 \`temporary\`, \`expires_at\`, \`removed_*\` — joint rows are **RPC-only**, and
 an active unexpired joint row grants access to exactly that case via
 \`private.has_joint_access\`), \`evidence\` (+
-append-only \`custody_chain\`), \`reports\` (finalize RPC-only),
+append-only \`custody_chain\`), \`reports\` (finalize RPC-only) +
+\`report_versions\` (v1.14: one immutable snapshot per seal, written only
+inside \`report_finalize()\` — SELECT follows the report's case access, client
+UPDATE is trigger-blocked and write grants are revoked; rows CASCADE with
+their report because reports stay client-deletable),
 \`case_tasks\` (sub-tasks via \`parent_id\`; delete = command OR own row),
 \`case_messages\` (author trigger-stamped; edit/delete author-or-command),
 \`case_intel_links\` (polymorphic case→person/gang/place — feeds the Intel
@@ -823,7 +879,10 @@ own form fields, decision columns trigger-frozen, \`internal_decision_note\`
 column-revoked — command reads via \`admin_membership_requests()\`) +
 append-only \`membership_request_history\` (definer-RPC writes only),
 \`app_secrets\` (RLS on, **zero policies** = invisible to all client roles —
-deliberate).
+deliberate), \`security_test_runs\` (v1.14: **all client grants revoked** —
+written only by \`security_test_report()\` from the rls-test fixture suites,
+read only through the owner-gated \`owner_security_overview()\`; newest 50
+runs kept per suite — see [Ch. 7](07-api.md)).
 
 ## 8.3 Helper functions (\`private\` schema)
 
@@ -1128,6 +1187,12 @@ npm run build       # next build — all routes must prerender
 
 CI (\`.github/workflows/ci.yml\`) runs the same four on every push/PR;
 Dependabot opens weekly dependency PRs gated by the same.
+
+The opt-in live security suite (\`npm run test:rls\`, see
+\`tests/rls/README.md\`) additionally posts each run's **sanitized** results
+to the Owner Portal's Security Testing dashboard via a vitest reporter
+(\`tests/rls/securityReporter.ts\`, v1.14) — fixture-authenticated,
+best-effort, and self-skipping when credentials are absent.
 
 ## Shipping
 

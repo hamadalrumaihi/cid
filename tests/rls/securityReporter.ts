@@ -15,6 +15,7 @@ const PW = process.env.RLS_TEST_PASSWORD_LSB || ''
 const SUITE_NAME: Record<string, string> = {
   'rls.test.ts': 'RLS security wall',
   'legal.test.ts': 'DOJ legal review RLS',
+  'v114.test.ts': 'Shared platform RLS (v1.14)',
 }
 
 interface Failure { name: string; expected: string; actual: string }

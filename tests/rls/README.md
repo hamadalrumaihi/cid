@@ -91,6 +91,24 @@ The 13 justice fixture passwords (`RLS_TEST_PASSWORD_ADA_LSB/…/JUSTICE`) enabl
 this suite; without them it skips. `tests/rls/auth.ts` adds a sign-in backoff so
 authenticating ~20 fixtures per run doesn't trip GoTrue's per-IP burst limit.
 
+### Security dashboard reporter (v1.14 — `tests/rls/securityReporter.ts`)
+
+A vitest reporter (registered in `vitest.rls.config.ts`) feeds the Owner
+Portal's **Security Testing** section after every run: it signs in as the
+`rls-test-lsb` fixture (anon key + password grant — the same credentials the
+suite itself used) and posts per-file pass/fail/skip counts plus **sanitized**
+failure summaries (test name + first assertion line only) through the
+`security_test_report()` RPC, which is EXECUTE-limited to `rls-test-*`
+accounts and re-sanitizes server-side. Reporting is strictly **best-effort**:
+any error logs a warning and never affects the run, and it self-skips when the
+anon key or `RLS_TEST_PASSWORD_LSB` is absent — so plain/secretless runs stay
+offline. In CI it reports automatically (as `source: 'ci'`) whenever the
+fixture-password secrets exist. No service key, no new secrets.
+
+A `tests/rls/v114.test.ts` suite covers the v1.14 surface (report-version
+immutability, `search_all` legal hits staying sealed-safe, and the
+security-testing RPC gates).
+
 ## Running
 
 ```bash
