@@ -13,6 +13,11 @@ low-privilege test accounts and assert that the security wall holds:
 | `rls-test-director@cidportal.test` | **director**, SAB, active | Command Center: director keeps broad promote/transfer power |
 | `rls-test-target@cidportal.test` | detective, LSB, active | throwaway target the scoping tests promote/transfer and restore |
 | `rls-test-applicant@cidportal.test` | detective, LSB, **inactive** | disposable applicant for the membership approval-success path (activated by the test, deactivated + purged in teardown) |
+| `rls-test-ada-lsb / -ada-bcb / -ada-sab@cidportal.test` | active **ADA** (justice), no CID profile | bureau ADA coverage, routing precedence, packet isolation |
+| `rls-test-da@cidportal.test` | active **District Attorney** (justice) | ADA management, DA approval route, membership approvals |
+| `rls-test-ag@cidportal.test` | active **Attorney General** (justice) | AG approval route, DOJ-wide oversight |
+| `rls-test-judge / -judge2@cidportal.test` | active **Judge** (justice) | judicial decisions; judge2 stays unassigned to prove isolation |
+| `rls-test-justice@cidportal.test` | no justice membership | the justice applicant (onboarding → DA approval → deactivation) |
 
 Covered: bureau isolation (read, update, insert, child rows), deny-by-default
 for inactive accounts, the sign-off/finalize **lockdown triggers**, RPC caller
@@ -63,6 +68,28 @@ Newer server surface (2026-07-13 migrations):
   2 recipients, one deduplicated notification each, visibility via the
   mentions clause. Created announcements carry a `[rls-test]` title marker
   and are deleted by their author in `afterAll`.
+
+### DOJ legal review (v1.13.0 — `tests/rls/legal.test.ts`)
+
+37 assertions covering the DOJ Legal Review System (see
+`docs/DOJ-INTEGRATION.md`): justice identity separation (CID/DOJ/Judge never
+cross domains; hidden-field role smuggling rejected), the onboarding approval
+matrix, ADA bureau assignments (one primary/acting per bureau, no Judge/JTF,
+no self-assign), routing precedence (acting → primary; missing coverage parks
+unassigned, never reroutes; DA/AG/Owner override needs a reason), drafting +
+immutable versions, CID review, ADA review + **packet isolation** (an assigned
+ADA sees the request and its packet but not the case, evidence, or roster),
+conflict-of-role (prosecutor ≠ Judge on the same request), the DA and AG
+subpoena approval routes, judicial approval signing the exact version, CID-side
+fulfilment + the MDT expired-vs-wanted contract, sealed-request undiscoverability
+(table/search/notifications), and hard-delete resistance. The suite purges
+leftovers via `rls_test_cleanup()` at **both** start and teardown, so re-runs
+are deterministic; a NULL-guard gap it caught became migration
+`20260714070000_legal_null_guards`.
+
+The 13 justice fixture passwords (`RLS_TEST_PASSWORD_ADA_LSB/…/JUSTICE`) enable
+this suite; without them it skips. `tests/rls/auth.ts` adds a sign-in backoff so
+authenticating ~20 fixtures per run doesn't trip GoTrue's per-IP burst limit.
 
 ## Running
 

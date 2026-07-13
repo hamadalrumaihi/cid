@@ -7,12 +7,16 @@
 import { AuthProvider, useAuth } from '@/lib/auth'
 import { Gate } from '@/components/auth/Gate'
 import { AppShell } from '@/components/shell/AppShell'
+import { JusticeShell } from '@/components/justice/JusticeShell'
 import { Toaster } from '@/components/ui/Toaster'
 import { DialogHost } from '@/components/ui/dialog'
 
 function Gated({ children }: { children: React.ReactNode }) {
-  const { state } = useAuth()
+  const { state, profile, justiceRole } = useAuth()
   if (state !== 'in') return <Gate />
+  // Justice-only identity (no active CID profile): the Justice portal IS the
+  // app — no CID shell, no CID tabs. RLS makes the distinction real.
+  if (justiceRole && !profile?.active) return <JusticeShell />
   return <AppShell>{children}</AppShell>
 }
 

@@ -29,7 +29,22 @@ What you can see and change depends on your **role and bureau** — the server e
    - Type your email and click **Email link** — you'll get a one-time sign-in link in your inbox ("Magic link sent — check your inbox.").
 > **Denied access?** If Command has denied your login you'll see an **Access denied** screen with the reason instead of the request form — contact Command if you think it's a mistake. Command can deny or restore a person's access from **Manage Officer → Danger zone**.
 
-3. First time here? After signing in you'll land on the **membership request** screen. Fill it in — display name, badge number, your **one permanent department** (Los Santos, Blaine County or State Bureau — JTF is joint-case-only, not a home department), the CID role you're requesting (Detective or Senior Detective), and a short reason/current-assignment note — then hit **Submit Request**. Command reviews it: they can approve it as-is, approve with a different department/role, send it back for a correction (you'll see their note, can edit, and resubmit), or reject it. You stay locked out until a request is approved; once it is, reload and you're in.
+3. First time here? After signing in you'll be asked **which role you're applying for** — **CID**, **DOJ**, or **Judiciary**. Your choice only decides which application form you see; it never grants access. Pick **CID** for detective work, **DOJ** for prosecutor roles (Assistant District Attorney, District Attorney, Attorney General), or **Judiciary** for Judge.
+   - **CID applicants** fill in display name, badge number, your **one permanent department** (Los Santos, Blaine County or State Bureau — JTF is joint-case-only, not a home department), the CID role you're requesting (Detective or Senior Detective), and a short reason — then **Submit Request**. Command reviews it.
+   - **DOJ / Judiciary applicants** fill in display name, an optional **Badge / Bar / Court identifier**, the justice role, and a reason — then **Submit Request**. A District Attorney, Attorney General, or the project owner reviews it (a Judge or Attorney General request needs owner approval). There is no CID bureau to choose.
+   In every case the reviewer can approve as-is, approve with a different role, send it back for a correction (you'll see their note, edit, and resubmit), or reject it. You stay locked out until a request is approved; once it is, reload and you're in. Justice-only members land in the **Justice portal**; CID members get the full CID portal.
+
+### Legal requests — warrants and subpoenas
+
+CID members file legal requests from the **Legal Requests** tab (under Cases):
+
+1. **File Warrant Request** or **File Subpoena** (or, on a finalized arrest-warrant report, click **Submit for Legal Review**). Pick the case, the suspect/recipient from the Persons registry (warrants and player subpoenas) or type a business/entity name, fill the justification, and — for subpoenas — the type-specific fields.
+2. On the draft's **Packet** tab, add the supporting items the reviewers should see (evidence, attachments, finalized reports, media, links). Reviewers see **only** what you select — never the whole case.
+3. **Submit for CID review.** A supervisor approves it (and it routes automatically to the bureau's DOJ prosecutor) or returns it for revision.
+4. From there it moves through the DOJ (**ADA → DA/AG or Judge**) and, for warrants, always a **Judge**. You'll get notifications at each step and can watch progress on the request's **Review History** tab.
+5. Once approved, an authorized CID officer records **issue**, then **execution/return** (warrants) or **service/compliance** (subpoenas) on the **Fulfilment** tab. Materials received under a subpoena are logged back to the case as evidence/attachments.
+
+DOJ and Judge members work their queues in the **Justice portal**: prosecutors review the immutable packet, add notes, return to CID, or advance the request; Judges review the exact submitted version and approve, deny, or return it. Sealed requests are visible only to the people directly involved.
 
 ### First five minutes after approval
 

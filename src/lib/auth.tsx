@@ -38,10 +38,24 @@ export type Profile = Pick<
 
 export type GateState = 'loading' | 'setup' | 'out' | 'pending' | 'error' | 'in'
 
+/** Justice identity (justice_memberships) — a SEPARATE authorization domain
+ *  from the CID role. An active justice member passes the gate even with an
+ *  inactive CID profile (they get the Justice portal, never the CID shell);
+ *  both identities stay independently authorized for dual-identity users. */
+export interface JusticeIdentity {
+  agency: 'doj' | 'judiciary'
+  justice_role: string
+  active: boolean
+  justice_identifier: string | null
+}
+
 interface AuthContextValue {
   state: GateState
   session: Session | null
   profile: Profile | null
+  justice: JusticeIdentity | null
+  /** Active justice role, or null — the UX mirror of private.justice_role(). */
+  justiceRole: string | null
   /** Re-run the gate evaluation (retry button, post-mutation refresh). */
   refresh: () => Promise<void>
   signInOAuth: (provider: 'google' | 'discord') => Promise<{ error: { message: string } | null }>
@@ -75,10 +89,24 @@ async function fetchProfile(uid: string): Promise<Profile | null> {
   return (data as Profile | null) ?? null
 }
 
+/** Own justice membership (RLS: self-select is always allowed). Missing row
+ *  is the normal case for CID members; errors throw like fetchProfile so the
+ *  gate retries instead of silently locking a justice user out. */
+async function fetchJustice(uid: string): Promise<JusticeIdentity | null> {
+  const { data, error } = await supabase()
+    .from('justice_memberships')
+    .select('agency,justice_role,active,justice_identifier')
+    .eq('user_id', uid)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return (data as JusticeIdentity | null) ?? null
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GateState>(isConfigured ? 'loading' : 'setup')
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [justice, setJustice] = useState<JusticeIdentity | null>(null)
   // Serialize evaluations: auth events can burst (INITIAL_SESSION + SIGNED_IN);
   // a stale earlier evaluation must not overwrite a newer result.
   const evalSeq = useRef(0)
@@ -100,6 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Signed out: drop the cached identity and tear down realtime so a
       // different account on a shared browser doesn't inherit state.
       setProfile(null)
+      setJustice(null)
       try { supabase().removeAllChannels() } catch { /* no channels yet */ }
       resetRealtime()
       setState('out')
@@ -107,7 +136,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     let p: Profile | null = null
-    try { p = await fetchProfile(s.user.id) }
+    let j: JusticeIdentity | null = null
+    try { [p, j] = await Promise.all([fetchProfile(s.user.id), fetchJustice(s.user.id)]) }
     catch { if (!stale()) setState('error'); return } // transient — offer retry
     if (stale()) return
 
@@ -115,7 +145,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // from the auth session so the officer's own card still shows it.
     if (p && s.user.email) p = { ...p, email: s.user.email }
     setProfile(p)
+    setJustice(j)
 
+    // A login-denied profile blocks BOTH identities (the deny gate screen
+    // renders in PendingBody); otherwise an active justice membership passes
+    // the gate on its own — the layout routes those users to the Justice
+    // portal, never the CID shell.
+    if (p?.login_denied) { setState('pending'); return }
+    if (j?.active && !(p && p.active)) { setState('in'); return }
     if (p && p.active) {
       setState('in')
       // Capture the Discord user id (for DM notifications) from a Discord
@@ -185,6 +222,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const active = !!profile?.active
     return {
       state, session, profile,
+      justice,
+      justiceRole: justice?.active ? justice.justice_role : null,
       refresh: evaluate,
       signInOAuth, signInEmail, signOut, setMyLoa,
       canEdit: active,
@@ -192,7 +231,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isCommand: active && isCommandRole(profile?.role),
       isOwner: active && !!profile?.is_owner,
     }
-  }, [state, session, profile, evaluate, signInOAuth, signInEmail, signOut, setMyLoa])
+  }, [state, session, profile, justice, evaluate, signInOAuth, signInEmail, signOut, setMyLoa])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

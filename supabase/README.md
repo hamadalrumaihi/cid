@@ -88,6 +88,31 @@ the repo honest about that gap:
   `supabase_migrations.schema_migrations` history mapped to its repo file
   (or marked *applied live only*).
 
+## DOJ legal-review migrations (v1.13.0)
+Seven additive migrations add the DOJ Legal Review System (see
+[`../docs/DOJ-INTEGRATION.md`](../docs/DOJ-INTEGRATION.md)), all applied to the
+live project via MCP:
+
+- `20260714010000_justice_identity` — `justice_memberships`,
+  `justice_membership_requests` (+history), onboarding RPCs + approval matrix.
+- `20260714020000_prosecutor_assignments` — `prosecutor_bureau_assignments`,
+  routing helpers, coverage RPC.
+- `20260714030000_legal_core` — `legal_requests` + versions/actions/exhibits/
+  participants/signatures, `mdt_wanted_projections`, canonical access helpers,
+  SELECT-only policies.
+- `20260714040000_legal_workflow` + `20260714045000_legal_workflow_review` —
+  the full transition RPC layer (drafting → CID → ADA → DA/AG → Judge →
+  fulfilment).
+- `20260714050000_legal_search_cleanup` — `legal_search`, `mdt_wanted_current`,
+  and `rls_test_cleanup` extended to the new tables.
+- `20260714060000_justice_directory` — name resolution for justice-only users.
+- `20260714070000_legal_null_guards` — NULL-safety hardening of the justice
+  authorization helpers (caught by the live RLS suite).
+
+Justice/legal tables are all **SELECT-only** for clients; every write path is a
+SECURITY DEFINER RPC. DOJ roles are **not** in the `app_role` enum — they live
+in `justice_memberships`, a separate identity domain.
+
 ## Notes
 - **No Supabase Storage.** Media references are external URLs; there are no
   buckets or storage policies.

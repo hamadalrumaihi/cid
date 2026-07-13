@@ -37,6 +37,13 @@ export const NOTIF_LABEL: Record<string, string> = {
   joint_case_ended: 'Joint case ended',
   login_denied: '⛔ Portal access denied',
   login_restored: 'Portal access restored',
+  justice_membership_request: 'Justice membership request awaiting review',
+  justice_membership_update: 'Justice membership update',
+  ada_assignment: 'Prosecutor bureau assignment',
+  legal_request: '⚖️ Legal request needs your attention',
+  legal_update: '⚖️ Legal request update',
+  legal_decision: '⚖️ Legal decision recorded',
+  legal_coverage: '⚠ Bureau ADA coverage gap',
   client_error: '⚠ App error reported',
   case_stale: 'Case going stale',
   stale_case: 'Case going stale',
@@ -50,6 +57,7 @@ interface NotifPayload {
   detective?: string
   reason?: string
   title?: string
+  request_number?: string
 }
 
 const asPayload = (p: Json | null): NotifPayload => (p && typeof p === 'object' && !Array.isArray(p) ? (p as NotifPayload) : {})
@@ -62,7 +70,7 @@ export function notifTitle(n: NotificationRow): string {
  *  matching the vanilla row's blue mono line. Null when nothing applies. */
 export function notifDetail(n: NotificationRow): string | null {
   const p = asPayload(n.payload)
-  const detail = p.case_number || p.tracker_code || p.target
+  const detail = p.request_number || p.case_number || p.tracker_code || p.target
   if (!detail) return null
   return p.detective ? `${detail} · ${p.detective}` : detail
 }

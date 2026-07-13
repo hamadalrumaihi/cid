@@ -14,6 +14,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { signInWithRetry } from './auth'
 
 const URL = process.env.RLS_TEST_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jhxuflzmqspidkvjckox.supabase.co'
 const ANON = process.env.RLS_TEST_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -48,9 +49,8 @@ describe.skipIf(!enabled)('RLS security wall (live project, test accounts)', () 
       [bcb, 'rls-test-bcb@cidportal.test', PW.bcb],
       [inactive, 'rls-test-inactive@cidportal.test', PW.inactive],
     ] as const) {
-      const { data, error } = await client.auth.signInWithPassword({ email, password: password! })
-      if (error) throw new Error(`sign-in failed for ${email}: ${error.message}`)
-      if (email.includes('-lsb')) lsbId = data.user!.id
+      const uid = await signInWithRetry(client, email, password!)
+      if (email.includes('-lsb')) lsbId = uid
     }
   })
 
@@ -206,9 +206,7 @@ describe.skipIf(!enabled || !PW.owner)('Owner role (positive paths)', () => {
 
   beforeAll(async () => {
     owner = mk()
-    const { data, error } = await owner.auth.signInWithPassword({ email: 'rls-test-owner@cidportal.test', password: PW.owner! })
-    if (error) throw new Error(`owner sign-in failed: ${error.message}`)
-    ownerId = data.user!.id
+    ownerId = await signInWithRetry(owner, 'rls-test-owner@cidportal.test', PW.owner!)
     const fb = await owner.from('feedback').insert({ kind: 'feature', title: 'RLS owner-path test feedback' }).select('id')
     if (fb.error) throw new Error(`feedback insert failed: ${fb.error.message}`)
     feedbackId = fb.data![0].id
@@ -278,11 +276,7 @@ describe.skipIf(!ccEnabled)('Command Center — assign_member scoping', () => {
   beforeAll(async () => {
     lead = mk(); director = mk(); plainDet = mk()
     const t = mk(); const b = mk()
-    const signIn = async (c: SupabaseClient, email: string, pw: string) => {
-      const { data, error } = await c.auth.signInWithPassword({ email, password: pw })
-      if (error) throw new Error(`sign-in failed for ${email}: ${error.message}`)
-      return data.user!.id
-    }
+    const signIn = (c: SupabaseClient, email: string, pw: string) => signInWithRetry(c, email, pw)
     await signIn(lead, 'rls-test-lead@cidportal.test', PW.lead!)
     await signIn(director, 'rls-test-director@cidportal.test', PW.director!)
     await signIn(plainDet, 'rls-test-lsb@cidportal.test', PW.lsb!)
@@ -344,11 +338,7 @@ describe.skipIf(!ccEnabled)('Command Center — assign_member scoping', () => {
 })
 
 /* Shared helpers for the blocks below. */
-const signInAs = async (c: SupabaseClient, email: string, password: string) => {
-  const { data, error } = await c.auth.signInWithPassword({ email, password })
-  if (error) throw new Error(`sign-in failed for ${email}: ${error.message}`)
-  return data.user!.id
-}
+const signInAs = (c: SupabaseClient, email: string, password: string) => signInWithRetry(c, email, password)
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** Membership requests (migration 20260713030000) — the applicant is the

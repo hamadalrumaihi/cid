@@ -30,6 +30,10 @@ export const LIVE = {
   lead: { email: 'rls-test-lead@cidportal.test', name: 'RLS Test Lead', pwEnv: 'RLS_TEST_PASSWORD_LEAD' },
   director: { email: 'rls-test-director@cidportal.test', name: 'RLS Test Director', pwEnv: 'RLS_TEST_PASSWORD_DIRECTOR' },
   applicant: { email: 'rls-test-applicant@cidportal.test', name: 'RLS Test Applicant', pwEnv: 'RLS_TEST_PASSWORD_APPLICANT' },
+  adaLsb: { email: 'rls-test-ada-lsb@cidportal.test', name: 'RLS Test — ADA LSB', pwEnv: 'RLS_TEST_PASSWORD_ADA_LSB' },
+  da: { email: 'rls-test-da@cidportal.test', name: 'RLS Test — DA', pwEnv: 'RLS_TEST_PASSWORD_DA' },
+  judge: { email: 'rls-test-judge@cidportal.test', name: 'RLS Test — Judge', pwEnv: 'RLS_TEST_PASSWORD_JUDGE' },
+  justice: { email: 'rls-test-justice@cidportal.test', name: 'RLS Test — Justice Applicant', pwEnv: 'RLS_TEST_PASSWORD_JUSTICE' },
 } satisfies Record<string, LiveAccount>
 
 export const pwOf = (a: LiveAccount): string => process.env[a.pwEnv] || ''

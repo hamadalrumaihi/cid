@@ -6,6 +6,50 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.13.0] — 2026-07-13
+
+### Added — DOJ Legal Review System
+- A **limited legal-review workflow** for CID warrants and subpoenas, built as
+  a **separate identity domain** from CID. DOJ roles (ADA, DA, AG) and the
+  judicial role (Judge) live in a new `justice_memberships` table — **not** in
+  the CID `app_role` enum and never in `ROLE_ORDER`, so a Judge never outranks
+  a Director and an ADA never gains Command authority. `profiles.division` is
+  never consulted for justice access. Full spec: `docs/DOJ-INTEGRATION.md`.
+- **Adaptive first-login Gate:** applicants choose a domain (CID / DOJ /
+  Judiciary); the role menu and fields adapt (CID bureau for CID only; a
+  Badge/Bar/Court identifier for justice). Selecting a role grants nothing —
+  activation happens only inside the review RPC. Approval matrix: ADA ← DA/AG/
+  Owner, DA ← AG/Owner, AG ← Owner, Judge ← Owner. Separate
+  `justice_membership_requests` table + `review_justice_membership_request()`.
+- **Bureau-aligned ADA coverage** via `prosecutor_bureau_assignments`
+  (assignments, not roles): one active primary + one active acting per bureau,
+  routing precedence acting → primary, DA/AG/Owner manage assignments, ended
+  assignments preserved. `doj_bureau_coverage()` powers the coverage board.
+- **Legal requests** (`legal_requests`) with three independent status
+  dimensions (document / review / fulfilment), **immutable submitted versions**,
+  append-only history, deliberately-selected exhibit packets, request-specific
+  participants, and version-bound signatures. Responsible bureau resolves to
+  `cases.bureau` (ordinary) or `cases.originating_bureau` (joint/JTF); legacy
+  JTF cases must set the originating bureau first.
+- **Warrant workflow** (always Judge-approved) and **subpoena workflow** (DA /
+  AG / Judge routes by type), with issue / execution / return / service /
+  compliance tracking — all CID-side, all preserving the existing
+  evidence/chain-of-custody system. **Submit for Legal Review** on a finalized
+  arrest-warrant report spins up the linked legal request.
+- **Classification ladder** (standard / restricted / classified / sealed);
+  sealed requests are undiscoverable to unauthorized users via search, counts,
+  badges, or notification details. A server-side **MDT wanted-status contract**
+  (`mdt_wanted_projections`) holds only classification-safe fields; no external
+  endpoint exists yet.
+- **Justice portal** (role-scoped queues, coverage board, membership approvals,
+  DOJ personnel) — the whole app for justice-only users; a sidebar leaf for
+  dual-identity users and the Owner. New CID **Legal Requests** tab.
+- Every legal table is SELECT-only for clients; all transitions run through
+  transactional SECURITY DEFINER RPCs. Live RLS suite grew to **99/99** (37 new
+  DOJ assertions); 5 new Justice E2E specs. A NULL-guard hardening migration
+  (`20260714070000`) — caught by the live suite — closed a
+  `NULL in (...)`-skips-the-raise gap in the justice authorization helpers.
+
 ## [1.12.0] — 2026-07-13
 
 ### Added — deny login (app-level access block)

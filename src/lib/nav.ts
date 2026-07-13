@@ -12,6 +12,8 @@ export const PAGE_META: Record<string, PageMeta> = {
   command:    { title: 'Central Command', sub: 'Case assignment & operational hub' },
   analytics:  { title: 'Division Analytics', sub: 'Caseload, clearance & activity trends' },
   cases:      { title: 'Case Files', sub: 'Live case records, evidence & chain-of-custody' },
+  legal:      { title: 'Legal Requests', sub: 'Warrants & subpoenas — drafting, DOJ review & fulfilment' },
+  justice:    { title: 'Justice Portal', sub: 'DOJ & Judiciary — legal review queues, coverage & decisions' },
   operations: { title: 'Operations', sub: 'Task forces — related cases grouped under one umbrella' },
   persons:    { title: 'Persons', sub: 'Suspects & persons of interest (live)' },
   narcotics:  { title: 'Narcotics Intelligence', sub: 'Drug processing & market analytics' },
@@ -55,7 +57,7 @@ export interface NavCategory {
 
 export const NAV_CATEGORIES: NavCategory[] = [
   { id: 'command',   label: 'Command',      tabs: ['command', 'analytics', 'announce', 'heatmap', 'personnel'] },
-  { id: 'cases',     label: 'Cases',        tabs: ['cases', 'operations', 'case-files', 'rico'] },
+  { id: 'cases',     label: 'Cases',        tabs: ['cases', 'operations', 'legal', 'case-files', 'rico'] },
   { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'indicators', 'network', 'narcotics', 'ballistics', 'modus', 'media', 'records'] },
   { id: 'reference', label: 'Reference',    tabs: ['penal', 'sops', 'guide', 'devdocs'] },
   { id: 'oversight', label: 'Oversight',    tabs: ['inbox', 'calendar', 'shifts', 'audit'] },
@@ -63,7 +65,8 @@ export const NAV_CATEGORIES: NavCategory[] = [
 
 export const TAB_LABEL: Record<string, string> = {
   command: 'Dashboard', analytics: 'Analytics', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
-  cases: 'Case Files', operations: 'Operations', 'case-files': 'Attachments', rico: 'RICO',
+  cases: 'Case Files', operations: 'Operations', legal: 'Legal Requests', 'case-files': 'Attachments', rico: 'RICO',
+  justice: 'Justice Portal',
   persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', indicators: 'Indicators',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
   media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide', devdocs: 'Developer Handbook',
