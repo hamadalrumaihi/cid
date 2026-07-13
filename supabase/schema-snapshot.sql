@@ -1526,6 +1526,30 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.report_reopen(p_report uuid)
+ RETURNS public.reports
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare r public.reports;
+begin
+  select * into r from public.reports where id = p_report;
+  if not found then raise exception 'report not found'; end if;
+  if not r.finalized then raise exception 'report is not finalized'; end if;
+  if not (private.is_command() and private.can_access_case(r.case_id)) then
+    raise exception 'only bureau lead and above may reopen a finalized report';
+  end if;
+  update public.reports
+     set finalized = false,
+         signature = null,
+         updated_at = now()
+   where id = p_report
+  returning * into r;
+  return r;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.rls_test_cleanup()
  RETURNS jsonb
  LANGUAGE plpgsql

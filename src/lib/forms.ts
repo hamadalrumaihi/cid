@@ -26,10 +26,12 @@ export interface FormGridCol {
 
 export type FormSection =
   /** evidenceLookup: kv section whose ev_items/ev_files fields offer a
-   *  case-scoped pick-list of logged evidence + attachments (free-text append). */
+   *  case-scoped pick-list of logged evidence + attachments (free-text append).
+   *  evidencePick/mediaPick: grid/textarea variants of the same pick-list —
+   *  evidence rows append a grid row, attachments append a `title — url` line. */
   | { id: string; label: string; type: 'kv'; fields: FormField[]; evidenceLookup?: boolean }
-  | { id: string; label: string; type: 'grid'; cols: FormGridCol[] }
-  | { id: string; label: string; type: 'textarea'; key: string }
+  | { id: string; label: string; type: 'grid'; cols: FormGridCol[]; evidencePick?: boolean }
+  | { id: string; label: string; type: 'textarea'; key: string; mediaPick?: boolean }
   | { id: string; label: string; type: 'note'; text: string }
 
 export interface FormSchema {
@@ -151,11 +153,11 @@ export const FORM_SCHEMAS: Record<string, FormSchema> = {
         { key: 'nature', label: 'Nature of Interaction', type: 'text' },
         { key: 'key_actions', label: 'Key Conversations / Actions', type: 'text' },
       ] },
-      { id: 'intel', label: 'Intelligence & Evidence', type: 'grid', cols: [
+      { id: 'intel', label: 'Intelligence & Evidence', type: 'grid', evidencePick: true, cols: [
         { key: 'item', label: 'Items Observed or Discussed', type: 'text' },
         { key: 'description', label: 'Description of Evidence / Intelligence', type: 'text' },
       ] },
-      { id: 'media', label: 'Photos / Recordings Captured (attach references)', type: 'textarea', key: 'media_refs' },
+      { id: 'media', label: 'Photos / Recordings Captured (attach references)', type: 'textarea', key: 'media_refs', mediaPick: true },
       { id: 'assessment', label: 'Operational Assessment', type: 'kv', fields: [
         { key: 'threat_level', label: 'Threat Level', type: 'select', opts: ['', 'Low', 'Medium', 'High', 'Critical'] },
         { key: 'cover_status', label: 'UC Cover Status', type: 'select', opts: ['', 'Intact', 'At Risk', 'Compromised', 'Withdrawn'] },
@@ -319,7 +321,7 @@ export const FORM_SCHEMAS: Record<string, FormSchema> = {
         { key: 'plate', label: 'Plate', type: 'text' },
         { key: 'notes', label: 'Notes', type: 'text' },
       ] },
-      { id: 'media', label: 'Photos / Recordings Captured (attach references)', type: 'textarea', key: 'media_refs' },
+      { id: 'media', label: 'Photos / Recordings Captured (attach references)', type: 'textarea', key: 'media_refs', mediaPick: true },
       { id: 'assessment', label: 'Assessment / Findings', type: 'textarea', key: 'assessment' },
       { id: 'sign', label: 'Review', type: 'kv', fields: [
         { key: 'detective_sig', label: 'Detective Signature', type: 'text' },

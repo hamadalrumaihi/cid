@@ -6,6 +6,60 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.9.0] — 2026-07-13
+
+### Changed — reports open in-page, not in a popup
+- Clicking a saved report now opens it **inside the Reports tab** (with a
+  "← Back to reports" control) instead of a modal. The header shows
+  Draft/Sealed and — for warrants — the warrant status chip; Finalize,
+  Edit, Delete and Download .md live in the same bar.
+- Referenced content is **clickable**: evidence entries expand to their
+  logged details (type, collected by, tamper seal), attachment entries
+  open their file link, and suspect/witness/target names that match the
+  Persons registry jump to that person's profile.
+
+### Added — seal & reopen with confirmations
+- **Finalize now asks for confirmation** and lists any still-empty key
+  fields before sealing (you can seal anyway). A sealed report's contents
+  are locked (enforced server-side).
+- **Reopen** (bureau lead and above): breaks the seal with a confirmation,
+  removes the signature, and makes the report editable again — backed by a
+  new `report_reopen()` definer RPC gated on `private.is_command()`.
+  Reopening is audit-logged like every write.
+
+### Added — warrant lifecycle control
+- Warrant reports (arrest / search / wiretap) get a **status selector**
+  (draft → signed → executed → returned) in the report header. The status
+  was always *displayed* on the BOLO board, case graph, and person
+  profiles but nothing could change it. Each change appends to the
+  warrant log inside the report and works on sealed warrants too (the
+  database has always allowed exactly this).
+
+### Changed — report forms render as designed (bundle B)
+- Checkbox fields (supporting evidence, items to seize, basis,
+  surveillance type, subpoena type, method) render as **real checkbox
+  chips** instead of empty text boxes; legacy comma-joined values load.
+- **Money fields** get a $ prefix and numeric keypad; inventory-style
+  tables show display-only per-column totals.
+- Dropdown columns inside tables (e.g. premises type) render as actual
+  dropdowns.
+- Every field now has a **persistent label** — names no longer vanish
+  once you type (previously placeholder-only).
+
+### Added — form conveniences (bundle C)
+- Suspect/target/witness name fields **suggest names from the Persons
+  registry** (free text still allowed).
+- Date/time fields get a one-click **Now** button.
+- The evidence/attachment pickers extend to the **UC Operation** report
+  (intelligence table + media references) and the **Surveillance
+  Report** (media references).
+
+### Fixed — editing no longer renumbers a report
+- Saving an edit now changes only the report's contents; its kind,
+  sequence number and author stay as filed. New reports derive their
+  kind from the chosen Report Type, so supplementals are numbered
+  correctly.
+
 ## [1.8.2] — 2026-07-13
 
 ### Fixed — picked evidence/attachments are removable
