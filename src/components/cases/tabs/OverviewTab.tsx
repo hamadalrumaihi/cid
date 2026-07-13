@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Field, Textarea } from '@/components/ui/Field'
 import { insert, list, deleteWithUndo, rpc } from '@/lib/db'
 import { timeAgo } from '@/lib/format'
@@ -242,10 +243,15 @@ function ExpiryLine({ expiresAt, now }: { expiresAt: string; now: number }) {
     return (
       <p className="text-xs text-slate-400">
         <span className="line-through">Temporary access expires {label}</span>{' '}
-        <span className="font-semibold uppercase text-rose-300">expired</span>
+        <span className="font-semibold uppercase text-rose-300">expired</span>{' '}
+        <DeadlineChip at={expiresAt} kind="expires" now={now} />
       </p>
     )
   }
   const soon = remaining < 48 * 3_600_000
-  return <p className={`text-xs ${soon ? 'text-amber-300' : 'text-slate-400'}`}>Temporary access expires {label}</p>
+  return (
+    <p className={`text-xs ${soon ? 'text-amber-300' : 'text-slate-400'}`}>
+      Temporary access expires {label} <DeadlineChip at={expiresAt} kind="expires" now={now} className="ml-1" />
+    </p>
+  )
 }

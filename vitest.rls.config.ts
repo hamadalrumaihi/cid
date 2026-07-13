@@ -25,5 +25,8 @@ export default defineConfig({
     hookTimeout: 60_000,
     // The tests mutate shared fixtures (one case per run) — keep them serial.
     fileParallelism: false,
+    // Feeds the Owner Portal's Security Testing dashboard (sanitized,
+    // fixture-authenticated, best-effort — see tests/rls/securityReporter.ts).
+    reporters: ['default', './tests/rls/securityReporter.ts'],
   },
 })

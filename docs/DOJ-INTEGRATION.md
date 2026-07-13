@@ -231,18 +231,22 @@ full RPC list.
 ## Shared-platform adoption register
 
 Per the shared-platform requirement, these reusable capabilities were built for
-DOJ and are candidates for wider CID adoption:
+DOJ and are candidates for wider CID adoption. **v1.14.0 shipped the rows
+marked "Adopted v1.14"** as extracted shared components
+(`src/components/ui/`, `src/components/shared/`, `src/lib/deadlines.ts`),
+each with two or more non-DOJ consumers:
 
 | Shared capability | Where DOJ uses it now | Recommended future CID adopters | Blockers |
 | --- | --- | --- | --- |
 | `ClassificationBadge`, `StatusChip` (`justice/legalShared.tsx`) | legal request rows & detail | report sensitivity, case status, tracker status | none — extract to `ui/` when a second consumer lands |
-| `DeadlineChip` + `deadlineInfo()` (`lib/justice.ts`) | warrant expiry, subpoena deadlines | overdue tasks, stale cases, expiring joint-case access, report-review deadlines | none |
-| `WorkflowTimeline` (History tab render in `LegalRequestDetail`) | legal action history | membership requests, case sign-off, report review, joint-case membership | render is currently inline; extract to a shared component |
-| Exhibit / record pickers (`ExhibitPickers`) | legal packet selection | court packets, report evidence lookup | pickers are case-scoped; generalize the source query |
+| `DeadlineChip` + `deadlineInfo()` — extracted to `ui/DeadlineChip.tsx` + the shared engine `lib/deadlines.ts` (`lib/justice.ts` now delegates) | warrant expiry, subpoena response deadlines | **Adopted v1.14:** case-task due dates (TasksTab), joint-case access expiry (OverviewTab), case follow-ups (CaseDetail) | none — shipped |
+| `WorkflowTimeline` — extracted to `ui/WorkflowTimeline.tsx` | legal action history (`LegalRequestDetail` History tab) | **Adopted v1.14:** case sign-off history (SignoffTab), evidence custody chain (EvidenceTab expandable), Command Center approval-queue history, CID + Justice membership-request applicant history panels | none — shipped |
+| Exhibit / record pickers — generalized to `shared/RelatedRecordPicker.tsx` | legal exhibit pickers (packet selection) | **Adopted v1.14:** investigative-report evidence lookup (ReportsTab FormEditor), RICO predicate-act evidence links (RicoTab) | none — shipped (source query generalized) |
+| Signature display — extracted to `shared/SignatureViewer.tsx` | version-bound legal signatures | **Adopted v1.14:** report seal signatures incl. superseded seals from the reopen log (ReportsTab), tracker command co-signs (Trackers) | none — shipped |
 | Participant assignment/removal (`legal_request_participants` + helpers) | request-specific access | case access grants, joint-case membership | schema is legal-specific; the pattern is reusable |
 | Sealed-safe notification fan-out (`private.legal_notify`) | legal notifications | any classified notification path | none — same server-authoritative pattern as announcements |
 | `justice_directory()` / `legal_request_people()` name resolution | justice-only name lookup (no roster access) | any cross-domain name display | none |
-| Immutable-version display (Form tab) | frozen submitted versions | report versioning (`reports.parent_id`) | reports use a different version model |
+| Immutable-version display — extracted to `shared/VersionViewer.tsx` | frozen submitted versions (Form tab) | **Adopted v1.14:** finalized report versions (new `report_versions` table, snapshotted by `report_finalize()`, ReportsTab "Versions" toggle), SOP history modal (SopsView) | none — shipped (the reports version model now exists) |
 
 ## Verification & known gaps
 

@@ -11,6 +11,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { list, rpc } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
+import { Drafts, type Draft } from '@/lib/drafts'
+import { timeAgo } from '@/lib/format'
 import { SUBPOENA_FIELDS, SUBPOENA_TYPES, SOCIAL_PLATFORMS, type SubpoenaType } from '@/lib/justice'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
@@ -88,6 +90,20 @@ function LegalViewInner() {
 type SlimCase = Pick<Tables<'cases'>, 'id' | 'case_number' | 'title' | 'bureau' | 'originating_bureau'>
 type SlimPerson = Pick<Tables<'persons'>, 'id' | 'name' | 'alias'>
 
+/** Never-lose-work stash for the create form (same Drafts scheme as report
+ *  editors: `legal:new:<kind>`). Restore is always user-triggered. */
+interface LegalDraftData {
+  title: string
+  priority: string
+  narrative: string
+  subtype: SubpoenaType
+  recipientType: 'player' | 'entity'
+  recipientName: string
+  form: Record<string, string>
+  caseId: string
+  personId: string
+}
+
 function CreateRequestForm({ kind, onCancel, onCreated }: {
   kind: 'warrant' | 'subpoena'
   onCancel: () => void
@@ -107,6 +123,28 @@ function CreateRequestForm({ kind, onCancel, onCreated }: {
   const [recipientName, setRecipientName] = useState('')
   const [form, setForm] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
+
+  // Draft recovery: an existing stash surfaces as a banner (read once,
+  // lazily — never auto-filled); Restore applies it, Discard clears it.
+  const draftKey = `legal:new:${kind}`
+  const [pendingDraft, setPendingDraft] = useState<Draft<LegalDraftData> | null>(() => Drafts.load<LegalDraftData>(draftKey))
+  const restoreDraft = () => {
+    if (!pendingDraft) return
+    const d = pendingDraft.data
+    setTitle(d.title); setPriority(d.priority); setNarrative(d.narrative)
+    setSubtype(d.subtype); setRecipientType(d.recipientType); setRecipientName(d.recipientName)
+    setForm(d.form); setCaseId(d.caseId); setPersonId(d.personId)
+    setPendingDraft(null)
+  }
+  const discardDraft = () => { Drafts.clear(draftKey); setPendingDraft(null) }
+
+  // Stash while typing (write-only effect — no state changes). Pristine forms
+  // never save, so an unrestored draft is not overwritten by an empty mount.
+  const hasContent = !!(title.trim() || narrative.trim() || recipientName.trim() || caseId || personId || Object.keys(form).length)
+  useEffect(() => {
+    if (!hasContent) return
+    Drafts.save(draftKey, { title, priority, narrative, subtype, recipientType, recipientName, form, caseId, personId } satisfies LegalDraftData)
+  }, [draftKey, hasContent, title, priority, narrative, subtype, recipientType, recipientName, form, caseId, personId])
 
   useEffect(() => {
     let cancelled = false
@@ -178,6 +216,7 @@ function CreateRequestForm({ kind, onCancel, onCreated }: {
     })
     setBusy(false)
     if (res.error) { toast(res.error.message, 'danger'); return }
+    Drafts.clear(draftKey)
     toast('Draft created — add supporting items, then submit for CID review.', 'success')
     if (res.data) onCreated(res.data.id)
   }
@@ -188,6 +227,14 @@ function CreateRequestForm({ kind, onCancel, onCreated }: {
         <Button onClick={onCancel}>← Cancel</Button>
         <h2 className="text-lg font-bold text-white">{kind === 'warrant' ? 'File Warrant Request' : 'File Subpoena'}</h2>
       </div>
+
+      {pendingDraft && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2 text-xs text-amber-200">
+          <span className="min-w-0 flex-1">Draft from {timeAgo(pendingDraft.at)} found — restore your unsaved {kind === 'warrant' ? 'warrant request' : 'subpoena'}?</span>
+          <Button size="sm" variant="secondary" onClick={restoreDraft}>Restore</Button>
+          <Button size="sm" variant="ghost" onClick={discardDraft}>Discard</Button>
+        </div>
+      )}
 
       <Field label="Case" required>
         {(id) => (

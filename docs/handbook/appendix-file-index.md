@@ -15,6 +15,7 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | `src/app/` | Routes, HTML skeleton, error pages, global CSS |
 | `src/components/<feature>/` | One folder per screen (27) |
 | `src/components/shell/` | Navigation chrome |
+| `src/components/shared/` | Cross-feature record widgets (v1.14 extractions) |
 | `src/components/ui/` | Generic widgets |
 | `src/lib/` | ⚠ All shared logic |
 | `supabase/` | Backend migrations, edge functions, backend docs |
@@ -27,7 +28,8 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | `database.types.ts` | ⚠ Hand-maintained TS mirror of the live schema |
 | `db.ts` | ⚠ THE data layer: list/insert/update/remove/rpc/deleteWithUndo/withRetry |
 | `docx.ts` | Dependency-free OOXML writer (byte-fragile ZIP) |
-| `drafts.ts` | Unused never-lose-work localStorage util (zero importers) |
+| `deadlines.ts` | Shared deadline engine (v1.14) — feeds `ui/DeadlineChip`; `justice.ts` delegates to it |
+| `drafts.ts` | Never-lose-work localStorage stash — reports, chat, and (v1.14) the legal create/edit forms |
 | `fivemanage.ts` | Media upload (multipart → hosted URL) |
 | `format.ts` | timeAgo/todayISO/fmtUSD/slug/downloadBlob/copyText |
 | `forms.ts` | 8 report schemas + warrant helpers + finalize-gap check |
@@ -41,6 +43,7 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | `realtime.ts` | ⚠ One channel per table → version counters (`useTableVersion`) |
 | `roles.ts` | Role/bureau vocabulary + seniority + command predicates |
 | `safeUrl.ts` | ⚠ XSS scheme allow-list for DB-sourced URLs (tested) |
+| `schemas.ts` | Zod tolerant parsers for structured JSON payloads (v1.14) — legal form_data, packet manifests, notification payloads, report signatures/reopen logs, security overview |
 | `search.ts` | `search_all` RPC wrapper + penal hits + recents |
 | `signoff.ts` | Read-only sign-off vocabulary/tints/"whose court" hint |
 | `store.ts` | The shared localStorage blob (legacy-compatible keys) |
@@ -71,6 +74,8 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | `ui/DataTable.tsx` | Sort/filter/CSV table (+ injection-guarded `csvCell`) |
 | `ui/RichEditor.tsx` | Tiptap markdown editor |
 | `ui/Toaster.tsx` | Toast renderer |
+| `ui/WorkflowTimeline.tsx` / `ui/DeadlineChip.tsx` | v1.14 shared history render / deadline chip (see [Ch. 6](06-components.md)) |
+| `shared/RelatedRecordPicker.tsx` / `VersionViewer.tsx` / `SignatureViewer.tsx` | v1.14 cross-feature record picker / version list / signature trail |
 
 ## Feature views (main file per folder)
 

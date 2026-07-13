@@ -66,7 +66,11 @@ dossiers.
 `Header` shortcut → `SearchPalette` → debounced `runSearch` → `search_all`
 RPC (pg_trgm fuzzy, RLS-scoped, SECURITY INVOKER) + static penal-code
 hits + quick actions (New case, LOA, sign out, go-to-tab). A sequence
-guard drops out-of-order responses. Enter deep-links (`?case=`, `?q=`).
+guard drops out-of-order responses. Enter deep-links (`?case=`, `?q=`,
+and since v1.14 `/legal?request=` for legal-request hits). v1.14 added a
+`legal` kind to `search_all`: header fields only, and because the function
+is SECURITY INVOKER every hit passes the `legal_requests` SELECT policy —
+sealed requests never surface.
 
 ## 4.5 Command tools
 

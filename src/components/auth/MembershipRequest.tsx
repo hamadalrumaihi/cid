@@ -16,6 +16,7 @@ import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTimeline'
 
 type RequestRow = Tables<'membership_requests'>
 /** Explicit projection — internal_decision_note is column-grant-revoked for
@@ -46,6 +47,9 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+/** Snake-case history token → sentence case ("correction_requested" → "Correction requested"). */
+const humanize = (s: string) => { const t = s.replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1) }
+
 export function MembershipRequest() {
   const { session, profile, refresh } = useAuth()
   const uid = session?.user?.id ?? profile?.id ?? null
@@ -53,6 +57,8 @@ export function MembershipRequest() {
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [histOpen, setHistOpen] = useState(false)
+  const [hist, setHist] = useState<TimelineEntry[] | null>(null)
   const [form, setForm] = useState<FormState>({
     display_name: '', badge_number: '', requested_bureau: 'LSB', requested_role: 'detective', reason: '', additional_notes: '',
   })
@@ -137,6 +143,26 @@ export function MembershipRequest() {
     void load()
   }
 
+  // Lazy-loaded decision trail for the pending panel — RLS returns only
+  // non-internal rows to the applicant, and applicants can't read the roster,
+  // so actor names are omitted. Load failures fall back to the empty message.
+  const toggleHistory = async () => {
+    const next = !histOpen
+    setHistOpen(next)
+    if (!next || hist !== null || !req) return
+    try {
+      const rows = await list('membership_request_history', { eq: { request_id: req.id }, order: 'created_at' })
+      setHist(rows.map((h) => ({
+        id: h.id,
+        title: humanize(h.action),
+        at: h.created_at,
+        from: h.from_status ? humanize(h.from_status) : null,
+        to: h.to_status ? humanize(h.to_status) : null,
+        note: h.note,
+      })))
+    } catch { setHist([]) }
+  }
+
   if (!loaded) return <p className="text-sm text-slate-400">Loading your membership request…</p>
   if (loadError) {
     return (
@@ -200,6 +226,12 @@ export function MembershipRequest() {
           <InfoRow label="Requested role" value={roleLabel(req!.requested_role)} />
           <InfoRow label="Submitted" value={req?.submitted_at ? new Date(req.submitted_at).toLocaleString() : '—'} />
         </div>
+        <Button size="sm" variant="ghost" className="w-full" aria-expanded={histOpen} onClick={() => void toggleHistory()}>
+          {histOpen ? 'Hide request history' : 'Request history'}
+        </Button>
+        {histOpen && (hist === null
+          ? <p className="text-xs text-slate-400">Loading history…</p>
+          : <WorkflowTimeline dense entries={hist} />)}
         <Button className="w-full" disabled={busy} onClick={() => void withdraw()}>Withdraw request</Button>
       </div>
     )

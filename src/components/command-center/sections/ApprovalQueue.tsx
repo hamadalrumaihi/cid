@@ -13,7 +13,7 @@ import { list, rpc } from '@/lib/db'
 import type { Database, Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { notify } from '@/lib/notify'
-import { type RosterProfile, useProfilesStore } from '@/lib/profiles'
+import { officerName, type RosterProfile, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { ROLE_LABEL, ROLE_ORDER, SUBMIT_ROLES, bureauLabel, roleLabel } from '@/lib/roles'
 import { signoffLabel, signoffTint } from '@/lib/signoff'
@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Field, Select, Textarea } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTimeline'
 import { canReviewCase } from '../lib/approvals'
 
 type CaseRow = Tables<'cases'>
@@ -50,6 +51,45 @@ const DONE: Record<Decision, string> = {
   approve_with_changes: 'approved with changes — account activated',
   request_correction: 'sent back for correction',
   reject: 'rejected',
+}
+
+/** Snake-case history token → sentence case ("approve_with_changes" → "Approve with changes"). */
+const humanize = (s: string) => { const t = s.replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1) }
+
+/** Decision chain for one request — membership_request_history rendered for
+ *  reviewers. Loaded lazily on first expand (RLS: command also sees
+ *  internal=true rows; those notes are flagged inline). Load failures fall
+ *  back to the timeline's empty message. */
+function RequestHistory({ requestId }: { requestId: string }) {
+  const [open, setOpen] = useState(false)
+  const [entries, setEntries] = useState<TimelineEntry[] | null>(null)
+  const toggle = async () => {
+    const next = !open
+    setOpen(next)
+    if (!next || entries !== null) return
+    try {
+      const rows = await list('membership_request_history', { eq: { request_id: requestId }, order: 'created_at' })
+      setEntries(rows.map((h) => ({
+        id: h.id,
+        title: humanize(h.action),
+        actor: officerName(h.actor_id),
+        at: h.created_at,
+        from: h.from_status ? humanize(h.from_status) : null,
+        to: h.to_status ? humanize(h.to_status) : null,
+        note: h.internal ? `(internal) ${h.note ?? ''}`.trimEnd() : h.note,
+      })))
+    } catch { setEntries([]) }
+  }
+  return (
+    <div className="mt-3">
+      <Button size="sm" variant="ghost" aria-expanded={open} onClick={() => void toggle()}>
+        {open ? 'Hide history' : 'History'}
+      </Button>
+      {open && (entries === null
+        ? <p className="mt-2 text-xs text-slate-400">Loading history…</p>
+        : <div className="mt-2"><WorkflowTimeline dense entries={entries} /></div>)}
+    </div>
+  )
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
@@ -231,6 +271,7 @@ export function ApprovalQueue() {
                   <Button size="sm" onClick={() => setDecision({ req: r, kind: 'request_correction' })}>Request Correction</Button>
                   <Button size="sm" variant="danger" onClick={() => setDecision({ req: r, kind: 'reject' })}>Reject</Button>
                 </div>
+                <RequestHistory requestId={r.id} />
               </div>
             ))}
           </div>

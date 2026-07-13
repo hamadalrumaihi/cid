@@ -4,6 +4,7 @@
  *  these labels grant anything — RLS + the legal workflow RPCs are the
  *  authority for every read and transition. */
 import type { Tables } from './database.types'
+import { deadlineInfo as sharedDeadlineInfo } from './deadlines'
 
 export type JusticeRole =
   | 'assistant_district_attorney' | 'district_attorney' | 'attorney_general' | 'judge'
@@ -183,15 +184,11 @@ export const isEditableDraft = (r: Pick<LegalRequest, 'document_status' | 'revie
   (r.document_status === 'draft' || r.document_status === 'reopened') &&
   EDITABLE_REVIEW_STATES.has(r.review_status)
 
-/** Deadline helper — server timestamps in, human warning out (§49). */
+/** Deadline helper — server timestamps in, human warning out (§49). Thin
+ *  delegation to the shared engine (lib/deadlines): same labels
+ *  ('Expires'/'Expired', 'Response due'/'Response overdue'), same
+ *  {text, urgent} | null shape for legalShared callers. */
 export function deadlineInfo(iso: string | null | undefined, kind: 'expires' | 'deadline'): { text: string; urgent: boolean } | null {
-  if (!iso) return null
-  const at = new Date(iso).getTime()
-  if (Number.isNaN(at)) return null
-  const ms = at - Date.now()
-  const label = kind === 'expires' ? 'Expires' : 'Response due'
-  if (ms <= 0) return { text: kind === 'expires' ? 'Expired' : 'Response overdue', urgent: true }
-  const hours = Math.round(ms / 3_600_000)
-  if (hours <= 48) return { text: `${label} in ${hours}h`, urgent: hours <= 24 }
-  return { text: `${label} ${new Date(iso).toLocaleDateString()}`, urgent: false }
+  const info = sharedDeadlineInfo(iso, kind)
+  return info ? { text: info.text, urgent: info.urgent } : null
 }

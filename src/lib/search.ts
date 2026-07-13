@@ -21,6 +21,7 @@ export interface SearchHit {
  *  destination tab. Kinds arrive from the RPC; charges are added locally. */
 export const SEARCH_KINDS: Record<string, { title: string; icon: string; tab: string }> = {
   case:      { title: 'Cases',      icon: '📁', tab: 'cases' },
+  legal:     { title: 'Legal Requests', icon: '⚖️', tab: 'legal' },
   person:    { title: 'Persons',    icon: '👤', tab: 'persons' },
   gang:      { title: 'Gangs',      icon: '🚩', tab: 'gangs' },
   place:     { title: 'Places',     icon: '📍', tab: 'places' },
@@ -32,7 +33,7 @@ export const SEARCH_KINDS: Record<string, { title: string; icon: string; tab: st
   charge:    { title: 'Charges',    icon: '⚖️', tab: 'penal' },
 }
 
-export const SEARCH_SECTION_ORDER = ['case', 'person', 'gang', 'place', 'vehicle', 'narcotic', 'bench', 'document', 'charge'] as const
+export const SEARCH_SECTION_ORDER = ['case', 'legal', 'person', 'gang', 'place', 'vehicle', 'narcotic', 'bench', 'document', 'charge'] as const
 
 /** Charges matched client-side from the in-memory penal catalog (vanilla
  *  app.js:330) — they are static reference data, not RLS-scoped rows. */

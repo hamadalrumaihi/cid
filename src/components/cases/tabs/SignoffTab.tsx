@@ -1,8 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { WorkflowTimeline } from '@/components/ui/WorkflowTimeline'
 import { list, rpc } from '@/lib/db'
-import { timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
@@ -39,10 +39,10 @@ export function SignoffTab({ c }: { c: CaseRow }) {
         </div>
         {(reviewer || owner) && <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Decision note" className="mt-3 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />}
       </div>
-      <div className="space-y-2">
-        {history.map((h) => <div key={h.id} className="rounded-xl border border-white/10 bg-ink-950/50 p-3 text-sm text-slate-300"><b className="text-white">{h.actor_name || officerName(h.actor_id) || 'System'}</b> {SIGNOFF_ACTION_VERB[h.action] || h.action} <span className="text-slate-500">{timeAgo(h.created_at)}</span>{h.note && <p className="mt-1 text-slate-400">{h.note}</p>}</div>)}
-        {!history.length && <p className="py-8 text-center text-sm text-slate-500">No sign-off history yet.</p>}
-      </div>
+      <WorkflowTimeline
+        empty="No sign-off history yet."
+        entries={history.map((h) => ({ id: h.id, title: SIGNOFF_ACTION_VERB[h.action] || h.action, actor: h.actor_name || officerName(h.actor_id) || 'System', at: h.created_at, note: h.note }))}
+      />
     </div>
   )
 }

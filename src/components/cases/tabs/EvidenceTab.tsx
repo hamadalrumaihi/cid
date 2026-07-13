@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { WorkflowTimeline } from '@/components/ui/WorkflowTimeline'
 import { uiPrompt } from '@/components/ui/dialog'
 import { deleteWithUndo, insert, list, update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
@@ -17,6 +18,7 @@ export function EvidenceTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
   const [custody, setCustody] = useState<CustodyRow[]>([])
   const [media, setMedia] = useState<MediaRow[]>([])
   const [modal, setModal] = useState<'evidence' | 'media' | null>(null)
+  const [chainOpen, setChainOpen] = useState<Record<string, boolean>>({})
   const [item, setItem] = useState({ item_code: '', type: '', description: '', location: '' })
   const [link, setLink] = useState({ title: '', type: 'document', external_url: '' })
   const vE = useTableVersion('evidence')
@@ -82,7 +84,13 @@ export function EvidenceTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
                 <span className={`rounded-full px-2 py-1 text-xs font-bold uppercase ${ev.tamper === 'intact' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>{ev.tamper}</span>
               </div>
               <p className="mt-2 text-sm text-slate-400">{[ev.type, ev.location].filter(Boolean).join(' - ') || 'No location/type recorded.'}</p>
-              <p className="mt-2 text-xs text-slate-500">Custody entries: {chain.length}</p>
+              <button onClick={() => setChainOpen((o) => ({ ...o, [ev.id]: !o[ev.id] }))} aria-expanded={!!chainOpen[ev.id]} className="mt-2 text-xs text-slate-400 hover:text-slate-200">Custody entries: {chain.length} <span aria-hidden>{chainOpen[ev.id] ? '▴' : '▾'}</span></button>
+              {chainOpen[ev.id] && (
+                <div className="mt-2">
+                  {/* chain is fetched newest-first for transfer(); the expansion reads oldest → newest */}
+                  <WorkflowTimeline dense empty="No custody entries yet." entries={[...chain].reverse().map((x) => ({ id: x.id, title: x.to_officer ? `Transferred to ${x.to_officer}` : 'Logged', actor: officerName(x.transferred_by), at: x.at, note: x.from_officer ? `from ${x.from_officer}` : null }))} />
+                </div>
+              )}
               <div className="mt-3 flex gap-2">
                 {canEdit && <button onClick={() => void transfer(ev)} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-200">Transfer</button>}
                 {canDelete && <button onClick={() => { void deleteWithUndo('evidence', ev, { label: ev.item_code || 'evidence', children: [{ table: 'custody_chain', column: 'evidence_id' }], after: refresh }) }} className="rounded-lg border border-rose-400/30 px-3 py-1.5 text-xs font-bold text-rose-300">Delete</button>}

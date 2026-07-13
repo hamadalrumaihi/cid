@@ -22,6 +22,7 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { VersionViewer } from '@/components/shared/VersionViewer'
 
 type DocRow = Tables<'documents'>
 type VersionRow = Tables<'documents_versions'>
@@ -35,6 +36,7 @@ const sopTitle = (d: DocRow) => d.name.replace(/\.(docx?|pdf|sheet)$/i, '')
 const contentOf = (d: DocRow): Record<string, unknown> => (d.content && typeof d.content === 'object' && !Array.isArray(d.content) ? (d.content as Record<string, unknown>) : {})
 const bodyOf = (d: DocRow): string => { const b = contentOf(d).body; return typeof b === 'string' ? b : '' }
 const isSynced = (d: DocRow): boolean => { const s = contentOf(d).sync; return !!(s && typeof s === 'object' && (s as { source?: string }).source === 'gdrive') }
+const versionBody = (v: VersionRow): string => { const c = v.content; if (c && typeof c === 'object' && !Array.isArray(c)) { const b = (c as Record<string, unknown>).body; if (typeof b === 'string') return b } return '' }
 
 export function SopsView() {
   const { state, isCommand } = useAuth()
@@ -230,23 +232,24 @@ function HistoryModal({ d, canManage, onClose, onRestored }: { d: DocRow; canMan
       <ModalHeader title={`History — ${sopTitle(d)}`} onClose={onClose} />
       {!versions ? (
         <p className="text-sm text-slate-400">Loading versions…</p>
-      ) : !versions.length ? (
-        <p className="text-sm text-slate-400">No saved versions yet — a snapshot is captured each time the document is edited.</p>
       ) : (
-        <div className="max-h-[60vh] space-y-2 overflow-y-auto">
-          {versions.map((v, i) => (
-            <div key={v.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-ink-900 px-3 py-2">
-              <div className="min-w-0">
-                <p className="truncate text-sm text-slate-200">{v.name ?? d.name} {i === 0 && <span className="ml-1 rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-slate-400">latest snapshot</span>}</p>
-                <p className="text-[11px] text-slate-400">{new Date(v.saved_at).toLocaleString('en-US')} · {officerName(v.saved_by) ?? 'Unknown'}</p>
-              </div>
-              {canManage && (
+        <div className="max-h-[60vh] overflow-y-auto">
+          <VersionViewer
+            versions={versions.map((v, i) => ({ id: v.id, number: versions.length - i, label: v.name ?? d.name, at: v.saved_at, byName: officerName(v.saved_by) ?? 'Unknown' }))}
+            empty="No saved versions yet — a snapshot is captured each time the document is edited."
+            renderContent={(item) => {
+              const v = versions.find((x) => x.id === item.id)
+              return v ? renderMarkdown(versionBody(v)) : null
+            }}
+            actions={canManage ? (item) => {
+              const v = versions.find((x) => x.id === item.id)
+              return v ? (
                 <button onClick={() => void restore(v)} className="flex-shrink-0 rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-white/10">
                   Restore
                 </button>
-              )}
-            </div>
-          ))}
+              ) : null
+            } : undefined}
+          />
         </div>
       )}
     </Modal>

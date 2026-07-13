@@ -11,6 +11,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { list, rpc } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
+import { Drafts } from '@/lib/drafts'
+import { timeAgo } from '@/lib/format'
 import { useTableVersion } from '@/lib/realtime'
 import {
   CLASSIFICATIONS, LEGAL_ACTION_COLS, SUBPOENA_FIELDS, SOCIAL_PLATFORMS,
@@ -18,10 +20,15 @@ import {
   type LegalExhibit, type LegalRequest, type LegalSignature, type LegalVersion,
   type SubpoenaType,
 } from '@/lib/justice'
+import { parseLegalFormEntries, parsePacketManifest, type PacketManifestEntry } from '@/lib/schemas'
+import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTimeline'
+import { RelatedRecordPicker, type RecordSource } from '@/components/shared/RelatedRecordPicker'
+import { SignatureViewer, type SignatureItem } from '@/components/shared/SignatureViewer'
 import {
   ClassificationBadge, DeadlineChip, StatusChip, reviewTone,
   useJusticeDirectory, useLegalPeople,
@@ -40,6 +47,81 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
       <span className="text-right text-sm text-slate-200">{children}</span>
     </div>
   )
+}
+
+/** The creator's editable working copy — also the shape stashed under the
+ *  never-lose-work draft key `legal:edit:<request id>`. */
+interface DraftShape {
+  title: string; priority: string; narrative: string
+  classification: string; form: Record<string, string>
+}
+/** localStorage is user-editable — coerce a recovered stash back into the
+ *  exact controlled-input shape so a stale/malformed one can't break the form. */
+function sanitizeStash(d: Partial<DraftShape> | null | undefined, fallbackClassification: string): DraftShape {
+  return {
+    title: typeof d?.title === 'string' ? d.title : '',
+    priority: typeof d?.priority === 'string' ? d.priority : '',
+    narrative: typeof d?.narrative === 'string' ? d.narrative : '',
+    classification: typeof d?.classification === 'string' && d.classification ? d.classification : fallbackClassification,
+    form: (d?.form && typeof d.form === 'object' && !Array.isArray(d.form))
+      ? Object.fromEntries(Object.entries(d.form).map(([k, v]) => [k, String(v ?? '')]))
+      : {},
+  }
+}
+
+/** Case-scoped source records for the packet picker AND the pre-submission
+ *  preview (which cross-checks each exhibit against them). RLS-scoped reads
+ *  over the SAME canonical tables used elsewhere in the portal. */
+interface CaseRecords {
+  evidence: Tables<'evidence'>[]
+  files: Tables<'case_files'>[]
+  reports: Tables<'reports'>[]
+  media: Tables<'media'>[]
+}
+function useCaseRecords(r: LegalRequest | null, enabled: boolean): CaseRecords | null {
+  const [records, setRecords] = useState<CaseRecords | null>(null)
+  const caseId = r?.case_id ?? null
+  const caseNumber = r?.case_number_snapshot ?? null
+  useEffect(() => {
+    if (!caseId || !enabled) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const [ev, rp, md] = await Promise.all([
+          list('evidence', { eq: { case_id: caseId } }),
+          // ALL case reports (not just finalized) so the preview can tell
+          // "no longer finalized" apart from "missing"; the picker filters.
+          list('reports', { eq: { case_id: caseId } }),
+          list('media', { eq: { case_id: caseId } }),
+        ])
+        const fl = caseNumber ? await list('case_files', { eq: { case_number: caseNumber } }) : []
+        if (!cancelled) setRecords({ evidence: ev, files: fl, reports: rp, media: md })
+      } catch { /* case records simply unavailable */ }
+    })()
+    return () => { cancelled = true }
+  }, [caseId, caseNumber, enabled])
+  return records
+}
+
+/** Cross-check one selected exhibit against the live case records — flags a
+ *  broken source or a report that lost its finalized state before submission. */
+function exhibitFlag(e: LegalExhibit, rec: CaseRecords | null): string | null {
+  if (!rec || !e.source_id) return null
+  switch (e.exhibit_type) {
+    case 'evidence':
+      return rec.evidence.some((x) => x.id === e.source_id) ? null : 'source evidence record no longer found'
+    case 'attachment':
+      return rec.files.some((x) => x.id === e.source_id) ? null : 'source file no longer found'
+    case 'finalized_report': {
+      const rep = rec.reports.find((x) => x.id === e.source_id)
+      if (!rep) return 'source report no longer found'
+      return rep.finalized ? null : 'report is no longer finalized'
+    }
+    case 'case_media':
+      return rec.media.some((x) => x.id === e.source_id) ? null : 'source media no longer found'
+    default:
+      return null
+  }
 }
 
 export function LegalRequestDetail({ requestId, onBack }: { requestId: string; onBack: () => void }) {
@@ -90,19 +172,37 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
   // Draft form state (creator editing) — re-seeded from the row via the
   // adjust-state-during-render pattern so realtime refetches never clobber
   // in-progress typing mid-status.
-  const [draft, setDraft] = useState({ title: '', priority: '', narrative: '', classification: '', form: {} as Record<string, string> })
+  const [draft, setDraft] = useState<DraftShape>({ title: '', priority: '', narrative: '', classification: '', form: {} })
   const [seededKey, setSeededKey] = useState<string | null>(null)
+  const [seedJson, setSeedJson] = useState('')
+  // Never-lose-work recovery (v1.14): a stash from a previous session on this
+  // device. Offered ONLY via an explicit banner, and only when it is newer
+  // than the server row — it never auto-fills the form.
+  const [pendingDraft, setPendingDraft] = useState(() => Drafts.load<DraftShape>(`legal:edit:${requestId}`))
   const draftKey = r ? `${r.id}:${r.review_status}` : null
   if (r && draftKey !== seededKey) {
     setSeededKey(draftKey)
-    setDraft({
+    const seeded: DraftShape = {
       title: r.title, priority: r.priority ?? '', narrative: r.narrative ?? '',
       classification: r.classification,
       form: (r.form_data && typeof r.form_data === 'object' && !Array.isArray(r.form_data))
         ? Object.fromEntries(Object.entries(r.form_data as Record<string, unknown>).filter(([k]) => !k.startsWith('_')).map(([k, val]) => [k, String(val ?? '')]))
         : {},
-    })
+    }
+    setDraft(seeded)
+    setSeedJson(JSON.stringify(seeded))
   }
+
+  const editingEnabled = !!me && !!r && r.created_by === me && isEditableDraft(r)
+  const caseRecords = useCaseRecords(r, editingEnabled)
+  const [preview, setPreview] = useState(false)
+
+  // Stash keystrokes while editing — cleared on a successful save or submit.
+  useEffect(() => {
+    if (!editingEnabled || !r || !seedJson) return
+    if (JSON.stringify(draft) === seedJson) return
+    Drafts.save(`legal:edit:${r.id}`, draft)
+  }, [draft, editingEnabled, r, seedJson])
 
   const act = useCallback(async (fn: () => Promise<{ error: { message: string } | null }>, okMsg: string) => {
     setBusy(true)
@@ -143,28 +243,63 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
 
   const promptSig = () => uiPrompt('Type your name to sign this action.', { title: 'Signature', placeholder: profile?.display_name ?? '' })
 
-  const saveDraft = () => act(async () => rpc('update_legal_draft', {
-    p_request: r.id,
-    p_title: draft.title.trim() || undefined,
-    p_priority: draft.priority || undefined,
-    p_narrative: draft.narrative,
-    p_classification: draft.classification || undefined,
-    p_form: draft.form,
-  }), 'Draft saved.')
+  const saveDraft = () => act(async () => {
+    const res = await rpc('update_legal_draft', {
+      p_request: r.id,
+      p_title: draft.title.trim() || undefined,
+      p_priority: draft.priority || undefined,
+      p_narrative: draft.narrative,
+      p_classification: draft.classification || undefined,
+      p_form: draft.form,
+    })
+    if (!res.error) { Drafts.clear(`legal:edit:${r.id}`); setPendingDraft(null) }
+    return res
+  }, 'Draft saved.')
 
-  const submitToCid = async () => {
+  /** Requirements checklist for the pre-submission preview — the server
+   *  revalidates everything; this is honest UX, not authority. */
+  const submitChecklist = (): { label: string; ok: boolean; blocking: boolean }[] => {
+    const items: { label: string; ok: boolean; blocking: boolean }[] = [
+      { label: 'Title', ok: !!draft.title.trim(), blocking: true },
+      { label: 'Description / justification', ok: !!draft.narrative.trim(), blocking: true },
+    ]
+    if (r.request_type === 'warrant') {
+      items.push({ label: 'Priority', ok: !!draft.priority, blocking: true })
+    }
+    if (r.request_type === 'subpoena') {
+      const specNow = SUBPOENA_FIELDS[r.subtype as SubpoenaType] ?? []
+      for (const f of specNow.filter((x) => x.req)) {
+        items.push({ label: f.label, ok: !!String(draft.form[f.key] ?? '').trim(), blocking: true })
+      }
+    }
+    // Not blocking: the CID supervisor can record a packet override.
+    items.push({ label: 'At least one supporting item selected', ok: exhibits.length > 0, blocking: false })
+    return items
+  }
+
+  // Submission is a two-step flow (§ packet preview, v1.14): review exactly
+  // what DOJ will receive, then confirm — the existing RPCs do the work.
+  const submitToCid = () => {
     if (r.request_type === 'subpoena') {
       const spec = SUBPOENA_FIELDS[r.subtype as SubpoenaType] ?? []
       const missingReq = spec.filter((f) => f.req && !String(draft.form[f.key] ?? '').trim())
       if (missingReq.length) { toast(`Required: ${missingReq.map((f) => f.label).join(', ')}`, 'warn'); return }
     }
+    setPreview(true)
+  }
+
+  const confirmSubmit = async () => {
     const save = await rpc('update_legal_draft', {
       p_request: r.id, p_title: draft.title.trim() || undefined, p_priority: draft.priority || undefined,
       p_narrative: draft.narrative, p_classification: draft.classification || undefined, p_form: draft.form,
     })
     if (save.error) { toast(save.error.message, 'danger'); return }
-    await act(async () => rpc('submit_legal_request_to_cid', { p_request: r.id }),
-      'Submitted for CID supervisor review.')
+    setPreview(false)
+    await act(async () => {
+      const res = await rpc('submit_legal_request_to_cid', { p_request: r.id })
+      if (!res.error) { Drafts.clear(`legal:edit:${r.id}`); setPendingDraft(null) }
+      return res
+    }, 'Submitted for CID supervisor review.')
   }
 
   const cidDecide = async (decision: 'approve' | 'return') => {
@@ -254,14 +389,17 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
   const withdraw = async () => {
     const ok = await uiConfirm('Withdraw this legal request? The record is preserved but review stops.', { title: 'Withdraw request', confirmText: 'Withdraw' })
     if (!ok) return
-    await act(() => rpc('withdraw_legal_request', { p_request: r.id }), 'Request withdrawn.')
+    await act(async () => {
+      const res = await rpc('withdraw_legal_request', { p_request: r.id })
+      // A withdrawn request is abandoned — don't leave its narrative in
+      // localStorage on shared terminals.
+      if (!res.error) { Drafts.clear(`legal:edit:${r.id}`); setPendingDraft(null) }
+      return res
+    }, 'Request withdrawn.')
   }
 
   const spec = r.request_type === 'subpoena' ? (SUBPOENA_FIELDS[r.subtype as SubpoenaType] ?? []) : []
-  const formEntries = Object.entries(
-    (currentVersion?.form_data && typeof currentVersion.form_data === 'object' && !Array.isArray(currentVersion.form_data))
-      ? (currentVersion.form_data as Record<string, unknown>) : {},
-  ).filter(([k]) => !k.startsWith('_'))
+  const formEntries = parseLegalFormEntries(currentVersion?.form_data)
 
   return (
     <div className="space-y-4">
@@ -322,20 +460,17 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
           {signatures.length > 0 && (
             <div className="rounded-xl border border-white/10 bg-ink-900/60 p-4 lg:col-span-2">
               <h3 className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Signatures (version-bound)</h3>
-              <ul className="space-y-1">
-                {signatures.map((s) => {
-                  const ver = versions.find((x) => x.id === s.version_id)
-                  return (
-                    <li key={s.id} className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
-                      <span className="font-semibold text-white">{s.signer_name_snapshot}</span>
-                      <span className="text-xs text-slate-500">({justiceRoleLabel(s.signer_role_snapshot)})</span>
-                      <span className="text-xs text-slate-400">{s.action.replaceAll('_', ' ')}</span>
-                      <span className="font-mono text-xs text-blue-300">v{ver?.version_number ?? '?'}</span>
-                      <span className="text-xs text-slate-500">{new Date(s.signed_at).toLocaleString()}</span>
-                    </li>
-                  )
-                })}
-              </ul>
+              <SignatureViewer signatures={signatures.map((s): SignatureItem => {
+                const ver = versions.find((x) => x.id === s.version_id)
+                return {
+                  id: s.id,
+                  name: s.signer_name_snapshot,
+                  role: justiceRoleLabel(s.signer_role_snapshot),
+                  action: s.action.replaceAll('_', ' '),
+                  versionLabel: `v${ver?.version_number ?? '?'}`,
+                  at: s.signed_at,
+                }
+              })} />
             </div>
           )}
         </div>
@@ -344,6 +479,15 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
       {tab === 'Form' && (
         editable ? (
           <div className="max-w-2xl space-y-3 rounded-xl border border-white/10 bg-ink-900/60 p-4">
+            {pendingDraft && pendingDraft.at > Date.parse(r.updated_at) && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+                <span className="min-w-0 flex-1">
+                  An unsaved draft from {timeAgo(pendingDraft.at)} was found on this device (newer than the saved request).
+                </span>
+                <Button onClick={() => { setDraft(sanitizeStash(pendingDraft.data, r.classification)); setPendingDraft(null) }}>Restore</Button>
+                <Button onClick={() => { Drafts.clear(`legal:edit:${r.id}`); setPendingDraft(null) }}>Discard</Button>
+              </div>
+            )}
             <Field label={r.request_type === 'warrant' ? 'Warrant Title' : 'Title'} required>
               {(id) => <Input id={id} value={draft.title} onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))} />}
             </Field>
@@ -410,23 +554,20 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
 
       {tab === 'Packet' && (
         <PacketSection r={r} exhibits={exhibits} editable={editable} busy={busy} onChanged={reload}
-          manifest={(currentVersion?.packet_manifest as unknown as { title?: string; type?: string }[] | null) ?? null} />
+          records={caseRecords} manifest={parsePacketManifest(currentVersion?.packet_manifest)} />
       )}
 
       {tab === 'History' && (
         <div className="rounded-xl border border-white/10 bg-ink-900/60 p-4">
-          <ol className="space-y-2">
-            {actions.map((a) => (
-              <li key={a.id} className="flex flex-wrap items-baseline gap-2 border-l-2 border-badge-500/30 pl-3 text-sm">
-                <span className="font-semibold text-white">{a.action.replaceAll('_', ' ')}</span>
-                <span className="text-xs text-slate-400">{name(a.actor_id)}</span>
-                {a.to_status && <span className="text-xs text-slate-500">→ {reviewStatusLabel(a.to_status)}</span>}
-                <span className="text-xs text-slate-500">{new Date(a.created_at).toLocaleString()}</span>
-                {a.public_note && <span className="w-full text-xs text-slate-300">“{a.public_note}”</span>}
-              </li>
-            ))}
-            {actions.length === 0 && <li className="text-sm text-slate-500">No recorded actions.</li>}
-          </ol>
+          <WorkflowTimeline entries={actions.map((a): TimelineEntry => ({
+            id: a.id,
+            title: a.action.replaceAll('_', ' '),
+            actor: name(a.actor_id),
+            at: a.created_at,
+            from: a.from_status ? reviewStatusLabel(a.from_status) : null,
+            to: a.to_status ? reviewStatusLabel(a.to_status) : null,
+            note: a.public_note,
+          }))} />
         </div>
       )}
 
@@ -532,19 +673,114 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
           <span className="text-xs text-slate-500">No actions available for your role at this stage.</span>
         )}
       </div>
+
+      {preview && editable && (
+        <SubmitPreview
+          r={r} draft={draft} exhibits={exhibits} records={caseRecords}
+          checklist={submitChecklist()} busy={busy}
+          onCancel={() => setPreview(false)} onConfirm={() => void confirmSubmit()}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ---- Pre-submission packet preview (v1.14) -------------------------------
+ * One last look at EXACTLY what leaves CID: the form content, the selected
+ * exhibits (cross-checked against their live sources), and what DOJ will NOT
+ * receive. Confirm calls the same save + submit RPCs — the server remains
+ * the authority on every requirement shown here. */
+
+function SubmitPreview({ r, draft, exhibits, records, checklist, busy, onCancel, onConfirm }: {
+  r: LegalRequest
+  draft: DraftShape
+  exhibits: LegalExhibit[]
+  records: CaseRecords | null
+  checklist: { label: string; ok: boolean; blocking: boolean }[]
+  busy: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const blocked = checklist.some((c) => c.blocking && !c.ok)
+  const flagged = exhibits.map((e) => ({ e, flag: exhibitFlag(e, records) }))
+  const brokenCount = flagged.filter((x) => x.flag).length
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="Packet preview before submission">
+      <div className="max-h-[85vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-xl border border-white/10 bg-ink-950 p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-bold text-white">Packet preview — submit for CID review</h3>
+          <span className="font-mono text-xs text-blue-300">{r.request_number}</span>
+          <ClassificationBadge value={draft.classification || r.classification} />
+        </div>
+
+        <p className="rounded-lg border border-badge-500/20 bg-badge-500/5 p-3 text-xs text-slate-300">
+          Reviewers will receive <span className="font-semibold text-white">only</span> this request&apos;s form content and
+          the exhibits below, frozen as an immutable version at DOJ submission. DOJ will{' '}
+          <span className="font-semibold text-white">not</span> receive general case access — notes, evidence, files and
+          reports that are not selected here stay CID-only.
+        </p>
+
+        <section className="space-y-1.5">
+          <h4 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Requirements</h4>
+          <ul className="space-y-1">
+            {checklist.map((c) => (
+              <li key={c.label} className="flex items-center gap-2 text-sm">
+                <span className={c.ok ? 'text-emerald-300' : c.blocking ? 'text-rose-300' : 'text-amber-300'}>
+                  {c.ok ? '✓' : c.blocking ? '✗' : '⚠'}
+                </span>
+                <span className={c.ok ? 'text-slate-300' : 'text-slate-200'}>{c.label}</span>
+                {!c.ok && !c.blocking && (
+                  <span className="text-xs text-amber-300/80">CID supervisor must record an override for an empty packet</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="space-y-1.5">
+          <h4 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+            Included exhibits ({exhibits.length})
+          </h4>
+          {exhibits.length === 0 && <p className="text-sm text-slate-500">No supporting items selected.</p>}
+          <ul className="space-y-1.5">
+            {flagged.map(({ e, flag }) => (
+              <li key={e.id} className={`rounded-lg border px-3 py-2 text-sm ${flag ? 'border-amber-500/30 bg-amber-500/5' : 'border-white/10 bg-ink-900/50'}`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{e.exhibit_type.replaceAll('_', ' ')}</span>
+                  <span className="min-w-0 flex-1 truncate text-slate-200">{e.display_title}</span>
+                  {e.exhibit_type === 'finalized_report' && !flag && (
+                    <span className="rounded border border-emerald-500/25 bg-emerald-500/10 px-1.5 text-[10px] font-semibold text-emerald-300">finalized</span>
+                  )}
+                </div>
+                {flag && <p className="mt-1 text-xs text-amber-300">⚠ {flag} — remove it or fix the source before submitting.</p>}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-white/10 pt-3">
+          {blocked && <span className="mr-auto text-xs text-rose-300">Complete the required fields before submitting.</span>}
+          {!blocked && brokenCount > 0 && (
+            <span className="mr-auto text-xs text-amber-300">{brokenCount} exhibit{brokenCount === 1 ? '' : 's'} flagged — you can still submit; reviewers see the frozen snapshot titles.</span>
+          )}
+          <Button onClick={onCancel}>Back to editing</Button>
+          <Button variant="primary" disabled={busy || blocked} onClick={onConfirm}>Confirm &amp; submit to CID</Button>
+        </div>
+      </div>
     </div>
   )
 }
 
 /* ---- Packet (exhibit) section — deliberate selection only (§22) ---------- */
 
-function PacketSection({ r, exhibits, editable, busy, onChanged, manifest }: {
+function PacketSection({ r, exhibits, editable, busy, onChanged, records, manifest }: {
   r: LegalRequest
   exhibits: LegalExhibit[]
   editable: boolean
   busy: boolean
   onChanged: () => void
-  manifest: { title?: string; type?: string }[] | null
+  records: CaseRecords | null
+  manifest: PacketManifestEntry[]
 }) {
   const [adding, setAdding] = useState(false)
 
@@ -570,9 +806,15 @@ function PacketSection({ r, exhibits, editable, busy, onChanged, manifest }: {
             <li key={e.id} className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-950/50 px-3 py-2 text-sm">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{e.exhibit_type.replaceAll('_', ' ')}</span>
               <span className="min-w-0 flex-1 truncate text-slate-200">{e.display_title}</span>
-              {typeof e.snapshot_metadata === 'object' && e.snapshot_metadata && 'url' in (e.snapshot_metadata as object) && (
-                <a className="text-xs text-blue-300 underline" href={String((e.snapshot_metadata as Record<string, unknown>).url)} target="_blank" rel="noreferrer">open</a>
-              )}
+              {(() => {
+                // safeUrl on EVERY DB-sourced href — a planted javascript:/data:
+                // URL must never reach a DOJ reviewer's click (renders nothing).
+                const url = (typeof e.snapshot_metadata === 'object' && e.snapshot_metadata && !Array.isArray(e.snapshot_metadata))
+                  ? safeUrl((e.snapshot_metadata as Record<string, unknown>).url) : ''
+                return url
+                  ? <a className="text-xs text-blue-300 underline" href={url} target="_blank" rel="noreferrer">open</a>
+                  : null
+              })()}
               {editable && (
                 <button onClick={() => void removeExhibit(e)} className="text-xs font-semibold text-rose-300 hover:text-rose-200" aria-label={`Remove ${e.display_title}`}>
                   Remove
@@ -583,8 +825,8 @@ function PacketSection({ r, exhibits, editable, busy, onChanged, manifest }: {
           {exhibits.length === 0 && <li className="text-sm text-slate-500">No supporting items selected yet.</li>}
         </ul>
       </div>
-      {adding && editable && <ExhibitPickers r={r} onAdded={onChanged} />}
-      {!editable && manifest && manifest.length > 0 && (
+      {adding && editable && <ExhibitPickers r={r} records={records} onAdded={onChanged} />}
+      {!editable && manifest.length > 0 && (
         <p className="text-xs text-slate-500">
           Frozen manifest of the submitted version: {manifest.map((m) => m.title).filter(Boolean).join(' · ')}
         </p>
@@ -594,32 +836,9 @@ function PacketSection({ r, exhibits, editable, busy, onChanged, manifest }: {
 }
 
 /** Case-scoped selectors over the SAME canonical records used elsewhere in
- *  the portal (evidence, attachments, finalized reports, media, persons). */
-function ExhibitPickers({ r, onAdded }: { r: LegalRequest; onAdded: () => void }) {
-  const [evidence, setEvidence] = useState<Tables<'evidence'>[]>([])
-  const [files, setFiles] = useState<Tables<'case_files'>[]>([])
-  const [reports, setReports] = useState<Tables<'reports'>[]>([])
-  const [media, setMedia] = useState<Tables<'media'>[]>([])
-
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const [ev, rp, md] = await Promise.all([
-          list('evidence', { eq: { case_id: r.case_id } }),
-          list('reports', { eq: { case_id: r.case_id, finalized: true } }),
-          list('media', { eq: { case_id: r.case_id } }),
-        ])
-        const fl = r.case_number_snapshot
-          ? await list('case_files', { eq: { case_number: r.case_number_snapshot } })
-          : []
-        if (cancelled) return
-        setEvidence(ev); setReports(rp); setMedia(md); setFiles(fl)
-      } catch { /* case records simply unavailable */ }
-    })()
-    return () => { cancelled = true }
-  }, [r.case_id, r.case_number_snapshot])
-
+ *  the portal (evidence, attachments, finalized reports, media) — now the
+ *  shared RelatedRecordPicker; the add_legal_exhibit write path is unchanged. */
+function ExhibitPickers({ r, records, onAdded }: { r: LegalRequest; records: CaseRecords | null; onAdded: () => void }) {
   const add = async (type: string, sourceId: string | null, title?: string, meta?: Record<string, string>) => {
     const res = await rpc('add_legal_exhibit', {
       p_request: r.id, p_type: type, p_source_id: sourceId ?? undefined,
@@ -629,29 +848,20 @@ function ExhibitPickers({ r, onAdded }: { r: LegalRequest; onAdded: () => void }
     else { toast('Exhibit added.', 'success'); onAdded() }
   }
 
-  const addLink = async () => {
-    const url = await uiPrompt('External link URL (approved sources only).', { title: 'Add external link', placeholder: 'https://…' })
-    if (!url?.trim()) return
-    await add('external_link', null, undefined, { url: url.trim() })
-  }
-
-  const picker = (label: string, options: { id: string; text: string }[], type: string) => (
-    <label className="flex items-center gap-2 text-xs text-slate-400">
-      {label}
-      <Select value="" onChange={(e) => { if (e.target.value) void add(type, e.target.value) }}>
-        <option value="">Choose…</option>
-        {options.map((o) => <option key={o.id} value={o.id}>{o.text}</option>)}
-      </Select>
-    </label>
-  )
+  const sources: RecordSource[] = [
+    { kind: 'evidence', label: 'Evidence', options: (records?.evidence ?? []).map((e) => ({ id: e.id, label: `${e.item_code ?? ''} ${e.description ?? e.type ?? 'Evidence'}`.trim() })) },
+    { kind: 'attachment', label: 'Attachments', options: (records?.files ?? []).map((f) => ({ id: f.id, label: f.name })) },
+    { kind: 'finalized_report', label: 'Finalized reports', options: (records?.reports ?? []).filter((x) => x.finalized).map((x) => ({ id: x.id, label: `${x.template} report` })) },
+    { kind: 'case_media', label: 'Case media', options: (records?.media ?? []).map((m) => ({ id: m.id, label: m.title })) },
+  ]
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-ink-900/60 p-4">
-      {picker('Evidence', evidence.map((e) => ({ id: e.id, text: `${e.item_code ?? ''} ${e.description ?? e.type ?? 'Evidence'}`.trim() })), 'evidence')}
-      {picker('Attachments', files.map((f) => ({ id: f.id, text: f.name })), 'attachment')}
-      {picker('Finalized reports', reports.map((x) => ({ id: x.id, text: `${x.template} report` })), 'finalized_report')}
-      {picker('Case media', media.map((m) => ({ id: m.id, text: m.title })), 'case_media')}
-      <Button onClick={() => void addLink()}>+ External link</Button>
+    <div className="rounded-xl border border-white/10 bg-ink-900/60 p-4">
+      <RelatedRecordPicker
+        sources={sources}
+        onPick={(kind, option) => void add(kind, option.id)}
+        onAddLink={(url) => void add('external_link', null, undefined, { url })}
+      />
     </div>
   )
 }

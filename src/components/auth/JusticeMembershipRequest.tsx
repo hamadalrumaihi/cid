@@ -19,6 +19,7 @@ import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTimeline'
 
 type RequestRow = Tables<'justice_membership_requests'>
 
@@ -40,6 +41,9 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+/** Snake-case history token → sentence case ("correction_requested" → "Correction requested"). */
+const humanize = (s: string) => { const t = s.replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1) }
+
 /** Reviewer needed for a requested role — shown so applicants know who
  *  decides (approval matrix: ADA ← DA/AG/Owner, DA ← AG/Owner, AG/Judge ← Owner). */
 const APPROVER_HINT: Record<JusticeRole, string> = {
@@ -56,6 +60,8 @@ export function JusticeMembershipRequest({ initialAgency = 'doj' }: { initialAge
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [histOpen, setHistOpen] = useState(false)
+  const [hist, setHist] = useState<TimelineEntry[] | null>(null)
   const [form, setForm] = useState<FormState>({
     display_name: '', justice_identifier: '', requested_agency: initialAgency,
     requested_justice_role: initialAgency === 'judiciary' ? 'judge' : 'assistant_district_attorney',
@@ -151,6 +157,27 @@ export function JusticeMembershipRequest({ initialAgency = 'doj' }: { initialAge
     void load()
   }
 
+  // Lazy-loaded decision trail for the pending panel — RLS returns only
+  // non-internal rows to the applicant, and justice applicants can't read the
+  // roster, so actor names are omitted. Load failures fall back to the empty
+  // message.
+  const toggleHistory = async () => {
+    const next = !histOpen
+    setHistOpen(next)
+    if (!next || hist !== null || !req) return
+    try {
+      const rows = await list('justice_membership_request_history', { eq: { request_id: req.id }, order: 'created_at' })
+      setHist(rows.map((h) => ({
+        id: h.id,
+        title: humanize(h.action),
+        at: h.created_at,
+        from: h.from_status ? humanize(h.from_status) : null,
+        to: h.to_status ? humanize(h.to_status) : null,
+        note: h.note,
+      })))
+    } catch { setHist([]) }
+  }
+
   if (!loaded) return <p className="text-sm text-slate-400">Loading your justice membership request…</p>
   if (loadError) {
     return (
@@ -214,6 +241,12 @@ export function JusticeMembershipRequest({ initialAgency = 'doj' }: { initialAge
           <InfoRow label="Requested role" value={justiceRoleLabel(req!.requested_justice_role)} />
           <InfoRow label="Submitted" value={req?.submitted_at ? new Date(req.submitted_at).toLocaleString() : '—'} />
         </div>
+        <Button size="sm" variant="ghost" className="w-full" aria-expanded={histOpen} onClick={() => void toggleHistory()}>
+          {histOpen ? 'Hide request history' : 'Request history'}
+        </Button>
+        {histOpen && (hist === null
+          ? <p className="text-xs text-slate-400">Loading history…</p>
+          : <WorkflowTimeline dense entries={hist} />)}
         <Button className="w-full" disabled={busy} onClick={() => void withdraw()}>Withdraw request</Button>
       </div>
     )

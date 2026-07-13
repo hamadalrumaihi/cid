@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
+import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { uiConfirm } from '@/components/ui/dialog'
 import { deleteWithUndo, list, rpc, update, withRetry } from '@/lib/db'
 import { todayISO, copyText, slug } from '@/lib/format'
@@ -408,6 +409,7 @@ function FollowUpButton({ c, onChanged }: { c: CaseRow; onChanged: () => void })
     <>
       <button onClick={() => setOpen(true)} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${due ? 'border-amber-400/40 bg-amber-500/15 text-amber-200' : 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'}`}>
         Follow-up{c.follow_up_at ? ` ${c.follow_up_at.slice(0, 10)}` : ''}
+        {c.follow_up_at && <DeadlineChip at={c.follow_up_at} kind="due" className="ml-2" />}
       </button>
       <Modal open={open} onClose={() => setOpen(false)}>
         <div className="p-5">

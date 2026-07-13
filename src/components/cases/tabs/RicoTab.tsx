@@ -6,7 +6,10 @@ import { todayISO } from '@/lib/format'
 import { PENAL_CODE } from '@/lib/penal'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
+import { RelatedRecordPicker } from '@/components/shared/RelatedRecordPicker'
 import { type CaseRow, type EvidenceRow, type GangRow, type PredicateRow, type RicoRow } from './shared'
+
+const evLabel = (ev: EvidenceRow) => `${ev.item_code ?? ''} ${ev.description ?? ''}`.trim() || 'Untitled item'
 
 export function RicoTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; canDelete: boolean }) {
   const [rico, setRico] = useState<RicoRow | null>(null)
@@ -58,7 +61,19 @@ export function RicoTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolea
       </div>
       {canEdit && <div className="grid gap-2 rounded-xl border border-white/10 bg-ink-950/50 p-4 md:grid-cols-2">
         <select value={form.predicate_type} onChange={(e) => setForm({ ...form, predicate_type: e.target.value })} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white"><option value="">Predicate type</option>{PENAL_CODE.filter((p) => p.rico).map((p) => <option key={p.code} value={`${p.code} ${p.title}`}>{p.code} {p.title}</option>)}</select>
-        <select value={form.evidence_id} onChange={(e) => setForm({ ...form, evidence_id: e.target.value })} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white"><option value="">Evidence link</option>{evidence.map((ev) => <option key={ev.id} value={ev.id}>{ev.item_code || ev.description}</option>)}</select>
+        <div className="flex min-h-[42px] items-center">
+          {form.evidence_id ? (
+            <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200">
+              <span className="min-w-0 truncate">{(() => { const ev = evidence.find((x) => x.id === form.evidence_id); return ev ? evLabel(ev) : 'Linked evidence' })()}</span>
+              <button onClick={() => setForm({ ...form, evidence_id: '' })} aria-label="Clear evidence link" title="Clear" className="shrink-0 font-bold text-rose-300 hover:text-rose-200">✕</button>
+            </span>
+          ) : (
+            <RelatedRecordPicker
+              sources={[{ kind: 'evidence', label: 'Evidence link', options: evidence.map((ev) => ({ id: ev.id, label: evLabel(ev) })) }]}
+              onPick={(kind, opt) => { if (kind === 'evidence') setForm({ ...form, evidence_id: opt.id }) }}
+            />
+          )}
+        </div>
         <input type="date" value={form.act_date} onChange={(e) => setForm({ ...form, act_date: e.target.value })} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
         <input value={form.evidence_ref} onChange={(e) => setForm({ ...form, evidence_ref: e.target.value })} placeholder="Text ref" className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
         <textarea value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Predicate note" rows={2} className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />

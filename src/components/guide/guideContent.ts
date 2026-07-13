@@ -37,9 +37,11 @@ CID members file legal requests from the **Legal Requests** tab (under Cases):
 
 1. **File Warrant Request** or **File Subpoena** (or, on a finalized arrest-warrant report, click **Submit for Legal Review**). Pick the case, the suspect/recipient from the Persons registry (warrants and player subpoenas) or type a business/entity name, fill the justification, and — for subpoenas — the type-specific fields.
 2. On the draft's **Packet** tab, add the supporting items the reviewers should see (evidence, attachments, finalized reports, media, links). Reviewers see **only** what you select — never the whole case.
-3. **Submit for CID review.** A supervisor approves it (and it routes automatically to the bureau's DOJ prosecutor) or returns it for revision.
+3. **Submit for CID review.** A **packet preview** opens first: a requirements checklist, your selected items cross-checked against their live sources (anything missing or not yet finalized is flagged), and a reminder that reviewers receive **only the packet** — never access to the rest of the case. Confirm to submit; a supervisor then approves it (and it routes automatically to the bureau's DOJ prosecutor) or returns it for revision.
 4. From there it moves through the DOJ (**ADA → DA/AG or Judge**) and, for warrants, always a **Judge**. You'll get notifications at each step and can watch progress on the request's **Review History** tab.
 5. Once approved, an authorized CID officer records **issue**, then **execution/return** (warrants) or **service/compliance** (subpoenas) on the **Fulfilment** tab. Materials received under a subpoena are logged back to the case as evidence/attachments.
+
+> **Never lose work:** the warrant/subpoena forms keep a draft on this device as you type. If your browser closes mid-edit, reopening the form shows a **Restore draft** banner (only when your device copy is newer than what's already saved) — restore or discard it; it clears itself when you save or submit. You can also find any request again from the global search box — type its request number or title (sealed requests stay hidden from anyone not involved).
 
 DOJ and Judge members work their queues in the **Justice portal**: prosecutors review the immutable packet, add notes, return to CID, or advance the request; Judges review the exact submitted version and approve, deny, or return it. Sealed requests are visible only to the people directly involved.
 
@@ -67,7 +69,7 @@ Click a **category** to jump to its first screen; a **sub-tab strip** appears un
 
 ### The header (top bar)
 
-- **Search everything…** — the global search box. Press **/** to focus it, or **Ctrl-K** (**⌘K** on Mac) anywhere to open the search palette. It finds cases, people, gangs, vehicles (by plate), places, penal codes and more; press **↑/↓** then **Enter** to jump straight to a result. It also runs **commands**: type "new case", "loa", "sign out" or "go to heatmap" and hit Enter — the everyday actions appear as soon as the palette opens.
+- **Search everything…** — the global search box. Press **/** to focus it, or **Ctrl-K** (**⌘K** on Mac) anywhere to open the search palette. It finds cases, people, gangs, vehicles (by plate), places, penal codes, legal requests (by request number or title) and more; press **↑/↓** then **Enter** to jump straight to a result. It also runs **commands**: type "new case", "loa", "sign out" or "go to heatmap" and hit Enter — the everyday actions appear as soon as the palette opens.
 - **Bell icon** — your notifications (mentions, sign-off events, tracker approvals). Click one to jump to its case.
 - **Access chip** — hover to see exactly what your role lets you do.
 - **Set LOA / Clear LOA** — mark yourself on leave; sign-off routing will skip you while you're away.
@@ -83,7 +85,7 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 
 1. Go to **Cases → Case Files**.
 2. Use the search box or status filters to find the case, then **click its card**.
-3. Inside, work through the tabs: **Overview** (assignments & stats), **Graph** (the investigation link chart), **Evidence**, **Reports**, **Tasks**, **Charges**, **Chat** (case room with @mentions), **Timeline**, **Files**, **Intel** (linked people/gangs/places), **RICO**, and **Sign-off**. When you write an investigative report, the **Evidence / Property** section has **Add from case evidence** and **Add from case attachments** pickers — they list only what's already logged on this case's Evidence tab or attachments, and added entries show as removable chips. Click a saved report to open it **right in the tab**: referenced evidence expands to its logged details, attachments open their file link, and matching names jump to that person's profile. **Finalize** asks for confirmation and seals the report (contents lock); bureau leads and above can **Reopen** a sealed report to make it editable again. Warrant reports get a status selector (draft → signed → executed → returned) that feeds the BOLO board and person profiles.
+3. Inside, work through the tabs: **Overview** (assignments & stats), **Graph** (the investigation link chart), **Evidence**, **Reports**, **Tasks**, **Charges**, **Chat** (case room with @mentions), **Timeline**, **Files**, **Intel** (linked people/gangs/places), **RICO**, and **Sign-off**. When you write an investigative report, the **Evidence / Property** section has **Add from case evidence** and **Add from case attachments** pickers — they list only what's already logged on this case's Evidence tab or attachments, and added entries show as removable chips. Click a saved report to open it **right in the tab**: referenced evidence expands to its logged details, attachments open their file link, and matching names jump to that person's profile. **Finalize** asks for confirmation and seals the report (contents lock); bureau leads and above can **Reopen** a sealed report to make it editable again. Nothing sealed is ever lost: a sealed report shows its **Signatures** (including earlier seals from before a reopen, marked as superseded), and the **Versions** button lists every sealed version — open one to read exactly what the report said when it was signed. Warrant reports get a status selector (draft → signed → executed → returned) that feeds the BOLO board and person profiles.
 4. The **Timeline** tab opens with a zoomable chronology band — every event on its own lane (evidence, reports, tasks, sign-off). **Scroll to zoom** in on a busy day, **drag to pan**, and hover any dot for the details.
 
 ### Create a case
@@ -142,6 +144,12 @@ You can also work the case from the chart itself: **🔗 Link intel** (top-left)
 ### See what's due — the calendar
 
 **Oversight → Calendar** shows the month at a glance: 📌 case follow-ups, ☑️ open task deadlines, and 📝 shift-report weeks. Days in red have overdue items; click any day to see its items and jump straight to them.
+
+Wherever a date matters, the portal shows the same small **deadline chip** — on a case task's due date, a case's follow-up, a joint member's access expiry, and a warrant or subpoena deadline. It turns amber when the deadline is close and red once it has passed, using the same wording everywhere (**Due / Overdue**, **Expires / Expired**).
+
+### Check the security wall (portal owner)
+
+The Owner Portal has a **Security Testing** section (Monitor → Security Testing) showing the latest results of the live security test suites, the health of the dedicated test accounts, and any leftover test data from a crashed run. The results are posted by the test runs themselves (from CI or a developer machine) — the portal only ever reads sanitized summaries. Your browser never runs privileged tests and never sees test credentials.
 
 ### File your weekly shift report
 

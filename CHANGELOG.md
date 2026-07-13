@@ -6,6 +6,93 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.14.0] — 2026-07-13
+
+### Changed — shared platform (DOJ patterns promoted portal-wide)
+- The reusable pieces the v1.13 DOJ build proved are now **extracted shared
+  components**, each shipping with two or more non-DOJ adopters
+  (`docs/DOJ-INTEGRATION.md` adoption register updated):
+  - `ui/WorkflowTimeline` — legal request History tab, case sign-off history,
+    evidence custody chain (expandable), Command Center approval-queue
+    history, and the CID + Justice membership-request applicant history
+    panels.
+  - `shared/RelatedRecordPicker` — legal exhibit pickers, investigative-report
+    evidence lookup, RICO predicate-act evidence links.
+  - `shared/VersionViewer` — finalized report versions (new, below) and the
+    SOP history modal.
+  - `shared/SignatureViewer` — legal version-bound signatures, report seal
+    signatures (including superseded seals preserved in the reopen log), and
+    tracker command co-signs.
+  - `ui/DeadlineChip` + `lib/deadlines` (the shared deadline engine;
+    `lib/justice.ts` `deadlineInfo` now delegates to it) — legal
+    expiry/response deadlines, case-task due dates, joint-case access expiry,
+    case follow-ups.
+
+### Added — report versions (`report_versions`)
+- `report_finalize()` now **snapshots every sealed version** (fields +
+  signature at seal time) into a new `report_versions` table — seal v1,
+  reopen, edit, seal again → v2 with v1 still readable. Versions are
+  **immutable to clients** (UPDATE trigger-blocked, all write grants
+  revoked — the definer RPC is the only writer); SELECT follows the report's
+  case access. A **Versions** toggle on a sealed report shows exactly what
+  each seal contained, rendered through the shared viewers.
+
+### Added — legal requests in global search
+- `search_all` gained a `'legal'` kind. The function stays **SECURITY
+  INVOKER**, so every hit passes the `legal_requests` SELECT policy — sealed
+  requests remain **undiscoverable by construction**. Only authorized header
+  fields are matched and shown (request number, title, suspect/recipient
+  snapshot, case number, statuses); narratives are never indexed. The search
+  palette routes legal hits to `/legal?request=<id>`.
+
+### Added — packet preview before submission
+- Submitting a legal request for CID review now opens a **preview step**
+  first: a requirements checklist, the included exhibits cross-checked
+  against their live sources (broken-source and non-finalized flags), and an
+  explainer that DOJ receives **only the packet**, never general case
+  access. The existing submit RPC runs unchanged after confirmation.
+
+### Added — draft recovery (never-lose-work)
+- The legal create form stashes on-device under `legal:new:<kind>` and the
+  edit form under `legal:edit:<id>`. Restore is offered via an **explicit
+  banner only when the stash is newer than the server row**, and the stash
+  clears on save/submit. (Reports and chat already had drafts.)
+
+### Added — Owner Security Testing dashboard
+- New Owner Portal section (`/owner?s=security`,
+  `owner/SecurityTestingSection`): latest sanitized RLS-suite results, live
+  fixture-account health, and leftover test-data counts. Backed by a new
+  `security_test_runs` table with **zero client grants** — two audited
+  definer RPCs are the only path in or out:
+  - `security_test_report()` — callable **only by the
+    `rls-test-%@cidportal.test` fixtures** (the suites report their own
+    results), sanitizes failures server-side (short name/expected/actual
+    strings only — never row contents), keeps the newest 50 runs per suite,
+    audit-logged. Posted automatically by a new vitest reporter
+    (`tests/rls/securityReporter.ts`, registered in `vitest.rls.config.ts`)
+    after every `npm run test:rls` run, CI or local — strictly best-effort
+    and self-skipping without env.
+  - `owner_security_overview()` — `private.is_owner()`-gated and audited;
+    returns sanitized run results + fixture health + leftover test-data
+    counts.
+  Hard guarantees: the browser never executes privileged RLS tests, never
+  sees fixture passwords or a service key, gets no SQL console, and sees
+  sanitized failure output only.
+
+### Added — zod read-boundary validation
+- New `src/lib/schemas.ts` (zod ^4.4.3): **tolerant** parsers for legal
+  `form_data`, packet manifests, notification payloads, report signatures
+  and reopen logs, and the security overview — malformed JSON degrades to a
+  safe empty value instead of crashing a reviewer's screen. `jsonShapes`
+  stays in place for its existing consumers. Validation never widens
+  access — RLS remains the authority.
+
+### Boundaries preserved
+- No classification/RLS expansion beyond legal requests; no new warrant
+  subtypes; no Sentry (the `client_errors` reporter is unchanged); every DOJ
+  authorization, sealed-access, immutable-version, and signature guarantee
+  from v1.13.0 is intact.
+
 ## [1.13.0] — 2026-07-13
 
 ### Added — DOJ Legal Review System

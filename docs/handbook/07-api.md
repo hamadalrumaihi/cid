@@ -22,11 +22,11 @@ SECURITY DEFINER (run privileged, then check the caller inside) except
 
 | RPC | Request | Response | Called from | Why it exists |
 |---|---|---|---|---|
-| `search_all(q)` | search string | ranked hits across 9 tables | SearchPalette | one round-trip fuzzy search, RLS-scoped |
+| `search_all(q)` | search string | ranked hits across 10 tables (v1.14 adds `legal` — header fields only, never narratives; INVOKER + RLS keep sealed requests undiscoverable) | SearchPalette | one round-trip fuzzy search, RLS-scoped |
 | `signoff_submit(p_case)` | case id | updated case | CaseDetail | atomically route + stamp + history + notify; columns are trigger-locked |
 | `signoff_decide(p_case, p_decision, p_note)` | case id, approve/deny/changes, note | updated case | CaseDetail | reviewer decision, validated against the current assignee |
 | `signoff_owner_action(p_case, p_action)` | case id, complete/escalate/… | updated case | CaseDetail | owner-side chain actions |
-| `report_finalize(p_report, p_badge)` | report id, badge | report row | CaseDetail Reports | the ONLY way to set `finalized`; stamps signer |
+| `report_finalize(p_report, p_badge)` | report id, badge | report row | CaseDetail Reports | the ONLY way to set `finalized`; stamps signer; since v1.14 also snapshots the sealed fields + signature into `report_versions` |
 | `assign_member(target, role, division, active)` | profile id + assignment | void | AssignModal/AdminPanel | command-checked role/bureau/activation (guard trigger blocks direct writes) |
 | `admin_member_emails()` | — | roster emails | PersonnelView | command-only bypass of the email column grant |
 | `admin_remove_member` / `admin_restore_member(p_target)` | profile id | void | AdminPanel | soft remove/restore (`removed_at`) |
@@ -74,6 +74,17 @@ SELECT-only for clients; these definer RPCs are the only write path.
 | `legal_internal_notes(p_request)` | prosecution/judicial-side internal notes (column-revoked otherwise) |
 | `justice_directory()` / `legal_request_people(p_request)` | name resolution for justice-only users (no roster access) |
 | `mdt_wanted_current()` | classification-safe wanted projection; effective status computed at read time |
+
+### Security-testing RPCs (v1.14.0)
+
+The `security_test_runs` table has **no client grants at all** (not even
+SELECT) — these two audited definer RPCs are the only path in or out. The
+browser never runs privileged tests and never sees fixture credentials.
+
+| RPC | Purpose |
+|---|---|
+| `security_test_report(p_suite, p_passed, p_failed, p_skipped, p_failures, p_commit, p_branch, p_release, p_source, p_duration_ms)` | writer, callable **only by `rls-test-%@cidportal.test` accounts** — the live RLS suites report their own sanitized results (a vitest reporter posts after every `npm run test:rls`). Failures are re-sanitized server-side (short name/expected/actual strings only); newest 50 runs kept per suite; audit-logged |
+| `owner_security_overview()` | reader, `private.is_owner()`-gated + audited — recent runs, live fixture-roster health checks, and leftover test-data counts for the Owner Portal's Security Testing section |
 
 **Error handling**: RPCs come back through `rpc()` as `{error}` — callers
 toast it. RPC-internal permission failures raise exceptions that surface

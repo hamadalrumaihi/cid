@@ -139,6 +139,7 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
     const meta = SEARCH_KINDS[hit.kind]
     if (!meta) return
     if (hit.kind === 'case') router.push(`/cases?case=${hit.id}`)
+    else if (hit.kind === 'legal') router.push(`/legal?request=${encodeURIComponent(hit.id)}`)
     else if (hit.term && Q_SEEDED_TABS.has(meta.tab)) router.push(`/${meta.tab}?q=${encodeURIComponent(hit.term)}`)
     else router.push(`/${meta.tab}`)
   }, [onClose, query, router])
@@ -213,7 +214,7 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
           )}
           {state === 'loading' && <p className="px-3 py-6 text-center text-sm text-slate-500">Searching…</p>}
           {state === 'error' && <p className="px-3 py-6 text-center text-sm text-rose-300">Search failed — check your connection and try again.</p>}
-          {state === 'ready' && !rows.length && !matchedActions.length && <p className="px-3 py-6 text-center text-sm text-slate-500">No matches across cases, persons, gangs, places, vehicles, narcotics, ballistics, documents or charges.</p>}
+          {state === 'ready' && !rows.length && !matchedActions.length && <p className="px-3 py-6 text-center text-sm text-slate-500">No matches across cases, legal requests, persons, gangs, places, vehicles, narcotics, ballistics, documents or charges.</p>}
           {state === 'idle' && recents.length > 0 && (
             <>
               <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Recent searches</p>

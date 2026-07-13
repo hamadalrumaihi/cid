@@ -29,7 +29,11 @@ means division-wide visibility) plus its satellites: `case_assignments`
 `temporary`, `expires_at`, `removed_*` — joint rows are **RPC-only**, and
 an active unexpired joint row grants access to exactly that case via
 `private.has_joint_access`), `evidence` (+
-append-only `custody_chain`), `reports` (finalize RPC-only),
+append-only `custody_chain`), `reports` (finalize RPC-only) +
+`report_versions` (v1.14: one immutable snapshot per seal, written only
+inside `report_finalize()` — SELECT follows the report's case access, client
+UPDATE is trigger-blocked and write grants are revoked; rows CASCADE with
+their report because reports stay client-deletable),
 `case_tasks` (sub-tasks via `parent_id`; delete = command OR own row),
 `case_messages` (author trigger-stamped; edit/delete author-or-command),
 `case_intel_links` (polymorphic case→person/gang/place — feeds the Intel
@@ -70,7 +74,10 @@ own form fields, decision columns trigger-frozen, `internal_decision_note`
 column-revoked — command reads via `admin_membership_requests()`) +
 append-only `membership_request_history` (definer-RPC writes only),
 `app_secrets` (RLS on, **zero policies** = invisible to all client roles —
-deliberate).
+deliberate), `security_test_runs` (v1.14: **all client grants revoked** —
+written only by `security_test_report()` from the rls-test fixture suites,
+read only through the owner-gated `owner_security_overview()`; newest 50
+runs kept per suite — see [Ch. 7](07-api.md)).
 
 ## 8.3 Helper functions (`private` schema)
 
