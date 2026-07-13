@@ -6,6 +6,23 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.10.0] — 2026-07-13
+
+### Changed — D1: command dashboard declutter
+- The nine KPI cards compact into tighter tiles under a **Division vitals**
+  header — same numbers, same click-to-drill, less scrolling.
+- The embedded **Crime Analytics** block is now a collapsible section
+  (open by default, nothing removed) with a **Full analytics →** shortcut
+  to the dedicated Analytics tab.
+
+### Changed — D4: Intelligence navigation grouping
+- The Intelligence sub-tab strip visually groups its 12 tools —
+  **Registries** (Persons, BOLO, Gangs, Places, Vehicles, Indicators),
+  **Analysis** (Network, Narcotics, Ballistics, M.O. Detector) and
+  **Archive** (Media Vault, Records) — with dividers and labels (labels
+  hide on narrow screens). Same tabs, same order, same routes; purely a
+  visual layer, so deep links and vanilla parity are untouched.
+
 ## [1.9.1] — 2026-07-13
 
 ### Fixed — case Timeline tab froze the page

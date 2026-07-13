@@ -233,24 +233,27 @@ export function CommandView() {
         </div>
       )}
 
-      {/* KPI grid */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {kpis.map((m) => (
-          <div
-            key={m.label}
-            onClick={m.go && live ? m.go : undefined}
-            className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${KPI_ACCENTS[m.accent]} p-5 transition hover:shadow-glow${m.go && live ? ' cursor-pointer hover:brightness-110' : ''}`}
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{m.label}</p>
-                <p className="mt-2 text-3xl font-bold text-white">{live ? m.value : '—'}</p>
-                <p className="mt-1 text-[11px] text-slate-400">{m.delta}</p>
+      {/* KPI grid — compact tiles; drill behavior unchanged */}
+      <div>
+        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">Division vitals</h3>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {kpis.map((m) => (
+            <div
+              key={m.label}
+              onClick={m.go && live ? m.go : undefined}
+              className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${KPI_ACCENTS[m.accent]} p-4 transition hover:shadow-glow${m.go && live ? ' cursor-pointer hover:brightness-110' : ''}`}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{m.label}</p>
+                  <p className="mt-1.5 text-2xl font-bold text-white">{live ? m.value : '—'}</p>
+                  <p className="mt-0.5 text-[11px] text-slate-400">{m.delta}</p>
+                </div>
+                <span className="text-slate-500"><KpiIcon name={m.icon} /></span>
               </div>
-              <span className="text-slate-500"><KpiIcon name={m.icon} /></span>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       {/* Drill: matching cases while a filter is active */}
@@ -308,7 +311,24 @@ export function CommandView() {
         </div>
       )}
 
-      {live && <Analytics cases={data.cases} persons={data.persons} gangs={data.gangs} evidence={data.evidence} />}
+      {/* Crime analytics — collapsible so the dashboard scans; nothing removed.
+          The dedicated Analytics tab keeps the full trend charts. */}
+      {live && (data.cases.length > 0 || data.persons.length > 0) && (
+        <details open className="group rounded-2xl border border-white/5 bg-ink-900/40 p-4">
+          <summary className="flex cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
+            <span aria-hidden className="text-xs text-slate-500 group-open:hidden">▸</span>
+            <span aria-hidden className="hidden text-xs text-slate-500 group-open:inline">▾</span>
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">📈 Crime Analytics</h3>
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push('/analytics') }}
+              className="ml-auto flex-shrink-0 text-xs font-bold text-badge-200 hover:text-white"
+            >
+              Full analytics →
+            </button>
+          </summary>
+          <div className="mt-4"><Analytics cases={data.cases} persons={data.persons} gangs={data.gangs} evidence={data.evidence} /></div>
+        </details>
+      )}
 
       <TicketQueue cases={data.cases} onCaseCreated={() => void refresh()} />
 

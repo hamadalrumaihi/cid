@@ -91,7 +91,6 @@ export function Analytics({ cases, persons, gangs, evidence }: {
 
   return (
     <div>
-      <h4 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">📈 Crime Analytics</h4>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Tile label="Clearance rate" val={`${clearance}%`} sub={`${closed} of ${cases.length} cases closed`} />
         <Tile label="Open cases" val={openCases} sub="open + active" />

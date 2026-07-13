@@ -51,7 +51,7 @@ The sidebar groups all 29 screens into **5 categories**:
 | **Reference** | Penal Code, SOPs & Library, User Guide |
 | **Oversight** | My Desk, Calendar, Shift Reports, Audit Log (sortable, filterable, exports to CSV) |
 
-Click a **category** to jump to its first screen; a **sub-tab strip** appears under the header to switch between the screens inside that category. Colored dots on the Command button are live counters (pending member approvals, unread announcements, items waiting on you).
+Click a **category** to jump to its first screen; a **sub-tab strip** appears under the header to switch between the screens inside that category (the crowded Intelligence strip labels its tools **Registries · Analysis · Archive** so the right one is easier to spot). Colored dots on the Command button are live counters (pending member approvals, unread announcements, items waiting on you).
 
 ### The header (top bar)
 

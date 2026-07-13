@@ -70,6 +70,17 @@ export const TAB_LABEL: Record<string, string> = {
   inbox: 'My Desk', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', owner: 'Owner Portal', profile: 'My Profile', 'command-center': 'Command Center',
 }
 
+/** Presentational sub-grouping for crowded categories — a visual layer over
+ *  the SAME tabs in the SAME order. NAV_CATEGORIES stays the routing truth
+ *  (vanilla parity untouched); the strip just draws labels/dividers. */
+export const SUBTAB_GROUPS: Record<string, { label: string; tabs: string[] }[]> = {
+  intel: [
+    { label: 'Registries', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'indicators'] },
+    { label: 'Analysis', tabs: ['network', 'narcotics', 'ballistics', 'modus'] },
+    { label: 'Archive', tabs: ['media', 'records'] },
+  ],
+}
+
 export const TAB_CATEGORY: Record<string, string> = {}
 export const CAT_DEFAULT: Record<string, string> = {}
 for (const c of NAV_CATEGORIES) {
