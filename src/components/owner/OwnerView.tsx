@@ -34,6 +34,7 @@ import {
   LEARNING, MATRIX_NOTE, PERMISSIONS_MATRIX, REALTIME_DOC, ROUTES, SUGGESTIONS, WORKFLOW, fbLabel,
 } from './ownerData'
 import { useOwnerVitals } from './ownerVitals'
+import { SecurityTestingSection } from './SecurityTestingSection'
 import { parseStringArray } from '@/lib/jsonShapes'
 
 type FeedbackRow = Tables<'feedback'>
@@ -43,6 +44,7 @@ interface FbItem { fb: FeedbackRow; meta: MetaRow | null }
 const SECTIONS: { id: string; icon: string; label: string; sub: string }[] = [
   { id: 'home', icon: '🏠', label: 'Overview', sub: 'What this portal is and where everything lives' },
   { id: 'health', icon: '🩺', label: 'Health & statistics', sub: 'Service checks, safety warnings & live counts' },
+  { id: 'security', icon: '🛡️', label: 'Security Testing', sub: 'Live RLS suite results, fixture health & the access matrix' },
   { id: 'feedback', icon: '📨', label: 'Feedback & Bugs', sub: 'The owner inbox — triage, catalog, resolve' },
   { id: 'suggestions', icon: '💡', label: 'Suggestions', sub: 'The improvement roadmap from the repo analysis' },
   { id: 'impact', icon: '🎯', label: 'Change Impact', sub: '"If I change this, what else must I check?"' },
@@ -57,7 +59,7 @@ const SECTIONS: { id: string; icon: string; label: string; sub: string }[] = [
 /** Desktop rail grouping — same section ids + deep-links, grouped by purpose. */
 const NAV_GROUPS: { label: string; ids: string[] }[] = [
   { label: 'Overview', ids: ['home'] },
-  { label: 'Monitor', ids: ['health', 'realtime'] },
+  { label: 'Monitor', ids: ['health', 'security', 'realtime'] },
   { label: 'Improve', ids: ['feedback', 'suggestions', 'impact'] },
   { label: 'Understand', ids: ['architecture', 'routes', 'env'] },
   { label: 'Operate', ids: ['workflow', 'learning'] },
@@ -183,6 +185,7 @@ export function OwnerView() {
 
           {active.id === 'home' && <HomeSection onGo={go} />}
           {active.id === 'health' && <HealthSection />}
+          {active.id === 'security' && <SecurityTestingSection />}
           {active.id === 'feedback' && <FeedbackInbox />}
           {active.id === 'suggestions' && <SuggestionsSection />}
           {active.id === 'impact' && <ImpactSection />}

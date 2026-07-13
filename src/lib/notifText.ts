@@ -3,6 +3,7 @@
  *  row shape, app.js). Keeping it in lib/ means every surface renders a
  *  notification the same way instead of falling back to raw payload JSON. */
 import type { Json, Tables } from './database.types'
+import { parseNotifPayload, type NotifPayload } from './schemas'
 
 export type NotificationRow = Tables<'notifications'>
 
@@ -49,18 +50,9 @@ export const NOTIF_LABEL: Record<string, string> = {
   stale_case: 'Case going stale',
 }
 
-interface NotifPayload {
-  case_id?: string
-  case_number?: string
-  tracker_code?: string
-  target?: string
-  detective?: string
-  reason?: string
-  title?: string
-  request_number?: string
-}
-
-const asPayload = (p: Json | null): NotifPayload => (p && typeof p === 'object' && !Array.isArray(p) ? (p as NotifPayload) : {})
+// Payload parsing is zod-validated (v1.14): malformed payloads degrade to {}
+// instead of leaking raw JSON into the bell panel.
+const asPayload = (p: Json | null): NotifPayload => parseNotifPayload(p)
 
 export function notifTitle(n: NotificationRow): string {
   return NOTIF_LABEL[n.type] ?? n.type

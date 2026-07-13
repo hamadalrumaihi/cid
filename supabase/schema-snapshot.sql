@@ -1097,6 +1097,21 @@ alter table public.reports add constraint reports_case_id_fkey FOREIGN KEY (case
 alter table public.reports add constraint reports_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.reports(id);
 alter table public.reports enable row level security;
 
+create table public.report_versions (
+  id uuid not null default gen_random_uuid(),
+  report_id uuid not null,
+  version_number integer not null,
+  fields jsonb not null,
+  signature jsonb,
+  created_by uuid,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.report_versions add constraint report_versions_pkey PRIMARY KEY (id);
+alter table public.report_versions add constraint report_versions_report_id_version_number_key UNIQUE (report_id, version_number);
+alter table public.report_versions add constraint report_versions_report_id_fkey FOREIGN KEY (report_id) REFERENCES public.reports(id) ON DELETE CASCADE;
+alter table public.report_versions add constraint report_versions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.report_versions enable row level security;
+
 create table public.rico_cases (
   id uuid not null default gen_random_uuid(),
   case_id uuid not null,
@@ -1126,6 +1141,26 @@ alter table public.role_events add constraint role_events_pkey PRIMARY KEY (id);
 alter table public.role_events add constraint role_events_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
 alter table public.role_events add constraint role_events_target_id_fkey FOREIGN KEY (target_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 alter table public.role_events enable row level security;
+
+create table public.security_test_runs (
+  id uuid not null default gen_random_uuid(),
+  suite text not null,
+  passed integer not null default 0,
+  failed integer not null default 0,
+  skipped integer not null default 0,
+  total integer not null default 0,
+  failures jsonb not null default '[]'::jsonb,
+  commit_sha text,
+  branch text,
+  release text,
+  source text not null default 'local'::text,
+  duration_ms integer,
+  created_by uuid,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.security_test_runs add constraint security_test_runs_pkey PRIMARY KEY (id);
+alter table public.security_test_runs add constraint security_test_runs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.security_test_runs enable row level security;
 
 create table public.shift_reports (
   id uuid not null default gen_random_uuid(),
@@ -2066,6 +2101,24 @@ AS $function$
                       case when d.name ilike p.lk then 0.95 else 0 end)
       from public.documents d, p
       where p.lq <> '' and (d.name ilike p.lk or word_similarity(p.lq, lower(coalesce(d.name, ''))) > p.thr)
+      union all
+      -- Legal requests (v1.14): SECURITY INVOKER means the caller's RLS
+      -- filters every row here — unauthorized users get nothing, sealed
+      -- requests stay invisible. Header fields only, never narratives.
+      select 'legal', lr.id,
+             lr.request_number || ' · ' || lr.title,
+             initcap(lr.request_type) || ' · ' || replace(lr.review_status, '_', ' '),
+             null::text,
+             greatest(word_similarity(p.lq, lower(lr.title)),
+                      word_similarity(p.lq, lower(lr.request_number)),
+                      case when lr.request_number ilike p.lk or lr.title ilike p.lk
+                                or lr.person_name_snapshot ilike p.lk or lr.recipient_name ilike p.lk
+                                or lr.case_number_snapshot ilike p.lk then 0.95 else 0 end)
+      from public.legal_requests lr, p
+      where p.lq <> '' and (lr.request_number ilike p.lk or lr.title ilike p.lk
+            or lr.person_name_snapshot ilike p.lk or lr.recipient_name ilike p.lk
+            or lr.case_number_snapshot ilike p.lk
+            or word_similarity(p.lq, lower(lr.request_number || ' ' || lr.title)) > p.thr)
     ) u
   ) x
   where rn <= 8
@@ -3303,3 +3356,8 @@ create policy wl_sel on public.watchlist
 -- public.legal_internal_notes(uuid), public.legal_search(text), public.mdt_wanted_current(),
 -- public.justice_directory(), public.legal_request_people(uuid);
 -- rls_test_cleanup() was extended to purge the new tables.
+-- Functions added/updated by the 20260715 v1.14 consistency migrations:
+-- public.report_finalize() now snapshots each seal into report_versions;
+-- private.block_report_version_update() [trigger]; public.search_all() gained
+-- an RLS-scoped legal_requests union; public.security_test_report(...) and
+-- public.owner_security_overview() back the Owner Security Testing dashboard.

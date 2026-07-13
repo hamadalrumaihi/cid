@@ -14,6 +14,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { SignatureViewer } from '@/components/shared/SignatureViewer'
 import { caseNumById, fmtCountdown, type CaseRow, type TrackerRow } from './commandUtils'
 
 type Bureau = Database['public']['Enums']['bureau']
@@ -125,6 +126,14 @@ export function Trackers({ cases }: { cases: CaseRow[] }) {
                     {expired ? 'Expired' : authorized ? 'Authorized' : 'Pending dual-sign'}
                   </span>
                 </div>
+                {(t.director_sig || t.deputy_sig) && (
+                  <div className="mt-2">
+                    <SignatureViewer signatures={[
+                      ...(t.director_sig ? [{ id: `${t.id}-director`, name: officerName(t.director_sig) ?? 'Officer', role: 'command co-sign', action: 'tracker authorization', at: t.created_at }] : []),
+                      ...(t.deputy_sig ? [{ id: `${t.id}-deputy`, name: officerName(t.deputy_sig) ?? 'Officer', role: 'command co-sign', action: 'tracker authorization', at: t.authorized_at }] : []),
+                    ]} />
+                  </div>
+                )}
                 {canDelete && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {!authorized && !expired && (

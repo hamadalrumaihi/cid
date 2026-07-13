@@ -3178,6 +3178,51 @@ export type Database = {
           },
         ]
       }
+      report_versions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          fields: Json
+          id: string
+          report_id: string
+          signature: Json | null
+          version_number: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          fields: Json
+          id?: string
+          report_id: string
+          signature?: Json | null
+          version_number: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          fields?: Json
+          id?: string
+          report_id?: string
+          signature?: Json | null
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_versions_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_versions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reports: {
         Row: {
           author_id: string | null
@@ -3322,6 +3367,65 @@ export type Database = {
           target_id?: string
         }
         Relationships: []
+      }
+      security_test_runs: {
+        Row: {
+          branch: string | null
+          commit_sha: string | null
+          created_at: string
+          created_by: string | null
+          duration_ms: number | null
+          failed: number
+          failures: Json
+          id: string
+          passed: number
+          release: string | null
+          skipped: number
+          source: string
+          suite: string
+          total: number
+        }
+        Insert: {
+          branch?: string | null
+          commit_sha?: string | null
+          created_at?: string
+          created_by?: string | null
+          duration_ms?: number | null
+          failed?: number
+          failures?: Json
+          id?: string
+          passed?: number
+          release?: string | null
+          skipped?: number
+          source?: string
+          suite: string
+          total?: number
+        }
+        Update: {
+          branch?: string | null
+          commit_sha?: string | null
+          created_at?: string
+          created_by?: string | null
+          duration_ms?: number | null
+          failed?: number
+          failures?: Json
+          id?: string
+          passed?: number
+          release?: string | null
+          skipped?: number
+          source?: string
+          suite?: string
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "security_test_runs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       shift_reports: {
         Row: {
@@ -3887,6 +3991,25 @@ export type Database = {
       withdraw_legal_request: {
         Args: { p_note?: string; p_request: string }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      owner_security_overview: {
+        Args: never
+        Returns: Json
+      }
+      security_test_report: {
+        Args: {
+          p_branch?: string
+          p_commit?: string
+          p_duration_ms?: number
+          p_failed: number
+          p_failures?: Json
+          p_passed: number
+          p_release?: string
+          p_skipped: number
+          p_source?: string
+          p_suite: string
+        }
+        Returns: string
       }
       admin_member_emails: {
         Args: never

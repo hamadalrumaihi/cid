@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
-import type { Json } from '@/lib/database.types'
+import type { Json, Tables } from '@/lib/database.types'
 import { downloadTextFile, timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
@@ -13,6 +13,10 @@ import { safeUrl } from '@/lib/safeUrl'
 import { FORM_SCHEMAS, REPORT_TEMPLATES, WARRANT_TINT, WARRANT_TPLS, formToText, reportFinalizeGaps, reportTitle, warrantStatusOf, type FormSchema, type FormValues } from '@/lib/forms'
 import { isCommandRole } from '@/lib/roles'
 import { parseFormValues } from '@/lib/jsonShapes'
+import { parseReopenLog, parseReportSignature } from '@/lib/schemas'
+import { RelatedRecordPicker } from '@/components/shared/RelatedRecordPicker'
+import { SignatureViewer, type SignatureItem } from '@/components/shared/SignatureViewer'
+import { VersionViewer } from '@/components/shared/VersionViewer'
 import { Drafts } from '@/lib/drafts'
 import { toast } from '@/lib/toast'
 import type { CaseRow, EvidenceRow, MediaRow, PersonRow, ReportRow } from './shared'
@@ -172,6 +176,26 @@ function ReportDetail({ r, c, canEdit, canDelete, onBack, onEdit, onFinalize, on
     })()
     return () => { alive = false }
   }, [c.id, r.id])
+  // Seal provenance: the current signature plus any previous seals a reopen
+  // preserved in fields._reopen_log — both purely presentational.
+  const reopenLog = parseReopenLog((parseFormValues(r.fields)._reopen_log ?? null) as Json)
+  const sig = parseReportSignature(r.signature)
+  const sealSignatures: SignatureItem[] = [
+    ...(sig ? [{ id: 'current', name: sig.officer, badge: sig.badge ?? null, action: 'report seal', at: sig.signed_at ?? null }] : []),
+    ...reopenLog.flatMap((e, i) => (e.prev_signature ? [{ id: `prev-${i}`, name: e.prev_signature.officer, badge: e.prev_signature.badge ?? null, action: 'previous seal', at: e.at ?? null, superseded: true }] : [])),
+  ]
+  // Frozen seal snapshots (report_versions) load lazily on toggle so readers
+  // who never open history keep the detail view a single round-trip.
+  const [versions, setVersions] = useState<Tables<'report_versions'>[] | null>(null)
+  const [showVersions, setShowVersions] = useState(false)
+  const toggleVersions = () => {
+    const next = !showVersions
+    setShowVersions(next)
+    if (next) void (async () => {
+      try { setVersions(await list('report_versions', { eq: { report_id: r.id }, order: 'version_number', ascending: false })) }
+      catch { setVersions([]) }
+    })()
+  }
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -193,9 +217,39 @@ function ReportDetail({ r, c, canEdit, canDelete, onBack, onEdit, onFinalize, on
           {r.finalized && isCommandRole(profile?.role) && <button onClick={onReopen} className="rounded-lg border border-amber-500/40 px-3 py-2 text-sm font-bold text-amber-300 hover:bg-amber-500/10">Reopen</button>}
           {!r.finalized && canEdit && <button onClick={onEdit} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-badge-200 hover:bg-white/5">Edit</button>}
           {canDelete && <button onClick={onDelete} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-rose-300 hover:bg-rose-500/10">Delete</button>}
+          <button onClick={toggleVersions} aria-expanded={showVersions} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-slate-200 hover:bg-white/5">{showVersions ? 'Hide versions' : 'Versions'}</button>
           <button onClick={() => downloadTextFile(`${c.case_number}-${r.template}.md`, formToText(schema, parseFormValues(r.fields)), 'text/markdown')} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Download .md</button>
         </div>
       </div>
+      {(r.finalized || reopenLog.length > 0) && (
+        <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+          <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Signatures</h4>
+          <SignatureViewer signatures={sealSignatures} />
+        </div>
+      )}
+      {showVersions && (
+        <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+          <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Versions</h4>
+          {!versions ? <p className="text-sm text-slate-500">Loading versions…</p> : (
+            <VersionViewer
+              versions={versions.map((ver) => ({ id: ver.id, number: ver.version_number, label: 'Sealed', at: ver.created_at, byName: parseReportSignature(ver.signature)?.officer ?? null }))}
+              renderContent={(item) => {
+                const ver = versions.find((x) => x.id === item.id)
+                if (!ver) return null
+                const vsig = parseReportSignature(ver.signature)
+                return (
+                  <div className="space-y-3">
+                    {vsig && <SignatureViewer signatures={[{ id: ver.id, name: vsig.officer, badge: vsig.badge ?? null, action: 'report seal', at: vsig.signed_at ?? null, versionLabel: `v${ver.version_number}` }]} />}
+                    {schema
+                      ? <ReportView schema={schema} values={parseFormValues(ver.fields)} evidence={pools.evidence} media={pools.media} persons={pools.persons} onOpenPerson={(id) => router.push(`/persons?person=${encodeURIComponent(id)}`)} />
+                      : <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{JSON.stringify(ver.fields, null, 2)}</pre>}
+                  </div>
+                )
+              }}
+            />
+          )}
+        </div>
+      )}
       {schema
         ? <ReportView schema={schema} values={parseFormValues(r.fields)} evidence={pools.evidence} media={pools.media} persons={pools.persons} onOpenPerson={(id) => router.push(`/persons?person=${encodeURIComponent(id)}`)} />
         : <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{JSON.stringify(r.fields, null, 2)}</pre>}
@@ -261,10 +315,19 @@ function FormEditor({ template, caseId, values, onChange }: { template: string; 
     ? <p className="mb-2 text-xs text-slate-400">Case evidence lookup unavailable — enter items manually.</p>
     : pool && !pool.evidence.length && !pool.media.length
       ? <p className="mb-2 text-xs text-slate-400">No evidence or attachments on this case yet — log them in the Evidence tab first.</p>
-      : pool && <div className="mb-2 grid gap-2 md:grid-cols-2">
-          <select aria-label="Add from case evidence" value="" onChange={(e) => { const ev = pool.evidence.find((x) => x.id === e.target.value); if (ev) append('ev_items', evLabel(ev)) }} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Add from case evidence…</option>{pool.evidence.map((ev) => <option key={ev.id} value={ev.id}>{evLabel(ev)}</option>)}</select>
-          <select aria-label="Add from case attachments" value="" onChange={(e) => { const m = pool.media.find((x) => x.id === e.target.value); if (m) append('ev_files', m.title || m.type || 'Attachment') }} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Add from case attachments…</option>{pool.media.map((m) => <option key={m.id} value={m.id}>{m.title || m.type || 'Attachment'}</option>)}</select>
-          {pool.reports.length > 0 && <select aria-label="Add from case finalized reports" value="" onChange={(e) => { const r = pool.reports.find((x) => x.id === e.target.value); if (r) append('ev_files', `${reportTitle(r)} — finalized report`) }} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Add from case reports…</option>{pool.reports.map((r) => <option key={r.id} value={r.id}>{reportTitle(r)}</option>)}</select>}
+      : pool && <div className="mb-2">
+          <RelatedRecordPicker
+            sources={[
+              { kind: 'evidence', label: 'Case evidence', options: pool.evidence.map((ev) => ({ id: ev.id, label: evLabel(ev) })) },
+              { kind: 'attachment', label: 'Case attachments', options: pool.media.map((m) => ({ id: m.id, label: m.title || m.type || 'Attachment' })) },
+              { kind: 'finalized_report', label: 'Case reports', options: pool.reports.map((fr) => ({ id: fr.id, label: reportTitle(fr) })) },
+            ]}
+            onPick={(kind, opt) => {
+              if (kind === 'evidence') append('ev_items', opt.label)
+              else if (kind === 'attachment') append('ev_files', opt.label)
+              else append('ev_files', `${opt.label} — finalized report`)
+            }}
+          />
         </div>
   const dlId = `persons-${template}`
   const dlAttr = (person?: boolean) => (person && personNames.length ? dlId : undefined)
