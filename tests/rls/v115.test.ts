@@ -266,7 +266,15 @@ describe.skipIf(!enabled)('v1.15 — search_warrant subtype + owner warrant impo
     expect(legalHits(ownSearch.data).some((h) => h.id === sealedId)).toBe(true)
   })
 
-  /* ================= owner-only warrant import ================= */
+  /* ================= owner-only warrant import =================
+   * The import/rollback gate is private.is_owner_maintenance() — the
+   * profiles.is_owner super-grant, independent of CID `active` status — so an
+   * INACTIVE owner can run a one-time import without any temporary `active`
+   * toggle (migration 20260716030000). That inactive-owner path is verified
+   * directly in production (an active=false owner passes the gate) rather than
+   * here, because toggling a fixture's `active` from the suite would require
+   * service-role access, which these tests deliberately never use. The tests
+   * below cover the owner-allowed / non-owner-rejected contract. */
 
   it('owner imports a historical arrest warrant → submitted_to_doj, provenance + immutable version + audit, no MDT', async () => {
     const sourceAt = '2026-03-01T12:00:00.000Z'

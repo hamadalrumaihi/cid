@@ -38,6 +38,13 @@ the merged PRs that compose it.
   reused canonical exhibits plus http(s)-only external links, and writes a
   `LEGAL_IMPORTED` audit row. A deliberate owner-only
   `import_rollback_by_key()` reverses an import without deleting audit history.
+- **Owner-maintenance authorization** (`private.is_owner_maintenance()`): the
+  import/rollback RPCs authorize on the `profiles.is_owner` super-grant
+  **independent of CID `active`/roster status**, so an inactive owner never
+  requires a temporary `active` toggle to run a one-time import.
+  `private.is_owner()` is unchanged and still governs every ordinary owner
+  surface. Verified in production: an `active=false` owner passes the import
+  gate (previously it did not).
 
 ## [1.14.0] — 2026-07-13
 
