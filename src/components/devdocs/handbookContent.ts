@@ -785,6 +785,23 @@ browser never runs privileged tests and never sees fixture credentials.
 | \`security_test_report(p_suite, p_passed, p_failed, p_skipped, p_failures, p_commit, p_branch, p_release, p_source, p_duration_ms)\` | writer, callable **only by \`rls-test-%@cidportal.test\` accounts** — the live RLS suites report their own sanitized results (a vitest reporter posts after every \`npm run test:rls\`). Failures are re-sanitized server-side (short name/expected/actual strings only); newest 50 runs kept per suite; audit-logged |
 | \`owner_security_overview()\` | reader, \`private.is_owner()\`-gated + audited — recent runs, live fixture-roster health checks, and leftover test-data counts for the Owner Portal's Security Testing section |
 
+### Legal import RPCs (v1.15.0)
+
+\`search_warrant\` is now a warrant subtype alongside \`arrest_warrant\`:
+\`create_legal_request\` and \`submit_legal_request_to_cid\` accept it (a
+search warrant requires a subject **or** at least one
+\`form_data.search_targets\` entry — no mandatory Persons-registry suspect),
+and it routes CID → ADA → **Judge** like every warrant.
+
+These two RPCs migrate historical in-city warrants into the DOJ workflow.
+Both are **owner-only** (\`private.is_owner()\`) and are not wired to any
+normal UI.
+
+| RPC | Purpose |
+|---|---|
+| \`import_legal_warrant(p_case, p_subtype, p_title, p_priority, p_form, p_narrative, p_person, p_classification, p_source_submitted_at, p_source_submitter, p_import_key, p_exhibits)\` | owner-only, **idempotent** on \`import_key\` (a repeat key returns the existing row, zero duplicates); lands the request at \`submitted_to_doj\` intake (never approved / signed / issued / executed / MDT-projected); preserves the historical \`source_submitter\`/\`source_submitted_at\` **separate from** the real import actor (never falsifies \`auth.uid()\`); freezes an immutable submitted version; attaches reused canonical exhibits plus external links (external-link URLs must be http(s)); writes a \`LEGAL_IMPORTED\` audit row |
+| \`import_rollback_by_key(p_import_key)\` | owner-only deliberate reversal — deletes the imported request and its children in dependency order but **never** deletes \`audit_log\`; appends a \`LEGAL_IMPORT_ROLLBACK\` audit row before removal; returns the number of requests rolled back |
+
 **Error handling**: RPCs come back through \`rpc()\` as \`{error}\` — callers
 toast it. RPC-internal permission failures raise exceptions that surface
 the same way.
@@ -883,6 +900,24 @@ deliberate), \`security_test_runs\` (v1.14: **all client grants revoked** —
 written only by \`security_test_report()\` from the rls-test fixture suites,
 read only through the owner-gated \`owner_security_overview()\`; newest 50
 runs kept per suite — see [Ch. 7](07-api.md)).
+
+### Justice / legal (SELECT-only for clients; every write is a definer RPC)
+The DOJ Legal Review System's tables (\`justice_memberships\`,
+\`justice_membership_requests\`, \`prosecutor_bureau_assignments\`,
+\`legal_requests\` + \`legal_request_versions\`/\`_actions\`/\`_exhibits\`/
+\`_participants\`/\`_signatures\`, \`mdt_wanted_projections\`) are a **separate
+identity domain** — no INSERT/UPDATE/DELETE grants exist; the transactional
+SECURITY DEFINER RPCs in [Ch. 7](07-api.md) are the only write path (see
+[\`docs/DOJ-INTEGRATION.md\`](../DOJ-INTEGRATION.md)). \`legal_requests\`
+carries \`request_type\` (warrant / subpoena) and a \`subtype\` CHECK — the
+warrant subtypes are \`arrest_warrant\` **and \`search_warrant\`** (v1.15), a
+compound CHECK pinning warrant subtypes to \`request_type='warrant'\`. v1.15
+also added six nullable **import-provenance** columns, populated only on
+owner-imported rows: \`source_system\`, \`source_submitted_at\`,
+\`source_submitter_id\` (→ \`profiles\`), \`imported_by\` (→ \`profiles\`),
+\`imported_at\`, and \`import_key\` (a partial-unique index enforces idempotent
+imports where the key is present). See \`import_legal_warrant()\` in
+[Ch. 7](07-api.md).
 
 ## 8.3 Helper functions (\`private\` schema)
 

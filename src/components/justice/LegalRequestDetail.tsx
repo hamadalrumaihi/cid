@@ -15,10 +15,10 @@ import { Drafts } from '@/lib/drafts'
 import { timeAgo } from '@/lib/format'
 import { useTableVersion } from '@/lib/realtime'
 import {
-  CLASSIFICATIONS, LEGAL_ACTION_COLS, SUBPOENA_FIELDS, SOCIAL_PLATFORMS,
+  CLASSIFICATIONS, LEGAL_ACTION_COLS, SUBPOENA_FIELDS, SOCIAL_PLATFORMS, WARRANT_FIELDS,
   fulfilmentLabel, isEditableDraft, justiceRoleLabel, reviewStatusLabel,
   type LegalExhibit, type LegalRequest, type LegalSignature, type LegalVersion,
-  type SubpoenaType,
+  type SubpoenaType, type WarrantType,
 } from '@/lib/justice'
 import { parseLegalFormEntries, parsePacketManifest, type PacketManifestEntry } from '@/lib/schemas'
 import { safeUrl } from '@/lib/safeUrl'
@@ -265,6 +265,12 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
     ]
     if (r.request_type === 'warrant') {
       items.push({ label: 'Priority', ok: !!draft.priority, blocking: true })
+      // Search warrants require search targets + items sought (arrest warrants
+      // carry no required form fields — suspect NOT blocked here).
+      const specNow = WARRANT_FIELDS[r.subtype as WarrantType] ?? []
+      for (const f of specNow.filter((x) => x.req)) {
+        items.push({ label: f.label, ok: !!String(draft.form[f.key] ?? '').trim(), blocking: true })
+      }
     }
     if (r.request_type === 'subpoena') {
       const specNow = SUBPOENA_FIELDS[r.subtype as SubpoenaType] ?? []
@@ -280,11 +286,11 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
   // Submission is a two-step flow (§ packet preview, v1.14): review exactly
   // what DOJ will receive, then confirm — the existing RPCs do the work.
   const submitToCid = () => {
-    if (r.request_type === 'subpoena') {
-      const spec = SUBPOENA_FIELDS[r.subtype as SubpoenaType] ?? []
-      const missingReq = spec.filter((f) => f.req && !String(draft.form[f.key] ?? '').trim())
-      if (missingReq.length) { toast(`Required: ${missingReq.map((f) => f.label).join(', ')}`, 'warn'); return }
-    }
+    const specNow = r.request_type === 'subpoena'
+      ? (SUBPOENA_FIELDS[r.subtype as SubpoenaType] ?? [])
+      : r.request_type === 'warrant' ? (WARRANT_FIELDS[r.subtype as WarrantType] ?? []) : []
+    const missingReq = specNow.filter((f) => f.req && !String(draft.form[f.key] ?? '').trim())
+    if (missingReq.length) { toast(`Required: ${missingReq.map((f) => f.label).join(', ')}`, 'warn'); return }
     setPreview(true)
   }
 
@@ -398,7 +404,9 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
     }, 'Request withdrawn.')
   }
 
-  const spec = r.request_type === 'subpoena' ? (SUBPOENA_FIELDS[r.subtype as SubpoenaType] ?? []) : []
+  const spec = r.request_type === 'subpoena'
+    ? (SUBPOENA_FIELDS[r.subtype as SubpoenaType] ?? [])
+    : r.request_type === 'warrant' ? (WARRANT_FIELDS[r.subtype as WarrantType] ?? []) : []
   const formEntries = parseLegalFormEntries(currentVersion?.form_data)
 
   return (

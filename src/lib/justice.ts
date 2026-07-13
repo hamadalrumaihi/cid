@@ -127,6 +127,32 @@ export const SUBPOENA_FIELDS: Record<SubpoenaType, { key: string; label: string;
 /** In-RP platforms only — real-world platforms are out of scope (§35). */
 export const SOCIAL_PLATFORMS = ['Birdy', 'InstaPic'] as const
 
+export const WARRANT_TYPES = [
+  ['arrest_warrant', 'Arrest Warrant'],
+  ['search_warrant', 'Search Warrant'],
+] as const
+export type WarrantType = (typeof WARRANT_TYPES)[number][0]
+
+/** Type-specific warrant fields — parallel to SUBPOENA_FIELDS, stored in the
+ *  same free `form_data` jsonb. Probable cause lives in the shared narrative
+ *  field (not duplicated here). `req` marks the fields the form must fill;
+ *  every requirement is revalidated server-side. */
+export const WARRANT_FIELDS: Record<WarrantType, { key: string; label: string; req?: boolean; kind?: 'textarea' | 'datetime' }[]> = {
+  arrest_warrant: [
+    { key: 'charges', label: 'Charges', kind: 'textarea' },
+    { key: 'items_to_seize', label: 'Items to Seize', kind: 'textarea' },
+  ],
+  search_warrant: [
+    { key: 'search_targets', label: 'Search Targets (one per line — person / property / place / postal / vehicle)', req: true, kind: 'textarea' },
+    { key: 'place_to_search', label: 'Place to Search', kind: 'textarea' },
+    { key: 'items_sought', label: 'Items Sought', req: true, kind: 'textarea' },
+    { key: 'vehicle_targets', label: 'Vehicle Targets' },
+  ],
+}
+
+export const warrantTypeLabel = (s?: string | null): string =>
+  (s && WARRANT_TYPES.find(([v]) => v === s)?.[1]) || s || '—'
+
 export const REVIEW_STATUS_LABEL: Record<string, string> = {
   not_submitted: 'Draft — not submitted',
   cid_supervisor_review: 'CID supervisor review',

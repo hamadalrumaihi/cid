@@ -765,7 +765,13 @@ create table public.legal_requests (
   submitted_to_judge_at timestamp with time zone,
   closed_at timestamp with time zone,
   created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now()
+  updated_at timestamp with time zone not null default now(),
+  source_system text,
+  source_submitted_at timestamp with time zone,
+  source_submitter_id uuid,
+  imported_by uuid,
+  imported_at timestamp with time zone,
+  import_key text
 );
 alter table public.legal_requests add constraint legal_requests_pkey PRIMARY KEY (id);
 alter table public.legal_requests add constraint legal_requests_request_number_key UNIQUE (request_number);

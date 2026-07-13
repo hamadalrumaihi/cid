@@ -13,7 +13,7 @@ import { list, rpc } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { Drafts, type Draft } from '@/lib/drafts'
 import { timeAgo } from '@/lib/format'
-import { SUBPOENA_FIELDS, SUBPOENA_TYPES, SOCIAL_PLATFORMS, type SubpoenaType } from '@/lib/justice'
+import { SUBPOENA_FIELDS, SUBPOENA_TYPES, SOCIAL_PLATFORMS, WARRANT_FIELDS, WARRANT_TYPES, type SubpoenaType, type WarrantType } from '@/lib/justice'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
@@ -97,6 +97,7 @@ interface LegalDraftData {
   priority: string
   narrative: string
   subtype: SubpoenaType
+  warrantSubtype: WarrantType
   recipientType: 'player' | 'entity'
   recipientName: string
   form: Record<string, string>
@@ -119,6 +120,7 @@ function CreateRequestForm({ kind, onCancel, onCreated }: {
   const [priority, setPriority] = useState('Medium')
   const [narrative, setNarrative] = useState('')
   const [subtype, setSubtype] = useState<SubpoenaType>('testimony')
+  const [warrantSubtype, setWarrantSubtype] = useState<WarrantType>('arrest_warrant')
   const [recipientType, setRecipientType] = useState<'player' | 'entity'>('player')
   const [recipientName, setRecipientName] = useState('')
   const [form, setForm] = useState<Record<string, string>>({})
@@ -132,7 +134,8 @@ function CreateRequestForm({ kind, onCancel, onCreated }: {
     if (!pendingDraft) return
     const d = pendingDraft.data
     setTitle(d.title); setPriority(d.priority); setNarrative(d.narrative)
-    setSubtype(d.subtype); setRecipientType(d.recipientType); setRecipientName(d.recipientName)
+    setSubtype(d.subtype); setWarrantSubtype(d.warrantSubtype ?? 'arrest_warrant')
+    setRecipientType(d.recipientType); setRecipientName(d.recipientName)
     setForm(d.form); setCaseId(d.caseId); setPersonId(d.personId)
     setPendingDraft(null)
   }
@@ -143,8 +146,8 @@ function CreateRequestForm({ kind, onCancel, onCreated }: {
   const hasContent = !!(title.trim() || narrative.trim() || recipientName.trim() || caseId || personId || Object.keys(form).length)
   useEffect(() => {
     if (!hasContent) return
-    Drafts.save(draftKey, { title, priority, narrative, subtype, recipientType, recipientName, form, caseId, personId } satisfies LegalDraftData)
-  }, [draftKey, hasContent, title, priority, narrative, subtype, recipientType, recipientName, form, caseId, personId])
+    Drafts.save(draftKey, { title, priority, narrative, subtype, warrantSubtype, recipientType, recipientName, form, caseId, personId } satisfies LegalDraftData)
+  }, [draftKey, hasContent, title, priority, narrative, subtype, warrantSubtype, recipientType, recipientName, form, caseId, personId])
 
   useEffect(() => {
     let cancelled = false
@@ -179,14 +182,19 @@ function CreateRequestForm({ kind, onCancel, onCreated }: {
   const selectedCase = cases.find((c) => c.id === caseId)
   const needsBureauResolution = !!selectedCase && !['LSB', 'BCB', 'SAB'].includes(selectedCase.bureau)
     && !['LSB', 'BCB', 'SAB'].includes(selectedCase.originating_bureau ?? '')
-  const spec = kind === 'subpoena' ? SUBPOENA_FIELDS[subtype] : []
+  const spec = kind === 'subpoena' ? SUBPOENA_FIELDS[subtype] : WARRANT_FIELDS[warrantSubtype]
+  // Search warrants may target a place/property/vehicle with no suspect — the
+  // server accepts a search-target-only search warrant, so the suspect is
+  // optional there (arrest warrants still require it).
+  const suspectOptional = kind === 'warrant' && warrantSubtype === 'search_warrant'
 
   const setF = (k: string, val: string) => setForm((f) => ({ ...f, [k]: val }))
 
   const suggestTitle = () => {
     const person = persons.find((p) => p.id === personId)
     if (kind === 'warrant' && person && selectedCase && !title.trim()) {
-      setTitle(`Arrest Warrant — ${person.name} (${selectedCase.case_number})`)
+      const label = warrantSubtype === 'search_warrant' ? 'Search Warrant' : 'Arrest Warrant'
+      setTitle(`${label} — ${person.name} (${selectedCase.case_number})`)
     }
   }
 
@@ -194,18 +202,25 @@ function CreateRequestForm({ kind, onCancel, onCreated }: {
     if (!caseId) { toast('Select a case.', 'warn'); return }
     if (!title.trim()) { toast('A title is required.', 'warn'); return }
     if (!narrative.trim()) { toast(`A ${kind === 'warrant' ? 'description / justification' : 'reason for subpoena'} is required.`, 'warn'); return }
-    if (kind === 'warrant' && !personId) { toast('Search and select the suspect from the Persons registry.', 'warn'); return }
+    if (kind === 'warrant') {
+      if (!suspectOptional && !personId) { toast('Search and select the suspect from the Persons registry.', 'warn'); return }
+      // Mirror the server rule: a search warrant needs a subject OR at least
+      // one search target.
+      if (suspectOptional && !personId && !String(form.search_targets ?? '').trim()) {
+        toast('A search warrant needs a subject or at least one search target.', 'warn'); return
+      }
+    }
     if (kind === 'subpoena') {
       if (recipientType === 'player' && !personId) { toast('Search and select the player recipient.', 'warn'); return }
       if (recipientType === 'entity' && !recipientName.trim()) { toast('A recipient name is required.', 'warn'); return }
-      const missing = spec.filter((f) => f.req && !String(form[f.key] ?? '').trim())
-      if (missing.length) { toast(`Required: ${missing.map((f) => f.label).join(', ')}`, 'warn'); return }
     }
+    const missing = spec.filter((f) => f.req && !String(form[f.key] ?? '').trim())
+    if (missing.length) { toast(`Required: ${missing.map((f) => f.label).join(', ')}`, 'warn'); return }
     setBusy(true)
     const res = await rpc('create_legal_request', {
       p_case: caseId,
       p_request_type: kind,
-      p_subtype: kind === 'warrant' ? 'arrest_warrant' : subtype,
+      p_subtype: kind === 'warrant' ? warrantSubtype : subtype,
       p_title: title.trim(),
       p_priority: kind === 'warrant' ? priority : undefined,
       p_narrative: narrative,
@@ -256,6 +271,15 @@ function CreateRequestForm({ kind, onCancel, onCreated }: {
         </p>
       )}
 
+      {kind === 'warrant' && (
+        <Field label="Warrant Type" required>
+          {(id) => (
+            <Select id={id} value={warrantSubtype} onChange={(e) => { setWarrantSubtype(e.target.value as WarrantType); setForm({}) }}>
+              {WARRANT_TYPES.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+            </Select>
+          )}
+        </Field>
+      )}
       {kind === 'subpoena' && (
         <>
           <Field label="Subpoena Type" required>
@@ -277,7 +301,7 @@ function CreateRequestForm({ kind, onCancel, onCreated }: {
       )}
 
       {(kind === 'warrant' || recipientType === 'player') && (
-        <Field label={kind === 'warrant' ? 'Search Suspect' : 'Search Player'} required>
+        <Field label={kind === 'warrant' ? (suspectOptional ? 'Subject (optional for search warrants)' : 'Search Suspect') : 'Search Player'} required={!suspectOptional}>
           {(id) => (
             <div className="space-y-1.5">
               <Input id={id} value={personQuery} onChange={(e) => setPersonQuery(e.target.value)} placeholder="Search by name or alias…" />
@@ -296,27 +320,22 @@ function CreateRequestForm({ kind, onCancel, onCreated }: {
       )}
 
       <Field label={kind === 'warrant' ? 'Warrant Title' : 'Title'} required>
-        {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={kind === 'warrant' ? 'Arrest Warrant — name (case)' : 'Subpoena — records sought'} />}
+        {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={kind === 'warrant' ? (warrantSubtype === 'search_warrant' ? 'Search Warrant — target (case)' : 'Arrest Warrant — name (case)') : 'Subpoena — records sought'} />}
       </Field>
       {kind === 'warrant' && (
-        <>
-          <Field label="Warrant Type" required>
-            {(id) => <Select id={id} value="arrest_warrant" disabled><option value="arrest_warrant">Arrest Warrant</option></Select>}
-          </Field>
-          <Field label="Priority" required>
-            {(id) => (
-              <Select id={id} value={priority} onChange={(e) => setPriority(e.target.value)}>
-                {['Medium', 'High', 'Critical'].map((p) => <option key={p} value={p}>{p}</option>)}
-              </Select>
-            )}
-          </Field>
-        </>
+        <Field label="Priority" required>
+          {(id) => (
+            <Select id={id} value={priority} onChange={(e) => setPriority(e.target.value)}>
+              {['Medium', 'High', 'Critical'].map((p) => <option key={p} value={p}>{p}</option>)}
+            </Select>
+          )}
+        </Field>
       )}
       <Field label={kind === 'warrant' ? 'Description / Justification' : 'Reason for Subpoena'} required>
         {(id) => <Textarea id={id} rows={5} value={narrative} onChange={(e) => setNarrative(e.target.value)} />}
       </Field>
 
-      {kind === 'subpoena' && spec.map((f) => (
+      {spec.map((f) => (
         <Field key={f.key} label={f.label} required={f.req}>
           {(id) => f.key === 'platform' ? (
             <Select id={id} value={form[f.key] ?? ''} onChange={(e) => setF(f.key, e.target.value)}>
