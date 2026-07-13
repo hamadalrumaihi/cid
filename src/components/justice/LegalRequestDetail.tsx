@@ -21,6 +21,7 @@ import {
   type SubpoenaType,
 } from '@/lib/justice'
 import { parseLegalFormEntries, parsePacketManifest, type PacketManifestEntry } from '@/lib/schemas'
+import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
@@ -388,7 +389,13 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
   const withdraw = async () => {
     const ok = await uiConfirm('Withdraw this legal request? The record is preserved but review stops.', { title: 'Withdraw request', confirmText: 'Withdraw' })
     if (!ok) return
-    await act(() => rpc('withdraw_legal_request', { p_request: r.id }), 'Request withdrawn.')
+    await act(async () => {
+      const res = await rpc('withdraw_legal_request', { p_request: r.id })
+      // A withdrawn request is abandoned — don't leave its narrative in
+      // localStorage on shared terminals.
+      if (!res.error) { Drafts.clear(`legal:edit:${r.id}`); setPendingDraft(null) }
+      return res
+    }, 'Request withdrawn.')
   }
 
   const spec = r.request_type === 'subpoena' ? (SUBPOENA_FIELDS[r.subtype as SubpoenaType] ?? []) : []
@@ -799,9 +806,15 @@ function PacketSection({ r, exhibits, editable, busy, onChanged, records, manife
             <li key={e.id} className="flex items-center gap-2 rounded-lg border border-white/10 bg-ink-950/50 px-3 py-2 text-sm">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{e.exhibit_type.replaceAll('_', ' ')}</span>
               <span className="min-w-0 flex-1 truncate text-slate-200">{e.display_title}</span>
-              {typeof e.snapshot_metadata === 'object' && e.snapshot_metadata && 'url' in (e.snapshot_metadata as object) && (
-                <a className="text-xs text-blue-300 underline" href={String((e.snapshot_metadata as Record<string, unknown>).url)} target="_blank" rel="noreferrer">open</a>
-              )}
+              {(() => {
+                // safeUrl on EVERY DB-sourced href — a planted javascript:/data:
+                // URL must never reach a DOJ reviewer's click (renders nothing).
+                const url = (typeof e.snapshot_metadata === 'object' && e.snapshot_metadata && !Array.isArray(e.snapshot_metadata))
+                  ? safeUrl((e.snapshot_metadata as Record<string, unknown>).url) : ''
+                return url
+                  ? <a className="text-xs text-blue-300 underline" href={url} target="_blank" rel="noreferrer">open</a>
+                  : null
+              })()}
               {editable && (
                 <button onClick={() => void removeExhibit(e)} className="text-xs font-semibold text-rose-300 hover:text-rose-200" aria-label={`Remove ${e.display_title}`}>
                   Remove

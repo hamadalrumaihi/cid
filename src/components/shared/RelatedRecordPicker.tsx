@@ -5,6 +5,7 @@
  *  selectors"). Callers load their own RLS-scoped options and keep the write
  *  path domain-specific; this component only renders labeled pickers and an
  *  optional external-link entry, so it can never widen anyone's access. */
+import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Field'
 import { uiPrompt } from '@/components/ui/dialog'
@@ -26,10 +27,18 @@ export function RelatedRecordPicker({ sources, onPick, onAddLink, linkLabel = '+
 }) {
   const addLink = async () => {
     if (!onAddLink) return
-    const url = await uiPrompt('External link URL (approved sources only).', {
+    const url = await uiPrompt('External link URL (approved sources only, http/https).', {
       title: 'Add external link', placeholder: 'https://…',
     })
-    if (url?.trim()) onAddLink(url.trim())
+    const clean = url?.trim() ?? ''
+    if (!clean) return
+    // Scheme allow-list at the entry point — javascript:/data: links must
+    // never become clickable records (the render side safeUrl()s too).
+    if (!/^https?:\/\//i.test(clean)) {
+      toast('External links must start with http:// or https://', 'warn')
+      return
+    }
+    onAddLink(clean)
   }
   return (
     <div className="flex flex-wrap items-center gap-3">

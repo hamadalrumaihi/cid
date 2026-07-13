@@ -1874,9 +1874,9 @@ CREATE OR REPLACE FUNCTION public.report_finalize(p_report uuid, p_badge text DE
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare r public.reports; v_uid uuid := (select auth.uid()); v_name text;
+declare r public.reports; v_uid uuid := (select auth.uid()); v_name text; v_num integer;
 begin
-  select * into r from public.reports where id = p_report;
+  select * into r from public.reports where id = p_report for update;
   if not found then raise exception 'report not found'; end if;
   if r.finalized then raise exception 'report already finalized'; end if;
   if not (private.is_active() and private.can_access_case(r.case_id)) then
@@ -1892,6 +1892,10 @@ begin
         ),
         updated_at = now()
     where id = p_report returning * into r;
+  select coalesce(max(version_number), 0) + 1 into v_num
+    from public.report_versions where report_id = p_report;
+  insert into public.report_versions (report_id, version_number, fields, signature, created_by)
+  values (p_report, v_num, r.fields, r.signature, v_uid);
   return r;
 end $function$
 ;
@@ -3357,7 +3361,10 @@ create policy wl_sel on public.watchlist
 -- public.justice_directory(), public.legal_request_people(uuid);
 -- rls_test_cleanup() was extended to purge the new tables.
 -- Functions added/updated by the 20260715 v1.14 consistency migrations:
--- public.report_finalize() now snapshots each seal into report_versions;
+-- public.report_finalize() now snapshots each seal into report_versions
+-- (and takes FOR UPDATE since 20260715040000);
 -- private.block_report_version_update() [trigger]; public.search_all() gained
 -- an RLS-scoped legal_requests union; public.security_test_report(...) and
 -- public.owner_security_overview() back the Owner Security Testing dashboard.
+-- 20260715040000_v114_hardening: add_legal_exhibit() now rejects external_link
+-- URLs that are not http(s):// (security-review finding M1).
