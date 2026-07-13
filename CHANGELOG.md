@@ -6,6 +6,16 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.8.2] — 2026-07-13
+
+### Fixed — picked evidence/attachments are removable
+- Items added via **Add from case evidence / Add from case attachments** now
+  appear as chips with a **✕** button in the Evidence / Property section —
+  previously an added entry (including its link) could only be removed by
+  hand-editing the text. The underlying fields are unchanged ('; '-joined
+  strings), so free text and previously saved reports render exactly as
+  before.
+
 ## [1.8.1] — 2026-07-13
 
 ### Changed — saved reports render styled, not as raw text
