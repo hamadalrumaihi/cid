@@ -8,6 +8,12 @@ the merged PRs that compose it.
 
 ## [1.9.1] — 2026-07-13
 
+### Fixed — case Timeline tab froze the page
+- Opening a case's **Timeline** tab crashed the browser tab: on the first
+  render (before the case's events load) the chronology band computed an
+  infinite time range and its axis-tick loop never terminated. The range
+  is now pinned to a finite window and the loop is hard-capped.
+
 ### Security — seal hardening (review follow-up)
 - **Reopen is bureau-scoped**: a bureau lead can only unseal reports on
   their own bureau's cases (JTF cases are shared, matching case access);
