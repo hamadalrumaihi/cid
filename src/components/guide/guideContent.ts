@@ -24,7 +24,7 @@ What you can see and change depends on your **role and bureau** — the server e
    - Click **Continue with Discord** (most members use this),
    - Click **Continue with Google**, or
    - Type your email and click **Email link** — you'll get a one-time sign-in link in your inbox ("Magic link sent — check your inbox.").
-3. First time here? After signing in you'll see: "…signed in but not yet approved." That's normal — a Command member must activate your profile. Ping your supervisor, then just reload once they've approved you.
+3. First time here? After signing in you'll land on the **membership request** screen. Fill it in — display name, badge number, your **one permanent department** (Los Santos, Blaine County or State Bureau — JTF is joint-case-only, not a home department), the CID role you're requesting (Detective or Senior Detective), and a short reason/current-assignment note — then hit **Submit Request**. Command reviews it: they can approve it as-is, approve with a different department/role, send it back for a correction (you'll see their note, can edit, and resubmit), or reject it. You stay locked out until a request is approved; once it is, reload and you're in.
 
 ### First five minutes after approval
 
@@ -75,6 +75,10 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 2. Fill in the title, bureau, and summary — or click a **template** chip to prefill them. Templates with a ☑ number also carry a task checklist.
 3. Click **Save**. The case gets an auto-numbered ID (like \`SAB-9000041\`), appears for your bureau instantly, and any template checklist tasks are already waiting on its **Tasks** tab.
 
+### Run a joint case across departments
+
+When a case involves more than one department, the case lead (or Command) can click **Make This a Joint Case** on the case. The case keeps its originating department and gains a **JTF** tag, and you pick the members from other departments in a searchable list (by name or badge, filterable by department). Each member gets a **temporary joint-case role** — JTF Case Lead, Co-Lead, Joint Investigator, Support Investigator, Department Liaison, or Read-Only Member — and optionally an access **expiry date**. That grants them access to this case only: their permanent department and rank never change, and they don't see your department's other cases. Members can be added or removed later (removal takes effect immediately, history is kept), and **End Joint-Case Status** closes all temporary access at once. Everyone involved is notified and every step is audit-logged.
+
 ### Move a case through its life
 
 - Drag a case card between the status columns on the board, **or** open the case and change **Status**.
@@ -109,6 +113,10 @@ You can also work the case from the chart itself: **🔗 Link intel** (top-left)
 ### Work your desk
 
 **My Desk** (Oversight) shows, in one screen: sign-offs waiting on **you**, your returned cases, due follow-ups, stale cases, your open tasks, recent @mentions, your followed items, notifications and draft reports. If the Command dot in the nav is lit, this is where the work is.
+
+### Announce to the division (command staff)
+
+**Command → Announcements → + New Announcement.** Pick the **audience**: Everyone (\`@everyone\` — Deputy Director and above), Command, My Department, a specific department, or specific members (just the people you mention). The composer previews exactly how many active members will be notified and asks you to confirm before publishing; every recipient gets one notification (and a Discord DM where linked). Editing an announcement never re-notifies anyone unless you explicitly tick **Notify recipients about this update**.
 
 ### Read the division's pulse — analytics
 

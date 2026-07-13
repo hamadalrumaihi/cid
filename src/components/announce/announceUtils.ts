@@ -39,20 +39,49 @@ export function mentionLabel(t: string): string {
   return officerName(t) || 'Officer'
 }
 
-/** Audience + dismissal filter with pinned-first sort (collab.js:240-246). */
+/** Who is looking at the list — mirrors the server RLS inputs. Legacy callers
+ *  (nav badge) still pass just the division string; identity-dependent checks
+ *  then fall back to trusting what RLS returned. */
+export interface AnnounceViewer {
+  id?: string | null
+  division?: string | null
+  role?: string | null
+  isCommand?: boolean
+  isOwner?: boolean
+}
+
+/** Audience + dismissal filter with pinned-first sort (collab.js:240-246).
+ *  Client complement to the server-enforced RLS: 'all' and own-division rows
+ *  for everyone, 'command' for command, 'specific_members' only when mentioned (or the
+ *  author), and command/owner see everything (oversight). */
 export function visibleAnnouncements(
   rows: AnnouncementRow[],
-  myDivision: string | null,
+  viewer: AnnounceViewer | string | null,
   dismissed: ReadonlySet<string>,
   includeDismissed: boolean,
 ): AnnouncementRow[] {
+  const v: AnnounceViewer = viewer === null || typeof viewer === 'string' ? { division: viewer } : viewer
+  const mentioned = (a: AnnouncementRow) =>
+    !v.id || // identity unknown (legacy caller) — RLS only returns mentioned/authored rows
+    a.author_id === v.id ||
+    parseMentions(a.mentions).some((m) =>
+      m.target === 'all' || m.target === v.id || (!!v.role && m.target === `role:${v.role}`))
+  const visible = (a: AnnouncementRow): boolean => {
+    if (a.audience === 'all' || v.isCommand || v.isOwner) return true
+    if (a.audience === v.division) return true
+    if (a.audience === 'command') return v.isCommand ?? true // undefined = legacy caller, trust RLS
+    if (a.audience === 'specific_members') return mentioned(a)
+    return false
+  }
   return rows
-    .filter((a) => a.audience === 'all' || a.audience === myDivision)
+    .filter(visible)
     .filter((a) => includeDismissed || !dismissed.has(a.id))
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 }
 
-/** Audience label for the '<dept> only' meta suffix. */
-export const AUDIENCE_OPTIONS: [string, string][] = [
-  ['all', 'All divisions'], ['LSB', 'LSPD'], ['BCB', 'BCSO'], ['SAB', 'SAHP'], ['JTF', 'JTF'],
-]
+/** Audience vocabulary — every CHECK-allowed announcements.audience value. */
+export const AUDIENCE_LABEL: Record<string, string> = {
+  all: 'Everyone', command: 'Command', specific_members: 'Specific members',
+  LSB: 'LSPD', BCB: 'BCSO', SAB: 'SAHP', JTF: 'JTF',
+}
+export const audienceLabel = (a?: string | null) => (a && AUDIENCE_LABEL[a]) || a || '—'

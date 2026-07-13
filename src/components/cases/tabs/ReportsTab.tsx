@@ -176,16 +176,20 @@ function FormEditor({ template, caseId, values, onChange }: { template: string; 
   // muted notice (kv lookup) or hides the pickers, never blocks the form.
   const needsLookup = !!schema?.sections.some((s) => (s.type === 'kv' && s.evidenceLookup) || (s.type === 'grid' && s.evidencePick) || (s.type === 'textarea' && s.mediaPick))
   const needsPersons = !!schema?.sections.some((s) => (s.type === 'kv' && s.fields.some((f) => f.person)) || (s.type === 'grid' && s.cols.some((col) => col.person)))
-  const [pool, setPool] = useState<{ evidence: EvidenceRow[]; media: MediaRow[] } | null>(null)
+  const [pool, setPool] = useState<{ evidence: EvidenceRow[]; media: MediaRow[]; reports: ReportRow[] } | null>(null)
   const [poolErr, setPoolErr] = useState(false)
-  const [personNames, setPersonNames] = useState<string[]>([])
+  const [personsReg, setPersonsReg] = useState<{ id: string; name: string | null }[]>([])
   useEffect(() => {
     if (!needsLookup) return
     let alive = true
     void (async () => {
       try {
-        const [ev, m] = await Promise.all([list('evidence', { eq: { case_id: caseId }, order: 'created_at' }), list('media', { eq: { case_id: caseId } })])
-        if (alive) setPool({ evidence: ev, media: m })
+        const [ev, m, rp] = await Promise.all([
+          list('evidence', { eq: { case_id: caseId }, order: 'created_at' }),
+          list('media', { eq: { case_id: caseId } }),
+          list('reports', { eq: { case_id: caseId }, order: 'created_at' }).catch(() => [] as ReportRow[]),
+        ])
+        if (alive) setPool({ evidence: ev, media: m, reports: rp.filter((r) => r.finalized) })
       } catch { if (alive) setPoolErr(true) }
     })()
     return () => { alive = false }
@@ -194,11 +198,15 @@ function FormEditor({ template, caseId, values, onChange }: { template: string; 
     if (!needsPersons) return
     let alive = true
     void (async () => {
-      try { const p = await list('persons', { select: 'id,name', order: 'name' }); if (alive) setPersonNames(Array.from(new Set(p.map((x) => (x.name || '').trim()).filter(Boolean)))) }
+      try { const p = await list('persons', { select: 'id,name', order: 'name' }); if (alive) setPersonsReg(p) }
       catch { /* autocomplete is optional */ }
     })()
     return () => { alive = false }
   }, [needsPersons])
+  const personNames = Array.from(new Set(personsReg.map((x) => (x.name || '').trim()).filter(Boolean)))
+  // Canonical-record capture: when a person-flagged field exactly matches a
+  // registry name, the person's id is stored alongside the display snapshot.
+  const pidOf = (v: string) => { const t = v.trim().toLowerCase(); return (t && personsReg.find((p) => (p.name || '').trim().toLowerCase() === t)?.id) || '' }
   if (!schema) return <p className="text-sm text-slate-400">Unknown report template.</p>
   const set = (key: string, value: unknown) => onChange({ ...values, [key]: value })
   // Free-text append into a single-line field: join picks with '; '.
@@ -219,6 +227,7 @@ function FormEditor({ template, caseId, values, onChange }: { template: string; 
       : pool && <div className="mb-2 grid gap-2 md:grid-cols-2">
           <select aria-label="Add from case evidence" value="" onChange={(e) => { const ev = pool.evidence.find((x) => x.id === e.target.value); if (ev) append('ev_items', evLabel(ev)) }} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Add from case evidence…</option>{pool.evidence.map((ev) => <option key={ev.id} value={ev.id}>{evLabel(ev)}</option>)}</select>
           <select aria-label="Add from case attachments" value="" onChange={(e) => { const m = pool.media.find((x) => x.id === e.target.value); if (m) append('ev_files', m.title || m.type || 'Attachment') }} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Add from case attachments…</option>{pool.media.map((m) => <option key={m.id} value={m.id}>{m.title || m.type || 'Attachment'}</option>)}</select>
+          {pool.reports.length > 0 && <select aria-label="Add from case finalized reports" value="" onChange={(e) => { const r = pool.reports.find((x) => x.id === e.target.value); if (r) append('ev_files', `${reportTitle(r)} — finalized report`) }} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Add from case reports…</option>{pool.reports.map((r) => <option key={r.id} value={r.id}>{reportTitle(r)}</option>)}</select>}
         </div>
   const dlId = `persons-${template}`
   const dlAttr = (person?: boolean) => (person && personNames.length ? dlId : undefined)
@@ -259,7 +268,7 @@ function FormEditor({ template, caseId, values, onChange }: { template: string; 
                 ? <select id={cellId} value={row[col.key] || ''} onChange={(e) => setCell(i, col.key, e.target.value)} className={inputCls}><option value="">{col.label || '—'}</option>{col.opts.filter(Boolean).map((o) => <option key={o} value={o}>{o}</option>)}</select>
                 : col.type === 'money'
                   ? moneyInput(cellId, row[col.key] || '', (t) => setCell(i, col.key, t), col.label)
-                  : <input id={cellId} value={row[col.key] || ''} onChange={(e) => setCell(i, col.key, e.target.value)} placeholder={col.label} list={dlAttr(col.person)} className={inputCls} />}
+                  : <input id={cellId} value={row[col.key] || ''} onChange={(e) => (col.person ? set(s.id, rows.map((r, idx) => (idx === i ? { ...r, [col.key]: e.target.value, person_id: pidOf(e.target.value) } : r))) : setCell(i, col.key, e.target.value))} placeholder={col.label} list={dlAttr(col.person)} className={inputCls} />}
             </div>
           })}</div>
           <button onClick={() => set(s.id, rows.filter((_, idx) => idx !== i))} aria-label={`Remove row ${i + 1} from ${s.label}`} title="Remove row" className="mt-5 shrink-0 rounded-lg border border-white/10 px-2.5 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/10">✕</button>
@@ -277,7 +286,7 @@ function FormEditor({ template, caseId, values, onChange }: { template: string; 
       }
       if (f.type === 'money') return <div key={f.key}><label htmlFor={id} className={labelCls}>{f.label}</label>{moneyInput(id, String(values[f.key] ?? ''), (t) => set(f.key, t), f.label)}</div>
       const quickNow = f.type === 'text' && DATE_QUICK.has(f.key)
-      return <div key={f.key}><label htmlFor={id} className={labelCls}>{f.label}</label><div className="flex gap-2"><input id={id} value={Array.isArray(values[f.key]) ? (values[f.key] as string[]).join(', ') : String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} placeholder={f.label} list={dlAttr(f.person)} className={`${inputCls} min-w-0 flex-1`} />{quickNow && <button type="button" onClick={() => set(f.key, new Date().toLocaleString('en-US'))} aria-label={`Set ${f.label} to now`} className="shrink-0 rounded-lg border border-white/10 px-2.5 py-2 text-xs font-bold text-slate-200 hover:bg-white/10">Now</button>}</div></div>
+      return <div key={f.key}><label htmlFor={id} className={labelCls}>{f.label}</label><div className="flex gap-2"><input id={id} value={Array.isArray(values[f.key]) ? (values[f.key] as string[]).join(', ') : String(values[f.key] ?? '')} onChange={(e) => (f.person ? onChange({ ...values, [f.key]: e.target.value, [`_${f.key}_person_id`]: pidOf(e.target.value) }) : set(f.key, e.target.value))} placeholder={f.label} list={dlAttr(f.person)} className={`${inputCls} min-w-0 flex-1`} />{quickNow && <button type="button" onClick={() => set(f.key, new Date().toLocaleString('en-US'))} aria-label={`Set ${f.label} to now`} className="shrink-0 rounded-lg border border-white/10 px-2.5 py-2 text-xs font-bold text-slate-200 hover:bg-white/10">Now</button>}</div></div>
     })}</div></div>
   })}{needsPersons && personNames.length > 0 && <datalist id={dlId}>{personNames.map((n) => <option key={n} value={n} />)}</datalist>}</div>
 }
@@ -293,7 +302,8 @@ function ReportView({ schema, values, evidence = [], media = [], persons = [], o
   const toggle = (k: string) => setExpanded((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n })
   const text = (v: unknown) => (Array.isArray(v) ? v.join(', ') : String(v ?? '')).trim()
   const personOf = (v: string) => { const t = v.trim().toLowerCase(); return t ? persons.find((p) => (p.name || '').trim().toLowerCase() === t) : undefined }
-  const personText = (v: string) => { const p = onOpenPerson ? personOf(v) : undefined; return p ? <button onClick={() => onOpenPerson!(p.id)} className="font-semibold text-badge-200 hover:underline">{v}</button> : v }
+  // Prefer the canonical person id captured at edit time; fall back to a name match.
+  const personText = (v: string, pid?: string) => { const id = pid || (onOpenPerson ? personOf(v)?.id : undefined); return onOpenPerson && id ? <button onClick={() => onOpenPerson(id)} className="font-semibold text-badge-200 hover:underline">{v}</button> : v }
   const findEvidence = (entry: string) => evidence.find((ev) => (!!ev.item_code && !!ev.description && entry === `${ev.item_code} — ${ev.description}`) || (!!ev.item_code && entry.startsWith(ev.item_code)))
   const detailPanel = (line: string) => <span className="mt-1 block rounded-lg border border-white/10 bg-ink-900 px-2.5 py-1.5 text-left text-xs text-slate-300">{line}</span>
   // ev_items/ev_files render '; '-separated entries; entries that match a
@@ -332,13 +342,13 @@ function ReportView({ schema, values, evidence = [], media = [], persons = [], o
               const v = text(V[f.key])
               const lookupKey = s.evidenceLookup && (f.key === 'ev_items' || f.key === 'ev_files') ? f.key : null
               const hasPool = lookupKey === 'ev_items' ? evidence.length > 0 : lookupKey === 'ev_files' ? media.length > 0 : false
-              return <div key={f.key} className="flex items-start justify-between gap-4 py-1.5"><dt className="text-sm text-slate-400">{f.label}</dt><dd className={`text-right text-sm ${v ? 'text-white' : 'text-slate-500'}`}>{!v ? '—' : lookupKey && hasPool ? lookupEntries(lookupKey, v) : f.person ? personText(v) : v}</dd></div>
+              return <div key={f.key} className="flex items-start justify-between gap-4 py-1.5"><dt className="text-sm text-slate-400">{f.label}</dt><dd className={`text-right text-sm ${v ? 'text-white' : 'text-slate-500'}`}>{!v ? '—' : lookupKey && hasPool ? lookupEntries(lookupKey, v) : f.person ? personText(v, String(V[`_${f.key}_person_id`] ?? '') || undefined) : v}</dd></div>
             })}</dl>}
             {s.type === 'grid' && (() => {
               const rows = (Array.isArray(V[s.id]) ? V[s.id] : []) as Record<string, string>[]
               const filled = rows.filter((r) => s.cols.some((c) => text(r[c.key])))
               return filled.length
-                ? <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>{s.cols.map((c) => <th key={c.key} className="pb-1.5 pr-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">{c.label}</th>)}</tr></thead><tbody className="divide-y divide-white/5">{filled.map((r, i) => <tr key={i}>{s.cols.map((c) => { const cv = text(r[c.key]); return <td key={c.key} className="py-1.5 pr-4 text-slate-200">{cv ? (c.person ? personText(cv) : cv) : '—'}</td> })}</tr>)}</tbody></table></div>
+                ? <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>{s.cols.map((c) => <th key={c.key} className="pb-1.5 pr-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">{c.label}</th>)}</tr></thead><tbody className="divide-y divide-white/5">{filled.map((r, i) => <tr key={i}>{s.cols.map((c) => { const cv = text(r[c.key]); return <td key={c.key} className="py-1.5 pr-4 text-slate-200">{cv ? (c.person ? personText(cv, r.person_id || undefined) : cv) : '—'}</td> })}</tr>)}</tbody></table></div>
                 : <p className="text-sm text-slate-500">—</p>
             })()}
           </section>

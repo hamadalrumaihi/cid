@@ -73,8 +73,22 @@ guard drops out-of-order responses. Enter deep-links (`?case=`, `?q=`).
 Dashboard (KPIs + 8 widgets incl. the ticket wizard that *creates cases*
 and the dual-co-sign GPS trackers — self-co-sign blocked in UI *and* by
 trigger), division analytics (SVG charts, Monday-week buckets),
-announcements (fan-out notifications on first post only), heatmap
-(weighted layers, pan/zoom SVG map), roster (approve/assign via RPCs).
+announcements (audience-targeted: everyone/`@everyone` for deputy+ only,
+command, own/specific department, or just the mentioned members — the
+`publish_announcement()` RPC resolves recipients server-side with one
+notification each, a recipient-count preview and confirm in the composer,
+and edits never re-notify unless explicitly requested), heatmap
+(weighted layers, pan/zoom SVG map), roster (membership requests: new
+sign-ins request ONE permanent department — LSB/BCB/SAB, never JTF — plus
+a rank-and-file role from the inactive-account screen; the Approval Queue
+reviews them via `review_membership_request()` — approve /
+approve-with-changes / request-correction / reject — activating the
+profile only on approval; the legacy one-click `assign_member` approve
+remains for requestless profiles). Joint cases:
+`convert_case_to_joint()` tags a case JTF while preserving its
+originating bureau and grants selected members temporary case-scoped
+access (joint roles, optional expiry, removable, endable) — access model
+in Ch. 8.
 
 ## 4.6 Personal tools
 

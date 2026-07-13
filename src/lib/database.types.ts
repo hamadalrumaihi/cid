@@ -318,27 +318,58 @@ export type Database = {
       }
       case_assignments: {
         Row: {
+          added_by: string | null
+          assignment_source: string
           case_id: string
           created_at: string
+          expires_at: string | null
           id: string
+          joint_role: string | null
           officer_id: string
+          removal_reason: string | null
+          removed_at: string | null
+          removed_by: string | null
           role: Database["public"]["Enums"]["assign_role"]
+          temporary: boolean
         }
         Insert: {
+          added_by?: string | null
+          assignment_source?: string
           case_id: string
           created_at?: string
+          expires_at?: string | null
           id?: string
+          joint_role?: string | null
           officer_id: string
+          removal_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
           role?: Database["public"]["Enums"]["assign_role"]
+          temporary?: boolean
         }
         Update: {
+          added_by?: string | null
+          assignment_source?: string
           case_id?: string
           created_at?: string
+          expires_at?: string | null
           id?: string
+          joint_role?: string | null
           officer_id?: string
+          removal_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
           role?: Database["public"]["Enums"]["assign_role"]
+          temporary?: boolean
         }
         Relationships: [
+          {
+            foreignKeyName: "case_assignments_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "case_assignments_case_id_fkey"
             columns: ["case_id"]
@@ -349,6 +380,13 @@ export type Database = {
           {
             foreignKeyName: "case_assignments_officer_id_fkey"
             columns: ["officer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_assignments_removed_by_fkey"
+            columns: ["removed_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -676,10 +714,16 @@ export type Database = {
           created_by: string | null
           follow_up_at: string | null
           id: string
+          is_joint_case: boolean
+          joint_case_created_at: string | null
+          joint_case_created_by: string | null
+          joint_case_ended_at: string | null
+          joint_case_ended_by: string | null
           last_stale_notified_at: string | null
           lead_detective_id: string | null
           notes: string | null
           operation_id: string | null
+          originating_bureau: Database["public"]["Enums"]["bureau"] | null
           signoff_assignee_id: string | null
           signoff_stage: string | null
           signoff_status: string
@@ -700,10 +744,16 @@ export type Database = {
           created_by?: string | null
           follow_up_at?: string | null
           id?: string
+          is_joint_case?: boolean
+          joint_case_created_at?: string | null
+          joint_case_created_by?: string | null
+          joint_case_ended_at?: string | null
+          joint_case_ended_by?: string | null
           last_stale_notified_at?: string | null
           lead_detective_id?: string | null
           notes?: string | null
           operation_id?: string | null
+          originating_bureau?: Database["public"]["Enums"]["bureau"] | null
           signoff_assignee_id?: string | null
           signoff_stage?: string | null
           signoff_status?: string
@@ -724,10 +774,16 @@ export type Database = {
           created_by?: string | null
           follow_up_at?: string | null
           id?: string
+          is_joint_case?: boolean
+          joint_case_created_at?: string | null
+          joint_case_created_by?: string | null
+          joint_case_ended_at?: string | null
+          joint_case_ended_by?: string | null
           last_stale_notified_at?: string | null
           lead_detective_id?: string | null
           notes?: string | null
           operation_id?: string | null
+          originating_bureau?: Database["public"]["Enums"]["bureau"] | null
           signoff_assignee_id?: string | null
           signoff_stage?: string | null
           signoff_status?: string
@@ -739,6 +795,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "cases_joint_case_created_by_fkey"
+            columns: ["joint_case_created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cases_joint_case_ended_by_fkey"
+            columns: ["joint_case_ended_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "cases_created_by_fkey"
             columns: ["created_by"]
@@ -1682,6 +1752,135 @@ export type Database = {
           },
         ]
       }
+      membership_request_history: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          from_status: string | null
+          id: string
+          internal: boolean
+          note: string | null
+          request_id: string
+          to_status: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          internal?: boolean
+          note?: string | null
+          request_id: string
+          to_status?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          internal?: boolean
+          note?: string | null
+          request_id?: string
+          to_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "membership_request_history_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "membership_request_history_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "membership_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      membership_requests: {
+        Row: {
+          additional_notes: string | null
+          applicant_id: string
+          applicant_visible_decision_note: string | null
+          badge_number: string | null
+          created_at: string
+          decided_at: string | null
+          decided_bureau: Database["public"]["Enums"]["bureau"] | null
+          decided_by: string | null
+          decided_role: Database["public"]["Enums"]["app_role"] | null
+          display_name: string
+          id: string
+          internal_decision_note: string | null
+          reason: string
+          requested_bureau: Database["public"]["Enums"]["bureau"]
+          requested_role: Database["public"]["Enums"]["app_role"]
+          status: string
+          submitted_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          additional_notes?: string | null
+          applicant_id: string
+          applicant_visible_decision_note?: string | null
+          badge_number?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decided_bureau?: Database["public"]["Enums"]["bureau"] | null
+          decided_by?: string | null
+          decided_role?: Database["public"]["Enums"]["app_role"] | null
+          display_name: string
+          id?: string
+          internal_decision_note?: string | null
+          reason: string
+          requested_bureau: Database["public"]["Enums"]["bureau"]
+          requested_role: Database["public"]["Enums"]["app_role"]
+          status?: string
+          submitted_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          additional_notes?: string | null
+          applicant_id?: string
+          applicant_visible_decision_note?: string | null
+          badge_number?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decided_bureau?: Database["public"]["Enums"]["bureau"] | null
+          decided_by?: string | null
+          decided_role?: Database["public"]["Enums"]["app_role"] | null
+          display_name?: string
+          id?: string
+          internal_decision_note?: string | null
+          reason?: string
+          requested_bureau?: Database["public"]["Enums"]["bureau"]
+          requested_role?: Database["public"]["Enums"]["app_role"]
+          status?: string
+          submitted_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "membership_requests_applicant_id_fkey"
+            columns: ["applicant_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "membership_requests_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       narcotics: {
         Row: {
           classification: string | null
@@ -2543,8 +2742,66 @@ export type Database = {
           id: string
         }[]
       }
+      admin_membership_requests: {
+        Args: never
+        Returns: Database["public"]["Tables"]["membership_requests"]["Row"][]
+      }
       admin_remove_member: { Args: { p_target: string }; Returns: undefined }
       admin_restore_member: { Args: { p_target: string }; Returns: undefined }
+      announcement_notify_update: {
+        Args: { p_announce: string }
+        Returns: number
+      }
+      announcement_recipient_count: {
+        Args: { p_audience: string; p_mentions?: Json }
+        Returns: number
+      }
+      convert_case_to_joint: {
+        Args: { p_case: string; p_members: Json; p_note?: string }
+        Returns: Json
+      }
+      joint_case_add_members: {
+        Args: { p_case: string; p_members: Json }
+        Returns: Json
+      }
+      joint_case_end: {
+        Args: { p_case: string; p_note?: string }
+        Returns: undefined
+      }
+      joint_case_remove_member: {
+        Args: { p_case: string; p_officer: string; p_reason?: string }
+        Returns: undefined
+      }
+      membership_request_submit: {
+        Args: { p_request: string }
+        Returns: Database["public"]["Tables"]["membership_requests"]["Row"]
+      }
+      membership_request_withdraw: {
+        Args: { p_request: string }
+        Returns: Database["public"]["Tables"]["membership_requests"]["Row"]
+      }
+      publish_announcement: {
+        Args: {
+          p_audience: string
+          p_body: string
+          p_links?: Json
+          p_mentions?: Json
+          p_pinned?: boolean
+          p_title: string
+        }
+        Returns: Json
+      }
+      review_membership_request: {
+        Args: {
+          p_applicant_note?: string
+          p_decision: string
+          p_final_bureau?: Database["public"]["Enums"]["bureau"]
+          p_final_role?: Database["public"]["Enums"]["app_role"]
+          p_internal_note?: string
+          p_request: string
+        }
+        Returns: Database["public"]["Tables"]["membership_requests"]["Row"]
+      }
       assign_member: {
         Args: {
           new_division: Database["public"]["Enums"]["bureau"]

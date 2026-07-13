@@ -4,14 +4,15 @@
  *  editing/deleting is gated to LEAD_ROLES (bureau lead and above). Dismissal
  *  is per-user and local-only (same `annDismissed`/`annSeen` Store keys as
  *  vanilla, so state carries over); pinned posts sort to the top; audience
- *  scoping is a client convenience on top of what RLS returns. */
+ *  scoping ('all'/division/'command'/'specific_members') is server-enforced by RLS —
+ *  visibleAnnouncements is only a client complement, so non-command members
+ *  legitimately see fewer rows. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
-import { deptLabel } from '@/lib/roles'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { Modal } from '@/components/ui/Modal'
@@ -19,14 +20,14 @@ import { EmptyState } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { AnnouncementModal } from './AnnouncementModal'
 import {
-  REC_LINK, mentionLabel, parseLinks, parseMentions, visibleAnnouncements,
-  type AnnouncementRow,
+  REC_LINK, audienceLabel, mentionLabel, parseLinks, parseMentions, visibleAnnouncements,
+  type AnnounceViewer, type AnnouncementRow,
 } from './announceUtils'
 
 interface CaseOption { id: string; case_number: string }
 
 export function AnnounceView() {
-  const { profile, state, isCommand } = useAuth()
+  const { profile, state, isCommand, isOwner } = useAuth()
   const fetchProfiles = useProfilesStore((s) => s.fetch)
   const [rows, setRows] = useState<AnnouncementRow[]>([])
   const [caseOptions, setCaseOptions] = useState<CaseOption[]>([])
@@ -60,9 +61,15 @@ export function AnnounceView() {
     return () => window.clearTimeout(id)
   }, [refresh, v])
 
-  const division = profile?.division ?? null
-  const items = useMemo(() => visibleAnnouncements(rows, division, dismissed, false), [rows, division, dismissed])
-  const withDismissed = useMemo(() => visibleAnnouncements(rows, division, dismissed, true), [rows, division, dismissed])
+  const viewer = useMemo<AnnounceViewer>(() => ({
+    id: profile?.id ?? null,
+    division: profile?.division ?? null,
+    role: profile?.role ?? null,
+    isCommand,
+    isOwner,
+  }), [profile, isCommand, isOwner])
+  const items = useMemo(() => visibleAnnouncements(rows, viewer, dismissed, false), [rows, viewer, dismissed])
+  const withDismissed = useMemo(() => visibleAnnouncements(rows, viewer, dismissed, true), [rows, viewer, dismissed])
   const dismissedCount = withDismissed.length - items.length
 
   // Mark seen for the unread badge (Notifications cross-cut reads `annSeen`;
@@ -148,6 +155,15 @@ export function AnnounceView() {
   )
 }
 
+/** Who the post targets — '@everyone' gets the distinctive amber broadcast
+ *  chip; every other audience renders its plain label (Command, LSPD, …). */
+function AudienceChip({ audience }: { audience: string }) {
+  if (audience === 'all') {
+    return <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">@everyone</span>
+  }
+  return <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-slate-300">{audienceLabel(audience)}</span>
+}
+
 function AnnChips({ a }: { a: AnnouncementRow }) {
   const mentions = parseMentions(a.mentions)
   const links = parseLinks(a.links)
@@ -181,9 +197,9 @@ function AnnouncementCard({ a, canManage, onOpen, onEdit, onDismiss }: {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-base font-bold text-white">{a.pinned ? '📌 ' : ''}{a.title}</h2>
-          <p className="mt-0.5 text-[11px] text-slate-400">
-            {a.author_name || 'Command'} · {new Date(a.created_at).toLocaleString('en-US')}
-            {a.audience !== 'all' ? ` · ${deptLabel(a.audience)} only` : ''}
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400">
+            <span>{a.author_name || 'Command'} · {new Date(a.created_at).toLocaleString('en-US')}</span>
+            <AudienceChip audience={a.audience} />
           </p>
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
@@ -214,9 +230,9 @@ function AnnouncementViewModal({ a, onClose }: { a: AnnouncementRow; onClose: ()
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-bold text-white">{a.pinned ? '📌 ' : ''}{a.title}</h2>
-            <p className="mt-1 text-[11px] text-slate-400">
-              {a.author_name || 'Command'} · {new Date(a.created_at).toLocaleString('en-US')}
-              {a.audience !== 'all' ? ` · ${deptLabel(a.audience)} only` : ''}
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400">
+              <span>{a.author_name || 'Command'} · {new Date(a.created_at).toLocaleString('en-US')}</span>
+              <AudienceChip audience={a.audience} />
             </p>
           </div>
           <button aria-label="Close" onClick={onClose} className="-m-2 p-2 text-2xl leading-none text-slate-400 hover:text-white">&times;</button>

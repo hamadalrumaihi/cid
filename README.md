@@ -96,10 +96,14 @@ Roles and bureaus have one canonical definition in `src/lib/roles.ts`.
 
 Access rules:
 
-- **Deny-by-default:** new sign-ins are inactive and see only their own
-  profile until a command user activates them and assigns a role/bureau.
+- **Deny-by-default:** new sign-ins are inactive and see only the
+  membership-request screen — they request **one** permanent department
+  (LSB/BCB/SAB) and a role, and Command approves/adjusts/rejects via a
+  server-authoritative review RPC before the profile activates.
 - **Bureau isolation:** a member sees, edits, **and creates** cases only
   within their own bureau; JTF and command staff work across bureaus.
+  **Joint cases** grant selected members temporary, case-scoped,
+  expiry-aware access without changing anyone's permanent department.
 - **Server-authoritative workflows:** the case **sign-off chain**
   (Detective → Bureau Lead → Deputy Director → Director) and **report
   finalize/e-sign** run through SECURITY DEFINER RPCs. The client calls

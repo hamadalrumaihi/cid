@@ -157,8 +157,20 @@ create table public.case_assignments (
   case_id uuid not null,
   officer_id uuid not null,
   role public.assign_role not null default 'support'::public.assign_role,
-  created_at timestamp with time zone not null default now()
+  created_at timestamp with time zone not null default now(),
+  assignment_source text not null default 'standard'::text,
+  joint_role text,
+  temporary boolean not null default false,
+  added_by uuid,
+  expires_at timestamp with time zone,
+  removed_at timestamp with time zone,
+  removed_by uuid,
+  removal_reason text
 );
+alter table public.case_assignments add constraint case_assignments_assignment_source_check CHECK (assignment_source in ('standard', 'joint_case', 'manual_access'));
+alter table public.case_assignments add constraint case_assignments_joint_role_check CHECK (joint_role is null or joint_role in ('JTF Case Lead', 'JTF Co-Lead', 'Joint Investigator', 'Support Investigator', 'Department Liaison', 'Read-Only Member'));
+alter table public.case_assignments add constraint case_assignments_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id);
+alter table public.case_assignments add constraint case_assignments_removed_by_fkey FOREIGN KEY (removed_by) REFERENCES public.profiles(id);
 alter table public.case_assignments add constraint case_assignments_case_id_officer_id_key UNIQUE (case_id, officer_id);
 alter table public.case_assignments add constraint case_assignments_pkey PRIMARY KEY (id);
 alter table public.case_assignments add constraint case_assignments_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
@@ -289,8 +301,16 @@ create table public.cases (
   charges jsonb not null default '[]'::jsonb,
   follow_up_at date,
   notes text,
-  operation_id uuid
+  operation_id uuid,
+  is_joint_case boolean not null default false,
+  originating_bureau public.bureau,
+  joint_case_created_by uuid,
+  joint_case_created_at timestamp with time zone,
+  joint_case_ended_by uuid,
+  joint_case_ended_at timestamp with time zone
 );
+alter table public.cases add constraint cases_joint_case_created_by_fkey FOREIGN KEY (joint_case_created_by) REFERENCES public.profiles(id);
+alter table public.cases add constraint cases_joint_case_ended_by_fkey FOREIGN KEY (joint_case_ended_by) REFERENCES public.profiles(id);
 alter table public.cases add constraint cases_case_number_key UNIQUE (case_number);
 alter table public.cases add constraint cases_pkey PRIMARY KEY (id);
 alter table public.cases add constraint cases_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
@@ -594,6 +614,54 @@ create table public.narcotic_precursors (
 alter table public.narcotic_precursors add constraint narcotic_precursors_pkey PRIMARY KEY (id);
 alter table public.narcotic_precursors add constraint narcotic_precursors_narcotic_id_fkey FOREIGN KEY (narcotic_id) REFERENCES public.narcotics(id) ON DELETE CASCADE;
 alter table public.narcotic_precursors enable row level security;
+
+create table public.membership_request_history (
+  id uuid not null default gen_random_uuid(),
+  request_id uuid not null,
+  actor_id uuid,
+  action text not null,
+  from_status text,
+  to_status text,
+  note text,
+  internal boolean not null default false,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.membership_request_history add constraint membership_request_history_pkey PRIMARY KEY (id);
+alter table public.membership_request_history add constraint membership_request_history_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.membership_requests(id) ON DELETE CASCADE;
+alter table public.membership_request_history add constraint membership_request_history_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id);
+alter table public.membership_request_history enable row level security;
+
+create table public.membership_requests (
+  id uuid not null default gen_random_uuid(),
+  applicant_id uuid not null,
+  display_name text not null,
+  badge_number text,
+  requested_bureau public.bureau not null,
+  requested_role public.app_role not null,
+  reason text not null,
+  additional_notes text,
+  status text not null default 'draft'::text,
+  decided_bureau public.bureau,
+  decided_role public.app_role,
+  applicant_visible_decision_note text,
+  internal_decision_note text,
+  decided_by uuid,
+  decided_at timestamp with time zone,
+  submitted_at timestamp with time zone,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.membership_requests add constraint membership_requests_pkey PRIMARY KEY (id);
+alter table public.membership_requests add constraint membership_requests_applicant_id_key UNIQUE (applicant_id);
+alter table public.membership_requests add constraint membership_requests_applicant_id_fkey FOREIGN KEY (applicant_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.membership_requests add constraint membership_requests_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id);
+alter table public.membership_requests add constraint membership_requests_requested_bureau_check CHECK (requested_bureau in ('LSB', 'BCB', 'SAB'));
+alter table public.membership_requests add constraint membership_requests_requested_role_check CHECK (requested_role in ('detective', 'senior_detective'));
+alter table public.membership_requests add constraint membership_requests_status_check CHECK (status in ('draft', 'pending', 'correction_requested', 'approved', 'approved_with_changes', 'rejected', 'withdrawn'));
+alter table public.membership_requests add constraint membership_requests_decided_bureau_check CHECK (decided_bureau in ('LSB', 'BCB', 'SAB'));
+alter table public.membership_requests enable row level security;
+-- Column privacy: internal_decision_note is grant-revoked from clients
+-- (profiles.email precedent); Command reads it via admin_membership_requests().
 
 create table public.narcotics (
   id uuid not null default gen_random_uuid(),
@@ -1960,14 +2028,26 @@ CREATE TRIGGER vehicles_touch BEFORE UPDATE ON public.vehicles FOR EACH ROW EXEC
 -- Row-Level Security policies
 -- ============================================================
 
-create policy ann_all on public.announcements
-  as permissive for all to authenticated
+create policy ann_del on public.announcements
+  as permissive for delete to authenticated
+  using (private.can_announce());
+
+create policy ann_ins on public.announcements
+  as permissive for insert to authenticated
+  with check ((private.can_announce() AND private.can_post_audience(audience)));
+
+create policy ann_upd on public.announcements
+  as permissive for update to authenticated
   using (private.can_announce())
-  with check (private.can_announce());
+  with check ((private.can_announce() AND private.can_post_audience(audience)));
 
 create policy ann_sel on public.announcements
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active() AND ((audience = 'all'::text)
+    OR (audience = (select division::text from public.profiles where id = (select auth.uid())))
+    OR ((audience = 'specific_members'::text) AND (mentions @> jsonb_build_array(jsonb_build_object('target', (select auth.uid())::text))))
+    OR (author_id = (select auth.uid()))
+    OR private.is_command() OR private.is_owner())));
 
 create policy audit_sel on public.audit_log
   as permissive for select to public
@@ -2032,13 +2112,30 @@ create policy car_upd on public.case_access_requests
   using (private.can_grant_case(case_id))
   with check (private.can_grant_case(case_id));
 
+create policy mr_ins on public.membership_requests
+  as permissive for insert to authenticated
+  with check (((applicant_id = (select auth.uid())) AND (status = 'draft'::text) AND (NOT private.is_active())));
+
+create policy mr_sel on public.membership_requests
+  as permissive for select to authenticated
+  using (((applicant_id = (select auth.uid())) OR private.is_command() OR private.is_owner()));
+
+create policy mr_upd on public.membership_requests
+  as permissive for update to authenticated
+  using (((applicant_id = (select auth.uid())) AND (status = ANY (ARRAY['draft'::text, 'correction_requested'::text]))))
+  with check ((applicant_id = (select auth.uid())));
+
+create policy mrh_sel on public.membership_request_history
+  as permissive for select to authenticated
+  using ((((NOT internal) AND (EXISTS (SELECT 1 FROM public.membership_requests r WHERE ((r.id = request_id) AND (r.applicant_id = (select auth.uid())))))) OR private.is_command() OR private.is_owner()));
+
 create policy case_assignments_del on public.case_assignments
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((private.can_delete() AND (assignment_source = 'standard'::text)));
 
 create policy case_assignments_ins on public.case_assignments
   as permissive for insert to authenticated
-  with check (private.can_access_case(case_id));
+  with check ((private.can_access_case(case_id) AND (assignment_source = 'standard'::text)));
 
 create policy case_assignments_sel on public.case_assignments
   as permissive for select to authenticated
@@ -2046,8 +2143,8 @@ create policy case_assignments_sel on public.case_assignments
 
 create policy case_assignments_upd on public.case_assignments
   as permissive for update to authenticated
-  using (private.can_access_case(case_id))
-  with check (private.can_access_case(case_id));
+  using ((private.can_access_case(case_id) AND (assignment_source = 'standard'::text)))
+  with check ((private.can_access_case(case_id) AND (assignment_source = 'standard'::text)));
 
 create policy cf_delete on public.case_files
   as permissive for delete to authenticated
@@ -2874,3 +2971,26 @@ create policy wl_sel on public.watchlist
 --   profiles.discord_id: {authenticated=r/postgres}
 --   profiles.removed_at: {authenticated=r/postgres}
 --   profiles.is_owner: {authenticated=r/postgres}
+
+-- ============================================================
+-- Functions added by the 20260713 membership/joint/announcement
+-- migrations (definitive SQL in supabase/migrations/202607130*.sql):
+-- private.touch_membership_requests(), private.guard_membership_request(),
+-- private.mr_history(), public.membership_request_submit(uuid),
+-- public.membership_request_withdraw(uuid),
+-- public.review_membership_request(uuid, text, bureau, app_role, text, text),
+-- public.admin_membership_requests(),
+-- private.has_joint_access(uuid), private.can_manage_joint(uuid),
+-- private.joint_apply_members(uuid, jsonb, uuid),
+-- public.convert_case_to_joint(uuid, jsonb, text),
+-- public.joint_case_add_members(uuid, jsonb),
+-- public.joint_case_remove_member(uuid, uuid, text),
+-- public.joint_case_end(uuid, text),
+-- private.can_post_audience(text), private.announcement_recipients(text, jsonb, uuid),
+-- public.announcement_recipient_count(text, jsonb),
+-- public.publish_announcement(text, text, text, jsonb, jsonb, boolean),
+-- public.announcement_notify_update(uuid).
+-- private.can_access_case() / can_access_case_row() gained the
+-- has_joint_access() clause (temporary case-scoped joint access);
+-- their pre-joint bodies above are superseded by the versions in
+-- supabase/migrations/20260713040000_joint_cases.sql.

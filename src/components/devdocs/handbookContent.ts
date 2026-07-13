@@ -563,8 +563,22 @@ guard drops out-of-order responses. Enter deep-links (\`?case=\`, \`?q=\`).
 Dashboard (KPIs + 8 widgets incl. the ticket wizard that *creates cases*
 and the dual-co-sign GPS trackers — self-co-sign blocked in UI *and* by
 trigger), division analytics (SVG charts, Monday-week buckets),
-announcements (fan-out notifications on first post only), heatmap
-(weighted layers, pan/zoom SVG map), roster (approve/assign via RPCs).
+announcements (audience-targeted: everyone/\`@everyone\` for deputy+ only,
+command, own/specific department, or just the mentioned members — the
+\`publish_announcement()\` RPC resolves recipients server-side with one
+notification each, a recipient-count preview and confirm in the composer,
+and edits never re-notify unless explicitly requested), heatmap
+(weighted layers, pan/zoom SVG map), roster (membership requests: new
+sign-ins request ONE permanent department — LSB/BCB/SAB, never JTF — plus
+a rank-and-file role from the inactive-account screen; the Approval Queue
+reviews them via \`review_membership_request()\` — approve /
+approve-with-changes / request-correction / reject — activating the
+profile only on approval; the legacy one-click \`assign_member\` approve
+remains for requestless profiles). Joint cases:
+\`convert_case_to_joint()\` tags a case JTF while preserving its
+originating bureau and grants selected members temporary case-scoped
+access (joint roles, optional expiry, removable, endable) — access model
+in Ch. 8.
 
 ## 4.6 Personal tools
 
@@ -676,6 +690,17 @@ SECURITY DEFINER (run privileged, then check the caller inside) except
 | \`admin_remove_member\` / \`admin_restore_member(p_target)\` | profile id | void | AdminPanel | soft remove/restore (\`removed_at\`) |
 | \`create_notification(user, type, payload)\` | recipient + payload | void | \`lib/notify.ts\` | insert for ANOTHER user with the actor stamped server-side (no forgery) |
 | \`mo_crossref(terms[])\` | term list | existence-only case matches | ModusView | controlled cross-bureau M.O. matching |
+| \`report_reopen(p_report)\` | report id | report row | CaseDetail Reports | bureau-scoped seal break; prior signature kept in \`fields._reopen_log\` |
+| \`warrant_set_status(p_report, p_status)\` | report id + status | report row | CaseDetail Reports | validated warrant lifecycle; only path on sealed warrants |
+| \`membership_request_submit\` / \`_withdraw(p_request)\` | request id | request row | Gate (inactive screen) | applicant-side transitions; submit notifies command |
+| \`review_membership_request(p_request, p_decision, …)\` | decision + final dept/role + notes | request row | ApprovalQueue | command decision; activates profile ONLY on approval; role_events + history + audit atomically |
+| \`admin_membership_requests()\` | — | all request rows | ApprovalQueue | command-only bypass of the internal-note column grant |
+| \`convert_case_to_joint\` / \`joint_case_add_members(p_case, p_members)\` | case + member list | summary | CaseDetail/Overview | joint rows are RPC-only; bureau never flips to JTF |
+| \`joint_case_remove_member(p_case, p_officer, p_reason)\` | case + member | void | Overview | immediate revoke, history preserved |
+| \`joint_case_end(p_case, p_note)\` | case id | void | CaseDetail | closes all temporary joint access |
+| \`publish_announcement(title, body, audience, …)\` | announcement + audience | \`{announce_id, recipients}\` | AnnouncementModal | server-side fan-out, one notification per recipient |
+| \`announcement_recipient_count(p_audience, p_mentions)\` | audience | count | AnnouncementModal | composer preview |
+| \`announcement_notify_update(p_announce)\` | announcement id | count | AnnouncementModal | explicit re-notify on edit (never automatic) |
 | \`bootstrap_command\` / \`bootstrap_director(email)\` | email | text | nobody (setup-era) | first-user bootstrap; candidates for removal |
 
 **Error handling**: RPCs come back through \`rpc()\` as \`{error}\` — callers
@@ -715,12 +740,18 @@ live catalog (July 2026).
 | \`case_status\` | open, active, cold, closed |
 | \`assign_role\` / \`report_kind\` / \`evidence_tamper\` / \`media_type\` / \`doc_kind\` / \`location_type\` / \`bench_type\` / \`tracker_status\` / \`threat_level\` / \`density\` | see [Quick Reference](appendix-quick-reference.md) |
 
-## 8.2 The 47 tables, grouped by RLS pattern
+## 8.2 The tables, grouped by RLS pattern
 
 ### Case-scoped (every action needs \`private.can_access_case(case_id)\`)
-The hub \`cases\` (22 cols — number, title, bureau, status, lead, summary,
+The hub \`cases\` (28 cols — number, title, bureau, status, lead, summary,
 follow-up, stale stamps, operation link, **trigger-locked sign-off
-columns**) plus its satellites: \`case_assignments\`, \`evidence\` (+
+columns**, joint-case flags \`is_joint_case\`/\`originating_bureau\`/
+\`joint_case_*\` — conversion never flips \`bureau\`, because \`bureau='JTF'\`
+means division-wide visibility) plus its satellites: \`case_assignments\`
+(now the joint-membership ledger too: \`assignment_source\`, \`joint_role\`,
+\`temporary\`, \`expires_at\`, \`removed_*\` — joint rows are **RPC-only**, and
+an active unexpired joint row grants access to exactly that case via
+\`private.has_joint_access\`), \`evidence\` (+
 append-only \`custody_chain\`), \`reports\` (finalize RPC-only),
 \`case_tasks\` (sub-tasks via \`parent_id\`; delete = command OR own row),
 \`case_messages\` (author trigger-stamped; edit/delete author-or-command),
@@ -752,16 +783,24 @@ owners), \`profiles\` (self-update allowed; \`guard_profile\` trigger blocks
 self-changing role/active/bureau; \`email\` column readable by command only).
 
 ### System
-\`audit_log\` (written ONLY by the \`private.audit()\` trigger; readable by
-one owner UUID), \`announcements\` (write = \`can_announce()\`),
+\`audit_log\` (written ONLY by the \`private.audit()\` trigger and the
+membership/joint/announcement RPCs; readable by one owner UUID),
+\`announcements\` (write = \`can_announce()\` + \`can_post_audience(audience)\`;
+SELECT is audience-scoped: 'all', own division, 'command' for command,
+'members' for mentioned users, author, command/owner oversight),
+\`membership_requests\` (one per applicant; INACTIVE applicant inserts/edits
+own form fields, decision columns trigger-frozen, \`internal_decision_note\`
+column-revoked — command reads via \`admin_membership_requests()\`) +
+append-only \`membership_request_history\` (definer-RPC writes only),
 \`app_secrets\` (RLS on, **zero policies** = invisible to all client roles —
 deliberate).
 
 ## 8.3 Helper functions (\`private\` schema)
 
 \`is_active / is_command / role / can_delete / can_announce /
-can_access_bureau / can_access_case / can_access_case_number /
-can_access_case_row / can_create_case / can_grant_case\` — the policy
+can_post_audience / can_access_bureau / can_access_case /
+can_access_case_number / can_access_case_row / can_create_case /
+can_grant_case / has_joint_access / can_manage_joint\` — the policy
 building blocks. \`signoff_pick / signoff_route / signoff_status_of\` — the
 routing brain (LOA-aware assignee choice). All SECURITY DEFINER with
 pinned empty \`search_path\`.

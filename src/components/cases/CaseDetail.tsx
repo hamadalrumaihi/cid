@@ -8,9 +8,10 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { uiConfirm } from '@/components/ui/dialog'
-import { deleteWithUndo, list, update, withRetry } from '@/lib/db'
+import { deleteWithUndo, list, rpc, update, withRetry } from '@/lib/db'
 import { todayISO, copyText, slug } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
+import { bureauLabel } from '@/lib/roles'
 import { useOperationsStore } from '@/lib/operations'
 import { caseCourtHint, caseStatusTint, CASE_STATUSES, signoffLabel, signoffTint } from '@/lib/signoff'
 import { officerName } from '@/lib/profiles'
@@ -21,6 +22,7 @@ import { isPinnedCase, pushRecentCase, togglePinCase } from './caseUtils'
 import { StaleBadge } from './StaleBadge'
 import { WatchButton } from './WatchButton'
 import { CaseModal } from './CaseModal'
+import { JointCaseModal } from './JointCaseModal'
 import { OverviewTab } from './tabs/OverviewTab'
 import { NotesTab } from './tabs/NotesTab'
 import { EvidenceTab } from './tabs/EvidenceTab'
@@ -32,7 +34,7 @@ import { TasksTab } from './tabs/TasksTab'
 import { SignoffTab } from './tabs/SignoffTab'
 import { ChatTab } from './tabs/ChatTab'
 import { TimelineTab } from './tabs/TimelineTab'
-import type { CaseRow } from './tabs/shared'
+import type { AssignmentRow, CaseRow } from './tabs/shared'
 
 // RicoView renders the same tracker outside the case screen.
 export { RicoTab } from './tabs/RicoTab'
@@ -185,6 +187,14 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
               {/* Identity group — what the case is. */}
               <button onClick={() => copyText(c.case_number, 'Case number copied.')} title="Copy case number" className="inline-flex items-center rounded-full bg-white/5 px-2.5 py-0.5 font-mono text-[11px] font-bold text-badge-200 hover:bg-white/10">{c.case_number}</button>
               <Badge>{c.bureau}</Badge>
+              {c.is_joint_case && (
+                <Badge
+                  tint="bg-violet-500/15 text-violet-300"
+                  title={`Originating department: ${bureauLabel(c.originating_bureau ?? c.bureau)}`}
+                >
+                  JTF · Joint case
+                </Badge>
+              )}
               <span aria-hidden className="mx-0.5 h-4 w-px bg-white/10" />
               {/* Workflow group — where the case stands. */}
               <Badge tint={caseStatusTint(c.status)} className="uppercase">{c.status}</Badge>
@@ -204,6 +214,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
             {op && <Link href={`/operations?op=${op.id}`} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Operation: {op.name}</Link>}
             <button onClick={() => { togglePinCase(c.id); setCase({ ...c }) }} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">{pinned ? 'Pinned' : 'Pin'}</button>
             <WatchButton type="case" id={c.id} label={c.case_number} />
+            <JointCaseControls c={c} onChanged={() => { onChanged(); void fetchCase() }} />
             {canEdit && <FollowUpButton c={c} onChanged={fetchCase} />}
             <button onClick={() => copyText(`${window.location.origin}/cases?case=${c.id}`, 'Case link copied.')} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Link</button>
             <PacketButton c={c} />
@@ -277,6 +288,64 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       </section>
       <CaseModal open={edit} record={c} onClose={() => setEdit(false)} onSaved={() => { setEdit(false); onChanged(); void fetchCase() }} />
     </div>
+  )
+}
+
+/** Convert / end joint-case status. Client mirror of the server authority
+ *  (command, case lead, or case creator) — RLS + the RPCs enforce the real
+ *  rule. Conversion never changes cases.bureau; the JTF designation lives in
+ *  is_joint_case + display, so the originating department is preserved. */
+function JointCaseControls({ c, onChanged }: { c: CaseRow; onChanged: () => void }) {
+  const { profile, isCommand } = useAuth()
+  const [open, setOpen] = useState(false)
+  const [assignments, setAssignments] = useState<AssignmentRow[]>([])
+  const [busy, setBusy] = useState(false)
+  const manages = isCommand || c.lead_detective_id === profile?.id || c.created_by === profile?.id
+  if (!manages) return null
+
+  const openConvert = async () => {
+    // Snapshot current assignments so the picker excludes already-assigned officers.
+    try { setAssignments(await list('case_assignments', { eq: { case_id: c.id } })) }
+    catch { setAssignments([]) }
+    setOpen(true)
+  }
+
+  const endJoint = async () => {
+    if (busy) return
+    const ok = await uiConfirm('This closes all temporary joint access on this case. Assignment history is preserved.', {
+      title: 'End joint-case status',
+      confirmText: 'End joint case',
+      danger: false,
+    })
+    if (!ok) return
+    setBusy(true)
+    const res = await rpc('joint_case_end', { p_case: c.id })
+    setBusy(false)
+    if (res.error) toast(res.error.message, 'danger')
+    else { toast('Joint-case status ended.', 'success'); onChanged() }
+  }
+
+  if (c.is_joint_case) {
+    return (
+      <button onClick={() => void endJoint()} disabled={busy} className="min-h-[44px] rounded-lg border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-sm font-semibold text-violet-200 hover:bg-violet-500/20 disabled:opacity-60 sm:min-h-0">
+        End Joint-Case Status
+      </button>
+    )
+  }
+  return (
+    <>
+      <button onClick={() => void openConvert()} className="min-h-[44px] rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10 sm:min-h-0">
+        Make This a Joint Case
+      </button>
+      <JointCaseModal
+        open={open}
+        onClose={() => setOpen(false)}
+        c={c}
+        mode="convert"
+        existingAssignments={assignments}
+        onDone={() => { setOpen(false); onChanged() }}
+      />
+    </>
   )
 }
 

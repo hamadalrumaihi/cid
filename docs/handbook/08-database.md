@@ -17,12 +17,18 @@ live catalog (July 2026).
 | `case_status` | open, active, cold, closed |
 | `assign_role` / `report_kind` / `evidence_tamper` / `media_type` / `doc_kind` / `location_type` / `bench_type` / `tracker_status` / `threat_level` / `density` | see [Quick Reference](appendix-quick-reference.md) |
 
-## 8.2 The 47 tables, grouped by RLS pattern
+## 8.2 The tables, grouped by RLS pattern
 
 ### Case-scoped (every action needs `private.can_access_case(case_id)`)
-The hub `cases` (22 cols — number, title, bureau, status, lead, summary,
+The hub `cases` (28 cols — number, title, bureau, status, lead, summary,
 follow-up, stale stamps, operation link, **trigger-locked sign-off
-columns**) plus its satellites: `case_assignments`, `evidence` (+
+columns**, joint-case flags `is_joint_case`/`originating_bureau`/
+`joint_case_*` — conversion never flips `bureau`, because `bureau='JTF'`
+means division-wide visibility) plus its satellites: `case_assignments`
+(now the joint-membership ledger too: `assignment_source`, `joint_role`,
+`temporary`, `expires_at`, `removed_*` — joint rows are **RPC-only**, and
+an active unexpired joint row grants access to exactly that case via
+`private.has_joint_access`), `evidence` (+
 append-only `custody_chain`), `reports` (finalize RPC-only),
 `case_tasks` (sub-tasks via `parent_id`; delete = command OR own row),
 `case_messages` (author trigger-stamped; edit/delete author-or-command),
@@ -54,16 +60,24 @@ owners), `profiles` (self-update allowed; `guard_profile` trigger blocks
 self-changing role/active/bureau; `email` column readable by command only).
 
 ### System
-`audit_log` (written ONLY by the `private.audit()` trigger; readable by
-one owner UUID), `announcements` (write = `can_announce()`),
+`audit_log` (written ONLY by the `private.audit()` trigger and the
+membership/joint/announcement RPCs; readable by one owner UUID),
+`announcements` (write = `can_announce()` + `can_post_audience(audience)`;
+SELECT is audience-scoped: 'all', own division, 'command' for command,
+'members' for mentioned users, author, command/owner oversight),
+`membership_requests` (one per applicant; INACTIVE applicant inserts/edits
+own form fields, decision columns trigger-frozen, `internal_decision_note`
+column-revoked — command reads via `admin_membership_requests()`) +
+append-only `membership_request_history` (definer-RPC writes only),
 `app_secrets` (RLS on, **zero policies** = invisible to all client roles —
 deliberate).
 
 ## 8.3 Helper functions (`private` schema)
 
 `is_active / is_command / role / can_delete / can_announce /
-can_access_bureau / can_access_case / can_access_case_number /
-can_access_case_row / can_create_case / can_grant_case` — the policy
+can_post_audience / can_access_bureau / can_access_case /
+can_access_case_number / can_access_case_row / can_create_case /
+can_grant_case / has_joint_access / can_manage_joint` — the policy
 building blocks. `signoff_pick / signoff_route / signoff_status_of` — the
 routing brain (LOA-aware assignee choice). All SECURITY DEFINER with
 pinned empty `search_path`.
