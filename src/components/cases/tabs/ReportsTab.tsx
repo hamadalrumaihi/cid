@@ -7,7 +7,7 @@ import type { Json } from '@/lib/database.types'
 import { downloadTextFile, timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
-import { FORM_SCHEMAS, REPORT_TEMPLATES, formToText, reportTitle, type FormValues } from '@/lib/forms'
+import { FORM_SCHEMAS, REPORT_TEMPLATES, formToText, reportTitle, type FormSchema, type FormValues } from '@/lib/forms'
 import { parseFormValues } from '@/lib/jsonShapes'
 import { Drafts } from '@/lib/drafts'
 import { toast } from '@/lib/toast'
@@ -63,7 +63,9 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
       <Modal open={!!view} onClose={() => setView(null)} wide>
         <div className="p-5">
           <ModalHeader title={view ? reportTitle(view) : 'Report'} onClose={() => setView(null)} />
-          {view && <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{formToText(FORM_SCHEMAS[view.template], parseFormValues(view.fields))}</pre>}
+          {view && (FORM_SCHEMAS[view.template]
+            ? <ReportView schema={FORM_SCHEMAS[view.template]} values={parseFormValues(view.fields)} />
+            : <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{JSON.stringify(view.fields, null, 2)}</pre>)}
           {view && <div className="mt-4 flex justify-end"><button onClick={() => downloadTextFile(`${c.case_number}-${view.template}.md`, formToText(FORM_SCHEMAS[view.template], parseFormValues(view.fields)), 'text/markdown')} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Download .md</button></div>}
         </div>
       </Modal>
@@ -107,8 +109,38 @@ function FormEditor({ template, caseId, values, onChange }: { template: string; 
     if (s.type === 'textarea') return <label key={s.id} className="block text-sm font-bold text-white">{s.label}<textarea value={String(values[s.key] ?? '')} onChange={(e) => set(s.key, e.target.value)} rows={5} className="mt-2 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 font-normal text-white" /></label>
     if (s.type === 'grid') {
       const rows = (Array.isArray(values[s.id]) ? values[s.id] : [{}]) as Record<string, string>[]
-      return <div key={s.id} className="rounded-xl border border-white/10 p-3"><h4 className="mb-2 font-bold text-white">{s.label}</h4>{rows.map((row, i) => <div key={i} className="mb-2 grid gap-2 md:grid-cols-2">{s.cols.map((col) => <input key={col.key} value={row[col.key] || ''} onChange={(e) => set(s.id, rows.map((r, idx) => idx === i ? { ...r, [col.key]: e.target.value } : r))} placeholder={col.label} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white" />)}</div>)}<button onClick={() => set(s.id, [...rows, {}])} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-200">Add row</button></div>
+      return <div key={s.id} className="rounded-xl border border-white/10 p-3"><h4 className="mb-2 font-bold text-white">{s.label}</h4>{rows.map((row, i) => <div key={i} className="mb-2 flex items-start gap-2"><div className="grid min-w-0 flex-1 gap-2 md:grid-cols-2">{s.cols.map((col) => <input key={col.key} value={row[col.key] || ''} onChange={(e) => set(s.id, rows.map((r, idx) => idx === i ? { ...r, [col.key]: e.target.value } : r))} placeholder={col.label} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white" />)}</div><button onClick={() => set(s.id, rows.filter((_, idx) => idx !== i))} aria-label={`Remove row ${i + 1} from ${s.label}`} title="Remove row" className="mt-0.5 shrink-0 rounded-lg border border-white/10 px-2.5 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/10">✕</button></div>)}<button onClick={() => set(s.id, [...rows, {}])} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-200">Add row</button></div>
     }
     return <div key={s.id} className="rounded-xl border border-white/10 p-3"><h4 className="mb-2 font-bold text-white">{s.label}</h4>{s.evidenceLookup && lookup}<div className="grid gap-2 md:grid-cols-2">{s.fields.map((f) => f.type === 'select' ? <select key={f.key} value={String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white"><option value="">{f.label}</option>{(f.opts || []).filter(Boolean).map((o) => <option key={o} value={o}>{o}</option>)}</select> : <input key={f.key} value={Array.isArray(values[f.key]) ? (values[f.key] as string[]).join(', ') : String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} placeholder={f.label} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white" />)}</div></div>
   })}</div>
+}
+
+/** Read-only rendering of a saved report — walks the same FORM_SCHEMAS the
+ *  editor uses and presents each section styled like the rest of the site.
+ *  The markdown flattening (formToText) is kept for the Download .md action. */
+function ReportView({ schema, values }: { schema: FormSchema; values: FormValues }) {
+  const V = values || {}
+  const text = (v: unknown) => (Array.isArray(v) ? v.join(', ') : String(v ?? '')).trim()
+  return (
+    <div className="max-h-[65vh] space-y-3 overflow-y-auto pr-1">
+      <p className="text-xs uppercase tracking-wider text-slate-500">{schema.subtitle}</p>
+      {schema.sections.map((s) => {
+        if (s.type === 'note') return <p key={s.id} className="rounded-lg bg-white/5 p-3 text-sm text-slate-300">{s.text}</p>
+        return (
+          <section key={s.id} className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+            <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">{s.label}</h4>
+            {s.type === 'textarea' && (text(V[s.key]) ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{text(V[s.key])}</p> : <p className="text-sm text-slate-500">—</p>)}
+            {s.type === 'kv' && <dl className="divide-y divide-white/5">{s.fields.map((f) => { const v = text(V[f.key]); return <div key={f.key} className="flex items-start justify-between gap-4 py-1.5"><dt className="text-sm text-slate-400">{f.label}</dt><dd className={`text-right text-sm ${v ? 'text-white' : 'text-slate-500'}`}>{v || '—'}</dd></div> })}</dl>}
+            {s.type === 'grid' && (() => {
+              const rows = (Array.isArray(V[s.id]) ? V[s.id] : []) as Record<string, string>[]
+              const filled = rows.filter((r) => s.cols.some((c) => text(r[c.key])))
+              return filled.length
+                ? <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>{s.cols.map((c) => <th key={c.key} className="pb-1.5 pr-4 text-left text-xs font-bold uppercase tracking-wider text-slate-500">{c.label}</th>)}</tr></thead><tbody className="divide-y divide-white/5">{filled.map((r, i) => <tr key={i}>{s.cols.map((c) => <td key={c.key} className="py-1.5 pr-4 text-slate-200">{text(r[c.key]) || '—'}</td>)}</tr>)}</tbody></table></div>
+                : <p className="text-sm text-slate-500">—</p>
+            })()}
+          </section>
+        )
+      })}
+    </div>
+  )
 }

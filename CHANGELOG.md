@@ -6,6 +6,20 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.8.1] — 2026-07-13
+
+### Changed — saved reports render styled, not as raw text
+- Opening a saved report now shows it **styled like the rest of the site**:
+  each form section becomes a card with a header, key-value rows, a real
+  table for suspect/witness rows, and readable paragraphs for narratives —
+  instead of the previous monospace text dump. The **Download .md** button
+  is unchanged and still exports the markdown flattening.
+
+### Fixed — report rows can be removed
+- Grid sections in the report editor (e.g. *Suspect / Witness Information*)
+  gain a per-row **✕ Remove** button next to **Add row** — previously a row,
+  once added, could not be deleted.
+
 ## [1.8.0] — 2026-07-13
 
 ### Added — evidence lookup while writing a report
