@@ -96,6 +96,14 @@ function FormEditor({ template, caseId, values, onChange }: { template: string; 
   // Free-text append into a single-line field: join picks with '; '.
   const append = (key: string, text: string) => { const cur = String(values[key] ?? '').trim(); set(key, cur ? `${cur}; ${text}` : text) }
   const evLabel = (ev: EvidenceRow) => [ev.item_code, ev.description].filter(Boolean).join(' — ') || 'Untitled item'
+  // Added entries render as removable chips — the fields stay '; '-joined
+  // strings underneath, so free text and saved reports are unaffected.
+  const entriesOf = (key: string) => String(values[key] ?? '').split(';').map((t) => t.trim()).filter(Boolean)
+  const removeEntry = (key: string, idx: number) => set(key, entriesOf(key).filter((_, i) => i !== idx).join('; '))
+  const chips = (key: string, label: string) => {
+    const es = entriesOf(key)
+    return es.length ? <div className="mb-2 flex flex-wrap gap-1.5">{es.map((t, i) => <span key={`${t}-${i}`} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200"><span className="min-w-0 truncate">{t}</span><button onClick={() => removeEntry(key, i)} aria-label={`Remove ${t} from ${label}`} title="Remove" className="shrink-0 font-bold text-rose-300 hover:text-rose-200">✕</button></span>)}</div> : null
+  }
   const lookup = poolErr
     ? <p className="mb-2 text-xs text-slate-400">Case evidence lookup unavailable — enter items manually.</p>
     : pool && !pool.evidence.length && !pool.media.length
@@ -111,7 +119,7 @@ function FormEditor({ template, caseId, values, onChange }: { template: string; 
       const rows = (Array.isArray(values[s.id]) ? values[s.id] : [{}]) as Record<string, string>[]
       return <div key={s.id} className="rounded-xl border border-white/10 p-3"><h4 className="mb-2 font-bold text-white">{s.label}</h4>{rows.map((row, i) => <div key={i} className="mb-2 flex items-start gap-2"><div className="grid min-w-0 flex-1 gap-2 md:grid-cols-2">{s.cols.map((col) => <input key={col.key} value={row[col.key] || ''} onChange={(e) => set(s.id, rows.map((r, idx) => idx === i ? { ...r, [col.key]: e.target.value } : r))} placeholder={col.label} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white" />)}</div><button onClick={() => set(s.id, rows.filter((_, idx) => idx !== i))} aria-label={`Remove row ${i + 1} from ${s.label}`} title="Remove row" className="mt-0.5 shrink-0 rounded-lg border border-white/10 px-2.5 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/10">✕</button></div>)}<button onClick={() => set(s.id, [...rows, {}])} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-200">Add row</button></div>
     }
-    return <div key={s.id} className="rounded-xl border border-white/10 p-3"><h4 className="mb-2 font-bold text-white">{s.label}</h4>{s.evidenceLookup && lookup}<div className="grid gap-2 md:grid-cols-2">{s.fields.map((f) => f.type === 'select' ? <select key={f.key} value={String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white"><option value="">{f.label}</option>{(f.opts || []).filter(Boolean).map((o) => <option key={o} value={o}>{o}</option>)}</select> : <input key={f.key} value={Array.isArray(values[f.key]) ? (values[f.key] as string[]).join(', ') : String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} placeholder={f.label} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white" />)}</div></div>
+    return <div key={s.id} className="rounded-xl border border-white/10 p-3"><h4 className="mb-2 font-bold text-white">{s.label}</h4>{s.evidenceLookup && lookup}{s.evidenceLookup && chips('ev_items', 'items')}{s.evidenceLookup && chips('ev_files', 'files')}<div className="grid gap-2 md:grid-cols-2">{s.fields.map((f) => f.type === 'select' ? <select key={f.key} value={String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white"><option value="">{f.label}</option>{(f.opts || []).filter(Boolean).map((o) => <option key={o} value={o}>{o}</option>)}</select> : <input key={f.key} value={Array.isArray(values[f.key]) ? (values[f.key] as string[]).join(', ') : String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} placeholder={f.label} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white" />)}</div></div>
   })}</div>
 }
 
