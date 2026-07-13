@@ -96,7 +96,7 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
         <div className="p-5">
           <ModalHeader title={confirm?.kind === 'reopen' ? 'Reopen this report?' : 'Finalize & seal this report?'} onClose={() => setConfirm(null)} />
           {confirm?.kind === 'reopen'
-            ? <p className="text-sm text-slate-300">The seal and signature will be removed and the report becomes editable again. Reopening is recorded in the audit log.</p>
+            ? <p className="text-sm text-slate-300">The seal is removed and the report becomes editable again. The previous signature is kept in the report&apos;s history, and the reopen is audit-logged.</p>
             : confirm && (() => { const gaps = reportFinalizeGaps(confirm.r); return <div className="space-y-2 text-sm text-slate-300">
                 <p>Finalizing seals the report: its contents lock and it is signed in your name. Bureau lead and above can reopen it later.</p>
                 {gaps.length > 0 && <p className="rounded-lg bg-amber-500/10 p-3 text-amber-200">Still empty: {gaps.join(', ')}. You can seal it anyway.</p>}
@@ -119,13 +119,12 @@ function ReportDetail({ r, c, canEdit, canDelete, onBack, onEdit, onFinalize, on
   const { profile } = useAuth()
   const schema = FORM_SCHEMAS[r.template]
   const status = warrantStatusOf(r)
-  // Warrant lifecycle rides in fields._warrant_status/_warrant_log — the only
-  // part of a sealed report the database allows to keep changing.
+  // Warrant lifecycle goes through a validating RPC — the status whitelist
+  // and the actor stamped into fields._warrant_log are server-side, and it's
+  // the only path that can touch a sealed warrant.
   const setWarrant = async (next: string) => {
     if (next === status) return
-    const f = parseFormValues(r.fields)
-    const log = Array.isArray(f._warrant_log) ? (f._warrant_log as unknown[]) : []
-    const res = await update('reports', r.id, { fields: { ...f, _warrant_status: next, _warrant_log: [...log, { at: new Date().toISOString(), by: profile?.display_name || profile?.id || 'unknown', from: status, to: next }] } as Json })
+    const res = await rpc('warrant_set_status', { p_report: r.id, p_status: next })
     if (res.error) toast(res.error.message, 'danger')
     else { toast(`Warrant marked ${next}.`, 'success'); onChanged() }
   }

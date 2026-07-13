@@ -2613,6 +2613,29 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      warrant_set_status: {
+        Args: { p_report: string; p_status: string }
+        Returns: {
+          author_id: string | null
+          case_id: string
+          created_at: string
+          fields: Json
+          finalized: boolean
+          id: string
+          kind: Database["public"]["Enums"]["report_kind"]
+          parent_id: string | null
+          seq: number | null
+          signature: Json | null
+          template: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "reports"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       search_all: {
         Args: { q: string }
         Returns: {

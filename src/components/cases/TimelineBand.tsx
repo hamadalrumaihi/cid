@@ -45,8 +45,11 @@ export function TimelineBand({ events }: { events: BandEvent[] }) {
 
   const m = useMemo(() => {
     const times = events.map((e) => new Date(e.at).getTime()).filter((t) => Number.isFinite(t))
-    const rawMin = Math.min(...times)
-    const rawMax = Math.max(...times)
+    // No usable timestamps (incl. the initial empty render before data
+    // arrives): pin a finite window — Math.min() of nothing is Infinity,
+    // which sent the tick loop below spinning forever.
+    const rawMin = times.length ? Math.min(...times) : 0
+    const rawMax = times.length ? Math.max(...times) : 0
     const rawSpan = Math.max(rawMax - rawMin, DAY) // degenerate single-moment case
     const min = rawMin - rawSpan * 0.05
     const span = rawSpan * 1.1
@@ -68,7 +71,8 @@ export function TimelineBand({ events }: { events: BandEvent[] }) {
     const step = steps.find((s) => visSpan / s <= 10) ?? steps[steps.length - 1]
     const visMin = m.min + (vb.x / WORLD) * m.span
     const out: { t: number; label: string }[] = []
-    for (let t = Math.ceil(visMin / step) * step; t <= visMin + visSpan; t += step) {
+    if (!Number.isFinite(visMin) || !Number.isFinite(visSpan)) return out
+    for (let t = Math.ceil(visMin / step) * step; t <= visMin + visSpan && out.length < 40; t += step) {
       const d = new Date(t)
       out.push({
         t,

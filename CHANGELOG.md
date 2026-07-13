@@ -6,6 +6,27 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.9.1] — 2026-07-13
+
+### Fixed — case Timeline tab froze the page
+- Opening a case's **Timeline** tab crashed the browser tab: on the first
+  render (before the case's events load) the chronology band computed an
+  infinite time range and its axis-tick loop never terminated. The range
+  is now pinned to a finite window and the loop is hard-capped.
+
+### Security — seal hardening (review follow-up)
+- **Reopen is bureau-scoped**: a bureau lead can only unseal reports on
+  their own bureau's cases (JTF cases are shared, matching case access);
+  deputy director and director remain unrestricted. Permission is now
+  checked before report state is revealed.
+- **The previous signature survives a reopen** — it is preserved in the
+  report's history (`fields._reopen_log`) instead of being erased.
+- **Warrant status changes go through a validating RPC**
+  (`warrant_set_status()`): status whitelist, warrant templates only, and
+  the actor is stamped server-side into the warrant log. Direct client
+  writes to a sealed report's warrant fields are now blocked entirely —
+  the RPC is the only path, so the in-record trail can't be forged.
+
 ## [1.9.0] — 2026-07-13
 
 ### Changed — reports open in-page, not in a popup
