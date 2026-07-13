@@ -291,7 +291,14 @@ test.describe('v1.11 features — announcements, joint cases, approvals (live fi
       await page.goto('/command')
       await expect(page.getByText(`Signed in as ${LIVE.applicant.email}`, { exact: false })).toBeVisible({ timeout: 30_000 })
       await expect(page.getByRole('button', { name: /Command Center/ })).toHaveCount(0)
-      await expect(page.getByText(/Submit your department request/)).toBeVisible({ timeout: 20_000 })
+      // Adaptive Gate (DOJ build): the application probe finishes on either the
+      // domain picker (fresh applicant) or straight on the form (returning).
+      // Wait for one of them, then pick CID if the picker is showing.
+      const cidChoice = page.getByRole('button', { name: /^CID/ })
+      const deptForm = page.getByText(/Submit your department request/)
+      await expect(cidChoice.or(deptForm)).toBeVisible({ timeout: 20_000 })
+      if (await cidChoice.isVisible().catch(() => false)) await cidChoice.click()
+      await expect(deptForm).toBeVisible({ timeout: 20_000 })
 
       // Fill and submit the Gate form: name + reason; keep the LSB /
       // Detective defaults (the director changes both on approval below).

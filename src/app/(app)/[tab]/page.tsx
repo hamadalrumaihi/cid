@@ -35,6 +35,8 @@ import { DevDocsView } from '@/components/devdocs/DevDocsView'
 import { OwnerView } from '@/components/owner/OwnerView'
 import { ProfileView } from '@/components/profile/ProfileView'
 import { CommandCenterView } from '@/components/command-center/CommandCenterView'
+import { LegalView } from '@/components/legal/LegalView'
+import { JusticePortalView } from '@/components/justice/JusticePortalView'
 
 /** One route per leaf tab, statically prerendered via generateStaticParams. */
 
@@ -276,6 +278,20 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="command-center" />}>
         <CommandCenterView />
+      </Suspense>
+    )
+  }
+  if (tab === 'legal') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="legal" />}>
+        <LegalView />
+      </Suspense>
+    )
+  }
+  if (tab === 'justice') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="justice" />}>
+        <JusticePortalView />
       </Suspense>
     )
   }

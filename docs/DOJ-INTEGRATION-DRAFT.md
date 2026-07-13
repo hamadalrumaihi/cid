@@ -1,5 +1,6 @@
 # DOJ Integration Draft
-Status: Proposal only — no DOJ functionality currently exists or is implemented.
+Status: **SUPERSEDED** — implemented in v1.13.0. See `docs/DOJ-INTEGRATION.md`
+for the shipped system. This file is retained only as the historical proposal.
 
 This document proposes how the CID Portal could later integrate a Department of
 Justice (DOJ) workflow — prosecutor and judicial review of warrants, a subpoena

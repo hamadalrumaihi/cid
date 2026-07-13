@@ -128,6 +128,37 @@ function ReportDetail({ r, c, canEdit, canDelete, onBack, onEdit, onFinalize, on
     if (res.error) toast(res.error.message, 'danger')
     else { toast(`Warrant marked ${next}.`, 'success'); onChanged() }
   }
+  // Submit for Legal Review (arrest warrants only): spins up a DOJ legal
+  // request linked to this case + finalized report, carrying the canonical
+  // suspect person_id, title, priority and justification. The report itself
+  // stays investigator-owned — the legal request freezes its own versions.
+  const [legalBusy, setLegalBusy] = useState(false)
+  const submitForLegalReview = async () => {
+    const vals = parseFormValues(r.fields)
+    const suspects = Array.isArray(vals.suspects) ? (vals.suspects as Record<string, string>[]) : []
+    const suspectPid = suspects.find((s) => s.person_id)?.person_id || ''
+    const suspectName = suspects.map((s) => s.full_name).filter(Boolean).join(', ')
+    if (!suspectPid) {
+      toast('Link the suspect to a Persons-registry record first — the Full Name in Suspect Information must match a registry person.', 'warn')
+      return
+    }
+    const title = String(vals.warrant_title ?? '').trim() || `Arrest Warrant — ${suspectName || c.case_number}`
+    const priority = ['Medium', 'High', 'Critical'].includes(String(vals.priority)) ? String(vals.priority) : 'Medium'
+    const narrative = [String(vals.probable_cause ?? '').trim(), String(vals.summary ?? '').trim()]
+      .filter(Boolean).join('\n\n') || 'See the attached finalized warrant report.'
+    setLegalBusy(true)
+    const res = await rpc('create_legal_request', {
+      p_case: c.id, p_request_type: 'warrant', p_subtype: 'arrest_warrant',
+      p_title: title, p_priority: priority, p_narrative: narrative,
+      p_person: suspectPid, p_source_report: r.id,
+    })
+    if (res.error || !res.data) { setLegalBusy(false); toast(res.error?.message || 'Could not create the legal request.', 'danger'); return }
+    // The source report is always the packet's first exhibit.
+    await rpc('add_legal_exhibit', { p_request: res.data.id, p_type: 'finalized_report', p_source_id: r.id })
+    setLegalBusy(false)
+    toast('Legal request created — build the packet, then submit for CID review.', 'success')
+    router.push(`/legal?request=${encodeURIComponent(res.data.id)}`)
+  }
   const [pools, setPools] = useState<{ evidence: EvidenceRow[]; media: MediaRow[]; persons: PersonRow[] }>({ evidence: [], media: [], persons: [] })
   useEffect(() => {
     let alive = true
@@ -152,6 +183,12 @@ function ReportDetail({ r, c, canEdit, canDelete, onBack, onEdit, onFinalize, on
           {WARRANT_TPLS[r.template] && canEdit && <select aria-label="Set warrant status" value={status} onChange={(e) => void setWarrant(e.target.value)} className="rounded-lg border border-white/10 bg-ink-900 px-2 py-1.5 text-xs font-bold text-white">{['draft', 'signed', 'executed', 'returned'].map((o) => <option key={o} value={o}>{o}</option>)}</select>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {r.template === 'arrest_warrant' && r.finalized && canEdit && (
+            <button onClick={() => void submitForLegalReview()} disabled={legalBusy}
+              className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50">
+              ⚖️ Submit for Legal Review
+            </button>
+          )}
           {!r.finalized && canEdit && <button onClick={onFinalize} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Finalize</button>}
           {r.finalized && isCommandRole(profile?.role) && <button onClick={onReopen} className="rounded-lg border border-amber-500/40 px-3 py-2 text-sm font-bold text-amber-300 hover:bg-amber-500/10">Reopen</button>}
           {!r.finalized && canEdit && <button onClick={onEdit} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-badge-200 hover:bg-white/5">Edit</button>}

@@ -1549,6 +1549,859 @@ export type Database = {
           },
         ]
       }
+      justice_membership_request_history: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          from_status: string | null
+          id: string
+          internal: boolean
+          note: string | null
+          request_id: string
+          to_status: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          internal?: boolean
+          note?: string | null
+          request_id: string
+          to_status?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          internal?: boolean
+          note?: string | null
+          request_id?: string
+          to_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "justice_membership_request_history_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "justice_membership_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "justice_membership_request_history_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      justice_membership_requests: {
+        Row: {
+          additional_notes: string | null
+          applicant_id: string
+          applicant_visible_decision_note: string | null
+          created_at: string
+          decided_agency: string | null
+          decided_at: string | null
+          decided_by: string | null
+          decided_justice_role: string | null
+          display_name: string
+          id: string
+          internal_decision_note: string | null
+          justice_identifier: string | null
+          reason: string
+          requested_agency: string
+          requested_justice_role: string
+          status: string
+          submitted_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          additional_notes?: string | null
+          applicant_id: string
+          applicant_visible_decision_note?: string | null
+          created_at?: string
+          decided_agency?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decided_justice_role?: string | null
+          display_name: string
+          id?: string
+          internal_decision_note?: string | null
+          justice_identifier?: string | null
+          reason: string
+          requested_agency: string
+          requested_justice_role: string
+          status?: string
+          submitted_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          additional_notes?: string | null
+          applicant_id?: string
+          applicant_visible_decision_note?: string | null
+          created_at?: string
+          decided_agency?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decided_justice_role?: string | null
+          display_name?: string
+          id?: string
+          internal_decision_note?: string | null
+          justice_identifier?: string | null
+          reason?: string
+          requested_agency?: string
+          requested_justice_role?: string
+          status?: string
+          submitted_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "justice_membership_requests_applicant_id_fkey"
+            columns: ["applicant_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "justice_membership_requests_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      justice_memberships: {
+        Row: {
+          active: boolean
+          agency: string
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          justice_identifier: string | null
+          justice_role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          agency: string
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          justice_identifier?: string | null
+          justice_role: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          agency?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          justice_identifier?: string | null
+          justice_role?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "justice_memberships_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "justice_memberships_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      legal_request_actions: {
+        Row: {
+          action: string
+          actor_id: string
+          created_at: string
+          from_status: string | null
+          id: string
+          internal_note: string | null
+          legal_request_id: string
+          public_note: string | null
+          to_status: string | null
+          version_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          internal_note?: string | null
+          legal_request_id: string
+          public_note?: string | null
+          to_status?: string | null
+          version_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          internal_note?: string | null
+          legal_request_id?: string
+          public_note?: string | null
+          to_status?: string | null
+          version_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_request_actions_legal_request_id_fkey"
+            columns: ["legal_request_id"]
+            isOneToOne: false
+            referencedRelation: "legal_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_request_actions_version_id_fkey"
+            columns: ["version_id"]
+            isOneToOne: false
+            referencedRelation: "legal_request_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_request_actions_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      legal_request_exhibits: {
+        Row: {
+          added_by: string
+          created_at: string
+          display_title: string
+          exhibit_type: string
+          id: string
+          legal_request_id: string
+          snapshot_metadata: Json
+          source_id: string | null
+          version_id: string | null
+        }
+        Insert: {
+          added_by: string
+          created_at?: string
+          display_title: string
+          exhibit_type: string
+          id?: string
+          legal_request_id: string
+          snapshot_metadata?: Json
+          source_id?: string | null
+          version_id?: string | null
+        }
+        Update: {
+          added_by?: string
+          created_at?: string
+          display_title?: string
+          exhibit_type?: string
+          id?: string
+          legal_request_id?: string
+          snapshot_metadata?: Json
+          source_id?: string | null
+          version_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_request_exhibits_legal_request_id_fkey"
+            columns: ["legal_request_id"]
+            isOneToOne: false
+            referencedRelation: "legal_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_request_exhibits_version_id_fkey"
+            columns: ["version_id"]
+            isOneToOne: false
+            referencedRelation: "legal_request_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_request_exhibits_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      legal_request_participants: {
+        Row: {
+          added_at: string
+          added_by: string
+          legal_request_id: string
+          participant_role: string
+          removed_at: string | null
+          removed_by: string | null
+          user_id: string
+        }
+        Insert: {
+          added_at?: string
+          added_by: string
+          legal_request_id: string
+          participant_role: string
+          removed_at?: string | null
+          removed_by?: string | null
+          user_id: string
+        }
+        Update: {
+          added_at?: string
+          added_by?: string
+          legal_request_id?: string
+          participant_role?: string
+          removed_at?: string | null
+          removed_by?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_request_participants_legal_request_id_fkey"
+            columns: ["legal_request_id"]
+            isOneToOne: false
+            referencedRelation: "legal_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_request_participants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_request_participants_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_request_participants_removed_by_fkey"
+            columns: ["removed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      legal_request_signatures: {
+        Row: {
+          action: string
+          id: string
+          legal_request_id: string
+          signature: string
+          signed_at: string
+          signer_id: string
+          signer_name_snapshot: string
+          signer_role_snapshot: string
+          version_id: string
+        }
+        Insert: {
+          action: string
+          id?: string
+          legal_request_id: string
+          signature: string
+          signed_at?: string
+          signer_id: string
+          signer_name_snapshot: string
+          signer_role_snapshot: string
+          version_id: string
+        }
+        Update: {
+          action?: string
+          id?: string
+          legal_request_id?: string
+          signature?: string
+          signed_at?: string
+          signer_id?: string
+          signer_name_snapshot?: string
+          signer_role_snapshot?: string
+          version_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_request_signatures_legal_request_id_fkey"
+            columns: ["legal_request_id"]
+            isOneToOne: false
+            referencedRelation: "legal_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_request_signatures_version_id_fkey"
+            columns: ["version_id"]
+            isOneToOne: false
+            referencedRelation: "legal_request_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_request_signatures_signer_id_fkey"
+            columns: ["signer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      legal_request_versions: {
+        Row: {
+          content_hash: string | null
+          created_at: string
+          created_by: string
+          form_data: Json
+          id: string
+          legal_request_id: string
+          narrative: string | null
+          packet_manifest: Json
+          submitted_stage: string | null
+          version_number: number
+        }
+        Insert: {
+          content_hash?: string | null
+          created_at?: string
+          created_by: string
+          form_data: Json
+          id?: string
+          legal_request_id: string
+          narrative?: string | null
+          packet_manifest?: Json
+          submitted_stage?: string | null
+          version_number: number
+        }
+        Update: {
+          content_hash?: string | null
+          created_at?: string
+          created_by?: string
+          form_data?: Json
+          id?: string
+          legal_request_id?: string
+          narrative?: string | null
+          packet_manifest?: Json
+          submitted_stage?: string | null
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_request_versions_legal_request_id_fkey"
+            columns: ["legal_request_id"]
+            isOneToOne: false
+            referencedRelation: "legal_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_request_versions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      legal_requests: {
+        Row: {
+          approval_route: string | null
+          assigned_ada_id: string | null
+          assigned_judge_id: string | null
+          case_id: string
+          case_number_snapshot: string | null
+          case_title_snapshot: string | null
+          cid_reviewed_at: string | null
+          cid_reviewed_by: string | null
+          citizen_id_snapshot: string | null
+          classification: string
+          close_note: string | null
+          closed_at: string | null
+          closed_by: string | null
+          compliance_date: string | null
+          compliance_notes: string | null
+          compliance_status: string
+          created_at: string
+          created_by: string
+          current_version_id: string | null
+          decided_at: string | null
+          decided_by: string | null
+          decision: string | null
+          decision_note: string | null
+          document_status: string
+          executed_at: string | null
+          executed_by: string | null
+          execution_notes: string | null
+          execution_outcome: string | null
+          expires_at: string | null
+          form_data: Json
+          fulfilment_status: string
+          id: string
+          issued_at: string | null
+          issued_by: string | null
+          judicial_conditions: string | null
+          narrative: string | null
+          non_compliance_reason: string | null
+          person_id: string | null
+          person_name_snapshot: string | null
+          priority: string | null
+          recipient_acknowledged: boolean | null
+          recipient_name: string | null
+          recipient_type: string | null
+          request_number: string
+          request_type: string
+          response_deadline: string | null
+          responsible_bureau: Database["public"]["Enums"]["bureau"]
+          return_filed_by: string | null
+          return_narrative: string | null
+          returned_at: string | null
+          review_status: string
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          served_at: string | null
+          served_by: string | null
+          service_method: string | null
+          service_notes: string | null
+          service_status: string
+          source_report_id: string | null
+          source_report_seq: number | null
+          submitted_to_cid_at: string | null
+          submitted_to_doj_at: string | null
+          submitted_to_judge_at: string | null
+          subtype: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          approval_route?: string | null
+          assigned_ada_id?: string | null
+          assigned_judge_id?: string | null
+          case_id: string
+          case_number_snapshot?: string | null
+          case_title_snapshot?: string | null
+          cid_reviewed_at?: string | null
+          cid_reviewed_by?: string | null
+          citizen_id_snapshot?: string | null
+          classification?: string
+          close_note?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          compliance_date?: string | null
+          compliance_notes?: string | null
+          compliance_status?: string
+          created_at?: string
+          created_by: string
+          current_version_id?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision?: string | null
+          decision_note?: string | null
+          document_status?: string
+          executed_at?: string | null
+          executed_by?: string | null
+          execution_notes?: string | null
+          execution_outcome?: string | null
+          expires_at?: string | null
+          form_data?: Json
+          fulfilment_status?: string
+          id?: string
+          issued_at?: string | null
+          issued_by?: string | null
+          judicial_conditions?: string | null
+          narrative?: string | null
+          non_compliance_reason?: string | null
+          person_id?: string | null
+          person_name_snapshot?: string | null
+          priority?: string | null
+          recipient_acknowledged?: boolean | null
+          recipient_name?: string | null
+          recipient_type?: string | null
+          request_number?: string
+          request_type: string
+          response_deadline?: string | null
+          responsible_bureau: Database["public"]["Enums"]["bureau"]
+          return_filed_by?: string | null
+          return_narrative?: string | null
+          returned_at?: string | null
+          review_status?: string
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          served_at?: string | null
+          served_by?: string | null
+          service_method?: string | null
+          service_notes?: string | null
+          service_status?: string
+          source_report_id?: string | null
+          source_report_seq?: number | null
+          submitted_to_cid_at?: string | null
+          submitted_to_doj_at?: string | null
+          submitted_to_judge_at?: string | null
+          subtype: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          approval_route?: string | null
+          assigned_ada_id?: string | null
+          assigned_judge_id?: string | null
+          case_id?: string
+          case_number_snapshot?: string | null
+          case_title_snapshot?: string | null
+          cid_reviewed_at?: string | null
+          cid_reviewed_by?: string | null
+          citizen_id_snapshot?: string | null
+          classification?: string
+          close_note?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          compliance_date?: string | null
+          compliance_notes?: string | null
+          compliance_status?: string
+          created_at?: string
+          created_by?: string
+          current_version_id?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision?: string | null
+          decision_note?: string | null
+          document_status?: string
+          executed_at?: string | null
+          executed_by?: string | null
+          execution_notes?: string | null
+          execution_outcome?: string | null
+          expires_at?: string | null
+          form_data?: Json
+          fulfilment_status?: string
+          id?: string
+          issued_at?: string | null
+          issued_by?: string | null
+          judicial_conditions?: string | null
+          narrative?: string | null
+          non_compliance_reason?: string | null
+          person_id?: string | null
+          person_name_snapshot?: string | null
+          priority?: string | null
+          recipient_acknowledged?: boolean | null
+          recipient_name?: string | null
+          recipient_type?: string | null
+          request_number?: string
+          request_type?: string
+          response_deadline?: string | null
+          responsible_bureau?: Database["public"]["Enums"]["bureau"]
+          return_filed_by?: string | null
+          return_narrative?: string | null
+          returned_at?: string | null
+          review_status?: string
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          served_at?: string | null
+          served_by?: string | null
+          service_method?: string | null
+          service_notes?: string | null
+          service_status?: string
+          source_report_id?: string | null
+          source_report_seq?: number | null
+          submitted_to_cid_at?: string | null
+          submitted_to_doj_at?: string | null
+          submitted_to_judge_at?: string | null
+          subtype?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_requests_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_requests_source_report_id_fkey"
+            columns: ["source_report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_requests_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_requests_assigned_ada_id_fkey"
+            columns: ["assigned_ada_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_requests_assigned_judge_id_fkey"
+            columns: ["assigned_judge_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_requests_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_requests_current_version_fkey"
+            columns: ["current_version_id"]
+            isOneToOne: false
+            referencedRelation: "legal_request_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mdt_wanted_projections: {
+        Row: {
+          classification_safe_warning: string | null
+          expires_at: string | null
+          id: string
+          issue_date: string | null
+          issuing_judge_name: string | null
+          last_sync_at: string | null
+          last_sync_error: string | null
+          legal_request_id: string
+          person_id: string | null
+          person_name_snapshot: string | null
+          sync_attempts: number
+          sync_status: string
+          updated_at: string
+          wanted_status: string
+          warrant_reference: string
+          warrant_type: string
+        }
+        Insert: {
+          classification_safe_warning?: string | null
+          expires_at?: string | null
+          id?: string
+          issue_date?: string | null
+          issuing_judge_name?: string | null
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          legal_request_id: string
+          person_id?: string | null
+          person_name_snapshot?: string | null
+          sync_attempts?: number
+          sync_status?: string
+          updated_at?: string
+          wanted_status: string
+          warrant_reference: string
+          warrant_type: string
+        }
+        Update: {
+          classification_safe_warning?: string | null
+          expires_at?: string | null
+          id?: string
+          issue_date?: string | null
+          issuing_judge_name?: string | null
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          legal_request_id?: string
+          person_id?: string | null
+          person_name_snapshot?: string | null
+          sync_attempts?: number
+          sync_status?: string
+          updated_at?: string
+          wanted_status?: string
+          warrant_reference?: string
+          warrant_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mdt_wanted_projections_legal_request_id_fkey"
+            columns: ["legal_request_id"]
+            isOneToOne: true
+            referencedRelation: "legal_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mdt_wanted_projections_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prosecutor_bureau_assignments: {
+        Row: {
+          assigned_by: string
+          assignment_note: string | null
+          assignment_type: string
+          bureau: Database["public"]["Enums"]["bureau"]
+          created_at: string
+          ends_at: string | null
+          id: string
+          prosecutor_id: string
+          starts_at: string
+        }
+        Insert: {
+          assigned_by: string
+          assignment_note?: string | null
+          assignment_type?: string
+          bureau: Database["public"]["Enums"]["bureau"]
+          created_at?: string
+          ends_at?: string | null
+          id?: string
+          prosecutor_id: string
+          starts_at?: string
+        }
+        Update: {
+          assigned_by?: string
+          assignment_note?: string | null
+          assignment_type?: string
+          bureau?: Database["public"]["Enums"]["bureau"]
+          created_at?: string
+          ends_at?: string | null
+          id?: string
+          prosecutor_id?: string
+          starts_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prosecutor_bureau_assignments_prosecutor_id_fkey"
+            columns: ["prosecutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prosecutor_bureau_assignments_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       media: {
         Row: {
           case_id: string | null
@@ -2747,6 +3600,294 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_legal_exhibit: {
+        Args: {
+          p_meta?: Json
+          p_request: string
+          p_source_id?: string
+          p_title?: string
+          p_type: string
+        }
+        Returns: Database["public"]["Tables"]["legal_request_exhibits"]["Row"]
+      }
+      admin_justice_membership_requests: {
+        Args: never
+        Returns: Database["public"]["Tables"]["justice_membership_requests"]["Row"][]
+      }
+      assign_ada_to_bureau: {
+        Args: {
+          p_bureau: Database["public"]["Enums"]["bureau"]
+          p_note?: string
+          p_prosecutor: string
+          p_replace?: boolean
+          p_type?: string
+        }
+        Returns: Database["public"]["Tables"]["prosecutor_bureau_assignments"]["Row"]
+      }
+      assign_judge: {
+        Args: { p_judge: string; p_request: string }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      close_legal_request: {
+        Args: { p_note?: string; p_outcome?: string; p_request: string }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      create_legal_request: {
+        Args: {
+          p_case: string
+          p_classification?: string
+          p_form?: Json
+          p_narrative?: string
+          p_person?: string
+          p_priority?: string
+          p_recipient_name?: string
+          p_recipient_type?: string
+          p_request_type: string
+          p_source_report?: string
+          p_subtype: string
+          p_title: string
+        }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      decide_legal_request_as_judge: {
+        Args: {
+          p_conditions?: string
+          p_decision: string
+          p_expires_at?: string
+          p_note?: string
+          p_request: string
+          p_signature?: string
+        }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      doj_bureau_coverage: {
+        Args: never
+        Returns: {
+          acting_id: string | null
+          acting_name: string | null
+          acting_role: string | null
+          acting_since: string | null
+          bureau: Database["public"]["Enums"]["bureau"]
+          covered: boolean
+          primary_ada_id: string | null
+          primary_ada_name: string | null
+          primary_since: string | null
+          supporting: Json
+        }[]
+      }
+      end_ada_bureau_assignment: {
+        Args: { p_assignment: string; p_note?: string }
+        Returns: Database["public"]["Tables"]["prosecutor_bureau_assignments"]["Row"]
+      }
+      issue_legal_request: {
+        Args: {
+          p_expires_at?: string
+          p_request: string
+          p_response_deadline?: string
+        }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      justice_membership_request_submit: {
+        Args: { p_request: string }
+        Returns: Database["public"]["Tables"]["justice_membership_requests"]["Row"]
+      }
+      justice_membership_request_withdraw: {
+        Args: { p_request: string }
+        Returns: Database["public"]["Tables"]["justice_membership_requests"]["Row"]
+      }
+      justice_directory: {
+        Args: never
+        Returns: {
+          active: boolean
+          agency: string
+          display_name: string
+          justice_identifier: string | null
+          justice_role: string
+          user_id: string
+        }[]
+      }
+      legal_request_people: {
+        Args: { p_request: string }
+        Returns: {
+          display_name: string
+          id: string
+        }[]
+      }
+      legal_internal_notes: {
+        Args: { p_request: string }
+        Returns: {
+          action: string
+          actor_id: string
+          created_at: string
+          id: string
+          internal_note: string
+        }[]
+      }
+      legal_search: {
+        Args: { q: string }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"][]
+      }
+      mdt_wanted_current: {
+        Args: never
+        Returns: {
+          classification_safe_warning: string | null
+          effective_status: string
+          expires_at: string | null
+          issue_date: string | null
+          issuing_judge_name: string | null
+          legal_request_id: string
+          person_id: string | null
+          person_name_snapshot: string | null
+          wanted_status: string
+          warrant_reference: string
+          warrant_type: string
+        }[]
+      }
+      reassign_legal_ada: {
+        Args: { p_new_ada: string; p_reason?: string; p_request: string }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      record_subpoena_compliance: {
+        Args: {
+          p_date?: string
+          p_non_compliance_reason?: string
+          p_notes?: string
+          p_request: string
+          p_status: string
+        }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      record_subpoena_service: {
+        Args: {
+          p_acknowledged?: boolean
+          p_method?: string
+          p_notes?: string
+          p_request: string
+          p_served_at?: string
+          p_status: string
+        }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      record_warrant_execution: {
+        Args: {
+          p_executed_at?: string
+          p_notes?: string
+          p_outcome: string
+          p_request: string
+        }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      record_warrant_return: {
+        Args: { p_narrative: string; p_request: string }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      remove_legal_exhibit: { Args: { p_exhibit: string }; Returns: undefined }
+      resolve_case_originating_bureau: {
+        Args: {
+          p_bureau: Database["public"]["Enums"]["bureau"]
+          p_case: string
+        }
+        Returns: Database["public"]["Tables"]["cases"]["Row"]
+      }
+      review_justice_membership_request: {
+        Args: {
+          p_applicant_note?: string
+          p_decision: string
+          p_final_agency?: string
+          p_final_role?: string
+          p_internal_note?: string
+          p_request: string
+        }
+        Returns: Database["public"]["Tables"]["justice_membership_requests"]["Row"]
+      }
+      review_legal_request_as_ada: {
+        Args: {
+          p_decision: string
+          p_judge?: string
+          p_note?: string
+          p_request: string
+          p_signature?: string
+        }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      review_legal_request_as_ag: {
+        Args: {
+          p_decision: string
+          p_note?: string
+          p_request: string
+          p_signature?: string
+        }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      review_legal_request_as_cid: {
+        Args: {
+          p_decision: string
+          p_note?: string
+          p_override_reason?: string
+          p_request: string
+          p_signature?: string
+        }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      review_legal_request_as_da: {
+        Args: {
+          p_decision: string
+          p_note?: string
+          p_request: string
+          p_signature?: string
+        }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      set_acting_ada: {
+        Args: {
+          p_bureau: Database["public"]["Enums"]["bureau"]
+          p_note?: string
+          p_prosecutor: string
+        }
+        Returns: Database["public"]["Tables"]["prosecutor_bureau_assignments"]["Row"]
+      }
+      set_justice_membership_active: {
+        Args: { p_active: boolean; p_target: string }
+        Returns: Database["public"]["Tables"]["justice_memberships"]["Row"]
+      }
+      set_legal_approval_route: {
+        Args: { p_reason: string; p_request: string; p_route: string }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      set_primary_ada: {
+        Args: {
+          p_bureau: Database["public"]["Enums"]["bureau"]
+          p_note?: string
+          p_prosecutor: string
+        }
+        Returns: Database["public"]["Tables"]["prosecutor_bureau_assignments"]["Row"]
+      }
+      submit_legal_request_to_cid: {
+        Args: { p_request: string }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      submit_legal_request_to_doj: {
+        Args: { p_ada?: string; p_reason?: string; p_request: string }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      update_legal_draft: {
+        Args: {
+          p_classification?: string
+          p_form?: Json
+          p_narrative?: string
+          p_person?: string
+          p_priority?: string
+          p_recipient_name?: string
+          p_recipient_type?: string
+          p_request: string
+          p_title?: string
+        }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      withdraw_legal_request: {
+        Args: { p_note?: string; p_request: string }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
       admin_member_emails: {
         Args: never
         Returns: {

@@ -554,6 +554,270 @@ alter table public.indicators add constraint indicators_kind_check CHECK ((kind 
 alter table public.indicators add constraint indicators_value_check CHECK ((length(btrim(value)) > 0));
 alter table public.indicators enable row level security;
 
+create table public.justice_membership_request_history (
+  id uuid not null default gen_random_uuid(),
+  request_id uuid not null,
+  actor_id uuid,
+  action text not null,
+  from_status text,
+  to_status text,
+  note text,
+  internal boolean not null default false,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.justice_membership_request_history add constraint justice_membership_request_history_pkey PRIMARY KEY (id);
+alter table public.justice_membership_request_history add constraint justice_membership_request_history_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.justice_membership_requests(id);
+alter table public.justice_membership_request_history add constraint justice_membership_request_history_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id);
+alter table public.justice_membership_request_history enable row level security;
+
+create table public.justice_membership_requests (
+  id uuid not null default gen_random_uuid(),
+  applicant_id uuid not null,
+  display_name text not null,
+  justice_identifier text,
+  requested_agency text not null,
+  requested_justice_role text not null,
+  reason text not null,
+  additional_notes text,
+  status text not null default 'draft'::text,
+  decided_agency text,
+  decided_justice_role text,
+  applicant_visible_decision_note text,
+  internal_decision_note text,
+  decided_by uuid,
+  decided_at timestamp with time zone,
+  submitted_at timestamp with time zone,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.justice_membership_requests add constraint justice_membership_requests_pkey PRIMARY KEY (id);
+alter table public.justice_membership_requests add constraint justice_membership_requests_applicant_id_key UNIQUE (applicant_id);
+alter table public.justice_membership_requests add constraint justice_membership_requests_applicant_id_fkey FOREIGN KEY (applicant_id) REFERENCES public.profiles(id);
+alter table public.justice_membership_requests add constraint justice_membership_requests_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id);
+alter table public.justice_membership_requests enable row level security;
+
+create table public.justice_memberships (
+  user_id uuid not null,
+  agency text not null,
+  justice_role text not null,
+  active boolean not null default false,
+  justice_identifier text,
+  approved_by uuid,
+  approved_at timestamp with time zone,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.justice_memberships add constraint justice_memberships_pkey PRIMARY KEY (user_id);
+alter table public.justice_memberships add constraint justice_memberships_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id);
+alter table public.justice_memberships add constraint justice_memberships_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES public.profiles(id);
+alter table public.justice_memberships enable row level security;
+
+create table public.legal_request_actions (
+  id uuid not null default gen_random_uuid(),
+  legal_request_id uuid not null,
+  version_id uuid,
+  actor_id uuid not null,
+  action text not null,
+  from_status text,
+  to_status text,
+  public_note text,
+  internal_note text,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.legal_request_actions add constraint legal_request_actions_pkey PRIMARY KEY (id);
+alter table public.legal_request_actions add constraint legal_request_actions_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id);
+alter table public.legal_request_actions add constraint legal_request_actions_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.legal_request_versions(id);
+alter table public.legal_request_actions add constraint legal_request_actions_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id);
+alter table public.legal_request_actions enable row level security;
+
+create table public.legal_request_exhibits (
+  id uuid not null default gen_random_uuid(),
+  legal_request_id uuid not null,
+  version_id uuid,
+  exhibit_type text not null,
+  source_id uuid,
+  display_title text not null,
+  snapshot_metadata jsonb not null default '{}'::jsonb,
+  added_by uuid not null,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.legal_request_exhibits add constraint legal_request_exhibits_pkey PRIMARY KEY (id);
+alter table public.legal_request_exhibits add constraint legal_request_exhibits_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id);
+alter table public.legal_request_exhibits add constraint legal_request_exhibits_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.legal_request_versions(id);
+alter table public.legal_request_exhibits add constraint legal_request_exhibits_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id);
+alter table public.legal_request_exhibits enable row level security;
+
+create table public.legal_request_participants (
+  legal_request_id uuid not null,
+  user_id uuid not null,
+  participant_role text not null,
+  added_by uuid not null,
+  added_at timestamp with time zone not null default now(),
+  removed_at timestamp with time zone,
+  removed_by uuid
+);
+alter table public.legal_request_participants add constraint legal_request_participants_pkey PRIMARY KEY (legal_request_id, user_id, participant_role);
+alter table public.legal_request_participants add constraint legal_request_participants_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id);
+alter table public.legal_request_participants add constraint legal_request_participants_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id);
+alter table public.legal_request_participants add constraint legal_request_participants_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id);
+alter table public.legal_request_participants add constraint legal_request_participants_removed_by_fkey FOREIGN KEY (removed_by) REFERENCES public.profiles(id);
+alter table public.legal_request_participants enable row level security;
+
+create table public.legal_request_signatures (
+  id uuid not null default gen_random_uuid(),
+  legal_request_id uuid not null,
+  version_id uuid not null,
+  signer_id uuid not null,
+  signer_name_snapshot text not null,
+  signer_role_snapshot text not null,
+  signature text not null,
+  action text not null,
+  signed_at timestamp with time zone not null default now()
+);
+alter table public.legal_request_signatures add constraint legal_request_signatures_pkey PRIMARY KEY (id);
+alter table public.legal_request_signatures add constraint legal_request_signatures_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id);
+alter table public.legal_request_signatures add constraint legal_request_signatures_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.legal_request_versions(id);
+alter table public.legal_request_signatures add constraint legal_request_signatures_signer_id_fkey FOREIGN KEY (signer_id) REFERENCES public.profiles(id);
+alter table public.legal_request_signatures enable row level security;
+
+create table public.legal_request_versions (
+  id uuid not null default gen_random_uuid(),
+  legal_request_id uuid not null,
+  version_number integer not null,
+  form_data jsonb not null,
+  narrative text,
+  packet_manifest jsonb not null default '[]'::jsonb,
+  created_by uuid not null,
+  created_at timestamp with time zone not null default now(),
+  submitted_stage text,
+  content_hash text
+);
+alter table public.legal_request_versions add constraint legal_request_versions_pkey PRIMARY KEY (id);
+alter table public.legal_request_versions add constraint legal_request_versions_legal_request_id_version_number_key UNIQUE (legal_request_id, version_number);
+alter table public.legal_request_versions add constraint legal_request_versions_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id);
+alter table public.legal_request_versions add constraint legal_request_versions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.legal_request_versions enable row level security;
+
+create table public.legal_requests (
+  id uuid not null default gen_random_uuid(),
+  request_number text not null default private.next_legal_request_number(),
+  request_type text not null,
+  subtype text not null,
+  case_id uuid not null,
+  source_report_id uuid,
+  source_report_seq integer,
+  created_by uuid not null,
+  responsible_bureau public.bureau not null,
+  classification text not null default 'restricted'::text,
+  priority text,
+  title text not null,
+  document_status text not null default 'draft'::text,
+  review_status text not null default 'not_submitted'::text,
+  fulfilment_status text not null default 'unissued'::text,
+  current_version_id uuid,
+  assigned_ada_id uuid,
+  assigned_judge_id uuid,
+  approval_route text,
+  form_data jsonb not null default '{}'::jsonb,
+  narrative text,
+  person_id uuid,
+  person_name_snapshot text,
+  citizen_id_snapshot text,
+  recipient_type text,
+  recipient_name text,
+  case_number_snapshot text,
+  case_title_snapshot text,
+  cid_reviewed_by uuid,
+  cid_reviewed_at timestamp with time zone,
+  decision text,
+  decision_note text,
+  decided_by uuid,
+  decided_at timestamp with time zone,
+  judicial_conditions text,
+  issued_by uuid,
+  issued_at timestamp with time zone,
+  expires_at timestamp with time zone,
+  response_deadline timestamp with time zone,
+  executed_at timestamp with time zone,
+  executed_by uuid,
+  execution_outcome text,
+  execution_notes text,
+  return_narrative text,
+  returned_at timestamp with time zone,
+  return_filed_by uuid,
+  revoked_at timestamp with time zone,
+  revoked_by uuid,
+  revoke_reason text,
+  service_status text not null default 'not_served'::text,
+  served_at timestamp with time zone,
+  served_by uuid,
+  service_method text,
+  service_notes text,
+  recipient_acknowledged boolean,
+  compliance_status text not null default 'pending'::text,
+  compliance_date timestamp with time zone,
+  compliance_notes text,
+  non_compliance_reason text,
+  closed_by uuid,
+  close_note text,
+  submitted_to_cid_at timestamp with time zone,
+  submitted_to_doj_at timestamp with time zone,
+  submitted_to_judge_at timestamp with time zone,
+  closed_at timestamp with time zone,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.legal_requests add constraint legal_requests_pkey PRIMARY KEY (id);
+alter table public.legal_requests add constraint legal_requests_request_number_key UNIQUE (request_number);
+alter table public.legal_requests add constraint legal_requests_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id);
+alter table public.legal_requests add constraint legal_requests_source_report_id_fkey FOREIGN KEY (source_report_id) REFERENCES public.reports(id);
+alter table public.legal_requests add constraint legal_requests_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.legal_requests add constraint legal_requests_assigned_ada_id_fkey FOREIGN KEY (assigned_ada_id) REFERENCES public.profiles(id);
+alter table public.legal_requests add constraint legal_requests_assigned_judge_id_fkey FOREIGN KEY (assigned_judge_id) REFERENCES public.profiles(id);
+alter table public.legal_requests add constraint legal_requests_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id);
+alter table public.legal_requests add constraint legal_requests_current_version_fkey FOREIGN KEY (current_version_id) REFERENCES public.legal_request_versions(id);
+alter table public.legal_requests enable row level security;
+
+create table public.mdt_wanted_projections (
+  id uuid not null default gen_random_uuid(),
+  legal_request_id uuid not null,
+  person_id uuid,
+  person_name_snapshot text,
+  wanted_status text not null,
+  warrant_reference text not null,
+  warrant_type text not null,
+  issuing_judge_name text,
+  issue_date timestamp with time zone,
+  expires_at timestamp with time zone,
+  classification_safe_warning text,
+  sync_status text not null default 'pending'::text,
+  sync_attempts integer not null default 0,
+  last_sync_at timestamp with time zone,
+  last_sync_error text,
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.mdt_wanted_projections add constraint mdt_wanted_projections_pkey PRIMARY KEY (id);
+alter table public.mdt_wanted_projections add constraint mdt_wanted_projections_legal_request_id_key UNIQUE (legal_request_id);
+alter table public.mdt_wanted_projections add constraint mdt_wanted_projections_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id);
+alter table public.mdt_wanted_projections add constraint mdt_wanted_projections_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id);
+alter table public.mdt_wanted_projections enable row level security;
+
+create table public.prosecutor_bureau_assignments (
+  id uuid not null default gen_random_uuid(),
+  prosecutor_id uuid not null,
+  bureau public.bureau not null,
+  assignment_type text not null default 'supporting'::text,
+  assigned_by uuid not null,
+  assignment_note text,
+  starts_at timestamp with time zone not null default now(),
+  ends_at timestamp with time zone,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.prosecutor_bureau_assignments add constraint prosecutor_bureau_assignments_pkey PRIMARY KEY (id);
+alter table public.prosecutor_bureau_assignments add constraint prosecutor_bureau_assignments_prosecutor_id_fkey FOREIGN KEY (prosecutor_id) REFERENCES public.profiles(id);
+alter table public.prosecutor_bureau_assignments add constraint prosecutor_bureau_assignments_assigned_by_fkey FOREIGN KEY (assigned_by) REFERENCES public.profiles(id);
+alter table public.prosecutor_bureau_assignments enable row level security;
+
 create table public.media (
   id uuid not null default gen_random_uuid(),
   title text not null,
@@ -3005,3 +3269,37 @@ create policy wl_sel on public.watchlist
 -- login block (Command/Owner, bureau-lead scoped); definitive SQL in
 -- supabase/migrations/20260713090000_login_denial.sql. guard_profile() and
 -- membership_request_submit() gained login_denied handling there.
+
+-- Functions/RPCs added by the 20260714 DOJ legal-review migrations
+-- (justice_identity, prosecutor_assignments, legal_core, legal_workflow,
+-- legal_workflow_review, legal_search_cleanup):
+-- private.justice_role_of(uuid), private.justice_role(), private.is_justice_active(uuid),
+-- private.can_review_justice_role(uuid, text), private.jmr_history(...),
+-- private.guard_justice_membership_request() [trigger],
+-- private.is_active_ada_for_bureau(uuid, public.bureau),
+-- private.get_routing_ada_for_bureau(public.bureau), private.can_manage_prosecutors(),
+-- private.pba_validate(uuid, public.bureau, text), private.next_legal_request_number(),
+-- private.block_legal_immutable() [trigger], private.is_legal_participant(uuid, uuid),
+-- private.owner_flag(uuid), private.can_view_legal_request(uuid, uuid),
+-- private.can_edit_legal_draft(uuid, uuid), private.can_review_as_cid/_ada/_da/_ag/_judge(uuid, uuid),
+-- private.can_manage_legal_assignment(uuid, uuid), private.legal_log/_audit/_notify/_freeze_version/
+-- _add_participant/_end_participant/_sign/_resolve_bureau/_is_prosecution_side/
+-- _default_route/_default_classification, private.mdt_project(uuid, text),
+-- private.can_fulfil_legal(uuid, uuid),
+-- public.justice_membership_request_submit/_withdraw(uuid),
+-- public.review_justice_membership_request(uuid, text, text, text, text, text),
+-- public.admin_justice_membership_requests(), public.set_justice_membership_active(uuid, boolean),
+-- public.assign_ada_to_bureau(uuid, public.bureau, text, text, boolean),
+-- public.end_ada_bureau_assignment(uuid, text), public.set_primary_ada/set_acting_ada(uuid, public.bureau, text),
+-- public.doj_bureau_coverage(), public.create_legal_request(...), public.update_legal_draft(...),
+-- public.add_legal_exhibit(...), public.remove_legal_exhibit(uuid),
+-- public.submit_legal_request_to_cid(uuid), public.review_legal_request_as_cid(...),
+-- public.reassign_legal_ada(uuid, uuid, text), public.submit_legal_request_to_doj(uuid, uuid, text),
+-- public.review_legal_request_as_ada/_da/_ag(...), public.assign_judge(uuid, uuid),
+-- public.decide_legal_request_as_judge(...), public.issue_legal_request(...),
+-- public.record_warrant_execution/_return(...), public.record_subpoena_service/_compliance(...),
+-- public.close_legal_request(uuid, text, text), public.withdraw_legal_request(uuid, text),
+-- public.set_legal_approval_route(uuid, text, text), public.resolve_case_originating_bureau(uuid, public.bureau),
+-- public.legal_internal_notes(uuid), public.legal_search(text), public.mdt_wanted_current(),
+-- public.justice_directory(), public.legal_request_people(uuid);
+-- rls_test_cleanup() was extended to purge the new tables.

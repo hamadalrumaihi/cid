@@ -72,7 +72,7 @@ const subscribeCollapse = (cb: () => void) => {
 const readCollapsed = () => document.body.classList.contains('nav-collapsed')
 
 export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; onCloseDrawer: () => void }) {
-  const { isCommand, isOwner } = useAuth()
+  const { isCommand, isOwner, justiceRole } = useAuth()
   const { activeCategory, activeTab, navigate, navigateCategory } = useNav()
   const badges = useNavBadges()
   const collapsed = useSyncExternalStore(subscribeCollapse, readCollapsed, () => false)
@@ -173,6 +173,24 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
           >
             <span className="nav-icon flex-shrink-0" aria-hidden>🛡️</span>
             <span className="nav-label">Command Center</span>
+          </button>
+        )}
+        {/* Justice Portal — standalone leaf for dual-identity users (an
+            active CID member who ALSO holds a justice membership) and the
+            owner (oversight). Justice-only users never see this sidebar at
+            all — they get the standalone JusticeShell. Hiding is cosmetic;
+            the view gate + legal RLS are the real rule. */}
+        {(justiceRole || isOwner) && (
+          <button
+            data-label="Justice Portal"
+            onClick={() => go(() => navigate('justice'))}
+            title="Justice Portal — DOJ & Judiciary legal review"
+            className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
+              activeTab === 'justice' ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-badge-500' : 'text-slate-300'
+            }`}
+          >
+            <span className="nav-icon flex-shrink-0" aria-hidden>⚖️</span>
+            <span className="nav-label">Justice Portal</span>
           </button>
         )}
         {/* Owner Portal — standalone leaf, rendered ONLY for the project
