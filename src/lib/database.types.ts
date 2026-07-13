@@ -2219,6 +2219,10 @@ export type Database = {
           is_owner: boolean
           loa: boolean
           loa_since: string | null
+          login_denied: boolean
+          login_denied_at: string | null
+          login_denied_by: string | null
+          login_denied_reason: string | null
           removed_at: string | null
           role: Database["public"]["Enums"]["app_role"]
           updated_at: string
@@ -2236,6 +2240,10 @@ export type Database = {
           is_owner?: boolean
           loa?: boolean
           loa_since?: string | null
+          login_denied?: boolean
+          login_denied_at?: string | null
+          login_denied_by?: string | null
+          login_denied_reason?: string | null
           removed_at?: string | null
           role?: Database["public"]["Enums"]["app_role"]
           updated_at?: string
@@ -2253,6 +2261,10 @@ export type Database = {
           is_owner?: boolean
           loa?: boolean
           loa_since?: string | null
+          login_denied?: boolean
+          login_denied_at?: string | null
+          login_denied_by?: string | null
+          login_denied_reason?: string | null
           removed_at?: string | null
           role?: Database["public"]["Enums"]["app_role"]
           updated_at?: string
@@ -2759,6 +2771,14 @@ export type Database = {
       convert_case_to_joint: {
         Args: { p_case: string; p_members: Json; p_note?: string }
         Returns: Json
+      }
+      deny_member_login: {
+        Args: { p_reason: string; p_target: string }
+        Returns: Database["public"]["Tables"]["profiles"]["Row"]
+      }
+      restore_member_login: {
+        Args: { p_target: string }
+        Returns: Database["public"]["Tables"]["profiles"]["Row"]
       }
       joint_case_add_members: {
         Args: { p_case: string; p_members: Json }

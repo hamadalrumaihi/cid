@@ -35,6 +35,8 @@ export const NOTIF_LABEL: Record<string, string> = {
   joint_case_added: 'Added to a joint case',
   joint_case_removed: 'Joint-case access removed',
   joint_case_ended: 'Joint case ended',
+  login_denied: '⛔ Portal access denied',
+  login_restored: 'Portal access restored',
   client_error: '⚠ App error reported',
   case_stale: 'Case going stale',
   stale_case: 'Case going stale',

@@ -74,8 +74,30 @@ function LoginBody() {
 }
 
 function PendingBody() {
-  const { session, signOut } = useAuth()
+  const { session, profile, signOut } = useAuth()
   const who = session?.user?.email || 'Your account'
+  // A denied member authenticates but is blocked from the portal and from
+  // filing a membership request — the block is enforced server-side (RLS +
+  // deny_member_login); this screen just explains it.
+  if (profile?.login_denied) {
+    return (
+      <>
+        <div className="rounded-lg border border-rose-500/25 bg-rose-500/10 p-4">
+          <p className="text-sm font-bold text-rose-200">Access denied</p>
+          <p className="mt-1 text-sm text-rose-100/90">
+            {profile.login_denied_reason?.trim() || 'Your access to the CID Portal has been denied by Command.'}
+          </p>
+          <p className="mt-2 text-xs text-rose-200/70">Contact Command if you believe this is a mistake.</p>
+        </div>
+        <button
+          onClick={() => void signOut()}
+          className="mt-4 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
+        >
+          Sign out
+        </button>
+      </>
+    )
+  }
   return (
     <>
       <p className="mb-3 text-xs text-slate-400">Signed in as <b className="text-slate-200">{who}</b></p>

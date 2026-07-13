@@ -37,6 +37,7 @@ SECURITY DEFINER (run privileged, then check the caller inside) except
 | `membership_request_submit` / `_withdraw(p_request)` | request id | request row | Gate (inactive screen) | applicant-side transitions; submit notifies command |
 | `review_membership_request(p_request, p_decision, …)` | decision + final dept/role + notes | request row | ApprovalQueue | command decision; activates profile ONLY on approval; role_events + history + audit atomically |
 | `admin_membership_requests()` | — | all request rows | ApprovalQueue | command-only bypass of the internal-note column grant |
+| `deny_member_login(p_target, p_reason)` / `restore_member_login(p_target)` | profile id + reason | profile row | AssignModal | app-level login block (Command/Owner, bureau-lead scoped); denied users hit an "Access denied" gate and can't file a request; `login_denied*` frozen by a non-definer trigger |
 | `convert_case_to_joint` / `joint_case_add_members(p_case, p_members)` | case + member list | summary | CaseDetail/Overview | joint rows are RPC-only; bureau never flips to JTF |
 | `joint_case_remove_member(p_case, p_officer, p_reason)` | case + member | void | Overview | immediate revoke, history preserved |
 | `joint_case_end(p_case, p_note)` | case id | void | CaseDetail | closes all temporary joint access |
