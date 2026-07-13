@@ -27,6 +27,8 @@ What you can see and change depends on your **role and bureau** — the server e
    - Click **Continue with Discord** (most members use this),
    - Click **Continue with Google**, or
    - Type your email and click **Email link** — you'll get a one-time sign-in link in your inbox ("Magic link sent — check your inbox.").
+> **Denied access?** If Command has denied your login you'll see an **Access denied** screen with the reason instead of the request form — contact Command if you think it's a mistake. Command can deny or restore a person's access from **Manage Officer → Danger zone**.
+
 3. First time here? After signing in you'll land on the **membership request** screen. Fill it in — display name, badge number, your **one permanent department** (Los Santos, Blaine County or State Bureau — JTF is joint-case-only, not a home department), the CID role you're requesting (Detective or Senior Detective), and a short reason/current-assignment note — then hit **Submit Request**. Command reviews it: they can approve it as-is, approve with a different department/role, send it back for a correction (you'll see their note, can edit, and resubmit), or reject it. You stay locked out until a request is approved; once it is, reload and you're in.
 
 ### First five minutes after approval

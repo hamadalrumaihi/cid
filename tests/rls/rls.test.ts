@@ -1009,3 +1009,82 @@ describe.skipIf(!enabled)('Announcements — audience authority & scoped fan-out
     }
   })
 })
+
+/** Login denial (migration 20260713090000) — an app-level block Command/Owner
+ *  apply via deny_member_login()/restore_member_login(). Uses the disposable
+ *  rls-test-applicant so the shared deny-by-default fixtures are untouched; the
+ *  block also stops the applicant filing a membership request. Teardown
+ *  restores + rls_test_cleanup so the account returns to inactive/blank. */
+const denyEnabled = enabled && !!(PW.applicant && PW.director)
+describe.skipIf(!denyEnabled)('Login denial — deny/restore access', () => {
+  let applicant: SupabaseClient
+  let director: SupabaseClient
+  let bcb: SupabaseClient
+  let applicantId = ''
+
+  beforeAll(async () => {
+    applicant = mk(); director = mk(); bcb = mk()
+    applicantId = await signInAs(applicant, 'rls-test-applicant@cidportal.test', PW.applicant!)
+    await signInAs(director, 'rls-test-director@cidportal.test', PW.director!)
+    await signInAs(bcb, 'rls-test-bcb@cidportal.test', PW.bcb!)
+    // Clean slate: clear any prior denial + request.
+    await director.rpc('restore_member_login', { p_target: applicantId })
+    await applicant.rpc('rls_test_cleanup')
+  })
+
+  afterAll(async () => {
+    if (!director) return
+    await director.rpc('restore_member_login', { p_target: applicantId })
+    await applicant.rpc('rls_test_cleanup')
+    await Promise.all([applicant, director, bcb].filter(Boolean).map((c) => c.auth.signOut()))
+  })
+
+  it('an ordinary detective cannot deny anyone', async () => {
+    const { error } = await bcb.rpc('deny_member_login', { p_target: applicantId, p_reason: '[rls-test]' })
+    expect(error).not.toBeNull()
+  })
+
+  it('a director can deny and it blocks the membership-request flow', async () => {
+    const deny = await director.rpc('deny_member_login', { p_target: applicantId, p_reason: '[rls-test] denied' })
+    expect(deny.error).toBeNull()
+    // Applicant sees the block on their own profile with the reason.
+    const prof = await applicant.from('profiles').select('login_denied,login_denied_reason,active').eq('id', applicantId).maybeSingle()
+    expect(prof.error).toBeNull()
+    expect(prof.data!.login_denied).toBe(true)
+    expect(prof.data!.active).toBe(false)
+    expect(prof.data!.login_denied_reason).toBe('[rls-test] denied')
+    // A denied applicant cannot insert a membership request (mr_ins RLS).
+    const ins = await applicant.from('membership_requests')
+      .insert({ applicant_id: applicantId, display_name: 'RLS Test Applicant', requested_bureau: 'LSB', requested_role: 'detective', reason: '[rls-test] blocked' })
+      .select('id')
+    expect(ins.error).not.toBeNull()
+  })
+
+  it('the denied applicant cannot self-clear the block', async () => {
+    // Direct profile update is frozen by guard_profile for clients.
+    await applicant.from('profiles').update({ login_denied: false }).eq('id', applicantId)
+    const prof = await applicant.from('profiles').select('login_denied').eq('id', applicantId).maybeSingle()
+    expect(prof.data!.login_denied).toBe(true)
+    // And the restore RPC is authority-gated.
+    const { error } = await applicant.rpc('restore_member_login', { p_target: applicantId })
+    expect(error).not.toBeNull()
+  })
+
+  it('restore clears the block and re-opens the request flow', async () => {
+    const res = await director.rpc('restore_member_login', { p_target: applicantId })
+    expect(res.error).toBeNull()
+    const prof = await applicant.from('profiles').select('login_denied,active').eq('id', applicantId).maybeSingle()
+    expect(prof.data!.login_denied).toBe(false)
+    expect(prof.data!.active).toBe(false)
+    // Now the applicant can file a request again.
+    const ins = await applicant.from('membership_requests')
+      .insert({ applicant_id: applicantId, display_name: 'RLS Test Applicant', requested_bureau: 'LSB', requested_role: 'detective', reason: '[rls-test] restored' })
+      .select('id')
+    expect(ins.error).toBeNull()
+  })
+
+  it('a member cannot deny their own login', async () => {
+    const { error } = await director.rpc('deny_member_login', { p_target: (await director.auth.getUser()).data.user!.id, p_reason: 'x' })
+    expect(error).not.toBeNull()
+  })
+})

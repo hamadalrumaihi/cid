@@ -6,6 +6,25 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.12.0] — 2026-07-13
+
+### Added — deny login (app-level access block)
+- Command and the Owner can now **deny a person access** to the portal from
+  **Manage Officer → Danger zone → Deny login access** (with a reason shown
+  to the member), and **Restore login access** to reverse it. Bureau leads
+  are scoped to their own bureau and cannot deny a command member or the
+  owner; nobody can deny themselves — all enforced server-side by the
+  `deny_member_login()` / `restore_member_login()` definer RPCs.
+- A denied person can still authenticate but lands on an **"Access denied"**
+  screen (showing the reason) instead of the membership-request form, and is
+  blocked from filing or advancing a request — closing the gap where a
+  removed or rejected person could simply sign back in and re-apply.
+  Reversible; deny/restore are audit-logged and notify the member. Restoring
+  returns them to inactive so they re-enter the normal request→approval flow.
+- The `login_denied*` columns are frozen against direct client writes by a
+  dedicated non-definer trigger (a denied user cannot self-clear the block —
+  covered by a new RLS test).
+
 ## [1.11.0] — 2026-07-13
 
 ### Added — membership requests (new-member onboarding)

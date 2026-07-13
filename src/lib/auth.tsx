@@ -27,13 +27,13 @@ type ProfileRow = Database['public']['Tables']['profiles']['Row']
  *  member would be DENIED, so it is never in this list; a member's own email
  *  comes from the auth session instead (vanilla supabase.js:36-45). */
 export const PROFILE_COLS =
-  'id,display_name,avatar_url,badge_number,division,role,active,created_at,updated_at,loa,loa_since,discord_id,is_owner' as const
+  'id,display_name,avatar_url,badge_number,division,role,active,created_at,updated_at,loa,loa_since,discord_id,is_owner,login_denied,login_denied_reason' as const
 
 export type Profile = Pick<
   ProfileRow,
   | 'id' | 'display_name' | 'avatar_url' | 'badge_number' | 'division' | 'role'
   | 'active' | 'created_at' | 'updated_at' | 'loa' | 'loa_since' | 'discord_id'
-  | 'is_owner'
+  | 'is_owner' | 'login_denied' | 'login_denied_reason'
 > & { email?: string | null }
 
 export type GateState = 'loading' | 'setup' | 'out' | 'pending' | 'error' | 'in'

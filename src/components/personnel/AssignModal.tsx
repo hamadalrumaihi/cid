@@ -10,9 +10,9 @@ import type { Database } from '@/lib/database.types'
 import { rpc, updateNoSelect } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import type { RosterProfile } from '@/lib/profiles'
-import { ROLE_ORDER, ROLE_LABEL } from '@/lib/roles'
+import { ROLE_ORDER, ROLE_LABEL, isCommandRole } from '@/lib/roles'
 import { toast } from '@/lib/toast'
-import { uiConfirm } from '@/components/ui/dialog'
+import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 
 type AppRole = Database['public']['Enums']['app_role']
@@ -50,6 +50,37 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
       if (lr.error) toast(`Role saved; LOA update failed: ${lr.error.message}`, 'warn')
     }
     toast('Member updated', 'success')
+    onChanged()
+    onClose()
+  }
+
+  // Command/Owner may deny a person portal access (app-level block) or restore
+  // it. Bureau-lead scoping is enforced server-side by deny_member_login().
+  const canDenyThis = !!me && (me.is_owner || (isCommandRole(me.role) && !p.is_owner && me.id !== p.id))
+
+  const denyLogin = async () => {
+    if (me && me.id === p.id) { toast('You cannot deny your own login.', 'warn'); return }
+    const reason = await uiPrompt(
+      `Deny ${p.display_name || 'this member'} access to the CID Portal?\n\nThey can still sign in but will see an "Access denied" screen with your reason and cannot submit a membership request. This is reversible.`,
+      { title: 'Deny login', placeholder: 'Reason shown to the member (optional)', confirmText: 'Deny access' },
+    )
+    if (reason === null) return
+    const res = await rpc('deny_member_login', { p_target: p.id, p_reason: reason })
+    if (res.error) { toast(`Deny failed: ${res.error.message}`, 'danger'); return }
+    toast(`${p.display_name || 'Member'} denied access`, 'warn')
+    onChanged()
+    onClose()
+  }
+
+  const restoreLogin = async () => {
+    const ok = await uiConfirm(
+      `Restore ${p.display_name || 'this member'}'s access?\n\nThey return to inactive and can submit a membership request again (Command still approves before they are active).`,
+      { confirmText: 'Restore access' },
+    )
+    if (!ok) return
+    const res = await rpc('restore_member_login', { p_target: p.id })
+    if (res.error) { toast(`Restore failed: ${res.error.message}`, 'danger'); return }
+    toast(`${p.display_name || 'Member'} access restored`, 'success')
     onChanged()
     onClose()
   }
@@ -112,6 +143,21 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
         </button>
         <div className="mt-4 border-t border-white/5 pt-3">
           <p className="mb-2 text-[11px] uppercase tracking-wider text-rose-300/70">Danger zone</p>
+          {canDenyThis && (p.login_denied ? (
+            <div className="mb-2">
+              <button onClick={() => void restoreLogin()} className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 py-2.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/10">
+                Restore login access
+              </button>
+              <p className="mt-1.5 text-[10px] text-slate-500">This member is currently <b className="text-rose-300">denied access</b>. Restoring returns them to inactive so they can request access again.</p>
+            </div>
+          ) : (
+            <div className="mb-2">
+              <button onClick={() => void denyLogin()} className="w-full rounded-lg border border-rose-500/30 bg-rose-500/5 py-2.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">
+                Deny login access
+              </button>
+              <p className="mt-1.5 text-[10px] text-slate-500">Blocks the portal with an “Access denied” screen (reason shown) and stops them submitting a membership request. Reversible.</p>
+            </div>
+          ))}
           <button onClick={() => void removePermanently()} className="w-full rounded-lg border border-rose-500/30 bg-rose-500/5 py-2.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">
             Permanently remove from CID
           </button>

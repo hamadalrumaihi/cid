@@ -785,10 +785,15 @@ create table public.profiles (
   loa_since timestamp with time zone,
   discord_id text,
   removed_at timestamp with time zone,
-  is_owner boolean not null default false
+  is_owner boolean not null default false,
+  login_denied boolean not null default false,
+  login_denied_at timestamp with time zone,
+  login_denied_by uuid,
+  login_denied_reason text
 );
 alter table public.profiles add constraint profiles_pkey PRIMARY KEY (id);
 alter table public.profiles add constraint profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+alter table public.profiles add constraint profiles_login_denied_by_fkey FOREIGN KEY (login_denied_by) REFERENCES public.profiles(id);
 alter table public.profiles enable row level security;
 
 create table public.raid_compensations (
@@ -2007,6 +2012,7 @@ CREATE TRIGGER places_touch BEFORE UPDATE ON public.places FOR EACH ROW EXECUTE 
 CREATE TRIGGER predicate_acts_audit AFTER INSERT OR DELETE OR UPDATE ON public.predicate_acts FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER predicate_acts_touch BEFORE UPDATE ON public.predicate_acts FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER profiles_guard BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.guard_profile();
+CREATE TRIGGER profiles_block_login_denied BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.block_direct_login_denied();
 CREATE TRIGGER profiles_touch BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER raid_compensations_audit AFTER INSERT OR DELETE OR UPDATE ON public.raid_compensations FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER raid_compensations_touch BEFORE UPDATE ON public.raid_compensations FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -2114,7 +2120,7 @@ create policy car_upd on public.case_access_requests
 
 create policy mr_ins on public.membership_requests
   as permissive for insert to authenticated
-  with check (((applicant_id = (select auth.uid())) AND (status = 'draft'::text) AND (NOT private.is_active())));
+  with check (((applicant_id = (select auth.uid())) AND (status = 'draft'::text) AND (NOT private.is_active()) AND (NOT (EXISTS (SELECT 1 FROM public.profiles p WHERE ((p.id = (select auth.uid())) AND p.login_denied))))));
 
 create policy mr_sel on public.membership_requests
   as permissive for select to authenticated
@@ -2122,7 +2128,7 @@ create policy mr_sel on public.membership_requests
 
 create policy mr_upd on public.membership_requests
   as permissive for update to authenticated
-  using (((applicant_id = (select auth.uid())) AND (status = ANY (ARRAY['draft'::text, 'correction_requested'::text]))))
+  using (((applicant_id = (select auth.uid())) AND (status = ANY (ARRAY['draft'::text, 'correction_requested'::text])) AND (NOT (EXISTS (SELECT 1 FROM public.profiles p WHERE ((p.id = (select auth.uid())) AND p.login_denied))))))
   with check ((applicant_id = (select auth.uid())));
 
 create policy mrh_sel on public.membership_request_history
@@ -2994,3 +3000,8 @@ create policy wl_sel on public.watchlist
 -- has_joint_access() clause (temporary case-scoped joint access);
 -- their pre-joint bodies above are superseded by the versions in
 -- supabase/migrations/20260713040000_joint_cases.sql.
+
+-- deny_member_login(uuid, text) / restore_member_login(uuid): app-level
+-- login block (Command/Owner, bureau-lead scoped); definitive SQL in
+-- supabase/migrations/20260713090000_login_denial.sql. guard_profile() and
+-- membership_request_submit() gained login_denied handling there.
