@@ -1020,11 +1020,9 @@ begin
        or new.signature is distinct from old.signature then
       raise exception 'reports can only be finalized via report_finalize()';
     end if;
-    if old.finalized and (
-         (coalesce(new.fields, '{}'::jsonb) - '_warrant_status' - '_warrant_log')
-         is distinct from
-         (coalesce(old.fields, '{}'::jsonb) - '_warrant_status' - '_warrant_log')) then
-      raise exception 'a finalized report''s contents are locked (only the warrant lifecycle may change)';
+    if old.finalized
+       and coalesce(new.fields, '{}'::jsonb) is distinct from coalesce(old.fields, '{}'::jsonb) then
+      raise exception 'a finalized report''s contents are locked (use warrant_set_status() for the warrant lifecycle)';
     end if;
   end if;
   return new;
@@ -1532,17 +1530,81 @@ CREATE OR REPLACE FUNCTION public.report_reopen(p_report uuid)
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare r public.reports;
+declare
+  r public.reports;
+  v_uid uuid := (select auth.uid());
+  v_role text;
+  v_div text;
 begin
   select * into r from public.reports where id = p_report;
   if not found then raise exception 'report not found'; end if;
-  if not r.finalized then raise exception 'report is not finalized'; end if;
-  if not (private.is_command() and private.can_access_case(r.case_id)) then
+  select role::text, division::text into v_role, v_div
+    from public.profiles where id = v_uid and active;
+  if v_role is null or v_role not in ('bureau_lead', 'deputy_director', 'director') then
     raise exception 'only bureau lead and above may reopen a finalized report';
   end if;
+  -- Bureau leads unseal only their own bureau's reports (JTF cases are
+  -- shared, mirroring can_access_case); deputy director+ are unrestricted.
+  if v_role = 'bureau_lead'
+     and (select bureau::text from public.cases where id = r.case_id) not in ('JTF', v_div) then
+    raise exception 'bureau leads may only reopen reports in their own bureau';
+  end if;
+  if not r.finalized then raise exception 'report is not finalized'; end if;
   update public.reports
      set finalized = false,
          signature = null,
+         fields = coalesce(fields, '{}'::jsonb) || jsonb_build_object(
+           '_reopen_log',
+           coalesce(fields->'_reopen_log', '[]'::jsonb) || jsonb_build_array(jsonb_build_object(
+             'at', now(),
+             'by', v_uid,
+             'prev_signature', signature
+           ))
+         ),
+         updated_at = now()
+   where id = p_report
+  returning * into r;
+  return r;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.warrant_set_status(p_report uuid, p_status text)
+ RETURNS public.reports
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  r public.reports;
+  v_uid uuid := (select auth.uid());
+  v_name text;
+  v_from text;
+begin
+  if p_status not in ('draft', 'signed', 'executed', 'returned') then
+    raise exception 'invalid warrant status';
+  end if;
+  select * into r from public.reports where id = p_report;
+  if not found then raise exception 'report not found'; end if;
+  if not (private.is_active() and private.can_access_case(r.case_id)) then
+    raise exception 'not permitted to update this warrant';
+  end if;
+  if r.template not in ('arrest_warrant', 'search_warrant', 'wiretap_warrant') then
+    raise exception 'not a warrant report';
+  end if;
+  v_from := coalesce(r.fields->>'_warrant_status', 'draft');
+  if v_from = p_status then return r; end if;
+  select display_name into v_name from public.profiles where id = v_uid;
+  update public.reports
+     set fields = coalesce(fields, '{}'::jsonb)
+       || jsonb_build_object('_warrant_status', p_status)
+       || jsonb_build_object('_warrant_log',
+            coalesce(fields->'_warrant_log', '[]'::jsonb) || jsonb_build_array(jsonb_build_object(
+              'at', now(),
+              'by', coalesce(v_name, 'Officer'),
+              'by_id', v_uid,
+              'from', v_from,
+              'to', p_status
+            ))),
          updated_at = now()
    where id = p_report
   returning * into r;
