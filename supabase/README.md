@@ -134,6 +134,27 @@ Three additive migrations promote the DOJ patterns portal-wide (see
   `owner_security_overview()` (reader — `private.is_owner()`-gated; recent
   runs + live fixture health + leftover test-data counts).
 
+## DOJ search-warrant & import migrations (v1.15.0)
+Two additive migrations (see `CHANGELOG.md` 1.15.0 and
+[`../docs/DOJ-INTEGRATION.md`](../docs/DOJ-INTEGRATION.md)):
+
+- `20260716010000_legal_search_warrant` — adds `search_warrant` as a warrant
+  subtype (subtype + compound CHECK constraints widened). `create_legal_request`
+  and `submit_legal_request_to_cid` accept it and require a subject **or** at
+  least one `form_data.search_targets` entry (no mandatory Persons-registry
+  suspect); routing/classification defaults are inherited unchanged (CID → ADA →
+  Judge, Judge-only approval, `classified`). `private.mdt_project` is tightened
+  to project **only** `arrest_warrant`, so a search warrant never creates an MDT
+  wanted-person row.
+- `20260716020000_legal_import_provenance` — six nullable provenance columns on
+  `legal_requests` (`source_system`, `source_submitted_at`, `source_submitter_id`,
+  `imported_by`, `imported_at`, `import_key` + partial-unique index) plus two
+  owner-only RPCs: `import_legal_warrant()` (idempotent on `import_key`; lands at
+  `submitted_to_doj`; preserves the historical submitter/timestamp separate from
+  the import actor; freezes an immutable version; http(s)-only external-link
+  exhibits; `LEGAL_IMPORTED` audit) and `import_rollback_by_key()` (deliberate
+  reversal that leaves `audit_log` intact, appending `LEGAL_IMPORT_ROLLBACK`).
+
 ## Notes
 - **No Supabase Storage.** Media references are external URLs; there are no
   buckets or storage policies.

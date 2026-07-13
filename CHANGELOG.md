@@ -6,6 +6,46 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.15.0] — 2026-07-13
+
+### Added — DOJ search warrants
+- **`search_warrant` is now a first-class warrant subtype** in the DOJ
+  legal-request workflow (v1.13 shipped with `arrest_warrant` only). It uses
+  the **same single workflow** — CID → ADA → Judge — and can be **approved
+  only by a Judge** (inherited unchanged: every warrant routes to `judge`, and
+  no ADA/DA/AG path can approve a `judge`-routed request). It defaults to the
+  `classified` classification like every warrant.
+- Unlike an arrest warrant, a search warrant may target a **person and/or one
+  or more places / properties / postal areas / vehicles** — it does **not**
+  require a Persons-registry suspect, only a subject *or* at least one search
+  target (`form_data.search_targets`). New warrant form fields (search targets,
+  place/property to search, items sought, vehicle targets; probable cause is
+  the existing narrative) render in the create form, the reviewer detail, the
+  submit checklist, and the packet preview.
+- **MDT projection is now restricted to arrest warrants.** A search warrant
+  targets premises, not a fugitive, so it never creates an MDT "wanted person"
+  projection even after approval and issue.
+
+### Added — audited legal-request import (owner-only)
+- New provenance columns on `legal_requests` (`source_system`,
+  `source_submitted_at`, `source_submitter_id`, `imported_by`, `imported_at`,
+  `import_key`) and an owner-only, **idempotent** `import_legal_warrant()` RPC
+  for migrating historical in-city warrants into the DOJ workflow. It
+  preserves the historical submitter and submission timestamp **separately
+  from** the real import actor (never falsifying `auth.uid()`), lands each
+  request at `submitted_to_doj` intake (never approved, signed, issued,
+  executed, or MDT-projected), freezes an immutable submitted version, attaches
+  reused canonical exhibits plus http(s)-only external links, and writes a
+  `LEGAL_IMPORTED` audit row. A deliberate owner-only
+  `import_rollback_by_key()` reverses an import without deleting audit history.
+- **Owner-maintenance authorization** (`private.is_owner_maintenance()`): the
+  import/rollback RPCs authorize on the `profiles.is_owner` super-grant
+  **independent of CID `active`/roster status**, so an inactive owner never
+  requires a temporary `active` toggle to run a one-time import.
+  `private.is_owner()` is unchanged and still governs every ordinary owner
+  surface. Verified in production: an `active=false` owner passes the import
+  gate (previously it did not).
+
 ## [1.14.0] — 2026-07-13
 
 ### Changed — shared platform (DOJ patterns promoted portal-wide)

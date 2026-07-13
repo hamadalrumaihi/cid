@@ -109,6 +109,20 @@ A `tests/rls/v114.test.ts` suite covers the v1.14 surface (report-version
 immutability, `search_all` legal hits staying sealed-safe, and the
 security-testing RPC gates).
 
+### DOJ search warrants & owner import (v1.15 — `tests/rls/v115.test.ts`)
+
+A `tests/rls/v115.test.ts` suite covers the v1.15 legal surface: the new
+`search_warrant` behaviors (accepted as a warrant subtype; a subject **or** at
+least one `form_data.search_targets` entry required — no mandatory
+Persons-registry suspect; Judge-only approval inherited; classified default; no
+MDT wanted-person projection), and the owner-only warrant import
+(`import_legal_warrant` restricted to the owner and denied to non-owners;
+**idempotency** on `import_key` — a repeat key yields no duplicate; provenance
+columns recording the historical submitter/timestamp separately from the import
+actor; landing at `submitted_to_doj`; and `import_rollback_by_key` reversal that
+leaves `audit_log` intact). The suite has **not** been run yet — it documents
+the intended coverage.
+
 ## Running
 
 ```bash

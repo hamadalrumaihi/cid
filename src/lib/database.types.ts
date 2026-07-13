@@ -2088,6 +2088,12 @@ export type Database = {
           subtype: string
           title: string
           updated_at: string
+          source_system: string | null
+          source_submitted_at: string | null
+          source_submitter_id: string | null
+          imported_by: string | null
+          imported_at: string | null
+          import_key: string | null
         }
         Insert: {
           approval_route?: string | null
@@ -2157,6 +2163,12 @@ export type Database = {
           subtype: string
           title: string
           updated_at?: string
+          source_system?: string | null
+          source_submitted_at?: string | null
+          source_submitter_id?: string | null
+          imported_by?: string | null
+          imported_at?: string | null
+          import_key?: string | null
         }
         Update: {
           approval_route?: string | null
@@ -2226,6 +2238,12 @@ export type Database = {
           subtype?: string
           title?: string
           updated_at?: string
+          source_system?: string | null
+          source_submitted_at?: string | null
+          source_submitter_id?: string | null
+          imported_by?: string | null
+          imported_at?: string | null
+          import_key?: string | null
         }
         Relationships: [
           {
@@ -3752,6 +3770,27 @@ export type Database = {
           p_title: string
         }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      import_legal_warrant: {
+        Args: {
+          p_case: string
+          p_subtype: string
+          p_title: string
+          p_priority?: string
+          p_form?: Json
+          p_narrative?: string
+          p_person?: string
+          p_classification?: string
+          p_source_submitted_at?: string
+          p_source_submitter: string
+          p_import_key: string
+          p_exhibits?: Json
+        }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      import_rollback_by_key: {
+        Args: { p_import_key: string }
+        Returns: number
       }
       decide_legal_request_as_judge: {
         Args: {

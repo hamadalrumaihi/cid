@@ -148,10 +148,51 @@ are **separate** stages. Execution respects expiry. New evidence collected on
 execution uses the existing evidence / chain-of-custody system — the legal
 request never mutates original evidence.
 
+### Warrant subtypes
+
+Two warrant subtypes share this one workflow (both route CID → ADA → **Judge**
+and can be approved **only** by a Judge — `private.legal_default_route` returns
+`judge` for every warrant, and no ADA/DA/AG review path can approve a
+`judge`-routed request — and both default to `classified`):
+
+- **`arrest_warrant`** (v1.13) — requires a linked suspect from the Persons
+  registry. On approval + issue it projects an MDT wanted-person row.
+- **`search_warrant`** (v1.15) — targets a person **and/or** one or more
+  places / properties / postal areas / vehicles. It does **not** require a
+  Persons-registry suspect; the CID and submit gates accept a subject **or** at
+  least one search target (`form_data.search_targets`). Form fields:
+  `search_targets` (required), `place_to_search`, `items_sought` (required),
+  `vehicle_targets`; probable cause remains the shared narrative. A search
+  warrant **never** projects an MDT wanted-person row — a premises search must
+  not surface its owner/occupant as wanted (`private.mdt_project` is scoped to
+  `arrest_warrant` only).
+
 The **Submit for Legal Review** button on a finalized `arrest_warrant` report
 creates the linked legal request (case + source report + suspect `person_id` +
 priority + justification) with the report as the first packet exhibit. The CID
 report stays investigator-owned; the legal request freezes its own snapshots.
+
+### Importing historical warrants (v1.15.0)
+
+Historical in-city warrants predating the DOJ workflow can be migrated in
+without falsifying who did what. `legal_requests` carries six nullable
+**provenance** columns — `source_system`, `source_submitted_at`,
+`source_submitter_id`, `imported_by`, `imported_at`, `import_key` (partial
+unique index) — populated only on imported rows.
+
+`import_legal_warrant()` is **owner-only** (`private.is_owner()`) and
+**idempotent** on `import_key` (a repeat key returns the existing row — zero
+duplicates). It lands each request at the `submitted_to_doj` intake (never
+approved, signed, issued, executed, or MDT-projected), preserves the historical
+submitter and submission timestamp **separately from** the real import actor
+(`auth.uid()` is never falsified — `source_submitter_id`/`source_submitted_at`
+hold the history, `imported_by`/`imported_at` hold the import), freezes an
+immutable submitted version, attaches reused canonical exhibits plus
+external-link exhibits (external URLs must be http(s), the same guard the
+interactive `add_legal_exhibit` uses), and writes a `LEGAL_IMPORTED` audit row.
+A deliberate owner-only `import_rollback_by_key()` reverses an import in
+dependency order but **never** deletes `audit_log`; it appends a
+`LEGAL_IMPORT_ROLLBACK` audit row first. Neither RPC is wired to a normal UI.
 
 ## Subpoena workflow
 
@@ -205,7 +246,9 @@ contains probable cause, evidence, notes, narratives, or internal plans. There
 is **no external MDT endpoint** in this build — rows carry a `sync_status`
 (`pending`/`synced`/`failed`/`disabled`) for a future retryable, audited,
 secret-protecting sync worker. `mdt_wanted_current()` computes the effective
-status at read time so an expired warrant never reads as actively wanted.
+status at read time so an expired warrant never reads as actively wanted. Only
+**arrest** warrants are projected here (v1.15) — `private.mdt_project` returns
+early for any other subtype, so a search warrant never surfaces a wanted person.
 
 ## RLS helpers & RPCs
 

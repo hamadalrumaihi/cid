@@ -79,6 +79,24 @@ written only by `security_test_report()` from the rls-test fixture suites,
 read only through the owner-gated `owner_security_overview()`; newest 50
 runs kept per suite — see [Ch. 7](07-api.md)).
 
+### Justice / legal (SELECT-only for clients; every write is a definer RPC)
+The DOJ Legal Review System's tables (`justice_memberships`,
+`justice_membership_requests`, `prosecutor_bureau_assignments`,
+`legal_requests` + `legal_request_versions`/`_actions`/`_exhibits`/
+`_participants`/`_signatures`, `mdt_wanted_projections`) are a **separate
+identity domain** — no INSERT/UPDATE/DELETE grants exist; the transactional
+SECURITY DEFINER RPCs in [Ch. 7](07-api.md) are the only write path (see
+[`docs/DOJ-INTEGRATION.md`](../DOJ-INTEGRATION.md)). `legal_requests`
+carries `request_type` (warrant / subpoena) and a `subtype` CHECK — the
+warrant subtypes are `arrest_warrant` **and `search_warrant`** (v1.15), a
+compound CHECK pinning warrant subtypes to `request_type='warrant'`. v1.15
+also added six nullable **import-provenance** columns, populated only on
+owner-imported rows: `source_system`, `source_submitted_at`,
+`source_submitter_id` (→ `profiles`), `imported_by` (→ `profiles`),
+`imported_at`, and `import_key` (a partial-unique index enforces idempotent
+imports where the key is present). See `import_legal_warrant()` in
+[Ch. 7](07-api.md).
+
 ## 8.3 Helper functions (`private` schema)
 
 `is_active / is_command / role / can_delete / can_announce /

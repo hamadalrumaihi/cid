@@ -86,6 +86,23 @@ browser never runs privileged tests and never sees fixture credentials.
 | `security_test_report(p_suite, p_passed, p_failed, p_skipped, p_failures, p_commit, p_branch, p_release, p_source, p_duration_ms)` | writer, callable **only by `rls-test-%@cidportal.test` accounts** — the live RLS suites report their own sanitized results (a vitest reporter posts after every `npm run test:rls`). Failures are re-sanitized server-side (short name/expected/actual strings only); newest 50 runs kept per suite; audit-logged |
 | `owner_security_overview()` | reader, `private.is_owner()`-gated + audited — recent runs, live fixture-roster health checks, and leftover test-data counts for the Owner Portal's Security Testing section |
 
+### Legal import RPCs (v1.15.0)
+
+`search_warrant` is now a warrant subtype alongside `arrest_warrant`:
+`create_legal_request` and `submit_legal_request_to_cid` accept it (a
+search warrant requires a subject **or** at least one
+`form_data.search_targets` entry — no mandatory Persons-registry suspect),
+and it routes CID → ADA → **Judge** like every warrant.
+
+These two RPCs migrate historical in-city warrants into the DOJ workflow.
+Both are **owner-only** (`private.is_owner()`) and are not wired to any
+normal UI.
+
+| RPC | Purpose |
+|---|---|
+| `import_legal_warrant(p_case, p_subtype, p_title, p_priority, p_form, p_narrative, p_person, p_classification, p_source_submitted_at, p_source_submitter, p_import_key, p_exhibits)` | owner-only, **idempotent** on `import_key` (a repeat key returns the existing row, zero duplicates); lands the request at `submitted_to_doj` intake (never approved / signed / issued / executed / MDT-projected); preserves the historical `source_submitter`/`source_submitted_at` **separate from** the real import actor (never falsifies `auth.uid()`); freezes an immutable submitted version; attaches reused canonical exhibits plus external links (external-link URLs must be http(s)); writes a `LEGAL_IMPORTED` audit row |
+| `import_rollback_by_key(p_import_key)` | owner-only deliberate reversal — deletes the imported request and its children in dependency order but **never** deletes `audit_log`; appends a `LEGAL_IMPORT_ROLLBACK` audit row before removal; returns the number of requests rolled back |
+
 **Error handling**: RPCs come back through `rpc()` as `{error}` — callers
 toast it. RPC-internal permission failures raise exceptions that surface
 the same way.
