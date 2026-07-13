@@ -33,6 +33,11 @@ const titles: Record<string, string> = {
   case_assigned: 'Case assigned',
   report_finalized: 'Report finalized',
   rico_ready: 'RICO elements satisfied',
+  membership_request: 'Membership request awaiting review',
+  membership_update: 'Membership request update',
+  joint_case_added: 'Added to a joint case',
+  joint_case_removed: 'Joint-case access removed',
+  joint_case_ended: 'Joint case ended',
 };
 const clean = (v: unknown) => String(v || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 300);
 const dmBody = (type: string, payload: Record<string, unknown>) =>
@@ -57,11 +62,14 @@ Deno.serve(async (req) => {
     if (!caller?.active) return json({ error: 'inactive caller' }, 403);
 
     const recentCutoff = new Date(Date.now() - 5 * 60_000).toISOString();
+    // create_notification() stamps the caller into payload.actor_id (there is
+    // no created_by column on notifications — the old filter matched nothing
+    // and silently blocked every DM).
     let q = supa.from('notifications')
       .select('id')
       .eq('user_id', user_id)
       .eq('type', type)
-      .eq('created_by', callerId)
+      .eq('payload->>actor_id', callerId)
       .gte('created_at', recentCutoff)
       .order('created_at', { ascending: false })
       .limit(1);

@@ -64,14 +64,17 @@ export async function countRows<T extends TableName>(table: T): Promise<number> 
   return count ?? 0
 }
 
-export async function insert<T extends TableName>(table: T, values: TablesInsert<T> | TablesInsert<T>[]): Promise<MutationResult<Tables<T>[]>> {
-  const { data, error } = await raw().from(table).insert(values).select()
-  return { data: data as Tables<T>[] | null, error: asDbError(error) }
+/** `select` narrows the returning projection — required for tables with
+ *  column-grant-revoked fields (membership_requests.internal_decision_note),
+ *  where the default `select('*')` returning clause 403s for clients. */
+export async function insert<T extends TableName>(table: T, values: TablesInsert<T> | TablesInsert<T>[], select = '*'): Promise<MutationResult<Tables<T>[]>> {
+  const { data, error } = await raw().from(table).insert(values).select(select)
+  return { data: data as unknown as Tables<T>[] | null, error: asDbError(error) }
 }
 
-export async function update<T extends TableName>(table: T, id: string, patch: TablesUpdate<T>): Promise<MutationResult<Tables<T>[]>> {
-  const { data, error } = await raw().from(table).update(patch).eq('id', id).select()
-  return { data: data as Tables<T>[] | null, error: asDbError(error) }
+export async function update<T extends TableName>(table: T, id: string, patch: TablesUpdate<T>, select = '*'): Promise<MutationResult<Tables<T>[]>> {
+  const { data, error } = await raw().from(table).update(patch).eq('id', id).select(select)
+  return { data: data as unknown as Tables<T>[] | null, error: asDbError(error) }
 }
 
 /** Conditional update — powers compare-and-swap writes (stale-case escalation

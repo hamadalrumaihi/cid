@@ -25,6 +25,7 @@ const PW = {
   lead: process.env.RLS_TEST_PASSWORD_LEAD,
   director: process.env.RLS_TEST_PASSWORD_DIRECTOR,
   target: process.env.RLS_TEST_PASSWORD_TARGET,
+  applicant: process.env.RLS_TEST_PASSWORD_APPLICANT,
 }
 const enabled = !!(ANON && PW.lsb && PW.bcb && PW.inactive)
 if (!enabled) console.warn('[rls] RLS_TEST_PASSWORD_* not set — suite skipped')
@@ -339,5 +340,672 @@ describe.skipIf(!ccEnabled)('Command Center — assign_member scoping', () => {
     expect(cmd.error).toBeNull()
     const det = await plainDet.from('role_events').select('id').limit(1)
     expect(det.data ?? []).toHaveLength(0)
+  })
+})
+
+/* Shared helpers for the blocks below. */
+const signInAs = async (c: SupabaseClient, email: string, password: string) => {
+  const { data, error } = await c.auth.signInWithPassword({ email, password })
+  if (error) throw new Error(`sign-in failed for ${email}: ${error.message}`)
+  return data.user!.id
+}
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** Membership requests (migration 20260713030000) — the applicant is the
+ *  shared rls-test-inactive account. The request row is UNIQUE per applicant
+ *  and has NO client delete path (by design). rls_test_cleanup() purges it in
+ *  afterAll (migration 20260713070000), so a normal re-run starts fresh; the
+ *  reuse path + self-skips below only cover a previous run that crashed
+ *  before cleanup — one clean run (or any applicant rls_test_cleanup call)
+ *  clears it. membership_request_submit() suppresses its command fan-out for
+ *  rls-test applicants (migration 20260713080000), so this flow never
+ *  notifies real officers.
+ *
+ *  Approval SUCCESS is deliberately never exercised HERE: approving would
+ *  flip the shared rls-test-inactive fixture to active, breaking every
+ *  deny-by-default test in this suite. The denial side of the approval
+ *  authority (wrong-bureau and command-role rejections for a bureau lead,
+ *  self-review rejection) lives in this block; the positive approval path
+ *  runs in the next block against the DISPOSABLE rls-test-applicant. */
+describe.skipIf(!enabled)('Membership requests — applicant wall & review authority', () => {
+  let applicant: SupabaseClient
+  let bcb: SupabaseClient
+  let lead: SupabaseClient | null = null
+  let reviewer: SupabaseClient | null = null // director preferred, else owner
+  let applicantId = ''
+  let reviewerId = ''
+  let requestId = ''
+  const reviewerCreds = PW.director
+    ? { email: 'rls-test-director@cidportal.test', pw: PW.director }
+    : PW.owner
+      ? { email: 'rls-test-owner@cidportal.test', pw: PW.owner }
+      : null
+  // Explicit columns: the table's SELECT grant excludes internal_decision_note
+  // (profiles.email precedent), so `select('*')` errors for everyone.
+  const COLS = 'id,applicant_id,display_name,requested_bureau,requested_role,reason,status,decided_by,applicant_visible_decision_note'
+
+  const readStatus = async () => {
+    const { data, error } = await applicant.from('membership_requests').select('id,status').eq('id', requestId)
+    if (error) throw new Error(`status read failed: ${error.message}`)
+    return data && data[0] ? (data[0].status as string) : ''
+  }
+  /** Drive the request to 'pending' when the applicant still can; returns
+   *  false when a previous run left the row terminal (no server reset path). */
+  const ensurePending = async () => {
+    const s = await readStatus()
+    if (s === 'pending') return true
+    if (s !== 'draft' && s !== 'correction_requested') return false
+    const { error } = await applicant.rpc('membership_request_submit', { p_request: requestId })
+    if (error) throw new Error(`membership_request_submit failed: ${error.message}`)
+    return true
+  }
+
+  beforeAll(async () => {
+    applicant = mk(); bcb = mk()
+    applicantId = await signInAs(applicant, 'rls-test-inactive@cidportal.test', PW.inactive!)
+    await signInAs(bcb, 'rls-test-bcb@cidportal.test', PW.bcb!)
+    if (PW.lead) { lead = mk(); await signInAs(lead, 'rls-test-lead@cidportal.test', PW.lead) }
+    if (reviewerCreds) { reviewer = mk(); reviewerId = await signInAs(reviewer, reviewerCreds.email, reviewerCreds.pw) }
+    // Idempotency: reuse the row a previous run left behind (unique per applicant).
+    const { data, error } = await applicant.from('membership_requests').select(COLS).eq('applicant_id', applicantId)
+    if (error) throw new Error(`membership_requests probe failed: ${error.message}`)
+    if (data && data[0]) requestId = data[0].id
+  })
+
+  afterAll(async () => {
+    if (!applicant) return
+    // rls_test_cleanup purges the request (+history) and the notifications
+    // this flow sent to rls-test accounts; real members receive nothing
+    // (submit's command fan-out is suppressed for rls-test applicants).
+    const { error } = await applicant.rpc('rls_test_cleanup')
+    if (error) throw new Error(`rls_test_cleanup failed: ${error.message}`)
+    await Promise.all(
+      [applicant, bcb, lead, reviewer]
+        .filter((c): c is SupabaseClient => !!c)
+        .map((c) => c.auth.signOut()),
+    )
+  })
+
+  it('inactive applicant can create (fresh run) or reuse (re-run) their draft and read it back', async () => {
+    if (!requestId) {
+      const ins = await applicant.from('membership_requests')
+        .insert({
+          applicant_id: applicantId, display_name: 'RLS Test Applicant',
+          requested_bureau: 'LSB', requested_role: 'detective',
+          reason: '[rls-test] membership security-wall fixture',
+        })
+        .select(COLS)
+      expect(ins.error).toBeNull()
+      expect(ins.data).toHaveLength(1)
+      expect(ins.data![0]).toMatchObject({ status: 'draft', requested_bureau: 'LSB', requested_role: 'detective' })
+      requestId = ins.data![0].id
+    } else {
+      // Reuse path: reset the applicant-editable form fields. On a terminal
+      // row the mr_upd policy matches zero rows (silently) — that is fine,
+      // the status-dependent tests below detect it and skip.
+      const upd = await applicant.from('membership_requests')
+        .update({ display_name: 'RLS Test Applicant', requested_bureau: 'LSB', requested_role: 'detective' })
+        .eq('id', requestId)
+        .select('id')
+      expect(upd.error).toBeNull()
+    }
+    const sel = await applicant.from('membership_requests').select(COLS).eq('id', requestId)
+    expect(sel.error).toBeNull()
+    expect(sel.data).toHaveLength(1)
+    expect(sel.data![0].applicant_id).toBe(applicantId)
+  })
+
+  it('a second request for the same applicant is rejected (unique per applicant)', async () => {
+    const { error } = await applicant.from('membership_requests')
+      .insert({
+        applicant_id: applicantId, display_name: 'RLS Test Applicant (dupe)',
+        requested_bureau: 'BCB', requested_role: 'detective', reason: '[rls-test] duplicate',
+      })
+      .select('id')
+    expect(error).not.toBeNull()
+  })
+
+  it("requested_bureau 'JTF' is rejected (permanent onboarding departments only)", async () => {
+    // CHECK constraints fire before the unique index, so this asserts the
+    // bureau lock even though the applicant already has a row.
+    const { error } = await applicant.from('membership_requests')
+      .insert({
+        applicant_id: applicantId, display_name: 'RLS Test Applicant (JTF)',
+        requested_bureau: 'JTF', requested_role: 'detective', reason: '[rls-test] JTF attempt',
+      })
+      .select('id')
+    expect(error).not.toBeNull()
+  })
+
+  it('internal_decision_note is not selectable by the applicant (column grant revoked)', async () => {
+    const { error } = await applicant.from('membership_requests')
+      .select('id,internal_decision_note')
+      .eq('id', requestId)
+    expect(error).not.toBeNull()
+  })
+
+  it('direct status update cannot approve (column grant / trigger freeze)', async () => {
+    const before = await readStatus()
+    const upd = await applicant.from('membership_requests')
+      .update({ status: 'approved' })
+      .eq('id', requestId)
+      .select('id')
+    // Either the column grant rejects the write outright, or the guard
+    // trigger silently reverts it — both leave the status untouched.
+    if (!upd.error) expect(await readStatus()).toBe(before)
+    else expect(upd.error).not.toBeNull()
+  })
+
+  it('applicant cannot review their own request via review_membership_request', async () => {
+    const { error } = await applicant.rpc('review_membership_request', {
+      p_request: requestId, p_decision: 'approve', p_final_bureau: 'LSB', p_final_role: 'detective',
+    })
+    expect(error).not.toBeNull()
+  })
+
+  it('ordinary detective gets neither the admin queue nor the row', async () => {
+    const rpc = await bcb.rpc('admin_membership_requests')
+    expect(rpc.error).not.toBeNull()
+    const sel = await bcb.from('membership_requests').select('id').eq('id', requestId)
+    expect(sel.error).toBeNull()
+    expect(sel.data).toHaveLength(0) // RLS: invisible, not an error
+  })
+
+  it.skipIf(!PW.lead)('bureau lead cannot approve outside their bureau or assign command roles', async (ctx) => {
+    if (!(await ensurePending())) ctx.skip('fixture row is terminal from a previous run — no server reset path (see README)')
+    // rls-test-lead is bureau_lead of LSB (see README): BCB is the wrong bureau.
+    const wrongBureau = await lead!.rpc('review_membership_request', {
+      p_request: requestId, p_decision: 'approve', p_final_bureau: 'BCB', p_final_role: 'detective',
+    })
+    expect(wrongBureau.error).not.toBeNull()
+    expect(wrongBureau.error!.message).toMatch(/own bureau/i)
+    const commandRole = await lead!.rpc('review_membership_request', {
+      p_request: requestId, p_decision: 'approve', p_final_bureau: 'LSB', p_final_role: 'director',
+    })
+    expect(commandRole.error).not.toBeNull()
+    expect(commandRole.error!.message).toMatch(/command roles/i)
+    expect(await readStatus()).toBe('pending') // no partial decision leaked
+  })
+
+  it.skipIf(!reviewerCreds)('command review: correction → resubmit → reject leaves the applicant inactive', async (ctx) => {
+    if (!(await ensurePending())) ctx.skip('fixture row is terminal from a previous run — no server reset path (see README)')
+    const corr = await reviewer!.rpc('review_membership_request', {
+      p_request: requestId, p_decision: 'request_correction',
+      p_applicant_note: '[rls-test] please correct',
+    })
+    expect(corr.error).toBeNull()
+    expect(await readStatus()).toBe('correction_requested')
+
+    const resub = await applicant.rpc('membership_request_submit', { p_request: requestId })
+    expect(resub.error).toBeNull()
+    expect(await readStatus()).toBe('pending')
+
+    // REJECT, never approve: approving would activate the shared
+    // rls-test-inactive fixture and break every deny-by-default test in this
+    // suite. The approval-success path runs in the next block against the
+    // disposable rls-test-applicant account instead.
+    const rej = await reviewer!.rpc('review_membership_request', {
+      p_request: requestId, p_decision: 'reject',
+      p_applicant_note: '[rls-test] rejected by security suite',
+      p_internal_note: '[rls-test] internal note (must stay hidden from the applicant)',
+    })
+    expect(rej.error).toBeNull()
+
+    const row = await applicant.from('membership_requests').select(COLS).eq('id', requestId)
+    expect(row.error).toBeNull()
+    expect(row.data![0].status).toBe('rejected')
+    expect(row.data![0].decided_by).toBe(reviewerId)
+    // The wall around the reject path: the applicant's profile stays inactive.
+    const prof = await applicant.from('profiles').select('id,active').eq('id', applicantId)
+    expect(prof.error).toBeNull()
+    expect(prof.data![0].active).toBe(false)
+  })
+
+  it('applicant cannot delete the request; withdraw is the only exit', async () => {
+    const del = await applicant.from('membership_requests').delete().eq('id', requestId).select('id')
+    if (!del.error) expect(del.data).toHaveLength(0) // no delete policy: zero rows
+    const still = await applicant.from('membership_requests').select('id,status').eq('id', requestId)
+    expect(still.error).toBeNull()
+    expect(still.data).toHaveLength(1)
+    const cur = still.data![0].status as string
+    const wd = await applicant.rpc('membership_request_withdraw', { p_request: requestId })
+    if (['draft', 'pending', 'correction_requested'].includes(cur)) {
+      expect(wd.error).toBeNull()
+      expect(await readStatus()).toBe('withdrawn')
+    } else {
+      expect(wd.error).not.toBeNull() // terminal rows (rejected/withdrawn) cannot be withdrawn again
+    }
+  })
+})
+
+/** Membership approval — the SUCCESS path, exercised against the DISPOSABLE
+ *  rls-test-applicant fixture (never the shared rls-test-inactive account).
+ *  review_membership_request must be atomic: request status + decided_*
+ *  columns + profile role/division/active + applicant notification + history
+ *  land together. Teardown returns the fixture to inactive detective/LSB and
+ *  purges the request via rls_test_cleanup (which only checks that the CALLER
+ *  is an rls-test auth account — active is not required, so the deactivated
+ *  applicant can still purge). */
+const approvalEnabled = enabled && !!(PW.applicant && (PW.director || PW.owner))
+describe.skipIf(!approvalEnabled)('Membership approval — atomic activation (disposable applicant)', () => {
+  let applicant: SupabaseClient
+  let reviewer: SupabaseClient
+  let applicantId = ''
+  let reviewerId = ''
+  let requestId = ''
+  const reviewerCreds = PW.director
+    ? { email: 'rls-test-director@cidportal.test', pw: PW.director }
+    : { email: 'rls-test-owner@cidportal.test', pw: PW.owner! }
+
+  beforeAll(async () => {
+    applicant = mk(); reviewer = mk()
+    // Password grant works while the profile is inactive — the active gate is
+    // app/RLS-level, same as rls-test-inactive.
+    applicantId = await signInAs(applicant, 'rls-test-applicant@cidportal.test', PW.applicant!)
+    reviewerId = await signInAs(reviewer, reviewerCreds.email, reviewerCreds.pw)
+    // Reset: purge any request a previous run left, then force the fixture
+    // back to inactive detective/LSB (a no-op that records a role_event on an
+    // already-clean fixture — cleanup removes those too).
+    const clean = await applicant.rpc('rls_test_cleanup')
+    if (clean.error) throw new Error(`rls_test_cleanup failed: ${clean.error.message}`)
+    const reset = await reviewer.rpc('assign_member', {
+      target: applicantId, new_role: 'detective', new_division: 'LSB', set_active: false,
+    })
+    if (reset.error) throw new Error(`assign_member reset failed: ${reset.error.message}`)
+  })
+
+  afterAll(async () => {
+    if (!reviewer) return
+    // Safety net (idempotent with the final test): never leave the disposable
+    // applicant active, and purge its request/notifications/role_events.
+    const back = await reviewer.rpc('assign_member', {
+      target: applicantId, new_role: 'detective', new_division: 'LSB', set_active: false,
+    })
+    if (back.error) throw new Error(`assign_member restore failed: ${back.error.message}`)
+    const { error } = await applicant.rpc('rls_test_cleanup')
+    if (error) throw new Error(`rls_test_cleanup failed: ${error.message}`)
+    await Promise.all([applicant, reviewer].map((c) => c.auth.signOut()))
+  })
+
+  it('reset leaves the disposable applicant inactive', async () => {
+    const { data, error } = await applicant.from('profiles').select('id,active').eq('id', applicantId)
+    expect(error).toBeNull()
+    expect(data).toHaveLength(1)
+    expect(data![0].active).toBe(false)
+  })
+
+  it('applicant drafts and submits a request', async () => {
+    const ins = await applicant.from('membership_requests')
+      .insert({
+        applicant_id: applicantId, display_name: 'RLS Test Applicant (disposable)',
+        requested_bureau: 'LSB', requested_role: 'detective',
+        reason: '[rls-test] approval-path fixture',
+      })
+      .select('id,status')
+    expect(ins.error).toBeNull()
+    requestId = ins.data![0].id
+    const sub = await applicant.rpc('membership_request_submit', { p_request: requestId })
+    expect(sub.error).toBeNull()
+    expect((sub.data as { status: string }).status).toBe('pending')
+  })
+
+  it('approve_with_changes activates the profile atomically', async () => {
+    const rev = await reviewer.rpc('review_membership_request', {
+      p_request: requestId, p_decision: 'approve_with_changes',
+      p_final_bureau: 'BCB', p_final_role: 'senior_detective',
+      p_applicant_note: '[rls-test] approved with changes',
+      p_internal_note: '[rls-test] internal',
+    })
+    expect(rev.error).toBeNull()
+    const row = rev.data as {
+      status: string; decided_bureau: string; decided_role: string
+      requested_bureau: string; requested_role: string
+      decided_by: string; decided_at: string | null
+    }
+    expect(row).toMatchObject({
+      status: 'approved_with_changes',
+      decided_bureau: 'BCB', decided_role: 'senior_detective',
+      requested_bureau: 'LSB', requested_role: 'detective', // originals preserved
+      decided_by: reviewerId,
+    })
+    expect(row.decided_at).not.toBeNull()
+
+    // Profile flipped in the same transaction.
+    const prof = await applicant.from('profiles').select('id,role,division,active').eq('id', applicantId)
+    expect(prof.error).toBeNull()
+    expect(prof.data![0]).toMatchObject({ active: true, role: 'senior_detective', division: 'BCB' })
+
+    // The applicant was notified about their own approval.
+    const note = await applicant.from('notifications')
+      .select('id')
+      .eq('type', 'member_approved')
+      .eq('payload->>request_id', requestId)
+    expect(note.error).toBeNull()
+    expect(note.data).toHaveLength(1)
+
+    // Column revoke still holds for the now-active applicant.
+    const internal = await applicant.from('membership_requests')
+      .select('id,internal_decision_note')
+      .eq('id', requestId)
+    expect(internal.error).not.toBeNull()
+
+    // Applicant-visible history: submitted + approved_with_changes; the
+    // internal-note history row stays hidden (mrh_sel filters internal).
+    const hist = await applicant.from('membership_request_history')
+      .select('id,action,internal')
+      .eq('request_id', requestId)
+    expect(hist.error).toBeNull()
+    const actions = (hist.data ?? []).map((h) => h.action as string)
+    expect(actions).toContain('submitted')
+    expect(actions).toContain('approved_with_changes')
+    expect((hist.data ?? []).every((h) => h.internal === false)).toBe(true)
+  })
+
+  it('teardown: deactivation + cleanup leave no trace', async () => {
+    const back = await reviewer.rpc('assign_member', {
+      target: applicantId, new_role: 'detective', new_division: 'LSB', set_active: false,
+    })
+    expect(back.error).toBeNull()
+    const prof = await applicant.from('profiles').select('id,active').eq('id', applicantId)
+    expect(prof.error).toBeNull()
+    expect(prof.data![0].active).toBe(false)
+    // rls_test_cleanup only verifies the caller is an rls-test auth account,
+    // so the now-inactive applicant may still purge its own fixtures.
+    const clean = await applicant.rpc('rls_test_cleanup')
+    expect(clean.error).toBeNull()
+    const left = await applicant.from('membership_requests').select('id').eq('applicant_id', applicantId)
+    expect(left.error).toBeNull()
+    expect(left.data).toHaveLength(0)
+  })
+})
+
+/** Joint cases (migration 20260713040000) — temporary, case-scoped
+ *  cross-bureau access via joint assignments. Uses the same LSB-owned-case /
+ *  BCB-outsider pair as the bureau-isolation block; every case created here
+ *  is removed by rls_test_cleanup in afterAll. */
+describe.skipIf(!enabled)('Joint cases — temporary case-scoped cross-bureau access', () => {
+  let lsb: SupabaseClient
+  let bcb: SupabaseClient
+  let bcbId = ''
+  let caseA = '' // gets converted to joint
+  let caseB = '' // control: joint access must NOT leak here
+  const num = `RLS-JOINT-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
+
+  beforeAll(async () => {
+    lsb = mk(); bcb = mk()
+    await signInAs(lsb, 'rls-test-lsb@cidportal.test', PW.lsb!)
+    bcbId = await signInAs(bcb, 'rls-test-bcb@cidportal.test', PW.bcb!)
+    const a = await lsb.from('cases').insert({ case_number: num, title: 'RLS joint-case test', bureau: 'LSB' }).select('id')
+    if (a.error) throw new Error(`case A insert failed: ${a.error.message}`)
+    caseA = a.data![0].id
+    const b = await lsb.from('cases').insert({ case_number: `${num}-B`, title: 'RLS joint-case control', bureau: 'LSB' }).select('id')
+    if (b.error) throw new Error(`case B insert failed: ${b.error.message}`)
+    caseB = b.data![0].id
+    const rep = await lsb.from('reports')
+      .insert({ case_id: caseA, template: 'initial', kind: 'initial', seq: 1, fields: {} })
+      .select('id')
+    if (rep.error) throw new Error(`report insert failed: ${rep.error.message}`)
+  })
+
+  afterAll(async () => {
+    if (!lsb) return
+    const { data, error } = await lsb.rpc('rls_test_cleanup') // cascades cases + assignments + reports
+    if (error) throw new Error(`rls_test_cleanup failed: ${error.message}`)
+    console.info('[rls] joint-case cleanup:', JSON.stringify(data))
+    await Promise.all([lsb, bcb].map((c) => c.auth.signOut()))
+  })
+
+  it('BCB cannot read the LSB case before conversion (precondition)', async () => {
+    const { data, error } = await bcb.from('cases').select('id').in('id', [caseA, caseB])
+    expect(error).toBeNull()
+    expect(data).toHaveLength(0)
+  })
+
+  it('joint assignment rows cannot be minted by direct insert', async () => {
+    // Outsider: no case access at all.
+    const outsider = await bcb.from('case_assignments')
+      .insert({ case_id: caseA, officer_id: bcbId, role: 'support', assignment_source: 'joint_case' })
+      .select('id')
+    expect(outsider.error).not.toBeNull()
+    // Insider: has case access, but the with-check pins direct writes to 'standard'.
+    const insider = await lsb.from('case_assignments')
+      .insert({ case_id: caseA, officer_id: bcbId, role: 'support', assignment_source: 'joint_case' })
+      .select('id')
+    expect(insider.error).not.toBeNull()
+  })
+
+  it("an unrelated detective cannot convert someone else's case", async () => {
+    const { error } = await bcb.rpc('convert_case_to_joint', {
+      p_case: caseA,
+      p_members: [{ officer_id: bcbId, joint_role: 'Joint Investigator' }],
+      p_note: '[rls-test] should never work',
+    })
+    expect(error).not.toBeNull()
+  })
+
+  it('case creator converts to joint; bureau stays LSB (never flips to JTF)', async () => {
+    const { data, error } = await lsb.rpc('convert_case_to_joint', {
+      p_case: caseA,
+      p_members: [{ officer_id: bcbId, joint_role: 'Joint Investigator' }],
+      p_note: '[rls-test] joint conversion',
+    })
+    expect(error).toBeNull()
+    expect((data as { members_added: number }).members_added).toBe(1)
+    const c = await lsb.from('cases').select('id,bureau,is_joint_case,originating_bureau').eq('id', caseA)
+    expect(c.error).toBeNull()
+    expect(c.data![0]).toMatchObject({ is_joint_case: true, bureau: 'LSB', originating_bureau: 'LSB' })
+  })
+
+  it('the joint member can now read the case and its reports', async () => {
+    const c = await bcb.from('cases').select('id').eq('id', caseA)
+    expect(c.error).toBeNull()
+    expect(c.data).toHaveLength(1)
+    const r = await bcb.from('reports').select('id').eq('case_id', caseA)
+    expect(r.error).toBeNull()
+    expect(r.data!.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('joint access is case-scoped: the second LSB case stays invisible', async () => {
+    const { data, error } = await bcb.from('cases').select('id').eq('id', caseB)
+    expect(error).toBeNull()
+    expect(data).toHaveLength(0)
+  })
+
+  it('removing the member revokes access immediately', async () => {
+    const rm = await lsb.rpc('joint_case_remove_member', { p_case: caseA, p_officer: bcbId, p_reason: '[rls-test] removal' })
+    expect(rm.error).toBeNull()
+    const { data, error } = await bcb.from('cases').select('id').eq('id', caseA)
+    expect(error).toBeNull()
+    expect(data).toHaveLength(0)
+  })
+
+  it('expiring re-add: access holds until expiry, then is enforced server-side', async () => {
+    const members = (ms: number) => [{
+      officer_id: bcbId, joint_role: 'Read-Only Member',
+      expires_at: new Date(Date.now() + ms).toISOString(),
+    }]
+    let add = await lsb.rpc('joint_case_add_members', { p_case: caseA, p_members: members(2000) })
+    if (add.error && /future/i.test(add.error.message)) {
+      // client clock behind the DB — pad the offset once and keep polling below
+      add = await lsb.rpc('joint_case_add_members', { p_case: caseA, p_members: members(8000) })
+    }
+    expect(add.error).toBeNull()
+    const before = await bcb.from('cases').select('id').eq('id', caseA)
+    expect(before.error).toBeNull()
+    expect(before.data).toHaveLength(1)
+    await sleep(3000)
+    let rows = (await bcb.from('cases').select('id').eq('id', caseA)).data ?? []
+    for (let i = 0; i < 10 && rows.length > 0; i++) {
+      await sleep(1000)
+      rows = (await bcb.from('cases').select('id').eq('id', caseA)).data ?? []
+    }
+    expect(rows).toHaveLength(0)
+  }, 25_000)
+
+  it('joint_case_end clears the flag but preserves assignment history', async () => {
+    const end = await lsb.rpc('joint_case_end', { p_case: caseA, p_note: '[rls-test] joint case ended' })
+    expect(end.error).toBeNull()
+    const c = await lsb.from('cases').select('id,is_joint_case,bureau,originating_bureau,joint_case_ended_at').eq('id', caseA)
+    expect(c.error).toBeNull()
+    expect(c.data![0]).toMatchObject({ is_joint_case: false, bureau: 'LSB', originating_bureau: 'LSB' })
+    expect(c.data![0].joint_case_ended_at).not.toBeNull()
+    const a = await lsb.from('case_assignments')
+      .select('id,assignment_source,removed_at')
+      .eq('case_id', caseA)
+      .eq('officer_id', bcbId)
+    expect(a.error).toBeNull()
+    expect(a.data).toHaveLength(1)
+    expect(a.data![0].assignment_source).toBe('joint_case')
+    expect(a.data![0].removed_at).not.toBeNull()
+  })
+})
+
+/** Announcements (migrations 20260713050000/060000) — audience CHECK,
+ *  can_post_audience authority and server-side fan-out. Detective-tier denial
+ *  always runs; the positive paths need the lead/director passwords.
+ *
+ *  ZERO fan-out to real members: broad audiences ('all' / a division) are
+ *  proven via announcement_recipient_count (read-only) and DIRECT inserts —
+ *  fan-out lives only in publish_announcement, so direct inserts create no
+ *  notifications. The one publish_announcement success uses the
+ *  'specific_members' audience with ONLY rls-test accounts mentioned. Every
+ *  announcement carries a '[rls-test]' marker and is deleted by its author in
+ *  afterAll (ann_del). */
+describe.skipIf(!enabled)('Announcements — audience authority & scoped fan-out', () => {
+  let lsb: SupabaseClient
+  let bcb: SupabaseClient
+  let lead: SupabaseClient | null = null
+  let director: SupabaseClient | null = null
+  let lsbId = ''
+  let bcbId = ''
+  const created: { by: () => SupabaseClient; id: string }[] = []
+
+  beforeAll(async () => {
+    lsb = mk(); bcb = mk()
+    lsbId = await signInAs(lsb, 'rls-test-lsb@cidportal.test', PW.lsb!)
+    bcbId = await signInAs(bcb, 'rls-test-bcb@cidportal.test', PW.bcb!)
+    if (PW.lead) { lead = mk(); await signInAs(lead, 'rls-test-lead@cidportal.test', PW.lead) }
+    if (PW.director) { director = mk(); await signInAs(director, 'rls-test-director@cidportal.test', PW.director) }
+  })
+
+  afterAll(async () => {
+    if (!lsb) return
+    // Baselines for the live board: leftovers pollute it, so fail loudly.
+    for (const a of created) {
+      const del = await a.by().from('announcements').delete().eq('id', a.id).select('id')
+      if (del.error || (del.data ?? []).length !== 1) {
+        throw new Error(`announcement cleanup failed for ${a.id}: ${del.error?.message ?? 'no row deleted'}`)
+      }
+    }
+    // Purge the notifications the fan-out sent to the rls-test-* accounts.
+    const { error } = await lsb.rpc('rls_test_cleanup')
+    if (error) throw new Error(`rls_test_cleanup failed: ${error.message}`)
+    await Promise.all(
+      [lsb, bcb, lead, director]
+        .filter((c): c is SupabaseClient => !!c)
+        .map((c) => c.auth.signOut()),
+    )
+  })
+
+  it('a detective can neither insert nor publish announcements', async () => {
+    const ins = await lsb.from('announcements')
+      .insert({ title: '[rls-test] detective direct insert', body: 'should never exist', audience: 'LSB' })
+      .select('id')
+    expect(ins.error).not.toBeNull()
+    const pub = await lsb.rpc('publish_announcement', {
+      p_title: '[rls-test] detective publish', p_body: 'should never exist', p_audience: 'LSB',
+    })
+    expect(pub.error).not.toBeNull()
+  })
+
+  it('announcement_recipient_count is rejected for a detective', async () => {
+    const { error } = await lsb.rpc('announcement_recipient_count', { p_audience: 'LSB' })
+    expect(error).not.toBeNull()
+  })
+
+  it.skipIf(!PW.lead)('bureau lead: no @everyone; own-division authority proven without fan-out', async () => {
+    const everyone = await lead!.rpc('publish_announcement', {
+      p_title: '[rls-test] lead @everyone attempt', p_body: 'should never publish', p_audience: 'all',
+    })
+    expect(everyone.error).not.toBeNull()
+    expect(everyone.error!.message).toMatch(/audience/i)
+    // rls-test-lead is bureau_lead of LSB (see README). Authority proof
+    // WITHOUT notifying real LSB members: recipient_count is read-only…
+    const count = await lead!.rpc('announcement_recipient_count', { p_audience: 'LSB' })
+    expect(count.error).toBeNull()
+    expect(count.data as number).toBeGreaterThanOrEqual(0)
+    // …and a direct INSERT creates no notifications (fan-out lives only in
+    // publish_announcement).
+    const ins = await lead!.from('announcements')
+      .insert({ title: '[rls-test] LSB division notice', body: 'RLS security-suite fixture — safe to ignore.', audience: 'LSB' })
+      .select('id')
+    expect(ins.error).toBeNull()
+    const annId = ins.data![0].id as string
+    created.push({ by: () => lead!, id: annId })
+    // Visible to a same-division member…
+    const same = await lsb.from('announcements').select('id').eq('id', annId)
+    expect(same.error).toBeNull()
+    expect(same.data).toHaveLength(1)
+    // …and invisible to the other bureau's detective.
+    const other = await bcb.from('announcements').select('id').eq('id', annId)
+    expect(other.error).toBeNull()
+    expect(other.data).toHaveLength(0)
+  })
+
+  it.skipIf(!PW.director)('director @everyone authority proven without fan-out', async () => {
+    const count = await director!.rpc('announcement_recipient_count', { p_audience: 'all' })
+    expect(count.error).toBeNull()
+    expect(count.data as number).toBeGreaterThanOrEqual(0)
+    // Direct INSERT (RLS ann_ins allows the audience) — no notifications.
+    const ins = await director!.from('announcements')
+      .insert({ title: '[rls-test] portal-wide notice', body: 'RLS security-suite fixture — safe to ignore.', audience: 'all' })
+      .select('id')
+    expect(ins.error).toBeNull()
+    const annId = ins.data![0].id as string
+    created.push({ by: () => director!, id: annId })
+    for (const c of [lsb, bcb]) {
+      const vis = await c.from('announcements').select('id').eq('id', annId)
+      expect(vis.error).toBeNull()
+      expect(vis.data).toHaveLength(1)
+      // No fan-out happened: direct inserts bypass publish_announcement.
+      const notes = await c.from('notifications').select('id').eq('payload->>announce_id', annId)
+      expect(notes.error).toBeNull()
+      expect(notes.data).toHaveLength(0)
+    }
+  })
+
+  it.skipIf(!(PW.director || PW.lead))('specific_members publish fans out to exactly the mentioned test accounts', async () => {
+    const author = (director ?? lead)!
+    // Safe fan-out proof: the recipient set is ONLY the two rls-test
+    // detectives, so publish_announcement never pings a real member.
+    const pub = await author.rpc('publish_announcement', {
+      p_title: '[rls-test] specific-members fan-out',
+      p_body: 'RLS security-suite fixture — safe to ignore.',
+      p_audience: 'specific_members',
+      p_mentions: [
+        { target: lsbId, label: 'RLS Test LSB' },
+        { target: bcbId, label: 'RLS Test BCB' },
+      ],
+    })
+    expect(pub.error).toBeNull()
+    const res = pub.data as { announce_id: string; recipients: number }
+    created.push({ by: () => author, id: res.announce_id })
+    expect(res.recipients).toBe(2) // only the mentioned rls-test accounts
+    for (const c of [lsb, bcb]) {
+      // Visible to each mentioned account. Neither is command, the author, or
+      // in a division matching the audience, so visibility can only come
+      // through the specific_members mentions clause of ann_sel.
+      const vis = await c.from('announcements').select('id,audience').eq('id', res.announce_id)
+      expect(vis.error).toBeNull()
+      expect(vis.data).toHaveLength(1)
+      expect(vis.data![0].audience).toBe('specific_members')
+      // Deduplicated fan-out: exactly one notification each.
+      const notes = await c.from('notifications')
+        .select('id')
+        .eq('type', 'announcement')
+        .eq('payload->>announce_id', res.announce_id)
+      expect(notes.error).toBeNull()
+      expect(notes.data).toHaveLength(1)
+    }
   })
 })

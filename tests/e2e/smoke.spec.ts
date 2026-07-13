@@ -76,9 +76,10 @@ test.describe('smoke', () => {
       await page.getByLabel('Title', { exact: true }).fill(title)
       await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click()
 
-      // onSaved routes into the new case's detail screen.
+      // onSaved routes into the new case's detail screen ("Back to cases"
+      // became the Cases breadcrumb in the v1.6 modernization).
       await expect(page.getByRole('heading', { name: title })).toBeVisible({ timeout: 15_000 })
-      await expect(page.getByText('Back to cases')).toBeVisible()
+      await expect(page.getByLabel('Breadcrumb').getByRole('button', { name: 'Cases' })).toBeVisible()
     } finally {
       // Remove everything the test account authored (case, tasks, …).
       const del = await ctx.post(`${SUPA_URL}/rest/v1/rpc/rls_test_cleanup`, {

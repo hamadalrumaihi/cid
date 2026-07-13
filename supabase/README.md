@@ -46,6 +46,15 @@ references. RBAC helper functions live in the `private` schema.
 | `public.signoff_decide(p_case, p_decision, p_note)` | Reviewer approve / deny / changes at the current stage. | same |
 | `public.signoff_owner_action(p_case, p_action)` | Owner `complete` or `escalate` at the Deputy stop-point. | same |
 | `public.report_finalize(p_report, p_badge)` | Finalize + e-sign a report; `signature.signer_id = auth.uid()`. | `20260617190200_report_finalize_rpc.sql` |
+| `public.report_reopen(p_report)` | Break a report's seal (bureau-scoped command); prior signature preserved in `fields._reopen_log`. | `20260713020000_report_seal_hardening.sql` |
+| `public.warrant_set_status(p_report, p_status)` | Validated warrant lifecycle (draft→signed→executed→returned); only write path on sealed warrants. | same |
+| `public.membership_request_submit/_withdraw(p_request)` | Applicant-side membership-request transitions; submit notifies command. | `20260713030000_membership_requests.sql` |
+| `public.review_membership_request(p_request, p_decision, p_final_bureau, p_final_role, notes…)` | Command decision — approve / approve-with-changes / correction / reject; activates the profile ONLY on approval (role_events + history + audit + notification, atomic). | same |
+| `public.admin_membership_requests()` | Command-only full request read (bypasses the `internal_decision_note` column revoke). | same |
+| `public.convert_case_to_joint / joint_case_add_members(p_case, p_members)` | Joint-case conversion/membership; joint `case_assignments` rows are RPC-only and grant case-scoped, expiry-aware access via `private.has_joint_access()`. `cases.bureau` is never flipped to JTF. | `20260713040000_joint_cases.sql` |
+| `public.joint_case_remove_member(p_case, p_officer, p_reason)` / `joint_case_end(p_case, p_note)` | Immediate revoke / end all temporary joint access; history preserved. | same |
+| `public.publish_announcement(title, body, audience, mentions, links, pinned)` | Audience-validated announcement + server-side notification fan-out (one per active recipient); returns recipient count. | `20260713050000_announcement_audiences.sql` |
+| `public.announcement_recipient_count(p_audience, p_mentions)` / `announcement_notify_update(p_announce)` | Composer preview / explicit re-notify on edit. | same |
 
 History rows in `case_signoff_history` are written **inside** the RPCs, so the
 client no longer logs them.

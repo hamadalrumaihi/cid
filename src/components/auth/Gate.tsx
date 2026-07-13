@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { isConfigured } from '@/lib/supabase'
+import { MembershipRequest } from './MembershipRequest'
 
 function ShieldLogo({ size = 'h-12 w-12' }: { size?: string }) {
   return (
@@ -77,9 +78,8 @@ function PendingBody() {
   const who = session?.user?.email || 'Your account'
   return (
     <>
-      <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200">
-        ⏳ <b>{who}</b> is signed in but not yet approved. A Command/Director must activate your profile before you can access the portal.
-      </div>
+      <p className="mb-3 text-xs text-slate-400">Signed in as <b className="text-slate-200">{who}</b></p>
+      <MembershipRequest />
       <button
         onClick={() => void signOut()}
         className="mt-4 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"

@@ -174,9 +174,13 @@ export const FORM_SCHEMAS: Record<string, FormSchema> = {
     subtitle: 'State of San Andreas — FOR OFFICIAL USE ONLY',
     sections: [
       { id: 'hdr', label: 'Request', type: 'kv', fields: [
+        // Confirmed warrant form: readable legal-request title + queue priority.
+        // Priority orders review queues only — it never bypasses review/signing.
+        { key: 'warrant_title', label: 'Warrant Title', type: 'text' },
         { key: 'case_number', label: 'Case Number', type: 'text' },
         { key: 'detective', label: 'Requesting Detective', type: 'text' },
         { key: 'department', label: 'Department', type: 'select', opts: ['', 'LSPD', 'BCSO', 'SAHP'] },
+        { key: 'priority', label: 'Priority', type: 'select', opts: ['', 'Medium', 'High', 'Critical'] },
         { key: 'date', label: 'Date', type: 'text' },
       ] },
       { id: 'suspects', label: 'Suspect Information', type: 'grid', cols: [
@@ -189,6 +193,13 @@ export const FORM_SCHEMAS: Record<string, FormSchema> = {
       { id: 'pc', label: 'Probable Cause Statement', type: 'textarea', key: 'probable_cause' },
       { id: 'evidence', label: 'Supporting Evidence', type: 'kv', fields: [
         { key: 'supporting_evidence', label: 'Evidence', type: 'checks', opts: ['Witness Statements', 'Surveillance Footage', 'Bodycam Footage', 'Physical Evidence', 'Other'] },
+      ] },
+      // Confirmed warrant form: structured evidence/supporting links drawn from
+      // the case's logged evidence, attachments and finalized reports — not a
+      // single unrestricted text field (free text stays allowed in the fields).
+      { id: 'links', label: 'Evidence / Supporting Links', type: 'kv', evidenceLookup: true, fields: [
+        { key: 'ev_items', label: 'Item(s)', type: 'text' },
+        { key: 'ev_files', label: 'Files / Links', type: 'text' },
       ] },
       { id: 'affirm', label: 'Detective Affirmation', type: 'note', text: 'I affirm that probable cause exists for the arrest of the above-named individual.' },
       { id: 'sign', label: 'Authorization', type: 'kv', fields: [

@@ -6,6 +6,88 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.11.0] — 2026-07-13
+
+### Added — membership requests (new-member onboarding)
+- A new sign-in now lands on a **membership request form** instead of a
+  dead-end pending screen: display name, badge, **exactly one permanent
+  department** (LSB/BCB/SAB — JTF is joint-case-only and cannot be
+  requested), a requestable role (Detective / Senior Detective), and a
+  reason. Requests are draft → pending → (correction ↔ resubmit) →
+  approved / approved-with-changes / rejected / withdrawn, with an
+  append-only history and audit-log entries.
+- **Command review** lives in the Command Center Approval Queue: approve
+  as requested, approve with changes (final dept/role selectors,
+  bureau-lead scoping mirrors `assign_member`), request correction
+  (applicant-visible note + Command-only internal note), or reject.
+  The profile's role/division/activation change **only** inside the
+  `review_membership_request()` RPC, atomically with `role_events`,
+  history, audit and the applicant's notification. Internal notes are
+  column-revoked from clients (profiles.email precedent).
+
+### Added — joint cases (temporary cross-department access)
+- **Make This a Joint Case** on a case (lead/creator/command): pick
+  members from a searchable roster (name/badge, department filter), give
+  each a **temporary joint-case role** (JTF Case Lead, JTF Co-Lead, Joint
+  Investigator, Support Investigator, Department Liaison, Read-Only
+  Member) and an optional **access expiry**. The case shows a JTF tag and
+  keeps its **originating department** — `cases.bureau` is deliberately
+  never flipped to JTF (in this schema that would mean division-wide
+  visibility).
+- Access is enforced by RLS: an active, unexpired joint assignment grants
+  access to **exactly that case** (`private.has_joint_access`). Members'
+  permanent departments/roles never change; they gain nothing on other
+  cases. Joint assignment rows are **RPC-only** (direct client writes to
+  `case_assignments` stay limited to today's inert standard rows).
+  Removal revokes immediately, expiry is server-enforced, **End
+  Joint-Case Status** closes everything at once, and history is never
+  hard-deleted. All actions notify the affected members and audit-log.
+
+### Added — announcement audiences & portal @everyone
+- The composer now targets **Everyone** (`@everyone` — Deputy Director+
+  and owner only), **Command**, **My Department**, a **specific
+  department** (bureau leads: own department only), or **specific
+  members** (`specific_members` — exactly the mentioned users). Typing `@everyone` selects the
+  Everyone audience when authorized.
+- Publishing goes through the **`publish_announcement()` RPC**: recipients
+  resolved server-side (active members only, deduplicated, one
+  notification each), with a live **recipient-count preview** and a
+  confirmation before broadcast. Announcement visibility is now
+  RLS-scoped per audience (previously client-side only).
+- **Edits never re-notify automatically** — an explicit "Notify recipients
+  about this update" option (default off) sends one update notification.
+- Discord: a new `discord-announce` edge function performs one
+  rate-limited server-side DM sweep per broadcast (failure never affects
+  the portal records). Also fixed the existing `discord-notify` function,
+  which filtered on a non-existent `notifications.created_by` column and
+  therefore never delivered any DM.
+
+### Verification round (pre-merge checks)
+- Audience value `members` renamed to **`specific_members`** for clarity
+  (data, CHECK, RLS, helper, UI).
+- Fixed a projection bug the new E2E suite caught on its first live run:
+  the applicant form's default `select('*')` (and insert/update returning)
+  tripped the revoked internal-note column and 403'd for every applicant —
+  `insert`/`update` now take an explicit projection and the form uses one.
+- Fixed a stale smoke-spec assertion ("Back to cases" became the Cases
+  breadcrumb in v1.6); both smoke tests pass live again.
+- RLS fixture accounts recreated (they had been deleted with the other
+  test accounts), including a new disposable `rls-test-applicant`;
+  `rls_test_cleanup()` extended to the new tables; test-applicant
+  submissions never notify real command members.
+
+### Changed — CID warrant form corrections (confirmed form)
+- Arrest Warrant Request gains **Warrant Title**, **Priority**
+  (Medium/High/Critical — never bypasses review) and a structured
+  **Evidence / Supporting Links** section with pickers for case evidence,
+  case attachments and **finalized case reports** (free text still
+  allowed). Suspect-type fields across all report forms now capture the
+  **canonical person record id** alongside the display name whenever the
+  typed name matches the Persons registry, and saved reports link them.
+- No DOJ functionality was implemented; `docs/DOJ-INTEGRATION-DRAFT.md`
+  (proposal-only) covers roles, warrant/subpoena lifecycles, court
+  packets, classified requests, versioning and MDT projection.
+
 ## [1.10.0] — 2026-07-13
 
 ### Changed — D1: command dashboard declutter

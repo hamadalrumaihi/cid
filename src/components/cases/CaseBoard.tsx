@@ -66,7 +66,10 @@ export function CaseBoard({ items, canEdit, onOpen, onMoved }: { items: CaseRow[
                   <button onClick={() => onOpen(c.id)} className="w-full text-left">
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-mono text-sm font-bold text-white">{c.case_number.replaceAll('-', ' - ')}</p>
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${caseStatusTint(c.status)}`}>{c.bureau}</span>
+                      <span className="flex flex-shrink-0 items-center gap-1">
+                        {c.is_joint_case && <span className="rounded-full bg-violet-500/15 px-1.5 py-1 text-[10px] font-bold uppercase text-violet-300">JTF</span>}
+                        <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${caseStatusTint(c.status)}`}>{c.bureau}</span>
+                      </span>
                     </div>
                     <p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-100">{c.title || 'Untitled case'}</p>
                     <div className="mt-3 flex items-center justify-between gap-2 text-xs text-slate-400">
