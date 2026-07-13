@@ -6,6 +6,35 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.8.0] — 2026-07-13
+
+### Added — evidence lookup while writing a report
+- The **Evidence / Property** section of the CID Investigative Report gains
+  two pickers: **Add from case evidence** and **Add from case attachments**.
+  They list **only** items already attached to the case (the Evidence tab's
+  `evidence` rows and the case's attachments) and append the chosen item
+  (`EV-001 — description` / attachment title) into the existing fields — no
+  retyping, no schema change, drafts/finalize untouched. If nothing is
+  attached yet, the form says so and points to the Evidence tab.
+
+### Added — person & vehicle profile pages
+- **Person profile** (`/persons?person=…`, shareable/back-button friendly):
+  identity card (mugshot, name, BOLO/felony badges, status + alias) with
+  key-value rows for the fields the app stores (gang, CCW, VCH, felonies,
+  BOLO, DOB when present), plus panels for **Warrants** (derived from case
+  reports), **Vehicles**, **Properties**, **Linked cases**, **Media**, and
+  **Notes**. The Persons card's Profile button now opens this page; the
+  quick-look drawer is unchanged where other views use it.
+- **Vehicle profile** (`/vehicles?vehicle=…`): details card (model, mono
+  plate, color swatch, owner → linked to their person profile, gang chip)
+  with **Linked cases** derived from plate mentions in reports plus the
+  owner's case links (fail-closed with Retry — never a false "no cases"),
+  and **Notes**. Vehicle cards gain a Profile button; the registry, search,
+  cross-case scanner and edit modal are unchanged.
+- Both pages reuse the shared design-system primitives, stack on mobile,
+  respect reduced motion, read via RLS-scoped queries only, and invent no
+  fields the database doesn't store.
+
 ## [1.7.2] — 2026-07-12
 
 ### Phase D3 — Case-detail tab bar & header (visual + a11y)

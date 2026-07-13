@@ -19,14 +19,16 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { inputCls, labelCls } from '@/components/ui/Field'
 import { WatchButton } from '@/components/cases/WatchButton'
+import { VehicleProfile } from './VehicleProfile'
 
 type VehicleRow = Tables<'vehicles'>
-interface PersonOption { id: string; name: string }
-interface GangOption { id: string; name: string }
+export interface PersonOption { id: string; name: string }
+export interface GangOption { id: string; name: string }
 interface CaseOption { id: string; case_number: string }
 
 export function VehiclesView() {
   const { state, canEdit, canDelete } = useAuth()
+  const router = useRouter()
   const sp = useSearchParams()
   const [vehicles, setVehicles] = useState<VehicleRow[]>([])
   const [persons, setPersons] = useState<PersonOption[]>([])
@@ -35,6 +37,8 @@ export function VehiclesView() {
   const [err, setErr] = useState<string | null>(null)
   // `?q=` seeds the filter — how global-search results land here prefiltered.
   const [query, setQuery] = useState(() => sp.get('q') ?? '')
+  // `?vehicle=` drills into the profile view (mirrors cases' `?case=`).
+  const vehicleId = sp.get('vehicle')
   const [editor, setEditor] = useState<{ record: VehicleRow | null } | null>(null)
   const vVehicles = useTableVersion('vehicles')
 
@@ -81,6 +85,8 @@ export function VehiclesView() {
   }
 
   if (state !== 'in') return <Notice text="Live vehicle records require sign-in." />
+
+  if (vehicleId) return <VehicleProfile id={vehicleId} onBack={() => router.push('/vehicles')} />
 
   return (
     <div>
@@ -140,6 +146,7 @@ export function VehiclesView() {
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-2">
                     <WatchButton type="vehicle" id={v.id} label={v.plate} compact />
+                    <button onClick={() => router.push(`/vehicles?vehicle=${v.id}`)} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Profile</button>
                     {canEdit && <button onClick={() => setEditor({ record: v })} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
                     {canDelete && <button onClick={() => void onDelete(v)} aria-label="Delete vehicle" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10">✕</button>}
                   </div>
@@ -168,9 +175,10 @@ export function VehiclesView() {
   )
 }
 
-/* ---- Create / edit modal ------------------------------------------------ */
+/* ---- Create / edit modal ------------------------------------------------
+   Exported so VehicleProfile's Edit action reuses this exact definition. */
 
-function VehicleModal({ record, persons, gangs, onClose, onSaved }: {
+export function VehicleModal({ record, persons, gangs, onClose, onSaved }: {
   record: VehicleRow | null
   persons: PersonOption[]
   gangs: GangOption[]

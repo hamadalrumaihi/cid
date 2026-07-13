@@ -35,8 +35,10 @@ export interface PersonDossier {
 
 const uniq = <T,>(arr: T[]): T[] => [...new Set(arr)]
 
-/** Warrant reports naming this person (matched on suspect/full name fields). */
-function warrantsNaming(reports: ReportRow[], name: string): ReportRow[] {
+/** Warrant reports naming this person (matched on suspect/full name fields).
+ *  Exported for PersonProfile's Warrants panel — there is no warrants table;
+ *  warrants are derived from RLS-visible case reports. */
+export function warrantsNaming(reports: ReportRow[], name: string): ReportRow[] {
   const nm = name.trim().toLowerCase()
   if (!nm) return []
   return reports.filter((r) => {
