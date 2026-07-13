@@ -11,7 +11,7 @@ import { FORM_SCHEMAS, REPORT_TEMPLATES, formToText, reportTitle, type FormValue
 import { parseFormValues } from '@/lib/jsonShapes'
 import { Drafts } from '@/lib/drafts'
 import { toast } from '@/lib/toast'
-import type { CaseRow, ReportRow } from './shared'
+import type { CaseRow, EvidenceRow, MediaRow, ReportRow } from './shared'
 
 export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; canDelete: boolean }) {
   const { profile } = useAuth()
@@ -56,7 +56,7 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
       <Modal open={!!editing} onClose={() => setEditing(null)} wide>
         <div className="p-5">
           <ModalHeader title={editing ? FORM_SCHEMAS[editing.template]?.title || 'Report' : 'Report'} onClose={() => setEditing(null)} />
-          {editing && <FormEditor template={editing.template} values={editing.values} onChange={(values) => { setEditing({ ...editing, values }); Drafts.save(draftKey(editing.template, editing.report), values) }} />}
+          {editing && <FormEditor template={editing.template} caseId={c.id} values={editing.values} onChange={(values) => { setEditing({ ...editing, values }); Drafts.save(draftKey(editing.template, editing.report), values) }} />}
           <div className="mt-5 flex justify-end gap-2"><button onClick={() => setEditing(null)} className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-200">Cancel</button><button onClick={save} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Save</button></div>
         </div>
       </Modal>
@@ -71,10 +71,37 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
   )
 }
 
-function FormEditor({ template, values, onChange }: { template: string; values: FormValues; onChange: (v: FormValues) => void }) {
+function FormEditor({ template, caseId, values, onChange }: { template: string; caseId: string; values: FormValues; onChange: (v: FormValues) => void }) {
   const schema = FORM_SCHEMAS[template]
+  // Case-scoped evidence/attachment pool for kv sections flagged evidenceLookup.
+  // Loaded once per editor; a load failure shows a muted notice, never blocks the form.
+  const needsLookup = !!schema?.sections.some((s) => s.type === 'kv' && s.evidenceLookup)
+  const [pool, setPool] = useState<{ evidence: EvidenceRow[]; media: MediaRow[] } | null>(null)
+  const [poolErr, setPoolErr] = useState(false)
+  useEffect(() => {
+    if (!needsLookup) return
+    let alive = true
+    void (async () => {
+      try {
+        const [ev, m] = await Promise.all([list('evidence', { eq: { case_id: caseId }, order: 'created_at' }), list('media', { eq: { case_id: caseId } })])
+        if (alive) setPool({ evidence: ev, media: m })
+      } catch { if (alive) setPoolErr(true) }
+    })()
+    return () => { alive = false }
+  }, [caseId, needsLookup])
   if (!schema) return <p className="text-sm text-slate-400">Unknown report template.</p>
   const set = (key: string, value: unknown) => onChange({ ...values, [key]: value })
+  // Free-text append into a single-line field: join picks with '; '.
+  const append = (key: string, text: string) => { const cur = String(values[key] ?? '').trim(); set(key, cur ? `${cur}; ${text}` : text) }
+  const evLabel = (ev: EvidenceRow) => [ev.item_code, ev.description].filter(Boolean).join(' — ') || 'Untitled item'
+  const lookup = poolErr
+    ? <p className="mb-2 text-xs text-slate-400">Case evidence lookup unavailable — enter items manually.</p>
+    : pool && !pool.evidence.length && !pool.media.length
+      ? <p className="mb-2 text-xs text-slate-400">No evidence or attachments on this case yet — log them in the Evidence tab first.</p>
+      : pool && <div className="mb-2 grid gap-2 md:grid-cols-2">
+          <select aria-label="Add from case evidence" value="" onChange={(e) => { const ev = pool.evidence.find((x) => x.id === e.target.value); if (ev) append('ev_items', evLabel(ev)) }} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Add from case evidence…</option>{pool.evidence.map((ev) => <option key={ev.id} value={ev.id}>{evLabel(ev)}</option>)}</select>
+          <select aria-label="Add from case attachments" value="" onChange={(e) => { const m = pool.media.find((x) => x.id === e.target.value); if (m) append('ev_files', m.title || m.type || 'Attachment') }} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Add from case attachments…</option>{pool.media.map((m) => <option key={m.id} value={m.id}>{m.title || m.type || 'Attachment'}</option>)}</select>
+        </div>
   return <div className="space-y-4">{schema.sections.map((s) => {
     if (s.type === 'note') return <p key={s.id} className="rounded-lg bg-white/5 p-3 text-sm text-slate-300">{s.text}</p>
     if (s.type === 'textarea') return <label key={s.id} className="block text-sm font-bold text-white">{s.label}<textarea value={String(values[s.key] ?? '')} onChange={(e) => set(s.key, e.target.value)} rows={5} className="mt-2 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 font-normal text-white" /></label>
@@ -82,6 +109,6 @@ function FormEditor({ template, values, onChange }: { template: string; values: 
       const rows = (Array.isArray(values[s.id]) ? values[s.id] : [{}]) as Record<string, string>[]
       return <div key={s.id} className="rounded-xl border border-white/10 p-3"><h4 className="mb-2 font-bold text-white">{s.label}</h4>{rows.map((row, i) => <div key={i} className="mb-2 grid gap-2 md:grid-cols-2">{s.cols.map((col) => <input key={col.key} value={row[col.key] || ''} onChange={(e) => set(s.id, rows.map((r, idx) => idx === i ? { ...r, [col.key]: e.target.value } : r))} placeholder={col.label} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white" />)}</div>)}<button onClick={() => set(s.id, [...rows, {}])} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-200">Add row</button></div>
     }
-    return <div key={s.id} className="rounded-xl border border-white/10 p-3"><h4 className="mb-2 font-bold text-white">{s.label}</h4><div className="grid gap-2 md:grid-cols-2">{s.fields.map((f) => f.type === 'select' ? <select key={f.key} value={String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white"><option value="">{f.label}</option>{(f.opts || []).filter(Boolean).map((o) => <option key={o} value={o}>{o}</option>)}</select> : <input key={f.key} value={Array.isArray(values[f.key]) ? (values[f.key] as string[]).join(', ') : String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} placeholder={f.label} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white" />)}</div></div>
+    return <div key={s.id} className="rounded-xl border border-white/10 p-3"><h4 className="mb-2 font-bold text-white">{s.label}</h4>{s.evidenceLookup && lookup}<div className="grid gap-2 md:grid-cols-2">{s.fields.map((f) => f.type === 'select' ? <select key={f.key} value={String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white"><option value="">{f.label}</option>{(f.opts || []).filter(Boolean).map((o) => <option key={o} value={o}>{o}</option>)}</select> : <input key={f.key} value={Array.isArray(values[f.key]) ? (values[f.key] as string[]).join(', ') : String(values[f.key] ?? '')} onChange={(e) => set(f.key, e.target.value)} placeholder={f.label} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white" />)}</div></div>
   })}</div>
 }

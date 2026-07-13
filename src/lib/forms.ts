@@ -25,7 +25,9 @@ export interface FormGridCol {
 }
 
 export type FormSection =
-  | { id: string; label: string; type: 'kv'; fields: FormField[] }
+  /** evidenceLookup: kv section whose ev_items/ev_files fields offer a
+   *  case-scoped pick-list of logged evidence + attachments (free-text append). */
+  | { id: string; label: string; type: 'kv'; fields: FormField[]; evidenceLookup?: boolean }
   | { id: string; label: string; type: 'grid'; cols: FormGridCol[] }
   | { id: string; label: string; type: 'textarea'; key: string }
   | { id: string; label: string; type: 'note'; text: string }
@@ -80,7 +82,7 @@ export const FORM_SCHEMAS: Record<string, FormSchema> = {
         { key: 'inc_class', label: 'MCB Classification', type: 'text' },
       ] },
       { id: 'narrative', label: 'Narrative / Statement', type: 'textarea', key: 'narrative' },
-      { id: 'evidence', label: 'Evidence / Property', type: 'kv', fields: [
+      { id: 'evidence', label: 'Evidence / Property', type: 'kv', evidenceLookup: true, fields: [
         { key: 'ev_items', label: 'Item(s)', type: 'text' },
         { key: 'ev_collected_by', label: 'Collected by', type: 'text' },
         { key: 'ev_files', label: 'Files', type: 'text' },

@@ -2,10 +2,10 @@
 
 /** Persons of Interest — port of vanilla persons.js §11A. Paged card grid
  *  (24/page + load-more, reset on search), ≥8-felony flag, quick-add from an
- *  empty search, bulk multi-select delete (command), per-card intel profile /
- *  edit / attach-to-case, mugshots via safeUrl with graceful fallback. */
+ *  empty search, bulk multi-select delete (command), per-card profile page
+ *  (`?person=`), edit / attach-to-case, mugshots via safeUrl with fallback. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { deleteWithUndo, insert, list, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
@@ -16,7 +16,7 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
-import { IntelProfile, type IntelTarget } from './IntelProfile'
+import { PersonProfile } from './PersonProfile'
 import { PERSON_NULL_REFS, PersonModal, type GangRow, type PersonRow } from './PersonModal'
 
 const PAGE = 24
@@ -26,6 +26,7 @@ type EditorState = { record: PersonRow | null; prefillName?: string } | null
 
 export function PersonsView() {
   const { state, canEdit, canDelete } = useAuth()
+  const router = useRouter()
   const sp = useSearchParams()
   const [persons, setPersons] = useState<PersonRow[]>([])
   const [gangs, setGangs] = useState<GangRow[]>([])
@@ -37,8 +38,9 @@ export function PersonsView() {
   const [page, setPage] = useState({ q: '', shown: PAGE })
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [editor, setEditor] = useState<EditorState>(null)
-  const [profile, setProfile] = useState<IntelTarget | null>(null)
   const [attach, setAttach] = useState<PersonRow | null>(null)
+  // `?person=` drills into the full profile page instead of the registry grid.
+  const personId = sp.get('person')
   const vPersons = useTableVersion('persons')
   const vGangs = useTableVersion('gangs')
 
@@ -101,6 +103,13 @@ export function PersonsView() {
     await deleteWithUndo('persons', p, {
       label: `Person "${p.name || 'record'}"`, noConfirm: true, after: () => void refresh(), setNullRefs: PERSON_NULL_REFS,
     })
+  }
+
+  // Drill-down: `?person=` swaps the registry for the full profile page (same
+  // pattern as OperationsView's `?op=`). Signed-out visitors keep the gate.
+  if (personId) {
+    if (state !== 'in') return <Notice text="Live person records require sign-in." />
+    return <PersonProfile id={personId} onBack={() => router.push('/persons')} />
   }
 
   return (
@@ -184,7 +193,7 @@ export function PersonsView() {
                 canDelete={canDelete}
                 selected={selected.has(p.id)}
                 onSelect={(on) => toggleSelect(p.id, on)}
-                onProfile={() => setProfile({ type: 'person', id: p.id })}
+                onProfile={() => router.push(`/persons?person=${encodeURIComponent(p.id)}`)}
                 onEdit={() => setEditor({ record: p })}
                 onDelete={() => void deleteOne(p)}
                 onAttach={() => setAttach(p)}
@@ -210,7 +219,6 @@ export function PersonsView() {
           onSaved={() => { setEditor(null); void refresh() }}
         />
       )}
-      {profile && <IntelProfile initial={profile} gangs={gangs} onClose={() => setProfile(null)} />}
       {attach && <AttachToCaseModal person={attach} caseOptions={caseOptions} onClose={() => setAttach(null)} />}
     </section>
   )

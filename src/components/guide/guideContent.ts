@@ -66,7 +66,7 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 
 1. Go to **Cases → Case Files**.
 2. Use the search box or status filters to find the case, then **click its card**.
-3. Inside, work through the tabs: **Overview** (assignments & stats), **Graph** (the investigation link chart), **Evidence**, **Reports**, **Tasks**, **Charges**, **Chat** (case room with @mentions), **Timeline**, **Files**, **Intel** (linked people/gangs/places), **RICO**, and **Sign-off**.
+3. Inside, work through the tabs: **Overview** (assignments & stats), **Graph** (the investigation link chart), **Evidence**, **Reports**, **Tasks**, **Charges**, **Chat** (case room with @mentions), **Timeline**, **Files**, **Intel** (linked people/gangs/places), **RICO**, and **Sign-off**. When you write an investigative report, the **Evidence / Property** section has **Add from case evidence** and **Add from case attachments** pickers — they list only what's already logged on this case's Evidence tab or attachments, so you can reference items without retyping them.
 4. The **Timeline** tab opens with a zoomable chronology band — every event on its own lane (evidence, reports, tasks, sign-off). **Scroll to zoom** in on a busy day, **drag to pan**, and hover any dot for the details.
 
 ### Create a case
@@ -83,8 +83,8 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 
 ### Log intelligence
 
-- **A person:** Intelligence → Persons → **+ New Person**. Click any person's card to open their full intel profile (cases, gang ties, vehicles, dossier export).
-- **A vehicle:** Intelligence → Vehicles → **+ New Vehicle** — plate, model, owner. The registry automatically flags plates that appear across multiple cases.
+- **A person:** Intelligence → Persons → **+ New Person**. Click a person's **Profile** to open their full profile page — identity card, warrants, vehicles, properties, linked cases, media and notes (shareable link, with dossier export).
+- **A vehicle:** Intelligence → Vehicles → **+ New Vehicle** — plate, model, owner. Click a vehicle's **Profile** for its full page — details, owner (linked to their person profile), gang tie, notes, and every case the plate or owner appears in. The registry also flags plates that appear across multiple cases.
 - **A gang:** Intelligence → Gangs → pick or create a gang, then use **Add member** and **Add Turf** inside it.
 - **A hard identifier:** Intelligence → Indicators → **+ New Indicator** — log a burner phone, bank account, weapon serial, alias or address against its case. The registry deconflicts automatically: if the same value is already logged on another case, both cases get a ⚡ **Deconfliction alert** naming each other (a case you can't access shows as 🔒 restricted — coordinate through its bureau lead).
 - **Link intel to a case:** open the case → **Intel** tab → link persons/gangs/places so everything cross-references.
