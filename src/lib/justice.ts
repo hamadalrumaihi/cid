@@ -2,7 +2,11 @@
  *  schema (justice_identity/legal_core migrations). CID and justice roles are
  *  SEPARATE domains: nothing here touches ROLE_ORDER or app_role, and none of
  *  these labels grant anything — RLS + the legal workflow RPCs are the
- *  authority for every read and transition. */
+ *  authority for every read and transition.
+ *
+ *  Justice authority is intentionally separate from CID rank. Do not derive
+ *  DOJ/Judiciary permissions from profiles.role or profiles.division —
+ *  justice identity lives only in justice_memberships. */
 import type { Tables } from './database.types'
 import { deadlineInfo as sharedDeadlineInfo } from './deadlines'
 

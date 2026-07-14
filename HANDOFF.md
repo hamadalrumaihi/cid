@@ -35,15 +35,16 @@ framework, or build step. No test data in live DB. Supabase project: jhxuflzmqsp
 1. Sheets sync: extend sops-sync — list mimeType spreadsheet, export text/csv, parse to
    {cols,rows}, upsert kind='sheet'; render via existing sheet viewer. Also link-cards for
    images/video in folder (safeUrl'd webViewLink) into Library.
-2. AI Analyst: edge function calling Claude API (key in app_secrets), RLS-scoped context
-   assembly, "CID Analyst" panel; draft warrants/summaries from case data. Model ids:
-   claude-fable-5 / claude-opus-4-8 / claude-sonnet-5.
-3. sops-sync recursion (currently direct children of SOPS_FOLDER_ID only — fine for the
+2. sops-sync recursion (currently direct children of SOPS_FOLDER_ID only — fine for the
    flat SOP/Training folder today).
+
+(A proposed model-assisted drafting feature was evaluated and not adopted: the
+portal is deliberately rule-based and human-operated — every investigative and
+legal decision is a named human actor validated server-side.)
 
 ## Gotchas learned this session
 - MCP deploy_edge_function/list_extensions need interactive approval: user deploys via
   dashboard; big payloads into DB: use pg_net http_get server-side, never paste blobs.
-- Squash merges: restart branch from origin/main after every merge (branch name
-  claude/continue-previous-*; force-with-lease is fine on merged-only history).
+- Squash merges: restart the working branch from origin/main after every merge
+  (force-with-lease is fine on merged-only history).
 - FOLDER_META (core.js) is the Drive top-level list; Reference reads folders directly.

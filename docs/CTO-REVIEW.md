@@ -102,7 +102,7 @@ Ranked by fit with what the division actually does in-game:
 5. **Case merge/split** — real investigations converge; today that's manual re-linking (Med, M).
 6. **Evidence QR/blockchain-style custody hash** — RP flavor + tamper story for court scenes (Med, M).
 7. **Training/certification tracker** for personnel (Low–Med, S–M).
-8. **AI assists** (case-summary drafting, similar-case detection via embeddings) — genuinely useful but adds API keys, cost, and a new failure surface; prototype only after v1.5 (Med, L).
+8. **Model-assisted drafting** was evaluated and not adopted — the portal is deliberately rule-based, database-driven, and human-operated; it would add API keys, cost, and a new failure surface without changing who decides anything (every approval is a named human actor).
 
 ---
 
@@ -171,7 +171,7 @@ of the triggers fire, **v2.0 not happening in 2027 is success, not failure.**
 | Jul 2026 | v1.2 | Safety loop: CI security tests, baseline migration, restore drill, error tracking |
 | Aug–Sep 2026 | v1.3 | Patterns & polish: useRegistry, a11y, splits, budgets |
 | Oct–Dec 2026 | v1.5 | Two features (feedback-driven) + MFA |
-| Jan–Mar 2027 | v1.6 | Feature #3/#4 + useRegistry rollout completion + AI-assist prototype *if* wanted |
+| Jan–Mar 2027 | v1.6 | Feature #3/#4 + useRegistry rollout completion |
 | Apr–Jun 2027 | v2.0 *(conditional)* | Scale pack / tenancy / platform jump — only if a trigger fired |
 
 ---

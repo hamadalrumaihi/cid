@@ -1,5 +1,8 @@
 # Project subagents
 
+> Development tooling only. These files are not runtime dependencies and do
+> not provide AI features inside the CID Portal.
+
 Curated Claude Code subagent definitions tailored to the CID Portal — its
 design system, RLS-first security model, gates, and governance rules. Spawn
 them via the Agent tool (e.g. `subagent_type: "frontend-developer"`).

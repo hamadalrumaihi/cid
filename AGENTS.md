@@ -1,5 +1,9 @@
 # react-rebuild BRANCH NOTE
 
+> Development tooling only. This file guides development tools and human
+> contributors working on the repo; it is not a runtime dependency and does
+> not provide AI features inside the CID Portal.
+
 On THIS branch the repo root is a Next.js 16 app (src/, package.json). The
 legacy static-site files (index.html, the 30 *.js, styles.css) are still
 present but INERT here — they stay live from `main` until cutover. Do not
