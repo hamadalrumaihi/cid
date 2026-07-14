@@ -1878,20 +1878,52 @@ CREATE OR REPLACE FUNCTION public.create_notification(p_user_id uuid, p_type tex
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare v_actor uuid := (select auth.uid());
+declare
+  v_actor uuid := (select auth.uid());
+  v_case uuid := nullif(p_payload->>'case_id', '')::uuid;
 begin
   if v_actor is null or not private.is_active() then
     raise exception 'not authorized';
   end if;
   if p_user_id is null then return; end if;
+
+  -- Only the types the client legitimately emits (src/lib/notify.ts callers);
+  -- every server-owned type is inserted directly by its own definer RPC.
+  if p_type not in (
+    'member_approved', 'access_requested', 'stale_case',
+    'task_assigned', 'chat_mention', 'tracker_authorized', 'tracker_pending'
+  ) then
+    raise exception 'unsupported notification type';
+  end if;
+
+  if p_type = 'member_approved' then
+    if not private.is_command() then raise exception 'not authorized'; end if;
+  elsif p_type = 'access_requested' then
+    if v_case is null or not exists (
+      select 1 from public.case_access_requests r
+      where r.case_id = v_case and r.requester_id = v_actor and r.status = 'pending'
+    ) then raise exception 'not authorized'; end if;
+  elsif p_type in ('stale_case', 'task_assigned', 'chat_mention') then
+    if v_case is null or not private.can_access_case(v_case) then
+      raise exception 'not authorized';
+    end if;
+  elsif p_type = 'tracker_authorized' then
+    if p_user_id <> v_actor and not private.is_command() then raise exception 'not authorized'; end if;
+  elsif p_type = 'tracker_pending' then
+    if p_user_id <> v_actor then raise exception 'not authorized'; end if;
+  end if;
+
   insert into public.notifications (user_id, type, payload)
   values (
     p_user_id,
-    coalesce(nullif(btrim(p_type), ''), 'info'),
-    coalesce(p_payload, '{}'::jsonb) || jsonb_build_object(
-      'actor_id', v_actor,
-      'actor_name', (select display_name from public.profiles where id = v_actor)
-    )
+    p_type,
+    (coalesce(p_payload, '{}'::jsonb)
+      || case when p_payload ? 'reason' then jsonb_build_object('reason', left(p_payload->>'reason', 500)) else '{}'::jsonb end
+      || case when p_payload ? 'title'  then jsonb_build_object('title',  left(p_payload->>'title', 300))  else '{}'::jsonb end)
+      || jsonb_build_object(
+        'actor_id', v_actor,
+        'actor_name', (select display_name from public.profiles where id = v_actor)
+      )
   );
 end $function$
 ;

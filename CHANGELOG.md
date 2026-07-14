@@ -6,6 +6,23 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [Unreleased] — Usability roadmap, Phase 2 (in progress)
+
+### Security — re-hardened `create_notification` (the client notification path)
+- The live function had drifted to an un-guarded form: any active member could
+  insert a notification of **any** type with arbitrary free text to any other
+  member — i.e. spoof a "sign-off approved" / "legal decision" / "membership
+  approved" notice. (An earlier guard existed but was superseded; its whitelist
+  also predated rebuild type names like `stale_case`.)
+- Verified no database function calls `create_notification` (every server-owned
+  notice is inserted directly by its own definer RPC), so the client emits a
+  fixed set of seven types. The function now **whitelists exactly those seven**
+  and enforces per-type authority (`member_approved` ⇒ command;
+  `access_requested` ⇒ a matching pending request; `stale_case` /
+  `task_assigned` / `chat_mention` ⇒ case access; `tracker_*` ⇒ self/command),
+  keeps the server-stamped actor, and clamps free-text fields. Migration
+  `20260721010000`; 5 new live RLS tests (155/155).
+
 ## [Unreleased] — Usability roadmap, Phase 1
 
 Theme: the portal tells members what changed, what matters, and what to do next.
