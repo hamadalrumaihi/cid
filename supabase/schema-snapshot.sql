@@ -1892,7 +1892,8 @@ begin
   -- every server-owned type is inserted directly by its own definer RPC.
   if p_type not in (
     'member_approved', 'access_requested', 'stale_case',
-    'task_assigned', 'chat_mention', 'tracker_authorized', 'tracker_pending'
+    'task_assigned', 'chat_mention', 'case_handover',
+    'tracker_authorized', 'tracker_pending'
   ) then
     raise exception 'unsupported notification type';
   end if;
@@ -1904,7 +1905,7 @@ begin
       select 1 from public.case_access_requests r
       where r.case_id = v_case and r.requester_id = v_actor and r.status = 'pending'
     ) then raise exception 'not authorized'; end if;
-  elsif p_type in ('stale_case', 'task_assigned', 'chat_mention') then
+  elsif p_type in ('stale_case', 'task_assigned', 'chat_mention', 'case_handover') then
     if v_case is null or not private.can_access_case(v_case) then
       raise exception 'not authorized';
     end if;

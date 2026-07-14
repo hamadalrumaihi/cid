@@ -8,6 +8,13 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Usability roadmap, Phase 2 (in progress)
 
+### Added — case handover
+- The current lead (or command) can **hand a case to another officer** from the
+  case header: pick the new lead + an optional note. Both the outgoing and
+  incoming lead are notified (a new case-access-gated `case_handover` type on
+  the guarded `create_notification` path), so a lead change is never silent.
+  Migration `20260721030000` adds the type to the whitelist.
+
 ### Added — smarter case creation from templates
 - Case templates gain an optional **default follow-up interval**
   (`case_templates.followup_days`): applying a template to a new case sets

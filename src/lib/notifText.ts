@@ -17,6 +17,7 @@ export const NOTIF_LABEL: Record<string, string> = {
   tracker_authorized: 'Tracker authorized',
   case_assigned: 'Case assigned',
   task_assigned: 'Task assigned to you',
+  case_handover: 'Case handed over',
   report_finalized: 'Report finalized',
   rico_ready: 'RICO elements satisfied',
   signoff_waiting: 'Case awaiting your sign-off',
