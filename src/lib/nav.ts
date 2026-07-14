@@ -56,11 +56,14 @@ export interface NavCategory {
 }
 
 export const NAV_CATEGORIES: NavCategory[] = [
-  { id: 'command',   label: 'Command',      tabs: ['command', 'analytics', 'announce', 'heatmap', 'personnel'] },
+  // My Desk (inbox) leads the Command group — it is the personal home and the
+  // app's default landing (src/app/page.tsx), so the Command category opens
+  // there. Central Command (the shared dashboard) follows it.
+  { id: 'command',   label: 'Command',      tabs: ['inbox', 'command', 'analytics', 'announce', 'heatmap', 'personnel'] },
   { id: 'cases',     label: 'Cases',        tabs: ['cases', 'operations', 'legal', 'case-files', 'rico'] },
   { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'indicators', 'network', 'narcotics', 'ballistics', 'modus', 'media', 'records'] },
   { id: 'reference', label: 'Reference',    tabs: ['penal', 'sops', 'guide', 'devdocs'] },
-  { id: 'oversight', label: 'Oversight',    tabs: ['inbox', 'calendar', 'shifts', 'audit'] },
+  { id: 'oversight', label: 'Oversight',    tabs: ['calendar', 'shifts', 'audit'] },
 ]
 
 export const TAB_LABEL: Record<string, string> = {

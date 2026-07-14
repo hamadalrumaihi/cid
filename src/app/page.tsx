@@ -13,13 +13,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { isValidTab } from '@/lib/nav'
-import { Store } from '@/lib/store'
 import { isConfigured, supabase } from '@/lib/supabase'
-
-function savedTarget(): string {
-  const saved = Store.get<string>('tab', 'command')
-  return saved === 'reports' ? 'cases' : isValidTab(saved) ? saved : 'command'
-}
 
 const hasAuthParams = () =>
   /(?:access_token|refresh_token|error_description|error_code)=/.test(window.location.hash) ||
@@ -35,7 +29,7 @@ export default function RootRedirect() {
       const { data: sub } = supabase().auth.onAuthStateChange((event) => {
         if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
           sub.subscription.unsubscribe()
-          router.replace(`/${savedTarget()}`)
+          router.replace('/inbox')
         }
       })
       return () => sub.subscription.unsubscribe()
@@ -46,7 +40,10 @@ export default function RootRedirect() {
     if (caseLink) { router.replace(`/cases?case=${encodeURIComponent(caseLink[1])}`); return }
     if (hash === 'reports') { router.replace('/cases'); return }
     if (hash && isValidTab(hash)) { router.replace(`/${hash}`); return }
-    router.replace(`/${savedTarget()}`)
+    // Default landing is My Desk (the personal home) — an explicit hash
+    // deep-link above still wins, so shared links and auth callbacks are
+    // unaffected; only a bare app open lands here.
+    router.replace('/inbox')
   }, [router])
 
   // Rendered for at most a frame on plain loads; visible only while an

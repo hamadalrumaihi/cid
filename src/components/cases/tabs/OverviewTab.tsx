@@ -1,6 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Field, Textarea } from '@/components/ui/Field'
@@ -10,6 +12,9 @@ import { useAuth } from '@/lib/auth'
 import { officerName, activeProfiles, useProfilesStore } from '@/lib/profiles'
 import { bureauLabel, roleLabel } from '@/lib/roles'
 import { useTableVersion } from '@/lib/realtime'
+import { assessCase, type NextAction, type WfReport, type WfTask } from '@/lib/caseWorkflow'
+import type { LegalRequest } from '@/lib/justice'
+import { LegalRequestRow } from '@/components/justice/legalShared'
 import { toast } from '@/lib/toast'
 import { JointCaseModal, isActiveAssignment } from '../JointCaseModal'
 import { Stat, type AssignmentRow, type CaseRow } from './shared'
@@ -18,24 +23,42 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
   const { profile, isCommand } = useAuth()
   const [assignments, setAssignments] = useState<AssignmentRow[]>([])
   const [evidence, setEvidence] = useState(0)
-  const [reports, setReports] = useState(0)
+  const [reports, setReports] = useState<WfReport[]>([])
+  const [tasks, setTasks] = useState<WfTask[]>([])
+  const [legal, setLegal] = useState<LegalRequest[]>([])
+  const router = useRouter()
   // "Now" is snapshotted per refresh (render must stay pure) — expiry lines
   // re-evaluate whenever the assignments themselves are refetched.
   const [now, setNow] = useState(0)
   const vA = useTableVersion('case_assignments')
   const vE = useTableVersion('evidence')
   const vR = useTableVersion('reports')
+  const vT = useTableVersion('case_tasks')
+  const vL = useTableVersion('legal_requests')
   const refresh = useCallback(async () => {
     try {
-      const [a, e, r] = await Promise.all([
+      const [a, e, r, t, l] = await Promise.all([
         list('case_assignments', { eq: { case_id: c.id } }),
         list('evidence', { eq: { case_id: c.id } }),
         list('reports', { eq: { case_id: c.id } }),
+        list('case_tasks', { eq: { case_id: c.id } }),
+        // Legal is read-scoped by RLS; a failure must not sink the Overview.
+        list('legal_requests', { eq: { case_id: c.id }, order: 'created_at', ascending: false }).catch(() => [] as LegalRequest[]),
       ])
-      setAssignments(a); setEvidence(e.length); setReports(r.length); setNow(Date.now())
+      setAssignments(a); setEvidence(e.length); setReports(r); setTasks(t); setLegal(l as LegalRequest[]); setNow(Date.now())
     } catch { /* tab can render stale */ }
   }, [c.id])
-  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vA, vE, vR])
+  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vA, vE, vR, vT, vL])
+
+  const standardCount = assignments.filter((a) => a.assignment_source !== 'joint_case' && !a.removed_at).length
+  const assessment = useMemo(() => assessCase({
+    c,
+    tasks, reports, legal,
+    evidenceCount: evidence,
+    supportCount: standardCount,
+    meId: profile?.id ?? null,
+    assigneeName: officerName(c.signoff_assignee_id),
+  }), [c, tasks, reports, legal, evidence, standardCount, profile?.id])
 
   const [assignBusy, setAssignBusy] = useState(false)
   const addAssignment = async () => {
@@ -68,9 +91,10 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
 
   return (
     <div className="space-y-4">
+      <GuidedNextAction caseId={c.id} stageLabel={assessment.stageLabel} actions={assessment.nextActions} />
       <div className="grid gap-3 md:grid-cols-4">
         <Stat label="Evidence" value={evidence} />
-        <Stat label="Reports" value={reports} />
+        <Stat label="Reports" value={reports.length} />
         <Stat label="Lead" value={officerName(c.lead_detective_id) || 'Unassigned'} />
         <Stat label="Updated" value={timeAgo(c.updated_at).toUpperCase()} />
       </div>
@@ -89,6 +113,7 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
           {!standardRows.length && <p className="text-sm text-slate-500">No support assignments recorded.</p>}
         </div>
       </div>
+      <CaseLegalPanel rows={legal} onOpen={(id) => router.push(`/legal?request=${encodeURIComponent(id)}`)} />
       {showJointPanel && (
         <JointMembersPanel
           c={c}
@@ -101,6 +126,109 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
         />
       )}
     </div>
+  )
+}
+
+/* ── Case legal panel ───────────────────────────────────────────────────────
+ * Read-only view of the case's warrants/subpoenas on the Overview, so a
+ * detective never has to leave the case to see whether their search warrant
+ * was approved. Rows reuse the shared LegalRequestRow (same look as the Legal
+ * and Justice queues) and deep-link into /legal?request=<id>. Creating and
+ * advancing requests stays in the Legal view / its RPCs. (Audit P1-7.) */
+function CaseLegalPanel({ rows, onOpen }: { rows: LegalRequest[]; onOpen: (id: string) => void }) {
+  const TERMINAL = new Set(['denied', 'withdrawn', 'closed'])
+  const active = rows.filter((r) => !TERMINAL.has(r.review_status))
+  const resolved = rows.filter((r) => TERMINAL.has(r.review_status))
+  return (
+    <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="font-bold text-white">Legal requests <span className="text-slate-500">({rows.length})</span></h3>
+        <Link href="/legal" className="text-xs font-semibold text-blue-300 hover:text-blue-200">Open Legal ↗</Link>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-sm text-slate-500">No warrants or subpoenas are linked to this case yet. Draft one from the <Link href="/legal" className="text-blue-300 hover:text-blue-200">Legal Requests</Link> view.</p>
+      ) : (
+        <div className="space-y-3">
+          {active.length > 0 && (
+            <div className="space-y-1.5">
+              {active.map((r) => <LegalRequestRow key={r.id} r={r} onOpen={onOpen} />)}
+            </div>
+          )}
+          {resolved.length > 0 && (
+            <details>
+              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 hover:text-slate-300">Resolved ({resolved.length})</summary>
+              <div className="mt-2 space-y-1.5 opacity-80">
+                {resolved.map((r) => <LegalRequestRow key={r.id} r={r} onOpen={onOpen} />)}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Guided next action ─────────────────────────────────────────────────────
+ * A recommendation banner driven by the shared, unit-tested case-state
+ * evaluator (lib/caseWorkflow). It only surfaces what the evaluator derived
+ * from already-fetched state; the sign-off / legal RPCs remain the authority
+ * for who may actually act. Actions carrying a `tab` deep-link into that
+ * section via the same ?case=&tab= URL the tab bar uses. */
+const ACTION_TINT: Record<NextAction['severity'], string> = {
+  urgent: 'border-rose-400/30 bg-rose-500/10 text-rose-100',
+  warn: 'border-amber-400/25 bg-amber-500/10 text-amber-100',
+  info: 'border-white/10 bg-white/[0.03] text-slate-200',
+}
+const ACTION_DOT: Record<NextAction['severity'], string> = {
+  urgent: 'bg-rose-400', warn: 'bg-amber-400', info: 'bg-slate-400',
+}
+
+function GuidedNextAction({ caseId, stageLabel, actions }: { caseId: string; stageLabel: string; actions: NextAction[] }) {
+  if (!actions.length) return null
+  // Lead with the highest-severity action; show up to two more as follow-ups.
+  const order: NextAction['severity'][] = ['urgent', 'warn', 'info']
+  const ranked = [...actions].sort((a, b) => order.indexOf(a.severity) - order.indexOf(b.severity))
+  const [lead, ...rest] = ranked
+  const inner = (a: NextAction) => (
+    <>
+      <span className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${ACTION_DOT[a.severity]}`} aria-hidden />
+      <span className="min-w-0">
+        <span className="block text-sm font-bold">{a.label}</span>
+        {a.detail && <span className="block text-xs opacity-80">{a.detail}</span>}
+      </span>
+    </>
+  )
+  return (
+    <section aria-label="Recommended next action" className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="t-readout text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Next action</span>
+        <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-400">{stageLabel}</span>
+      </div>
+      {lead.tab ? (
+        <Link href={`/cases?case=${encodeURIComponent(caseId)}&tab=${lead.tab}`} className={`flex items-start gap-2.5 rounded-lg border p-3 transition hover:brightness-110 ${ACTION_TINT[lead.severity]}`}>
+          {inner(lead)}
+        </Link>
+      ) : (
+        <div className={`flex items-start gap-2.5 rounded-lg border p-3 ${ACTION_TINT[lead.severity]}`}>{inner(lead)}</div>
+      )}
+      {rest.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {rest.slice(0, 3).map((a) => (
+            <li key={a.key}>
+              {a.tab ? (
+                <Link href={`/cases?case=${encodeURIComponent(caseId)}&tab=${a.tab}`} className="flex items-center gap-2 rounded px-1 py-0.5 text-xs text-slate-400 transition hover:text-slate-200">
+                  <span className={`h-1.5 w-1.5 rounded-full ${ACTION_DOT[a.severity]}`} aria-hidden />{a.label}
+                </Link>
+              ) : (
+                <span className="flex items-center gap-2 px-1 py-0.5 text-xs text-slate-400">
+                  <span className={`h-1.5 w-1.5 rounded-full ${ACTION_DOT[a.severity]}`} aria-hidden />{a.label}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 

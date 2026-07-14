@@ -16,6 +16,7 @@ export const NOTIF_LABEL: Record<string, string> = {
   tracker_pending: 'Tracker awaiting co-sign',
   tracker_authorized: 'Tracker authorized',
   case_assigned: 'Case assigned',
+  task_assigned: 'Task assigned to you',
   report_finalized: 'Report finalized',
   rico_ready: 'RICO elements satisfied',
   signoff_waiting: 'Case awaiting your sign-off',
@@ -76,4 +77,22 @@ export function notifSub(n: NotificationRow): string | null {
 /** Case deep-link target when the payload carries one. */
 export function notifCaseId(n: NotificationRow): string | null {
   return asPayload(n.payload).case_id ?? null
+}
+
+/** Where clicking a notification should take the member — so bell rows are
+ *  never dead ends. Case-scoped payloads win (most types carry case_id); the
+ *  rest route by type to the surface that owns them. Null = no useful
+ *  destination (purely informational), and the row stays unclickable. */
+export function notifHref(n: NotificationRow): string | null {
+  const p = asPayload(n.payload)
+  const t = n.type
+  if (p.case_id) return `/cases?case=${encodeURIComponent(p.case_id)}`
+  const isLegal = t.startsWith('legal') || t === 'ada_assignment'
+  if (isLegal && p.request_id) return `/legal?request=${encodeURIComponent(p.request_id)}`
+  if (isLegal) return '/legal'
+  if (t.startsWith('justice')) return '/justice'
+  if (t === 'membership_request' || t === 'access_requested' || t.startsWith('transfer')) return '/command-center'
+  if (t === 'announcement') return '/announce'
+  if (t === 'client_error') return '/owner'
+  return null
 }

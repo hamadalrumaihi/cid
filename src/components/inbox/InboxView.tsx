@@ -16,6 +16,7 @@ import { caseStatusTint, signoffLabel, signoffTint } from '@/lib/signoff'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { markWatchSeen, type WatchType } from '@/lib/watchlist'
+import { useJusticeRoster } from '@/lib/justiceRoster'
 import { canReviewCase } from '@/components/command-center/lib/approvals'
 import { PageHeader } from '@/components/ui/PageHeader'
 
@@ -159,8 +160,11 @@ function Panel({ title, count, action, children }: { title: string; count: numbe
 }
 
 export function InboxView() {
-  const { profile, state } = useAuth()
+  const { profile, state, isCommand } = useAuth()
   const fetchProfiles = useProfilesStore((s) => s.fetch)
+  const rosterProfiles = useProfilesStore((s) => s.profiles)
+  const justiceByUser = useJusticeRoster((s) => s.byUser)
+  const fetchJustice = useJusticeRoster((s) => s.fetch)
   const [data, setData] = useState<InboxData>(EMPTY)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
@@ -175,6 +179,7 @@ export function InboxView() {
   const vWatch = useTableVersion('watchlist')
   const vPersons = useTableVersion('persons')
   const vVehicles = useTableVersion('vehicles')
+  const vJustice = useTableVersion('justice_memberships')
 
   const refresh = useCallback(async () => {
     if (state !== 'in' || !profile) return
@@ -183,6 +188,7 @@ export function InboxView() {
     setErr(null)
     try {
       await fetchProfiles()
+      void fetchJustice()
       const [cases, tasks, messages, notifications, reports, watchlist, persons, vehicles] = await Promise.all([
         list('cases', { order: 'updated_at', ascending: false }),
         list('case_tasks', { order: 'due', nullsFirst: false }),
@@ -200,12 +206,19 @@ export function InboxView() {
     } finally {
       setLoading(false)
     }
-  }, [fetchProfiles, profile, state])
+  }, [fetchProfiles, fetchJustice, profile, state])
 
   useEffect(() => {
     const id = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(id)
-  }, [refresh, vCases, vTasks, vMessages, vNotifications, vReports, vWatch, vPersons, vVehicles])
+  }, [refresh, vCases, vTasks, vMessages, vNotifications, vReports, vWatch, vPersons, vVehicles, vJustice])
+
+  // Command-only: pending CID sign-ins awaiting a decision. Mirrors the roster
+  // rule — a deactivated member who now holds an active justice identity was
+  // moved out by an organization correction and is NOT a pending sign-in.
+  const pendingApprovals = isCommand
+    ? rosterProfiles.filter((p) => !p.active && !p.removed_at && !justiceByUser[p.id]).length
+    : 0
 
   const model = useMemo(() => {
     const myId = profile?.id ?? ''
@@ -255,6 +268,26 @@ export function InboxView() {
 
       {err && <p className="rounded border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">Desk refresh failed: {err}</p>}
       {loading && <p className="rounded border border-white/10 bg-white/[0.03] p-3 text-sm text-slate-400">Loading desk...</p>}
+
+      {isCommand && (
+        <Link
+          href="/command-center"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-400/25 bg-amber-500/10 px-4 py-3 transition hover:border-amber-300/40 hover:bg-amber-500/15"
+        >
+          <span className="text-sm font-bold text-amber-100">
+            Command administration
+            <span className="ml-2 font-normal text-amber-200/80">
+              {pendingApprovals > 0
+                ? `${pendingApprovals} sign-in ${pendingApprovals === 1 ? 'request' : 'requests'} awaiting approval`
+                : 'Approvals, promotions & transfers'}
+            </span>
+          </span>
+          <span className="flex items-center gap-2">
+            {pendingApprovals > 0 && <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-xs font-black text-amber-100">{pendingApprovals}</span>}
+            <span className="text-xs font-semibold text-amber-200">Open Command Center ↗</span>
+          </span>
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
         <Stat label="Review" value={model.review.length} tone={model.review.length ? 'amber' : 'slate'} />
