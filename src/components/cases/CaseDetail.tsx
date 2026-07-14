@@ -15,6 +15,7 @@ import { useAuth } from '@/lib/auth'
 import { bureauLabel } from '@/lib/roles'
 import { useOperationsStore } from '@/lib/operations'
 import { caseCourtHint, caseStatusTint, CASE_STATUSES, signoffLabel, signoffTint } from '@/lib/signoff'
+import { assessCase } from '@/lib/caseWorkflow'
 import { officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { gatherCasePacket, packetDocx, packetMarkdown, packetPdfSpec } from '@/lib/packet'
@@ -155,7 +156,24 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     // Closing stamps closed_at and takes the case off the active board — worth
     // a beat of confirmation. It stays reversible (set it back to reopen).
     if (status === 'closed' && c.status !== 'closed') {
-      const ok = await uiConfirm(`Close ${c.case_number}? It moves to the Closed column and drops off active dashboards. You can reopen it by changing the status back.`, { title: 'Close case', confirmText: 'Close case', danger: false })
+      // Pre-close checklist: surface unresolved work via the shared evaluator
+      // so a case isn't closed over open sign-off / tasks / legal / drafts. This
+      // is advisory — command can still close over it (reason lives in history).
+      let blockerLines = ''
+      try {
+        const [tasks, reports, legal, evidence] = await Promise.all([
+          list('case_tasks', { eq: { case_id: c.id } }),
+          list('reports', { eq: { case_id: c.id } }),
+          list('legal_requests', { eq: { case_id: c.id } }).catch(() => []),
+          list('evidence', { eq: { case_id: c.id } }),
+        ])
+        const { blockers } = assessCase({ c, tasks, reports, legal, evidenceCount: evidence.length, meId: profile?.id ?? null, todayISO: todayISO() })
+        if (blockers.length) blockerLines = '\n\nStill open on this case:\n' + blockers.map((b) => `• ${b.label}`).join('\n') + '\n\nClose anyway?'
+      } catch { /* checklist is best-effort; fall back to the plain confirm */ }
+      const ok = await uiConfirm(
+        `Close ${c.case_number}? It moves to the Closed column and drops off active dashboards. You can reopen it by changing the status back.${blockerLines}`,
+        { title: 'Close case', confirmText: blockerLines ? 'Close anyway' : 'Close case', danger: !!blockerLines },
+      )
       if (!ok) { void fetchCase(); return }
     }
     const res = await update('cases', c.id, { status, closed_at: status === 'closed' && !c.closed_at ? new Date().toISOString() : c.closed_at })

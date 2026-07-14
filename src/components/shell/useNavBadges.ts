@@ -15,6 +15,7 @@ import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { todayISO } from '@/lib/format'
 import { useProfilesStore } from '@/lib/profiles'
+import { useJusticeRoster } from '@/lib/justiceRoster'
 import { useTableVersion } from '@/lib/realtime'
 import { Store } from '@/lib/store'
 import { visibleAnnouncements, type AnnouncementRow } from '@/components/announce/announceUtils'
@@ -48,6 +49,8 @@ export function useNavBadges(): NavBadges {
   const { state, profile, isCommand } = useAuth()
   const profiles = useProfilesStore((s) => s.profiles)
   const fetchProfiles = useProfilesStore((s) => s.fetch)
+  const justiceByUser = useJusticeRoster((s) => s.byUser)
+  const fetchJustice = useJusticeRoster((s) => s.fetch)
   const [anns, setAnns] = useState<AnnouncementRow[]>([])
   const [cases, setCases] = useState<CaseRow[]>([])
   const [notifs, setNotifs] = useState<NotificationRow[]>([])
@@ -55,22 +58,26 @@ export function useNavBadges(): NavBadges {
   const vCases = useTableVersion('cases')
   const vNotifs = useTableVersion('notifications')
   const vProfiles = useTableVersion('profiles')
+  const vJustice = useTableVersion('justice_memberships')
 
   useEffect(() => {
     if (state !== 'in') return
     const t = window.setTimeout(() => {
       void fetchProfiles()
+      if (isCommand) void fetchJustice()
       list('announcements', { order: 'created_at', ascending: false }).then(setAnns).catch(() => undefined)
       list('cases', {}).then(setCases).catch(() => undefined)
       list('notifications', { eq: { read: false } }).then(setNotifs).catch(() => undefined)
     }, 0)
     return () => window.clearTimeout(t)
-  }, [state, fetchProfiles, vAnn, vCases, vNotifs, vProfiles])
+  }, [state, isCommand, fetchProfiles, fetchJustice, vAnn, vCases, vNotifs, vProfiles, vJustice])
 
   return useMemo<NavBadges>(() => {
     if (state !== 'in' || !profile) return { pending: 0, announcements: 0, signoff: 0, command: 0 }
 
-    const pending = isCommand ? profiles.filter((p) => !p.active && !p.removed_at).length : 0
+    // A deactivated member who now holds an active justice identity was moved
+    // out of CID by an organization correction — not a pending sign-in.
+    const pending = isCommand ? profiles.filter((p) => !p.active && !p.removed_at && !justiceByUser[p.id]).length : 0
 
     const seen = Store.get<string>('annSeen', '')
     const announcements = visibleAnnouncements(anns, profile.division, new Set<string>(), true).filter((a) => a.created_at > seen).length
@@ -86,5 +93,5 @@ export function useNavBadges(): NavBadges {
     const signoff = review.length + bounced.length + mentions + overdue + followUps
 
     return { pending, announcements, signoff, command: pending + announcements + signoff }
-  }, [state, profile, isCommand, profiles, anns, cases, notifs])
+  }, [state, profile, isCommand, profiles, justiceByUser, anns, cases, notifs])
 }

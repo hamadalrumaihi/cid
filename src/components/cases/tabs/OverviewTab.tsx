@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Field, Textarea } from '@/components/ui/Field'
@@ -11,7 +12,9 @@ import { useAuth } from '@/lib/auth'
 import { officerName, activeProfiles, useProfilesStore } from '@/lib/profiles'
 import { bureauLabel, roleLabel } from '@/lib/roles'
 import { useTableVersion } from '@/lib/realtime'
-import { assessCase, type NextAction, type WfLegal, type WfReport, type WfTask } from '@/lib/caseWorkflow'
+import { assessCase, type NextAction, type WfReport, type WfTask } from '@/lib/caseWorkflow'
+import type { LegalRequest } from '@/lib/justice'
+import { LegalRequestRow } from '@/components/justice/legalShared'
 import { toast } from '@/lib/toast'
 import { JointCaseModal, isActiveAssignment } from '../JointCaseModal'
 import { Stat, type AssignmentRow, type CaseRow } from './shared'
@@ -22,7 +25,8 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
   const [evidence, setEvidence] = useState(0)
   const [reports, setReports] = useState<WfReport[]>([])
   const [tasks, setTasks] = useState<WfTask[]>([])
-  const [legal, setLegal] = useState<WfLegal[]>([])
+  const [legal, setLegal] = useState<LegalRequest[]>([])
+  const router = useRouter()
   // "Now" is snapshotted per refresh (render must stay pure) — expiry lines
   // re-evaluate whenever the assignments themselves are refetched.
   const [now, setNow] = useState(0)
@@ -39,9 +43,9 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
         list('reports', { eq: { case_id: c.id } }),
         list('case_tasks', { eq: { case_id: c.id } }),
         // Legal is read-scoped by RLS; a failure must not sink the Overview.
-        list('legal_requests', { eq: { case_id: c.id } }).catch(() => [] as WfLegal[]),
+        list('legal_requests', { eq: { case_id: c.id }, order: 'created_at', ascending: false }).catch(() => [] as LegalRequest[]),
       ])
-      setAssignments(a); setEvidence(e.length); setReports(r); setTasks(t); setLegal(l as WfLegal[]); setNow(Date.now())
+      setAssignments(a); setEvidence(e.length); setReports(r); setTasks(t); setLegal(l as LegalRequest[]); setNow(Date.now())
     } catch { /* tab can render stale */ }
   }, [c.id])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vA, vE, vR, vT, vL])
@@ -109,6 +113,7 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
           {!standardRows.length && <p className="text-sm text-slate-500">No support assignments recorded.</p>}
         </div>
       </div>
+      <CaseLegalPanel rows={legal} onOpen={(id) => router.push(`/legal?request=${encodeURIComponent(id)}`)} />
       {showJointPanel && (
         <JointMembersPanel
           c={c}
@@ -119,6 +124,45 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
           now={now}
           onChanged={refresh}
         />
+      )}
+    </div>
+  )
+}
+
+/* ── Case legal panel ───────────────────────────────────────────────────────
+ * Read-only view of the case's warrants/subpoenas on the Overview, so a
+ * detective never has to leave the case to see whether their search warrant
+ * was approved. Rows reuse the shared LegalRequestRow (same look as the Legal
+ * and Justice queues) and deep-link into /legal?request=<id>. Creating and
+ * advancing requests stays in the Legal view / its RPCs. (Audit P1-7.) */
+function CaseLegalPanel({ rows, onOpen }: { rows: LegalRequest[]; onOpen: (id: string) => void }) {
+  const TERMINAL = new Set(['denied', 'withdrawn', 'closed'])
+  const active = rows.filter((r) => !TERMINAL.has(r.review_status))
+  const resolved = rows.filter((r) => TERMINAL.has(r.review_status))
+  return (
+    <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="font-bold text-white">Legal requests <span className="text-slate-500">({rows.length})</span></h3>
+        <Link href="/legal" className="text-xs font-semibold text-blue-300 hover:text-blue-200">Open Legal ↗</Link>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-sm text-slate-500">No warrants or subpoenas are linked to this case yet. Draft one from the <Link href="/legal" className="text-blue-300 hover:text-blue-200">Legal Requests</Link> view.</p>
+      ) : (
+        <div className="space-y-3">
+          {active.length > 0 && (
+            <div className="space-y-1.5">
+              {active.map((r) => <LegalRequestRow key={r.id} r={r} onOpen={onOpen} />)}
+            </div>
+          )}
+          {resolved.length > 0 && (
+            <details>
+              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 hover:text-slate-300">Resolved ({resolved.length})</summary>
+              <div className="mt-2 space-y-1.5 opacity-80">
+                {resolved.map((r) => <LegalRequestRow key={r.id} r={r} onOpen={onOpen} />)}
+              </div>
+            </details>
+          )}
+        </div>
       )}
     </div>
   )
