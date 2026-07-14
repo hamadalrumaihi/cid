@@ -6,6 +6,33 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.17.1] — 2026-07-14
+
+### Fix — members moved to DOJ/Judiciary no longer resurface as pending CID sign-ins
+- After an organization correction moves a member out of CID, their CID
+  profile is deactivated but kept as history (`active=false`,
+  `removed_at=null`). The command roster treated every such profile as a
+  brand-new pending sign-in — showing them as "Detective · JTF · Pending"
+  with a one-click **Approve** button that would have re-activated their CID
+  membership *while they hold an active justice identity*, re-creating the
+  exact dual-organization state the correction resolved.
+- **Server guard:** `assign_member(set_active := true)` now refuses to
+  reactivate a member who holds an active `justice_memberships` row, pointing
+  the operator to organization correction (Move to CID) instead. This mirrors
+  the block the correction RPC already enforces in the other direction. Live
+  RLS suite: 150/150.
+- **Roster display:** Command Center → Personnel & Admin lists these members
+  in a distinct read-only **Moved to DOJ / Judiciary** section (showing their
+  former CID role → current justice role) instead of the pending queue, and
+  the Approval Queue no longer offers them for quick approval. Backed by a new
+  command-only `justice_memberships` read (`useJusticeRoster`).
+
+### Fix — clearer Manage Officer danger-zone wording
+- "Deny login access" and "Permanently remove from CID" are now explicitly
+  contrasted (a one-line "two different actions" note plus expanded confirm
+  dialogs spelling out what each does and does not do), so denying access is
+  no longer confused with erasing the account.
+
 ## [1.17.0] — 2026-07-14
 
 ### Security — RLS test fixtures hidden from every ordinary surface

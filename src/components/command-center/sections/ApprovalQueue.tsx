@@ -14,6 +14,7 @@ import type { Database, Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { notify } from '@/lib/notify'
 import { officerName, type RosterProfile, useProfilesStore } from '@/lib/profiles'
+import { useJusticeRoster } from '@/lib/justiceRoster'
 import { useTableVersion } from '@/lib/realtime'
 import { PERMANENT_BUREAUS, ROLE_LABEL, ROLE_ORDER, bureauLabel, canApproveRequestedRole, roleLabel, type RoleParty } from '@/lib/roles'
 import { signoffLabel, signoffTint } from '@/lib/signoff'
@@ -215,6 +216,8 @@ export function ApprovalQueue() {
   const { profile, isCommand } = useAuth()
   const profiles = useProfilesStore((s) => s.profiles)
   const fetchProfiles = useProfilesStore((s) => s.fetch)
+  const justiceByUser = useJusticeRoster((s) => s.byUser)
+  const fetchJustice = useJusticeRoster((s) => s.fetch)
   const router = useRouter()
   const [cases, setCases] = useState<CaseRow[]>([])
   const [requests, setRequests] = useState<RequestRow[]>([])
@@ -223,9 +226,11 @@ export function ApprovalQueue() {
   const vP = useTableVersion('profiles')
   const vC = useTableVersion('cases')
   const vM = useTableVersion('membership_requests')
+  const vJ = useTableVersion('justice_memberships')
 
   const refresh = useCallback(async () => {
     void fetchProfiles()
+    void fetchJustice()
     try { setCases(await list('cases', { order: 'updated_at', ascending: false })) } catch { /* stale */ }
     if (isCommand) {
       const [rq, em] = await Promise.all([
@@ -235,11 +240,14 @@ export function ApprovalQueue() {
       if (!rq.error && Array.isArray(rq.data)) setRequests(rq.data)
       if (!em.error && Array.isArray(em.data)) setEmails(Object.fromEntries(em.data.map((x) => [x.id, x.email])))
     }
-  }, [fetchProfiles, isCommand])
-  useEffect(() => { const t = window.setTimeout(() => { void refresh() }, 0); return () => window.clearTimeout(t) }, [refresh, vP, vC, vM])
+  }, [fetchProfiles, fetchJustice, isCommand])
+  useEffect(() => { const t = window.setTimeout(() => { void refresh() }, 0); return () => window.clearTimeout(t) }, [refresh, vP, vC, vM, vJ])
 
   const reqByApplicant = new Map(requests.map((r) => [r.applicant_id, r]))
-  const pending = profiles.filter((p) => !p.removed_at && !p.active)
+  // Members moved out of CID by an organization correction are inactive-with-a-
+  // justice-identity — they are not pending sign-ins and must never surface a
+  // quick Approve (which is now blocked server-side anyway).
+  const pending = profiles.filter((p) => !p.removed_at && !p.active && !justiceByUser[p.id])
   const submitted = pending
     .map((p) => ({ p, r: reqByApplicant.get(p.id) }))
     .filter((x): x is { p: RosterProfile; r: RequestRow } => x.r?.status === 'pending')

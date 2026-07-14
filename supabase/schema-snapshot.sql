@@ -1850,6 +1850,11 @@ begin
   if set_active and t.login_denied then
     raise exception 'member login is denied — restore login first';
   end if;
+  if set_active and exists (
+    select 1 from public.justice_memberships m where m.user_id = target and m.active
+  ) then
+    raise exception 'member holds an active DOJ/Judiciary membership — use organization correction (Move to CID) to bring them back, do not reactivate CID access';
+  end if;
   if t.active = set_active then return; end if;
 
   update public.profiles set active = set_active where id = target;

@@ -9,19 +9,29 @@ import { useAuth } from '@/lib/auth'
 import { notify } from '@/lib/notify'
 import type { RosterProfile } from '@/lib/profiles'
 import { ROLE_LABEL } from '@/lib/roles'
+import { AGENCY_LABEL, justiceRoleLabel } from '@/lib/justice'
+import type { JusticeIdentity } from '@/lib/justiceRoster'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 
 interface AdminPanelProps {
   profiles: RosterProfile[]
   emails: Record<string, string>
+  /** Active DOJ/Judiciary identities keyed by CID user id — members here were
+   *  moved out of CID and must not resurface as pending sign-ins. */
+  justiceByUser?: Record<string, JusticeIdentity>
   onManage: (p: RosterProfile) => void
   onChanged: () => void
 }
 
-export function AdminPanel({ profiles, emails, onManage, onChanged }: AdminPanelProps) {
+export function AdminPanel({ profiles, emails, justiceByUser = {}, onManage, onChanged }: AdminPanelProps) {
   const { profile: me } = useAuth()
-  const rows = profiles.filter((p) => !p.removed_at).slice().sort((a, b) => Number(a.active) - Number(b.active))
+  // A deactivated CID member who now holds an active justice identity was moved
+  // out by an organization correction — list them separately, never as a
+  // pending sign-in with a (re-dual-ing) Approve button.
+  const movedToJustice = (p: RosterProfile) => !p.active && !p.removed_at && !!justiceByUser[p.id]
+  const rows = profiles.filter((p) => !p.removed_at && !movedToJustice(p)).slice().sort((a, b) => Number(a.active) - Number(b.active))
+  const moved = profiles.filter(movedToJustice).slice().sort((a, b) => (a.display_name || '').localeCompare(b.display_name || ''))
   const removed = profiles.filter((p) => p.removed_at).slice().sort((a, b) => (b.removed_at || '').localeCompare(a.removed_at || ''))
 
   // One-click approve for pending sign-ins (keeps their current role/bureau —
@@ -84,6 +94,25 @@ export function AdminPanel({ profiles, emails, onManage, onChanged }: AdminPanel
           </tbody>
         </table>
       </div>
+      {moved.length > 0 && (
+        <div className="mt-5 border-t border-white/5 pt-4">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-sky-300/70">Moved to DOJ / Judiciary ({moved.length})</p>
+          <div className="space-y-1.5">
+            {moved.map((p) => {
+              const j = justiceByUser[p.id]
+              return (
+                <div key={p.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-ink-900 px-3 py-2">
+                  <span className="text-sm text-slate-400">
+                    <span className="text-slate-300">{p.display_name}</span> ·{' '}
+                    <span className="text-[11px]">CID {ROLE_LABEL[p.role] || p.role} · {p.division} → <span className="text-sky-300">{justiceRoleLabel(j?.justice_role)}{j ? `, ${AGENCY_LABEL[j.agency]}` : ''}</span></span>
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          <p className="mt-2 text-[10px] text-slate-500">Their CID membership is inactive and kept as history. Reactivating CID here is blocked — use <b>Manage → Move to CID</b> (organization correction) to bring them back.</p>
+        </div>
+      )}
       {removed.length > 0 && (
         <div className="mt-5 border-t border-white/5 pt-4">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-rose-300/70">Permanently removed ({removed.length})</p>
