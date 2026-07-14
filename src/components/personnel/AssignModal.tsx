@@ -18,6 +18,7 @@ import {
   PERMANENT_BUREAUS, ROLE_LABEL, bureauLabel, canTransfer,
   getAssignableRoles, isCommandRole, roleLabel, type RoleParty,
 } from '@/lib/roles'
+import { justiceRoleLabel } from '@/lib/justice'
 import { toast } from '@/lib/toast'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -41,9 +42,10 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
   const [badge, setBadge] = useState(p.badge_number || '')
   const [loa, setLoa] = useState(!!p.loa)
   // Which privileged action panel is open (never more than one).
-  const [panel, setPanel] = useState<'role' | 'transfer' | null>(null)
+  const [panel, setPanel] = useState<'role' | 'transfer' | 'org' | null>(null)
   const [newRole, setNewRole] = useState('')
   const [toBureau, setToBureau] = useState<Bureau | ''>('')
+  const [justiceRole, setJusticeRole] = useState('')
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -52,11 +54,37 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
     .filter((b) => canTransfer(actor, p, p.division ?? '', b))
   const hasPermanentBureau = (PERMANENT_BUREAUS as readonly string[]).includes(p.division ?? '')
 
-  const openPanel = (which: 'role' | 'transfer') => {
+  const openPanel = (which: 'role' | 'transfer' | 'org') => {
     setPanel(panel === which ? null : which)
     setNewRole('')
     setToBureau('')
+    setJusticeRole('')
     setReason('')
+  }
+
+  // Owner-only: fix an account approved into the wrong organization. The
+  // server deactivates the CID membership, preserves all history, and files a
+  // pending justice membership request through the NORMAL approval matrix —
+  // nothing is granted until an authorized reviewer approves it.
+  const orgCorrect = async () => {
+    if (!justiceRole || !reason.trim()) { toast('Pick the destination role and give a reason.', 'warn'); return }
+    const agency = justiceRole === 'judge' ? 'the Judiciary' : 'the DOJ'
+    const ok = await uiConfirm(
+      `Move ${p.display_name} out of CID to ${agency} as ${justiceRoleLabel(justiceRole)}?\n\nTheir CID membership is deactivated (all history preserved) and a pending ${justiceRoleLabel(justiceRole)} membership request is created. It still needs approval through the normal justice approval matrix — no access is granted until then.\n\nReason: ${reason.trim()}`,
+      { title: 'Organization correction', confirmText: 'Move out of CID', danger: true },
+    )
+    if (!ok) return
+    setBusy(true)
+    const res = await rpc('correct_membership_organization', {
+      p_target: p.id,
+      p_direction: justiceRole === 'judge' ? 'cid_to_judiciary' : 'cid_to_doj',
+      p_reason: reason.trim(),
+      p_requested_justice_role: justiceRole === 'judge' ? undefined : justiceRole,
+    })
+    setBusy(false)
+    if (res.error) { toast(`Correction failed: ${res.error.message}`, 'danger'); return }
+    toast(`${p.display_name} moved out of CID — justice membership request pending approval`, 'warn')
+    onChanged(); onClose()
   }
 
   const saveProfile = async () => {
@@ -206,6 +234,9 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
             <Button size="sm" variant={p.active ? 'danger' : 'primary'} onClick={() => void setActive(!p.active)}>
               {p.active ? 'Deactivate' : 'Activate'}
             </Button>
+            {actor.is_owner && p.active && me?.id !== p.id && (
+              <Button size="sm" onClick={() => openPanel('org')}>Move to DOJ / Judiciary…</Button>
+            )}
           </div>
 
           {panel === 'role' && (
@@ -228,6 +259,34 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
               </Field>
               <Button variant="primary" className="w-full" disabled={busy || !newRole || !reason.trim()} onClick={() => void changeRole()}>
                 Change role
+              </Button>
+            </div>
+          )}
+
+          {panel === 'org' && (
+            <div className="mt-3 space-y-3 rounded-xl border border-amber-400/20 bg-ink-950/50 p-3">
+              <p className="text-xs text-amber-200">
+                Owner-only correction for an account approved into the wrong organization.
+                This is not a bureau transfer: the CID membership is deactivated (all history
+                preserved) and a pending justice membership request is filed — approval still
+                goes through the normal DOJ/Judiciary matrix before any access is granted.
+              </p>
+              <Field label="Destination role" required>
+                {(id) => (
+                  <Select id={id} value={justiceRole} onChange={(e) => setJusticeRole(e.target.value)}>
+                    <option value="">Select…</option>
+                    <option value="assistant_district_attorney">DOJ — Assistant District Attorney</option>
+                    <option value="district_attorney">DOJ — District Attorney</option>
+                    <option value="attorney_general">DOJ — Attorney General</option>
+                    <option value="judge">Judiciary — Judge</option>
+                  </Select>
+                )}
+              </Field>
+              <Field label="Reason" required>
+                {(id) => <Textarea id={id} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder='e.g. "Approved into the wrong organization"' />}
+              </Field>
+              <Button variant="danger" className="w-full" disabled={busy || !justiceRole || !reason.trim()} onClick={() => void orgCorrect()}>
+                Move out of CID
               </Button>
             </div>
           )}

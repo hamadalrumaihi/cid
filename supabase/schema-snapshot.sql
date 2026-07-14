@@ -1048,6 +1048,7 @@ create table public.profiles (
   badge_number text,
   division public.bureau not null default 'JTF'::public.bureau,
   role public.app_role not null default 'detective'::public.app_role,
+  is_test boolean not null default false,
   active boolean not null default false,
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
@@ -3021,13 +3022,13 @@ create policy predicate_acts_upd on public.predicate_acts
   WHERE ((r.id = predicate_acts.rico_case_id) AND private.can_access_case(r.case_id)))));
 
 create policy profiles_command on public.profiles
-  as permissive for all to authenticated
+  as permissive for update to authenticated
   using (private.is_command())
   with check (private.is_command());
 
 create policy profiles_sel on public.profiles
   as permissive for select to authenticated
-  using (((id = ( SELECT auth.uid() AS uid)) OR private.is_active()));
+  using (((id = ( SELECT auth.uid() AS uid)) OR (private.is_active() AND (private.is_test_user(( SELECT auth.uid() AS uid)) OR (NOT is_test)))));
 
 create policy profiles_upd_self on public.profiles
   as permissive for update to authenticated
