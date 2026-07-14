@@ -6,6 +6,22 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [Unreleased]
+
+### Added — shared case-state evaluator + "Guided next action" (Phase 1)
+- New pure, unit-tested rules engine `src/lib/caseWorkflow.ts` (`assessCase`):
+  given a case and its already-fetched tasks, reports, legal requests, evidence
+  and support counts, it derives the workflow stage, an ordered list of
+  recommended next actions (actor-specific for sign-off), and the set of
+  closure blockers. It is the single source of truth that "Guided next action",
+  the forthcoming pre-close checklist, and My Desk per-case hints all read, so
+  those surfaces cannot drift. The sign-off / legal RPCs remain the authority
+  for who may act; the evaluator only decides what to *surface*. 20 unit tests.
+- First consumer: the case **Overview** now leads with a "Next action" banner
+  (stage badge + the highest-severity recommendation, deep-linking into the
+  relevant tab). Overview additionally loads the case's tasks and legal
+  requests to feed the evaluator.
+
 ## [1.17.1] — 2026-07-14
 
 ### Fix — members moved to DOJ/Judiciary no longer resurface as pending CID sign-ins
