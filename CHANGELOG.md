@@ -6,7 +6,17 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
-## [Unreleased] — Usability roadmap, Phase 2 (in progress)
+## [Unreleased] — Usability roadmap, Phase 2
+
+### Added — Action Center
+- A new **Action Center** tab (in the Command group, beside My Desk): one
+  prioritized queue of everything awaiting a decision or action from the
+  signed-in member — sign-offs to decide, cases returned to them, overdue and
+  open tasks, transfer decisions, case-access requests, and (for command)
+  pending membership approvals. Each row deep-links to where the action happens;
+  the actual writes stay in the owning surface (the RPCs remain the authority).
+  It's the actionable slice of My Desk (which links to it), sharing the same
+  data sources.
 
 ### Added — case activity recap
 - The case Overview shows a **"Since your last visit"** banner summarising what
