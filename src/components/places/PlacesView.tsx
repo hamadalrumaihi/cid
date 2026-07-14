@@ -3,10 +3,11 @@
 /** Criminal Places & Production - port of vanilla places.js. Live place cards,
  * FK-preserving create/edit modal, generated lab production recipes, linked
  * gang/case/narcotic chips, attach-to-case, and undo-backed deletes. */
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Database, Tables } from '@/lib/database.types'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { Database, Json, Tables } from '@/lib/database.types'
 import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
+import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
@@ -74,6 +75,7 @@ export function PlacesView() {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [editor, setEditor] = useState<PlaceRow | 'new' | null>(null)
   const [attach, setAttach] = useState<PlaceRow | null>(null)
+  const [addPhoto, setAddPhoto] = useState<PlaceRow | null>(null)
   const [lightbox, setLightbox] = useState<PlacePhoto | null>(null)
 
   const vPlaces = useTableVersion('places')
@@ -226,6 +228,7 @@ export function PlacesView() {
               customSteps={stepsByPlace.get(place.id) ?? []}
               photos={photosByPlace.get(place.id) ?? []}
               onOpenPhoto={setLightbox}
+              onAddPhoto={() => setAddPhoto(place)}
               canEdit={canEdit}
               canDelete={canDelete}
               selected={selected.has(place.id)}
@@ -249,8 +252,83 @@ export function PlacesView() {
         />
       )}
       {attach && <AttachPlaceModal place={attach} caseOptions={cases} onClose={() => setAttach(null)} />}
+      {addPhoto && <AddPlacePhotoModal place={addPhoto} onClose={() => setAddPhoto(null)} onSaved={() => { setAddPhoto(null); void refresh() }} />}
       {lightbox && <PhotoLightbox photo={lightbox} onClose={() => setLightbox(null)} />}
     </section>
+  )
+}
+
+/** Attach a photo to one place: FiveManage upload when the key is configured,
+ *  paste-a-URL fallback otherwise — same intake contract as the Media Vault,
+ *  but the row lands pre-linked to the place so it shows on the card. */
+function AddPlacePhotoModal({ place, onClose, onSaved }: { place: PlaceRow; onClose: () => void; onSaved: () => void }) {
+  const [title, setTitle] = useState('')
+  const [src, setSrc] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const input = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
+
+  const upload = async (file: File) => {
+    setUploading(true)
+    try {
+      const out = await fmUpload(file)
+      setSrc(out.url)
+      if (!title) setTitle(file.name.replace(/\.[a-z0-9]+$/i, ''))
+      toast('Uploaded to FiveManage', 'success')
+    } catch (e) {
+      toast(`Upload failed: ${e instanceof Error ? e.message : String(e)}`, 'danger')
+    } finally { setUploading(false) }
+  }
+
+  const save = async () => {
+    if (!src.trim()) { toast('Upload a photo or paste an image URL first.', 'warn'); return }
+    setBusy(true)
+    const res = await insert('media', {
+      title: title.trim() || place.name,
+      type: 'image',
+      kind: 'image',
+      external_url: src.trim(),
+      place_id: place.id,
+      tags: { labels: ['Place'], location: place.area || place.name } as Json,
+    })
+    setBusy(false)
+    if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
+    toast(`Photo added to "${place.name}"`, 'success')
+    onSaved()
+  }
+
+  return (
+    <Modal open onClose={onClose} dirty={() => !!(title || src)}>
+      <div className="p-6">
+        <ModalHeader title={`Add photo — ${place.name}`} onClose={onClose} />
+        <div className="space-y-3">
+          <div>
+            <label htmlFor="pp-title" className="mb-1 block text-xs font-semibold text-slate-400">Title</label>
+            <input id="pp-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={place.name} className={input} />
+          </div>
+          {fmConfigured() && (
+            <div>
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f) }} />
+              <button onClick={() => fileRef.current?.click()} disabled={uploading} className="w-full rounded-lg border border-dashed border-white/20 bg-white/5 py-3 text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50">
+                {uploading ? 'Uploading…' : '📷 Upload photo'}
+              </button>
+            </div>
+          )}
+          <div>
+            <label htmlFor="pp-src" className="mb-1 block text-xs font-semibold text-slate-400">{fmConfigured() ? 'Or paste an image URL' : 'Image URL'}</label>
+            <input id="pp-src" value={src} onChange={(e) => setSrc(e.target.value)} placeholder="https://…" className={input} />
+          </div>
+          {safeUrl(src) && (
+            // eslint-disable-next-line @next/next/no-img-element -- external evidence URL
+            <img src={safeUrl(src)!} alt="Preview" className="max-h-48 w-full rounded-lg border border-white/10 object-contain" />
+          )}
+        </div>
+        <button onClick={() => void save()} disabled={busy || uploading} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50">
+          {busy ? 'Saving…' : 'Add photo'}
+        </button>
+      </div>
+    </Modal>
   )
 }
 
@@ -276,7 +354,7 @@ function PhotoLightbox({ photo, onClose }: { photo: PlacePhoto; onClose: () => v
   )
 }
 
-function PlaceCard({ place, gang, caseNumber, drug, customSteps, photos, onOpenPhoto, canEdit, canDelete, selected, onSelect, onEdit, onDelete, onAttach }: {
+function PlaceCard({ place, gang, caseNumber, drug, customSteps, photos, onOpenPhoto, onAddPhoto, canEdit, canDelete, selected, onSelect, onEdit, onDelete, onAttach }: {
   place: PlaceRow
   gang: string | null
   caseNumber: string | null
@@ -284,6 +362,7 @@ function PlaceCard({ place, gang, caseNumber, drug, customSteps, photos, onOpenP
   customSteps: ProcessStepRow[]
   photos: PlacePhoto[]
   onOpenPhoto: (p: PlacePhoto) => void
+  onAddPhoto: () => void
   canEdit: boolean
   canDelete: boolean
   selected: boolean
@@ -302,6 +381,7 @@ function PlaceCard({ place, gang, caseNumber, drug, customSteps, photos, onOpenP
           <p className="mt-0.5 text-xs text-slate-400">{locLabel(place.type)} · {place.area || '-'}</p>
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
+          {canEdit && <button onClick={onAddPhoto} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-emerald-200 transition hover:bg-white/10" title="Add a photo of this location">📷</button>}
           {canEdit && <button onClick={onAttach} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-blue-200 transition hover:bg-white/10" title="Attach to case">Attach</button>}
           {canEdit && <button onClick={onEdit} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
           {canDelete && <button aria-label="Remove location" onClick={onDelete} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
