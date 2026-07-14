@@ -658,6 +658,7 @@ export type Database = {
           status: Database["public"]["Enums"]["case_status"]
           summary: string | null
           tasks: Json
+          followup_days: number | null
           title: string | null
           updated_at: string
         }
@@ -674,6 +675,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["case_status"]
           summary?: string | null
           tasks?: Json
+          followup_days?: number | null
           title?: string | null
           updated_at?: string
         }
@@ -690,6 +692,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["case_status"]
           summary?: string | null
           tasks?: Json
+          followup_days?: number | null
           title?: string | null
           updated_at?: string
         }

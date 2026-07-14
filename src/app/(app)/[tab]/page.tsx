@@ -6,6 +6,7 @@ import { CasesView } from '@/components/cases/CasesView'
 import { CommandView } from '@/components/command/CommandView'
 import { OperationsView } from '@/components/operations/OperationsView'
 import { InboxView } from '@/components/inbox/InboxView'
+import { ActionCenterView } from '@/components/actioncenter/ActionCenterView'
 import { PersonnelView } from '@/components/personnel/PersonnelView'
 import { AnnounceView } from '@/components/announce/AnnounceView'
 import { PersonsView } from '@/components/persons/PersonsView'
@@ -75,6 +76,13 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="inbox" />}>
         <InboxView />
+      </Suspense>
+    )
+  }
+  if (tab === 'action') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="action" />}>
+        <ActionCenterView />
       </Suspense>
     )
   }

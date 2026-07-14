@@ -6,6 +6,54 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [Unreleased] — Usability roadmap, Phase 2
+
+### Added — Action Center
+- A new **Action Center** tab (in the Command group, beside My Desk): one
+  prioritized queue of everything awaiting a decision or action from the
+  signed-in member — sign-offs to decide, cases returned to them, overdue and
+  open tasks, transfer decisions, case-access requests, and (for command)
+  pending membership approvals. Each row deep-links to where the action happens;
+  the actual writes stay in the owning surface (the RPCs remain the authority).
+  It's the actionable slice of My Desk (which links to it), sharing the same
+  data sources.
+
+### Added — case activity recap
+- The case Overview shows a **"Since your last visit"** banner summarising what
+  changed (evidence / reports / tasks added, legal updates) since the viewer
+  last opened this case — a per-case marker re-stamped on leave. Purely
+  informational; it never suppresses a notification.
+
+### Added — case handover
+- The current lead (or command) can **hand a case to another officer** from the
+  case header: pick the new lead + an optional note. Both the outgoing and
+  incoming lead are notified (a new case-access-gated `case_handover` type on
+  the guarded `create_notification` path), so a lead change is never silent.
+  Migration `20260721030000` adds the type to the whitelist.
+
+### Added — smarter case creation from templates
+- Case templates gain an optional **default follow-up interval**
+  (`case_templates.followup_days`): applying a template to a new case sets
+  `follow_up_at` to today + N days, so the Guided-next-action banner and the
+  Division Calendar surface the review automatically (never overwrites a
+  follow-up an editor set). The New-case template picker previews it, and the
+  template manager edits it. Additive column; no policy change.
+
+### Security — re-hardened `create_notification` (the client notification path)
+- The live function had drifted to an un-guarded form: any active member could
+  insert a notification of **any** type with arbitrary free text to any other
+  member — i.e. spoof a "sign-off approved" / "legal decision" / "membership
+  approved" notice. (An earlier guard existed but was superseded; its whitelist
+  also predated rebuild type names like `stale_case`.)
+- Verified no database function calls `create_notification` (every server-owned
+  notice is inserted directly by its own definer RPC), so the client emits a
+  fixed set of seven types. The function now **whitelists exactly those seven**
+  and enforces per-type authority (`member_approved` ⇒ command;
+  `access_requested` ⇒ a matching pending request; `stale_case` /
+  `task_assigned` / `chat_mention` ⇒ case access; `tracker_*` ⇒ self/command),
+  keeps the server-stamped actor, and clamps free-text fields. Migration
+  `20260721010000`; 5 new live RLS tests (155/155).
+
 ## [Unreleased] — Usability roadmap, Phase 1
 
 Theme: the portal tells members what changed, what matters, and what to do next.

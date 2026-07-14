@@ -16,7 +16,8 @@ import { bureauLabel } from '@/lib/roles'
 import { useOperationsStore } from '@/lib/operations'
 import { caseCourtHint, caseStatusTint, CASE_STATUSES, signoffLabel, signoffTint } from '@/lib/signoff'
 import { assessCase } from '@/lib/caseWorkflow'
-import { officerName } from '@/lib/profiles'
+import { officerName, activeProfiles } from '@/lib/profiles'
+import { notify } from '@/lib/notify'
 import { useTableVersion } from '@/lib/realtime'
 import { gatherCasePacket, packetDocx, packetMarkdown, packetPdfSpec } from '@/lib/packet'
 import { toast } from '@/lib/toast'
@@ -53,11 +54,12 @@ type TabId = (typeof TABS)[number]
 export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () => void; onChanged: () => void }) {
   const router = useRouter()
   const sp = useSearchParams()
-  const { profile, canEdit, canDelete } = useAuth()
+  const { profile, canEdit, canDelete, isCommand } = useAuth()
   const operations = useOperationsStore((s) => s.operations)
   const [c, setCase] = useState<CaseRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [edit, setEdit] = useState(false)
+  const [handover, setHandover] = useState(false)
   const casesV = useTableVersion('cases')
   const tab = (sp.get('tab') && TABS.includes(sp.get('tab') as TabId) ? sp.get('tab') : 'overview') as TabId
 
@@ -147,6 +149,8 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const op = operations.find((x) => x.id === c.operation_id)
   const hint = caseCourtHint(c, profile?.id ?? null, officerName(c.signoff_assignee_id))
   const pinned = isPinnedCase(c.id)
+  // The current lead (or command) may hand the case to another officer.
+  const canHandover = !!profile && (c.lead_detective_id === profile.id || isCommand)
   // "Awaiting a decision" reuses the established sign-off vocabulary: every
   // awaiting state is prefixed awaiting_ (lib/signoff), same set caseCourtHint
   // keys off. No new states invented.
@@ -238,6 +242,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
             <button onClick={() => copyText(`${window.location.origin}/cases?case=${c.id}`, 'Case link copied.')} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Link</button>
             <PacketButton c={c} />
             {canEdit && <button onClick={() => setEdit(true)} className="rounded-lg bg-white/10 px-3 py-2 text-sm font-semibold text-white hover:bg-white/15">Edit</button>}
+            {canHandover && <button onClick={() => setHandover(true)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Hand over</button>}
             {canDelete && <button onClick={() => void deleteCase()} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-500">Delete</button>}
           </div>
         </div>
@@ -306,6 +311,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         {tab === 'timeline' && <TimelineTab c={c} />}
       </section>
       <CaseModal open={edit} record={c} onClose={() => setEdit(false)} onSaved={() => { setEdit(false); onChanged(); void fetchCase() }} />
+      <HandoverModal open={handover} c={c} onClose={() => setHandover(false)} onDone={() => { setHandover(false); onChanged(); void fetchCase() }} />
     </div>
   )
 }
@@ -440,5 +446,58 @@ function FollowUpButton({ c, onChanged }: { c: CaseRow; onChanged: () => void })
         </div>
       </Modal>
     </>
+  )
+}
+
+/* ── Case handover ──────────────────────────────────────────────────────────
+ * The current lead (or command) reassigns the case to another officer. The
+ * lead field is a plain, RLS-guarded case update; both the outgoing and
+ * incoming lead are notified (case_handover — a case-access-gated type on the
+ * guarded create_notification path) so a handover is never silent. */
+function HandoverModal({ open, c, onClose, onDone }: { open: boolean; c: CaseRow; onClose: () => void; onDone: () => void }) {
+  const { profile } = useAuth()
+  const [to, setTo] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { if (open) queueMicrotask(() => { setTo(''); setNote('') }) }, [open])
+  const options = activeProfiles().filter((p) => p.id !== c.lead_detective_id)
+  const run = async () => {
+    if (!to || busy) return
+    setBusy(true)
+    const res = await update('cases', c.id, { lead_detective_id: to })
+    if (res.error) { setBusy(false); toast(res.error.message, 'danger'); return }
+    const actor = profile?.display_name || 'An officer'
+    const payload = { case_id: c.id, case_number: c.case_number, detective: actor, title: c.title || c.case_number, ...(note.trim() ? { reason: note.trim() } : {}) }
+    void notify(to, 'case_handover', { ...payload, reason: note.trim() || `${actor} handed you the lead on ${c.case_number}.` })
+    if (c.lead_detective_id && c.lead_detective_id !== profile?.id) {
+      void notify(c.lead_detective_id, 'case_handover', { ...payload, reason: `${officerName(to) || 'Another officer'} is now the lead on ${c.case_number}.` })
+    }
+    setBusy(false)
+    toast(`Case handed to ${officerName(to) || 'the officer'}.`, 'success')
+    onDone()
+  }
+  return (
+    <Modal open={open} onClose={onClose}>
+      <div className="p-5">
+        <ModalHeader title="Hand over case" onClose={onClose} />
+        <p className="text-sm text-slate-300">
+          Reassign the lead on <span className="font-mono font-bold text-white">{c.case_number}</span> from{' '}
+          <span className="text-slate-200">{officerName(c.lead_detective_id) || 'Unassigned'}</span> to another officer. Both are notified.
+        </p>
+        <label className="mt-4 block text-sm text-slate-300">New lead
+          <select value={to} onChange={(e) => setTo(e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white">
+            <option value="">Select an officer…</option>
+            {options.map((p) => <option key={p.id} value={p.id}>{officerName(p.id) || p.display_name}</option>)}
+          </select>
+        </label>
+        <label className="mt-3 block text-sm text-slate-300">Handover note (optional)
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Context for the incoming lead" className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white" />
+        </label>
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onClose} disabled={busy} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 disabled:opacity-60">Cancel</button>
+          <button onClick={() => void run()} disabled={busy || !to} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{busy ? 'Handing over…' : 'Hand over'}</button>
+        </div>
+      </div>
+    </Modal>
   )
 }

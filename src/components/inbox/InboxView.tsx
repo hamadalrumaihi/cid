@@ -259,9 +259,12 @@ export function InboxView() {
           title="My Desk"
           subtitle={`${profile?.display_name || 'Officer'} - ${ROLE_LABEL[profile?.role ?? ''] || profile?.role || 'Member'}`}
           actions={
-            <button onClick={() => { void refresh() }} className="rounded border border-white/10 px-3 py-2 text-sm font-bold text-slate-200 hover:border-amber-300/30 hover:text-amber-100">
-              Refresh
-            </button>
+            <span className="flex items-center gap-2">
+              <Link href="/action" className="rounded border border-white/10 px-3 py-2 text-sm font-bold text-slate-200 hover:border-amber-300/30 hover:text-amber-100">Action Center ↗</Link>
+              <button onClick={() => { void refresh() }} className="rounded border border-white/10 px-3 py-2 text-sm font-bold text-slate-200 hover:border-amber-300/30 hover:text-amber-100">
+                Refresh
+              </button>
+            </span>
           }
         />
       </div>
