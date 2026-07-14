@@ -1,11 +1,23 @@
 # CID Portal — Criminal Investigation Division
 
-A private, real-time case-management portal for a **State of San Andreas**
-roleplay Criminal Investigation Division. The front-end is a **Next.js
-single-page app** (React 19, TypeScript, Tailwind CSS v4) served as static
-pages from Vercel; all data lives in a **Supabase** Postgres backend behind
-Row-Level Security. Every screen is live — when one detective updates a
-case, everyone else's screen follows within seconds.
+The CID Portal is a human-designed case-management and legal-review platform
+for a GTA V roleplay Criminal Investigation Division. It organizes cases,
+evidence, reports, intelligence, operations, warrants, subpoenas, approvals,
+and audit history through role-based workflows enforced by the database.
+
+The front-end is a **Next.js single-page app** (React 19, TypeScript,
+Tailwind CSS v4) served as static pages from Vercel; all data lives in a
+**Supabase** Postgres backend behind Row-Level Security. Every screen is
+live — when one detective updates a case, everyone else's screen follows
+within seconds. There is no runtime AI anywhere in the portal: every
+approval, denial, assignment, and decision is a named human actor, validated
+server-side, and deterministic features are rule-based and database-driven.
+
+> The project's requirements, workflows, security model, and final
+> implementation decisions are human-directed and human-reviewed.
+> Development tools may assist with drafting or implementation, but no tool
+> independently defines policy, approves changes, or operates investigative
+> and legal decisions.
 
 ## Tech stack
 

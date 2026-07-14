@@ -1,0 +1,83 @@
+# Authorization Model
+
+Who may do what in the CID Portal, and which server-side rule enforces it. The portal is a human-directed system: every approval, denial, and assignment is made by a named human actor whose authority is validated in the database — the client never decides access. Deterministic, rule-based SQL (RLS policies, guard triggers, `SECURITY DEFINER` RPCs) enforces the decisions humans make. Companion docs: [RLS.md](RLS.md) (mechanics), [SECURITY-REVIEW.md](SECURITY-REVIEW.md) (reviewer checklist), [handbook ch. 09](handbook/09-auth.md) (auth flow), [handbook ch. 08](handbook/08-database.md) (per-table detail).
+
+## 1. CID role hierarchy
+
+```
+detective → senior_detective → bureau_lead → deputy_director → director
+```
+
+- **Command** = `bureau_lead` (scoped to their own bureau) + `deputy_director` + `director` (global). Encoded in `private.is_command()`.
+- **Retired enum values**: `supervisor` and `command` still exist in the `app_role` enum (Postgres enums only append) but rank **0** in `private.cid_role_rank()` and are never assignable — see [`20260718010000_unified_role_policy.sql`](../supabase/migrations/20260718010000_unified_role_policy.sql) (retirement itself: [`20260617170000_retire_supervisor_command_roles.sql`](../supabase/migrations/20260617170000_retire_supervisor_command_roles.sql)).
+- **Owner is a flag, not a role** (§3). It is never requestable or assignable.
+
+### The unified assignment matrix (v1.16)
+
+One server-side authority matrix, `private.can_assign_cid_role(p_final_role, p_bureau)` in [`20260718010000_unified_role_policy.sql`](../supabase/migrations/20260718010000_unified_role_policy.sql), governs **every** CID role grant — membership approval, promotion/demotion, and role changes riding on a transfer all call the same function:
+
+| Final role | May approve / assign |
+|---|---|
+| Detective / Senior Detective | Bureau Lead **of that bureau**, or higher |
+| Bureau Lead | Deputy Director, Director, or Owner |
+| Deputy Director | Director or Owner |
+| Director | Owner only |
+
+Invariants enforced inside the RPCs (not the UI):
+
+- **No self-approval / self-role-change / self-transfer** — `review_membership_request`, `change_member_role`, and every `*_transfer` RPC reject `p_target = auth.uid()`.
+- **A recorded reason is required** for approve-with-changes (`review_membership_request`), every promotion/demotion (`change_member_role`), and every transfer (`request_transfer`). The reason lands on `role_events` (`reason`, `source`, `source_id`) — the latest event **is** the member's assignment-provenance record.
+- **Demotion needs the same authority as promotion**: `change_member_role` requires matrix authority over *both* the old and the new role, so demoting a Director requires the Owner.
+- `profiles.role/division/active/is_owner/removed_at` are frozen against all direct client writes by the non-definer trigger `private.block_direct_privileged_profile()` (same migration); only the audited definer RPCs can move them.
+- Only another owner may change an owner account's CID role.
+
+## 2. Justice-role separation (DOJ / Judiciary)
+
+Justice identity lives in `justice_memberships` (`agency` ∈ doj/judiciary; `justice_role` ∈ `assistant_district_attorney`, `district_attorney`, `attorney_general`, `judge`) — a **fully separate identity domain** defined in [`20260714010000_justice_identity.sql`](../supabase/migrations/20260714010000_justice_identity.sql). Justice authority is **never** derived from `profiles.role` or `profiles.division`; the only authorities are `private.justice_role_of()` / `private.justice_role()` / `private.is_justice_active()`. A Judge can never outrank a Director; an ADA can never gain Command authority; justice roles grant no CID assignment power.
+
+Onboarding mirrors `membership_requests` (own draft, definer-RPC transitions, trigger-frozen decision columns) with a stricter human approval matrix, `private.can_review_justice_role()`:
+
+| Requested justice role | May approve |
+|---|---|
+| ADA | DA, AG, or Owner |
+| DA | AG or Owner |
+| AG | Owner only |
+| Judge | Owner only |
+
+Full workflow, ADA bureau coverage, routing precedence, and conflict-of-role rules: [DOJ-INTEGRATION.md](DOJ-INTEGRATION.md).
+
+## 3. The owner flag
+
+- `profiles.is_owner` is a boolean super-grant, immutable from the client for everyone (`private.guard_profile()` resets it unconditionally; `block_direct_privileged_profile` freezes it too).
+- `private.is_owner()` = `is_owner AND active` — governs all ordinary owner surfaces (audit log, feedback triage, security dashboard).
+- `private.is_owner_maintenance()` = the **flag alone**, independent of `active`/`removed_at` — used ONLY by the two legal-import maintenance RPCs (`import_legal_warrant`, `import_rollback_by_key`), so an off-roster owner never needs a temporary profile mutation to run a one-time import. See [`20260716030000_owner_maintenance_gate.sql`](../supabase/migrations/20260716030000_owner_maintenance_gate.sql).
+
+## 4. Bureaus, membership lifecycle, and access states
+
+- **Bureaus**: `LSB` / `BCB` / `SAB` are the permanent departments. **`JTF` is a temporary joint-case designation** (and the pre-approval profile default) — never a permanent department, never assignable, never a transfer source/destination. Enforced by CHECK constraints on `membership_requests` and `transfer_requests` and explicit rejections in `review_membership_request` and `request_transfer`.
+- **Active/inactive**: first sign-in creates an inactive profile (`private.handle_new_user()`); every RLS check fails via `private.is_active()` until a human reviewer approves. Deactivation (`assign_member(target, set_active)`) is bureau-lead-scoped (own bureau, no command targets) with an owner override.
+- **Login denial** (`deny_member_login` / `restore_member_login`, [`20260713090000_login_denial.sql`](../supabase/migrations/20260713090000_login_denial.sql)): an app-level block by Command/Owner. A denied person can still authenticate (OAuth/magic-link) but hits an "Access denied" screen and — enforced by RLS, not the UI — cannot file or edit a membership request. Denial also deactivates; restore clears only the block (the member stays inactive and re-enters the normal request flow). Bureau-lead-scoped; the owner account cannot be denied. The `login_denied*` columns are frozen by the non-definer trigger `private.block_direct_login_denied()`.
+- **LOA**: `profiles.loa` is informational, but the sign-off routing helpers (`private.signoff_pick`) skip members on LOA when choosing an assignee.
+- **Temporary access via joint cases**: `case_assignments` rows with `assignment_source='joint_case'` grant access to exactly that case through `private.has_joint_access()` — honoring `expires_at` and `removed_at` server-side, revoked instantly on removal. Joint rows are RPC-only (`convert_case_to_joint`, `joint_case_add_members`, `joint_case_remove_member`, `joint_case_end`); the table policies pin direct writes to `assignment_source='standard'`. See [`20260713040000_joint_cases.sql`](../supabase/migrations/20260713040000_joint_cases.sql).
+- **Membership requests** ([`20260713030000_membership_requests.sql`](../supabase/migrations/20260713030000_membership_requests.sql)): one request per applicant; the inactive applicant owns the draft form fields; workflow/decision columns are frozen by a non-definer guard trigger; `internal_decision_note` is column-revoked from clients (Command reads it via `admin_membership_requests()`). Decisions (`approve` / `approve_with_changes` / `request_correction` / `reject`) run through `review_membership_request`, which enforces the assignment matrix on the FINAL role+bureau and activates the profile atomically.
+- **Promotions/demotions**: `change_member_role(p_target, p_new_role, p_reason)` — same-department only; department moves are transfers.
+- **Transfers** ([`20260718020000_officer_transfers.sql`](../supabase/migrations/20260718020000_officer_transfers.sql)): a deliberate **two-sided workflow** — request → source Bureau Lead approval → target Bureau Lead approval → completed; Deputy Director+ may complete directly (recorded as an override). No lead can unilaterally pull a member from another bureau. Visibility is **bureau-scoped** (`tr_sel` + `private.can_decide_transfer_side()`): the target officer, the requester, Leads of the two involved bureaus, and DD+/Owner — an unrelated bureau's Lead sees no rows, counts, or realtime events. All writes go through the `*_transfer` definer RPCs.
+- **Permanent removal**: `admin_remove_member` (Command) is a **soft remove** — sets `active=false`, stamps `removed_at`, nulls `email`, and releases the member's live hooks (watchlist, case assignments) while keeping the profile row for history. It refuses self-removal and removing the last active director. `admin_restore_member` clears `removed_at` but returns the member **inactive** — a human must re-approve.
+
+## 5. Permission table — major features
+
+Accurate as of the [schema snapshot](../supabase/schema-snapshot.sql) + v1.16 migrations. "Command" = `private.is_command()`; "case access" = `private.can_access_case()` (bureau match, JTF cases, lead/creator, command, explicit grant, or active joint assignment). This is the summary — the full per-table policy list is in [handbook ch. 08](handbook/08-database.md).
+
+| Feature | Who may view | Who may create | Who may update | Who may approve | Who may delete | Enforcing RPC(s) | Protecting RLS policy / helper |
+|---|---|---|---|---|---|---|---|
+| **Cases** | case access | active member, own bureau or JTF; command anywhere | case access (sign-off columns trigger-frozen) | sign-off: the stage's role holder (Bureau Lead → Deputy → Director), routed rule-based; deputy stop-point decided by the case owner | command **and** case access | `signoff_submit`, `signoff_decide`, `signoff_owner_action` | `cases_sel/ins/upd/del` → `can_access_case_row` / `can_create_case` / `can_delete`; trigger `block_direct_signoff` |
+| **Reports + finalize/seal** | case access | case access | case access while draft; finalized contents locked | finalize: any case-access member signs (`report_finalize`, snapshots an immutable `report_versions` row); reopen: Bureau Lead (own bureau; JTF shared) or DD+ (`report_reopen`); warrant lifecycle: `warrant_set_status` | command | `report_finalize`, `report_reopen`, `warrant_set_status` | `reports_sel/ins/upd/del` → `can_access_case`; trigger `block_direct_report_finalize`; `block_report_version_update` ([`20260713020000_report_seal_hardening.sql`](../supabase/migrations/20260713020000_report_seal_hardening.sql), [`20260715010000_report_versions.sql`](../supabase/migrations/20260715010000_report_versions.sql)) |
+| **Evidence + custody chain** | case access | case access | evidence: case access; custody chain: append-only (no update policy) | — | evidence: command; custody chain: no delete policy | — (direct writes under RLS) | `evidence_sel/ins/upd/del`; `custody_ins/custody_sel` (via the parent evidence row's case) |
+| **Legal requests (incl. sealed)** | creator, active request participants, Owner, DA/AG for DOJ-submitted requests, CID case members for `standard` classification only — sealed requests visible to no one else, undiscoverable by construction | requesting investigator via RPC (no INSERT grants exist) | drafts via RPC only; submitted versions immutable | staged human review: CID reviewer → ADA → (route) DA / AG → Judge for warrants; issue/execution/service recorded by authorized CID fulfilment | none (hard-delete resistant); owner rollback of imported rows only (`import_rollback_by_key`) | `create_legal_request`, `update_legal_draft`, `submit_legal_request_to_cid/_doj`, `review_legal_request_as_cid/_ada/_da/_ag`, `assign_judge`, `decide_legal_request_as_judge`, `issue_legal_request`, fulfilment RPCs | `lr_sel` (+ children `lrv/lra/lre/lrp/lrs/mdt_sel`) → `private.can_view_legal_request`; [`20260714030000_legal_core.sql`](../supabase/migrations/20260714030000_legal_core.sql) |
+| **Membership requests** | applicant (own), Command, Owner | the inactive applicant (own draft; blocked if login-denied) | applicant, form fields only, in `draft`/`correction_requested`; decision columns trigger-frozen | matrix via `review_membership_request` (`can_assign_cid_role` on final role+bureau); no self-review | no delete policy | `membership_request_submit/_withdraw`, `review_membership_request`, `admin_membership_requests` | `mr_sel/ins/upd`, `mrh_sel`; trigger `guard_membership_request`; `internal_decision_note` column revoke |
+| **Transfers** | target officer, requester, source/target Bureau Leads, DD+, Owner (bureau-scoped — no other rows/counts) | Bureau Lead touching own bureau (rank-and-file only), DD+, Owner | RPC-only (no insert/update/delete policies) | source side then target side via `can_decide_transfer_side`; DD+/Owner may complete directly (override recorded) | no delete policy | `request_transfer`, `approve_transfer_source/_target`, `complete_transfer`, `reject_transfer`, `cancel_transfer` | `tr_sel` → `can_decide_transfer_side` ([`20260718020000_officer_transfers.sql`](../supabase/migrations/20260718020000_officer_transfers.sql)) |
+| **Announcements** | audience-scoped: `all`, own division, `specific_members` mentions, author, Command/Owner oversight | command with audience authority: `all` → DD+/Owner; a bureau → that bureau's Lead or DD+/Owner | same as create | — | command (`can_announce`) | `publish_announcement` (fan-out), `announcement_recipient_count`, `announcement_notify_update` | `ann_sel/ins/upd/del` → `can_announce` + `can_post_audience` ([`20260713050000_announcement_audiences.sql`](../supabase/migrations/20260713050000_announcement_audiences.sql)) |
+| **Operations** | active member | active member | active member | — | command | — (direct writes under RLS) | `operations_sel/ins/upd/del` → `is_active` / `can_delete` |
+| **Owner surfaces** | Owner only: `audit_log`, `feedback_meta`, `client_errors`, security-test overview; `app_secrets` visible to no client role | audit rows: written only by the `private.audit()` trigger + audited RPCs; test runs: only `rls-test-*` fixtures | feedback triage: Owner | — | client_errors: Owner | `owner_security_overview` (`is_owner`), `security_test_report` (fixtures only), `import_legal_warrant` / `import_rollback_by_key` (`is_owner_maintenance`) | `audit_sel`, `feedback_meta_all`, `client_errors_owner_sel/del`; `app_secrets` = RLS on, zero policies; `security_test_runs` = all client grants revoked |
+
+Every RPC above is `SECURITY DEFINER` with a pinned empty `search_path`, revoked from `public`/`anon`, and validates the **named human caller** (`auth.uid()`) inside the function body — see [RLS.md](RLS.md) §6.
