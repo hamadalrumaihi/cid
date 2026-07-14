@@ -6,6 +6,60 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.17.0] — 2026-07-14
+
+### Security — RLS test fixtures hidden from every ordinary surface
+- New authoritative marker **`profiles.is_test`** (seeded for all
+  `rls-test-*` accounts, stamped at creation by `handle_new_user`, frozen
+  against direct client writes, owner-settable via the audited
+  `set_profile_test_flag`).
+- **Real members no longer see fixture accounts anywhere**: the `profiles`
+  SELECT policy is viewer-scoped (fixture viewers still see fixtures — the
+  live security suites depend on it), `justice_directory`,
+  `admin_member_emails`, `admin_membership_requests`, and
+  `admin_justice_membership_requests` exclude fixture rows/requests for
+  real callers, and announcement/notification fan-out (membership + justice
+  submissions, transfers, client-error owner pings) never crosses the
+  fixture/real boundary in either direction.
+- `profiles_command` narrowed from FOR ALL to **UPDATE-only** (its SELECT
+  arm would have bypassed the new visibility rule; its INSERT/DELETE arms
+  had no client use).
+- Motivation: fixtures were visible enough that production command staff
+  manually denied/removed them (twice), breaking the suites. Deleting the
+  accounts would destroy the 150-test live security suite; hiding removes
+  them from the portal instead. Permanent-deletion machinery ships
+  separately with its own safeguards.
+
+### Added — organization correction (Owner-only)
+- **`correct_membership_organization`** fixes accounts approved into the
+  wrong organization: CID → DOJ (ADA/DA/AG) or CID → Judiciary (Judge)
+  deactivates the CID membership (all history preserved) and files a
+  pending justice membership request through the **normal approval
+  matrix**; DOJ/Judiciary → CID deactivates the justice membership and
+  files a pending CID membership request for Command review. Never converts
+  `profiles.role` into a justice role; blocked while unresolved active
+  assignments (lead cases, case assignments, open tasks/transfers, assigned
+  legal requests, bureau coverage) need deliberate reassignment; reason
+  required; initiator/approver/completion all recorded; the member is
+  notified; test fixtures are rejected outright. UI: Manage Officer
+  ("Move to DOJ / Judiciary…", Owner-only) and the Justice portal personnel
+  board ("Move to CID…", Owner-only).
+
+### Added — Owner-granted dual justice membership
+- **`owner_grant_justice_membership`**: the Owner may appoint an existing
+  active CID member as a department prosecutor (or DA/AG/Judge) without
+  deactivating their CID identity — the Owner tops every justice approval
+  matrix, so the audited direct grant is matrix-consistent. Ordinary signup
+  still blocks active CID members from applying; dual identity is an Owner
+  decision. Test fixtures can never be granted justice memberships.
+
+### Tests
+- New `tests/rls/v117.test.ts` (fixture-viewer visibility retained; owner
+  un-flag/re-flag proves a real viewer gets zero fixture rows/counts and a
+  fixture-free justice directory; flag is owner-only and write-frozen;
+  correction and grant are Owner-only and fixture-refusing). Full live
+  suite: **150/150** after deployment.
+
 ## [1.16.0] — 2026-07-13
 
 ### Added — unified role & department assignment system

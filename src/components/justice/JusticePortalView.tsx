@@ -289,6 +289,24 @@ function JusticePersonnel() {
     else { toast('Membership updated.', 'success'); reload() }
   }
 
+  // Owner-only correction for a member approved into the wrong organization:
+  // deactivates the justice membership (history preserved) and files a pending
+  // CID membership request through the normal Command approval matrix.
+  const moveToCid = async (e: { user_id: string; display_name: string }) => {
+    const reason = await uiPrompt(
+      `Move ${e.display_name} out of DOJ/Judiciary to CID?\n\nTheir justice membership is deactivated (history preserved) and a pending CID membership request (Detective) is created — Command still approves the final role and department before any access is granted. Unresolved assigned legal work blocks the move.`,
+      { title: 'Organization correction', placeholder: 'Reason, e.g. "Approved into the wrong organization"', confirmText: 'Move to CID' },
+    )
+    if (reason === null || !reason.trim()) { if (reason !== null) toast('A reason is required.', 'warn'); return }
+    const res = await rpc('correct_membership_organization', {
+      p_target: e.user_id, p_direction: 'justice_to_cid', p_reason: reason.trim(),
+      p_requested_bureau: 'LSB', p_requested_role: 'detective',
+    })
+    if (res.error) { toast(`Correction failed: ${res.error.message}`, 'danger'); return }
+    toast(`${e.display_name} moved to CID intake — membership request pending Command approval`, 'warn')
+    reload()
+  }
+
   if (entries.length === 0) return null
   return (
     <section className="space-y-2">
@@ -303,6 +321,9 @@ function JusticePersonnel() {
             <span className="flex-1" />
             {canDeactivate(e.justice_role) && (
               <Button onClick={() => void setActive(e)}>{e.active ? 'Deactivate' : 'Reactivate'}</Button>
+            )}
+            {isOwnerFlag && e.active && (
+              <Button onClick={() => void moveToCid(e)}>Move to CID…</Button>
             )}
           </div>
         ))}

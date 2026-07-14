@@ -3088,6 +3088,7 @@ export type Database = {
           email: string | null
           id: string
           is_owner: boolean
+          is_test: boolean
           loa: boolean
           loa_since: string | null
           login_denied: boolean
@@ -3109,6 +3110,7 @@ export type Database = {
           email?: string | null
           id: string
           is_owner?: boolean
+          is_test?: boolean
           loa?: boolean
           loa_since?: string | null
           login_denied?: boolean
@@ -3130,6 +3132,7 @@ export type Database = {
           email?: string | null
           id?: string
           is_owner?: boolean
+          is_test?: boolean
           loa?: boolean
           loa_since?: string | null
           login_denied?: boolean
@@ -4276,6 +4279,30 @@ export type Database = {
       cancel_transfer: {
         Args: { p_id: string }
         Returns: Database["public"]["Tables"]["transfer_requests"]["Row"]
+      }
+      correct_membership_organization: {
+        Args: {
+          p_direction: string
+          p_reason: string
+          p_requested_bureau?: Database["public"]["Enums"]["bureau"]
+          p_requested_justice_role?: string
+          p_requested_role?: Database["public"]["Enums"]["app_role"]
+          p_target: string
+        }
+        Returns: Json
+      }
+      owner_grant_justice_membership: {
+        Args: {
+          p_agency: string
+          p_justice_role: string
+          p_reason: string
+          p_target: string
+        }
+        Returns: undefined
+      }
+      set_profile_test_flag: {
+        Args: { p_is_test: boolean; p_target: string }
+        Returns: undefined
       }
       rls_test_reset_member: {
         Args: {
