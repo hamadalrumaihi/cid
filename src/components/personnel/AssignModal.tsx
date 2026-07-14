@@ -151,8 +151,8 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
   const denyLogin = async () => {
     if (me && me.id === p.id) { toast('You cannot deny your own login.', 'warn'); return }
     const reasonTxt = await uiPrompt(
-      `Deny ${p.display_name || 'this member'} access to the CID Portal?\n\nThey can still sign in but will see an "Access denied" screen with your reason and cannot submit a membership request. This is reversible.`,
-      { title: 'Deny login', placeholder: 'Reason shown to the member (optional)', confirmText: 'Deny access' },
+      `Deny ${p.display_name || 'this member'} access to the CID Portal?\n\nWhat this does: they can still sign in but land on an "Access denied" screen showing your reason, and cannot submit a membership request.\n\nWhat this does NOT do: their account, cases, reports and history are untouched — this only blocks the door. Fully reversible with "Restore login access".\n\n(To erase the account instead — clear their email, unassign cases, hide them from the roster — use "Permanently remove from CID" below.)`,
+      { title: 'Deny login access', placeholder: 'Reason shown to the member (optional)', confirmText: 'Deny access' },
     )
     if (reasonTxt === null) return
     const res = await rpc('deny_member_login', { p_target: p.id, p_reason: reasonTxt })
@@ -176,7 +176,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
   const removePermanently = async () => {
     if (me && me.id === p.id) { toast('You cannot remove yourself.', 'warn'); return }
     const ok = await uiConfirm(
-      `Permanently remove ${p.display_name || 'this member'} from CID?\n\nThey lose all access immediately and their sign-in email is cleared. Their authored cases, reports and audit trail are preserved. This is reversible only by a director restoring them.`,
+      `Permanently remove ${p.display_name || 'this member'} from CID?\n\nWhat this does: revokes access immediately, clears their sign-in email, unassigns their cases and hides them from the roster.\n\nWhat is kept: cases, reports and audit history they authored stay intact. Only a director can restore them, and they return inactive pending re-approval.\n\nThis is heavier than "Deny login access" (which just blocks the door and is instantly reversible).`,
       { confirmText: 'Remove permanently', danger: true },
     )
     if (!ok) return
@@ -317,7 +317,8 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
         </div>
 
         <div className="mt-4 border-t border-white/5 pt-3">
-          <p className="mb-2 text-[11px] uppercase tracking-wider text-rose-300/70">Danger zone</p>
+          <p className="mb-1 text-[11px] uppercase tracking-wider text-rose-300/70">Danger zone</p>
+          <p className="mb-2 text-[10px] text-slate-500">Two different actions: <b className="text-slate-400">Deny login</b> blocks the door but keeps the account; <b className="text-slate-400">Permanently remove</b> erases the membership (history preserved).</p>
           {canDenyThis && (p.login_denied ? (
             <div className="mb-2">
               <button onClick={() => void restoreLogin()} className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 py-2.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/10">
