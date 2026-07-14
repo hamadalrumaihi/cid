@@ -48,17 +48,21 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
   // Checklist carried by the selected template — auto-created as case_tasks
   // on save (flowintel-style template task lists). New cases only.
   const [checklist, setChecklist] = useState<string[]>([])
+  // Default review cadence carried by the selected template → cases.follow_up_at
+  // on creation (new cases only).
+  const [followupDays, setFollowupDays] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const fetchTemplates = async () => {
     try {
       setTemplates((await list('case_templates', { order: 'sort_order' })).filter((t) => t.active !== false))
     } catch { setTemplates([]) }
   }
-  useEffect(() => { if (open) queueMicrotask(() => { setForm(initial); setChecklist([]); void fetchOps(); void fetchTemplates() }) }, [open, initial, fetchOps, templatesVersion])
+  useEffect(() => { if (open) queueMicrotask(() => { setForm(initial); setChecklist([]); setFollowupDays(null); void fetchOps(); void fetchTemplates() }) }, [open, initial, fetchOps, templatesVersion])
   const dirty = () => JSON.stringify(form) !== JSON.stringify(initial)
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
   const applyTemplate = (tpl: CaseTemplateRow | null) => {
     setChecklist(tplTasks(tpl))
+    setFollowupDays(tpl?.followup_days ?? null)
     if (!tpl) { setForm(initial); return }
     setForm((f) => ({
       ...f,
@@ -74,6 +78,11 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
     if (!form.title.trim()) { toast('Case title is required.', 'warn'); return }
     setSaving(true)
     const caseNumber = `${form.bureau}-${form.digits.replace(/\D/g, '') || Date.now().toString().slice(-5)}`
+    // A template's default review cadence lands on new cases only, and never
+    // overwrites a follow-up an editor already set.
+    const followUpAt = !record && followupDays && followupDays > 0
+      ? new Date(Date.now() + followupDays * 86_400_000).toISOString().slice(0, 10)
+      : undefined
     const patch = {
       bureau: form.bureau as CaseRow['bureau'],
       case_number: caseNumber,
@@ -83,6 +92,7 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
       lead_detective_id: form.lead_detective_id || null,
       operation_id: form.operation_id || null,
       summary: form.summary.trim() || null,
+      ...(followUpAt ? { follow_up_at: followUpAt } : {}),
     }
     const res = record ? await update('cases', record.id, patch) : await insert('cases', patch)
     if (res.error) { setSaving(false); toast(res.error.message, 'danger'); return }
@@ -112,6 +122,9 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
             </div>
             {checklist.length > 0 && (
               <p className="mt-2 text-xs text-emerald-200">☑ Saving will add {checklist.length} standard task{checklist.length === 1 ? '' : 's'}: {checklist.join(' · ')}</p>
+            )}
+            {followupDays && followupDays > 0 && (
+              <p className="mt-1 text-xs text-amber-200">⏰ Sets a follow-up review in {followupDays} day{followupDays === 1 ? '' : 's'}.</p>
             )}
           </div>
         )}
@@ -166,7 +179,7 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
 
 function TemplateManager({ open, templates, onClose, onChanged }: { open: boolean; templates: CaseTemplateRow[]; onClose: () => void; onChanged: () => void }) {
   const [drafts, setDrafts] = useState<CaseTemplateRow[]>(templates)
-  const [newRow, setNewRow] = useState({ name: '', icon: '', bureau: 'LSB', status: 'open', title: '', summary: '', tasks: '' })
+  const [newRow, setNewRow] = useState({ name: '', icon: '', bureau: 'LSB', status: 'open', title: '', summary: '', tasks: '', followup: '' })
   // Raw textarea text per row — parsed only on save so Enter/blank lines type naturally.
   const [taskDrafts, setTaskDrafts] = useState<Record<string, string>>({})
   const parseTasks = (v: string): string[] => v.split('\n').map((x) => x.trim()).filter(Boolean)
@@ -180,6 +193,7 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
       title: row.title || null,
       summary: row.summary || null,
       tasks: taskDrafts[row.id] !== undefined ? parseTasks(taskDrafts[row.id]) : (Array.isArray(row.tasks) ? row.tasks : []),
+      followup_days: row.followup_days ?? null,
       active: row.active,
       sort_order: row.sort_order,
     })
@@ -196,10 +210,11 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
       title: newRow.title || null,
       summary: newRow.summary || null,
       tasks: parseTasks(newRow.tasks),
+      followup_days: newRow.followup.trim() ? Math.max(0, parseInt(newRow.followup, 10) || 0) || null : null,
       sort_order: templates.length + 1,
     })
     if (res.error) toast(res.error.message, 'danger')
-    else { setNewRow({ name: '', icon: '', bureau: 'LSB', status: 'open', title: '', summary: '', tasks: '' }); toast('Template added.', 'success'); onChanged() }
+    else { setNewRow({ name: '', icon: '', bureau: 'LSB', status: 'open', title: '', summary: '', tasks: '', followup: '' }); toast('Template added.', 'success'); onChanged() }
   }
   const patchDraft = (id: string, patch: Partial<CaseTemplateRow>) => setDrafts((rows) => rows.map((row) => row.id === id ? { ...row, ...patch } : row))
   return (
@@ -214,6 +229,7 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
             <select value={row.status} onChange={(e) => patchDraft(row.id, { status: e.target.value as CaseTemplateRow['status'] })} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white">{CASE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
             <input value={row.title || ''} onChange={(e) => patchDraft(row.id, { title: e.target.value })} placeholder="Prefill title" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
             <input value={row.summary || ''} onChange={(e) => patchDraft(row.id, { summary: e.target.value })} placeholder="Prefill summary" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
+            <input type="number" min={0} value={row.followup_days ?? ''} onChange={(e) => patchDraft(row.id, { followup_days: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0) })} placeholder="Follow-up days" title="Default review cadence in days" className="md:col-span-4 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
             <textarea value={taskDrafts[row.id] ?? tplTasks(row).join('\n')} onChange={(e) => setTaskDrafts((m) => ({ ...m, [row.id]: e.target.value }))} rows={3} placeholder={'Checklist tasks — one per line, auto-created with each new case\nCanvass witnesses\nPull CCTV'} className="md:col-span-4 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />
             <div className="md:col-span-4 flex justify-end gap-2"><button onClick={() => void saveRow(row)} className="rounded-lg bg-badge-600 px-3 py-2 text-xs font-bold text-white">Save</button><button onClick={() => void deleteWithUndo('case_templates', row, { confirmTitle: 'Delete template', confirmMessage: `Delete the “${row.name}” case template? Existing cases are unaffected — only the template is removed. You can undo this for a few seconds.`, confirmText: 'Delete template', label: 'template', after: onChanged })} className="rounded-lg border border-rose-400/30 px-3 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/10">Delete</button></div>
           </div>)}
@@ -225,6 +241,7 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
           <select value={newRow.status} onChange={(e) => setNewRow({ ...newRow, status: e.target.value })} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white">{CASE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
           <input value={newRow.title} onChange={(e) => setNewRow({ ...newRow, title: e.target.value })} placeholder="Prefill title" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
           <input value={newRow.summary} onChange={(e) => setNewRow({ ...newRow, summary: e.target.value })} placeholder="Prefill summary" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
+          <input type="number" min={0} value={newRow.followup} onChange={(e) => setNewRow({ ...newRow, followup: e.target.value })} placeholder="Follow-up days (optional)" title="Default review cadence in days" className="md:col-span-4 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
           <textarea value={newRow.tasks} onChange={(e) => setNewRow({ ...newRow, tasks: e.target.value })} rows={3} placeholder={'Checklist tasks — one per line, auto-created with each new case'} className="md:col-span-4 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />
           <button onClick={add} className="md:col-span-4 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white">Add template</button>
         </div>

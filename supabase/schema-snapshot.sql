@@ -273,7 +273,8 @@ create table public.case_templates (
   created_by uuid default auth.uid(),
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
-  tasks jsonb not null default '[]'::jsonb
+  tasks jsonb not null default '[]'::jsonb,
+  followup_days integer
 );
 alter table public.case_templates add constraint case_templates_pkey PRIMARY KEY (id);
 alter table public.case_templates add constraint case_templates_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);

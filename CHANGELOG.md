@@ -8,6 +8,14 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Usability roadmap, Phase 2 (in progress)
 
+### Added — smarter case creation from templates
+- Case templates gain an optional **default follow-up interval**
+  (`case_templates.followup_days`): applying a template to a new case sets
+  `follow_up_at` to today + N days, so the Guided-next-action banner and the
+  Division Calendar surface the review automatically (never overwrites a
+  follow-up an editor set). The New-case template picker previews it, and the
+  template manager edits it. Additive column; no policy change.
+
 ### Security — re-hardened `create_notification` (the client notification path)
 - The live function had drifted to an un-guarded form: any active member could
   insert a notification of **any** type with arbitrary free text to any other
