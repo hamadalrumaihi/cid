@@ -532,8 +532,10 @@ export type Database = {
           actor_name: string | null
           case_id: string
           created_at: string
+          from_status: string | null
           id: string
           note: string | null
+          source: string | null
           stage: string | null
           to_status: string | null
         }
@@ -543,8 +545,10 @@ export type Database = {
           actor_name?: string | null
           case_id: string
           created_at?: string
+          from_status?: string | null
           id?: string
           note?: string | null
+          source?: string | null
           stage?: string | null
           to_status?: string | null
         }
@@ -554,8 +558,10 @@ export type Database = {
           actor_name?: string | null
           case_id?: string
           created_at?: string
+          from_status?: string | null
           id?: string
           note?: string | null
+          source?: string | null
           stage?: string | null
           to_status?: string | null
         }
@@ -4474,6 +4480,43 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      signoff_command_override: {
+        Args: { p_action: string; p_case: string; p_reason: string }
+        Returns: {
+          area: string | null
+          bureau: Database["public"]["Enums"]["bureau"]
+          case_number: string
+          charges: Json
+          closed_at: string | null
+          created_at: string
+          created_by: string | null
+          follow_up_at: string | null
+          id: string
+          last_stale_notified_at: string | null
+          lead_detective_id: string | null
+          notes: string | null
+          operation_id: string | null
+          signoff_assignee_id: string | null
+          signoff_stage: string | null
+          signoff_status: string
+          signoff_submitted_at: string | null
+          signoff_submitted_by: string | null
+          status: Database["public"]["Enums"]["case_status"]
+          summary: string | null
+          title: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cases"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      rls_test_set_signoff: {
+        Args: { p_case: string; p_stage?: string; p_status: string }
+        Returns: undefined
       }
       signoff_submit: {
         Args: { p_case: string }

@@ -233,7 +233,9 @@ create table public.case_signoff_history (
   stage text,
   to_status text,
   note text,
-  created_at timestamp with time zone not null default now()
+  created_at timestamp with time zone not null default now(),
+  from_status text,
+  source text
 );
 alter table public.case_signoff_history add constraint case_signoff_history_pkey PRIMARY KEY (id);
 alter table public.case_signoff_history add constraint case_signoff_history_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id);
@@ -2273,11 +2275,13 @@ CREATE OR REPLACE FUNCTION public.signoff_decide(p_case uuid, p_decision text, p
  SET search_path TO ''
 AS $function$
 declare c public.cases; v_uid uuid := (select auth.uid()); v_role public.app_role;
-        need_role public.app_role; r_stage text; r_assignee uuid;
+        need_role public.app_role; r_stage text; r_assignee uuid; v_from text; v_name text;
 begin
-  select * into c from public.cases where id = p_case;
+  select * into c from public.cases where id = p_case for update;
   if not found then raise exception 'case not found'; end if;
-  if c.signoff_stage is null then raise exception 'case is not awaiting a decision'; end if;
+  if c.signoff_stage is null then
+    raise exception 'this case is not awaiting a decision (it may have just been decided) — reload and retry' using errcode = 'P0001';
+  end if;
   select role into v_role from public.profiles where id = v_uid;
   need_role := case c.signoff_stage when 'bureau_lead' then 'bureau_lead'
                                     when 'deputy' then 'deputy_director'
@@ -2285,7 +2289,8 @@ begin
   if not (private.is_active() and v_role = need_role) then
     raise exception 'you do not hold the % role required to decide this stage', c.signoff_stage;
   end if;
-
+  v_from := c.signoff_status;
+  select display_name into v_name from public.profiles where id = v_uid;
   if p_decision = 'approve' then
     if c.signoff_stage = 'bureau_lead' then
       select stage, assignee into r_stage, r_assignee from private.signoff_route(1, c.bureau);
@@ -2303,20 +2308,20 @@ begin
       update public.cases set signoff_status='ready_doj', signoff_stage=null,
         signoff_assignee_id=null, updated_at=now() where id=p_case returning * into c;
     end if;
-    insert into public.case_signoff_history(case_id, actor_name, action, stage, to_status, note)
-      values (p_case, (select display_name from public.profiles where id=v_uid), 'approved', need_role::text, c.signoff_status, p_note);
+    insert into public.case_signoff_history(case_id, actor_id, actor_name, action, stage, from_status, to_status, note, source)
+      values (p_case, v_uid, v_name, 'approved', need_role::text, v_from, c.signoff_status, p_note, 'reviewer');
   elsif p_decision = 'deny' then
     if coalesce(btrim(p_note),'') = '' then raise exception 'a note is required to deny'; end if;
     update public.cases set signoff_status='denied', signoff_stage=null, signoff_assignee_id=null, updated_at=now()
       where id=p_case returning * into c;
-    insert into public.case_signoff_history(case_id, actor_name, action, stage, to_status, note)
-      values (p_case, (select display_name from public.profiles where id=v_uid), 'denied', need_role::text, 'denied', p_note);
+    insert into public.case_signoff_history(case_id, actor_id, actor_name, action, stage, from_status, to_status, note, source)
+      values (p_case, v_uid, v_name, 'denied', need_role::text, v_from, 'denied', p_note, 'reviewer');
   elsif p_decision = 'changes' then
     if coalesce(btrim(p_note),'') = '' then raise exception 'a note is required to request changes'; end if;
     update public.cases set signoff_status='changes_requested', signoff_stage=null, signoff_assignee_id=null, updated_at=now()
       where id=p_case returning * into c;
-    insert into public.case_signoff_history(case_id, actor_name, action, stage, to_status, note)
-      values (p_case, (select display_name from public.profiles where id=v_uid), 'changes_requested', need_role::text, 'changes_requested', p_note);
+    insert into public.case_signoff_history(case_id, actor_id, actor_name, action, stage, from_status, to_status, note, source)
+      values (p_case, v_uid, v_name, 'changes_requested', need_role::text, v_from, 'changes_requested', p_note, 'reviewer');
   else
     raise exception 'unknown decision %', p_decision;
   end if;
@@ -2330,28 +2335,32 @@ CREATE OR REPLACE FUNCTION public.signoff_owner_action(p_case uuid, p_action tex
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare c public.cases; v_uid uuid := (select auth.uid()); v_role public.app_role;
-        r_stage text; r_assignee uuid;
+declare c public.cases; v_uid uuid := (select auth.uid());
+        r_stage text; r_assignee uuid; v_from text; v_name text;
 begin
-  select * into c from public.cases where id=p_case;
+  select * into c from public.cases where id = p_case for update;
   if not found then raise exception 'case not found'; end if;
-  if c.signoff_status <> 'approved_deputy' then raise exception 'case is not at the deputy stop-point'; end if;
-  select role into v_role from public.profiles where id=v_uid;
+  if c.signoff_status <> 'approved_deputy' then
+    raise exception 'this case is not at the deputy stop-point (it may have just changed) — reload and retry' using errcode = 'P0001';
+  end if;
   if not (private.is_active() and private.can_access_case(p_case)
-          and (v_uid = c.lead_detective_id or v_uid = c.signoff_submitted_by
-               or v_role in ('detective','senior_detective'))) then
-    raise exception 'only the case owner can decide here'; end if;
+          and (v_uid is not distinct from c.lead_detective_id
+               or v_uid is not distinct from c.signoff_submitted_by)) then
+    raise exception 'only the case owner (lead detective or original submitter) can decide here';
+  end if;
+  v_from := c.signoff_status;
+  select display_name into v_name from public.profiles where id = v_uid;
   if p_action = 'complete' then
     update public.cases set signoff_status='approved_complete', updated_at=now() where id=p_case returning * into c;
-    insert into public.case_signoff_history(case_id, actor_name, action, stage, to_status)
-      values (p_case, (select display_name from public.profiles where id=v_uid), 'completed', 'deputy', 'approved_complete');
+    insert into public.case_signoff_history(case_id, actor_id, actor_name, action, stage, from_status, to_status, source)
+      values (p_case, v_uid, v_name, 'completed', 'deputy', v_from, 'approved_complete', 'owner');
   elsif p_action = 'escalate' then
     select stage, assignee into r_stage, r_assignee from private.signoff_route(2, c.bureau);
     if r_stage is null then raise exception 'no active Director available to escalate to'; end if;
     update public.cases set signoff_status='awaiting_director', signoff_stage='director',
       signoff_assignee_id=r_assignee, updated_at=now() where id=p_case returning * into c;
-    insert into public.case_signoff_history(case_id, actor_name, action, stage, to_status)
-      values (p_case, (select display_name from public.profiles where id=v_uid), 'escalated', 'director', 'awaiting_director');
+    insert into public.case_signoff_history(case_id, actor_id, actor_name, action, stage, from_status, to_status, source)
+      values (p_case, v_uid, v_name, 'escalated', 'director', v_from, 'awaiting_director', 'owner');
   else
     raise exception 'unknown action %', p_action;
   end if;
@@ -2366,25 +2375,94 @@ CREATE OR REPLACE FUNCTION public.signoff_submit(p_case uuid)
  SET search_path TO ''
 AS $function$
 declare c public.cases; v_uid uuid := (select auth.uid());
-        r_stage text; r_assignee uuid;
+        r_stage text; r_assignee uuid; v_from text; v_name text;
 begin
-  select * into c from public.cases where id = p_case;
+  select * into c from public.cases where id = p_case for update;
   if not found then raise exception 'case not found'; end if;
   if not private.is_active() then raise exception 'inactive user'; end if;
-  if not (c.lead_detective_id = v_uid
-          or (c.lead_detective_id is null and c.created_by = v_uid))
+  if not (v_uid is not distinct from c.lead_detective_id
+          or (c.lead_detective_id is null and v_uid is not distinct from c.created_by))
      then raise exception 'only the case owner (lead detective) can submit this case for sign-off'; end if;
   if coalesce(c.signoff_status,'none') not in ('none','changes_requested','denied')
-     then raise exception 'case already in review'; end if;
+     then raise exception 'this case is already in review — reload and retry' using errcode = 'P0001'; end if;
   select stage, assignee into r_stage, r_assignee from private.signoff_route(0, c.bureau);
   if r_stage is null then raise exception 'no active reviewers in the chain'; end if;
+  v_from := coalesce(c.signoff_status,'none');
+  select display_name into v_name from public.profiles where id = v_uid;
   update public.cases set signoff_status = private.signoff_status_of(r_stage),
     signoff_stage = r_stage, signoff_assignee_id = r_assignee,
     signoff_submitted_by = v_uid, signoff_submitted_at = now(), updated_at = now()
     where id = p_case returning * into c;
-  insert into public.case_signoff_history(case_id, actor_name, action, stage, to_status)
-    values (p_case, (select display_name from public.profiles where id = v_uid), 'submitted', r_stage, c.signoff_status);
+  insert into public.case_signoff_history(case_id, actor_id, actor_name, action, stage, from_status, to_status, source)
+    values (p_case, v_uid, v_name, 'submitted', r_stage, v_from, c.signoff_status, 'submit');
   return c;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.signoff_command_override(p_case uuid, p_action text, p_reason text)
+ RETURNS public.cases
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare c public.cases; v_uid uuid := (select auth.uid()); me public.profiles;
+        r_stage text; r_assignee uuid; v_from text;
+begin
+  select * into me from public.profiles where id = v_uid;
+  if not (me.id is not null and coalesce(me.active, false)
+          and (coalesce(me.role in ('deputy_director','director'), false) or coalesce(me.is_owner, false))) then
+    raise exception 'command override is limited to Deputy Director, Director, or Owner';
+  end if;
+  if coalesce(btrim(p_reason), '') = '' then
+    raise exception 'a reason is required for a command override';
+  end if;
+  select * into c from public.cases where id = p_case for update;
+  if not found then raise exception 'case not found'; end if;
+  if c.signoff_status <> 'approved_deputy' then
+    raise exception 'this case is not at the deputy stop-point (it may have just changed) — reload and retry' using errcode = 'P0001';
+  end if;
+  v_from := c.signoff_status;
+  if p_action = 'complete' then
+    update public.cases set signoff_status='approved_complete', updated_at=now() where id=p_case returning * into c;
+    insert into public.case_signoff_history(case_id, actor_id, actor_name, action, stage, from_status, to_status, note, source)
+      values (p_case, v_uid, me.display_name, 'completed', 'deputy', v_from, 'approved_complete', p_reason, 'command_override');
+  elsif p_action = 'escalate' then
+    select stage, assignee into r_stage, r_assignee from private.signoff_route(2, c.bureau);
+    if r_stage is null then raise exception 'no active Director available to escalate to'; end if;
+    update public.cases set signoff_status='awaiting_director', signoff_stage='director',
+      signoff_assignee_id=r_assignee, updated_at=now() where id=p_case returning * into c;
+    insert into public.case_signoff_history(case_id, actor_id, actor_name, action, stage, from_status, to_status, note, source)
+      values (p_case, v_uid, me.display_name, 'escalated', 'director', v_from, 'awaiting_director', p_reason, 'command_override');
+  else
+    raise exception 'unknown action %', p_action;
+  end if;
+  return c;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.rls_test_set_signoff(p_case uuid, p_status text, p_stage text DEFAULT NULL::text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); v_email text; v_owner_email text;
+begin
+  select email into v_email from public.profiles where id = v_uid;
+  if v_email is null or v_email not like 'rls-test-%@cidportal.test' then
+    raise exception 'rls_test_set_signoff: caller is not a test fixture';
+  end if;
+  select p.email into v_owner_email from public.cases c join public.profiles p on p.id = c.created_by where c.id = p_case;
+  if v_owner_email is null or v_owner_email not like 'rls-test-%@cidportal.test' then
+    raise exception 'rls_test_set_signoff: case is not fixture-owned';
+  end if;
+  update public.cases
+     set signoff_status = p_status,
+         signoff_stage = p_stage,
+         signoff_submitted_by = coalesce(signoff_submitted_by, v_uid),
+         signoff_submitted_at = coalesce(signoff_submitted_at, now()),
+         updated_at = now()
+   where id = p_case;
 end $function$
 ;
 
@@ -2632,10 +2710,6 @@ create policy cm_upd on public.case_messages
   as permissive for update to authenticated
   using ((((author_id = ( SELECT auth.uid() AS uid)) OR ( SELECT private.is_command() AS is_command)) AND ( SELECT private.can_access_case(case_messages.case_id) AS can_access_case)))
   with check ((((author_id = ( SELECT auth.uid() AS uid)) OR ( SELECT private.is_command() AS is_command)) AND ( SELECT private.can_access_case(case_messages.case_id) AS can_access_case)));
-
-create policy csh_ins on public.case_signoff_history
-  as permissive for insert to authenticated
-  with check (private.can_access_case(case_id));
 
 create policy csh_sel on public.case_signoff_history
   as permissive for select to authenticated
@@ -3324,8 +3398,7 @@ create policy wl_sel on public.watchlist
 --   case_intel_links -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_messages -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_messages -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_signoff_history -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_signoff_history -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_signoff_history -> authenticated: REFERENCES, SELECT, TRIGGER
 --   case_tasks -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_tasks -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_templates -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
