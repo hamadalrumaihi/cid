@@ -4,11 +4,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { insert, list, update, deleteWithUndo } from '@/lib/db'
 import { officerName, activeProfiles } from '@/lib/profiles'
+import { useAuth } from '@/lib/auth'
+import { notify } from '@/lib/notify'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { type CaseRow, type TaskRow } from './shared'
 
 export function TasksTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; canDelete: boolean }) {
+  const { profile } = useAuth()
   const [tasks, setTasks] = useState<TaskRow[]>([])
   const [title, setTitle] = useState('')
   const [assignee, setAssignee] = useState('')
@@ -20,10 +23,19 @@ export function TasksTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boole
   const add = async () => {
     if (!title.trim() || adding) return
     setAdding(true)
-    const res = await insert('case_tasks', { case_id: c.id, title: title.trim(), assignee: assignee || null, due: due || null })
+    const taskTitle = title.trim()
+    const taskAssignee = assignee
+    const res = await insert('case_tasks', { case_id: c.id, title: taskTitle, assignee: taskAssignee || null, due: due || null })
     setAdding(false)
     if (res.error) toast(res.error.message, 'danger')
-    else { setTitle(''); setAssignee(''); setDue(''); toast('Task added.', 'success'); void refresh() }
+    else {
+      // Let the assignee know (unless they assigned it to themselves) — the
+      // notification carries case_id, so the bell deep-links to the case.
+      if (taskAssignee && taskAssignee !== profile?.id) {
+        void notify(taskAssignee, 'task_assigned', { case_id: c.id, case_number: c.case_number, title: taskTitle })
+      }
+      setTitle(''); setAssignee(''); setDue(''); toast('Task added.', 'success'); void refresh()
+    }
   }
   const toggle = async (t: TaskRow) => {
     const res = await update('case_tasks', t.id, { done: !t.done })

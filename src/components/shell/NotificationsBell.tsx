@@ -10,7 +10,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { list, update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
-import { notifCaseId, notifDetail, notifSub, notifTitle, type NotificationRow } from '@/lib/notifText'
+import { notifDetail, notifHref, notifSub, notifTitle, type NotificationRow } from '@/lib/notifText'
+
+/** Human label for the row's call-to-action, by destination. */
+function ctaLabel(href: string): string {
+  if (href.startsWith('/cases')) return 'View case'
+  if (href.startsWith('/legal')) return 'View legal request'
+  if (href.startsWith('/justice')) return 'Open Justice Portal'
+  if (href.startsWith('/command-center')) return 'Open Command Center'
+  if (href.startsWith('/announce')) return 'View announcement'
+  if (href.startsWith('/owner')) return 'Open Owner Portal'
+  return 'Open'
+}
 import { useTableVersion } from '@/lib/realtime'
 import { timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
@@ -48,10 +59,10 @@ export function NotificationsBell() {
 
   const onRow = async (n: NotificationRow) => {
     void markRead(n)
-    const caseId = notifCaseId(n)
-    if (caseId) {
+    const href = notifHref(n)
+    if (href) {
       setOpen(false)
-      router.push(`/cases?case=${caseId}`)
+      router.push(href)
     }
   }
 
@@ -90,7 +101,7 @@ export function NotificationsBell() {
           {notifs.length ? notifs.map((n) => {
             const detail = notifDetail(n)
             const sub = notifSub(n)
-            const linkable = !!notifCaseId(n)
+            const href = notifHref(n)
             return (
               <button
                 key={n.id}
@@ -103,7 +114,7 @@ export function NotificationsBell() {
                 </div>
                 {detail && <p className="mt-0.5 font-mono text-[11px] text-blue-300">{detail}</p>}
                 {sub && <p className="mt-1 text-xs text-slate-400">{sub}</p>}
-                {linkable && <p className="mt-1 text-[11px] font-semibold text-blue-300">View case →</p>}
+                {href && <p className="mt-1 text-[11px] font-semibold text-blue-300">{ctaLabel(href)} →</p>}
               </button>
             )
           }) : <p className="text-sm text-slate-500">No notifications.</p>}
