@@ -138,7 +138,11 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
     onClose()
     const meta = SEARCH_KINDS[hit.kind]
     if (!meta) return
+    // Reports and evidence live inside a case — search_all returns the CASE id
+    // for those kinds, so open the case on the matching tab.
     if (hit.kind === 'case') router.push(`/cases?case=${hit.id}`)
+    else if (hit.kind === 'report') router.push(`/cases?case=${hit.id}&tab=reports`)
+    else if (hit.kind === 'evidence') router.push(`/cases?case=${hit.id}&tab=evidence`)
     else if (hit.kind === 'legal') router.push(`/legal?request=${encodeURIComponent(hit.id)}`)
     else if (hit.term && Q_SEEDED_TABS.has(meta.tab)) router.push(`/${meta.tab}?q=${encodeURIComponent(hit.term)}`)
     else router.push(`/${meta.tab}`)

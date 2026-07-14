@@ -2174,6 +2174,40 @@ AS $function$
             or lr.person_name_snapshot ilike p.lk or lr.recipient_name ilike p.lk
             or lr.case_number_snapshot ilike p.lk
             or word_similarity(p.lq, lower(lr.request_number || ' ' || lr.title)) > p.thr)
+      union all
+      -- Reports live inside a case → id is the CASE id (client opens the case
+      -- Reports tab). Bodies searched by jsonb *values* only, never keys/UUIDs.
+      select 'report', r.case_id,
+             coalesce(nullif(r.template, ''), 'Report') || ' · ' || c.case_number,
+             'Report in ' || coalesce(nullif(c.title, ''), c.case_number),
+             null::text,
+             greatest(word_similarity(p.lq, lower(coalesce(r.template, ''))),
+                      case when r.template ilike p.lk
+                                or exists (select 1 from jsonb_each_text(r.fields) kv where kv.value ilike p.lk) then 0.9 else 0 end)
+      from public.reports r join public.cases c on c.id = r.case_id, p
+      where p.lq <> '' and (r.template ilike p.lk
+            or exists (select 1 from jsonb_each_text(r.fields) kv where kv.value ilike p.lk))
+      union all
+      -- Evidence also lives inside a case → id is the CASE id (Evidence tab).
+      select 'evidence', e.case_id,
+             coalesce(nullif(e.item_code, ''), 'Evidence') || coalesce(' · ' || e.type, ''),
+             left(coalesce(e.description, ''), 90),
+             e.item_code,
+             greatest(word_similarity(p.lq, lower(coalesce(e.item_code, ''))),
+                      word_similarity(p.lq, lower(coalesce(e.description, ''))),
+                      case when e.item_code ilike p.lk or e.description ilike p.lk or e.type ilike p.lk
+                                or e.location ilike p.lk or e.notes ilike p.lk then 0.92 else 0 end)
+      from public.evidence e join public.cases c on c.id = e.case_id, p
+      where p.lq <> '' and (e.item_code ilike p.lk or e.description ilike p.lk or e.type ilike p.lk
+            or e.location ilike p.lk or e.notes ilike p.lk
+            or word_similarity(p.lq, lower(coalesce(e.item_code, '') || ' ' || coalesce(e.description, ''))) > p.thr)
+      union all
+      select 'operation', o.id, o.name, coalesce(initcap(o.status), 'Operation'), o.name,
+             greatest(word_similarity(p.lq, lower(coalesce(o.name, ''))),
+                      case when o.name ilike p.lk or o.description ilike p.lk then 0.95 else 0 end)
+      from public.operations o, p
+      where p.lq <> '' and (o.name ilike p.lk or o.description ilike p.lk
+            or word_similarity(p.lq, lower(coalesce(o.name, ''))) > p.thr)
     ) u
   ) x
   where rn <= 8
