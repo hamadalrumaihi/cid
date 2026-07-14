@@ -2042,11 +2042,13 @@ declare
   v_uid uuid := (select auth.uid());
   v_name text;
   v_from text;
+  v_cmd boolean;
+  v_authority text;
 begin
   if p_status not in ('draft', 'signed', 'executed', 'returned') then
     raise exception 'invalid warrant status';
   end if;
-  select * into r from public.reports where id = p_report;
+  select * into r from public.reports where id = p_report for update;
   if not found then raise exception 'report not found'; end if;
   if not (private.is_active() and private.can_access_case(r.case_id)) then
     raise exception 'not permitted to update this warrant';
@@ -2055,19 +2057,51 @@ begin
     raise exception 'not a warrant report';
   end if;
   v_from := coalesce(r.fields->>'_warrant_status', 'draft');
-  if v_from = p_status then return r; end if;
+  if v_from = p_status then
+    raise exception 'this warrant is already % (it may have just changed) — reload and retry', p_status using errcode = 'P0001';
+  end if;
+  v_cmd := coalesce((select private.is_command()), false);
+  if p_status = 'draft' then
+    if not v_cmd then
+      raise exception 'only command can revert a warrant to draft';
+    end if;
+    v_authority := 'override';
+  elsif p_status = 'signed' then
+    if v_from <> 'draft' then
+      raise exception 'a warrant can only be signed from draft (it is %) — reload and retry', v_from using errcode = 'P0001';
+    end if;
+    if v_cmd then
+      v_authority := 'command';
+    elsif exists (select 1 from public.legal_requests lr
+                   where lr.source_report_id = p_report and lr.review_status = 'approved') then
+      v_authority := 'legal_approved';
+    else
+      raise exception 'marking a warrant signed requires command authority or an approved legal request for this report — submit it for Legal Review or have command sign it';
+    end if;
+  elsif p_status = 'executed' then
+    if v_from <> 'signed' then
+      raise exception 'a warrant cannot be executed before it is signed (it is %) — reload and retry', v_from using errcode = 'P0001';
+    end if;
+  elsif p_status = 'returned' then
+    if v_from <> 'executed' then
+      raise exception 'a warrant cannot be returned before it is executed (it is %) — reload and retry', v_from using errcode = 'P0001';
+    end if;
+  end if;
   select display_name into v_name from public.profiles where id = v_uid;
   update public.reports
      set fields = coalesce(fields, '{}'::jsonb)
        || jsonb_build_object('_warrant_status', p_status)
        || jsonb_build_object('_warrant_log',
-            coalesce(fields->'_warrant_log', '[]'::jsonb) || jsonb_build_array(jsonb_build_object(
-              'at', now(),
-              'by', coalesce(v_name, 'Officer'),
-              'by_id', v_uid,
-              'from', v_from,
-              'to', p_status
-            ))),
+            coalesce(fields->'_warrant_log', '[]'::jsonb) || jsonb_build_array(
+              jsonb_build_object(
+                'at', now(),
+                'by', coalesce(v_name, 'Officer'),
+                'by_id', v_uid,
+                'from', v_from,
+                'to', p_status
+              ) || case when v_authority is not null
+                     then jsonb_build_object('authority', v_authority)
+                     else '{}'::jsonb end)),
          updated_at = now()
    where id = p_report
   returning * into r;
