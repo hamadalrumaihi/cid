@@ -70,9 +70,23 @@ membership/joint/announcement RPCs; readable by one owner UUID),
 SELECT is audience-scoped: 'all', own division, 'command' for command,
 'members' for mentioned users, author, command/owner oversight),
 `membership_requests` (one per applicant; INACTIVE applicant inserts/edits
-own form fields, decision columns trigger-frozen, `internal_decision_note`
-column-revoked — command reads via `admin_membership_requests()`) +
-append-only `membership_request_history` (definer-RPC writes only),
+own form fields — since v1.16 every normal CID role is requestable
+(detective … director; Owner is a flag, not a role; JTF still CHECK-blocked) —
+decision columns trigger-frozen, `internal_decision_note` column-revoked —
+command reads via `admin_membership_requests()`) + append-only
+`membership_request_history` (definer-RPC writes only),
+`role_events` (append-only assignment history; v1.16 adds `reason`,
+`source` — membership_approval / role_change / transfer / activation — and
+`source_id` linking back to the request/transfer, making the latest event
+the member's assignment-provenance record; SELECT command/owner only),
+`transfer_requests` (v1.16 two-sided department-move workflow:
+`pending_source → pending_target → approved → completed` plus
+rejected/cancelled; one open transfer per member via a partial unique
+index; SELECT is **bureau-scoped**, not command-wide — the target officer,
+the requester, Bureau Leads of the source/destination bureaus, and Deputy
+Director+/Owner; an unrelated bureau's Lead sees no rows, counts, or
+realtime events; ALL writes via the `*_transfer` definer RPCs — see
+[Ch. 7](07-api.md)),
 `app_secrets` (RLS on, **zero policies** = invisible to all client roles —
 deliberate), `security_test_runs` (v1.14: **all client grants revoked** —
 written only by `security_test_report()` from the rls-test fixture suites,

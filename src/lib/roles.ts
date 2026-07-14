@@ -58,3 +58,102 @@ export const meIsCommand = (me?: { active?: boolean | null; role?: string | null
 /** @deprecated role-only check kept for existing imports — prefer meIsCommand
  *  (active-aware) for anything that gates UI. */
 export const isCommand = isCommandRole
+
+// ---------------------------------------------------------------------------
+// Unified role/department policy — the client mirror of the server matrix in
+// private.can_assign_cid_role() (20260718010000_unified_role_policy.sql).
+// UX filtering only; RLS/RPCs remain the authority. Keep the two in lockstep.
+// ---------------------------------------------------------------------------
+
+/** Permanent CID departments. JTF is deliberately absent: it is a temporary
+ *  joint-case designation (and the pre-approval profile default), never a
+ *  permanent home — the server rejects it in every assignment path. */
+export const PERMANENT_BUREAUS = ['LSB', 'BCB', 'SAB'] as const
+export type PermanentBureau = (typeof PERMANENT_BUREAUS)[number]
+
+/** Minimal actor/target shape shared by profiles and roster rows. */
+export interface RoleParty {
+  id?: string | null
+  role?: string | null
+  division?: string | null
+  active?: boolean | null
+  is_owner?: boolean | null
+}
+
+/** Every role an applicant may REQUEST at signup. Requesting grants nothing —
+ *  an authorized reviewer decides. Owner is a flag, not an app_role, so it can
+ *  never appear here. */
+export const getRequestableRoles = (domain: 'cid' | 'doj' | 'judiciary' = 'cid') =>
+  domain === 'cid' ? ROLE_ORDER : ([] as readonly string[])
+
+/** Valid permanent departments for a CID role (DOJ/Judiciary identities do not
+ *  use profiles.division — justice authority lives in justice_memberships). */
+export const getValidDepartments = (_role?: string | null, domain: 'cid' | 'doj' | 'judiciary' = 'cid') =>
+  domain === 'cid' ? PERMANENT_BUREAUS : ([] as readonly string[])
+
+/** May `actor` assign/approve `finalRole` in `bureau`? Mirrors the server
+ *  matrix: Det/Sr Det ← Bureau Lead of that bureau or higher; Bureau Lead ←
+ *  DD+; Deputy Director ← Director+; Director ← Owner. */
+export const canAssignCidRole = (
+  actor: RoleParty | null | undefined, finalRole: string, bureau: string,
+): boolean => {
+  if (!actor) return false
+  // Unknown/retired roles (and "owner", which is a flag, not a role) are
+  // never assignable — not even by the Owner.
+  if (!(ROLE_ORDER as readonly string[]).includes(finalRole)) return false
+  if (actor.is_owner && actor.active) return true
+  if (!actor.active) return false
+  switch (finalRole) {
+    case 'detective':
+    case 'senior_detective':
+      return (actor.role === 'bureau_lead' && actor.division === bureau)
+        || actor.role === 'deputy_director' || actor.role === 'director'
+    case 'bureau_lead':
+      return actor.role === 'deputy_director' || actor.role === 'director'
+    case 'deputy_director':
+      return actor.role === 'director'
+    default:
+      return false // director requires Owner; unknown/retired roles never assignable
+  }
+}
+
+/** May `actor` approve a membership request into (`requestedRole`, `bureau`)? */
+export const canApproveRequestedRole = canAssignCidRole
+
+/** May `actor` change `target`'s role to `newRole` (same department)? Needs
+ *  matrix authority over BOTH the old and the new role; never yourself. */
+export const canChangeRole = (
+  actor: RoleParty | null | undefined, target: RoleParty, newRole: string,
+): boolean =>
+  !!actor && actor.id !== target.id
+  && (PERMANENT_BUREAUS as readonly string[]).includes(target.division ?? '')
+  && newRole !== target.role
+  && canAssignCidRole(actor, target.role ?? '', target.division ?? '')
+  && canAssignCidRole(actor, newRole, target.division ?? '')
+
+/** Roles `actor` could move `target` to right now (UI options). */
+export const getAssignableRoles = (actor: RoleParty | null | undefined, target: RoleParty) =>
+  ROLE_ORDER.filter((r) => canChangeRole(actor, target, r))
+
+/** May `actor` INITIATE a transfer of `target` from `source` to `destination`?
+ *  A Bureau Lead may only initiate for rank-and-file members when one side is
+ *  their own bureau (the other bureau still approves); DD+ and Owner may
+ *  initiate any move between permanent bureaus. Never yourself. */
+export const canTransfer = (
+  actor: RoleParty | null | undefined, target: RoleParty, source: string, destination: string,
+): boolean => {
+  if (!actor || !actor.active || actor.id === target.id) return false
+  const perm = PERMANENT_BUREAUS as readonly string[]
+  if (!perm.includes(source) || !perm.includes(destination) || source === destination) return false
+  if (actor.is_owner || actor.role === 'deputy_director' || actor.role === 'director') return true
+  if (actor.role !== 'bureau_lead') return false
+  if (isCommandRole(target.role)) return false
+  return actor.division === source || actor.division === destination
+}
+
+/** May `actor` decide (approve/reject) the given SIDE of a pending transfer?
+ *  Bureau Lead of that bureau, or Deputy Director or higher, or Owner. */
+export const canDecideTransferSide = (actor: RoleParty | null | undefined, bureau: string): boolean =>
+  !!actor && ((!!actor.is_owner && !!actor.active)
+    || (!!actor.active && ((actor.role === 'bureau_lead' && actor.division === bureau)
+      || actor.role === 'deputy_director' || actor.role === 'director')))

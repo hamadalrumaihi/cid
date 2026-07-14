@@ -15,7 +15,7 @@ import { useAuth } from '@/lib/auth'
 import { notify } from '@/lib/notify'
 import { officerName, type RosterProfile, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
-import { ROLE_LABEL, ROLE_ORDER, SUBMIT_ROLES, bureauLabel, roleLabel } from '@/lib/roles'
+import { PERMANENT_BUREAUS, ROLE_LABEL, ROLE_ORDER, bureauLabel, canApproveRequestedRole, roleLabel, type RoleParty } from '@/lib/roles'
 import { signoffLabel, signoffTint } from '@/lib/signoff'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
@@ -32,7 +32,7 @@ type Role = RequestRow['requested_role']
 type Decision = 'approve' | 'approve_with_changes' | 'request_correction' | 'reject'
 
 /** JTF is never a final assignment offered here — same list the applicant saw. */
-const FINAL_BUREAUS: Bureau[] = ['LSB', 'BCB', 'SAB']
+const FINAL_BUREAUS = PERMANENT_BUREAUS as readonly Bureau[]
 
 const TITLE: Record<Decision, string> = {
   approve: 'Approve as Requested',
@@ -108,20 +108,29 @@ function DecisionModal({ req, kind, onClose, onDone }: {
   onDone: () => void
 }) {
   const { profile, isOwner } = useAuth()
-  // Client mirror of the server rule: a bureau lead (who is not the owner)
-  // assigns into their own division only, and cannot grant command roles.
-  const leadLocked = profile?.role === 'bureau_lead' && !isOwner
-  const [bureau, setBureau] = useState<Bureau>(leadLocked ? ((profile?.division as Bureau) ?? req.requested_bureau) : req.requested_bureau)
+  // Client mirror of the server authority matrix (can_assign_cid_role): the
+  // options offered are exactly the (bureau, role) pairs this reviewer may
+  // grant. The RPC re-validates, so this is UX only.
+  const actor: RoleParty = { ...(profile ?? {}), is_owner: isOwner || profile?.is_owner }
+  const grantableBureaus = FINAL_BUREAUS.filter((b) =>
+    (ROLE_ORDER as readonly string[]).some((r) => canApproveRequestedRole(actor, r, b)))
+  const [bureau, setBureau] = useState<Bureau>(
+    grantableBureaus.includes(req.requested_bureau) ? req.requested_bureau : (grantableBureaus[0] ?? req.requested_bureau))
+  const roleOptions = (ROLE_ORDER as readonly string[]).filter((r) => canApproveRequestedRole(actor, r, bureau))
   const [role, setRole] = useState<Role>(req.requested_role)
+  const effectiveRole = roleOptions.includes(role) ? role : ((roleOptions[0] ?? role) as Role)
   const [note, setNote] = useState('')
   const [internal, setInternal] = useState('')
   const [busy, setBusy] = useState(false)
 
   const approving = kind === 'approve' || kind === 'approve_with_changes'
-  const needsNote = kind === 'request_correction' || kind === 'reject'
   const finalBureau = kind === 'approve' ? req.requested_bureau : bureau
-  const finalRole = kind === 'approve' ? req.requested_role : role
-  const roleOptions = leadLocked ? (SUBMIT_ROLES as readonly string[]) : (ROLE_ORDER as readonly string[])
+  const finalRole = kind === 'approve' ? req.requested_role : (effectiveRole as Role)
+  const changed = approving && (finalBureau !== req.requested_bureau || finalRole !== req.requested_role)
+  // Corrections/rejections always need a note; so does any approval that
+  // differs from the request (the server refuses a change without a reason).
+  const needsNote = kind === 'request_correction' || kind === 'reject' || changed
+  const cannotApprove = approving && !canApproveRequestedRole(actor, finalRole, finalBureau)
 
   const run = async () => {
     if (needsNote && !note.trim()) { toast('A note to the applicant is required.', 'warn'); return }
@@ -150,18 +159,16 @@ function DecisionModal({ req, kind, onClose, onDone }: {
 
         {kind === 'approve_with_changes' && (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <Field label="Final Department" required hint={leadLocked ? 'Locked to your division (bureau lead).' : undefined}>
+            <Field label="Final Department" required hint="Options are limited to departments you may assign into.">
               {(id) => (
-                <Select id={id} value={bureau} disabled={leadLocked} onChange={(e) => setBureau(e.target.value as Bureau)}>
-                  {leadLocked
-                    ? <option value={bureau}>{bureauLabel(bureau)}</option>
-                    : FINAL_BUREAUS.map((b) => <option key={b} value={b}>{bureauLabel(b)}</option>)}
+                <Select id={id} value={bureau} onChange={(e) => setBureau(e.target.value as Bureau)}>
+                  {grantableBureaus.map((b) => <option key={b} value={b}>{bureauLabel(b)}</option>)}
                 </Select>
               )}
             </Field>
-            <Field label="Final Role" required>
+            <Field label="Final Role" required hint="Options are limited to roles you may grant here.">
               {(id) => (
-                <Select id={id} value={role} onChange={(e) => setRole(e.target.value as Role)}>
+                <Select id={id} value={effectiveRole} onChange={(e) => setRole(e.target.value as Role)}>
                   {roleOptions.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
                 </Select>
               )}
@@ -169,10 +176,23 @@ function DecisionModal({ req, kind, onClose, onDone }: {
           </div>
         )}
 
-        {needsNote && (
+        {cannotApprove && (
+          <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
+            Granting {roleLabel(finalRole)} in {bureauLabel(finalBureau)} requires higher authority
+            (Detective/Senior Detective — Bureau Lead of that bureau or higher; Bureau Lead — Deputy
+            Director or higher; Deputy Director — Director; Director — Owner). Use “Approve with
+            Changes” for an assignment within your authority, or leave it for higher command.
+          </p>
+        )}
+
+        {(needsNote || kind === 'approve_with_changes') && (
           <div className="mt-4 space-y-3">
-            <Field label={kind === 'reject' ? 'Reason shown to applicant' : 'Note to applicant'} required>
-              {(id) => <Textarea id={id} rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={kind === 'reject' ? 'Why this request is being rejected' : 'What needs to be corrected before resubmitting'} />}
+            <Field
+              label={kind === 'reject' ? 'Reason shown to applicant'
+                : changed ? 'Reason for the change (shown to applicant)' : 'Note to applicant'}
+              required={needsNote}
+            >
+              {(id) => <Textarea id={id} rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={kind === 'reject' ? 'Why this request is being rejected' : changed ? 'Why the assignment differs from what was requested' : 'What needs to be corrected before resubmitting'} />}
             </Field>
             <Field label="Internal note (Command only)">
               {(id) => <Textarea id={id} rows={2} value={internal} onChange={(e) => setInternal(e.target.value)} />}
@@ -182,7 +202,7 @@ function DecisionModal({ req, kind, onClose, onDone }: {
 
         <div className="mt-5 flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant={kind === 'reject' ? 'danger' : 'primary'} disabled={busy || (needsNote && !note.trim())} onClick={() => void run()}>
+          <Button variant={kind === 'reject' ? 'danger' : 'primary'} disabled={busy || cannotApprove || (needsNote && !note.trim())} onClick={() => void run()}>
             {CONFIRM[kind]}
           </Button>
         </div>
@@ -232,7 +252,8 @@ export function ApprovalQueue() {
   const reviews = cases.filter((c) => canReviewCase(c, profile))
 
   const approve = async (p: RosterProfile) => {
-    const res = await rpc('assign_member', { target: p.id, new_role: p.role, new_division: p.division, set_active: true })
+    // Activation-only since v1.16 — role/division stay exactly as they are.
+    const res = await rpc('assign_member', { target: p.id, set_active: true })
     if (res.error) { toast(`Approve failed: ${res.error.message}`, 'danger'); return }
     toast(`${p.display_name} approved for access`, 'success')
     void notify(p.id, 'member_approved', { detective: profile?.display_name || 'Command', reason: 'Your CID access has been approved — welcome aboard.' })

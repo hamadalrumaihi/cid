@@ -151,23 +151,27 @@ describe.skipIf(!enabled)('DOJ legal review — RLS/RPC security wall (live)', (
     expect(rev.error).not.toBeNull()
   })
 
-  it('ADA does not gain CID authority (no roster, no cases, no assign_member)', async () => {
+  it('ADA does not gain CID authority (no roster, no cases, no member management)', async () => {
     const cases = await adaLsb.from('cases').select('id').limit(3)
     expect(cases.data ?? []).toHaveLength(0)
     const roster = await adaLsb.from('profiles').select('id')
     expect((roster.data ?? []).length).toBeLessThanOrEqual(1) // self only
-    const am = await adaLsb.rpc('assign_member', { target: ids.lsb, new_role: 'director', new_division: 'LSB', set_active: true })
+    const am = await adaLsb.rpc('assign_member', { target: ids.lsb, set_active: true })
     expect(am.error).not.toBeNull()
+    const cr = await adaLsb.rpc('change_member_role', { p_target: ids.lsb, p_new_role: 'director', p_reason: '[rls-test] must fail' })
+    expect(cr.error).not.toBeNull()
   })
 
   it('DA does not gain CID Director authority', async () => {
-    const am = await da.rpc('assign_member', { target: ids.lsb, new_role: 'director', new_division: 'LSB', set_active: true })
-    expect(am.error).not.toBeNull()
+    const cr = await da.rpc('change_member_role', { p_target: ids.lsb, p_new_role: 'director', p_reason: '[rls-test] must fail' })
+    expect(cr.error).not.toBeNull()
+    const tr = await da.rpc('request_transfer', { p_target: ids.lsb, p_to_bureau: 'BCB', p_reason: '[rls-test] must fail' })
+    expect(tr.error).not.toBeNull()
   })
 
   it('AG does not gain CID Director authority', async () => {
-    const am = await ag.rpc('assign_member', { target: ids.lsb, new_role: 'director', new_division: 'LSB', set_active: true })
-    expect(am.error).not.toBeNull()
+    const cr = await ag.rpc('change_member_role', { p_target: ids.lsb, p_new_role: 'director', p_reason: '[rls-test] must fail' })
+    expect(cr.error).not.toBeNull()
   })
 
   it('a Judge gains neither DOJ prosecutor authority nor membership-review authority', async () => {

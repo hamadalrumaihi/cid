@@ -17,5 +17,5 @@
 | CSP (`next.config.ts`) | PDF export (WASM), Supabase REST+WSS, FiveManage, Discord | The allow-lists are exact |
 | `docs/USER-GUIDE.md` | Regenerate `guideContent.ts` | Dual-copy system |
 | An environment variable | `vercel.json` AND `.github/workflows/ci.yml` | Duplicated values must agree; `NEXT_PUBLIC_` values need a rebuild |
-| A user's role (data, not code) | Their bureau/active flags via the Roster screen only | `assign_member` RPC is the sole write path (trigger-enforced) |
+| A user's role (data, not code) | The audited RPCs only: `change_member_role` (rank), the `*_transfer` workflow (department), `assign_member` (activation) | `profiles.role/division/active/is_owner/removed_at` are trigger-frozen against every direct client write |
 | Component props on a shared UI primitive | All call sites (grep the import) — especially `Modal`'s `dirty`/`onClose` contract | Focus/scroll/discard behavior is relied on everywhere |

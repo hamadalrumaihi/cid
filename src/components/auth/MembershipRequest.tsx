@@ -11,7 +11,7 @@ import { useAuth } from '@/lib/auth'
 import { insert, list, rpc, update } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { useTableVersion } from '@/lib/realtime'
-import { BUREAUS, ROLE_LABEL, bureauLabel, roleLabel } from '@/lib/roles'
+import { BUREAUS, PERMANENT_BUREAUS, ROLE_LABEL, ROLE_ORDER, bureauLabel, getRequestableRoles, getValidDepartments, roleLabel } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { uiConfirm } from '@/components/ui/dialog'
@@ -23,9 +23,12 @@ type RequestRow = Tables<'membership_requests'>
  *  clients, so a default select('*') (incl. insert/update returning) is a
  *  PostgREST 42501 for every applicant. */
 const MR_COLS = 'id,applicant_id,display_name,badge_number,requested_bureau,requested_role,reason,additional_notes,status,decided_bureau,decided_role,applicant_visible_decision_note,decided_by,decided_at,submitted_at,created_at,updated_at'
-/** JTF is never offered to applicants (CHECK-enforced server-side too). */
-const APPLICANT_BUREAUS = ['LSB', 'BCB', 'SAB'] as const
-const APPLICANT_ROLES = ['detective', 'senior_detective'] as const
+/** Shared policy lists (roles.ts) — every normal CID role is requestable
+ *  (requesting grants nothing; an authorized reviewer decides). Owner is a
+ *  flag, not a role, so it can never appear. JTF is never offered
+ *  (CHECK-enforced server-side too). */
+const APPLICANT_BUREAUS = getValidDepartments() as typeof PERMANENT_BUREAUS
+const APPLICANT_ROLES = getRequestableRoles('cid') as typeof ROLE_ORDER
 type ApplicantBureau = (typeof APPLICANT_BUREAUS)[number]
 type ApplicantRole = (typeof APPLICANT_ROLES)[number]
 
@@ -62,7 +65,22 @@ export function MembershipRequest() {
   const [form, setForm] = useState<FormState>({
     display_name: '', badge_number: '', requested_bureau: 'LSB', requested_role: 'detective', reason: '', additional_notes: '',
   })
+  const [approverName, setApproverName] = useState<string | null>(null)
   const v = useTableVersion('membership_requests')
+
+  // Resolve the approver's name for the approved panel. Only possible once the
+  // decision activated the account (an inactive applicant can't read the
+  // roster) — failures just leave the em-dash.
+  useEffect(() => {
+    const decidedBy = req?.decided_by
+    if (!decidedBy || !(req?.status === 'approved' || req?.status === 'approved_with_changes')) return
+    void (async () => {
+      try {
+        const rows = await list('profiles', { eq: { id: decidedBy }, select: 'id,display_name' })
+        setApproverName(rows[0]?.display_name ?? null)
+      } catch { /* still pending activation propagation */ }
+    })()
+  }, [req?.decided_by, req?.status])
 
   const load = useCallback(async () => {
     if (!uid) return
@@ -87,7 +105,7 @@ export function MembershipRequest() {
       display_name: req?.display_name ?? profile?.display_name ?? '',
       badge_number: req?.badge_number ?? profile?.badge_number ?? '',
       requested_bureau: (APPLICANT_BUREAUS as readonly string[]).includes(req?.requested_bureau ?? '') ? (req!.requested_bureau as ApplicantBureau) : 'LSB',
-      requested_role: req?.requested_role === 'senior_detective' ? 'senior_detective' : 'detective',
+      requested_role: (APPLICANT_ROLES as readonly string[]).includes(req?.requested_role ?? '') ? (req!.requested_role as ApplicantRole) : 'detective',
       reason: req?.reason ?? '',
       additional_notes: req?.additional_notes ?? '',
     })
@@ -184,12 +202,21 @@ export function MembershipRequest() {
           Your membership request was approved{status === 'approved_with_changes' ? ' with changes' : ''}. Reload to enter the portal.
         </div>
         <div className="space-y-1.5 rounded-lg border border-white/10 bg-ink-950/50 p-4">
-          <InfoRow label="Requested" value={`${bureauLabel(req!.requested_bureau)} · ${roleLabel(req!.requested_role)}`} />
-          <InfoRow label="Assigned" value={`${bureauLabel(req!.decided_bureau)} · ${roleLabel(req!.decided_role)}`} />
+          <InfoRow label="Requested role" value={roleLabel(req!.requested_role)} />
+          <InfoRow label="Requested department" value={bureauLabel(req!.requested_bureau)} />
+          <InfoRow label="Approved role" value={roleLabel(req!.decided_role)} />
+          <InfoRow label="Approved department" value={bureauLabel(req!.decided_bureau)} />
+          <InfoRow label="Approved by" value={approverName || '—'} />
+          <InfoRow label="Effective date" value={req?.decided_at ? new Date(req.decided_at).toLocaleString() : '—'} />
         </div>
         {req?.applicant_visible_decision_note && (
           <p className="text-sm text-slate-400">Note from Command: {req.applicant_visible_decision_note}</p>
         )}
+        <p className="text-xs text-slate-500">
+          Your assigned role and department stay in effect until an authorized transfer,
+          promotion, or demotion is completed — submitting another request or editing your
+          profile cannot change them.
+        </p>
         <Button variant="primary" className="w-full" onClick={() => void refresh()}>Reload</Button>
       </div>
     )
@@ -251,13 +278,19 @@ export function MembershipRequest() {
           Your account has not been approved yet. Submit your department request so Command can verify your assignment.
         </p>
       )}
+      <div className="rounded-lg border border-white/10 bg-ink-950/50 p-3 text-xs text-slate-400">
+        You are requesting a role and department. Your selection does not grant access.
+        An authorized reviewer may approve it, change it, return it, or reject it.
+        After approval, the assigned role and department remain in effect until an
+        authorized transfer, promotion, or demotion is completed.
+      </div>
       <Field label="Display Name" required>
         {(id) => <Input id={id} value={form.display_name} onChange={(e) => set('display_name', e.target.value)} placeholder="Firstname Lastname" />}
       </Field>
       <Field label="Badge Number">
         {(id) => <Input id={id} value={form.badge_number} onChange={(e) => set('badge_number', e.target.value)} placeholder="e.g. 4211" />}
       </Field>
-      <Field label="Requested Department" required>
+      <Field label="Requested Department" required hint="JTF is a temporary joint-case designation — assigned per case, not a permanent department.">
         {(id) => (
           <Select id={id} value={form.requested_bureau} onChange={(e) => set('requested_bureau', e.target.value as ApplicantBureau)}>
             {APPLICANT_BUREAUS.map((b) => <option key={b} value={b}>{b} — {BUREAUS[b]}</option>)}

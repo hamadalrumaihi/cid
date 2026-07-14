@@ -3358,6 +3358,9 @@ export type Database = {
           old_active: boolean | null
           old_division: Database["public"]["Enums"]["bureau"] | null
           old_role: Database["public"]["Enums"]["app_role"] | null
+          reason: string | null
+          source: string | null
+          source_id: string | null
           target_id: string
         }
         Insert: {
@@ -3370,6 +3373,9 @@ export type Database = {
           old_active?: boolean | null
           old_division?: Database["public"]["Enums"]["bureau"] | null
           old_role?: Database["public"]["Enums"]["app_role"] | null
+          reason?: string | null
+          source?: string | null
+          source_id?: string | null
           target_id: string
         }
         Update: {
@@ -3382,9 +3388,111 @@ export type Database = {
           old_active?: boolean | null
           old_division?: Database["public"]["Enums"]["bureau"] | null
           old_role?: Database["public"]["Enums"]["app_role"] | null
+          reason?: string | null
+          source?: string | null
+          source_id?: string | null
           target_id?: string
         }
         Relationships: []
+      }
+      transfer_requests: {
+        Row: {
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          decision_note: string | null
+          from_bureau: Database["public"]["Enums"]["bureau"]
+          from_role: Database["public"]["Enums"]["app_role"]
+          id: string
+          reason: string
+          requested_by: string
+          source_approved_at: string | null
+          source_approved_by: string | null
+          status: string
+          target_approved_at: string | null
+          target_approved_by: string | null
+          target_id: string
+          to_bureau: Database["public"]["Enums"]["bureau"]
+          to_role: Database["public"]["Enums"]["app_role"]
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          decision_note?: string | null
+          from_bureau: Database["public"]["Enums"]["bureau"]
+          from_role: Database["public"]["Enums"]["app_role"]
+          id?: string
+          reason: string
+          requested_by: string
+          source_approved_at?: string | null
+          source_approved_by?: string | null
+          status?: string
+          target_approved_at?: string | null
+          target_approved_by?: string | null
+          target_id: string
+          to_bureau: Database["public"]["Enums"]["bureau"]
+          to_role: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          decision_note?: string | null
+          from_bureau?: Database["public"]["Enums"]["bureau"]
+          from_role?: Database["public"]["Enums"]["app_role"]
+          id?: string
+          reason?: string
+          requested_by?: string
+          source_approved_at?: string | null
+          source_approved_by?: string | null
+          status?: string
+          target_approved_at?: string | null
+          target_approved_by?: string | null
+          target_id?: string
+          to_bureau?: Database["public"]["Enums"]["bureau"]
+          to_role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transfer_requests_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transfer_requests_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transfer_requests_source_approved_by_fkey"
+            columns: ["source_approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transfer_requests_target_approved_by_fkey"
+            columns: ["target_approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transfer_requests_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       security_test_runs: {
         Row: {
@@ -4127,10 +4235,54 @@ export type Database = {
       }
       assign_member: {
         Args: {
-          new_division: Database["public"]["Enums"]["bureau"]
-          new_role: Database["public"]["Enums"]["app_role"]
           set_active: boolean
           target: string
+        }
+        Returns: undefined
+      }
+      change_member_role: {
+        Args: {
+          p_new_role: Database["public"]["Enums"]["app_role"]
+          p_reason: string
+          p_target: string
+        }
+        Returns: Database["public"]["Tables"]["profiles"]["Row"]
+      }
+      request_transfer: {
+        Args: {
+          p_reason: string
+          p_target: string
+          p_to_bureau: Database["public"]["Enums"]["bureau"]
+          p_to_role?: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: Database["public"]["Tables"]["transfer_requests"]["Row"]
+      }
+      approve_transfer_source: {
+        Args: { p_id: string; p_note?: string }
+        Returns: Database["public"]["Tables"]["transfer_requests"]["Row"]
+      }
+      approve_transfer_target: {
+        Args: { p_id: string; p_note?: string }
+        Returns: Database["public"]["Tables"]["transfer_requests"]["Row"]
+      }
+      complete_transfer: {
+        Args: { p_id: string }
+        Returns: Database["public"]["Tables"]["transfer_requests"]["Row"]
+      }
+      reject_transfer: {
+        Args: { p_id: string; p_note?: string }
+        Returns: Database["public"]["Tables"]["transfer_requests"]["Row"]
+      }
+      cancel_transfer: {
+        Args: { p_id: string }
+        Returns: Database["public"]["Tables"]["transfer_requests"]["Row"]
+      }
+      rls_test_reset_member: {
+        Args: {
+          p_active: boolean
+          p_division: Database["public"]["Enums"]["bureau"]
+          p_role: Database["public"]["Enums"]["app_role"]
+          p_target: string
         }
         Returns: undefined
       }

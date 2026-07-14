@@ -1,24 +1,30 @@
 'use client'
 
-/** Manage Officer modal — vanilla app.js openAssignModal(). Role/bureau/active
- *  go through the SECURITY DEFINER assign_member RPC (the client never patches
- *  profiles.role); name/badge and command-set LOA are plain profile updates
- *  via updateNoSelect. Danger zone: permanent removal via admin_remove_member
- *  (self-removal blocked). Mounted fresh per open. */
+/** Manage Officer modal. Since v1.16 the administrative actions are separated:
+ *  "Save profile details" writes only display fields (name/badge/LOA);
+ *  role changes go through the audited change_member_role RPC (reason
+ *  required, authority matrix enforced server-side); department moves go
+ *  through the transfer workflow (request_transfer — cross-bureau needs
+ *  source+target approval unless higher command completes it); activation is
+ *  the narrowed assign_member; danger zone: deny/restore login and permanent
+ *  removal. A changed dropdown never silently changes anything — every
+ *  privileged action shows a summary and needs an explicit confirm, and the
+ *  database freezes profiles.role/division/active against direct writes. */
 import { useState } from 'react'
-import type { Database } from '@/lib/database.types'
 import { rpc, updateNoSelect } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import type { RosterProfile } from '@/lib/profiles'
-import { ROLE_ORDER, ROLE_LABEL, isCommandRole } from '@/lib/roles'
+import {
+  PERMANENT_BUREAUS, ROLE_LABEL, bureauLabel, canTransfer,
+  getAssignableRoles, isCommandRole, roleLabel, type RoleParty,
+} from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
+import { Field, Select, Textarea } from '@/components/ui/Field'
 
-type AppRole = Database['public']['Enums']['app_role']
-type Bureau = Database['public']['Enums']['bureau']
-
-const BUREAU_KEYS: Bureau[] = ['LSB', 'BCB', 'SAB', 'JTF']
+type Bureau = (typeof PERMANENT_BUREAUS)[number]
 
 interface AssignModalProps {
   p: RosterProfile
@@ -29,47 +35,102 @@ interface AssignModalProps {
 }
 
 export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) {
-  const { profile: me } = useAuth()
+  const { profile: me, isOwner } = useAuth()
+  const actor: RoleParty = { ...(me ?? {}), is_owner: isOwner || me?.is_owner }
   const [name, setName] = useState(p.display_name || '')
   const [badge, setBadge] = useState(p.badge_number || '')
-  const [role, setRole] = useState<string>(p.role)
-  const [bureau, setBureau] = useState<string>(p.division || 'LSB')
-  const [active, setActive] = useState(!!p.active)
   const [loa, setLoa] = useState(!!p.loa)
+  // Which privileged action panel is open (never more than one).
+  const [panel, setPanel] = useState<'role' | 'transfer' | null>(null)
+  const [newRole, setNewRole] = useState('')
+  const [toBureau, setToBureau] = useState<Bureau | ''>('')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
 
-  const save = async () => {
-    const res = await rpc('assign_member', { target: p.id, new_role: role as AppRole, new_division: bureau as Bureau, set_active: active })
-    if (res.error) { toast(`Update failed: ${res.error.message}`, 'danger'); return }
+  const roleOptions = getAssignableRoles(actor, p)
+  const transferDestinations = (PERMANENT_BUREAUS as readonly Bureau[])
+    .filter((b) => canTransfer(actor, p, p.division ?? '', b))
+  const hasPermanentBureau = (PERMANENT_BUREAUS as readonly string[]).includes(p.division ?? '')
+
+  const openPanel = (which: 'role' | 'transfer') => {
+    setPanel(panel === which ? null : which)
+    setNewRole('')
+    setToBureau('')
+    setReason('')
+  }
+
+  const saveProfile = async () => {
     const nm = name.trim(), bd = badge.trim()
-    if (nm !== (p.display_name || '') || bd !== (p.badge_number || '')) {
-      const pr = await updateNoSelect('profiles', p.id, { display_name: nm || p.display_name, badge_number: bd || null })
-      if (pr.error) toast(`Name/badge save failed: ${pr.error.message}`, 'warn')
-    }
-    if (loa !== !!p.loa) {
-      const lr = await updateNoSelect('profiles', p.id, { loa, loa_since: loa ? new Date().toISOString() : null })
-      if (lr.error) toast(`Role saved; LOA update failed: ${lr.error.message}`, 'warn')
-    }
-    toast('Member updated', 'success')
+    const changes: Record<string, unknown> = {}
+    if (nm !== (p.display_name || '')) changes.display_name = nm || p.display_name
+    if (bd !== (p.badge_number || '')) changes.badge_number = bd || null
+    if (loa !== !!p.loa) { changes.loa = loa; changes.loa_since = loa ? new Date().toISOString() : null }
+    if (!Object.keys(changes).length) { toast('No profile changes to save.', 'info'); return }
+    const res = await updateNoSelect('profiles', p.id, changes)
+    if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
+    toast('Profile details saved', 'success')
     onChanged()
-    onClose()
+  }
+
+  const changeRole = async () => {
+    if (!newRole || !reason.trim()) { toast('Pick the new role and give a reason.', 'warn'); return }
+    const ok = await uiConfirm(
+      `${p.display_name}: ${roleLabel(p.role)} · ${p.division} → ${roleLabel(newRole)} · ${p.division}\n\nReason: ${reason.trim()}\n\nThe change is recorded in the role history and the officer is notified.`,
+      { title: 'Confirm role change', confirmText: 'Change role' },
+    )
+    if (!ok) return
+    setBusy(true)
+    const res = await rpc('change_member_role', { p_target: p.id, p_new_role: newRole as never, p_reason: reason.trim() })
+    setBusy(false)
+    if (res.error) { toast(`Role change failed: ${res.error.message}`, 'danger'); return }
+    toast(`${p.display_name} is now ${roleLabel(newRole)}`, 'success')
+    onChanged(); onClose()
+  }
+
+  const requestTransfer = async () => {
+    if (!toBureau || !reason.trim()) { toast('Pick the destination and give a reason.', 'warn'); return }
+    const ok = await uiConfirm(
+      `${p.display_name}: ${roleLabel(p.role)} · ${p.division} → ${roleLabel(p.role)} · ${toBureau}\n\nReason: ${reason.trim()}\n\nCross-bureau transfers need the source and destination Bureau Leads to approve (Deputy Director+ can complete directly). The officer and both bureaus are notified.`,
+      { title: 'Confirm transfer request', confirmText: 'Request transfer' },
+    )
+    if (!ok) return
+    setBusy(true)
+    const res = await rpc('request_transfer', { p_target: p.id, p_to_bureau: toBureau as never, p_reason: reason.trim() })
+    setBusy(false)
+    if (res.error) { toast(`Transfer request failed: ${res.error.message}`, 'danger'); return }
+    toast(`Transfer to ${toBureau} requested for ${p.display_name}`, 'success')
+    onChanged(); onClose()
+  }
+
+  const setActive = async (next: boolean) => {
+    const ok = await uiConfirm(
+      next
+        ? `Activate ${p.display_name}? They keep their saved role (${roleLabel(p.role)}) and department (${p.division}).`
+        : `Deactivate ${p.display_name}? They lose portal access until reactivated; role and department are kept.`,
+      { confirmText: next ? 'Activate' : 'Deactivate', danger: !next },
+    )
+    if (!ok) return
+    const res = await rpc('assign_member', { target: p.id, set_active: next })
+    if (res.error) { toast(`Update failed: ${res.error.message}`, 'danger'); return }
+    toast(next ? `${p.display_name} activated` : `${p.display_name} deactivated`, next ? 'success' : 'warn')
+    onChanged(); onClose()
   }
 
   // Command/Owner may deny a person portal access (app-level block) or restore
   // it. Bureau-lead scoping is enforced server-side by deny_member_login().
-  const canDenyThis = !!me && (me.is_owner || (isCommandRole(me.role) && !p.is_owner && me.id !== p.id))
+  const canDenyThis = !!me && (actor.is_owner || (isCommandRole(me.role) && !p.is_owner && me.id !== p.id))
 
   const denyLogin = async () => {
     if (me && me.id === p.id) { toast('You cannot deny your own login.', 'warn'); return }
-    const reason = await uiPrompt(
+    const reasonTxt = await uiPrompt(
       `Deny ${p.display_name || 'this member'} access to the CID Portal?\n\nThey can still sign in but will see an "Access denied" screen with your reason and cannot submit a membership request. This is reversible.`,
       { title: 'Deny login', placeholder: 'Reason shown to the member (optional)', confirmText: 'Deny access' },
     )
-    if (reason === null) return
-    const res = await rpc('deny_member_login', { p_target: p.id, p_reason: reason })
+    if (reasonTxt === null) return
+    const res = await rpc('deny_member_login', { p_target: p.id, p_reason: reasonTxt })
     if (res.error) { toast(`Deny failed: ${res.error.message}`, 'danger'); return }
     toast(`${p.display_name || 'Member'} denied access`, 'warn')
-    onChanged()
-    onClose()
+    onChanged(); onClose()
   }
 
   const restoreLogin = async () => {
@@ -81,8 +142,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
     const res = await rpc('restore_member_login', { p_target: p.id })
     if (res.error) { toast(`Restore failed: ${res.error.message}`, 'danger'); return }
     toast(`${p.display_name || 'Member'} access restored`, 'success')
-    onChanged()
-    onClose()
+    onChanged(); onClose()
   }
 
   const removePermanently = async () => {
@@ -95,19 +155,28 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
     const res = await rpc('admin_remove_member', { p_target: p.id })
     if (res.error) { toast(`Remove failed: ${res.error.message}`, 'danger'); return }
     toast(`${p.display_name || 'Member'} permanently removed`, 'warn')
-    onChanged()
-    onClose()
+    onChanged(); onClose()
   }
 
   const dirty = () =>
     name.trim() !== (p.display_name || '') || badge.trim() !== (p.badge_number || '') ||
-    role !== p.role || bureau !== (p.division || 'LSB') || active !== !!p.active || loa !== !!p.loa
+    loa !== !!p.loa || !!reason.trim()
 
   return (
     <Modal open onClose={onClose} dirty={dirty}>
       <div className="p-6">
         <ModalHeader title="Manage Officer" onClose={onClose} />
         <p className="mb-3 text-[11px] text-slate-500">{email}</p>
+
+        {/* Current authoritative assignment — read-only; changes go through the
+            audited actions below, never a silent dropdown save. */}
+        <div className="mb-4 grid grid-cols-2 gap-x-6 gap-y-1 rounded-xl border border-white/10 bg-ink-950/50 p-3 text-xs">
+          <p className="text-slate-400">Current Role <span className="block text-sm text-slate-100">{roleLabel(p.role)}</span></p>
+          <p className="text-slate-400">Current Department <span className="block text-sm text-slate-100">{hasPermanentBureau ? `${p.division} — ${bureauLabel(p.division)}` : 'Unassigned (pending approval)'}</span></p>
+          <p className="text-slate-400">Active <span className="block text-sm text-slate-100">{p.active ? 'Yes' : 'No'}</span></p>
+          <p className="text-slate-400">On LOA <span className="block text-sm text-slate-100">{p.loa ? 'Yes' : 'No'}</span></p>
+        </div>
+
         <div className="mb-3 grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-400">Display Name</label>
@@ -118,29 +187,76 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
             <input value={badge} onChange={(e) => setBadge(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 font-mono text-sm text-white outline-none focus:border-badge-500" />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-400">Role</label>
-            <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">
-              {ROLE_ORDER.map((r) => <option key={r} value={r}>{ROLE_LABEL[r] || r}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-400">Bureau</label>
-            <select value={bureau} onChange={(e) => setBureau(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">
-              {BUREAU_KEYS.map((b) => <option key={b}>{b}</option>)}
-            </select>
-          </div>
-        </div>
-        <label className="mt-3 flex items-center gap-2 text-sm text-slate-200">
-          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="accent-emerald-500" /> Active (approved for access)
-        </label>
-        <label className="mt-2 flex items-center gap-2 text-sm text-slate-200">
+        <label className="flex items-center gap-2 text-sm text-slate-200">
           <input type="checkbox" checked={loa} onChange={(e) => setLoa(e.target.checked)} className="accent-amber-500" /> On LOA (Leave of Absence) — informational; auto-routes sign-offs around this officer
         </label>
-        <button onClick={() => void save()} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
-          Save
-        </button>
+        <Button className="mt-3 w-full" onClick={() => void saveProfile()}>Save profile details</Button>
+
+        <div className="mt-4 border-t border-white/5 pt-3">
+          <p className="mb-2 text-[11px] uppercase tracking-wider text-slate-400">Administrative actions</p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" disabled={!roleOptions.length} onClick={() => openPanel('role')}
+              title={roleOptions.length ? undefined : 'No role you can grant for this member (authority matrix)'}>
+              Change role
+            </Button>
+            <Button size="sm" disabled={!transferDestinations.length} onClick={() => openPanel('transfer')}
+              title={transferDestinations.length ? undefined : hasPermanentBureau ? 'You cannot initiate a transfer for this member' : 'Member has no permanent department yet'}>
+              Transfer department
+            </Button>
+            <Button size="sm" variant={p.active ? 'danger' : 'primary'} onClick={() => void setActive(!p.active)}>
+              {p.active ? 'Deactivate' : 'Activate'}
+            </Button>
+          </div>
+
+          {panel === 'role' && (
+            <div className="mt-3 space-y-3 rounded-xl border border-badge-400/20 bg-ink-950/50 p-3">
+              <Field label="New role" required hint="Options are limited to roles you may grant (server-enforced).">
+                {(id) => (
+                  <Select id={id} value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+                    <option value="">Select…</option>
+                    {roleOptions.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+                  </Select>
+                )}
+              </Field>
+              {newRole && (
+                <p className="text-xs text-slate-300">
+                  {roleLabel(p.role)} · {p.division} → <b>{roleLabel(newRole)} · {p.division}</b>
+                </p>
+              )}
+              <Field label="Reason" required>
+                {(id) => <Textarea id={id} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Recorded in the role history and shown to the officer" />}
+              </Field>
+              <Button variant="primary" className="w-full" disabled={busy || !newRole || !reason.trim()} onClick={() => void changeRole()}>
+                Change role
+              </Button>
+            </div>
+          )}
+
+          {panel === 'transfer' && (
+            <div className="mt-3 space-y-3 rounded-xl border border-badge-400/20 bg-ink-950/50 p-3">
+              <Field label="Destination department" required hint="Cross-bureau moves need source + destination Bureau Lead approval (Deputy Director+ completes directly). JTF is never a destination.">
+                {(id) => (
+                  <Select id={id} value={toBureau} onChange={(e) => setToBureau(e.target.value as Bureau)}>
+                    <option value="">Select…</option>
+                    {transferDestinations.map((b) => <option key={b} value={b}>{b} — {bureauLabel(b)}</option>)}
+                  </Select>
+                )}
+              </Field>
+              {toBureau && (
+                <p className="text-xs text-slate-300">
+                  {roleLabel(p.role)} · {p.division} → <b>{roleLabel(p.role)} · {toBureau}</b>
+                </p>
+              )}
+              <Field label="Reason" required>
+                {(id) => <Textarea id={id} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Recorded on the transfer and shown to the officer" />}
+              </Field>
+              <Button variant="primary" className="w-full" disabled={busy || !toBureau || !reason.trim()} onClick={() => void requestTransfer()}>
+                Request transfer
+              </Button>
+            </div>
+          )}
+        </div>
+
         <div className="mt-4 border-t border-white/5 pt-3">
           <p className="mb-2 text-[11px] uppercase tracking-wider text-rose-300/70">Danger zone</p>
           {canDenyThis && (p.login_denied ? (

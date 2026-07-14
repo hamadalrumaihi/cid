@@ -6,6 +6,84 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [1.16.0] — 2026-07-13
+
+### Added — unified role & department assignment system
+- **One server-side authority matrix** (`private.can_assign_cid_role`,
+  mirrored client-side in `src/lib/roles.ts`) now governs every CID role
+  assignment — signup approval, promotion, demotion, and transfer role
+  changes: Detective/Senior Detective ← Bureau Lead of that bureau or
+  higher; Bureau Lead ← Deputy Director+; Deputy Director ← Director+;
+  Director ← Owner. Owner is a flag, never a requestable or assignable
+  role. No self-approval, self-role-change, or self-transfer anywhere.
+- **Signup now offers every normal CID role** (Detective through Director;
+  the `requested_role` CHECK was widened) with explicit wording that
+  requesting grants nothing. The approved screen shows requested vs.
+  approved role/department, the approver, and the effective date.
+- **`change_member_role(p_target, p_new_role, p_reason)`** — dedicated,
+  audited promotion/demotion RPC (same-department only; requires authority
+  over BOTH the old and new role, so demoting a Director takes the Owner;
+  reason required; writes `role_events` + `ROLE_CHANGED` audit + officer
+  notification).
+- **Officer transfers** — new `transfer_requests` workflow
+  (`pending_source → pending_target → approved → completed`, plus
+  rejected/cancelled; one open transfer per member): a Bureau Lead may
+  initiate outbound or request inbound but never take a member from
+  another bureau unilaterally; cross-bureau moves need source **and**
+  destination approval; Deputy Director+ may complete directly (recorded
+  as an override when approvals were missing). Completion applies
+  `profiles.division` atomically with `role_events` (source `transfer`),
+  `TRANSFER_*` audit rows, and notifications to the officer and both
+  bureaus' leads (test fixtures excluded from fan-out). Transfer
+  visibility is **bureau-scoped**: only the target officer, the requester,
+  the source/destination Bureau Leads, and Deputy Director+/Owner can see
+  a transfer — an unrelated bureau's Lead gets zero rows (and no counts,
+  notifications, or realtime events, which enforce the same policy).
+- **`role_events` provenance** — new `reason`, `source`
+  (membership_approval / role_change / transfer / activation) and
+  `source_id` columns make the latest event the member's authoritative
+  assignment record (no duplicate provenance columns on `profiles`).
+  Approve-with-changes, promotions, demotions, and transfers all require a
+  recorded reason.
+
+### Changed
+- **`assign_member` narrowed to activation/deactivation only** (the old
+  4-argument role/division/active signature is dropped). Manage Officer is
+  restructured into separated actions — *Save profile details*
+  (name/badge/LOA), *Change role*, *Transfer department*,
+  *Deactivate/Activate*, and the danger zone — a changed dropdown never
+  silently changes an assignment; each privileged action shows a summary
+  and requires a reason.
+- **Promotions & Transfers** (Command Center) now hosts the live transfer
+  queue (approve source/destination, complete, reject, cancel — matrix
+  gated) and the role/assignment history with reasons and sources.
+- JTF remains a temporary joint-case designation: it is no longer offered
+  as a division in Manage Officer, is rejected by every assignment RPC,
+  and stays excluded from signup (explained inline).
+
+### Security
+- **Closed a privileged-write bypass:** the `profiles_command` RLS policy
+  allowed any command member to `UPDATE profiles.role/division/active`
+  directly via PostgREST, skipping `assign_member`'s bureau-lead scoping
+  and `role_events`. A new non-definer trigger
+  (`private.block_direct_privileged_profile`, same pattern as the
+  login-denial guard) freezes `role`, `division`, `active`, `is_owner`,
+  and `removed_at` on **every** direct client write — the definer RPCs are
+  the only mutation path.
+- `private.can_announce` no longer lists the retired `supervisor`/`command`
+  roles (last disagreeing role list in the schema).
+- Live RLS coverage: rewritten Command Center block (activation-only
+  `assign_member`, direct-write freeze regression, lead scoping, two-lead
+  transfer flow, self-transfer/JTF rejections, history) + new
+  `tests/rls/v116.test.ts` (signup role range, Owner/JTF unrequestable,
+  no self-review, matrix denials per rank, reason-required, Owner approves
+  Director-final, assignment permanence, Judge has no CID authority) +
+  `src/lib/roles.test.ts` pinning the client matrix to the server's.
+- Test infra: `rls_test_reset_member` (callable only by rls-test accounts,
+  only against rls-test profiles) replaces the suites' use of the old
+  combined `assign_member`; `rls_test_cleanup` now purges
+  `transfer_requests`.
+
 ## [1.15.0] — 2026-07-13
 
 ### Added — DOJ search warrants
