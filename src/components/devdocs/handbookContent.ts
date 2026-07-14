@@ -611,11 +611,15 @@ notification each, a recipient-count preview and confirm in the composer,
 and edits never re-notify unless explicitly requested), heatmap
 (weighted layers, pan/zoom SVG map), roster (membership requests: new
 sign-ins request ONE permanent department — LSB/BCB/SAB, never JTF — plus
-a rank-and-file role from the inactive-account screen; the Approval Queue
-reviews them via \`review_membership_request()\` — approve /
-approve-with-changes / request-correction / reject — activating the
-profile only on approval; the legacy one-click \`assign_member\` approve
-remains for requestless profiles). Joint cases:
+any normal CID role (v1.16: detective … director; requesting grants
+nothing) from the inactive-account screen; the Approval Queue reviews them
+via \`review_membership_request()\` — approve / approve-with-changes (reason
+required) / request-correction / reject — under the unified authority
+matrix ([Ch. 9](09-auth.md)), activating the profile only on approval; the
+legacy one-click \`assign_member\` approve remains for requestless profiles
+(activation-only). Promotions/demotions run through \`change_member_role\`
+and department moves through the two-sided \`transfer_requests\` workflow
+— both audited with reasons). Joint cases:
 \`convert_case_to_joint()\` tags a case JTF while preserving its
 originating bureau and grants selected members temporary case-scoped
 access (joint roles, optional expiry, removable, endable) — access model
@@ -726,7 +730,12 @@ SECURITY DEFINER (run privileged, then check the caller inside) except
 | \`signoff_decide(p_case, p_decision, p_note)\` | case id, approve/deny/changes, note | updated case | CaseDetail | reviewer decision, validated against the current assignee |
 | \`signoff_owner_action(p_case, p_action)\` | case id, complete/escalate/… | updated case | CaseDetail | owner-side chain actions |
 | \`report_finalize(p_report, p_badge)\` | report id, badge | report row | CaseDetail Reports | the ONLY way to set \`finalized\`; stamps signer; since v1.14 also snapshots the sealed fields + signature into \`report_versions\` |
-| \`assign_member(target, role, division, active)\` | profile id + assignment | void | AssignModal/AdminPanel | command-checked role/bureau/activation (guard trigger blocks direct writes) |
+| \`assign_member(target, set_active)\` | profile id + flag | void | AssignModal/AdminPanel/ApprovalQueue | activation/deactivation ONLY since v1.16 (bureau-lead scoped; blocked for removed/login-denied members). Role changes and department moves have dedicated audited RPCs below |
+| \`change_member_role(p_target, p_new_role, p_reason)\` | profile id + role + reason | profile row | AssignModal (Change role) | promotion/demotion within the member's department; the unified authority matrix (\`private.can_assign_cid_role\`) requires authority over BOTH old and new role (demoting a Director takes the Owner); reason recorded in \`role_events\` + \`ROLE_CHANGED\` audit + officer notified |
+| \`request_transfer(p_target, p_to_bureau, p_reason, p_to_role?)\` | member + destination + reason | transfer row | AssignModal (Transfer department) | starts the two-sided transfer workflow; a Bureau Lead may initiate only for rank-and-file touching their own bureau; DD+/Owner initiations start pre-approved; JTF never a destination; one open transfer per member |
+| \`approve_transfer_source\` / \`approve_transfer_target(p_id, p_note?)\` | transfer id | transfer row | PromotionsTransfers | that bureau's Lead (or DD+/Owner) consents; the destination-side approval applies the move atomically (\`role_events\` source \`transfer\` + \`TRANSFER_*\` audit + notifications) |
+| \`complete_transfer(p_id)\` | transfer id | transfer row | PromotionsTransfers | DD/Director/Owner completes an open transfer directly (recorded as an override when approvals were missing) |
+| \`reject_transfer(p_id, p_note?)\` / \`cancel_transfer(p_id)\` | transfer id | transfer row | PromotionsTransfers | either side's Lead or DD+ rejects; the requester or DD+ cancels |
 | \`admin_member_emails()\` | — | roster emails | PersonnelView | command-only bypass of the email column grant |
 | \`admin_remove_member\` / \`admin_restore_member(p_target)\` | profile id | void | AdminPanel | soft remove/restore (\`removed_at\`) |
 | \`create_notification(user, type, payload)\` | recipient + payload | void | \`lib/notify.ts\` | insert for ANOTHER user with the actor stamped server-side (no forgery) |
@@ -734,7 +743,7 @@ SECURITY DEFINER (run privileged, then check the caller inside) except
 | \`report_reopen(p_report)\` | report id | report row | CaseDetail Reports | bureau-scoped seal break; prior signature kept in \`fields._reopen_log\` |
 | \`warrant_set_status(p_report, p_status)\` | report id + status | report row | CaseDetail Reports | validated warrant lifecycle; only path on sealed warrants |
 | \`membership_request_submit\` / \`_withdraw(p_request)\` | request id | request row | Gate (inactive screen) | applicant-side transitions; submit notifies command |
-| \`review_membership_request(p_request, p_decision, …)\` | decision + final dept/role + notes | request row | ApprovalQueue | command decision; activates profile ONLY on approval; role_events + history + audit atomically |
+| \`review_membership_request(p_request, p_decision, …)\` | decision + final dept/role + notes | request row | ApprovalQueue | matrix-enforced decision (Det/Sr Det ← Bureau Lead of that bureau+; Bureau Lead ← DD+; DD ← Director+; Director ← Owner); approving with changes REQUIRES an applicant-visible reason; activates profile ONLY on approval; role_events (+reason/source/source_id) + history + audit atomically |
 | \`admin_membership_requests()\` | — | all request rows | ApprovalQueue | command-only bypass of the internal-note column grant |
 | \`deny_member_login(p_target, p_reason)\` / \`restore_member_login(p_target)\` | profile id + reason | profile row | AssignModal | app-level login block (Command/Owner, bureau-lead scoped); denied users hit an "Access denied" gate and can't file a request; \`login_denied*\` frozen by a non-definer trigger |
 | \`convert_case_to_joint\` / \`joint_case_add_members(p_case, p_members)\` | case + member list | summary | CaseDetail/Overview | joint rows are RPC-only; bureau never flips to JTF |
@@ -892,9 +901,23 @@ membership/joint/announcement RPCs; readable by one owner UUID),
 SELECT is audience-scoped: 'all', own division, 'command' for command,
 'members' for mentioned users, author, command/owner oversight),
 \`membership_requests\` (one per applicant; INACTIVE applicant inserts/edits
-own form fields, decision columns trigger-frozen, \`internal_decision_note\`
-column-revoked — command reads via \`admin_membership_requests()\`) +
-append-only \`membership_request_history\` (definer-RPC writes only),
+own form fields — since v1.16 every normal CID role is requestable
+(detective … director; Owner is a flag, not a role; JTF still CHECK-blocked) —
+decision columns trigger-frozen, \`internal_decision_note\` column-revoked —
+command reads via \`admin_membership_requests()\`) + append-only
+\`membership_request_history\` (definer-RPC writes only),
+\`role_events\` (append-only assignment history; v1.16 adds \`reason\`,
+\`source\` — membership_approval / role_change / transfer / activation — and
+\`source_id\` linking back to the request/transfer, making the latest event
+the member's assignment-provenance record; SELECT command/owner only),
+\`transfer_requests\` (v1.16 two-sided department-move workflow:
+\`pending_source → pending_target → approved → completed\` plus
+rejected/cancelled; one open transfer per member via a partial unique
+index; SELECT is **bureau-scoped**, not command-wide — the target officer,
+the requester, Bureau Leads of the source/destination bureaus, and Deputy
+Director+/Owner; an unrelated bureau's Lead sees no rows, counts, or
+realtime events; ALL writes via the \`*_transfer\` definer RPCs — see
+[Ch. 7](07-api.md)),
 \`app_secrets\` (RLS on, **zero policies** = invisible to all client roles —
 deliberate), \`security_test_runs\` (v1.14: **all client grants revoked** —
 written only by \`security_test_report()\` from the rls-test fixture suites,
@@ -1101,7 +1124,30 @@ User clicks "Save" in a modal
 \`detective\` → \`senior_detective\` → \`bureau_lead\` → \`deputy_director\` →
 \`director\`. **Command staff** = bureau_lead (within their bureau) +
 deputy_director + director (global). Plus a bureau:
-\`LSB | BCB | SAB | JTF\`. One canonical definition: \`src/lib/roles.ts\`.
+\`LSB | BCB | SAB | JTF\` — JTF is a **temporary joint-case designation**
+(and the pre-approval profile default), never a permanent home. One
+canonical definition: \`src/lib/roles.ts\` (the client mirror of the server
+matrix \`private.can_assign_cid_role\`).
+
+**Unified assignment matrix (v1.16)** — who may grant a role (signup
+approval, promotion/demotion, transfer role changes all use the same rule):
+
+| Final role | May approve / assign |
+|---|---|
+| Detective / Senior Detective | Bureau Lead of that bureau, or higher |
+| Bureau Lead | Deputy Director, Director, or Owner |
+| Deputy Director | Director or Owner |
+| Director | Owner |
+
+No self-approval, self-role-change, or self-transfer anywhere. Every
+approval-with-changes, promotion, demotion, and transfer records a reason.
+\`profiles.role/division/active/is_owner/removed_at\` are frozen against ALL
+direct client writes (non-definer trigger) — the audited RPCs are the only
+mutation path, and each writes \`role_events\` (+\`reason\`/\`source\`/\`source_id\`).
+Department moves are a two-sided workflow: source Bureau Lead → target
+Bureau Lead → completed, with Deputy Director+ able to complete directly
+(\`transfer_requests\`, [Ch. 7](07-api.md)). Justice roles (ADA/DA/AG/Judge)
+are a separate identity domain and grant no CID assignment authority.
 
 ## Permissions (what may you do?) — three layers
 
@@ -1452,7 +1498,7 @@ export function FeatureView() {
 | CSP (\`next.config.ts\`) | PDF export (WASM), Supabase REST+WSS, FiveManage, Discord | The allow-lists are exact |
 | \`docs/USER-GUIDE.md\` | Regenerate \`guideContent.ts\` | Dual-copy system |
 | An environment variable | \`vercel.json\` AND \`.github/workflows/ci.yml\` | Duplicated values must agree; \`NEXT_PUBLIC_\` values need a rebuild |
-| A user's role (data, not code) | Their bureau/active flags via the Roster screen only | \`assign_member\` RPC is the sole write path (trigger-enforced) |
+| A user's role (data, not code) | The audited RPCs only: \`change_member_role\` (rank), the \`*_transfer\` workflow (department), \`assign_member\` (activation) | \`profiles.role/division/active/is_owner/removed_at\` are trigger-frozen against every direct client write |
 | Component props on a shared UI primitive | All call sites (grep the import) — especially \`Modal\`'s \`dirty\`/\`onClose\` contract | Focus/scroll/discard behavior is relied on everywhere |`,
   },
   {
@@ -1696,7 +1742,9 @@ bureau_lead → deputy_director → director.
 ## Main RPCs
 
 \`search_all\` · \`signoff_submit/decide/owner_action\` · \`report_finalize\` ·
-\`assign_member\` · \`admin_member_emails/remove/restore\` ·
+\`assign_member\` (activation) · \`change_member_role\` · \`request_transfer\`
++ \`approve/reject/cancel/complete_transfer\` ·
+\`admin_member_emails/remove/restore\` ·
 \`create_notification\` · \`mo_crossref\` ([Ch. 7](07-api.md)).
 
 ## Database tables (47), by RLS pattern

@@ -84,11 +84,15 @@ notification each, a recipient-count preview and confirm in the composer,
 and edits never re-notify unless explicitly requested), heatmap
 (weighted layers, pan/zoom SVG map), roster (membership requests: new
 sign-ins request ONE permanent department — LSB/BCB/SAB, never JTF — plus
-a rank-and-file role from the inactive-account screen; the Approval Queue
-reviews them via `review_membership_request()` — approve /
-approve-with-changes / request-correction / reject — activating the
-profile only on approval; the legacy one-click `assign_member` approve
-remains for requestless profiles). Joint cases:
+any normal CID role (v1.16: detective … director; requesting grants
+nothing) from the inactive-account screen; the Approval Queue reviews them
+via `review_membership_request()` — approve / approve-with-changes (reason
+required) / request-correction / reject — under the unified authority
+matrix ([Ch. 9](09-auth.md)), activating the profile only on approval; the
+legacy one-click `assign_member` approve remains for requestless profiles
+(activation-only). Promotions/demotions run through `change_member_role`
+and department moves through the two-sided `transfer_requests` workflow
+— both audited with reasons). Joint cases:
 `convert_case_to_joint()` tags a case JTF while preserving its
 originating bureau and grants selected members temporary case-scoped
 access (joint roles, optional expiry, removable, endable) — access model

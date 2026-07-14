@@ -24,9 +24,10 @@ export function AdminPanel({ profiles, emails, onManage, onChanged }: AdminPanel
   const rows = profiles.filter((p) => !p.removed_at).slice().sort((a, b) => Number(a.active) - Number(b.active))
   const removed = profiles.filter((p) => p.removed_at).slice().sort((a, b) => (b.removed_at || '').localeCompare(a.removed_at || ''))
 
-  // One-click approve for pending sign-ins (keeps their current role/bureau).
+  // One-click approve for pending sign-ins (keeps their current role/bureau —
+  // assign_member is activation-only since v1.16).
   const approve = async (p: RosterProfile) => {
-    const res = await rpc('assign_member', { target: p.id, new_role: p.role, new_division: p.division, set_active: true })
+    const res = await rpc('assign_member', { target: p.id, set_active: true })
     if (res.error) { toast(`Approve failed: ${res.error.message}`, 'danger'); return }
     toast(`${p.display_name} approved for access`, 'success')
     void notify(p.id, 'member_approved', { detective: me?.display_name || 'Command', reason: 'Your CID access has been approved — welcome aboard.' })

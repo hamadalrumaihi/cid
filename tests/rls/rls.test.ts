@@ -260,73 +260,232 @@ describe.skipIf(!enabled || !PW.owner)('Owner role (positive paths)', () => {
   })
 })
 
-/** Command Center — assign_member bureau-lead scoping. Proves a Bureau Lead is
- *  confined to their own bureau and can't over-promote, while a Director keeps
- *  the broad power. Uses dedicated lead/director accounts (never mutated) and a
- *  throwaway `target` (detective/LSB) that a test promotes and afterAll
- *  restores. Skips unless all three passwords are set. */
-const ccEnabled = enabled && !!(PW.lead && PW.director && PW.target)
-describe.skipIf(!ccEnabled)('Command Center — assign_member scoping', () => {
+/** Command Center — role-change / transfer authority (v1.16 unified matrix).
+ *  Proves a Bureau Lead is confined to their own bureau and can't over-promote
+ *  or take a member from another bureau, that role changes are same-department
+ *  only with a required reason, and that a Director keeps the broad power.
+ *  Uses dedicated lead/director accounts (never mutated) and a throwaway
+ *  `target` (detective/LSB) restored via rls_test_reset_member in afterAll.
+ *  Skips unless all three passwords are set. */
+const ccEnabled = enabled && !!(PW.lead && PW.director && PW.target && PW.owner)
+describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority', () => {
   let lead: SupabaseClient
   let director: SupabaseClient
   let plainDet: SupabaseClient
+  let owner: SupabaseClient
+  let targetC: SupabaseClient
   let targetId = ''
   let bcbId = ''
 
   beforeAll(async () => {
-    lead = mk(); director = mk(); plainDet = mk()
-    const t = mk(); const b = mk()
+    lead = mk(); director = mk(); plainDet = mk(); owner = mk(); targetC = mk()
+    const b = mk()
     const signIn = (c: SupabaseClient, email: string, pw: string) => signInWithRetry(c, email, pw)
     await signIn(lead, 'rls-test-lead@cidportal.test', PW.lead!)
     await signIn(director, 'rls-test-director@cidportal.test', PW.director!)
     await signIn(plainDet, 'rls-test-lsb@cidportal.test', PW.lsb!)
-    targetId = await signIn(t, 'rls-test-target@cidportal.test', PW.target!)
+    await signIn(owner, 'rls-test-owner@cidportal.test', PW.owner!)
+    targetId = await signIn(targetC, 'rls-test-target@cidportal.test', PW.target!)
     bcbId = await signIn(b, 'rls-test-bcb@cidportal.test', PW.bcb!)
-    await t.auth.signOut(); await b.auth.signOut()
+    await b.auth.signOut()
+    // Deterministic start: baseline the throwaway target and purge leftovers
+    // (open transfers from an aborted previous run would violate the
+    // one-open-transfer index).
+    await director.rpc('rls_test_cleanup')
+    await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
   })
 
   afterAll(async () => {
     if (director) {
       // restore the throwaway target to its baseline, then purge the
-      // role_events this block created (cleanup deletes them for test ids)
-      await director.rpc('assign_member', { target: targetId, new_role: 'detective', new_division: 'LSB', set_active: true })
+      // role_events/transfers this block created
+      await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
       await director.rpc('rls_test_cleanup')
     }
-    await Promise.all([lead, director, plainDet].filter(Boolean).map((c) => c.auth.signOut()))
+    await Promise.all([lead, director, plainDet, owner, targetC].filter(Boolean).map((c) => c.auth.signOut()))
   })
 
-  it('Bureau Lead may manage a member in their own bureau (no-op update succeeds)', async () => {
-    const { error } = await lead.rpc('assign_member', { target: targetId, new_role: 'detective', new_division: 'LSB', set_active: true })
+  it('assign_member is activation-only (no-op activate succeeds for own-bureau lead)', async () => {
+    const { error } = await lead.rpc('assign_member', { target: targetId, set_active: true })
     expect(error).toBeNull()
   })
 
+  it('direct role/division writes by command are frozen (privileged-column trigger)', async () => {
+    const upd = await director.from('profiles')
+      .update({ role: 'director', division: 'BCB' }).eq('id', targetId).select('role,division')
+    expect(upd.error).toBeNull() // policy allows the UPDATE…
+    expect(upd.data![0]).toMatchObject({ role: 'detective', division: 'LSB' }) // …but the trigger reverts it
+  })
+
   it('Bureau Lead cannot promote above senior detective', async () => {
-    const { error } = await lead.rpc('assign_member', { target: targetId, new_role: 'bureau_lead', new_division: 'LSB', set_active: true })
+    const { error } = await lead.rpc('change_member_role', { p_target: targetId, p_new_role: 'bureau_lead', p_reason: '[rls-test] must fail' })
     expect(error).not.toBeNull()
   })
 
-  it('Bureau Lead cannot transfer a member out of their bureau', async () => {
-    const { error } = await lead.rpc('assign_member', { target: targetId, new_role: 'detective', new_division: 'BCB', set_active: true })
+  it('role changes require a reason', async () => {
+    const { error } = await lead.rpc('change_member_role', { p_target: targetId, p_new_role: 'senior_detective', p_reason: '  ' })
     expect(error).not.toBeNull()
   })
 
   it('Bureau Lead cannot manage a member in another bureau', async () => {
-    const { error } = await lead.rpc('assign_member', { target: bcbId, new_role: 'detective', new_division: 'BCB', set_active: true })
+    const { error } = await lead.rpc('change_member_role', { p_target: bcbId, p_new_role: 'senior_detective', p_reason: '[rls-test] must fail' })
     expect(error).not.toBeNull()
   })
 
-  it('Bureau Lead may promote to senior detective within their bureau', async () => {
-    const up = await lead.rpc('assign_member', { target: targetId, new_role: 'senior_detective', new_division: 'LSB', set_active: true })
-    expect(up.error).toBeNull()
-    await director.rpc('assign_member', { target: targetId, new_role: 'detective', new_division: 'LSB', set_active: true })
+  it('Bureau Lead cannot take a member from another bureau unilaterally (inbound request stays pending at the source)', async () => {
+    const tr = await lead.rpc('request_transfer', { p_target: bcbId, p_to_bureau: 'LSB', p_reason: '[rls-test] inbound pull' })
+    expect(tr.error).toBeNull()
+    const row = tr.data as { id: string; status: string }
+    expect(row.status).toBe('pending_source') // BCB has not consented — nothing moved
+    const prof = await director.from('profiles').select('division').eq('id', bcbId)
+    expect(prof.data![0].division).toBe('BCB')
+    const cancel = await lead.rpc('cancel_transfer', { p_id: row.id })
+    expect(cancel.error).toBeNull()
   })
 
-  it('Director can promote across bureaus and to command roles', async () => {
-    const up = await director.rpc('assign_member', { target: targetId, new_role: 'bureau_lead', new_division: 'BCB', set_active: true })
+  it('Bureau Lead may promote to senior detective within their bureau (reason recorded)', async () => {
+    const up = await lead.rpc('change_member_role', { p_target: targetId, p_new_role: 'senior_detective', p_reason: '[rls-test] promotion' })
     expect(up.error).toBeNull()
-    // restore
-    const back = await director.rpc('assign_member', { target: targetId, new_role: 'detective', new_division: 'LSB', set_active: true })
+    const ev = await director.from('role_events')
+      .select('reason,source,new_role').eq('target_id', targetId)
+      .order('created_at', { ascending: false }).limit(1)
+    expect(ev.error).toBeNull()
+    expect(ev.data![0]).toMatchObject({ source: 'role_change', new_role: 'senior_detective', reason: '[rls-test] promotion' })
+    const back = await director.rpc('change_member_role', { p_target: targetId, p_new_role: 'detective', p_reason: '[rls-test] restore' })
     expect(back.error).toBeNull()
+  })
+
+  it('Director can promote to command roles and complete cross-bureau transfers directly', async () => {
+    const up = await director.rpc('change_member_role', { p_target: targetId, p_new_role: 'bureau_lead', p_reason: '[rls-test] promotion to command' })
+    expect(up.error).toBeNull()
+    const tr = await director.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'BCB', p_reason: '[rls-test] higher-command move' })
+    expect(tr.error).toBeNull()
+    expect((tr.data as { status: string }).status).toBe('approved') // DD+ authority covers both sides
+    const done = await director.rpc('complete_transfer', { p_id: (tr.data as { id: string }).id })
+    expect(done.error).toBeNull()
+    expect((done.data as { status: string }).status).toBe('completed')
+    const prof = await director.from('profiles').select('role,division').eq('id', targetId)
+    expect(prof.data![0]).toMatchObject({ role: 'bureau_lead', division: 'BCB' })
+    // restore baseline for the rest of the suite
+    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
+    expect(reset.error).toBeNull()
+  })
+
+  it('users cannot transfer themselves and leads cannot decide their own transfer', async () => {
+    const self = await director.rpc('request_transfer', { p_target: (await director.auth.getUser()).data.user!.id, p_to_bureau: 'BCB', p_reason: '[rls-test] self' })
+    expect(self.error).not.toBeNull()
+  })
+
+  it('JTF is never a transfer destination', async () => {
+    const tr = await director.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'JTF', p_reason: '[rls-test] must fail' })
+    expect(tr.error).not.toBeNull()
+  })
+
+  it('two-lead flow: source approval then destination approval applies the move (live role travels)', async () => {
+    // lead (LSB) initiates outbound — initiation IS the source approval
+    const tr = await lead.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'BCB', p_reason: '[rls-test] two-lead flow' })
+    expect(tr.error).toBeNull()
+    const row = tr.data as { id: string; status: string }
+    expect(row.status).toBe('pending_target')
+    // the same (source) lead cannot also give the destination approval
+    const wrongSide = await lead.rpc('approve_transfer_target', { p_id: row.id })
+    expect(wrongSide.error).not.toBeNull()
+    // a plain detective can approve nothing
+    const det = await plainDet.rpc('approve_transfer_target', { p_id: row.id })
+    expect(det.error).not.toBeNull()
+    // interleaved promotion while the transfer is pending — a plain transfer
+    // (no role change on the request) must carry the LIVE role, never revert
+    // it to the role captured at request time
+    const promo = await director.rpc('change_member_role', { p_target: targetId, p_new_role: 'senior_detective', p_reason: '[rls-test] interleaved promotion' })
+    expect(promo.error).toBeNull()
+    // director (DD+ counts for the destination side) — approval applies the move
+    const ok = await director.rpc('approve_transfer_target', { p_id: row.id, p_note: '[rls-test] accepted' })
+    expect(ok.error).toBeNull()
+    expect((ok.data as { status: string }).status).toBe('completed')
+    const prof = await director.from('profiles').select('role,division').eq('id', targetId)
+    expect(prof.data![0]).toMatchObject({ role: 'senior_detective', division: 'BCB' })
+    const ev = await director.from('role_events')
+      .select('source,old_division,new_division,old_role,new_role').eq('target_id', targetId)
+      .order('created_at', { ascending: false }).limit(1)
+    expect(ev.data![0]).toMatchObject({
+      source: 'transfer', old_division: 'LSB', new_division: 'BCB',
+      old_role: 'senior_detective', new_role: 'senior_detective',
+    })
+    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
+    expect(reset.error).toBeNull()
+  })
+
+  it('transfer visibility: involved leads see everything, the officer sees their own, a plain detective sees nothing', async () => {
+    // lead (LSB) initiates LSB -> BCB for the target: lead is source AND requester
+    const tr = await lead.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'BCB', p_reason: '[rls-test] visibility probe' })
+    expect(tr.error).toBeNull()
+    const id = (tr.data as { id: string }).id
+    // source Bureau Lead (also the requester) sees the row with the full reason
+    const asLead = await lead.from('transfer_requests')
+      .select('id,reason,from_role,to_role,from_bureau,to_bureau,status,source_approved_by,source_approved_at,decision_note').eq('id', id)
+    expect(asLead.error).toBeNull()
+    expect(asLead.data).toHaveLength(1)
+    expect(asLead.data![0].reason).toBe('[rls-test] visibility probe')
+    expect(asLead.data![0].source_approved_by).toBeTruthy() // lead's initiation IS the source approval
+    // Director (higher command) and Owner see it
+    expect((await director.from('transfer_requests').select('id,reason').eq('id', id)).data).toHaveLength(1)
+    expect((await owner.from('transfer_requests').select('id,reason').eq('id', id)).data).toHaveLength(1)
+    // the target officer sees their own transfer
+    const asTarget = await targetC.from('transfer_requests').select('id,reason,status').eq('id', id)
+    expect(asTarget.error).toBeNull()
+    expect(asTarget.data).toHaveLength(1)
+    // an ordinary detective (not the target) sees nothing — no rows, no count
+    const asDet = await plainDet.from('transfer_requests').select('id').eq('id', id)
+    expect(asDet.data ?? []).toHaveLength(0)
+    const detCount = await plainDet.from('transfer_requests').select('id', { count: 'exact', head: true }).eq('id', id)
+    expect(detCount.count ?? 0).toBe(0)
+    const cancel = await lead.rpc('cancel_transfer', { p_id: id })
+    expect(cancel.error).toBeNull()
+  })
+
+  it('an unrelated Bureau Lead cannot view or infer a transfer between two other bureaus', async () => {
+    // stage the throwaway target as a BCB detective and open a BCB -> SAB
+    // transfer (initiated by the Director, so the LSB lead is on NEITHER side
+    // and is not the requester)
+    const stage = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'BCB', p_active: true })
+    expect(stage.error).toBeNull()
+    const tr = await director.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'SAB', p_reason: '[rls-test] unrelated-bureau probe' })
+    expect(tr.error).toBeNull()
+    const id = (tr.data as { id: string }).id
+    // zero rows AND zero count for the unrelated LSB lead — existence is not inferable
+    const rows = await lead.from('transfer_requests').select('id,reason').eq('id', id)
+    expect(rows.data ?? []).toHaveLength(0)
+    const count = await lead.from('transfer_requests').select('id', { count: 'exact', head: true }).eq('id', id)
+    expect(count.count ?? 0).toBe(0)
+    // and no transfer notification reached the unrelated plain detective either
+    const notes = await plainDet.from('notifications').select('id').eq('payload->>transfer_id', id)
+    expect(notes.data ?? []).toHaveLength(0)
+    // deciding is equally out of reach for the unrelated lead
+    const decide = await lead.rpc('approve_transfer_source', { p_id: id })
+    expect(decide.error).not.toBeNull()
+    const cancel = await director.rpc('cancel_transfer', { p_id: id })
+    expect(cancel.error).toBeNull()
+    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
+    expect(reset.error).toBeNull()
+  })
+
+  it('a destination Bureau Lead sees an inbound transfer with full decision information', async () => {
+    // stage the target in BCB and request BCB -> LSB (Director-initiated):
+    // the LSB lead is the DESTINATION side this time
+    const stage = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'BCB', p_active: true })
+    expect(stage.error).toBeNull()
+    const tr = await director.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'LSB', p_reason: '[rls-test] inbound visibility' })
+    expect(tr.error).toBeNull()
+    const id = (tr.data as { id: string }).id
+    const asLead = await lead.from('transfer_requests')
+      .select('id,reason,from_role,to_role,from_bureau,to_bureau,status,requested_by,decision_note').eq('id', id)
+    expect(asLead.error).toBeNull()
+    expect(asLead.data).toHaveLength(1)
+    expect(asLead.data![0]).toMatchObject({ reason: '[rls-test] inbound visibility', from_bureau: 'BCB', to_bureau: 'LSB' })
+    const cancel = await director.rpc('cancel_transfer', { p_id: id })
+    expect(cancel.error).toBeNull()
+    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
+    expect(reset.error).toBeNull()
   })
 
   it('role_events history is readable by command but not by a plain detective', async () => {
@@ -508,12 +667,13 @@ describe.skipIf(!enabled)('Membership requests — applicant wall & review autho
       p_request: requestId, p_decision: 'approve', p_final_bureau: 'BCB', p_final_role: 'detective',
     })
     expect(wrongBureau.error).not.toBeNull()
-    expect(wrongBureau.error!.message).toMatch(/own bureau/i)
+    // v1.16 unified matrix wording ("not authorized to assign <role> in <bureau>")
+    expect(wrongBureau.error!.message).toMatch(/not authorized to assign|own bureau/i)
     const commandRole = await lead!.rpc('review_membership_request', {
       p_request: requestId, p_decision: 'approve', p_final_bureau: 'LSB', p_final_role: 'director',
     })
     expect(commandRole.error).not.toBeNull()
-    expect(commandRole.error!.message).toMatch(/command roles/i)
+    expect(commandRole.error!.message).toMatch(/not authorized to assign|command roles/i)
     expect(await readStatus()).toBe('pending') // no partial decision leaked
   })
 
@@ -598,20 +758,20 @@ describe.skipIf(!approvalEnabled)('Membership approval — atomic activation (di
     // already-clean fixture — cleanup removes those too).
     const clean = await applicant.rpc('rls_test_cleanup')
     if (clean.error) throw new Error(`rls_test_cleanup failed: ${clean.error.message}`)
-    const reset = await reviewer.rpc('assign_member', {
-      target: applicantId, new_role: 'detective', new_division: 'LSB', set_active: false,
+    const reset = await reviewer.rpc('rls_test_reset_member', {
+      p_target: applicantId, p_role: 'detective', p_division: 'LSB', p_active: false,
     })
-    if (reset.error) throw new Error(`assign_member reset failed: ${reset.error.message}`)
+    if (reset.error) throw new Error(`rls_test_reset_member reset failed: ${reset.error.message}`)
   })
 
   afterAll(async () => {
     if (!reviewer) return
     // Safety net (idempotent with the final test): never leave the disposable
     // applicant active, and purge its request/notifications/role_events.
-    const back = await reviewer.rpc('assign_member', {
-      target: applicantId, new_role: 'detective', new_division: 'LSB', set_active: false,
+    const back = await reviewer.rpc('rls_test_reset_member', {
+      p_target: applicantId, p_role: 'detective', p_division: 'LSB', p_active: false,
     })
-    if (back.error) throw new Error(`assign_member restore failed: ${back.error.message}`)
+    if (back.error) throw new Error(`rls_test_reset_member restore failed: ${back.error.message}`)
     const { error } = await applicant.rpc('rls_test_cleanup')
     if (error) throw new Error(`rls_test_cleanup failed: ${error.message}`)
     await Promise.all([applicant, reviewer].map((c) => c.auth.signOut()))
@@ -692,8 +852,8 @@ describe.skipIf(!approvalEnabled)('Membership approval — atomic activation (di
   })
 
   it('teardown: deactivation + cleanup leave no trace', async () => {
-    const back = await reviewer.rpc('assign_member', {
-      target: applicantId, new_role: 'detective', new_division: 'LSB', set_active: false,
+    const back = await reviewer.rpc('rls_test_reset_member', {
+      p_target: applicantId, p_role: 'detective', p_division: 'LSB', p_active: false,
     })
     expect(back.error).toBeNull()
     const prof = await applicant.from('profiles').select('id,active').eq('id', applicantId)

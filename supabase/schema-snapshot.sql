@@ -926,7 +926,7 @@ alter table public.membership_requests add constraint membership_requests_applic
 alter table public.membership_requests add constraint membership_requests_applicant_id_fkey FOREIGN KEY (applicant_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 alter table public.membership_requests add constraint membership_requests_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id);
 alter table public.membership_requests add constraint membership_requests_requested_bureau_check CHECK (requested_bureau in ('LSB', 'BCB', 'SAB'));
-alter table public.membership_requests add constraint membership_requests_requested_role_check CHECK (requested_role in ('detective', 'senior_detective'));
+alter table public.membership_requests add constraint membership_requests_requested_role_check CHECK (requested_role in ('detective', 'senior_detective', 'bureau_lead', 'deputy_director', 'director'));
 alter table public.membership_requests add constraint membership_requests_status_check CHECK (status in ('draft', 'pending', 'correction_requested', 'approved', 'approved_with_changes', 'rejected', 'withdrawn'));
 alter table public.membership_requests add constraint membership_requests_decided_bureau_check CHECK (decided_bureau in ('LSB', 'BCB', 'SAB'));
 alter table public.membership_requests enable row level security;
@@ -1141,9 +1141,13 @@ create table public.role_events (
   new_division public.bureau,
   old_active boolean,
   new_active boolean,
-  created_at timestamp with time zone not null default now()
+  created_at timestamp with time zone not null default now(),
+  reason text,
+  source text,
+  source_id uuid
 );
 alter table public.role_events add constraint role_events_pkey PRIMARY KEY (id);
+alter table public.role_events add constraint role_events_source_check CHECK (source in ('membership_approval', 'role_change', 'transfer', 'activation'));
 alter table public.role_events add constraint role_events_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
 alter table public.role_events add constraint role_events_target_id_fkey FOREIGN KEY (target_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 alter table public.role_events enable row level security;
@@ -1225,6 +1229,38 @@ alter table public.trackers add constraint trackers_created_by_fkey FOREIGN KEY 
 alter table public.trackers add constraint trackers_deputy_sig_fkey FOREIGN KEY (deputy_sig) REFERENCES public.profiles(id);
 alter table public.trackers add constraint trackers_director_sig_fkey FOREIGN KEY (director_sig) REFERENCES public.profiles(id);
 alter table public.trackers enable row level security;
+
+create table public.transfer_requests (
+  id uuid not null default gen_random_uuid(),
+  target_id uuid not null,
+  from_bureau public.bureau not null,
+  to_bureau public.bureau not null,
+  from_role public.app_role not null,
+  to_role public.app_role not null,
+  reason text not null,
+  status text not null default 'pending_source'::text,
+  requested_by uuid not null,
+  source_approved_by uuid,
+  source_approved_at timestamp with time zone,
+  target_approved_by uuid,
+  target_approved_at timestamp with time zone,
+  completed_by uuid,
+  completed_at timestamp with time zone,
+  decision_note text,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.transfer_requests add constraint transfer_requests_pkey PRIMARY KEY (id);
+alter table public.transfer_requests add constraint transfer_requests_target_id_fkey FOREIGN KEY (target_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.transfer_requests add constraint transfer_requests_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.profiles(id);
+alter table public.transfer_requests add constraint transfer_requests_source_approved_by_fkey FOREIGN KEY (source_approved_by) REFERENCES public.profiles(id);
+alter table public.transfer_requests add constraint transfer_requests_target_approved_by_fkey FOREIGN KEY (target_approved_by) REFERENCES public.profiles(id);
+alter table public.transfer_requests add constraint transfer_requests_completed_by_fkey FOREIGN KEY (completed_by) REFERENCES public.profiles(id);
+alter table public.transfer_requests add constraint transfer_requests_from_bureau_check CHECK (from_bureau in ('LSB', 'BCB', 'SAB'));
+alter table public.transfer_requests add constraint transfer_requests_to_bureau_check CHECK (to_bureau in ('LSB', 'BCB', 'SAB'));
+alter table public.transfer_requests add constraint transfer_requests_status_check CHECK (status in ('pending_source', 'pending_target', 'approved', 'rejected', 'cancelled', 'completed'));
+alter table public.transfer_requests add constraint transfer_requests_check CHECK (from_bureau <> to_bureau);
+alter table public.transfer_requests enable row level security;
 
 create table public.vehicles (
   id uuid not null default gen_random_uuid(),
@@ -1501,8 +1537,9 @@ CREATE OR REPLACE FUNCTION private.can_announce()
  STABLE SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-  select coalesce((select active and role in ('bureau_lead','supervisor','deputy_director','command','director')
-                   from public.profiles where id = (select auth.uid())), false) $function$
+  select coalesce((select active and role in ('bureau_lead','deputy_director','director')
+                   from public.profiles where id = (select auth.uid())), false)
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION private.can_create_case(p_bureau public.bureau)
@@ -1538,6 +1575,23 @@ AS $function$
     exists (select 1 from public.cases c where c.id = cid and c.lead_detective_id = (select auth.uid()))
     or (select role from public.profiles where id = (select auth.uid())) in ('bureau_lead','deputy_director','director')
   ) $function$
+;
+
+CREATE OR REPLACE FUNCTION private.block_direct_privileged_profile()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if current_user in ('authenticated', 'anon') then
+    new.role := old.role;
+    new.division := old.division;
+    new.active := old.active;
+    new.is_owner := old.is_owner;
+    new.removed_at := old.removed_at;
+  end if;
+  return new;
+end $function$
 ;
 
 CREATE OR REPLACE FUNCTION private.guard_profile()
@@ -1763,59 +1817,44 @@ begin
 end $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.assign_member(target uuid, new_role public.app_role, new_division public.bureau, set_active boolean)
+CREATE OR REPLACE FUNCTION public.assign_member(target uuid, set_active boolean)
  RETURNS void
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
 declare
-  actor uuid := (select auth.uid());
-  actor_role public.app_role;
-  actor_div public.bureau;
-  actor_owner boolean;
-  cur_role public.app_role;
-  cur_div public.bureau;
-  cur_active boolean;
+  v_uid uuid := (select auth.uid());
+  me public.profiles;
+  t public.profiles;
 begin
-  select role, division, is_owner into actor_role, actor_div, actor_owner
-    from public.profiles where id = actor;
-  -- Base gate: active command staff, or the owner.
-  if not (private.is_active() and (private.is_command() or coalesce(actor_owner, false))) then
+  select * into me from public.profiles where id = v_uid;
+  if me.id is null or not (me.active and (me.role in ('bureau_lead','deputy_director','director') or me.is_owner)) then
     raise exception 'not authorized';
   end if;
-
-  select role, division, active into cur_role, cur_div, cur_active
-    from public.profiles where id = target;
-  if not found then raise exception 'target not found'; end if;
-
-  -- Bureau Lead restrictions (owner override bypasses these).
-  if actor_role = 'bureau_lead' and not coalesce(actor_owner, false) then
-    if cur_div is distinct from actor_div then
+  select * into t from public.profiles where id = target for update;
+  if t.id is null then raise exception 'target not found'; end if;
+  -- Bureau Lead restrictions (owner override bypasses these, as before).
+  if me.role = 'bureau_lead' and not me.is_owner then
+    if t.division is distinct from me.division then
       raise exception 'bureau leads may only manage members in their own bureau';
     end if;
-    if new_division is distinct from actor_div then
-      raise exception 'bureau leads cannot transfer members out of their bureau';
-    end if;
-    if new_role in ('bureau_lead','deputy_director','director') then
-      raise exception 'bureau leads cannot promote above senior detective';
-    end if;
-    if cur_role in ('bureau_lead','deputy_director','director') then
+    if t.role in ('bureau_lead','deputy_director','director') then
       raise exception 'bureau leads cannot manage command staff';
     end if;
   end if;
-
-  update public.profiles
-    set role = new_role, division = new_division, active = set_active
-    where id = target;
-
-  -- Record the change (only when something actually changed).
-  if cur_role is distinct from new_role
-     or cur_div is distinct from new_division
-     or cur_active is distinct from set_active then
-    insert into public.role_events (target_id, actor_id, old_role, new_role, old_division, new_division, old_active, new_active)
-      values (target, actor, cur_role, new_role, cur_div, new_division, cur_active, set_active);
+  if set_active and t.removed_at is not null then
+    raise exception 'member was removed — restore them first';
   end if;
+  if set_active and t.login_denied then
+    raise exception 'member login is denied — restore login first';
+  end if;
+  if t.active = set_active then return; end if;
+
+  update public.profiles set active = set_active where id = target;
+  insert into public.role_events (target_id, actor_id, old_role, new_role,
+    old_division, new_division, old_active, new_active, source)
+  values (target, v_uid, t.role, t.role, t.division, t.division, t.active, set_active, 'activation');
 end $function$
 ;
 
@@ -3104,6 +3143,10 @@ create policy trackers_upd on public.trackers
   as permissive for update to authenticated
   using (private.can_delete())
   with check (private.can_delete());
+
+create policy tr_sel on public.transfer_requests
+  as permissive for select to authenticated
+  using (((target_id = ( SELECT auth.uid() AS uid)) OR (requested_by = ( SELECT auth.uid() AS uid)) OR private.can_decide_transfer_side(from_bureau) OR private.can_decide_transfer_side(to_bureau)));
 
 create policy vehicles_del on public.vehicles
   as permissive for delete to authenticated

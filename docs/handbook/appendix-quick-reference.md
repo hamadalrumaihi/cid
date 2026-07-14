@@ -50,7 +50,9 @@ bureau_lead → deputy_director → director.
 ## Main RPCs
 
 `search_all` · `signoff_submit/decide/owner_action` · `report_finalize` ·
-`assign_member` · `admin_member_emails/remove/restore` ·
+`assign_member` (activation) · `change_member_role` · `request_transfer`
++ `approve/reject/cancel/complete_transfer` ·
+`admin_member_emails/remove/restore` ·
 `create_notification` · `mo_crossref` ([Ch. 7](07-api.md)).
 
 ## Database tables (47), by RLS pattern

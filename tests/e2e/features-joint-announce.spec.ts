@@ -280,9 +280,9 @@ test.describe('v1.11 features — announcements, joint cases, approvals (live fi
       // any leftover request, force the disposable fixture back to inactive.
       const clean = await callRpc(app, 'rls_test_cleanup')
       if (!clean.ok()) throw new Error(`rls_test_cleanup (setup) failed: ${clean.status()} ${await clean.text()}`)
-      const reset = await callRpc(dir, 'assign_member',
-        { target: applicantId, new_role: 'detective', new_division: 'LSB', set_active: false })
-      if (!reset.ok()) throw new Error(`assign_member reset failed: ${reset.status()} ${await reset.text()}`)
+      const reset = await callRpc(dir, 'rls_test_reset_member',
+        { p_target: applicantId, p_role: 'detective', p_division: 'LSB', p_active: false })
+      if (!reset.ok()) throw new Error(`rls_test_reset_member reset failed: ${reset.status()} ${await reset.text()}`)
 
       // Inactive applicant lands on the Gate (never the shell) with the
       // membership request form. Command fan-out is suppressed server-side
@@ -334,13 +334,15 @@ test.describe('v1.11 features — announcements, joint cases, approvals (live fi
       await expect(modal.getByText(/Senior Detective/).first()).toBeVisible()
       await expect(modal.getByText('Activate Account', { exact: true })).toBeVisible()
       await expect(modal.getByText('Yes', { exact: true })).toBeVisible()
+      // v1.16: approving with a different assignment requires a recorded reason
+      await modal.getByLabel(/Reason for the change/).fill('[e2e] approved with changes')
       await modal.getByRole('button', { name: 'Approve & Activate' }).click()
       await expect(dirPage.getByText(/approved with changes — account activated/)).toBeVisible({ timeout: 20_000 })
     } finally {
       // Teardown (warn-not-fail, like smoke.spec): never leave the disposable
       // applicant active; purge the request/notifications/role_events.
-      const back = await callRpc(dir, 'assign_member',
-        { target: applicantId, new_role: 'detective', new_division: 'LSB', set_active: false })
+      const back = await callRpc(dir, 'rls_test_reset_member',
+        { p_target: applicantId, p_role: 'detective', p_division: 'LSB', p_active: false })
       if (!back.ok()) console.warn('applicant deactivate failed:', back.status(), await back.text())
       const purge = await callRpc(app, 'rls_test_cleanup')
       if (!purge.ok()) console.warn('rls_test_cleanup failed:', purge.status(), await purge.text())
