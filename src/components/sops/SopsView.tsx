@@ -42,7 +42,7 @@ export function SopsView() {
   const { state, isCommand } = useAuth()
   const [docs, setDocs] = useState<DocRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [reader, setReader] = useState<DocRow | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
   const [editor, setEditor] = useState<{ record: DocRow | null } | null>(null)
   const [history, setHistory] = useState<DocRow | null>(null)
   const version = useTableVersion('documents')
@@ -68,7 +68,36 @@ export function SopsView() {
 
   const sops = docs.filter((d) => d.folder === SOP_FOLDER)
   const lib = docs.filter((d) => d.folder === LIB_FOLDER)
-  const shelf = [...sops, ...lib]
+  const other = docs.filter((d) => d.folder !== SOP_FOLDER && d.folder !== LIB_FOLDER)
+  const shelf = [...sops, ...lib, ...other]
+  const openDoc = openId ? shelf.find((d) => d.id === openId) ?? null : null
+
+  const modals = (
+    <>
+      {editor && <EditorModal record={editor.record} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); void refresh() }} />}
+      {history && <HistoryModal d={history} canManage={isCommand} onClose={() => setHistory(null)} onRestored={() => { setHistory(null); void refresh() }} />}
+    </>
+  )
+
+  // ── Document page (in-page reader with a library sidebar) ────────────────
+  if (openDoc) {
+    return (
+      <div>
+        <DocPage
+          d={openDoc}
+          sops={sops}
+          lib={[...lib, ...other]}
+          canManage={isCommand}
+          onSelect={(id) => setOpenId(id)}
+          onBack={() => setOpenId(null)}
+          onEdit={() => setEditor({ record: openDoc })}
+          onHistory={() => setHistory(openDoc)}
+          onDeleted={() => { setOpenId(null); void refresh() }}
+        />
+        {modals}
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -95,37 +124,66 @@ export function SopsView() {
           action={isCommand ? { label: '+ New SOP', onClick: () => setEditor({ record: null }) } : undefined}
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {shelf.map((d) => (
-            <button key={d.id} onClick={() => setReader(d)} className="rounded-2xl border border-white/5 bg-ink-900/60 p-5 text-left transition hover:border-blue-500/30 hover:bg-white/5">
-              <p className="text-sm font-semibold text-white">{sopTitle(d)}</p>
-              <p className="mt-1 line-clamp-3 text-xs text-slate-400">{bodyOf(d).slice(0, 200) || 'No content yet.'}</p>
-              <p className="t-readout mt-3 text-[10px] uppercase text-slate-500">{`${CARD_TAG[d.folder] ?? 'SOP'} // ${d.modified_label || 'undated'}`}</p>
-            </button>
-          ))}
+        <div className="space-y-8">
+          <ShelfSection title="Standard Operating Procedures" subtitle="Division policy — how CID operates" rows={sops} onOpen={setOpenId} />
+          <ShelfSection title="Reference Library" subtitle="Rosters, gang intel and reference documents" rows={[...lib, ...other]} onOpen={setOpenId} />
         </div>
       )}
 
-      {reader && (
-        <ReaderModal
-          d={reader}
-          canManage={isCommand}
-          onClose={() => setReader(null)}
-          onEdit={() => { setEditor({ record: reader }); setReader(null) }}
-          onHistory={() => { setHistory(reader); setReader(null) }}
-          onDeleted={() => { setReader(null); void refresh() }}
-        />
-      )}
-      {editor && <EditorModal record={editor.record} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); void refresh() }} />}
-      {history && <HistoryModal d={history} canManage={isCommand} onClose={() => setHistory(null)} onRestored={() => { setHistory(null); void refresh() }} />}
+      {modals}
     </div>
   )
 }
 
-function ReaderModal({ d, canManage, onClose, onEdit, onHistory, onDeleted }: {
+function ShelfSection({ title, subtitle, rows, onOpen }: { title: string; subtitle: string; rows: DocRow[]; onOpen: (id: string) => void }) {
+  if (!rows.length) return null
+  return (
+    <section>
+      <div className="mb-3 flex items-baseline gap-3">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-blue-300/80">{title}</h3>
+        <span className="text-xs text-slate-500">{subtitle}</span>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {rows.map((d) => (
+          <button key={d.id} onClick={() => onOpen(d.id)} className="rounded-2xl border border-white/5 bg-ink-900/60 p-5 text-left transition hover:border-blue-500/30 hover:bg-white/5">
+            <p className="text-sm font-semibold text-white">{sopTitle(d)}</p>
+            <p className="mt-1 line-clamp-3 text-xs text-slate-400">{bodyOf(d).slice(0, 200) || 'No content yet.'}</p>
+            <p className="t-readout mt-3 text-[10px] uppercase text-slate-500">{`${CARD_TAG[d.folder] ?? 'SOP'} // ${d.modified_label || 'undated'}`}</p>
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function DocNavGroup({ label, rows, currentId, onSelect }: { label: string; rows: DocRow[]; currentId: string; onSelect: (id: string) => void }) {
+  if (!rows.length) return null
+  return (
+    <div>
+      <p className="t-readout px-3 pb-1 pt-3 text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
+      {rows.map((x) => (
+        <button
+          key={x.id}
+          onClick={() => onSelect(x.id)}
+          aria-current={x.id === currentId ? 'page' : undefined}
+          className={`block w-full truncate rounded-lg px-3 py-2 text-left text-sm transition ${x.id === currentId ? 'bg-blue-500/15 font-semibold text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}
+        >
+          {sopTitle(x)}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Full document page: library sidebar on the left, the document as a proper
+ *  reading page on the right — replaces the old text-in-a-modal reader. */
+function DocPage({ d, sops, lib, canManage, onSelect, onBack, onEdit, onHistory, onDeleted }: {
   d: DocRow
+  sops: DocRow[]
+  lib: DocRow[]
   canManage: boolean
-  onClose: () => void
+  onSelect: (id: string) => void
+  onBack: () => void
   onEdit: () => void
   onHistory: () => void
   onDeleted: () => void
@@ -135,23 +193,36 @@ function ReaderModal({ d, canManage, onClose, onEdit, onHistory, onDeleted }: {
     await deleteWithUndo('documents', d, { label: `SOP “${d.name}”`, noConfirm: true, after: onDeleted })
   }
   return (
-    <Modal open onClose={onClose} wide>
-      <ModalHeader title={sopTitle(d)} onClose={onClose} />
-      <p className="t-readout mb-3 text-[10px] uppercase tracking-widest text-slate-500">
-        {`${READER_TAG[d.folder] ?? 'Standard operating procedure'} // ${d.modified_label || 'undated'}`}
-        {isSynced(d) && ' // SYNCED FROM GOOGLE DRIVE'}
-      </p>
-      <div className="max-h-[65vh] overflow-y-auto rounded-lg border border-white/5 bg-ink-900 p-6">
-        {renderMarkdown(bodyOf(d))}
+    <div className="space-y-4">
+      <button onClick={onBack} className="rounded-lg py-1 pr-2 text-sm font-bold text-badge-200 hover:text-white">← Back to library</button>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[16rem,1fr]">
+        <aside className="h-fit rounded-2xl border border-white/5 bg-ink-900/60 p-2 lg:sticky lg:top-4">
+          <DocNavGroup label="Procedures" rows={sops} currentId={d.id} onSelect={onSelect} />
+          <DocNavGroup label="Library" rows={lib} currentId={d.id} onSelect={onSelect} />
+        </aside>
+        <article className="min-w-0 rounded-2xl border border-white/5 bg-ink-900/60">
+          <header className="border-b border-white/5 p-6 sm:p-8 sm:pb-6">
+            <p className="t-readout text-[10px] uppercase tracking-widest text-slate-500">
+              {`${READER_TAG[d.folder] ?? 'Standard operating procedure'} // ${d.modified_label || 'undated'}`}
+              {isSynced(d) && ' // SYNCED FROM GOOGLE DRIVE'}
+            </p>
+            <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+              <h1 className="text-2xl font-black text-white">{sopTitle(d)}</h1>
+              {canManage && (
+                <div className="flex flex-shrink-0 gap-2">
+                  <button onClick={onEdit} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10">Edit</button>
+                  <button onClick={onHistory} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-blue-200 transition hover:bg-white/10">History</button>
+                  <button onClick={() => void del()} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>
+                </div>
+              )}
+            </div>
+          </header>
+          <div className="mx-auto max-w-3xl p-6 text-[15px] leading-7 sm:p-8">
+            {renderMarkdown(bodyOf(d))}
+          </div>
+        </article>
       </div>
-      {canManage && (
-        <div className="mt-4 flex gap-2">
-          <button onClick={onEdit} className="flex-1 rounded-lg border border-white/10 bg-white/5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">Edit</button>
-          <button onClick={onHistory} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-blue-200 transition hover:bg-white/10">History</button>
-          <button onClick={() => void del()} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>
-        </div>
-      )}
-    </Modal>
+    </div>
   )
 }
 

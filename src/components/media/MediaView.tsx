@@ -8,8 +8,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Json, Tables } from '@/lib/database.types'
-import { insert, list, update, withRetry } from '@/lib/db'
+import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
+import { uiConfirm } from '@/components/ui/dialog'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
@@ -32,7 +33,7 @@ const labelsOf = (m: MediaRow): string[] => parseStringArray(tagsOf(m).labels)
 const parseTags = (s: string) => [...new Set(s.split(',').map((x) => x.trim()).filter(Boolean))]
 
 export function MediaView() {
-  const { state, canEdit } = useAuth()
+  const { state, canEdit, canDelete } = useAuth()
   const router = useRouter()
   const [media, setMedia] = useState<MediaRow[]>([])
   const [cases, setCases] = useState<CaseOption[]>([])
@@ -125,6 +126,12 @@ export function MediaView() {
               onCase={(cid) => router.push(`/cases?case=${cid}`)}
               onForward={() => setForward(m)}
               onTags={() => setTagEdit(m)}
+              onDelete={canDelete ? () => {
+                void (async () => {
+                  if (!(await uiConfirm(`Delete “${m.title}” from the vault? Restorable via Undo.`, { confirmText: 'Delete' }))) return
+                  await deleteWithUndo('media', m, { label: `Media “${m.title}”`, noConfirm: true, after: () => void refresh() })
+                })()
+              } : undefined}
             />
           ))}
         </div>
@@ -164,7 +171,7 @@ function TagChips({ m, caseNum, gangName, onCase }: { m: MediaRow; caseNum: (id:
   )
 }
 
-function MediaCard({ m, canEdit, caseNum, gangName, onOpen, onCase, onForward, onTags }: {
+function MediaCard({ m, canEdit, caseNum, gangName, onOpen, onCase, onForward, onTags, onDelete }: {
   m: MediaRow
   canEdit: boolean
   caseNum: (id: string | null) => string | null
@@ -173,6 +180,7 @@ function MediaCard({ m, canEdit, caseNum, gangName, onOpen, onCase, onForward, o
   onCase: (cid: string) => void
   onForward: () => void
   onTags: () => void
+  onDelete?: () => void
 }) {
   const [imgFailed, setImgFailed] = useState(false)
   const src = mediaSrc(m)
@@ -196,10 +204,11 @@ function MediaCard({ m, canEdit, caseNum, gangName, onOpen, onCase, onForward, o
           <span className="ml-2 flex-shrink-0 rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-slate-400">{m.kind || m.type}</span>
         </div>
         <div className="mt-2 flex flex-wrap gap-1"><TagChips m={m} caseNum={caseNum} gangName={gangName} onCase={onCase} /></div>
-        {canEdit && (
+        {(canEdit || onDelete) && (
           <div className="mt-3 flex items-center gap-2">
-            <button onClick={onForward} className="flex-1 rounded-lg border border-white/10 bg-white/5 py-2 text-xs font-semibold text-white transition hover:bg-white/10">↗ Forward to Case</button>
-            <button onClick={onTags} title="Edit tags" className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-fuchsia-200 transition hover:bg-white/10">🏷️</button>
+            {canEdit && <button onClick={onForward} className="flex-1 rounded-lg border border-white/10 bg-white/5 py-2 text-xs font-semibold text-white transition hover:bg-white/10">↗ Forward to Case</button>}
+            {canEdit && <button onClick={onTags} title="Edit tags" className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-fuchsia-200 transition hover:bg-white/10">🏷️</button>}
+            {onDelete && <button onClick={onDelete} title="Delete from vault" aria-label={`Delete ${m.title}`} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">🗑️</button>}
           </div>
         )}
       </div>
