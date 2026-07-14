@@ -6,21 +6,47 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
-## [Unreleased]
+## [Unreleased] — Usability roadmap, Phase 1
 
-### Added — shared case-state evaluator + "Guided next action" (Phase 1)
-- New pure, unit-tested rules engine `src/lib/caseWorkflow.ts` (`assessCase`):
-  given a case and its already-fetched tasks, reports, legal requests, evidence
-  and support counts, it derives the workflow stage, an ordered list of
-  recommended next actions (actor-specific for sign-off), and the set of
-  closure blockers. It is the single source of truth that "Guided next action",
-  the forthcoming pre-close checklist, and My Desk per-case hints all read, so
-  those surfaces cannot drift. The sign-off / legal RPCs remain the authority
-  for who may act; the evaluator only decides what to *surface*. 20 unit tests.
-- First consumer: the case **Overview** now leads with a "Next action" banner
-  (stage badge + the highest-severity recommendation, deep-linking into the
-  relevant tab). Overview additionally loads the case's tasks and legal
-  requests to feed the evaluator.
+Theme: the portal tells members what changed, what matters, and what to do next.
+
+### Added — shared case-state evaluator (the foundation)
+- Pure, unit-tested rules engine `src/lib/caseWorkflow.ts` (`assessCase`): given
+  a case + its tasks, reports, legal requests and evidence/support counts, it
+  derives the workflow stage, an ordered list of actor-specific next actions,
+  and the closure-blocker set. Single source of truth for Guided next action,
+  the pre-close checklist and My Desk hints, so they can't drift. The
+  sign-off/legal RPCs stay the authority for who may act. 20 unit tests.
+
+### Added — Guided next action
+- The case **Overview** leads with a "Next action" banner: stage badge + the
+  highest-severity recommendation (with follow-ups), each deep-linking into the
+  relevant case tab.
+
+### Added — Case legal panel
+- The case Overview shows the case's warrants/subpoenas (active + a collapsed
+  resolved list) via the shared `LegalRequestRow`, deep-linking into `/legal`
+  — the case ↔ legal connection that was missing.
+
+### Added — Pre-close checklist
+- Closing a case runs the evaluator and enumerates unresolved work (open
+  sign-off / tasks / legal / drafts) in the confirm, with a "Close anyway"
+  override.
+
+### Changed — My Desk is the home
+- My Desk (the personal inbox) is now the default landing page and leads the
+  Command nav group; a command-only "Command administration" banner surfaces
+  the live pending-approval count (excluding members moved to DOJ/Judiciary,
+  consistent with the roster fix).
+
+### Added — expanded global search
+- `search_all` now also finds reports (by body values, never JSON keys),
+  evidence, and operations; report/evidence hits open the owning case's tab.
+
+### Added — better notifications
+- Bell rows are no longer dead ends: a destination route map opens the case,
+  legal request, Justice Portal, Command Center, announcement or owner surface
+  as appropriate. Assigning a case task now notifies the assignee.
 
 ## [1.17.1] — 2026-07-14
 
