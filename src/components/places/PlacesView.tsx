@@ -8,6 +8,7 @@ import type { Database, Tables } from '@/lib/database.types'
 import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
+import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -23,6 +24,7 @@ type HotspotRow = Tables<'narcotic_hotspots'>
 type ProcessStepRow = Tables<'place_process_steps'>
 type LocationType = Database['public']['Enums']['location_type']
 type CaseOption = Pick<Tables<'cases'>, 'id' | 'case_number' | 'title'>
+type PlacePhoto = Pick<Tables<'media'>, 'id' | 'title' | 'type' | 'external_url' | 'storage_path' | 'place_id'>
 
 const LOC_TYPES: { value: LocationType; label: string }[] = [
   { value: 'drug_lab', label: 'Drug Lab' },
@@ -68,15 +70,18 @@ export function PlacesView() {
   const [steps, setSteps] = useState<ProcessStepRow[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
+  const [photos, setPhotos] = useState<PlacePhoto[]>([])
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [editor, setEditor] = useState<PlaceRow | 'new' | null>(null)
   const [attach, setAttach] = useState<PlaceRow | null>(null)
+  const [lightbox, setLightbox] = useState<PlacePhoto | null>(null)
 
   const vPlaces = useTableVersion('places')
   const vGangs = useTableVersion('gangs')
   const vCases = useTableVersion('cases')
   const vNarcotics = useTableVersion('narcotics')
   const vSteps = useTableVersion('place_process_steps')
+  const vMedia = useTableVersion('media')
 
   const refresh = useCallback(async () => {
     if (state !== 'in') return
@@ -84,7 +89,7 @@ export function PlacesView() {
     setLoading(true)
     setErr(null)
     try {
-      const [pl, g, c, n, prec, hot, ps] = await Promise.all([
+      const [pl, g, c, n, prec, hot, ps, ph] = await Promise.all([
         withRetry(() => list('places', { order: 'updated_at', ascending: false })),
         list('gangs', { order: 'name' }).catch(() => [] as GangRow[]),
         list('cases', { select: 'id,case_number,title', order: 'updated_at', ascending: false })
@@ -94,11 +99,15 @@ export function PlacesView() {
         list('narcotic_precursors', {}).catch(() => [] as PrecursorRow[]),
         list('narcotic_hotspots', {}).catch(() => [] as HotspotRow[]),
         list('place_process_steps', {}).catch(() => [] as ProcessStepRow[]),
+        list('media', { select: 'id,title,type,external_url,storage_path,place_id', order: 'created_at' })
+          .then((rows) => (rows as unknown as PlacePhoto[]).filter((m) => m.place_id))
+          .catch(() => [] as PlacePhoto[]),
       ])
       setPlaces(pl)
       setGangs(g)
       setCases(c)
       setSteps(ps)
+      setPhotos(ph)
       setDrugs(n.map((row) => ({
         row,
         precursors: prec.filter((p) => p.narcotic_id === row.id),
@@ -115,7 +124,7 @@ export function PlacesView() {
   useEffect(() => {
     const t = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(t)
-  }, [refresh, vPlaces, vGangs, vCases, vNarcotics, vSteps])
+  }, [refresh, vPlaces, vGangs, vCases, vNarcotics, vSteps, vMedia])
 
   const gangName = (id: string | null) => (id && gangs.find((g) => g.id === id)?.name) || null
   const caseNum = (id: string | null) => (id && cases.find((c) => c.id === id)?.case_number) || null
@@ -126,6 +135,11 @@ export function PlacesView() {
     m.forEach((rows) => rows.sort((a, b) => (a.step_order || 0) - (b.step_order || 0)))
     return m
   }, [steps])
+  const photosByPlace = useMemo(() => {
+    const m = new Map<string, PlacePhoto[]>()
+    photos.forEach((p) => { if (p.place_id) m.set(p.place_id, [...(m.get(p.place_id) ?? []), p]) })
+    return m
+  }, [photos])
 
   const toggleSelect = (id: string, on: boolean) =>
     setSelected((sel) => { const next = new Set(sel); if (on) next.add(id); else next.delete(id); return next })
@@ -210,6 +224,8 @@ export function PlacesView() {
               caseNumber={caseNum(place.case_id)}
               drug={drugById(place.narcotic_id)}
               customSteps={stepsByPlace.get(place.id) ?? []}
+              photos={photosByPlace.get(place.id) ?? []}
+              onOpenPhoto={setLightbox}
               canEdit={canEdit}
               canDelete={canDelete}
               selected={selected.has(place.id)}
@@ -233,16 +249,41 @@ export function PlacesView() {
         />
       )}
       {attach && <AttachPlaceModal place={attach} caseOptions={cases} onClose={() => setAttach(null)} />}
+      {lightbox && <PhotoLightbox photo={lightbox} onClose={() => setLightbox(null)} />}
     </section>
   )
 }
 
-function PlaceCard({ place, gang, caseNumber, drug, customSteps, canEdit, canDelete, selected, onSelect, onEdit, onDelete, onAttach }: {
+function PhotoLightbox({ photo, onClose }: { photo: PlacePhoto; onClose: () => void }) {
+  const safe = safeUrl(photo.external_url || photo.storage_path || '')
+  return (
+    <Modal open onClose={onClose} wide>
+      <div className="p-6">
+        <ModalHeader title={photo.title} onClose={onClose} />
+        {safe ? (
+          // eslint-disable-next-line @next/next/no-img-element -- external evidence URL
+          <img src={safe} alt={photo.title} className="max-h-[70vh] w-full rounded-lg object-contain" />
+        ) : (
+          <div className="flex h-64 items-center justify-center rounded-lg bg-ink-800 text-5xl" aria-hidden>📡</div>
+        )}
+        {safe && (
+          <div className="mt-3 text-right">
+            <a href={safe} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-300 underline">Open ↗</a>
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+function PlaceCard({ place, gang, caseNumber, drug, customSteps, photos, onOpenPhoto, canEdit, canDelete, selected, onSelect, onEdit, onDelete, onAttach }: {
   place: PlaceRow
   gang: string | null
   caseNumber: string | null
   drug: DrugBundle | null
   customSteps: ProcessStepRow[]
+  photos: PlacePhoto[]
+  onOpenPhoto: (p: PlacePhoto) => void
   canEdit: boolean
   canDelete: boolean
   selected: boolean
@@ -277,6 +318,26 @@ function PlaceCard({ place, gang, caseNumber, drug, customSteps, canEdit, canDel
         {drug && <span className="rounded-md bg-emerald-500/10 px-2 py-1 text-emerald-300">{drug.row.name}</span>}
       </div>
       {place.notes && <p className="mt-3 text-xs text-slate-400">{place.notes}</p>}
+      {photos.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {photos.map((p) => {
+            const safe = safeUrl(p.external_url || p.storage_path || '')
+            if (!safe) return null
+            return (
+              // eslint-disable-next-line @next/next/no-img-element -- external evidence URL
+              <img
+                key={p.id}
+                src={safe}
+                alt={p.title}
+                title={p.title}
+                loading="lazy"
+                onClick={() => onOpenPhoto(p)}
+                className="h-20 w-28 cursor-zoom-in rounded-lg border border-white/10 object-cover transition hover:brightness-110"
+              />
+            )
+          })}
+        </div>
+      )}
       {recipe.length > 0 && (
         <div className="mt-4">
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-blue-300/70">Production Process</p>
