@@ -4181,7 +4181,7 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Tables"]["membership_requests"]["Row"][]
       }
-      admin_remove_member: { Args: { p_target: string }; Returns: undefined }
+      admin_remove_member: { Args: { p_target: string; p_reason?: string }; Returns: undefined }
       admin_restore_member: { Args: { p_target: string }; Returns: undefined }
       announcement_notify_update: {
         Args: { p_announce: string }

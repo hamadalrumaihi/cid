@@ -36,11 +36,12 @@ The one-line model ([ch. 18](handbook/18-security.md)): **anon key public → RL
 ## 4. Known accepted risks
 
 - **Fixtures are visible to command** in the roster ("RLS Test — …") until the fixture-hiding phase ships. Command members can legitimately deactivate, deny, or remove them — that authority is real and correct; the risk is operational (broken test runs), not a security hole. See the incident below.
-- **`admin_remove_member` writes no audit row.** It logs neither `audit_log` nor `role_events` (and `profiles` has no `private.audit()` trigger), so a permanent removal is only observable via the profile's `removed_at`. Accepted for now; a candidate fix for the next hardening pass.
 - **`mo_crossref` deliberately leaks case *existence*** across bureaus (paired with the request-access flow) — design, not defect.
 - **Rate limiting** is Supabase platform defaults; no app-level throttle at this scale ([HARDENING.md](HARDENING.md) §5).
 - **`bootstrap_command` / `bootstrap_director`** setup RPCs remain — verify inert or drop ([ch. 19](handbook/19-improvements.md)).
 - Dashboard-only settings (OTP expiry, leaked-password protection, backups) are the owner's manual checklist ([HARDENING.md](HARDENING.md)).
+
+**Closed** (Sprint 1C, [`20260723010000`](../supabase/migrations/20260723010000_justice_denial_orphan_files_removal_audit.sql)): `admin_remove_member` / `admin_restore_member` now write a `role_events` row (`source=admin_remove_member` / `admin_restore_member`, with an optional removal reason) and an `audit_log` row. Two other audit findings closed the same migration: justice access now respects `profiles.login_denied` (`private.is_justice_active`), and orphaned `case_files` under an unknown case number are command-only (`private.can_access_case_number`). Pinned by `v121`.
 
 ## 5. Incident precedent: production command removed the test fixtures
 

@@ -91,7 +91,7 @@ Existing functions carry this information as prose comments in their migrations;
 
 ## 7. How the live test suites verify the wall
 
-The suites in [`tests/rls/`](../tests/rls/) (`rls.test.ts`, `legal.test.ts`, `v114`–`v119.test.ts`) sign in to the **live project** as the low-privilege fixtures using the anon key + password grant — **never a service key** — and assert both directions:
+The suites in [`tests/rls/`](../tests/rls/) (`rls.test.ts`, `legal.test.ts`, `v114`–`v121.test.ts`) sign in to the **live project** as the low-privilege fixtures using the anon key + password grant — **never a service key** — and assert both directions:
 
 - **Denial paths**: bureau isolation (read/write/insert/child rows), deny-by-default for inactive accounts, the lockdown triggers, RPC caller checks (e.g. `signoff_decide` as a non-assignee), the `profiles.email` column grant, `is_owner` self-grant immunity, sealed-request undiscoverability (table, search, notifications), anonymous access. `v119` adds the sign-off integrity contract: concurrent-decision conflict (`P0001`, exactly one winner), direct `case_signoff_history` INSERT rejected, strict-owner negatives (non-owner detective **and** bureau_lead), and command-override authority (rank-and-file/bureau_lead/blank-reason all rejected; Director/Owner positive with `source='command_override'`).
 - **Approval paths**: owner-positive blocks (triage writes, audit reads), the membership approval success path (atomic profile flip + notification), bureau-lead scoping that *succeeds* in the proper bureau, the DOJ review/approval routes, transfers.

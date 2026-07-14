@@ -1151,7 +1151,7 @@ create table public.role_events (
   source_id uuid
 );
 alter table public.role_events add constraint role_events_pkey PRIMARY KEY (id);
-alter table public.role_events add constraint role_events_source_check CHECK (source in ('membership_approval', 'role_change', 'transfer', 'activation'));
+alter table public.role_events add constraint role_events_source_check CHECK (source in ('membership_approval', 'role_change', 'transfer', 'activation', 'admin_remove_member', 'admin_restore_member'));
 alter table public.role_events add constraint role_events_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
 alter table public.role_events add constraint role_events_target_id_fkey FOREIGN KEY (target_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 alter table public.role_events enable row level security;
@@ -1515,8 +1515,8 @@ CREATE OR REPLACE FUNCTION private.can_access_case_number(cn text)
  SET search_path TO ''
 AS $function$
   select private.is_active() and (
-    not exists (select 1 from public.cases c where c.case_number = cn)
-    or exists (select 1 from public.cases c where c.case_number = cn and private.can_access_case(c.id))
+    exists (select 1 from public.cases c where c.case_number = cn and private.can_access_case(c.id))
+    or (not exists (select 1 from public.cases c where c.case_number = cn) and private.is_command())
   ) $function$
 ;
 
@@ -1781,21 +1781,20 @@ begin
 end $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.admin_remove_member(p_target uuid)
+CREATE OR REPLACE FUNCTION public.admin_remove_member(p_target uuid, p_reason text DEFAULT NULL::text)
  RETURNS void
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-declare v_actor uuid := (select auth.uid());
+declare v_actor uuid := (select auth.uid()); t public.profiles;
 begin
   if not private.is_command() then raise exception 'not authorized'; end if;
   if p_target = v_actor then raise exception 'you cannot remove yourself'; end if;
-  if not exists (select 1 from public.profiles where id = p_target) then
-    raise exception 'member not found';
-  end if;
+  select * into t from public.profiles where id = p_target;
+  if not found then raise exception 'member not found'; end if;
   -- never strand the org without a director
-  if exists (select 1 from public.profiles where id = p_target and role = 'director' and active)
+  if t.role = 'director' and t.active
      and (select count(*) from public.profiles where role = 'director' and active and id <> p_target) = 0 then
     raise exception 'cannot remove the last active director';
   end if;
@@ -1805,6 +1804,12 @@ begin
   update public.profiles
      set active = false, removed_at = now(), email = null
    where id = p_target;
+  insert into public.role_events (target_id, actor_id, old_role, new_role,
+    old_division, new_division, old_active, new_active, reason, source)
+  values (p_target, v_actor, t.role, t.role, t.division, t.division, t.active, false,
+    coalesce(nullif(btrim(coalesce(p_reason, '')), ''), 'removed by command'), 'admin_remove_member');
+  insert into public.audit_log (actor_id, action, entity, entity_id)
+  values (v_actor, 'REMOVE_MEMBER', 'profiles', p_target);
 end $function$
 ;
 
@@ -1814,10 +1819,19 @@ CREATE OR REPLACE FUNCTION public.admin_restore_member(p_target uuid)
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
+declare v_actor uuid := (select auth.uid()); t public.profiles;
 begin
   if not private.is_command() then raise exception 'not authorized'; end if;
+  select * into t from public.profiles where id = p_target;
+  if not found then raise exception 'member not found'; end if;
   -- returns inactive; a command member must re-approve to grant access again
   update public.profiles set removed_at = null where id = p_target;
+  insert into public.role_events (target_id, actor_id, old_role, new_role,
+    old_division, new_division, old_active, new_active, reason, source)
+  values (p_target, v_actor, t.role, t.role, t.division, t.division, t.active, t.active,
+    'restored by command', 'admin_restore_member');
+  insert into public.audit_log (actor_id, action, entity, entity_id)
+  values (v_actor, 'RESTORE_MEMBER', 'profiles', p_target);
 end $function$
 ;
 
