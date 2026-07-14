@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -15,6 +15,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { assessCase, type NextAction, type WfReport, type WfTask } from '@/lib/caseWorkflow'
 import type { LegalRequest } from '@/lib/justice'
 import { LegalRequestRow } from '@/components/justice/legalShared'
+import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { JointCaseModal, isActiveAssignment } from '../JointCaseModal'
 import { Stat, type AssignmentRow, type CaseRow } from './shared'
@@ -30,6 +31,10 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
   // "Now" is snapshotted per refresh (render must stay pure) — expiry lines
   // re-evaluate whenever the assignments themselves are refetched.
   const [now, setNow] = useState(0)
+  // "Since your last visit" recap: the marker for THIS case is captured once on
+  // open (so the recap stays visible through the visit) and re-stamped on leave.
+  const seenRef = useRef<string>(Store.get<string>(`caseSeen:${c.id}`, ''))
+  const [recap, setRecap] = useState<{ evidence: number; reports: number; tasks: number; legal: number } | null>(null)
   const vA = useTableVersion('case_assignments')
   const vE = useTableVersion('evidence')
   const vR = useTableVersion('reports')
@@ -46,9 +51,21 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
         list('legal_requests', { eq: { case_id: c.id }, order: 'created_at', ascending: false }).catch(() => [] as LegalRequest[]),
       ])
       setAssignments(a); setEvidence(e.length); setReports(r); setTasks(t); setLegal(l as LegalRequest[]); setNow(Date.now())
+      const seen = seenRef.current
+      const newer = (rows: { created_at?: string | null }[]) => seen ? rows.filter((x) => (x.created_at || '') > seen).length : 0
+      setRecap(seen ? {
+        evidence: newer(e), reports: newer(r), tasks: newer(t),
+        legal: l.filter((x) => (x.updated_at || '') > seen).length,
+      } : null)
     } catch { /* tab can render stale */ }
   }, [c.id])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vA, vE, vR, vT, vL])
+  // Re-stamp the marker when leaving the case, so the next visit's recap covers
+  // what changed while away. new Date() runs only in this browser effect.
+  useEffect(() => {
+    const id = c.id
+    return () => { Store.set(`caseSeen:${id}`, new Date().toISOString()) }
+  }, [c.id])
 
   const standardCount = assignments.filter((a) => a.assignment_source !== 'joint_case' && !a.removed_at).length
   const assessment = useMemo(() => assessCase({
@@ -91,6 +108,7 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
 
   return (
     <div className="space-y-4">
+      <CaseRecap recap={recap} />
       <GuidedNextAction caseId={c.id} stageLabel={assessment.stageLabel} actions={assessment.nextActions} />
       <div className="grid gap-3 md:grid-cols-4">
         <Stat label="Evidence" value={evidence} />
@@ -165,6 +183,27 @@ function CaseLegalPanel({ rows, onOpen }: { rows: LegalRequest[]; onOpen: (id: s
         </div>
       )}
     </div>
+  )
+}
+
+/* ── Since your last visit ──────────────────────────────────────────────────
+ * A compact recap of what changed on this case since the viewer last opened it
+ * (per-case localStorage marker, re-stamped on leave). Purely informational —
+ * it never suppresses a notification; it just orients a returning detective. */
+function CaseRecap({ recap }: { recap: { evidence: number; reports: number; tasks: number; legal: number } | null }) {
+  if (!recap) return null
+  const parts: string[] = []
+  if (recap.evidence) parts.push(`${recap.evidence} evidence item${recap.evidence === 1 ? '' : 's'} added`)
+  if (recap.reports) parts.push(`${recap.reports} report${recap.reports === 1 ? '' : 's'} added`)
+  if (recap.tasks) parts.push(`${recap.tasks} task${recap.tasks === 1 ? '' : 's'} added`)
+  if (recap.legal) parts.push(`${recap.legal} legal update${recap.legal === 1 ? '' : 's'}`)
+  if (!parts.length) return null
+  return (
+    <section aria-label="Changes since your last visit" className="rounded-xl border border-sky-400/25 bg-sky-500/10 px-4 py-3">
+      <p className="text-sm text-sky-100">
+        <span className="font-bold">Since your last visit:</span> {parts.join(' · ')}.
+      </p>
+    </section>
   )
 }
 

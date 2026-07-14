@@ -8,6 +8,12 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Usability roadmap, Phase 2 (in progress)
 
+### Added — case activity recap
+- The case Overview shows a **"Since your last visit"** banner summarising what
+  changed (evidence / reports / tasks added, legal updates) since the viewer
+  last opened this case — a per-case marker re-stamped on leave. Purely
+  informational; it never suppresses a notification.
+
 ### Added — case handover
 - The current lead (or command) can **hand a case to another officer** from the
   case header: pick the new lead + an optional note. Both the outgoing and
