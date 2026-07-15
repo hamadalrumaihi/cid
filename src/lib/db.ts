@@ -57,9 +57,16 @@ export async function list<T extends TableName>(table: T, opts: ListOptions<T> =
 
 /** Row count without fetching rows (HEAD + count=exact). THROWS like list().
  *  RLS applies — the caller sees the count of rows THEY can see. Powers the
- *  Owner Portal statistics; cheap even on the larger tables. */
-export async function countRows<T extends TableName>(table: T): Promise<number> {
-  const { count, error } = await raw().from(table).select('*', { count: 'exact', head: true })
+ *  Owner Portal statistics; cheap even on the larger tables. Optional
+ *  `filters.eq` matches list()'s eq handling, so bounded per-parent metric
+ *  counts (e.g. open case_blockers for one case) never fetch rows. */
+export async function countRows<T extends TableName>(
+  table: T,
+  filters?: { eq?: Partial<Record<keyof Tables<T> & string, unknown>> },
+): Promise<number> {
+  let q = raw().from(table).select('*', { count: 'exact', head: true })
+  if (filters?.eq) for (const [k, v] of Object.entries(filters.eq)) q = q.eq(k, v)
+  const { count, error } = await q
   if (error) throw Object.assign(new Error(error.message), { code: error.code })
   return count ?? 0
 }

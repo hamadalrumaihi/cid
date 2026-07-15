@@ -177,6 +177,36 @@ alter table public.case_assignments add constraint case_assignments_case_id_fkey
 alter table public.case_assignments add constraint case_assignments_officer_id_fkey FOREIGN KEY (officer_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 alter table public.case_assignments enable row level security;
 
+create table public.case_blockers (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  title text not null,
+  type text not null,
+  owner_id uuid,
+  review_at date,
+  task_id uuid,
+  report_id uuid,
+  legal_request_id uuid,
+  status text not null default 'open'::text,
+  resolution_note text,
+  resolved_by uuid,
+  resolved_at timestamp with time zone,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.case_blockers add constraint case_blockers_pkey PRIMARY KEY (id);
+alter table public.case_blockers add constraint case_blockers_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.case_blockers add constraint case_blockers_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.case_blockers add constraint case_blockers_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id) ON DELETE SET NULL;
+alter table public.case_blockers add constraint case_blockers_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.profiles(id);
+alter table public.case_blockers add constraint case_blockers_report_id_fkey FOREIGN KEY (report_id) REFERENCES public.reports(id) ON DELETE SET NULL;
+alter table public.case_blockers add constraint case_blockers_resolved_by_fkey FOREIGN KEY (resolved_by) REFERENCES public.profiles(id);
+alter table public.case_blockers add constraint case_blockers_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.case_tasks(id) ON DELETE SET NULL;
+alter table public.case_blockers add constraint case_blockers_status_check CHECK ((status = ANY (ARRAY['open'::text, 'resolved'::text])));
+alter table public.case_blockers add constraint case_blockers_type_check CHECK ((type = ANY (ARRAY['awaiting_evidence'::text, 'awaiting_report'::text, 'awaiting_legal_review'::text, 'awaiting_command_review'::text, 'awaiting_agency'::text, 'awaiting_suspect'::text, 'task_dependency'::text, 'resource'::text, 'other'::text])));
+alter table public.case_blockers enable row level security;
+
 create table public.case_files (
   id uuid not null default gen_random_uuid(),
   case_number text not null,
@@ -310,7 +340,8 @@ create table public.cases (
   joint_case_created_by uuid,
   joint_case_created_at timestamp with time zone,
   joint_case_ended_by uuid,
-  joint_case_ended_at timestamp with time zone
+  joint_case_ended_at timestamp with time zone,
+  priority text
 );
 alter table public.cases add constraint cases_joint_case_created_by_fkey FOREIGN KEY (joint_case_created_by) REFERENCES public.profiles(id);
 alter table public.cases add constraint cases_joint_case_ended_by_fkey FOREIGN KEY (joint_case_ended_by) REFERENCES public.profiles(id);
@@ -321,6 +352,7 @@ alter table public.cases add constraint cases_lead_detective_id_fkey FOREIGN KEY
 alter table public.cases add constraint cases_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES public.operations(id) ON DELETE SET NULL;
 alter table public.cases add constraint cases_signoff_assignee_id_fkey FOREIGN KEY (signoff_assignee_id) REFERENCES public.profiles(id);
 alter table public.cases add constraint cases_signoff_submitted_by_fkey FOREIGN KEY (signoff_submitted_by) REFERENCES public.profiles(id);
+alter table public.cases add constraint cases_priority_check CHECK (((priority IS NULL) OR (priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
 alter table public.cases enable row level security;
 
 create table public.cid_records (
@@ -1393,6 +1425,13 @@ CREATE INDEX case_access_requests_decided_by_fkey_idx ON public.case_access_requ
 CREATE INDEX case_access_requests_requester_id_fkey_idx ON public.case_access_requests USING btree (requester_id);
 CREATE INDEX idx_car_case ON public.case_access_requests USING btree (case_id);
 CREATE INDEX case_assignments_officer_id_fkey_idx ON public.case_assignments USING btree (officer_id);
+CREATE INDEX case_blockers_case_id_fkey_idx ON public.case_blockers USING btree (case_id);
+CREATE INDEX case_blockers_created_by_fkey_idx ON public.case_blockers USING btree (created_by);
+CREATE INDEX case_blockers_legal_request_id_fkey_idx ON public.case_blockers USING btree (legal_request_id);
+CREATE INDEX case_blockers_owner_id_fkey_idx ON public.case_blockers USING btree (owner_id);
+CREATE INDEX case_blockers_report_id_fkey_idx ON public.case_blockers USING btree (report_id);
+CREATE INDEX case_blockers_resolved_by_fkey_idx ON public.case_blockers USING btree (resolved_by);
+CREATE INDEX case_blockers_task_id_fkey_idx ON public.case_blockers USING btree (task_id);
 CREATE INDEX case_files_added_by_fkey_idx ON public.case_files USING btree (added_by);
 CREATE INDEX case_files_case_number_idx ON public.case_files USING btree (case_number);
 CREATE UNIQUE INDEX case_files_unique_file_per_case ON public.case_files USING btree (case_number, drive_file_id);
@@ -3291,6 +3330,8 @@ CREATE TRIGGER ballistic_footprints_touch BEFORE UPDATE ON public.ballistic_foot
 CREATE TRIGGER ballistics_benches_touch BEFORE UPDATE ON public.ballistics_benches FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER audit_car AFTER INSERT OR DELETE OR UPDATE ON public.case_access_requests FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER case_assignments_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_assignments FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER case_blockers_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_blockers FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER case_blockers_touch BEFORE UPDATE ON public.case_blockers FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_stamp_author BEFORE INSERT ON public.case_messages FOR EACH ROW EXECUTE FUNCTION public.stamp_author_identity();
 CREATE TRIGGER case_tasks_audit AFTER INSERT OR DELETE OR UPDATE ON public.case_tasks FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER case_tasks_touch BEFORE UPDATE ON public.case_tasks FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -3470,6 +3511,23 @@ create policy case_assignments_upd on public.case_assignments
   as permissive for update to authenticated
   using ((private.can_access_case(case_id) AND (assignment_source = 'standard'::text)))
   with check ((private.can_access_case(case_id) AND (assignment_source = 'standard'::text)));
+
+create policy case_blockers_del on public.case_blockers
+  as permissive for delete to authenticated
+  using ((private.can_delete() OR (created_by = ( SELECT auth.uid() AS uid))));
+
+create policy case_blockers_ins on public.case_blockers
+  as permissive for insert to authenticated
+  with check (private.can_access_case(case_id));
+
+create policy case_blockers_sel on public.case_blockers
+  as permissive for select to authenticated
+  using (private.can_access_case(case_id));
+
+create policy case_blockers_upd on public.case_blockers
+  as permissive for update to authenticated
+  using (private.can_access_case(case_id))
+  with check (private.can_access_case(case_id));
 
 create policy cf_delete on public.case_files
   as permissive for delete to authenticated
@@ -4161,6 +4219,7 @@ create policy wl_sel on public.watchlist
 --   public.case_access_grants
 --   public.case_access_requests
 --   public.case_assignments
+--   public.case_blockers
 --   public.case_files
 --   public.case_intel_links
 --   public.case_messages
@@ -4221,6 +4280,8 @@ create policy wl_sel on public.watchlist
 --   case_access_requests -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_assignments -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_assignments -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_blockers -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_blockers -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_files -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_files -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_intel_links -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE

@@ -1,33 +1,28 @@
 'use client'
 
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
-import { Badge } from '@/components/ui/Badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Button } from '@/components/ui/Button'
 import { DetailSkeleton } from '@/components/ui/Skeleton'
-import { DeadlineChip } from '@/components/ui/DeadlineChip'
+import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
+import { SectionTabs, panelDomId, tabDomId, type SectionTab, type SectionTabGroup } from '@/components/ui/SectionTabs'
 import { uiConfirm } from '@/components/ui/dialog'
-import { deleteWithUndo, list, rpc, update, withRetry } from '@/lib/db'
-import { todayISO, copyText, slug } from '@/lib/format'
+import { countRows, deleteWithUndo, list, update, withRetry } from '@/lib/db'
+import { todayISO } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
-import { bureauLabel } from '@/lib/roles'
 import { useOperationsStore } from '@/lib/operations'
-import { caseCourtHint, caseStatusTint, CASE_STATUSES, signoffLabel, signoffTint } from '@/lib/signoff'
-import { assessCase } from '@/lib/caseWorkflow'
+import { assessCase, type PersistedBlocker, type WfLegal, type WfReport, type WfTask } from '@/lib/caseWorkflow'
+import { parseCharges } from '@/lib/jsonShapes'
 import { officerName, activeProfiles } from '@/lib/profiles'
 import { notify } from '@/lib/notify'
 import { useTableVersion } from '@/lib/realtime'
-import { gatherCasePacket, packetDocx, packetMarkdown, packetPdfSpec } from '@/lib/packet'
 import { toast } from '@/lib/toast'
 import { isPinnedCase, pushRecentCase, togglePinCase } from './caseUtils'
-import { StaleBadge } from './StaleBadge'
-import { WatchButton } from './WatchButton'
 import { CaseModal } from './CaseModal'
-import { JointCaseModal } from './JointCaseModal'
+import { CaseCommandHeader } from './CaseCommandHeader'
 import { ReassignBureauModal } from './ReassignBureauModal'
 import { OverviewTab } from './tabs/OverviewTab'
 import { NotesTab } from './tabs/NotesTab'
@@ -40,7 +35,7 @@ import { TasksTab } from './tabs/TasksTab'
 import { SignoffTab } from './tabs/SignoffTab'
 import { ChatTab } from './tabs/ChatTab'
 import { TimelineTab } from './tabs/TimelineTab'
-import type { AssignmentRow, CaseRow } from './tabs/shared'
+import type { CaseRow } from './tabs/shared'
 
 // RicoView renders the same tracker outside the case screen.
 export { RicoTab } from './tabs/RicoTab'
@@ -53,6 +48,28 @@ const CaseGraphTab = dynamic(() => import('./CaseGraphTab').then((m) => m.CaseGr
 
 const TABS = ['overview', 'graph', 'evidence', 'notes', 'charges', 'rico', 'intel', 'reports', 'tasks', 'signoff', 'chat', 'timeline'] as const
 type TabId = (typeof TABS)[number]
+
+const TAB_LABELS: Record<TabId, string> = {
+  overview: 'Overview', graph: 'Graph', evidence: 'Evidence', notes: 'Notes',
+  charges: 'Charges', rico: 'RICO', intel: 'Intel', reports: 'Reports',
+  tasks: 'Tasks', signoff: 'Sign-off', chat: 'Chat', timeline: 'Timeline',
+}
+
+// Visual grouping only — the tab ids and ?tab= URL values are unchanged.
+const TAB_GROUPS: ReadonlyArray<SectionTabGroup<TabId>> = [
+  { label: 'Command', tabs: ['overview', 'signoff', 'timeline'] },
+  { label: 'Investigation', tabs: ['graph', 'evidence', 'notes', 'charges', 'rico', 'intel'] },
+  { label: 'Documentation', tabs: ['reports'] },
+  { label: 'Collaboration', tabs: ['tasks', 'chat'] },
+]
+
+interface WorkflowRows {
+  tasks: WfTask[]
+  reports: WfReport[]
+  legal: WfLegal[]
+  evidence: number
+  blockers: PersistedBlocker[]
+}
 
 export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () => void; onChanged: () => void }) {
   const router = useRouter()
@@ -89,69 +106,46 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     router.replace(`/cases?${params.toString()}`)
   }
 
-  // ── Tab bar mechanics: overflow fades tracked to real scroll position,
-  //    roving-tabindex keyboard focus, and active-tab-into-view on change. ──
-  const stripRef = useRef<HTMLDivElement>(null)
-  const tabRefs = useRef<Partial<Record<TabId, HTMLButtonElement | null>>>({})
-  const rafRef = useRef<number | undefined>(undefined)
-  const [fade, setFade] = useState({ left: false, right: false })
+  // ── Workflow snapshot for the command header + metric strip. Row fetches are
+  //    the same case-scoped queries the tabs run; evidence uses a HEAD count so
+  //    no rows move. Open blockers come over as rows (not a count) so the same
+  //    fetch feeds assessCase's persistedBlockers — header, metric strip and
+  //    Overview all gate on identical data. Best-effort: the header renders
+  //    without it. ──
+  const [wf, setWf] = useState<WorkflowRows | null>(null)
+  const vE = useTableVersion('evidence')
+  const vR = useTableVersion('reports')
+  const vT = useTableVersion('case_tasks')
+  const vL = useTableVersion('legal_requests')
+  const vB = useTableVersion('case_blockers')
+  const fetchWorkflow = useCallback(async () => {
+    try {
+      const [tasks, reports, legal, evidence, blockers] = await Promise.all([
+        list('case_tasks', { eq: { case_id: id } }),
+        list('reports', { eq: { case_id: id } }),
+        // Legal is read-scoped by RLS; a failure must not sink the header.
+        list('legal_requests', { eq: { case_id: id } }).catch(() => [] as WfLegal[]),
+        countRows('evidence', { eq: { case_id: id } }),
+        list('case_blockers', { eq: { case_id: id, status: 'open' } }).catch(() => [] as PersistedBlocker[]),
+      ])
+      setWf({ tasks, reports, legal, evidence, blockers })
+    } catch { /* header/metrics render with em-dashes until a fetch lands */ }
+  }, [id])
+  useEffect(() => { queueMicrotask(() => { void fetchWorkflow() }) }, [fetchWorkflow, casesV, vE, vR, vT, vL, vB])
 
-  const readFades = useCallback(() => {
-    const el = stripRef.current
-    if (!el) return
-    const left = el.scrollLeft > 1
-    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
-    setFade((f) => (f.left === left && f.right === right ? f : { left, right }))
-  }, [])
-
-  const onScroll = useCallback(() => {
-    if (rafRef.current != null) return
-    rafRef.current = requestAnimationFrame(() => { rafRef.current = undefined; readFades() })
-  }, [readFades])
-
-  // Window resize can change what overflows — re-measure (rAF-throttled).
-  useEffect(() => {
-    window.addEventListener('resize', onScroll)
-    return () => {
-      window.removeEventListener('resize', onScroll)
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
-    }
-  }, [onScroll])
-
-  // Bring the active tab into view on first paint and on every tab change,
-  // then re-measure the fades. Respect reduced-motion for the scroll.
-  useEffect(() => {
-    const el = tabRefs.current[tab]
-    if (el) {
-      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      el.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: reduce ? 'auto' : 'smooth' })
-    }
-    readFades()
-    // c?.id: the strip only mounts once the case has loaded.
-  }, [tab, c?.id, readFades])
-
-  // Roving focus only — arrows/Home/End MOVE focus between tabs; activation
-  // (Enter/Space/click) is left to each button's native onClick → setTab, so
-  // the ?tab= URL is not churned as focus roams the strip.
-  const onTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
-    e.preventDefault()
-    const active = document.activeElement
-    let idx = TABS.findIndex((t) => tabRefs.current[t] === active)
-    if (idx < 0) idx = TABS.indexOf(tab)
-    const next =
-      e.key === 'Home' ? 0
-      : e.key === 'End' ? TABS.length - 1
-      : e.key === 'ArrowLeft' ? (idx - 1 + TABS.length) % TABS.length
-      : (idx + 1) % TABS.length
-    tabRefs.current[TABS[next]]?.focus()
-  }
+  const assessment = useMemo(() => (c && wf ? assessCase({
+    c,
+    tasks: wf.tasks, reports: wf.reports, legal: wf.legal,
+    evidenceCount: wf.evidence,
+    persistedBlockers: wf.blockers,
+    meId: profile?.id ?? null,
+    assigneeName: officerName(c.signoff_assignee_id),
+  }) : null), [c, wf, profile?.id])
 
   if (loading) return <DetailSkeleton />
   if (!c) return <p className="rounded-2xl border border-white/10 bg-ink-900/50 p-6 text-slate-300">Case not found.</p>
 
   const op = operations.find((x) => x.id === c.operation_id)
-  const hint = caseCourtHint(c, profile?.id ?? null, officerName(c.signoff_assignee_id))
   const pinned = isPinnedCase(c.id)
   // The current lead (or command) may hand the case to another officer.
   const canHandover = !!profile && (c.lead_detective_id === profile.id || isCommand)
@@ -173,13 +167,14 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       // is advisory — command can still close over it (reason lives in history).
       let blockerLines = ''
       try {
-        const [tasks, reports, legal, evidence] = await Promise.all([
+        const [tasks, reports, legal, evidence, persisted] = await Promise.all([
           list('case_tasks', { eq: { case_id: c.id } }),
           list('reports', { eq: { case_id: c.id } }),
           list('legal_requests', { eq: { case_id: c.id } }).catch(() => []),
           list('evidence', { eq: { case_id: c.id } }),
+          list('case_blockers', { eq: { case_id: c.id, status: 'open' } }).catch(() => [] as PersistedBlocker[]),
         ])
-        const { blockers } = assessCase({ c, tasks, reports, legal, evidenceCount: evidence.length, meId: profile?.id ?? null, todayISO: todayISO() })
+        const { blockers } = assessCase({ c, tasks, reports, legal, evidenceCount: evidence.length, persistedBlockers: persisted, meId: profile?.id ?? null, todayISO: todayISO() })
         if (blockers.length) blockerLines = '\n\nStill open on this case:\n' + blockers.map((b) => `• ${b.label}`).join('\n') + '\n\nClose anyway?'
       } catch { /* checklist is best-effort; fall back to the plain confirm */ }
       const ok = await uiConfirm(
@@ -208,104 +203,81 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     if (ok) { onBack(); onChanged() }
   }
 
+  // Header/metric derivations — cheap, render-pure.
+  const chargesCount = parseCharges(c.charges).reduce((n, x) => n + Math.max(1, x.count || 1), 0)
+  const openTasks = wf ? wf.tasks.filter((t) => !t.done).length : null
+  const counts = assessment?.counts ?? null
+
+  const metrics: Metric[] = [
+    { label: 'Evidence', value: wf ? wf.evidence : '—', onClick: () => setTab('evidence') },
+    {
+      label: 'Open tasks', value: openTasks ?? '—', onClick: () => setTab('tasks'),
+      hint: counts && counts.overdueTasks > 0 ? `${counts.overdueTasks} overdue` : undefined,
+      tint: counts && counts.overdueTasks > 0 ? 'bg-rose-500/15 text-rose-300' : undefined,
+    },
+    {
+      label: 'Reports', value: wf ? wf.reports.length : '—', onClick: () => setTab('reports'),
+      hint: counts && counts.draftReports > 0 ? `${counts.draftReports} draft` : undefined,
+    },
+    {
+      label: 'Open blockers', value: wf ? wf.blockers.length : '—', onClick: () => setTab('overview'),
+      tint: wf && wf.blockers.length > 0 ? 'bg-amber-500/15 text-amber-300' : undefined,
+    },
+    { label: 'Charges', value: chargesCount, onClick: () => setTab('charges') },
+  ]
+
+  const tabDefs: Array<SectionTab<TabId>> = TABS.map((t) => ({
+    id: t,
+    label: TAB_LABELS[t],
+    count:
+      t === 'evidence' ? wf?.evidence
+      : t === 'reports' ? wf?.reports.length
+      : t === 'tasks' ? openTasks ?? undefined
+      : t === 'charges' ? chargesCount
+      : undefined,
+    marker: t === 'signoff' && awaitingSignoff,
+    markerLabel: t === 'signoff' ? 'Sign-off requires attention' : undefined,
+  }))
+
   return (
     <div className="space-y-4">
       <Breadcrumbs items={[{ label: 'Cases', onClick: onBack }, { label: c.case_number }]} />
-      <section className="rounded-2xl border border-white/10 bg-ink-900/60 p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              {/* Identity group — what the case is. */}
-              <button onClick={() => copyText(c.case_number, 'Case number copied.')} title="Copy case number" className="inline-flex items-center rounded-full bg-white/5 px-2.5 py-0.5 font-mono text-[11px] font-bold text-badge-200 hover:bg-white/10">{c.case_number}</button>
-              <Badge>{c.bureau}</Badge>
-              {c.is_joint_case && (
-                <Badge
-                  tint="bg-violet-500/15 text-violet-300"
-                  title={`Originating department: ${bureauLabel(c.originating_bureau ?? c.bureau)}`}
-                >
-                  JTF · Joint case
-                </Badge>
-              )}
-              <span aria-hidden className="mx-0.5 h-4 w-px bg-white/10" />
-              {/* Workflow group — where the case stands. */}
-              <Badge tint={caseStatusTint(c.status)} className="uppercase">{c.status}</Badge>
-              <Badge tint={signoffTint(c.signoff_status)}>{signoffLabel(c.signoff_status)}</Badge>
-              <StaleBadge c={c} />
-            </div>
-            <h1 className="text-2xl font-black text-white">{c.title || 'Untitled case'}</h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-300">{c.summary || 'No summary recorded.'}</p>
-            {hint && <p className={`mt-3 inline-flex rounded-lg px-3 py-2 text-sm font-semibold ${hint.c}`}>{hint.t}</p>}
-          </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            {canEdit ? (
-              <select value={c.status} onChange={(e) => void quickStatus(e.target.value as CaseRow['status'])} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
-                {CASE_STATUSES.map((s) => <option key={s} value={s}>{s.toUpperCase()}</option>)}
-              </select>
-            ) : <span className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300">Read-only</span>}
-            {op && <Link href={`/operations?op=${op.id}`} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Operation: {op.name}</Link>}
-            <Button onClick={() => { togglePinCase(c.id); setCase({ ...c }) }}>{pinned ? 'Pinned' : 'Pin'}</Button>
-            <WatchButton type="case" id={c.id} label={c.case_number} />
-            <JointCaseControls c={c} onChanged={() => { onChanged(); void fetchCase() }} />
-            {canEdit && <FollowUpButton c={c} onChanged={fetchCase} />}
-            <Button onClick={() => copyText(`${window.location.origin}/cases?case=${c.id}`, 'Case link copied.')}>Link</Button>
-            <PacketButton c={c} />
-            {canEdit && <Button onClick={() => setEdit(true)}>Edit</Button>}
-            {canHandover && <Button onClick={() => setHandover(true)}>Hand over</Button>}
-            {canReassignBureau && <Button onClick={() => setReassign(true)}>Reassign bureau</Button>}
-            {canDelete && <Button variant="danger" onClick={() => void deleteCase()}>Delete</Button>}
-          </div>
-        </div>
-      </section>
+      <CaseCommandHeader
+        c={c}
+        op={op ? { id: op.id, name: op.name } : null}
+        assessment={assessment}
+        pinned={pinned}
+        canEdit={canEdit}
+        canDelete={canDelete}
+        canHandover={canHandover}
+        canReassignBureau={canReassignBureau}
+        onStatusChange={(s) => void quickStatus(s)}
+        onPinToggle={() => { togglePinCase(c.id); setCase({ ...c }) }}
+        onEdit={() => setEdit(true)}
+        onHandover={() => setHandover(true)}
+        onReassign={() => setReassign(true)}
+        onDelete={() => void deleteCase()}
+        onChanged={() => { onChanged(); void fetchCase() }}
+        onGoTab={(t) => setTab(TABS.includes(t as TabId) ? (t as TabId) : 'overview')}
+      />
+
+      <MetricStrip metrics={metrics} />
 
       {/* Sticky tab strip — tucks directly under the shell header (sticky
           top-0). Header ≈ 4.5rem mobile / 4.75rem sm+; z-10 stays below the
           header's z-20 so the header owns the seam (no gap, no overlap). */}
       <div className="sticky top-[4.5rem] z-10 -mx-4 border-b border-white/10 bg-ink-950/90 px-4 backdrop-blur sm:top-[4.75rem] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-        <div className="relative">
-          {fade.left && <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-ink-950 to-transparent" />}
-          {fade.right && <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-ink-950 to-transparent" />}
-          <div
-            ref={stripRef}
-            role="tablist"
-            aria-label="Case sections"
-            onScroll={onScroll}
-            onKeyDown={onTabKeyDown}
-            className="flex gap-2 overflow-x-auto py-2"
-          >
-            {TABS.map((t) => {
-              const on = tab === t
-              const marker = t === 'signoff' && awaitingSignoff
-              return (
-                <Fragment key={t}>
-                  {/* One subtle divider before the workflow cluster (reports ·
-                      tasks · signoff · chat); tab order is untouched. */}
-                  {t === 'reports' && <span aria-hidden className="mx-1 h-6 w-px flex-shrink-0 self-center bg-white/10" />}
-                  <button
-                    ref={(el) => { tabRefs.current[t] = el }}
-                    role="tab"
-                    id={`casetab-${t}`}
-                    aria-selected={on}
-                    aria-controls={`casepanel-${t}`}
-                    tabIndex={on ? 0 : -1}
-                    title={marker ? 'Sign-off requires attention' : undefined}
-                    onClick={() => setTab(t)}
-                    className={`flex min-h-[44px] flex-shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold capitalize sm:min-h-0 ${on ? 'bg-badge-500 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10'}`}
-                  >
-                    {t}
-                    {marker && (
-                      <>
-                        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                        <span className="sr-only">Sign-off requires attention</span>
-                      </>
-                    )}
-                  </button>
-                </Fragment>
-              )
-            })}
-          </div>
-        </div>
+        <SectionTabs<TabId>
+          tabs={tabDefs}
+          groups={TAB_GROUPS}
+          active={tab}
+          onChange={setTab}
+          idBase="case"
+          ariaLabel="Case sections"
+          className="py-1"
+        />
       </div>
-      <section role="tabpanel" id={`casepanel-${tab}`} aria-labelledby={`casetab-${tab}`} tabIndex={0} className="rounded-2xl border border-white/10 bg-ink-900/45 p-4">
+      <section role="tabpanel" id={panelDomId('case', tab)} aria-labelledby={tabDomId('case', tab)} tabIndex={0} className="rounded-2xl border border-white/10 bg-ink-900/45 p-4">
         {tab === 'overview' && <OverviewTab c={c} canEdit={canEdit} canDelete={canDelete} />}
         {tab === 'graph' && <CaseGraphTab c={c} />}
         {tab === 'evidence' && <EvidenceTab c={c} canEdit={canEdit} canDelete={canDelete} />}
@@ -323,139 +295,6 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       <HandoverModal open={handover} c={c} onClose={() => setHandover(false)} onDone={() => { setHandover(false); onChanged(); void fetchCase() }} />
       <ReassignBureauModal open={reassign} c={c} onClose={() => setReassign(false)} onDone={() => { setReassign(false); onChanged(); void fetchCase() }} />
     </div>
-  )
-}
-
-/** Convert / end joint-case status. Client mirror of the server authority
- *  (command, case lead, or case creator) — RLS + the RPCs enforce the real
- *  rule. Conversion never changes cases.bureau; the JTF designation lives in
- *  is_joint_case + display, so the originating department is preserved. */
-function JointCaseControls({ c, onChanged }: { c: CaseRow; onChanged: () => void }) {
-  const { profile, isCommand } = useAuth()
-  const [open, setOpen] = useState(false)
-  const [assignments, setAssignments] = useState<AssignmentRow[]>([])
-  const [busy, setBusy] = useState(false)
-  const manages = isCommand || c.lead_detective_id === profile?.id || c.created_by === profile?.id
-  if (!manages) return null
-
-  const openConvert = async () => {
-    // Snapshot current assignments so the picker excludes already-assigned officers.
-    try { setAssignments(await list('case_assignments', { eq: { case_id: c.id } })) }
-    catch { setAssignments([]) }
-    setOpen(true)
-  }
-
-  const endJoint = async () => {
-    if (busy) return
-    const ok = await uiConfirm('This closes all temporary joint access on this case. Assignment history is preserved.', {
-      title: 'End joint-case status',
-      confirmText: 'End joint case',
-      danger: false,
-    })
-    if (!ok) return
-    setBusy(true)
-    const res = await rpc('joint_case_end', { p_case: c.id })
-    setBusy(false)
-    if (res.error) toast(res.error.message, 'danger')
-    else { toast('Joint-case status ended.', 'success'); onChanged() }
-  }
-
-  if (c.is_joint_case) {
-    return (
-      <button onClick={() => void endJoint()} disabled={busy} className="min-h-[44px] rounded-lg border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-sm font-semibold text-violet-200 hover:bg-violet-500/20 disabled:opacity-60 sm:min-h-0">
-        End Joint-Case Status
-      </button>
-    )
-  }
-  return (
-    <>
-      <Button className="min-h-[44px] sm:min-h-0" onClick={() => void openConvert()}>
-        Make This a Joint Case
-      </Button>
-      <JointCaseModal
-        open={open}
-        onClose={() => setOpen(false)}
-        c={c}
-        mode="convert"
-        existingAssignments={assignments}
-        onDone={() => { setOpen(false); onChanged() }}
-      />
-    </>
-  )
-}
-
-function PacketButton({ c }: { c: CaseRow }) {
-  const [open, setOpen] = useState(false)
-  const exportMd = async () => {
-    try {
-      const data = await gatherCasePacket(c)
-      packetMarkdown(c, data)
-      setOpen(false)
-    } catch (e) { toast(e instanceof Error ? e.message : e, 'danger') }
-  }
-  const exportDocx = async () => {
-    try {
-      const data = await gatherCasePacket(c)
-      packetDocx(c, data)
-      setOpen(false)
-    } catch (e) { toast(e instanceof Error ? e.message : e, 'danger') }
-  }
-  const [pdfBusy, setPdfBusy] = useState(false)
-  const exportPdf = async () => {
-    if (pdfBusy) return
-    setPdfBusy(true)
-    try {
-      const data = await gatherCasePacket(c)
-      const { downloadPdf } = await import('@/lib/pdf')
-      await downloadPdf(packetPdfSpec(c, data), `${slug(c.case_number)}-packet.pdf`)
-      setOpen(false)
-    } catch (e) { toast(e instanceof Error ? e.message : e, 'danger') }
-    finally { setPdfBusy(false) }
-  }
-  return (
-    <>
-      <Button onClick={() => setOpen(true)}>Packet</Button>
-      <Modal open={open} onClose={() => setOpen(false)}>
-        <div className="p-5">
-          <ModalHeader title="Case packet" onClose={() => setOpen(false)} />
-          <div className="grid gap-2">
-            <Button variant="primary" onClick={exportDocx}>Download DOCX</Button>
-            <Button variant="primary" onClick={exportMd}>Download Markdown</Button>
-            <Button variant="primary" onClick={() => void exportPdf()} disabled={pdfBusy}>{pdfBusy ? 'Rendering PDF…' : 'Download PDF'}</Button>
-          </div>
-        </div>
-      </Modal>
-    </>
-  )
-}
-
-function FollowUpButton({ c, onChanged }: { c: CaseRow; onChanged: () => void }) {
-  const [open, setOpen] = useState(false)
-  const [date, setDate] = useState(c.follow_up_at?.slice(0, 10) ?? '')
-  useEffect(() => { if (open) queueMicrotask(() => setDate(c.follow_up_at?.slice(0, 10) ?? '')) }, [open, c.follow_up_at])
-  const due = c.follow_up_at && c.follow_up_at.slice(0, 10) <= todayISO()
-  const save = async (clear = false) => {
-    const res = await update('cases', c.id, { follow_up_at: clear ? null : date || null })
-    if (res.error) toast(res.error.message, 'danger')
-    else { toast(clear ? 'Follow-up cleared.' : 'Follow-up saved.', 'success'); setOpen(false); onChanged() }
-  }
-  return (
-    <>
-      <button onClick={() => setOpen(true)} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${due ? 'border-amber-400/40 bg-amber-500/15 text-amber-200' : 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'}`}>
-        Follow-up{c.follow_up_at ? ` ${c.follow_up_at.slice(0, 10)}` : ''}
-        {c.follow_up_at && <DeadlineChip at={c.follow_up_at} kind="due" className="ml-2" />}
-      </button>
-      <Modal open={open} onClose={() => setOpen(false)}>
-        <div className="p-5">
-          <ModalHeader title="Follow-up" onClose={() => setOpen(false)} />
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white" />
-          <div className="mt-5 flex justify-end gap-2">
-            <Button onClick={() => void save(true)}>Clear</Button>
-            <Button variant="primary" onClick={() => void save()}>Save</Button>
-          </div>
-        </div>
-      </Modal>
-    </>
   )
 }
 

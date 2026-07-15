@@ -393,6 +393,113 @@ export type Database = {
           },
         ]
       }
+      case_blockers: {
+        Row: {
+          case_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          legal_request_id: string | null
+          owner_id: string | null
+          report_id: string | null
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          review_at: string | null
+          status: string
+          task_id: string | null
+          title: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          case_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          legal_request_id?: string | null
+          owner_id?: string | null
+          report_id?: string | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          review_at?: string | null
+          status?: string
+          task_id?: string | null
+          title: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          case_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          legal_request_id?: string | null
+          owner_id?: string | null
+          report_id?: string | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          review_at?: string | null
+          status?: string
+          task_id?: string | null
+          title?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_blockers_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_blockers_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_blockers_legal_request_id_fkey"
+            columns: ["legal_request_id"]
+            isOneToOne: false
+            referencedRelation: "legal_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_blockers_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_blockers_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_blockers_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_blockers_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "case_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       case_files: {
         Row: {
           added_by: string | null
@@ -733,6 +840,7 @@ export type Database = {
           notes: string | null
           operation_id: string | null
           originating_bureau: Database["public"]["Enums"]["bureau"] | null
+          priority: string | null
           signoff_assignee_id: string | null
           signoff_stage: string | null
           signoff_status: string
@@ -763,6 +871,7 @@ export type Database = {
           notes?: string | null
           operation_id?: string | null
           originating_bureau?: Database["public"]["Enums"]["bureau"] | null
+          priority?: string | null
           signoff_assignee_id?: string | null
           signoff_stage?: string | null
           signoff_status?: string
@@ -793,6 +902,7 @@ export type Database = {
           notes?: string | null
           operation_id?: string | null
           originating_bureau?: Database["public"]["Enums"]["bureau"] | null
+          priority?: string | null
           signoff_assignee_id?: string | null
           signoff_stage?: string | null
           signoff_status?: string

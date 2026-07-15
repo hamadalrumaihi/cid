@@ -25,6 +25,7 @@ import {
 } from '@xyflow/react'
 import type { Tables } from '@/lib/database.types'
 import { insert, list, remove } from '@/lib/db'
+import { caseLink } from '@/lib/caseLinks'
 import { useAuth } from '@/lib/auth'
 import { timeAgo } from '@/lib/format'
 import { WARRANT_TPLS, reportTitle, warrantStatusOf, type ReportLike } from '@/lib/forms'
@@ -201,8 +202,8 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
             ['Updated', timeAgo(r.updated_at)],
             ...(isWarrant ? [['Warrant status', warrantStatusOf(rl)] as [string, string]] : [['Finalized', r.finalized ? 'yes' : 'no'] as [string, string]]),
           ],
-          href: `/cases?case=${encodeURIComponent(c.id)}&tab=reports`,
-          hrefLabel: 'Open Reports tab',
+          href: caseLink(c.id, 'reports', { report: r.id }),
+          hrefLabel: 'Open report',
         },
       })
     }
@@ -291,7 +292,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
             ['Chain', String(e.tamper ?? 'ok')],
             ['Description', (e.description || '—').slice(0, 140)],
           ],
-          href: `/cases?case=${encodeURIComponent(c.id)}&tab=evidence`, hrefLabel: 'Open Evidence tab',
+          href: caseLink(c.id, 'evidence', { evidence: e.id }), hrefLabel: 'Open evidence item',
         },
       })
     }
@@ -384,7 +385,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
             data: {
               kind: 'case', icon: '📂', label: oc.case_number, sub: oc.title || 'Untitled',
               fields: [['Status', oc.status], ['Title', oc.title || '—']],
-              href: `/cases?case=${encodeURIComponent(oc.id)}`, hrefLabel: 'Open case',
+              href: caseLink(oc.id), hrefLabel: 'Open case',
             },
           })
         }

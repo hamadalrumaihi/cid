@@ -179,8 +179,10 @@ test.describe('v1.11 features — announcements, joint cases, approvals (live fi
       await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click()
       await expect(page.getByRole('heading', { name: title })).toBeVisible({ timeout: 15_000 })
 
-      // Convert: header action opens the member picker modal.
-      await page.getByRole('button', { name: 'Make This a Joint Case' }).click()
+      // Convert: the command header folds case actions into the overflow
+      // ActionMenu — open it, then the joint-case item opens the member picker.
+      await page.getByRole('button', { name: 'More case actions' }).click()
+      await page.getByRole('menuitem', { name: 'Make this a joint case…' }).click()
       const dlg = page.getByRole('dialog')
       await expect(dlg.getByRole('heading', { name: 'Make this a joint case' })).toBeVisible()
 
@@ -231,11 +233,13 @@ test.describe('v1.11 features — announcements, joint cases, approvals (live fi
         .filter({ hasText: 'Detail concluded (e2e)' })).toBeVisible()
 
       // End joint-case status (confirm) → JTF badge gone, convert offered again.
-      await page.getByRole('button', { name: 'End Joint-Case Status' }).click()
+      await page.getByRole('button', { name: 'More case actions' }).click()
+      await page.getByRole('menuitem', { name: 'End joint-case status…' }).click()
       await page.getByRole('dialog').filter({ hasText: 'End joint-case status' })
         .getByRole('button', { name: 'End joint case', exact: true }).click()
       await expect(page.getByText('JTF · Joint case')).toHaveCount(0, { timeout: 20_000 })
-      await expect(page.getByRole('button', { name: 'Make This a Joint Case' })).toBeVisible()
+      await page.getByRole('button', { name: 'More case actions' }).click()
+      await expect(page.getByRole('menuitem', { name: 'Make this a joint case…' })).toBeVisible()
     } finally {
       // Remove everything the test accounts authored — the lead created the
       // case, so rls_test_cleanup() purges it (+assignments, notifications).

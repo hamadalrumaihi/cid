@@ -155,3 +155,62 @@ describe('assessCase — closure readiness / pre-close checklist', () => {
     expect(a.closureReady).toBe(false)
   })
 })
+
+describe('assessCase — persisted blockers & closure checklist', () => {
+  const openBlocker = { title: 'Waiting on ballistics', type: 'awaiting_evidence', review_at: null, status: 'open' }
+
+  it('an open persisted blocker surfaces as a blocker and gates closure', () => {
+    const a = assessCase({ c: mkCase(), evidenceCount: 2, reports: [{ finalized: true }], persistedBlockers: [openBlocker], todayISO: TODAY })
+    expect(a.blockers.find((b) => b.key === 'open_blockers')).toMatchObject({ count: 1, severity: 'warn' })
+    expect(a.closureReady).toBe(false)
+    expect(a.closureChecklist.find((i) => i.key === 'blockers_clear')?.ok).toBe(false)
+  })
+
+  it('resolved persisted blockers are ignored', () => {
+    const a = assessCase({ c: mkCase(), evidenceCount: 2, reports: [{ finalized: true }], persistedBlockers: [{ ...openBlocker, status: 'resolved' }], todayISO: TODAY })
+    expect(a.blockers.find((b) => b.key === 'open_blockers')).toBeFalsy()
+    expect(a.closureChecklist.find((i) => i.key === 'blockers_clear')?.ok).toBe(true)
+    expect(a.closureReady).toBe(true)
+  })
+
+  it('a blocker past its review date is urgent and surfaces a review next action', () => {
+    const a = assessCase({ c: mkCase(), persistedBlockers: [{ ...openBlocker, review_at: '2026-07-10' }], todayISO: TODAY })
+    expect(a.blockers.find((b) => b.key === 'open_blockers')?.severity).toBe('urgent')
+    expect(a.nextActions.find((x) => x.key === 'blockers_review_due')).toMatchObject({ severity: 'warn' })
+  })
+
+  it('an open blocker suppresses the request-signoff nudge and shows an info line', () => {
+    const a = assessCase({ c: mkCase(), evidenceCount: 3, reports: [{ finalized: true }], tasks: [], persistedBlockers: [openBlocker], todayISO: TODAY })
+    expect(a.nextActions.find((x) => x.key === 'request_signoff')).toBeFalsy()
+    expect(a.nextActions.find((x) => x.key === 'blockers_open')).toMatchObject({ severity: 'info' })
+  })
+
+  it('a clean open case has an all-ok checklist matching closureReady', () => {
+    const a = assessCase({ c: mkCase(), evidenceCount: 2, reports: [{ finalized: true }], tasks: [], legal: [], todayISO: TODAY })
+    expect(a.closureChecklist.every((i) => i.ok)).toBe(true)
+    expect(a.closureReady).toBe(true)
+  })
+
+  it('checklist items flip with the underlying state and mirror closureReady', () => {
+    const a = assessCase({
+      c: mkCase({ signoff_status: 'awaiting_deputy' }),
+      tasks: [{ done: false, due: null }],
+      legal: [{ review_status: 'ada_review', expires_at: null }],
+      reports: [{ finalized: false }],
+      persistedBlockers: [openBlocker],
+      todayISO: TODAY,
+    })
+    const by = Object.fromEntries(a.closureChecklist.map((i) => [i.key, i.ok]))
+    expect(by).toMatchObject({
+      case_open: true, signoff_clear: false, tasks_done: false,
+      legal_resolved: false, reports_final: false, blockers_clear: false,
+    })
+    expect(a.closureChecklist.every((i) => i.ok)).toBe(a.closureReady)
+  })
+
+  it('a closed case fails the case_open item, preserving the checklist ⇔ ready invariant', () => {
+    const a = assessCase({ c: mkCase({ status: 'closed' }), todayISO: TODAY })
+    expect(a.closureChecklist.find((i) => i.key === 'case_open')?.ok).toBe(false)
+    expect(a.closureChecklist.every((i) => i.ok)).toBe(a.closureReady)
+  })
+})

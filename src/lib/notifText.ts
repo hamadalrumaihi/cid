@@ -2,6 +2,7 @@
  *  My Desk unread list (port of vanilla NOTIF_LABEL + the openNotifications
  *  row shape, app.js). Keeping it in lib/ means every surface renders a
  *  notification the same way instead of falling back to raw payload JSON. */
+import { caseLink } from './caseLinks'
 import type { Json, Tables } from './database.types'
 import { parseNotifPayload, type NotifPayload } from './schemas'
 
@@ -103,10 +104,7 @@ const NOTIF_CASE_TAB: Record<string, string> = {
 export function notifHref(n: NotificationRow, opts: { command?: boolean } = {}): string | null {
   const p = asPayload(n.payload)
   const t = n.type
-  if (p.case_id) {
-    const tab = NOTIF_CASE_TAB[t]
-    return `/cases?case=${encodeURIComponent(p.case_id)}${tab ? `&tab=${tab}` : ''}`
-  }
+  if (p.case_id) return caseLink(p.case_id, NOTIF_CASE_TAB[t])
   // ada_assignment goes to justice-side prosecutors — their queues live in
   // the Justice Portal, not the CID Legal view.
   if (t.startsWith('justice') || t === 'ada_assignment') return '/justice'
