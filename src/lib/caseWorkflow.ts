@@ -35,6 +35,22 @@ export interface Blocker {
   severity: Severity
 }
 
+/** Officer-authored durable blocker (an open case_blockers row projection). */
+export interface PersistedBlocker {
+  title: string
+  type: string
+  review_at: string | null
+  status: string
+}
+
+/** One line of the itemized closure-readiness checklist. Invariant:
+ *  closureReady === closureChecklist.every((i) => i.ok). */
+export interface ClosureChecklistItem {
+  key: string
+  label: string
+  ok: boolean
+}
+
 export interface CaseCounts {
   openTasks: number
   overdueTasks: number
@@ -53,6 +69,8 @@ export interface CaseAssessment {
   /** Unresolved work that should be cleared before the case is closed. */
   blockers: Blocker[]
   closureReady: boolean
+  /** Itemized closure gates — every `ok` ⇔ closureReady (see invariant). */
+  closureChecklist: ClosureChecklistItem[]
   counts: CaseCounts
 }
 
@@ -75,6 +93,9 @@ export interface CaseInputs {
   meId?: string | null
   /** Display name of the current sign-off assignee, for "waiting on X" copy. */
   assigneeName?: string | null
+  /** Durable officer-authored blockers (case_blockers rows). Only rows with
+   *  status 'open' count — pass all rows, the evaluator filters. */
+  persistedBlockers?: PersistedBlocker[]
   /** Injected clock (ISO) so the evaluator stays pure/testable. Defaults to now. */
   todayISO?: string
 }
@@ -137,6 +158,9 @@ export function assessCase(input: CaseInputs): CaseAssessment {
   }).length
   const evidence = input.evidenceCount ?? 0
   const supportOfficers = input.supportCount ?? 0
+  const openPersisted = (input.persistedBlockers ?? []).filter((b) => b.status === 'open')
+  const openBlockers = openPersisted.length
+  const dueBlockers = openPersisted.filter((b) => isDue(b.review_at, today)).length
 
   const counts: CaseCounts = { openTasks, overdueTasks, draftReports, activeLegal, expiringLegal, evidence, supportOfficers }
   const stage = deriveStage(c, activeLegal)
@@ -165,11 +189,19 @@ export function assessCase(input: CaseInputs): CaseAssessment {
     if (isDue(c.follow_up_at, today)) push({ key: 'followup_due', label: 'Follow-up is due', detail: c.follow_up_at ?? undefined, severity: 'warn' })
     if (openTasks - overdueTasks > 0) push({ key: 'tasks_open', label: `${openTasks} open ${openTasks === 1 ? 'task' : 'tasks'}`, severity: 'info', tab: 'tasks' })
 
+    // Durable blockers: a passed review date means "re-check whether the case
+    // is still waiting on this"; otherwise open blockers are informational.
+    if (dueBlockers > 0) {
+      push({ key: 'blockers_review_due', label: `${dueBlockers} ${dueBlockers === 1 ? 'blocker is' : 'blockers are'} due for review`, detail: 'Check whether the case is still waiting on it, then resolve or re-date it.', severity: 'warn' })
+    } else if (openBlockers > 0) {
+      push({ key: 'blockers_open', label: `${openBlockers} open ${openBlockers === 1 ? 'blocker' : 'blockers'}`, severity: 'info' })
+    }
+
     // Investigation-stage nudges toward being sign-off-ready.
     if (stage === 'investigation') {
       if (evidence === 0) push({ key: 'add_evidence', label: 'Add evidence before requesting sign-off', severity: 'info', tab: 'evidence' })
       if (draftReports > 0) push({ key: 'finalize_reports', label: `Finalize ${draftReports} draft ${draftReports === 1 ? 'report' : 'reports'}`, severity: 'info', tab: 'reports' })
-      if (SIGNOFF_IDLE.has(s) && evidence > 0 && draftReports === 0 && openTasks === 0) {
+      if (SIGNOFF_IDLE.has(s) && evidence > 0 && draftReports === 0 && openTasks === 0 && openBlockers === 0) {
         push({ key: 'request_signoff', label: 'Ready — request sign-off when you are', severity: 'info', tab: 'signoff' })
       }
     }
@@ -182,7 +214,19 @@ export function assessCase(input: CaseInputs): CaseAssessment {
     if (openTasks > 0) blockers.push({ key: 'open_tasks', label: `${openTasks} open ${openTasks === 1 ? 'task' : 'tasks'}`, count: openTasks, severity: overdueTasks > 0 ? 'urgent' : 'warn' })
     if (activeLegal > 0) blockers.push({ key: 'active_legal', label: `${activeLegal} unresolved legal ${activeLegal === 1 ? 'request' : 'requests'}`, count: activeLegal, severity: 'warn' })
     if (draftReports > 0) blockers.push({ key: 'draft_reports', label: `${draftReports} unfinalized ${draftReports === 1 ? 'report' : 'reports'}`, count: draftReports, severity: 'info' })
+    if (openBlockers > 0) blockers.push({ key: 'open_blockers', label: `${openBlockers} open ${openBlockers === 1 ? 'blocker' : 'blockers'}`, count: openBlockers, severity: dueBlockers > 0 ? 'urgent' : 'warn' })
   }
+
+  // Itemized closure gates — each item mirrors exactly one possible blocker
+  // (plus the not-already-closed gate), so every-ok ⇔ closureReady holds.
+  const closureChecklist: ClosureChecklistItem[] = [
+    { key: 'case_open', label: 'Case is open (not already closed)', ok: stage !== 'closed' },
+    { key: 'signoff_clear', label: AWAITING.has(s) || RETURNED.has(s) ? 'Sign-off is still in progress' : 'Sign-off pipeline is clear', ok: !(AWAITING.has(s) || RETURNED.has(s)) },
+    { key: 'tasks_done', label: openTasks > 0 ? `${openTasks} open ${openTasks === 1 ? 'task remains' : 'tasks remain'}` : 'All tasks completed', ok: openTasks === 0 },
+    { key: 'legal_resolved', label: activeLegal > 0 ? `${activeLegal} unresolved legal ${activeLegal === 1 ? 'request' : 'requests'}` : 'No unresolved legal requests', ok: activeLegal === 0 },
+    { key: 'reports_final', label: draftReports > 0 ? `${draftReports} ${draftReports === 1 ? 'report is' : 'reports are'} still in draft` : 'All reports finalized', ok: draftReports === 0 },
+    { key: 'blockers_clear', label: openBlockers > 0 ? `${openBlockers} open ${openBlockers === 1 ? 'blocker' : 'blockers'}` : 'No open blockers', ok: openBlockers === 0 },
+  ]
 
   return {
     stage,
@@ -190,6 +234,7 @@ export function assessCase(input: CaseInputs): CaseAssessment {
     nextActions,
     blockers,
     closureReady: stage !== 'closed' && blockers.length === 0,
+    closureChecklist,
     counts,
   }
 }

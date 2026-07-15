@@ -27,7 +27,7 @@ export function NotesTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boole
   return (
     <div>
       <div className="mb-3 flex justify-end gap-2">
-        <Button onClick={() => copyText(c.notes ?? '', 'Notes copied.')}>Copy</Button>
+        <Button onClick={() => copyText(c.notes ?? '', 'Notes')}>Copy</Button>
         <Button onClick={() => downloadTextFile(`${c.case_number}-notes.md`, c.notes ?? '')}>.md</Button>
         {canEdit && <Button onClick={() => setEditing(true)}>Edit</Button>}
       </div>

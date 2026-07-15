@@ -1,12 +1,15 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { WorkflowTimeline } from '@/components/ui/WorkflowTimeline'
 import { uiPrompt } from '@/components/ui/dialog'
 import { deleteWithUndo, insert, list, update } from '@/lib/db'
+import { caseLink } from '@/lib/caseLinks'
+import { copyText } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
@@ -28,17 +31,35 @@ export function EvidenceTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
   const vM = useTableVersion('media')
   const refresh = useCallback(async () => {
     try {
-      const [e, cc, m] = await Promise.all([
+      const [e, m] = await Promise.all([
         list('evidence', { eq: { case_id: c.id }, order: 'created_at', ascending: false }),
-        list('custody_chain', { order: 'at', ascending: false }),
         list('media', { eq: { case_id: c.id }, order: 'created_at', ascending: false }),
       ])
+      // Custody is scoped server-side to this case's items (.in on the FK) —
+      // previously the whole table was fetched and filtered client-side.
+      const cc = e.length ? await list('custody_chain', { in: { evidence_id: e.map((ev) => ev.id) }, order: 'at', ascending: false }) : []
       setRows(e)
-      setCustody(cc.filter((x) => e.some((ev) => ev.id === x.evidence_id)))
+      setCustody(cc)
       setMedia(m)
     } catch { /* stale */ }
   }, [c.id])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vE, vC, vM])
+
+  // ?evidence= deep link: scroll the referenced item into view once and open
+  // its custody chain. Highlight is a ring only — focus is never moved.
+  const sp = useSearchParams()
+  const evParam = sp.get('evidence')
+  const cardRefs = useRef<Record<string, HTMLElement | null>>({})
+  const scrolledRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!evParam || scrolledRef.current === evParam) return
+    const el = cardRefs.current[evParam]
+    if (!el) return
+    scrolledRef.current = evParam
+    setChainOpen((o) => ({ ...o, [evParam]: true }))
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    el.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' })
+  }, [evParam, rows])
 
   const nextCode = () => `EV-${String(rows.length + 1).padStart(3, '0')}`
   const addEvidence = async () => {
@@ -79,22 +100,26 @@ export function EvidenceTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
       <div className="grid gap-3 lg:grid-cols-2">
         {rows.map((ev) => {
           const chain = custody.filter((x) => x.evidence_id === ev.id)
+          // custody is fetched newest-first, so chain[0] is the current holder.
+          const holder = chain[0]?.to_officer || officerName(ev.collected_by) || null
           return (
-            <article key={ev.id} className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+            <article key={ev.id} ref={(el) => { cardRefs.current[ev.id] = el }} className={`rounded-xl border bg-ink-950/50 p-4 ${ev.id === evParam ? 'border-badge-400/60 ring-1 ring-badge-400/40' : 'border-white/10'}`}>
               <div className="flex items-start justify-between gap-2">
                 <div><p className="font-mono text-sm font-bold text-badge-200">{ev.item_code || 'Evidence'}</p><h3 className="font-bold text-white">{ev.description || ev.type || 'Untitled item'}</h3></div>
                 <Badge tint={ev.tamper === 'intact' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'} className="uppercase">{ev.tamper}</Badge>
               </div>
               <p className="mt-2 text-sm text-slate-400">{[ev.type, ev.location].filter(Boolean).join(' - ') || 'No location/type recorded.'}</p>
+              {holder && <p className="mt-1 text-xs text-slate-400">In custody of <span className="font-semibold text-slate-200">{holder}</span></p>}
               <button onClick={() => setChainOpen((o) => ({ ...o, [ev.id]: !o[ev.id] }))} aria-expanded={!!chainOpen[ev.id]} className="mt-2 text-xs text-slate-400 hover:text-slate-200">Custody entries: {chain.length} <span aria-hidden>{chainOpen[ev.id] ? '▴' : '▾'}</span></button>
               {chainOpen[ev.id] && (
                 <div className="mt-2">
                   {/* chain is fetched newest-first for transfer(); the expansion reads oldest → newest */}
-                  <WorkflowTimeline dense empty="No custody entries yet." entries={[...chain].reverse().map((x) => ({ id: x.id, title: x.to_officer ? `Transferred to ${x.to_officer}` : 'Logged', actor: officerName(x.transferred_by), at: x.at, note: x.from_officer ? `from ${x.from_officer}` : null }))} />
+                  <WorkflowTimeline dense empty="No custody entries yet." entries={[...chain].reverse().map((x) => ({ id: x.id, title: x.to_officer ? `Transferred to ${x.to_officer}` : 'Logged', actor: officerName(x.transferred_by), at: x.at, note: [x.from_officer ? `from ${x.from_officer}` : null, x.reason].filter(Boolean).join(' — ') || null }))} />
                 </div>
               )}
               <div className="mt-3 flex gap-2">
                 {canEdit && <Button size="sm" onClick={() => void transfer(ev)}>Transfer</Button>}
+                <Button size="sm" onClick={() => copyText(`${window.location.origin}${caseLink(c.id, 'evidence', { evidence: ev.id })}`, 'Evidence link')}>Copy link</Button>
                 {canDelete && <button onClick={() => { void deleteWithUndo('evidence', ev, { label: ev.item_code || 'evidence', children: [{ table: 'custody_chain', column: 'evidence_id' }], after: refresh }) }} className="rounded-lg border border-rose-400/30 px-3 py-1.5 text-xs font-bold text-rose-300">Delete</button>}
               </div>
             </article>

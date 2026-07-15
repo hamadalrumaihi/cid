@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Json, Tables } from '@/lib/database.types'
 import { list, update } from '@/lib/db'
+import { caseLink } from '@/lib/caseLinks'
 import { todayISO, timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { ROLE_LABEL } from '@/lib/roles'
@@ -102,7 +103,7 @@ function daysUntil(date?: string | null): number | null {
 }
 
 function caseHref(id: string): string {
-  return `/cases?case=${encodeURIComponent(id)}`
+  return caseLink(id)
 }
 
 function Stat({ label, value, tone = 'slate' }: { label: string; value: number; tone?: 'slate' | 'amber' | 'rose' | 'emerald' | 'blue' }) {

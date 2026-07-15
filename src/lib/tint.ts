@@ -85,6 +85,23 @@ export function provenanceTint(provenance?: string | null): string {
   }
 }
 
+/** Case priority — critical → rose, high → amber, medium → blue, low →
+ *  neutral. Same temperature scale as threatTint, but low reads neutral (a
+ *  low-priority case is not "good", it's just quiet). */
+export function priorityTint(priority?: string | null): string {
+  switch ((priority ?? '').toLowerCase()) {
+    case 'critical':
+      return 'bg-rose-500/15 text-rose-300'
+    case 'high':
+      return 'bg-amber-500/15 text-amber-300'
+    case 'medium':
+      return 'bg-blue-500/15 text-blue-300'
+    case 'low':
+    default:
+      return NEUTRAL
+  }
+}
+
 /** Threat level — high → rose, medium → amber, low → emerald. Promoted from
  *  the gangs-local helper so BOLO/threat chips read the same everywhere.
  *  (Bordered idiom lives in gangShared for the legacy gang chip; this returns

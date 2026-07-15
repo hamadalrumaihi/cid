@@ -8,6 +8,7 @@
  *  by RLS server-side; a link the caller can't access resolves to nothing on
  *  the far side, never a leak. */
 import { useRouter } from 'next/navigation'
+import { caseLink } from '@/lib/caseLinks'
 
 export type EntityKind = 'person' | 'vehicle' | 'case' | 'gang' | 'place'
 
@@ -18,7 +19,7 @@ export function entityHref(kind: EntityKind, ref: { id?: string; label?: string 
   switch (kind) {
     case 'person': return `/persons?person=${enc(ref.id ?? '')}`
     case 'vehicle': return `/vehicles?vehicle=${enc(ref.id ?? '')}`
-    case 'case': return `/cases?case=${enc(ref.id ?? '')}`
+    case 'case': return caseLink(ref.id ?? '')
     case 'gang': return `/gangs?q=${enc(ref.label ?? ref.id ?? '')}`
     case 'place': return `/places?q=${enc(ref.label ?? '')}`
   }

@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
+import { caseLink } from '@/lib/caseLinks'
 import { todayISO } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
@@ -91,13 +92,13 @@ export function CalendarView() {
     const caseById = new Map(data.cases.map((c) => [c.id, c]))
     for (const c of data.cases) {
       if (c.follow_up_at && c.status !== 'closed') {
-        push(c.follow_up_at, { icon: '📌', label: `${c.case_number} follow-up`, sub: c.title || 'Untitled', href: `/cases?case=${encodeURIComponent(c.id)}`, tone: 'amber' })
+        push(c.follow_up_at, { icon: '📌', label: `${c.case_number} follow-up`, sub: c.title || 'Untitled', href: caseLink(c.id), tone: 'amber' })
       }
     }
     for (const t of data.tasks) {
       if (t.due && !t.done) {
         const c = caseById.get(t.case_id)
-        push(t.due, { icon: '☑️', label: t.title, sub: c ? `${c.case_number} task` : 'Case task', href: c ? `/cases?case=${encodeURIComponent(c.id)}&tab=tasks` : '/cases', tone: 'blue' })
+        push(t.due, { icon: '☑️', label: t.title, sub: c ? `${c.case_number} task` : 'Case task', href: c ? caseLink(c.id, 'tasks', { task: t.id }) : '/cases', tone: 'blue' })
       }
     }
     for (const s of data.shifts) {

@@ -8,26 +8,29 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Field, Textarea } from '@/components/ui/Field'
 import { insert, list, deleteWithUndo, rpc } from '@/lib/db'
+import { caseLink } from '@/lib/caseLinks'
 import { fmtDate, timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { officerName, activeProfiles, useProfilesStore } from '@/lib/profiles'
 import { bureauLabel, roleLabel } from '@/lib/roles'
 import { useTableVersion } from '@/lib/realtime'
-import { assessCase, type NextAction, type WfReport, type WfTask } from '@/lib/caseWorkflow'
+import { assessCase, type ClosureChecklistItem, type NextAction } from '@/lib/caseWorkflow'
 import type { LegalRequest } from '@/lib/justice'
 import { LegalRequestRow } from '@/components/justice/legalShared'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { JointCaseModal, isActiveAssignment } from '../JointCaseModal'
-import { Stat, type AssignmentRow, type CaseRow } from './shared'
+import { CaseBlockersPanel, type BlockerRow } from './CaseBlockersPanel'
+import { Stat, type AssignmentRow, type CaseRow, type ReportRow, type TaskRow } from './shared'
 
 export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; canDelete: boolean }) {
   const { profile, isCommand } = useAuth()
   const [assignments, setAssignments] = useState<AssignmentRow[]>([])
   const [evidence, setEvidence] = useState(0)
-  const [reports, setReports] = useState<WfReport[]>([])
-  const [tasks, setTasks] = useState<WfTask[]>([])
+  const [reports, setReports] = useState<ReportRow[]>([])
+  const [tasks, setTasks] = useState<TaskRow[]>([])
   const [legal, setLegal] = useState<LegalRequest[]>([])
+  const [blockers, setBlockers] = useState<BlockerRow[]>([])
   const router = useRouter()
   // "Now" is snapshotted per refresh (render must stay pure) — expiry lines
   // re-evaluate whenever the assignments themselves are refetched.
@@ -41,17 +44,19 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
   const vR = useTableVersion('reports')
   const vT = useTableVersion('case_tasks')
   const vL = useTableVersion('legal_requests')
+  const vB = useTableVersion('case_blockers')
   const refresh = useCallback(async () => {
     try {
-      const [a, e, r, t, l] = await Promise.all([
+      const [a, e, r, t, l, b] = await Promise.all([
         list('case_assignments', { eq: { case_id: c.id } }),
         list('evidence', { eq: { case_id: c.id } }),
         list('reports', { eq: { case_id: c.id } }),
         list('case_tasks', { eq: { case_id: c.id } }),
         // Legal is read-scoped by RLS; a failure must not sink the Overview.
         list('legal_requests', { eq: { case_id: c.id }, order: 'created_at', ascending: false }).catch(() => [] as LegalRequest[]),
+        list('case_blockers', { eq: { case_id: c.id }, order: 'created_at', ascending: false }).catch(() => [] as BlockerRow[]),
       ])
-      setAssignments(a); setEvidence(e.length); setReports(r); setTasks(t); setLegal(l as LegalRequest[]); setNow(Date.now())
+      setAssignments(a); setEvidence(e.length); setReports(r); setTasks(t); setLegal(l as LegalRequest[]); setBlockers(b); setNow(Date.now())
       const seen = seenRef.current
       const newer = (rows: { created_at?: string | null }[]) => seen ? rows.filter((x) => (x.created_at || '') > seen).length : 0
       setRecap(seen ? {
@@ -60,7 +65,7 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
       } : null)
     } catch { /* tab can render stale */ }
   }, [c.id])
-  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vA, vE, vR, vT, vL])
+  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vA, vE, vR, vT, vL, vB])
   // Re-stamp the marker when leaving the case, so the next visit's recap covers
   // what changed while away. new Date() runs only in this browser effect.
   useEffect(() => {
@@ -76,7 +81,8 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
     supportCount: standardCount,
     meId: profile?.id ?? null,
     assigneeName: officerName(c.signoff_assignee_id),
-  }), [c, tasks, reports, legal, evidence, standardCount, profile?.id])
+    persistedBlockers: blockers,
+  }), [c, tasks, reports, legal, evidence, standardCount, profile?.id, blockers])
 
   const [assignBusy, setAssignBusy] = useState(false)
   const addAssignment = async () => {
@@ -110,41 +116,102 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
   return (
     <div className="space-y-4">
       <CaseRecap recap={recap} />
-      <GuidedNextAction caseId={c.id} stageLabel={assessment.stageLabel} actions={assessment.nextActions} />
-      <div className="grid gap-3 md:grid-cols-4">
-        <Stat label="Evidence" value={evidence} />
-        <Stat label="Reports" value={reports.length} />
-        <Stat label="Lead" value={officerName(c.lead_detective_id) || 'Unassigned'} />
-        <Stat label="Updated" value={timeAgo(c.updated_at).toUpperCase()} />
-      </div>
-      <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="font-bold text-white">Assigned Officers</h3>
-          {canEdit && <Button onClick={() => void addAssignment()} disabled={assignBusy}>Add support</Button>}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        {/* Left — operational state: what to do next, what stands in the way. */}
+        <div className="min-w-0 space-y-4">
+          <GuidedNextAction caseId={c.id} stageLabel={assessment.stageLabel} actions={assessment.nextActions} />
+          <CaseBlockersPanel caseId={c.id} blockers={blockers} tasks={tasks} reports={reports} canEdit={canEdit} now={now} onChanged={refresh} />
+          <ClosureReadinessPanel caseId={c.id} checklist={assessment.closureChecklist} ready={assessment.closureReady} closed={assessment.stage === 'closed'} />
         </div>
-        <div className="flex flex-wrap gap-2">
-          {standardRows.map((a) => (
-            <span key={a.id} className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-sm text-slate-200">
-              {officerName(a.officer_id) || 'Officer'} <span className="text-xs uppercase text-slate-500">{a.role}</span>
-              {canDelete && <button aria-label={`Remove ${officerName(a.officer_id) || 'officer'} from case`} onClick={() => void deleteWithUndo('case_assignments', a, { confirmTitle: 'Remove officer', confirmMessage: `Remove ${officerName(a.officer_id) || 'this officer'} from the case? You can undo this for a few seconds.`, confirmText: 'Remove', label: 'assignment', after: refresh })} className="text-rose-300 hover:text-rose-200">×</button>}
-            </span>
-          ))}
-          {!standardRows.length && <p className="text-sm text-slate-500">No support assignments recorded.</p>}
+        {/* Right — context: case facts, people, linked legal work. */}
+        <div className="min-w-0 space-y-4">
+          {/* Case facts the shell's MetricStrip doesn't carry — evidence/report
+              counts live up there now, so these tiles stay non-duplicative. */}
+          <div className="grid grid-cols-2 gap-3">
+            <Stat label="Lead" value={officerName(c.lead_detective_id) || 'Unassigned'} />
+            <Stat label="Officers" value={standardRows.filter((a) => isActiveAssignment(a)).length} />
+            <Stat label="Opened" value={fmtDate(c.created_at)} />
+            <Stat label="Updated" value={timeAgo(c.updated_at).toUpperCase()} />
+          </div>
+          <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="font-bold text-white">Assigned Officers</h3>
+              {canEdit && <Button onClick={() => void addAssignment()} disabled={assignBusy}>Add support</Button>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {standardRows.map((a) => (
+                <span key={a.id} className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-sm text-slate-200">
+                  {officerName(a.officer_id) || 'Officer'} <span className="text-xs uppercase text-slate-500">{a.role}</span>
+                  {canDelete && <button aria-label={`Remove ${officerName(a.officer_id) || 'officer'} from case`} onClick={() => void deleteWithUndo('case_assignments', a, { confirmTitle: 'Remove officer', confirmMessage: `Remove ${officerName(a.officer_id) || 'this officer'} from the case? You can undo this for a few seconds.`, confirmText: 'Remove', label: 'assignment', after: refresh })} className="text-rose-300 hover:text-rose-200">×</button>}
+                </span>
+              ))}
+              {!standardRows.length && <p className="text-sm text-slate-500">No support assignments recorded.</p>}
+            </div>
+          </div>
+          <CaseLegalPanel rows={legal} onOpen={(id) => router.push(`/legal?request=${encodeURIComponent(id)}`)} />
+          {showJointPanel && (
+            <JointMembersPanel
+              c={c}
+              assignments={assignments}
+              activeJoint={activeJoint}
+              removedJoint={removedJoint}
+              manages={managesJoint}
+              now={now}
+              onChanged={refresh}
+            />
+          )}
         </div>
       </div>
-      <CaseLegalPanel rows={legal} onOpen={(id) => router.push(`/legal?request=${encodeURIComponent(id)}`)} />
-      {showJointPanel && (
-        <JointMembersPanel
-          c={c}
-          assignments={assignments}
-          activeJoint={activeJoint}
-          removedJoint={removedJoint}
-          manages={managesJoint}
-          now={now}
-          onChanged={refresh}
-        />
-      )}
     </div>
+  )
+}
+
+/* ── Closure readiness ──────────────────────────────────────────────────────
+ * The itemized closure checklist from assessCase, rendered pass/fail. It is
+ * the same engine the shell's pre-close flow reads, so what a detective sees
+ * here never disagrees with what the close button will demand. When every
+ * gate is clear it offers the deep link into sign-off (the RPCs stay the
+ * authority on who may act). Hidden on closed cases — nothing left to gate. */
+function ClosureReadinessPanel({ caseId, checklist, ready, closed }: {
+  caseId: string
+  checklist: ClosureChecklistItem[]
+  ready: boolean
+  closed: boolean
+}) {
+  if (closed) return null
+  // The "not already closed" gate always passes here — skip the noise.
+  const items = checklist.filter((i) => i.key !== 'case_open')
+  return (
+    <section aria-label="Closure readiness" className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="font-bold text-white">Closure readiness</h3>
+        <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${ready ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
+          {ready ? 'Ready' : `${items.filter((i) => !i.ok).length} remaining`}
+        </span>
+      </div>
+      <ul className="space-y-1.5">
+        {items.map((i) => (
+          <li key={i.key} className="flex items-center gap-2 text-sm">
+            <span aria-hidden className={`grid h-4 w-4 flex-shrink-0 place-items-center rounded-full text-[10px] font-bold ${i.ok ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
+              {i.ok ? '✓' : '•'}
+            </span>
+            <span className={i.ok ? 'text-slate-400' : 'text-slate-200'}>
+              {i.label} <span className="sr-only">{i.ok ? '(complete)' : '(pending)'}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {ready && (
+        <div className="mt-3 rounded-lg border border-emerald-400/25 bg-emerald-500/10 px-3 py-2.5">
+          <p className="text-sm text-emerald-100">
+            <span className="font-bold">Ready for sign-off.</span> Every closure gate is clear.{' '}
+            <Link href={caseLink(caseId, 'signoff')} className="font-semibold underline underline-offset-2 hover:text-white">
+              Go to sign-off →
+            </Link>
+          </p>
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -245,7 +312,7 @@ function GuidedNextAction({ caseId, stageLabel, actions }: { caseId: string; sta
         <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-400">{stageLabel}</span>
       </div>
       {lead.tab ? (
-        <Link href={`/cases?case=${encodeURIComponent(caseId)}&tab=${lead.tab}`} className={`flex items-start gap-2.5 rounded-lg border p-3 transition hover:brightness-110 ${ACTION_TINT[lead.severity]}`}>
+        <Link href={caseLink(caseId, lead.tab)} className={`flex items-start gap-2.5 rounded-lg border p-3 transition hover:brightness-110 ${ACTION_TINT[lead.severity]}`}>
           {inner(lead)}
         </Link>
       ) : (
@@ -256,7 +323,7 @@ function GuidedNextAction({ caseId, stageLabel, actions }: { caseId: string; sta
           {rest.slice(0, 3).map((a) => (
             <li key={a.key}>
               {a.tab ? (
-                <Link href={`/cases?case=${encodeURIComponent(caseId)}&tab=${a.tab}`} className="flex items-center gap-2 rounded px-1 py-0.5 text-xs text-slate-400 transition hover:text-slate-200">
+                <Link href={caseLink(caseId, a.tab)} className="flex items-center gap-2 rounded px-1 py-0.5 text-xs text-slate-400 transition hover:text-slate-200">
                   <span className={`h-1.5 w-1.5 rounded-full ${ACTION_DOT[a.severity]}`} aria-hidden />{a.label}
                 </Link>
               ) : (

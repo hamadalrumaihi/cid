@@ -1,13 +1,14 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
 import type { Json, Tables } from '@/lib/database.types'
-import { downloadTextFile, fmtDateTime, timeAgo } from '@/lib/format'
+import { copyText, downloadTextFile, fmtDateTime, timeAgo } from '@/lib/format'
+import { caseLink } from '@/lib/caseLinks'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
@@ -24,10 +25,22 @@ import { WarrantPrintButton } from './WarrantPrint'
 import type { CaseRow, EvidenceRow, MediaRow, PersonRow, ReportRow } from './shared'
 
 export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; canDelete: boolean }) {
+  const router = useRouter()
+  const sp = useSearchParams()
   const { profile } = useAuth()
   const [reports, setReports] = useState<ReportRow[]>([])
   const [editing, setEditing] = useState<{ template: string; values: FormValues; report?: ReportRow } | null>(null)
-  const [openId, setOpenId] = useState<string | null>(null)
+  // The open report lives in the URL (?report=), so exact records are
+  // shareable/bookmarkable. `case` and `tab` are always preserved — same
+  // router.replace idiom the shell's tab strip uses.
+  const openId = sp.get('report')
+  const setOpenId = useCallback((id: string | null) => {
+    const params = new URLSearchParams(sp.toString())
+    params.set('case', c.id)
+    if (id) params.set('report', id)
+    else params.delete('report')
+    router.replace(`/cases?${params.toString()}`)
+  }, [sp, router, c.id])
   // Sealing and reopening both go through an explicit confirmation.
   const [confirm, setConfirm] = useState<{ kind: 'finalize' | 'reopen'; r: ReportRow } | null>(null)
   const v = useTableVersion('reports')
@@ -218,6 +231,8 @@ function ReportDetail({ r, c, canEdit, canDelete, onBack, onEdit, onFinalize, on
           {r.finalized && isCommandRole(profile?.role) && <button onClick={onReopen} className="rounded-lg border border-amber-500/40 px-3 py-2 text-sm font-bold text-amber-300 hover:bg-amber-500/10">Reopen</button>}
           {!r.finalized && canEdit && <button onClick={onEdit} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-badge-200 hover:bg-white/5">Edit</button>}
           {canDelete && <button onClick={onDelete} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-rose-300 hover:bg-rose-500/10">Delete</button>}
+          {/* Shareable deep link straight to this report (?case&tab&report). */}
+          <Button onClick={() => copyText(`${window.location.origin}${caseLink(c.id, 'reports', { report: r.id })}`, 'Report link')}>Copy link</Button>
           <Button onClick={toggleVersions} aria-expanded={showVersions}>{showVersions ? 'Hide versions' : 'Versions'}</Button>
           {/* Court-ready paper copy for warrants — browser print flow only. */}
           {WARRANT_TPLS[r.template] && <WarrantPrintButton r={r} c={c} />}

@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { list, rpc } from '@/lib/db'
+import { caseLink } from '@/lib/caseLinks'
 import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { todayISO } from '@/lib/format'
@@ -80,16 +81,16 @@ export function ActionCenterView() {
     const me = profile.id
     const out: Item[] = []
     for (const c of cases) {
-      if (canReviewCase(c, profile)) out.push({ key: `sign-${c.id}`, group: 'Sign-offs to decide', label: `${c.case_number} · ${c.title || 'Untitled'}`, sub: signoffLabel(c.signoff_status), href: `/cases?case=${c.id}&tab=signoff`, severity: 'urgent' })
-      if (c.signoff_submitted_by === me && (c.signoff_status === 'changes_requested' || c.signoff_status === 'denied')) out.push({ key: `ret-${c.id}`, group: 'Returned to you', label: `${c.case_number} · ${c.title || 'Untitled'}`, sub: `${signoffLabel(c.signoff_status)} — revise & resubmit`, href: `/cases?case=${c.id}&tab=signoff`, severity: 'urgent' })
+      if (canReviewCase(c, profile)) out.push({ key: `sign-${c.id}`, group: 'Sign-offs to decide', label: `${c.case_number} · ${c.title || 'Untitled'}`, sub: signoffLabel(c.signoff_status), href: caseLink(c.id, 'signoff'), severity: 'urgent' })
+      if (c.signoff_submitted_by === me && (c.signoff_status === 'changes_requested' || c.signoff_status === 'denied')) out.push({ key: `ret-${c.id}`, group: 'Returned to you', label: `${c.case_number} · ${c.title || 'Untitled'}`, sub: `${signoffLabel(c.signoff_status)} — revise & resubmit`, href: caseLink(c.id, 'signoff'), severity: 'urgent' })
     }
     for (const t of tasks) {
       const overdue = isDue(t.due)
-      out.push({ key: `task-${t.id}`, group: overdue ? 'Overdue tasks' : 'Your open tasks', label: t.title, sub: t.due ? (overdue ? `Due ${t.due}` : `Due ${t.due}`) : 'No due date', href: `/cases?case=${t.case_id}&tab=tasks`, severity: overdue ? 'urgent' : 'info' })
+      out.push({ key: `task-${t.id}`, group: overdue ? 'Overdue tasks' : 'Your open tasks', label: t.title, sub: t.due ? (overdue ? `Due ${t.due}` : `Due ${t.due}`) : 'No due date', href: caseLink(t.case_id, 'tasks', { task: t.id }), severity: overdue ? 'urgent' : 'info' })
     }
     const openTransfers = transfers.filter((r) => r.status === 'pending_source' || r.status === 'pending_target')
     for (const r of openTransfers) out.push({ key: `xfer-${r.id}`, group: 'Transfer decisions', label: `Transfer — ${officerName(r.target_id) || 'officer'}`, sub: `${r.from_bureau} → ${r.to_bureau} · ${r.status === 'pending_source' ? 'source approval' : 'destination approval'}`, href: '/command-center', severity: 'warn' })
-    for (const a of access) out.push({ key: `acc-${a.id}`, group: 'Access requests', label: `${a.requester_name || officerName(a.requester_id) || 'Officer'} requested case access`, sub: a.reason || undefined, href: `/cases?case=${a.case_id}`, severity: 'warn' })
+    for (const a of access) out.push({ key: `acc-${a.id}`, group: 'Access requests', label: `${a.requester_name || officerName(a.requester_id) || 'Officer'} requested case access`, sub: a.reason || undefined, href: caseLink(a.case_id), severity: 'warn' })
     if (isCommand && membershipCount > 0) out.push({ key: 'membership', group: 'Membership approvals', label: `${membershipCount} membership request${membershipCount === 1 ? '' : 's'} awaiting review`, href: '/command-center', severity: 'warn' })
     return out.sort((a, b) => SEV_ORDER.indexOf(a.severity) - SEV_ORDER.indexOf(b.severity))
   }, [profile, cases, tasks, transfers, access, isCommand, membershipCount])

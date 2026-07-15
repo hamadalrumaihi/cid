@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
+import { caseLink } from '@/lib/caseLinks'
 import { PAGE_META, TAB_LABEL } from '@/lib/nav'
 import { recentSearches, rememberSearch, runSearch, SEARCH_KINDS, SEARCH_SECTION_ORDER, type SearchHit } from '@/lib/search'
 import { toast } from '@/lib/toast'
@@ -140,9 +141,9 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
     if (!meta) return
     // Reports and evidence live inside a case — search_all returns the CASE id
     // for those kinds, so open the case on the matching tab.
-    if (hit.kind === 'case') router.push(`/cases?case=${hit.id}`)
-    else if (hit.kind === 'report') router.push(`/cases?case=${hit.id}&tab=reports`)
-    else if (hit.kind === 'evidence') router.push(`/cases?case=${hit.id}&tab=evidence`)
+    if (hit.kind === 'case') router.push(caseLink(hit.id))
+    else if (hit.kind === 'report') router.push(caseLink(hit.id, 'reports'))
+    else if (hit.kind === 'evidence') router.push(caseLink(hit.id, 'evidence'))
     else if (hit.kind === 'legal') router.push(`/legal?request=${encodeURIComponent(hit.id)}`)
     else if (hit.term && Q_SEEDED_TABS.has(meta.tab)) router.push(`/${meta.tab}?q=${encodeURIComponent(hit.term)}`)
     else router.push(`/${meta.tab}`)

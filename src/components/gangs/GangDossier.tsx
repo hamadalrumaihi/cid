@@ -82,7 +82,7 @@ function IntelligenceSummary({ gang, canEdit, onEdit }: { gang: GangRow; canEdit
   const copyAll = () => {
     const parts = sections.map((s) => `${s.label}\n${summary[s.key]}`)
     if (notes) parts.push(`Original imported notes\n${notes}`)
-    copyText(parts.join('\n\n'), 'Intelligence summary copied')
+    copyText(parts.join('\n\n'), 'Intelligence summary')
   }
 
   return (
