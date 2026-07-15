@@ -180,7 +180,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
       { confirmText: 'Remove permanently', danger: true },
     )
     if (!ok) return
-    const res = await rpc('admin_remove_member', { p_target: p.id })
+    const res = await rpc('admin_remove_member', { p_target: p.id, ...(reason.trim() ? { p_reason: reason.trim() } : {}) })
     if (res.error) { toast(`Remove failed: ${res.error.message}`, 'danger'); return }
     toast(`${p.display_name || 'Member'} permanently removed`, 'warn')
     onChanged(); onClose()
