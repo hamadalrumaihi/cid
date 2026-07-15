@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
+import { fmtDate } from '@/lib/format'
 import { WARRANT_TINT, reportTitle, warrantStatusOf } from '@/lib/forms'
 import { safeUrl } from '@/lib/safeUrl'
 import { useWatchlistStore } from '@/lib/watchlist'
@@ -34,7 +35,6 @@ type VehicleRow = Tables<'vehicles'>
 
 const MEDIA_ICON: Record<string, string> = { photo: '🖼️', video: '🎞️', document: '📄', audio: '🎧' }
 const uniq = <T,>(arr: T[]): T[] => [...new Set(arr)]
-const shortDate = (ts: string) => new Date(ts).toLocaleDateString('en-US')
 
 interface ProfileData {
   person: PersonRow
@@ -210,8 +210,8 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
                   <Badge tone={p.bolo ? 'danger' : 'neutral'}>{p.bolo ? 'Active' : 'No'}</Badge>
                 </Row>
                 {p.dob && <Row label="DOB">{p.dob}</Row>}
-                <Row label="Added">{shortDate(p.created_at)}</Row>
-                <Row label="Updated">{shortDate(p.updated_at)}</Row>
+                <Row label="Added">{fmtDate(p.created_at)}</Row>
+                <Row label="Updated">{fmtDate(p.updated_at)}</Row>
               </dl>
             </Card>
 
@@ -233,7 +233,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
                   <span className="min-w-0 truncate text-slate-200">{reportTitle(r)}</span>
                   <span className="flex flex-shrink-0 items-center gap-2">
                     <Badge tint={WARRANT_TINT[warrantStatusOf(r)]} className="uppercase">{warrantStatusOf(r)}</Badge>
-                    <span className="text-[11px] text-slate-400">{shortDate(r.created_at)}</span>
+                    <span className="text-[11px] text-slate-400">{fmtDate(r.created_at)}</span>
                   </span>
                 </div>
               ))}

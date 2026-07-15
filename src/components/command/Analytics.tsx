@@ -5,6 +5,7 @@
  *  identity); values are direct-labeled. */
 import type { Tables } from '@/lib/database.types'
 import type { CaseRow } from './commandUtils'
+import { Card } from '@/components/ui/Card'
 
 type PersonRow = Tables<'persons'>
 type GangRow = Tables<'gangs'>
@@ -28,20 +29,20 @@ function Bar({ label, val, max, hue }: { label: string; val: number; max: number
 
 function Tile({ label, val, sub }: { label: string; val: string | number; sub?: string }) {
   return (
-    <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+    <Card>
       <p className="text-xs uppercase tracking-wider text-slate-400">{label}</p>
       <p className="mt-1 text-2xl font-bold text-white">{val}</p>
       {sub && <p className="mt-0.5 text-[11px] text-slate-500">{sub}</p>}
-    </div>
+    </Card>
   )
 }
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+    <Card>
       <h4 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">{title}</h4>
       <div className="space-y-2">{children}</div>
-    </div>
+    </Card>
   )
 }
 

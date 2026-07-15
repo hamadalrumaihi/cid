@@ -12,7 +12,9 @@ import { ROLE_LABEL } from '@/lib/roles'
 import { AGENCY_LABEL, justiceRoleLabel } from '@/lib/justice'
 import type { JusticeIdentity } from '@/lib/justiceRoster'
 import { toast } from '@/lib/toast'
+import { fmtDate } from '@/lib/format'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Card } from '@/components/ui/Card'
 
 interface AdminPanelProps {
   profiles: RosterProfile[]
@@ -54,7 +56,7 @@ export function AdminPanel({ profiles, emails, justiceByUser = {}, onManage, onC
   }
 
   return (
-    <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+    <Card pad="lg">
       <h4 className="mb-1 text-sm font-semibold uppercase tracking-wider text-amber-300/80">⚙️ Member Administration (Director / Command)</h4>
       <p className="mb-4 text-xs text-slate-400">Approve and assign officers. New sign-ins are inactive until activated.</p>
       <div className="overflow-x-auto">
@@ -121,7 +123,7 @@ export function AdminPanel({ profiles, emails, justiceByUser = {}, onManage, onC
               <div key={p.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-ink-900 px-3 py-2">
                 <span className="text-sm text-slate-400">
                   <span className="text-slate-300">{p.display_name}</span> ·{' '}
-                  <span className="text-[11px]">removed {p.removed_at ? new Date(p.removed_at).toLocaleDateString('en-GB') : ''}</span>
+                  <span className="text-[11px]">removed {p.removed_at ? fmtDate(p.removed_at) : ''}</span>
                 </span>
                 <button onClick={() => void restore(p)} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/10">
                   Restore
@@ -131,6 +133,6 @@ export function AdminPanel({ profiles, emails, justiceByUser = {}, onManage, onC
           </div>
         </div>
       )}
-    </div>
+    </Card>
   )
 }

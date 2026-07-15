@@ -14,8 +14,10 @@ import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState } from '@/components/ui/Notice'
+import { Card } from '@/components/ui/Card'
 
 type FileRow = Tables<'case_files'>
 
@@ -130,9 +132,9 @@ export function CaseFilesView() {
           className="w-72 rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
         />
         <datalist id="cf-case-list">{caseNumbers.map((n) => <option key={n} value={n} />)}</datalist>
-        <button onClick={attach} disabled={uploading} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+        <Button variant="primary" onClick={attach} disabled={uploading}>
           {uploading ? 'Uploading…' : '📎 Attach file'}
-        </button>
+        </Button>
         <input ref={fileRef} type="file" accept="image/*,video/*,audio/*,.pdf" multiple className="hidden" onChange={(e) => { void onFiles(e.target.files); e.target.value = '' }} />
         <input
           type="search"
@@ -157,7 +159,7 @@ export function CaseFilesView() {
       ) : (
         <div className="space-y-4">
           {grouped.map(([cn, rows]) => (
-            <div key={cn} className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+            <Card key={cn}>
               <div className="mb-3 flex items-center gap-2">
                 <span className="text-lg" aria-hidden>🗂️</span>
                 <h3 className="font-mono text-sm font-semibold text-blue-300">{cn}</h3>
@@ -187,7 +189,7 @@ export function CaseFilesView() {
                   )
                 })}
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}

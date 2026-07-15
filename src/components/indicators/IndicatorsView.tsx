@@ -15,6 +15,8 @@ import { useTableVersion } from '@/lib/realtime'
 import { useRegistry } from '@/lib/useRegistry'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -111,7 +113,7 @@ export function IndicatorsView() {
 
   return (
     <div>
-      <div className="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <Card pad="lg" className="mb-6">
         <PageHeader
           title="🧷 Indicators Registry"
           subtitle="Hard identifiers — phones, accounts, serials, aliases & addresses — deconflicted across every case"
@@ -128,14 +130,14 @@ export function IndicatorsView() {
                 />
               )}
               {canEdit && (
-                <button onClick={() => setEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
+                <Button variant="primary" onClick={() => setEditor({ record: null })}>
                   + New Indicator
-                </button>
+                </Button>
               )}
             </>
           }
         />
-      </div>
+      </Card>
 
       {!loading && !err && (
         alerts.length ? (
@@ -324,9 +326,9 @@ function IndicatorModal({ record, cases, onClose, onSaved }: {
         </div>
       </div>
       <div className="mt-5">
-        <button onClick={() => void save()} disabled={busy} className="w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+        <Button variant="primary" className="w-full" disabled={busy} onClick={() => void save()}>
           {record ? 'Save changes' : 'Log indicator'}
-        </button>
+        </Button>
       </div>
     </Modal>
   )

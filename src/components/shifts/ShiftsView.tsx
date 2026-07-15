@@ -11,6 +11,8 @@ import { insert, list, update, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -50,17 +52,17 @@ export function ShiftsView() {
 
   return (
     <div>
-      <div className="mb-5 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <Card pad="lg" className="mb-5">
         <PageHeader
           title="🗓️ Weekly Shift Reports"
           subtitle="Log your weekly activity (cases worked, arrests, evidence). Rolls up to your Bureau Lead & Command."
           actions={canEdit ? (
-            <button onClick={() => setEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+            <Button variant="primary" onClick={() => setEditor({ record: null })}>
               + This week&rsquo;s report
-            </button>
+            </Button>
           ) : undefined}
         />
-      </div>
+      </Card>
       {loading ? (
         <CardGridSkeleton cols="" />
       ) : !shifts.length ? (
@@ -75,19 +77,19 @@ export function ShiftsView() {
           {shifts.map((s) => {
             const mine = profile?.id === s.author_id
             return (
-              <div key={s.id} className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+              <Card key={s.id}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <span className="font-mono text-sm font-semibold text-blue-300">{s.bureau}</span>
                     {' · '}
                     <span className="text-sm text-white">{s.author_name || 'Officer'}</span>
                     <span className="ml-1 text-[11px] text-slate-400">week of {s.week_start}</span>
-                    {mine && <span className="ml-1 rounded bg-blue-500/15 px-1.5 text-[9px] font-semibold uppercase text-blue-300">you</span>}
+                    {mine && <span className="ml-1 rounded bg-blue-500/15 px-1.5 text-[10px] font-semibold uppercase text-blue-300">you</span>}
                   </div>
                   {mine && (
-                    <button onClick={() => setEditor({ record: s })} className="-my-1 rounded-md border border-white/10 bg-white/5 p-2 text-[11px] text-slate-200 hover:bg-white/10">
+                    <Button size="sm" className="-my-1" onClick={() => setEditor({ record: s })}>
                       Edit
-                    </button>
+                    </Button>
                   )}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-300">
@@ -96,7 +98,7 @@ export function ShiftsView() {
                   <span>🔬 {s.evidence_count} evidence</span>
                 </div>
                 {s.notes && <p className="mt-2 whitespace-pre-wrap text-xs text-slate-400">{s.notes}</p>}
-              </div>
+              </Card>
             )
           })}
         </div>
@@ -202,9 +204,9 @@ function ShiftModal({ record, onClose, onSaved }: { record: ShiftRow | null; onC
           <textarea id="shift-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} className={inputCls} />
         </div>
       </div>
-      <button onClick={() => void save()} disabled={busy} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+      <Button variant="primary" className="mt-5 w-full" disabled={busy} onClick={() => void save()}>
         {record ? 'Save changes' : 'Submit report'}
-      </button>
+      </Button>
     </Modal>
   )
 }

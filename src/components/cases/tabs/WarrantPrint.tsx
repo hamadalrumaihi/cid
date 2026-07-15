@@ -11,6 +11,8 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { FormSchema, FormValues } from '@/lib/forms'
 import { FORM_SCHEMAS, reportTitle, warrantStatusOf } from '@/lib/forms'
+import { fmtDateTime } from '@/lib/format'
+import { Button } from '@/components/ui/Button'
 import { parseFormValues } from '@/lib/jsonShapes'
 import { parseReportSignature } from '@/lib/schemas'
 import type { CaseRow, ReportRow } from './shared'
@@ -120,7 +122,7 @@ function WarrantSheet({ r, c, schema, preparedAt }: { r: ReportRow; c: CaseRow; 
         <tr><td>Bureau</td><td>{c.bureau}</td></tr>
         <tr><td>Document</td><td>{reportTitle(r)} · {r.finalized ? 'finalized' : 'draft'}</td></tr>
         <tr><td>Warrant status</td><td style={{ textTransform: 'uppercase' }}>{status}</td></tr>
-        <tr><td>Filed</td><td>{new Date(r.created_at).toLocaleString('en-US')}</td></tr>
+        <tr><td>Filed</td><td>{fmtDateTime(r.created_at)}</td></tr>
       </tbody></table>
       {body.map((s) => <SheetSection key={s.id} s={s} V={V} />)}
       {log.length > 0 && (
@@ -131,7 +133,7 @@ function WarrantSheet({ r, c, schema, preparedAt }: { r: ReportRow; c: CaseRow; 
             <tbody>
               {log.map((e, i) => (
                 <tr key={i}>
-                  <td>{e.at ? new Date(e.at).toLocaleString('en-US') : Empty}</td>
+                  <td>{e.at ? fmtDateTime(e.at) : Empty}</td>
                   <td>{e.by || Empty}</td>
                   <td>{e.from || 'draft'} → {e.to || Empty}</td>
                   <td>{e.authority || Empty}</td>
@@ -155,7 +157,7 @@ function WarrantSheet({ r, c, schema, preparedAt }: { r: ReportRow; c: CaseRow; 
         )}
         {seal && (
           <p className="wp-seal">
-            Digitally sealed by {seal.officer}{seal.badge ? ` (badge ${seal.badge})` : ''}{seal.signed_at ? ` on ${new Date(seal.signed_at).toLocaleString('en-US')}` : ''}.
+            Digitally sealed by {seal.officer}{seal.badge ? ` (badge ${seal.badge})` : ''}{seal.signed_at ? ` on ${fmtDateTime(seal.signed_at)}` : ''}.
           </p>
         )}
       </section>
@@ -181,12 +183,9 @@ export function WarrantPrintButton({ r, c }: { r: ReportRow; c: CaseRow }) {
   if (!schema) return null
   return (
     <>
-      <button
-        onClick={() => setPreparedAt(new Date().toLocaleString('en-US'))}
-        className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-slate-200 hover:bg-white/5"
-      >
+      <Button onClick={() => setPreparedAt(fmtDateTime(new Date()))}>
         🖨️ Print / Export
-      </button>
+      </Button>
       {preparedAt && createPortal(<WarrantSheet r={r} c={c} schema={schema} preparedAt={preparedAt} />, document.body)}
     </>
   )

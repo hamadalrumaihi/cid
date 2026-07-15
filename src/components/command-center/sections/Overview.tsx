@@ -10,6 +10,8 @@ import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { canReviewCase } from '../lib/approvals'
 
 type CaseRow = Tables<'cases'>
@@ -25,7 +27,7 @@ function Tile({ label, value, hint, onClick }: { label: string; value: number | 
   return onClick ? (
     <button onClick={onClick} className="rounded-2xl border border-white/5 bg-ink-900/60 p-4 text-left transition hover:border-badge-400/50 hover:bg-white/5">{body}</button>
   ) : (
-    <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-4">{body}</div>
+    <Card pad="sm">{body}</Card>
   )
 }
 
@@ -71,7 +73,7 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
             ['permissions', '🔐 Permissions'],
             ['comms', '📣 Announcements & Analytics'],
           ].map(([id, label]) => (
-            <button key={id} onClick={() => onGo(id)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10">{label}</button>
+            <Button key={id} size="sm" onClick={() => onGo(id)}>{label}</Button>
           ))}
         </div>
         <p className="mt-3 text-[11px] text-slate-500">The full division dashboard (KPIs, scorecards, activity feed) lives on the member-facing <b>Dashboard</b> tab; this Overview focuses on command decisions.</p>

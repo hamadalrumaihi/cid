@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { Button } from '@/components/ui/Button'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { insert, list, update, deleteWithUndo } from '@/lib/db'
 import { officerName, activeProfiles } from '@/lib/profiles'
@@ -48,7 +49,7 @@ export function TasksTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boole
         <input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void add() }} placeholder="New task" className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />
         <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Unassigned</option>{activeProfiles().map((p) => <option key={p.id} value={p.id}>{officerName(p.id) || p.display_name}</option>)}</select>
         <input type="date" value={due} onChange={(e) => setDue(e.target.value)} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />
-        <button onClick={() => void add()} disabled={adding} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-60">Add</button>
+        <Button variant="primary" onClick={() => void add()} disabled={adding}>Add</Button>
       </div>}
       {tasks.map((t) => <div key={t.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3">
         <input type="checkbox" checked={t.done} disabled={!canEdit} onChange={() => void toggle(t)} />

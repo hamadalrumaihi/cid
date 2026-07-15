@@ -17,7 +17,7 @@ function Person({ p }: { p: RosterProfile }) {
     <span className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-ink-950/50 px-2.5 py-1.5 text-sm">
       <span className="grid h-6 w-6 place-items-center rounded-full bg-gradient-to-br from-slate-600 to-slate-700 text-[10px] font-bold text-white">{initials(p.display_name)}</span>
       <span className="text-white">{p.display_name}</span>
-      {p.loa && <span className="rounded bg-amber-500/15 px-1 text-[9px] font-bold uppercase text-amber-300">LOA</span>}
+      {p.loa && <span className="rounded bg-amber-500/15 px-1 text-[10px] font-bold uppercase text-amber-300">LOA</span>}
     </span>
   )
 }

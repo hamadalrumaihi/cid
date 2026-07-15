@@ -15,6 +15,9 @@ import { useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
+import { fmtDateTime } from '@/lib/format'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -95,17 +98,17 @@ export function AnnounceView() {
 
   return (
     <section className="view-in space-y-4">
-      <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <Card pad="lg">
         <PageHeader
           title="📣 Announcements"
           subtitle="Division-wide notices from CID command staff. Posting is restricted to Bureau Lead and above."
           actions={isCommand ? (
-            <button onClick={() => setEditing('new')} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+            <Button variant="primary" onClick={() => setEditing('new')}>
               + New Announcement
-            </button>
+            </Button>
           ) : undefined}
         />
-      </div>
+      </Card>
 
       <div className="space-y-4">
         {state !== 'in' ? (
@@ -132,9 +135,9 @@ export function AnnounceView() {
             ))}
             {dismissedCount > 0 && (
               <div className="text-center">
-                <button onClick={restoreAll} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-400 hover:bg-white/10">
+                <Button size="sm" onClick={restoreAll}>
                   Show {dismissedCount} dismissed
-                </button>
+                </Button>
               </div>
             )}
           </>
@@ -198,7 +201,7 @@ function AnnouncementCard({ a, canManage, onOpen, onEdit, onDismiss }: {
         <div>
           <h2 className="flex items-center gap-2 text-base font-bold text-white">{a.pinned ? '📌 ' : ''}{a.title}</h2>
           <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400">
-            <span>{a.author_name || 'Command'} · {new Date(a.created_at).toLocaleString('en-US')}</span>
+            <span>{a.author_name || 'Command'} · {fmtDateTime(a.created_at)}</span>
             <AudienceChip audience={a.audience} />
           </p>
         </div>
@@ -231,7 +234,7 @@ function AnnouncementViewModal({ a, onClose }: { a: AnnouncementRow; onClose: ()
           <div>
             <h2 className="text-xl font-bold text-white">{a.pinned ? '📌 ' : ''}{a.title}</h2>
             <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400">
-              <span>{a.author_name || 'Command'} · {new Date(a.created_at).toLocaleString('en-US')}</span>
+              <span>{a.author_name || 'Command'} · {fmtDateTime(a.created_at)}</span>
               <AudienceChip audience={a.audience} />
             </p>
           </div>

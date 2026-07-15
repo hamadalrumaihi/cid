@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { insert, list, deleteWithUndo } from '@/lib/db'
+import { Button } from '@/components/ui/Button'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { type CaseRow, type GangRow, type IntelRow, type PersonRow, type PlaceRow } from './shared'
@@ -42,7 +43,7 @@ export function IntelTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boole
         <select value={kind} onChange={(e) => { setKind(e.target.value); setRef('') }} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white"><option value="person">Person</option><option value="gang">Gang</option><option value="place">Place</option></select>
         <select value={ref} onChange={(e) => setRef(e.target.value)} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white"><option value="">Choose...</option>{pool.filter((x) => !links.some((l) => l.kind === kind && l.ref_id === x.id)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
         <input value={role} onChange={(e) => setRole(e.target.value)} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
-        <button onClick={add} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Link</button>
+        <Button variant="primary" onClick={add}>Link</Button>
       </div>}
       {(['person', 'gang', 'place'] as const).map((section) => <div key={section} className="rounded-xl border border-white/10 bg-ink-950/50 p-4"><h3 className="mb-2 font-bold capitalize text-white">{section}s</h3><div className="flex flex-wrap gap-2">{links.filter((l) => l.kind === section).map((l) => <span key={l.id} className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-sm text-slate-200">{label(l)} <span className="text-xs text-slate-500">{l.role}</span>{canDelete && <button aria-label={`Unlink ${label(l)}`} onClick={() => void deleteWithUndo('case_intel_links', l, { confirmTitle: 'Remove link', confirmMessage: `Unlink ${label(l)} from this case? The ${l.kind} record itself is kept — only the link is removed. You can undo this for a few seconds.`, confirmText: 'Unlink', label: 'link', after: refresh })} className="text-rose-300 hover:text-rose-200">×</button>}</span>)}{!links.some((l) => l.kind === section) && <p className="text-sm text-slate-500">None linked.</p>}</div></div>)}
     </div>

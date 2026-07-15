@@ -3,6 +3,7 @@
 import { activeProfiles, officerName } from '@/lib/profiles'
 import { activeCaseFilterCount, caseViews, EMPTY_FILTERS, setCaseViews, type CaseFilters, type SavedCaseView } from './caseUtils'
 import { uiPrompt } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/Button'
 import { toast } from '@/lib/toast'
 
 const BUREAUS = ['LSB', 'BCB', 'SAB', 'JTF']
@@ -72,10 +73,10 @@ export function CaseFilterBar({ filters, scope, query, activeViewName, onFilters
           <option value="fresh">Fresh</option>
         </select>
         <div className="flex gap-2">
-          <button onClick={() => onFilters(EMPTY_FILTERS)} className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">
+          <Button className="flex-1" onClick={() => onFilters(EMPTY_FILTERS)}>
             Clear{count ? ` (${count})` : ''}
-          </button>
-          <button onClick={saveView} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10" title="Save view">Save</button>
+          </Button>
+          <Button onClick={saveView} title="Save view">Save</Button>
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">

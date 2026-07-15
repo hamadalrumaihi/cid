@@ -12,6 +12,8 @@ import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
+import { Card } from '@/components/ui/Card'
+import { Notice } from '@/components/ui/Notice'
 
 type CaseRow = Tables<'cases'>
 type EvidenceRow = Tables<'evidence'>
@@ -38,7 +40,7 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
 
 function Panel({ title, legend, children }: { title: string; legend?: [string, string][]; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+    <Card>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-black uppercase tracking-wide text-slate-100">{title}</h3>
         {legend && (
@@ -52,7 +54,7 @@ function Panel({ title, legend, children }: { title: string; legend?: [string, s
         )}
       </div>
       {children}
-    </div>
+    </Card>
   )
 }
 
@@ -264,6 +266,4 @@ function ChartTip({ tip }: { tip: Tip }) {
   )
 }
 
-function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
-}
+

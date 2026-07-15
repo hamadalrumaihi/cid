@@ -12,7 +12,7 @@ import { useAuth } from '@/lib/auth'
 import { list, rpc } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { Drafts } from '@/lib/drafts'
-import { timeAgo } from '@/lib/format'
+import { fmtDate, fmtDateTime, timeAgo } from '@/lib/format'
 import { useTableVersion } from '@/lib/realtime'
 import {
   CLASSIFICATIONS, LEGAL_ACTION_COLS, SUBPOENA_FIELDS, SOCIAL_PLATFORMS, WARRANT_FIELDS,
@@ -454,16 +454,16 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
             <Row label="Assigned Judge">{name(r.assigned_judge_id)}</Row>
           </div>
           <div className="rounded-xl border border-white/10 bg-ink-900/60 p-4">
-            <Row label="Created">{new Date(r.created_at).toLocaleString()}</Row>
-            <Row label="Submitted to CID">{r.submitted_to_cid_at ? new Date(r.submitted_to_cid_at).toLocaleString() : '—'}</Row>
-            <Row label="Submitted to DOJ">{r.submitted_to_doj_at ? new Date(r.submitted_to_doj_at).toLocaleString() : '—'}</Row>
-            <Row label="Submitted to Judge">{r.submitted_to_judge_at ? new Date(r.submitted_to_judge_at).toLocaleString() : '—'}</Row>
-            <Row label="Decision">{r.decision ? `${r.decision} by ${name(r.decided_by)}${r.decided_at ? ` · ${new Date(r.decided_at).toLocaleString()}` : ''}` : '—'}</Row>
+            <Row label="Created">{fmtDateTime(r.created_at)}</Row>
+            <Row label="Submitted to CID">{fmtDateTime(r.submitted_to_cid_at)}</Row>
+            <Row label="Submitted to DOJ">{fmtDateTime(r.submitted_to_doj_at)}</Row>
+            <Row label="Submitted to Judge">{fmtDateTime(r.submitted_to_judge_at)}</Row>
+            <Row label="Decision">{r.decision ? `${r.decision} by ${name(r.decided_by)}${r.decided_at ? ` · ${fmtDateTime(r.decided_at)}` : ''}` : '—'}</Row>
             {r.decision_note && <Row label="Decision note">{r.decision_note}</Row>}
             {r.judicial_conditions && <Row label="Conditions">{r.judicial_conditions}</Row>}
-            <Row label="Issued">{r.issued_at ? `${new Date(r.issued_at).toLocaleString()} by ${name(r.issued_by)}` : '—'}</Row>
-            <Row label="Expires">{r.expires_at ? new Date(r.expires_at).toLocaleString() : '—'}</Row>
-            {r.request_type === 'subpoena' && <Row label="Response deadline">{r.response_deadline ? new Date(r.response_deadline).toLocaleString() : '—'}</Row>}
+            <Row label="Issued">{r.issued_at ? `${fmtDateTime(r.issued_at)} by ${name(r.issued_by)}` : '—'}</Row>
+            <Row label="Expires">{fmtDateTime(r.expires_at)}</Row>
+            {r.request_type === 'subpoena' && <Row label="Response deadline">{fmtDateTime(r.response_deadline)}</Row>}
           </div>
           {signatures.length > 0 && (
             <div className="rounded-xl border border-white/10 bg-ink-900/60 p-4 lg:col-span-2">
@@ -586,8 +586,8 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
               <li key={`${p.user_id}:${p.participant_role}`} className={`flex flex-wrap items-center gap-2 text-sm ${p.removed_at ? 'opacity-50' : ''}`}>
                 <span className="font-semibold text-white">{name(p.user_id)}</span>
                 <span className="text-xs text-slate-400">{p.participant_role.replaceAll('_', ' ')}</span>
-                <span className="text-xs text-slate-500">added {new Date(p.added_at).toLocaleDateString()}</span>
-                {p.removed_at && <StatusChip label={`ended ${new Date(p.removed_at).toLocaleDateString()}`} tone="rose" />}
+                <span className="text-xs text-slate-500">added {fmtDate(p.added_at)}</span>
+                {p.removed_at && <StatusChip label={`ended ${fmtDate(p.removed_at)}`} tone="rose" />}
               </li>
             ))}
             {participants.length === 0 && <li className="text-sm text-slate-500">No participants yet.</li>}
@@ -938,7 +938,7 @@ function FulfilmentSection({ r, cidActive, canManage, judgeSelf, busy, act, name
         <Row label="Fulfilment status">{fulfilmentLabel(r.fulfilment_status)}</Row>
         {warrant ? (
           <>
-            <Row label="Executed">{r.executed_at ? `${new Date(r.executed_at).toLocaleString()} by ${name(r.executed_by)}` : '—'}</Row>
+            <Row label="Executed">{r.executed_at ? `${fmtDateTime(r.executed_at)} by ${name(r.executed_by)}` : '—'}</Row>
             {r.execution_outcome && <Row label="Outcome">{r.execution_outcome}</Row>}
             {r.execution_notes && <Row label="Execution notes">{r.execution_notes}</Row>}
             {r.return_narrative && <Row label="Return narrative">{r.return_narrative}</Row>}
@@ -946,15 +946,15 @@ function FulfilmentSection({ r, cidActive, canManage, judgeSelf, busy, act, name
           </>
         ) : (
           <>
-            <Row label="Service">{r.service_status.replaceAll('_', ' ')}{r.served_at ? ` · ${new Date(r.served_at).toLocaleString()} by ${name(r.served_by)}` : ''}</Row>
+            <Row label="Service">{r.service_status.replaceAll('_', ' ')}{r.served_at ? ` · ${fmtDateTime(r.served_at)} by ${name(r.served_by)}` : ''}</Row>
             {r.service_method && <Row label="Method">{r.service_method}</Row>}
             {r.service_notes && <Row label="Service notes">{r.service_notes}</Row>}
-            <Row label="Compliance">{r.compliance_status.replaceAll('_', ' ')}{r.compliance_date ? ` · ${new Date(r.compliance_date).toLocaleString()}` : ''}</Row>
+            <Row label="Compliance">{r.compliance_status.replaceAll('_', ' ')}{r.compliance_date ? ` · ${fmtDateTime(r.compliance_date)}` : ''}</Row>
             {r.non_compliance_reason && <Row label="Non-compliance">{r.non_compliance_reason}</Row>}
             {r.compliance_notes && <Row label="Compliance notes">{r.compliance_notes}</Row>}
           </>
         )}
-        {r.closed_at && <Row label="Closed">{`${new Date(r.closed_at).toLocaleString()} by ${name(r.closed_by)}`}</Row>}
+        {r.closed_at && <Row label="Closed">{`${fmtDateTime(r.closed_at)} by ${name(r.closed_by)}`}</Row>}
       </div>
       <div className="flex flex-wrap gap-2">
         {cidActive && approvedUnissued && <Button variant="primary" disabled={busy} onClick={() => void issue()}>Record issue</Button>}

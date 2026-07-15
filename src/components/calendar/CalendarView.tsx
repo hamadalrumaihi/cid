@@ -12,6 +12,8 @@ import { list } from '@/lib/db'
 import { todayISO } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { Notice } from '@/components/ui/Notice'
 
 type CaseRow = Tables<'cases'>
@@ -137,18 +139,18 @@ export function CalendarView() {
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/5 bg-ink-900/60 p-4">
+      <Card pad="sm" className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-black text-white">{MONTHS[month.m]} {month.y} <span className="ml-2 text-xs font-medium text-slate-400">{monthTotal} item{monthTotal === 1 ? '' : 's'}</span></h2>
         <div className="flex gap-2">
-          <button onClick={() => nav(-1)} aria-label="Previous month" className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-bold text-slate-200 hover:bg-white/10">←</button>
-          <button onClick={goToday} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-bold text-slate-200 hover:bg-white/10">Today</button>
-          <button onClick={() => nav(1)} aria-label="Next month" className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-bold text-slate-200 hover:bg-white/10">→</button>
+          <Button size="sm" onClick={() => nav(-1)} aria-label="Previous month">←</Button>
+          <Button size="sm" onClick={goToday}>Today</Button>
+          <Button size="sm" onClick={() => nav(1)} aria-label="Next month">→</Button>
         </div>
-      </div>
+      </Card>
 
       {loading && <Notice text="Loading calendar…" />}
 
-      <div className="overflow-hidden rounded-2xl border border-white/5 bg-ink-900/60">
+      <Card pad="none" className="overflow-hidden">
         <div className="grid grid-cols-7 border-b border-white/5">
           {DOW.map((d) => <div key={d} className="px-2 py-2 text-center text-[10px] font-black uppercase tracking-widest text-slate-500">{d}</div>)}
         </div>
@@ -176,13 +178,13 @@ export function CalendarView() {
             )
           })}
         </div>
-      </div>
+      </Card>
 
       {sel && (byDay[sel]?.length ?? 0) > 0 && (
         <div className="mt-4 rounded-2xl border border-blue-500/20 bg-ink-900/70 p-4">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-black uppercase tracking-wide text-slate-100">{sel}{sel === today ? ' — today' : sel < today ? ' — past' : ''}</h3>
-            <button onClick={() => setSel(null)} aria-label="Close day details" className="-my-1 rounded-md border border-white/10 bg-white/5 p-2 text-xs font-semibold text-slate-300 hover:bg-white/10">✕</button>
+            <Button size="sm" className="-my-1" onClick={() => setSel(null)} aria-label="Close day details">✕</Button>
           </div>
           <div className="space-y-1.5">
             {(byDay[sel] ?? []).map((it) => (

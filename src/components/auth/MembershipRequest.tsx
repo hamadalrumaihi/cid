@@ -12,6 +12,7 @@ import { insert, list, rpc, update } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { useTableVersion } from '@/lib/realtime'
 import { BUREAUS, PERMANENT_BUREAUS, ROLE_LABEL, ROLE_ORDER, bureauLabel, getRequestableRoles, getValidDepartments, roleLabel } from '@/lib/roles'
+import { fmtDateTime } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { uiConfirm } from '@/components/ui/dialog'
@@ -207,7 +208,7 @@ export function MembershipRequest() {
           <InfoRow label="Approved role" value={roleLabel(req!.decided_role)} />
           <InfoRow label="Approved department" value={bureauLabel(req!.decided_bureau)} />
           <InfoRow label="Approved by" value={approverName || '—'} />
-          <InfoRow label="Effective date" value={req?.decided_at ? new Date(req.decided_at).toLocaleString() : '—'} />
+          <InfoRow label="Effective date" value={fmtDateTime(req?.decided_at)} />
         </div>
         {req?.applicant_visible_decision_note && (
           <p className="text-sm text-slate-400">Note from Command: {req.applicant_visible_decision_note}</p>
@@ -251,7 +252,7 @@ export function MembershipRequest() {
         <div className="space-y-1.5 rounded-lg border border-white/10 bg-ink-950/50 p-4">
           <InfoRow label="Requested department" value={bureauLabel(req!.requested_bureau)} />
           <InfoRow label="Requested role" value={roleLabel(req!.requested_role)} />
-          <InfoRow label="Submitted" value={req?.submitted_at ? new Date(req.submitted_at).toLocaleString() : '—'} />
+          <InfoRow label="Submitted" value={fmtDateTime(req?.submitted_at)} />
         </div>
         <Button size="sm" variant="ghost" className="w-full" aria-expanded={histOpen} onClick={() => void toggleHistory()}>
           {histOpen ? 'Hide request history' : 'Request history'}

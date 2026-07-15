@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Badge } from '@/components/ui/Badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
+import { Button } from '@/components/ui/Button'
+import { Notice } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { deleteWithUndo, list, insert, update } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
@@ -40,14 +44,15 @@ export function OperationsView() {
 
   return (
     <div className="space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">ACTIVE TASK FORCES</p><h2 className="text-2xl font-black text-white">Operations</h2></div>
-        {canEdit && <button onClick={() => setModal('new')} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-2 text-sm font-bold text-white">New Operation</button>}
-      </header>
+      <PageHeader
+        title="Operations"
+        eyebrow="Active Task Forces"
+        actions={canEdit && <Button variant="primary" onClick={() => setModal('new')}>New Operation</Button>}
+      />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {operations.map((op) => <OperationCard key={op.id} op={op} cases={cases.filter((c) => c.operation_id === op.id)} onOpen={() => router.push(`/operations?op=${op.id}`)} />)}
       </div>
-      {!operations.length && <p className="rounded-2xl border border-white/5 bg-ink-900/50 p-8 text-center text-sm text-slate-400">No operations yet.</p>}
+      {!operations.length && <Notice text="No operations yet." />}
       <OperationModal open={!!modal} record={modal === 'new' ? null : modal} onClose={() => setModal(null)} onSaved={() => { setModal(null); void refresh() }} />
     </div>
   )
@@ -60,7 +65,7 @@ function OperationCard({ op, cases, onOpen }: { op: OperationRow; cases: OpsCase
     <button onClick={onOpen} className="rounded-2xl border border-white/5 bg-ink-900/60 p-4 text-left transition hover:border-badge-400/50">
       <div className="flex items-start justify-between gap-3">
         <h3 className="text-lg font-black text-white">{op.name}</h3>
-        <span className={`rounded-full px-2 py-1 text-xs font-bold uppercase ${opStatusTint(op.status)}`}>{op.status}</span>
+        <Badge tint={opStatusTint(op.status)} className="uppercase">{op.status}</Badge>
       </div>
       <p className="mt-2 line-clamp-3 min-h-[3.75rem] text-sm text-slate-400">{op.description || 'No description recorded.'}</p>
       <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-white/5">
@@ -94,17 +99,17 @@ function OperationDetail({ op, cases, unlinked, canEdit, canDelete, onBack, onCh
       <Breadcrumbs items={[{ label: 'Operations', onClick: onBack }, { label: op.name }]} />
       <section className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><p className={`mb-2 inline-flex rounded-full px-2 py-1 text-xs font-bold uppercase ${opStatusTint(op.status)}`}>{op.status}</p><h2 className="text-2xl font-black text-white">{op.name}</h2><p className="mt-2 max-w-3xl text-sm text-slate-300">{op.description || 'No description recorded.'}</p></div>
-          <div className="flex gap-2">{canEdit && <button onClick={onEdit} className="rounded-lg bg-white/10 px-3 py-2 text-sm font-bold text-white">Edit</button>}{canDelete && <button onClick={() => void del()} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white">Delete</button>}</div>
+          <div><Badge tint={opStatusTint(op.status)} className="mb-2 uppercase">{op.status}</Badge><h1 className="text-2xl font-black text-white">{op.name}</h1><p className="mt-2 max-w-3xl text-sm text-slate-300">{op.description || 'No description recorded.'}</p></div>
+          <div className="flex gap-2">{canEdit && <Button onClick={onEdit}>Edit</Button>}{canDelete && <Button variant="danger" onClick={() => void del()}>Delete</Button>}</div>
         </div>
       </section>
       {canEdit && <div className="flex gap-2 rounded-2xl border border-white/5 bg-ink-900/50 p-3">
         <select value={pick} onChange={(e) => setPick(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white"><option value="">Link a case...</option>{unlinked.map((c) => <option key={c.id} value={c.id}>{c.case_number} - {c.title}</option>)}</select>
-        <button onClick={linkCase} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Link</button>
+        <Button variant="primary" onClick={linkCase}>Link</Button>
       </div>}
       <div className="space-y-2">
         {cases.map((c) => <div key={c.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3"><button onClick={() => router.push(`/cases?case=${c.id}`)} className="min-w-0 flex-1 text-left"><p className="font-mono text-sm font-bold text-badge-200">{c.case_number}</p><p className="font-semibold text-white">{c.title || 'Untitled case'}</p><p className="text-xs text-slate-500">{c.bureau} - {c.status} - {officerName(c.lead_detective_id) || 'Unassigned'}</p></button>{canEdit && <button onClick={() => void unlink(c.id)} className="text-sm font-bold text-rose-300">Unlink</button>}</div>)}
-        {!cases.length && <p className="rounded-2xl border border-white/5 bg-ink-900/50 p-8 text-center text-sm text-slate-400">No cases linked to this operation.</p>}
+        {!cases.length && <Notice text="No cases linked to this operation." />}
       </div>
     </div>
   )
@@ -131,7 +136,7 @@ function OperationModal({ open, record, onClose, onSaved }: { open: boolean; rec
           <label className="block text-sm text-slate-300">Status<select value={status} onChange={(e) => setStatus(e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white"><option value="active">Active</option><option value="closed">Closed</option></select></label>
           <label className="block text-sm text-slate-300">Description<textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={5} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white" /></label>
         </div>
-        <div className="mt-5 flex justify-end gap-2"><button onClick={onClose} className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-200">Cancel</button><button onClick={save} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Save</button></div>
+        <div className="mt-5 flex justify-end gap-2"><Button onClick={onClose}>Cancel</Button><Button variant="primary" onClick={save}>Save</Button></div>
       </div>
     </Modal>
   )

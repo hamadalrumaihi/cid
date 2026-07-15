@@ -13,6 +13,8 @@ import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -90,7 +92,7 @@ export function VehiclesView() {
 
   return (
     <div>
-      <div className="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <Card pad="lg" className="mb-6">
         <PageHeader
           title="🚗 Vehicle Registry"
           subtitle="Plates as first-class intel — owners, gang links & automatic cross-case matching"
@@ -107,14 +109,14 @@ export function VehiclesView() {
                 />
               )}
               {canEdit && (
-                <button onClick={() => setEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
+                <Button variant="primary" onClick={() => setEditor({ record: null })}>
                   + New Vehicle
-                </button>
+                </Button>
               )}
             </>
           }
         />
-      </div>
+      </Card>
 
       <CrossrefPanel vehicles={vehicles} persons={persons} ownerName={ownerName} />
 
@@ -135,7 +137,7 @@ export function VehiclesView() {
             const owner = ownerName(v.owner_id)
             const gang = gangName(v.gang_id)
             return (
-              <div key={v.id} className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+              <Card key={v.id}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="inline-block rounded-md border border-white/15 bg-ink-800 px-2.5 py-1 font-mono text-sm font-bold tracking-widest text-white">{v.plate}</p>
@@ -156,7 +158,7 @@ export function VehiclesView() {
                   {gang && <span className="rounded-md bg-violet-500/10 px-2 py-1 text-violet-300">🚩 {gang}</span>}
                 </div>
                 {v.notes && <p className="mt-3 text-xs text-slate-400">{v.notes}</p>}
-              </div>
+              </Card>
             )
           })}
         </div>
@@ -260,9 +262,9 @@ export function VehicleModal({ record, persons, gangs, onClose, onSaved }: {
         </div>
       </div>
       <div className="mt-5">
-        <button onClick={() => void save()} disabled={busy} className="w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+        <Button variant="primary" className="w-full" disabled={busy} onClick={() => void save()}>
           {record ? 'Save changes' : 'Register vehicle'}
-        </button>
+        </Button>
       </div>
     </Modal>
   )

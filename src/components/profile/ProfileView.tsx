@@ -23,6 +23,8 @@ import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { safeUrl } from '@/lib/safeUrl'
 import { initials } from '@/lib/format'
 import { deptLabel, roleLabel } from '@/lib/roles'
+import { Button } from '@/components/ui/Button'
+import { Notice } from '@/components/ui/Notice'
 import { toast } from '@/lib/toast'
 
 /* eslint-disable @next/next/no-img-element -- small external avatar (OAuth/FiveManage CDN) */
@@ -59,7 +61,7 @@ export function ProfileView() {
   }
 
   if (!profile) {
-    return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">Sign in to view your profile.</div>
+    return <Notice text="Sign in to view your profile." />
   }
 
   const avatar = safeUrl(profile.avatar_url ?? '')
@@ -98,7 +100,7 @@ export function ProfileView() {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-2xl font-black text-white">{profile!.display_name || 'Officer'}</h2>
+            <h1 className="text-2xl font-black text-white">{profile!.display_name || 'Officer'}</h1>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-300">
               <span className={`h-2 w-2 rounded-full ${dot.cls}`} /> {dot.t}
             </span>
@@ -224,9 +226,9 @@ function ProfileSection() {
       </label>
 
       <div className="flex items-center gap-3">
-        <button onClick={() => void save()} disabled={busy || !dirty} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50">
+        <Button variant="primary" onClick={() => void save()} disabled={busy || !dirty}>
           {busy ? 'Saving…' : 'Save changes'}
-        </button>
+        </Button>
         {dirty && <span className="text-xs text-slate-500">Unsaved changes</span>}
       </div>
       <p className="text-[11px] text-slate-500">Role, bureau and activation are set by Command and can’t be changed here.</p>

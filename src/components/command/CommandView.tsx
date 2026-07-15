@@ -21,6 +21,7 @@ import { JumpBack } from './JumpBack'
 import { RaidComp } from './RaidComp'
 import { TicketQueue } from './TicketQueue'
 import { Trackers } from './Trackers'
+import { Card } from '@/components/ui/Card'
 import {
   EMPTY_CMD_FILTERS, avgResolutionDays, bureauScore, cmdFilterActive, cmdMatch, fmtAvgDays,
   reEvNarc, reEvWeapon, type CaseRow, type CmdFilters,
@@ -196,7 +197,7 @@ export function CommandView() {
 
       {/* Command filters (#17): scope KPIs & caseload by bureau/detective/status/date */}
       {isCommand && (
-        <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-white/5 bg-ink-900/60 p-4">
+        <Card pad="sm" className="flex flex-wrap items-end gap-3">
           <div>
             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Bureau</label>
             <select value={filters.bureau} onChange={(e) => setFilters((f) => ({ ...f, bureau: e.target.value }))} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">
@@ -230,7 +231,7 @@ export function CommandView() {
           </div>
           <button onClick={() => setFilters(EMPTY_CMD_FILTERS)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10">Reset</button>
           <span className="ml-auto text-xs text-slate-500">{scoped ? `${filtered.length} of ${data.cases.length} cases` : ''}</span>
-        </div>
+        </Card>
       )}
 
       {/* KPI grid — compact tiles; drill behavior unchanged */}
@@ -258,7 +259,7 @@ export function CommandView() {
 
       {/* Drill: matching cases while a filter is active */}
       {live && scoped && (
-        <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+        <Card>
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-white">Matching cases</h3>
             <span className="text-[11px] text-slate-500">{drillCases.length} result{drillCases.length === 1 ? '' : 's'}</span>
@@ -280,7 +281,7 @@ export function CommandView() {
               {drillCases.length > 40 && <p className="mt-2 text-center text-[11px] text-slate-500">Showing first 40.</p>}
             </div>
           ) : <p className="text-sm text-slate-500">No cases match the current filters.</p>}
-        </div>
+        </Card>
       )}
 
       {/* Bureau performance scorecards (Wave 3) — command only */}
@@ -296,7 +297,7 @@ export function CommandView() {
               const clr = s.clearance == null ? '—' : `${s.clearance}%`
               const clrTint = s.clearance == null ? 'text-slate-400' : s.clearance >= 60 ? 'text-emerald-300' : s.clearance >= 30 ? 'text-amber-300' : 'text-rose-300'
               return (
-                <div key={k} className="rounded-2xl border border-white/5 bg-ink-900/60 p-4">
+                <Card key={k} pad="sm">
                   <p className="text-sm font-bold text-white">{BUREAU_FULL_NAMES[k] || k}</p>
                   <p className="mt-0.5 text-[11px] text-slate-500">{s.total} case{s.total === 1 ? '' : 's'} on file</p>
                   <div className="mt-3 grid grid-cols-3 gap-2 text-center">
@@ -304,7 +305,7 @@ export function CommandView() {
                     <div><p className={`text-2xl font-bold ${clrTint}`}>{clr}</p><p className="text-[10px] uppercase tracking-wider text-slate-500">Clearance</p></div>
                     <div><p className="text-2xl font-bold text-white">{fmtAvgDays(s.avg)}</p><p className="text-[10px] uppercase tracking-wider text-slate-500">Avg close</p></div>
                   </div>
-                </div>
+                </Card>
               )
             })}
           </div>
@@ -333,11 +334,11 @@ export function CommandView() {
       <TicketQueue cases={data.cases} onCaseCreated={() => void refresh()} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6 lg:col-span-2">
+        <Card pad="lg" className="lg:col-span-2">
           <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-white"><span aria-hidden="true">🛰️</span> Division Activity Feed</h3>
           {live ? <ActivityFeed /> : <p className="text-sm text-slate-500">Sign in to view the division activity feed.</p>}
-        </div>
-        <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+        </Card>
+        <Card pad="lg">
           <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-white"><span aria-hidden="true">🏛️</span> Bureau Caseload</h3>
           <div className="space-y-5">
             {BUREAU_KEYS.map((k) => (
@@ -359,7 +360,7 @@ export function CommandView() {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">

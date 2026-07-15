@@ -11,8 +11,10 @@ import { insert, list, update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
+import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { CASE_NUM_LEAD, DEPT_ROUTING, TICKET_BUREAUS, caseNumById, type CaseRow, type TicketRow } from './commandUtils'
+import { Card } from '@/components/ui/Card'
 
 type Bureau = Database['public']['Enums']['bureau']
 
@@ -36,7 +38,7 @@ export function TicketQueue({ cases, onCaseCreated }: { cases: CaseRow[]; onCase
   }, [refresh, v])
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/5 bg-ink-900/60">
+    <Card pad="none" className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 px-6 py-4">
         <div>
           <h3 className="flex items-center gap-2 text-base font-semibold text-white"><span className="text-lg" aria-hidden="true">🎫</span> Odyssey Ticket Intake Queue</h3>
@@ -44,12 +46,13 @@ export function TicketQueue({ cases, onCaseCreated }: { cases: CaseRow[]; onCase
         </div>
         <div className="flex items-center gap-2">
           {canEdit && (
-            <button
+            <Button
+              size="sm"
+              variant="primary"
               onClick={() => setNewTicketCode(`ticket-${Math.floor(10000 + Math.random() * 89999)}`)}
-              className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110"
             >
               + New Ticket
-            </button>
+            </Button>
           )}
           <span className="flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300">
             <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" /> Live sync
@@ -86,9 +89,9 @@ export function TicketQueue({ cases, onCaseCreated }: { cases: CaseRow[]; onCase
                     {t.status === 'processed' ? (
                       <span className="rounded-md bg-emerald-500/10 px-2 py-1 font-mono text-[11px] text-emerald-300">{caseNumById(cases, t.case_id) || 'processed'}</span>
                     ) : canEdit ? (
-                      <button onClick={() => setWizardTicket(t)} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-110">
+                      <Button size="sm" variant="primary" onClick={() => setWizardTicket(t)}>
                         Process
-                      </button>
+                      </Button>
                     ) : (
                       <span className="text-[11px] text-amber-300">pending</span>
                     )}
@@ -106,7 +109,7 @@ export function TicketQueue({ cases, onCaseCreated }: { cases: CaseRow[]; onCase
       {wizardTicket && (
         <TicketWizard key={wizardTicket.id} ticket={wizardTicket} onClose={() => setWizardTicket(null)} onDone={() => { setWizardTicket(null); void refresh(); onCaseCreated() }} />
       )}
-    </div>
+    </Card>
   )
 }
 
@@ -151,9 +154,9 @@ function NewTicketModal({ defaultCode, onClose, onSaved }: { defaultCode: string
             <textarea rows={3} value={desc} onChange={(e) => setDesc(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
           </div>
         </div>
-        <button onClick={() => void save()} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+        <Button variant="primary" className="mt-5 w-full" onClick={() => void save()}>
           Add to Queue
-        </button>
+        </Button>
       </div>
     </Modal>
   )
@@ -228,9 +231,9 @@ function TicketWizard({ ticket, onClose, onDone }: { ticket: TicketRow; onClose:
                 ⚠️ Misrouted ticket detected. Auto-renaming <span className="font-mono">{ticket.ticket_code}</span> → <span className="font-mono font-bold">{workingId}</span> and tagging <b>{routedDept}</b>.
               </p>
             )}
-            <button onClick={() => setStep(2)} className="w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+            <Button variant="primary" className="w-full" onClick={() => setStep(2)}>
               Confirm Routing →
-            </button>
+            </Button>
           </>
         )}
 
@@ -254,8 +257,8 @@ function TicketWizard({ ticket, onClose, onDone }: { ticket: TicketRow; onClose:
             </div>
             <p className="mb-5 text-[11px] text-slate-500">LSB→1xxxxx · BCB→2xxxxx · SAB/JTF→9xxxxx. Must be unique.</p>
             <div className="flex gap-3">
-              <button onClick={() => setStep(1)} className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10">← Back</button>
-              <button onClick={() => void createCase()} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white transition hover:brightness-110">Create Case File →</button>
+              <Button onClick={() => setStep(1)}>← Back</Button>
+              <Button variant="primary" className="flex-1" onClick={() => void createCase()}>Create Case File →</Button>
             </div>
           </>
         )}
@@ -277,9 +280,9 @@ function TicketWizard({ ticket, onClose, onDone }: { ticket: TicketRow; onClose:
                 <span className="break-all font-mono text-xs text-blue-300">{driveUrl}</span>
               </div>
             </div>
-            <button onClick={finish} className="mt-6 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+            <Button variant="primary" className="mt-6 w-full" onClick={finish}>
               Done
-            </button>
+            </Button>
           </div>
         )}
       </div>

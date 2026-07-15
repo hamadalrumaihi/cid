@@ -13,6 +13,8 @@ import { useTableVersion } from '@/lib/realtime'
 import { fmtUSD } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -81,7 +83,7 @@ export function NarcoticsView() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <Card pad="lg" className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <PageHeader
           className="flex-1"
           title="💊 Narcotics Intelligence"
@@ -97,14 +99,14 @@ export function NarcoticsView() {
                 <p className="text-[10px] uppercase tracking-wider text-slate-400">Hotspots</p>
               </div>
               {canEdit && (
-                <button onClick={() => setEditor({ drug: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+                <Button variant="primary" onClick={() => setEditor({ drug: null })}>
                   + New Narcotic
-                </button>
+                </Button>
               )}
             </div>
           }
         />
-      </div>
+      </Card>
 
       {loading ? (
         <Notice text="Loading narcotics registry…" />
@@ -214,7 +216,7 @@ function DrugCard({ drug, defaultOpen, canEdit, caseNum, onEdit }: {
           </div>
           {canEdit && (
             <div className="mt-4 text-right">
-              <button onClick={onEdit} className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit narcotic</button>
+              <Button size="sm" onClick={onEdit}>Edit narcotic</Button>
             </div>
           )}
         </div>
@@ -359,9 +361,9 @@ function NarcoticModal({ drug, cases, canDelete, onClose, onSaved }: {
       </div>
 
       <div className="mt-5 flex gap-2">
-        <button onClick={() => void save()} disabled={busy} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+        <Button variant="primary" className="flex-1" disabled={busy} onClick={() => void save()}>
           {n ? 'Save changes' : 'Create narcotic'}
-        </button>
+        </Button>
         {n && canDelete && (
           <button onClick={() => void del()} className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>
         )}

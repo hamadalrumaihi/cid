@@ -13,7 +13,7 @@ import type { Tables } from '@/lib/database.types'
 import { list, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
-import { copyText, timeAgo } from '@/lib/format'
+import { copyText, fmtDate, timeAgo } from '@/lib/format'
 import { Badge } from '@/components/ui/Badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Button } from '@/components/ui/Button'
@@ -309,7 +309,7 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
                     <span className="text-slate-400">—</span>
                   )}
                 </Row>
-                <Row label="Added">{new Date(v.created_at).toLocaleDateString()}</Row>
+                <Row label="Added">{fmtDate(v.created_at)}</Row>
                 <Row label="Updated">{timeAgo(v.updated_at)}</Row>
               </dl>
             </Card>

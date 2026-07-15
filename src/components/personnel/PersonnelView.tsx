@@ -16,6 +16,7 @@ import { toast } from '@/lib/toast'
 import { useNav } from '@/components/shell/useNav'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Commendations, type CommendationRow } from './Commendations'
+import { Card } from '@/components/ui/Card'
 
 const ROSTER_PAGE = 30
 
@@ -47,9 +48,9 @@ export function PersonnelView() {
 
   return (
     <section className="view-in space-y-6">
-      <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <Card pad="lg">
         <PageHeader title="👥 Personnel, Roster & Commendations" subtitle="CID roster & digital commendations" />
-      </div>
+      </Card>
 
       {state === 'in' && isCommand && (
         <button

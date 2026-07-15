@@ -16,6 +16,7 @@ import {
   AGENCY_LABEL, JMR_COLS, justiceRoleAbbr, justiceRoleLabel,
   type JusticeAgency, type LegalRequest,
 } from '@/lib/justice'
+import { fmtDateTime } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
@@ -250,7 +251,7 @@ function JusticeApprovals() {
               <span className="text-sm font-bold text-white">{r.display_name}</span>
               <StatusChip label={`${justiceRoleAbbr(r.requested_justice_role)} · ${AGENCY_LABEL[r.requested_agency as JusticeAgency]}`} tone="blue" />
               {r.justice_identifier && <span className="font-mono text-xs text-slate-500">{r.justice_identifier}</span>}
-              <span className="text-xs text-slate-500">{r.submitted_at ? new Date(r.submitted_at).toLocaleString() : ''}</span>
+              <span className="text-xs text-slate-500">{r.submitted_at ? fmtDateTime(r.submitted_at) : ''}</span>
             </div>
             <p className="mt-1 text-sm text-slate-300">{r.reason}</p>
             {r.additional_notes && <p className="mt-1 text-xs text-slate-500">{r.additional_notes}</p>}

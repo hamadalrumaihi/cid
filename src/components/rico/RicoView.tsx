@@ -9,8 +9,10 @@ import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { downloadDocx, type DocxPara } from '@/lib/docx'
-import { slug } from '@/lib/format'
+import { fmtDate, slug } from '@/lib/format'
 import { toast } from '@/lib/toast'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { RicoTab } from '@/components/cases/CaseDetail'
@@ -61,7 +63,7 @@ export function RicoView() {
     const P: DocxPara[] = [
       { text: 'Criminal Investigation Division — State of San Andreas', style: 'subtitle' },
       { text: 'RICO Predicate Summary', style: 'title' },
-      { text: `${current.case_number}  ·  Prepared ${new Date().toLocaleDateString('en-US')}`, style: 'subtitle' },
+      { text: `${current.case_number}  ·  Prepared ${fmtDate(new Date())}`, style: 'subtitle' },
       { text: '', style: 'normal' },
       { text: 'Enterprise', style: 'heading' },
       { text: gang ? `${gang.name}${gang.threat_level ? ` — threat ${gang.threat_level}` : ''}` : 'Not defined', style: 'normal' },
@@ -82,7 +84,7 @@ export function RicoView() {
 
   return (
     <div>
-      <div className="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <Card pad="lg" className="mb-6">
         <PageHeader
           title="⚖️ RICO Element Tracker"
           subtitle="Assemble & track enterprise + pattern-of-racketeering elements per case."
@@ -90,16 +92,16 @@ export function RicoView() {
         <p className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
           ⚠️ Organizational tool only — not legal advice. Predicate-act sufficiency and charging decisions are a prosecutor&rsquo;s determination.
         </p>
-      </div>
+      </Card>
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <label className="text-xs font-semibold uppercase tracking-wider text-slate-400" htmlFor="rico-case">Case</label>
         <select id="rico-case" value={caseId} onChange={(e) => setCaseId(e.target.value)} className="rounded-lg border border-white/10 bg-ink-850 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">
           {!cases.length && <option value="">— no cases —</option>}
           {cases.map((c) => <option key={c.id} value={c.id}>{c.case_number} · {c.title || 'Untitled'}</option>)}
         </select>
-        <button onClick={() => void exportDocx()} className="ml-auto rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/10">
+        <Button className="ml-auto" onClick={() => void exportDocx()}>
           Export Predicate Summary (.docx)
-        </button>
+        </Button>
       </div>
       {loading ? (
         <Notice text="Loading cases…" />

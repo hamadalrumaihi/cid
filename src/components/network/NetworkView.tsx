@@ -11,6 +11,8 @@ import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { IntelProfile, type IntelTarget } from '@/components/persons/IntelProfile'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 
@@ -171,7 +173,7 @@ export function NetworkView() {
 
   return (
     <div>
-      <div className="mb-3 rounded-2xl border border-white/5 bg-ink-900/60 p-4">
+      <Card pad="sm" className="mb-3">
         <PageHeader
           eyebrow="Relationship network"
           title={focusNd ? `${ICON[focusNd.type]} ${focusNd.label}` : 'Overview — all gangs & their networks'}
@@ -186,14 +188,14 @@ export function NetworkView() {
               {focusNd && (focusNd.type === 'gang' || focusNd.type === 'person') && (
                 <button onClick={() => setProfile({ type: focusNd.type as 'gang' | 'person', id: focusNd.id })} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold text-blue-200 transition hover:bg-white/10">🔎 Profile</button>
               )}
-              {layout.focus && <button onClick={() => setFocusKey(null)} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10">⌂ Overview</button>}
-              <button onClick={() => zoomBy(1.2)} aria-label="Zoom in" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10">＋</button>
-              <button onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom out" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10">－</button>
-              <button onClick={() => setView({ tx: 0, ty: 0, k: 1 })} aria-label="Reset view" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10">↺</button>
+              {layout.focus && <Button size="sm" className="-my-1" onClick={() => setFocusKey(null)}>⌂ Overview</Button>}
+              <Button size="sm" className="-my-1" onClick={() => zoomBy(1.2)} aria-label="Zoom in">＋</Button>
+              <Button size="sm" className="-my-1" onClick={() => zoomBy(1 / 1.2)} aria-label="Zoom out">－</Button>
+              <Button size="sm" className="-my-1" onClick={() => setView({ tx: 0, ty: 0, k: 1 })} aria-label="Reset view">↺</Button>
             </>
           }
         />
-      </div>
+      </Card>
       <div className="overflow-hidden rounded-2xl border border-white/5 bg-ink-950/60">
         <svg
           ref={svgRef}

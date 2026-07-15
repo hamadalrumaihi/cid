@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Field, Textarea } from '@/components/ui/Field'
 import { insert, list, deleteWithUndo, rpc } from '@/lib/db'
-import { timeAgo } from '@/lib/format'
+import { fmtDate, timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { officerName, activeProfiles, useProfilesStore } from '@/lib/profiles'
 import { bureauLabel, roleLabel } from '@/lib/roles'
@@ -119,7 +120,7 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
       <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="font-bold text-white">Assigned Officers</h3>
-          {canEdit && <button onClick={() => void addAssignment()} disabled={assignBusy} className="rounded-lg bg-white/10 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Add support</button>}
+          {canEdit && <Button onClick={() => void addAssignment()} disabled={assignBusy}>Add support</Button>}
         </div>
         <div className="flex flex-wrap gap-2">
           {standardRows.map((a) => (
@@ -310,8 +311,6 @@ function JointMembersPanel({ c, assignments, activeJoint, removedJoint, manages,
     }
   }
 
-  const fmtDate = (v: string) => new Date(v).toLocaleDateString('en-US')
-
   return (
     <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -320,9 +319,9 @@ function JointMembersPanel({ c, assignments, activeJoint, removedJoint, manages,
           <span className="ml-1 align-middle rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-violet-300">JTF</span>
         </h3>
         {manages && (
-          <button onClick={() => setAddOpen(true)} className="min-h-[44px] rounded-lg bg-white/10 px-3 py-2 text-sm font-semibold text-white hover:bg-white/15 sm:min-h-0">
+          <Button className="min-h-[44px] sm:min-h-0" onClick={() => setAddOpen(true)}>
             ＋ Add members
-          </button>
+          </Button>
         )}
       </div>
       <div className="space-y-2">
@@ -389,10 +388,10 @@ function JointMembersPanel({ c, assignments, activeJoint, removedJoint, manages,
             </Field>
           </div>
           <div className="mt-5 flex justify-end gap-2">
-            <button onClick={() => setRemoveTarget(null)} disabled={removeBusy} className="min-h-[44px] rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/5 disabled:opacity-60 sm:min-h-0">Cancel</button>
-            <button onClick={() => void confirmRemove()} disabled={removeBusy} className="min-h-[44px] rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-500 disabled:opacity-60 sm:min-h-0">
+            <Button className="min-h-[44px] sm:min-h-0" onClick={() => setRemoveTarget(null)} disabled={removeBusy}>Cancel</Button>
+            <Button variant="danger" className="min-h-[44px] sm:min-h-0" onClick={() => void confirmRemove()} disabled={removeBusy}>
               {removeBusy ? 'Removing…' : 'Remove member'}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>

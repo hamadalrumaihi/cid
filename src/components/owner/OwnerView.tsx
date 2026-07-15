@@ -22,6 +22,7 @@ import { officerName, useProfilesStore } from '@/lib/profiles'
 import { timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/PageHeader'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
@@ -227,11 +228,11 @@ function HomeSection({ onGo }: { onGo: (s: string) => void }) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <Card pad="lg">
         <p className="t-readout mb-3 inline-flex items-center gap-2 rounded border border-blue-400/20 bg-blue-500/10 px-2 py-1 text-[10px] uppercase tracking-widest text-blue-200">
           <span className="t-dot t-dot-cyan" /> Owner &amp; developer operations
         </p>
-        <h2 className="text-xl font-black text-white">The project&rsquo;s control center</h2>
+        <h1 className="text-xl font-black text-white">The project&rsquo;s control center</h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-400">
           One owner-only place to understand, monitor, maintain and safely evolve the portal:
           health and statistics, the feedback inbox, the improvement roadmap, change-impact
@@ -239,7 +240,7 @@ function HomeSection({ onGo }: { onGo: (s: string) => void }) {
           <button onClick={() => router.push('/devdocs')} className="text-blue-300 underline decoration-blue-300/40 hover:text-blue-200">Developer Handbook</button> —
           this portal is for deciding and doing.
         </p>
-      </div>
+      </Card>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard
@@ -384,9 +385,9 @@ function HealthSection() {
             ))}
           </div>
         )}
-        <button onClick={() => void refresh()} disabled={loading} className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50">
+        <Button size="sm" className="mt-3" disabled={loading} onClick={() => void refresh()}>
           {loading ? 'Refreshing…' : '↻ Refresh'}
-        </button>
+        </Button>
       </Panel>
 
       <ClientErrorsPanel />
@@ -434,9 +435,9 @@ function ClientErrorsPanel() {
               {r.user_agent && <p className="mt-1 text-xs text-slate-400">{r.user_agent}</p>}
             </details>
           ))}
-          <button onClick={() => void clearAll()} disabled={busy} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50">
+          <Button size="sm" disabled={busy} onClick={() => void clearAll()}>
             {busy ? 'Clearing…' : 'Clear shown'}
-          </button>
+          </Button>
         </div>
       )}
     </Panel>
@@ -557,7 +558,7 @@ function FeedbackInbox() {
             <option value="priority">Priority</option><option value="status">Status</option>
             <option value="updated">Recently updated</option>
           </select>
-          <button aria-label="Refresh" title="Refresh" onClick={() => void refresh()} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">↻</button>
+          <Button size="sm" aria-label="Refresh" title="Refresh" onClick={() => void refresh()}>↻</Button>
         </div>
 
         {loading ? <p className="text-sm text-slate-400">Loading submissions…</p>
@@ -696,9 +697,9 @@ function FeedbackDetailModal({ item, onClose, onSaved }: { item: FbItem; onClose
         <textarea value={resolution} onChange={(e) => setResolution(e.target.value)} rows={2} className={inputCls} />
       </div>
       <div className="mt-4 flex gap-2">
-        <button onClick={() => void save()} disabled={busy} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-2.5 text-sm font-bold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+        <Button variant="primary" className="flex-1" disabled={busy} onClick={() => void save()}>
           {busy ? 'Saving…' : 'Save catalog'}
-        </button>
+        </Button>
       </div>
       <p className="mt-2 text-xs text-slate-400">
         Archive instead of delete — nothing here is destructive. Status changes to

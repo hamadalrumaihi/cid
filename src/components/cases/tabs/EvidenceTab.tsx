@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { WorkflowTimeline } from '@/components/ui/WorkflowTimeline'
 import { uiPrompt } from '@/components/ui/dialog'
@@ -71,8 +73,8 @@ export function EvidenceTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap justify-end gap-2">
-        {canEdit && <button onClick={() => { setItem((x) => ({ ...x, item_code: x.item_code || nextCode() })); setModal('evidence') }} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Add Evidence</button>}
-        {canEdit && <button onClick={() => setModal('media')} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-slate-200">Add Link</button>}
+        {canEdit && <Button variant="primary" onClick={() => { setItem((x) => ({ ...x, item_code: x.item_code || nextCode() })); setModal('evidence') }}>Add Evidence</Button>}
+        {canEdit && <Button onClick={() => setModal('media')}>Add Link</Button>}
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
         {rows.map((ev) => {
@@ -81,7 +83,7 @@ export function EvidenceTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
             <article key={ev.id} className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
               <div className="flex items-start justify-between gap-2">
                 <div><p className="font-mono text-sm font-bold text-badge-200">{ev.item_code || 'Evidence'}</p><h3 className="font-bold text-white">{ev.description || ev.type || 'Untitled item'}</h3></div>
-                <span className={`rounded-full px-2 py-1 text-xs font-bold uppercase ${ev.tamper === 'intact' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>{ev.tamper}</span>
+                <Badge tint={ev.tamper === 'intact' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'} className="uppercase">{ev.tamper}</Badge>
               </div>
               <p className="mt-2 text-sm text-slate-400">{[ev.type, ev.location].filter(Boolean).join(' - ') || 'No location/type recorded.'}</p>
               <button onClick={() => setChainOpen((o) => ({ ...o, [ev.id]: !o[ev.id] }))} aria-expanded={!!chainOpen[ev.id]} className="mt-2 text-xs text-slate-400 hover:text-slate-200">Custody entries: {chain.length} <span aria-hidden>{chainOpen[ev.id] ? '▴' : '▾'}</span></button>
@@ -92,7 +94,7 @@ export function EvidenceTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
                 </div>
               )}
               <div className="mt-3 flex gap-2">
-                {canEdit && <button onClick={() => void transfer(ev)} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-200">Transfer</button>}
+                {canEdit && <Button size="sm" onClick={() => void transfer(ev)}>Transfer</Button>}
                 {canDelete && <button onClick={() => { void deleteWithUndo('evidence', ev, { label: ev.item_code || 'evidence', children: [{ table: 'custody_chain', column: 'evidence_id' }], after: refresh }) }} className="rounded-lg border border-rose-400/30 px-3 py-1.5 text-xs font-bold text-rose-300">Delete</button>}
               </div>
             </article>
@@ -116,7 +118,7 @@ export function EvidenceTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
           <input value={item.type} onChange={(e) => setItem({ ...item, type: e.target.value })} placeholder="Type" className="w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white" />
           <input value={item.location} onChange={(e) => setItem({ ...item, location: e.target.value })} placeholder="Location" className="w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white" />
           <textarea value={item.description} onChange={(e) => setItem({ ...item, description: e.target.value })} placeholder="Description" rows={4} className="w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white" />
-          <button onClick={addEvidence} className="w-full rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Save evidence</button>
+          <Button variant="primary" className="w-full" onClick={addEvidence}>Save evidence</Button>
         </div></div>
       </Modal>
       <Modal open={modal === 'media'} onClose={() => setModal(null)}>
@@ -124,7 +126,7 @@ export function EvidenceTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
           <input value={link.title} onChange={(e) => setLink({ ...link, title: e.target.value })} placeholder="Title" className="w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white" />
           <select value={link.type} onChange={(e) => setLink({ ...link, type: e.target.value })} className="w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white"><option value="document">Document</option><option value="image">Image</option><option value="video">Video</option><option value="fivemanage">FiveManage</option></select>
           <input value={link.external_url} onChange={(e) => setLink({ ...link, external_url: e.target.value })} placeholder="https://..." className="w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white" />
-          <button onClick={addMedia} className="w-full rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Save link</button>
+          <Button variant="primary" className="w-full" onClick={addMedia}>Save link</Button>
         </div></div>
       </Modal>
     </div>

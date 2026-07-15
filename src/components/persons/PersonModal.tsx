@@ -11,6 +11,7 @@ import { deleteWithUndo, insert, update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 
 export type PersonRow = Tables<'persons'>
@@ -150,9 +151,9 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
           </div>
         </div>
         <div className="mt-5 flex gap-2">
-          <button onClick={() => void save()} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+          <Button variant="primary" className="flex-1" onClick={() => void save()}>
             {record ? 'Save changes' : 'Create person'}
-          </button>
+          </Button>
           {record && canDelete && (
             <button onClick={() => void del()} className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>
           )}
