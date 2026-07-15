@@ -99,7 +99,10 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
           <ShieldIcon className="h-6 w-6 text-white" />
         </div>
         <div className="sidebar-hide leading-tight">
-          <h1 className="text-base font-bold tracking-tight text-white">CID Portal</h1>
+          {/* Brand wordmark, not the page heading — each view owns its single
+              <h1> (PageHeader / dossier), so the brand is a styled <div> to keep
+              one-h1-per-page. */}
+          <div className="text-base font-bold tracking-tight text-white">CID Portal</div>
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-blue-300/70">San Andreas</p>
         </div>
         <button

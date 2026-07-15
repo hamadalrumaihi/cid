@@ -496,9 +496,11 @@ create table public.gang_members (
   mugshot_url text,
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
-  rank text
+  rank text,
+  provenance text
 );
 alter table public.gang_members add constraint gang_members_pkey PRIMARY KEY (id);
+alter table public.gang_members add constraint gang_members_provenance_check CHECK (((provenance IS NULL) OR (provenance = ANY (ARRAY['imported'::text, 'reported'::text, 'manually_confirmed'::text, 'inferred'::text, 'historical'::text, 'disputed'::text]))));
 alter table public.gang_members add constraint gang_members_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
 alter table public.gang_members add constraint gang_members_gang_id_fkey FOREIGN KEY (gang_id) REFERENCES public.gangs(id) ON DELETE CASCADE;
 alter table public.gang_members add constraint gang_members_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE SET NULL;
@@ -521,11 +523,40 @@ create table public.gang_turf (
   block text not null,
   density public.density not null default 'low'::public.density,
   hotspot_area text,
-  created_at timestamp with time zone not null default now()
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  status text,
+  confidence text,
+  first_observed date,
+  last_confirmed date,
+  notes text
 );
 alter table public.gang_turf add constraint gang_turf_pkey PRIMARY KEY (id);
 alter table public.gang_turf add constraint gang_turf_gang_id_fkey FOREIGN KEY (gang_id) REFERENCES public.gangs(id) ON DELETE CASCADE;
+alter table public.gang_turf add constraint gang_turf_status_check CHECK (((status IS NULL) OR (status = ANY (ARRAY['claimed'::text, 'confirmed'::text, 'contested'::text, 'historical'::text, 'unknown'::text]))));
+alter table public.gang_turf add constraint gang_turf_confidence_check CHECK (((confidence IS NULL) OR (confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
 alter table public.gang_turf enable row level security;
+
+create table public.gang_places (
+  id uuid not null default gen_random_uuid(),
+  gang_id uuid not null,
+  place_id uuid not null,
+  role text,
+  confidence text,
+  provenance text,
+  note text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.gang_places add constraint gang_places_pkey PRIMARY KEY (id);
+alter table public.gang_places add constraint gang_places_gang_id_place_id_key UNIQUE (gang_id, place_id);
+alter table public.gang_places add constraint gang_places_gang_id_fkey FOREIGN KEY (gang_id) REFERENCES public.gangs(id) ON DELETE CASCADE;
+alter table public.gang_places add constraint gang_places_place_id_fkey FOREIGN KEY (place_id) REFERENCES public.places(id) ON DELETE CASCADE;
+alter table public.gang_places add constraint gang_places_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.gang_places add constraint gang_places_confidence_check CHECK (((confidence IS NULL) OR (confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
+alter table public.gang_places add constraint gang_places_provenance_check CHECK (((provenance IS NULL) OR (provenance = ANY (ARRAY['imported'::text, 'reported'::text, 'manually_confirmed'::text, 'inferred'::text, 'historical'::text, 'disputed'::text]))));
+alter table public.gang_places enable row level security;
 
 create table public.gangs (
   id uuid not null default gen_random_uuid(),
@@ -535,10 +566,24 @@ create table public.gangs (
   notes text,
   created_by uuid default auth.uid(),
   created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now()
+  updated_at timestamp with time zone not null default now(),
+  aliases text,
+  classification text,
+  status text,
+  confidence text,
+  intelligence_summary jsonb not null default '{}'::jsonb,
+  reviewed_at timestamp with time zone,
+  reviewed_by uuid,
+  next_review_at timestamp with time zone,
+  lead_detective_id uuid
 );
 alter table public.gangs add constraint gangs_pkey PRIMARY KEY (id);
 alter table public.gangs add constraint gangs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.gangs add constraint gangs_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.profiles(id);
+alter table public.gangs add constraint gangs_lead_detective_id_fkey FOREIGN KEY (lead_detective_id) REFERENCES public.profiles(id);
+alter table public.gangs add constraint gangs_classification_check CHECK (((classification IS NULL) OR (classification = ANY (ARRAY['street_gang'::text, 'organized_crime'::text, 'motorcycle_club'::text, 'faction'::text, 'cartel'::text, 'crew'::text, 'unknown'::text]))));
+alter table public.gangs add constraint gangs_status_check CHECK (((status IS NULL) OR (status = ANY (ARRAY['active'::text, 'emerging'::text, 'dormant'::text, 'disbanded'::text, 'historical'::text, 'unknown'::text]))));
+alter table public.gangs add constraint gangs_confidence_check CHECK (((confidence IS NULL) OR (confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
 alter table public.gangs enable row level security;
 
 create table public.indicators (
@@ -1356,7 +1401,12 @@ CREATE INDEX gang_members_person_id_fkey_idx ON public.gang_members USING btree 
 CREATE INDEX gang_members_rank_id_fkey_idx ON public.gang_members USING btree (rank_id);
 CREATE INDEX gang_ranks_gang_id_fkey_idx ON public.gang_ranks USING btree (gang_id);
 CREATE INDEX gang_turf_gang_id_fkey_idx ON public.gang_turf USING btree (gang_id);
+CREATE INDEX gang_places_gang_id_fkey_idx ON public.gang_places USING btree (gang_id);
+CREATE INDEX gang_places_place_id_fkey_idx ON public.gang_places USING btree (place_id);
+CREATE INDEX gang_places_created_by_fkey_idx ON public.gang_places USING btree (created_by);
 CREATE INDEX gangs_created_by_fkey_idx ON public.gangs USING btree (created_by);
+CREATE INDEX gangs_lead_detective_id_fkey_idx ON public.gangs USING btree (lead_detective_id);
+CREATE INDEX gangs_reviewed_by_fkey_idx ON public.gangs USING btree (reviewed_by);
 CREATE INDEX gangs_name_trgm ON public.gangs USING gin (name extensions.gin_trgm_ops);
 CREATE INDEX indicators_case_idx ON public.indicators USING btree (case_id);
 CREATE INDEX indicators_created_by_fkey_idx ON public.indicators USING btree (created_by);
@@ -2564,6 +2614,10 @@ CREATE TRIGGER feedback_meta_audit AFTER INSERT OR DELETE OR UPDATE ON public.fe
 CREATE TRIGGER feedback_meta_touch BEFORE UPDATE ON public.feedback_meta FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER gang_members_audit AFTER INSERT OR DELETE OR UPDATE ON public.gang_members FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER gang_members_touch BEFORE UPDATE ON public.gang_members FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER gang_places_audit AFTER INSERT OR DELETE OR UPDATE ON public.gang_places FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER gang_places_touch BEFORE UPDATE ON public.gang_places FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER gang_turf_audit AFTER INSERT OR DELETE OR UPDATE ON public.gang_turf FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER gang_turf_touch BEFORE UPDATE ON public.gang_turf FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER gangs_audit AFTER INSERT OR DELETE OR UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER gangs_touch BEFORE UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER media_audit AFTER INSERT OR DELETE OR UPDATE ON public.media FOR EACH ROW EXECUTE FUNCTION private.audit();
@@ -2970,6 +3024,23 @@ create policy gang_ranks_sel on public.gang_ranks
   using (private.is_active());
 
 create policy gang_ranks_upd on public.gang_ranks
+  as permissive for update to authenticated
+  using (private.is_active())
+  with check (private.is_active());
+
+create policy gang_places_del on public.gang_places
+  as permissive for delete to authenticated
+  using (private.can_delete());
+
+create policy gang_places_ins on public.gang_places
+  as permissive for insert to authenticated
+  with check (private.is_active());
+
+create policy gang_places_sel on public.gang_places
+  as permissive for select to authenticated
+  using (private.is_active());
+
+create policy gang_places_upd on public.gang_places
   as permissive for update to authenticated
   using (private.is_active())
   with check (private.is_active());
@@ -3398,6 +3469,7 @@ create policy wl_sel on public.watchlist
 --   public.documents
 --   public.evidence
 --   public.gang_members
+--   public.gang_places
 --   public.gang_ranks
 --   public.gang_turf
 --   public.gangs
