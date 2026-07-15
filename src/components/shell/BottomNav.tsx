@@ -16,7 +16,7 @@ export function BottomNav() {
   const badges = useNavBadges()
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-30 flex items-stretch overflow-x-auto border-t border-white/10 bg-ink-950/90 backdrop-blur-xl lg:hidden"
+      className="safe-bottom safe-x fixed inset-x-0 bottom-0 z-30 flex items-stretch overflow-x-auto border-t border-white/10 bg-ink-950/90 backdrop-blur-xl lg:hidden"
       aria-label="Primary navigation (mobile)"
     >
       {NAV_CATEGORIES.map((c) => {

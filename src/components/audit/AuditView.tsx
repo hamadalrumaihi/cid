@@ -13,24 +13,30 @@ import { useAuth } from '@/lib/auth'
 import { officerName } from '@/lib/profiles'
 import { copyText } from '@/lib/format'
 import { toast } from '@/lib/toast'
+import { Button } from '@/components/ui/Button'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { Notice } from '@/components/ui/Notice'
 
 type AuditRow = Tables<'audit_log'>
 
+/** Fetch window — the log is append-only and grows without bound, so pull the
+ *  newest page and let "Load older" widen it instead of reading every row. */
+const PAGE = 500
+
 export function AuditView() {
   const { state, isOwner } = useAuth()
   const [rows, setRows] = useState<AuditRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [limit, setLimit] = useState(PAGE)
 
   const refresh = useCallback(async () => {
     if (state !== 'in' || !isOwner) return
     await Promise.resolve()
     setLoading(true)
-    try { setRows(await list('audit_log', { order: 'created_at', ascending: false })) }
+    try { setRows(await list('audit_log', { order: 'created_at', ascending: false, limit })) }
     catch { setRows([]); toast("Couldn't load the audit log — check your connection.", 'danger') }
     finally { setLoading(false) }
-  }, [state, isOwner])
+  }, [state, isOwner, limit])
 
   useEffect(() => {
     const t = window.setTimeout(() => { void refresh() }, 0)
@@ -81,20 +87,31 @@ export function AuditView() {
 
   return (
     <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
-      {loading ? (
+      {loading && rows.length === 0 ? (
         <Notice text="Loading audit log…" />
       ) : (
-        <DataTable
-          columns={columns}
-          rows={rows}
-          rowKey={(r) => String(r.id)}
-          initialSort={{ key: 'when', dir: 'desc' }}
-          filterPlaceholder="Filter action / entity / officer…"
-          searchText={(r) => JSON.stringify(r.detail ?? '')}
-          csvName="audit-log"
-          countLabel="entries"
-          emptyText="No audit entries yet."
-        />
+        <>
+          <DataTable
+            columns={columns}
+            rows={rows}
+            rowKey={(r) => String(r.id)}
+            initialSort={{ key: 'when', dir: 'desc' }}
+            filterPlaceholder="Filter action / entity / officer…"
+            searchText={(r) => JSON.stringify(r.detail ?? '')}
+            csvName="audit-log"
+            countLabel="entries"
+            emptyText="No audit entries yet."
+          />
+          {/* A full window means older entries probably exist below the cut. */}
+          {rows.length >= limit && (
+            <div className="mt-3 flex items-center gap-3">
+              <Button size="sm" disabled={loading} onClick={() => setLimit((l) => l + PAGE)}>
+                {loading ? 'Loading…' : `Load ${PAGE} older entries`}
+              </Button>
+              <p className="text-xs text-slate-400">Showing the newest {rows.length} entries — filter and CSV export cover only what&rsquo;s loaded.</p>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

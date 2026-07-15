@@ -130,9 +130,12 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
         )}
         <div className="grid gap-3 md:grid-cols-2">
           <label className="text-sm text-slate-300">Bureau
-            <select value={form.bureau} onChange={(e) => set('bureau', e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white">
+            {/* Bureau is frozen after creation (block_direct_case_bureau) — the
+                authorized path is the Reassign-bureau action on the case (DD+). */}
+            <select value={form.bureau} onChange={(e) => set('bureau', e.target.value)} disabled={!!record} title={record ? 'Bureau changes go through Reassign bureau on the case (Deputy Director+)' : undefined} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white disabled:cursor-not-allowed disabled:opacity-60">
               {BUREAUS.map((b) => <option key={b} value={b}>{b}</option>)}
             </select>
+            {record && <span className="mt-1 block text-[11px] text-slate-500">Changed via “Reassign bureau” on the case (Deputy Director+).</span>}
           </label>
           <label className="text-sm text-slate-300">Case number
             <div className="mt-1 flex">

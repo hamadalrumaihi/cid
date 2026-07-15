@@ -53,6 +53,8 @@ export const notifPayloadSchema = z.object({
   request_id: z.string().optional(),
   request_number: z.string().optional(),
   request_type: z.string().optional(),
+  transfer_id: z.string().optional(),
+  announce_id: z.string().optional(),
   sealed: z.boolean().optional(),
   actor_id: z.string().optional(),
   actor_name: z.string().optional(),

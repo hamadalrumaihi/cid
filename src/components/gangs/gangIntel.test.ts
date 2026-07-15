@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   duplicateMemberIds, findDuplicateMembers, groupByTier, isGangStale, normalizeName,
-  parseColors, rankTier,
+  parseColors, planMerge, rankTier,
 } from './gangIntel'
 import type { GangRow, MemberRow } from './gangShared'
 
@@ -80,6 +80,53 @@ describe('findDuplicateMembers / duplicateMemberIds', () => {
       member({ id: 'b', name: 'Trey Sanders', person_id: 'p1' }),
     ]
     expect(findDuplicateMembers(members)[0].reason).toMatch(/linked person/i)
+  })
+})
+
+describe('planMerge', () => {
+  it('keeps the survivor’s non-empty values and plans no patch when nothing changes', () => {
+    const survivor = member({ id: 's', rank: 'OG', callsign: 'Ghost', felony_count: 3 })
+    const dup = member({ id: 'd', rank: 'Soldier', callsign: 'Spectre', felony_count: 1 })
+    const plan = planMerge(survivor, [dup])
+    expect(plan.patch).toEqual({})
+    expect(plan.deletions.map((m) => m.id)).toEqual(['d'])
+  })
+  it('adopts the first non-empty duplicate value where the survivor is empty', () => {
+    const survivor = member({ id: 's', rank: null, mugshot_url: null })
+    const d1 = member({ id: 'd1', rank: '  ', mugshot_url: null })
+    const d2 = member({ id: 'd2', rank: 'Enforcer', mugshot_url: 'https://cdn/x.png' })
+    expect(planMerge(survivor, [d1, d2]).patch).toEqual({ rank: 'Enforcer', mugshot_url: 'https://cdn/x.png' })
+  })
+  it('adopts person_id when the survivor has none, and never overwrites one it has', () => {
+    const dup = member({ id: 'd', person_id: 'p1' })
+    expect(planMerge(member({ id: 's', person_id: null }), [dup]).patch.person_id).toBe('p1')
+    expect(planMerge(member({ id: 's', person_id: 'p0' }), [dup]).patch).toEqual({})
+  })
+  it('treats schema defaults (ccw false, counts 0) as empty so richer values prefill', () => {
+    const survivor = member({ id: 's', ccw: false, vch: 0, felony_count: 0 })
+    const dup = member({ id: 'd', ccw: true, vch: 4, felony_count: 7 })
+    expect(planMerge(survivor, [dup]).patch).toEqual({ ccw: true, vch: 4, felony_count: 7 })
+  })
+  it('never plans deletion of the survivor, even when passed among the duplicates', () => {
+    const survivor = member({ id: 's' })
+    const dup = member({ id: 'd' })
+    const plan = planMerge(survivor, [survivor, dup])
+    expect(plan.deletions.map((m) => m.id)).toEqual(['d'])
+  })
+  it('explicit choices override both directions', () => {
+    const survivor = member({ id: 's', rank: 'OG', status: null })
+    const dup = member({ id: 'd', rank: 'Soldier', status: 'active' })
+    // Adopt the duplicate's rank despite the survivor having one…
+    expect(planMerge(survivor, [dup], { rank: 'Soldier' }).patch.rank).toBe('Soldier')
+    // …and keep the survivor's empty status despite the adoption default.
+    expect(planMerge(survivor, [dup], { status: null }).patch).not.toHaveProperty('status')
+  })
+  it('is pure — inputs are never mutated', () => {
+    const survivor = member({ id: 's', rank: null })
+    const dup = member({ id: 'd', rank: 'Soldier' })
+    const before = JSON.stringify([survivor, dup])
+    planMerge(survivor, [dup])
+    expect(JSON.stringify([survivor, dup])).toBe(before)
   })
 })
 

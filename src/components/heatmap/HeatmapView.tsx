@@ -11,6 +11,7 @@
  *  equal-length window, and click-to-drill-down (tile or map dot) listing
  *  the underlying records with case deep-links. */
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
@@ -23,6 +24,7 @@ type PlaceRow = Tables<'places'>
 type TurfRow = Tables<'gang_turf'>
 type RaidRow = Tables<'raid_compensations'>
 type GangRow = Tables<'gangs'>
+type GangPlaceRow = Tables<'gang_places'>
 
 const LAYER_META = [
   { key: 'cases', icon: '📂', label: 'Cases', w: 3 },
@@ -70,12 +72,18 @@ interface AreaRow {
 
 export function HeatmapView() {
   const { state } = useAuth()
-  const [data, setData] = useState<{ cases: CaseRow[]; places: PlaceRow[]; turf: TurfRow[]; raids: RaidRow[]; gangs: GangRow[] }>({ cases: [], places: [], turf: [], raids: [], gangs: [] })
+  const router = useRouter()
+  const sp = useSearchParams()
+  // ?gang=<id> focuses the map on one gang's areas (linked from the dossier).
+  const gangId = sp.get('gang')
+  const [data, setData] = useState<{ cases: CaseRow[]; places: PlaceRow[]; turf: TurfRow[]; raids: RaidRow[]; gangs: GangRow[]; gangPlaces: GangPlaceRow[] }>({ cases: [], places: [], turf: [], raids: [], gangs: [], gangPlaces: [] })
   const [loading, setLoading] = useState(true)
   const [layers, setLayers] = useState<Record<LayerKey, boolean>>({ cases: true, raids: true, turf: true, places: true })
   const [win, setWin] = useState(0)
   const [winPreview, setWinPreview] = useState(0)
   const [sel, setSel] = useState<string | null>(null)
+  // Focus mode filters the tile list to the gang's areas; this toggles it off.
+  const [showAll, setShowAll] = useState(false)
   // "Now" is stamped per data load (not read inside the memo) so the window
   // cutoff stays deterministic for a given dataset — and lint-pure.
   const [loadedAt, setLoadedAt] = useState(0)
@@ -85,17 +93,20 @@ export function HeatmapView() {
     await Promise.resolve()
     setLoading(true)
     try {
-      const [cases, places, turf, raids, gangs] = await Promise.all([
+      const [cases, places, turf, raids, gangs, gangPlaces] = await Promise.all([
         list('cases', {}).catch(() => [] as CaseRow[]),
         list('places', {}).catch(() => [] as PlaceRow[]),
         list('gang_turf', {}).catch(() => [] as TurfRow[]),
         list('raid_compensations', {}).catch(() => [] as RaidRow[]),
         list('gangs', {}).catch(() => [] as GangRow[]),
+        // gang_places is only needed to resolve the focused gang's linked
+        // properties — skip the query entirely when no focus is requested.
+        gangId ? list('gang_places', { eq: { gang_id: gangId } }).catch(() => [] as GangPlaceRow[]) : Promise.resolve([] as GangPlaceRow[]),
       ])
-      setData({ cases, places, turf, raids, gangs })
+      setData({ cases, places, turf, raids, gangs, gangPlaces })
       setLoadedAt(Date.now())
     } finally { setLoading(false) }
-  }, [state])
+  }, [state, gangId])
 
   useEffect(() => {
     const t = window.setTimeout(() => { void refresh() }, 0)
@@ -144,6 +155,30 @@ export function HeatmapView() {
 
   const max = rows.reduce((m, r) => Math.max(m, r.score), 0) || 1
 
+  // ── Per-gang focus (?gang=<id>) ─────────────────────────────────────────────
+  const focusGang = gangId ? data.gangs.find((g) => g.id === gangId) ?? null : null
+  // The gang's area strings: its turf rows (hotspot_area || block) plus its
+  // controlled/linked places' areas. Matched case-insensitively against the
+  // aggregated tile keys.
+  const focusAreas = useMemo(() => {
+    const set = new Set<string>()
+    if (!gangId) return set
+    for (const t of data.turf) if (t.gang_id === gangId) { const a = norm(t.hotspot_area || t.block).toLowerCase(); if (a) set.add(a) }
+    const linked = new Set(data.gangPlaces.map((gp) => gp.place_id))
+    for (const p of data.places) if (p.controlling_gang_id === gangId || linked.has(p.id)) { const a = norm(p.area).toLowerCase(); if (a) set.add(a) }
+    return set
+  }, [gangId, data])
+  const focusedRows = gangId ? rows.filter((r) => focusAreas.has(r.area.toLowerCase())) : rows
+  // Tile list honours the focus filter unless "Show all" is toggled; the map
+  // always plots everything (focused dots get an extra ring).
+  const shown = gangId && !showAll ? focusedRows : rows
+  const clearFocus = () => {
+    const params = new URLSearchParams(sp.toString())
+    params.delete('gang')
+    const qs = params.toString()
+    router.replace(qs ? `/heatmap?${qs}` : '/heatmap')
+  }
+
   if (state !== 'in') return <Notice text="Sign in to view the Commander Heatmap." />
 
   return (
@@ -176,6 +211,17 @@ export function HeatmapView() {
         </div>
       </div>
 
+      {gangId && !loading && (
+        <FocusBanner
+          gang={focusGang}
+          areaCount={focusAreas.size}
+          activeCount={focusedRows.length}
+          showAll={showAll}
+          onToggle={() => setShowAll((v) => !v)}
+          onClear={clearFocus}
+        />
+      )}
+
       {loading ? (
         <Notice text="Loading heatmap data…" />
       ) : !enabled.length ? (
@@ -201,10 +247,15 @@ export function HeatmapView() {
               ))}
             </div>
           )}
-          <HeatSvg rows={rows} max={max} layers={layers} onPick={setSel} />
+          <HeatSvg rows={rows} max={max} layers={layers} onPick={setSel} focus={gangId ? focusAreas : undefined} />
           {sel && <AreaDetail area={sel} data={data} win={win} loadedAt={loadedAt} onClose={() => setSel(null)} />}
+          {gangId && !showAll && !shown.length && (
+            <p className="mb-4 rounded-xl border border-white/5 bg-ink-900/60 p-4 text-sm text-slate-400">
+              None of the focused gang&apos;s areas have records in this window. Use “Show all areas” above, or widen the time range.
+            </p>
+          )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {rows.map((r) => {
+            {shown.map((r) => {
               const pct = Math.round((r.score / max) * 100)
               const lvl = pct >= 75 ? 'lvl3' : pct >= 50 ? 'lvl2' : pct >= 25 ? 'lvl1' : ''
               return (
@@ -226,6 +277,51 @@ export function HeatmapView() {
           </p>
         </>
       )}
+    </div>
+  )
+}
+
+/** Dismissible ?gang= focus banner — names the gang, counts its areas, and
+ *  offers the tile-list filter toggle. Clearing drops the URL param. */
+function FocusBanner({ gang, areaCount, activeCount, showAll, onToggle, onClear }: {
+  gang: GangRow | null
+  areaCount: number
+  activeCount: number
+  showAll: boolean
+  onToggle: () => void
+  onClear: () => void
+}) {
+  const quiet = areaCount - activeCount
+  return (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-2.5">
+      <p className="text-sm font-semibold text-amber-200">
+        {gang ? (
+          <>
+            Focused: {gang.name} — {areaCount} area{areaCount === 1 ? '' : 's'}
+            {quiet > 0 && <span className="ml-1 font-normal text-amber-200/70">({quiet} with no records in this window)</span>}
+          </>
+        ) : (
+          'Focused gang not found or not accessible.'
+        )}
+      </p>
+      <span className="flex items-center gap-1.5">
+        {gang && areaCount > 0 && (
+          <button
+            onClick={onToggle}
+            aria-pressed={showAll}
+            className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/20"
+          >
+            {showAll ? 'Show focused only' : 'Show all areas'}
+          </button>
+        )}
+        <button
+          onClick={onClear}
+          aria-label="Clear gang focus"
+          className="grid h-10 w-10 place-items-center rounded-lg text-lg leading-none text-amber-200 hover:bg-amber-500/20"
+        >
+          ✕
+        </button>
+      </span>
     </div>
   )
 }
@@ -320,7 +416,7 @@ function DetailBlock({ title, children }: { title: string; children: React.React
   )
 }
 
-function HeatSvg({ rows, max, layers, onPick }: { rows: AreaRow[]; max: number; layers: Record<LayerKey, boolean>; onPick: (area: string) => void }) {
+function HeatSvg({ rows, max, layers, onPick, focus }: { rows: AreaRow[]; max: number; layers: Record<LayerKey, boolean>; onPick: (area: string) => void; focus?: Set<string> }) {
   // Pan/zoom via viewBox math — self-contained vector map, no tiles, no CSP
   // changes. Wheel zooms on the cursor, drag pans, buttons cover touch.
   const HOME = { x: 0, y: 0, w: 100, h: 130 }
@@ -432,6 +528,7 @@ function HeatSvg({ rows, max, layers, onPick }: { rows: AreaRow[]; max: number; 
           const [x, y] = HM_XY[r.area.toLowerCase()]
           const pct = Math.round((r.score / max) * 100)
           const rad = (2 + (pct / 100) * 4.5) / Math.max(zoom, 1) ** 0.5
+          const inFocus = focus?.has(r.area.toLowerCase()) ?? false
           const parts = LAYER_META.filter((L) => layers[L.key] && r.v[L.key]).map((L) => `${r.v[L.key]} ${L.label.toLowerCase()}`).join(', ')
           return (
             <g
@@ -440,11 +537,16 @@ function HeatSvg({ rows, max, layers, onPick }: { rows: AreaRow[]; max: number; 
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(r.area) } }}
               tabIndex={0}
               role="button"
-              aria-label={`${r.area} — intensity ${pct}${parts ? ` (${parts})` : ''} — open records`}
+              aria-label={`${r.area} — intensity ${pct}${parts ? ` (${parts})` : ''}${inFocus ? ' — focused gang territory' : ''} — open records`}
               className="cursor-pointer focus:outline-none"
             >
+              {/* Focus ring rides outside the dot — a shape cue, not color-only
+                  (the banner + filtered tile list carry the same signal). */}
+              {inFocus && (
+                <circle cx={x} cy={y} r={(rad + 1.2 / Math.max(zoom, 1) ** 0.5).toFixed(2)} fill="none" stroke="#fbbf24" strokeWidth={0.55 / Math.max(zoom, 1) ** 0.5} />
+              )}
               <circle cx={x} cy={y} r={rad.toFixed(2)} fill={dotColor(pct)} fillOpacity={0.75} stroke="#0b1120" strokeWidth={0.6 / Math.max(zoom, 1) ** 0.5}>
-                <title>{r.area} — intensity {pct} ({parts}) — click for records</title>
+                <title>{r.area} — intensity {pct} ({parts}){inFocus ? ' — focused gang territory' : ''} — click for records</title>
               </circle>
               {/* The number rides along so intensity never depends on color alone. */}
               <text x={x} y={Number((y - rad - 1.5 / Math.max(zoom, 1) ** 0.5).toFixed(1))} textAnchor="middle" fontSize={fs(3.2)} fill="#cbd5e1">
@@ -464,6 +566,7 @@ function HeatSvg({ rows, max, layers, onPick }: { rows: AreaRow[]; max: number; 
         the intensity number; size &amp; color repeat it:{' '}
         <span className="text-rose-300">● 75–100</span> · <span className="text-amber-300">● 50–74</span> ·{' '}
         <span className="text-blue-300">● 0–49</span>.
+        {!!focus?.size && ' Ringed dots mark the focused gang’s territory.'}
         {unplaced > 0 && ` ${unplaced} area${unplaced === 1 ? '' : 's'} without a map position (postals etc.) appear in the tiles below.`}
       </p>
     </div>

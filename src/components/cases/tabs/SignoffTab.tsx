@@ -6,9 +6,19 @@ import { list, rpc } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
-import { signoffLabel, signoffTint, SIGNOFF_ACTION_VERB } from '@/lib/signoff'
+import { signoffLabel, signoffTint, SIGNOFF_ACTION_VERB, SIGNOFF_STAGE_LABEL } from '@/lib/signoff'
 import { toast } from '@/lib/toast'
 import type { CaseRow, HistoryRow } from './shared'
+
+/** How each history row came to be — the RPCs stamp `source` alongside the
+ *  action (Sprint 1A); rendered so an override is never mistaken for a
+ *  routine decision (audit P2-10). */
+const SIGNOFF_SOURCE_LABEL: Record<string, string> = {
+  submit: 'owner submission',
+  reviewer: 'reviewer decision',
+  owner: 'owner action',
+  command_override: 'command override',
+}
 
 export function SignoffTab({ c }: { c: CaseRow }) {
   const { profile } = useAuth()
@@ -41,7 +51,22 @@ export function SignoffTab({ c }: { c: CaseRow }) {
       </div>
       <WorkflowTimeline
         empty="No sign-off history yet."
-        entries={history.map((h) => ({ id: h.id, title: SIGNOFF_ACTION_VERB[h.action] || h.action, actor: h.actor_name || officerName(h.actor_id) || 'System', at: h.created_at, note: h.note }))}
+        entries={history.map((h) => {
+          // Full trail: verb + chain stage, the from→to status transition and
+          // the recorded source — all fields the RPCs already stamp.
+          const stage = h.stage ? SIGNOFF_STAGE_LABEL[h.stage] || h.stage : null
+          const source = h.source ? SIGNOFF_SOURCE_LABEL[h.source] || h.source : null
+          const actor = h.actor_name || officerName(h.actor_id) || 'System'
+          return {
+            id: h.id,
+            title: stage ? `${SIGNOFF_ACTION_VERB[h.action] || h.action} — ${stage}` : SIGNOFF_ACTION_VERB[h.action] || h.action,
+            actor: source ? `${actor} · via ${source}` : actor,
+            at: h.created_at,
+            from: h.from_status ? signoffLabel(h.from_status) : null,
+            to: h.to_status ? signoffLabel(h.to_status) : null,
+            note: h.note,
+          }
+        })}
       />
     </div>
   )

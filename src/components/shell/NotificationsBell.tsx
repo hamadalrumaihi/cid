@@ -18,8 +18,11 @@ function ctaLabel(href: string): string {
   if (href.startsWith('/legal')) return 'View legal request'
   if (href.startsWith('/justice')) return 'Open Justice Portal'
   if (href.startsWith('/command-center')) return 'Open Command Center'
+  if (href.startsWith('/command')) return 'Open Central Command'
   if (href.startsWith('/announce')) return 'View announcement'
   if (href.startsWith('/owner')) return 'Open Owner Portal'
+  if (href.startsWith('/profile')) return 'View your profile'
+  if (href.startsWith('/guide')) return 'Open the field guide'
   return 'Open'
 }
 import { useTableVersion } from '@/lib/realtime'
@@ -29,7 +32,7 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { BellIcon } from './icons'
 
 export function NotificationsBell() {
-  const { state } = useAuth()
+  const { state, isCommand } = useAuth()
   const router = useRouter()
   const [notifs, setNotifs] = useState<NotificationRow[]>([])
   const [open, setOpen] = useState(false)
@@ -59,7 +62,7 @@ export function NotificationsBell() {
 
   const onRow = async (n: NotificationRow) => {
     void markRead(n)
-    const href = notifHref(n)
+    const href = notifHref(n, { command: isCommand })
     if (href) {
       setOpen(false)
       router.push(href)
@@ -101,7 +104,7 @@ export function NotificationsBell() {
           {notifs.length ? notifs.map((n) => {
             const detail = notifDetail(n)
             const sub = notifSub(n)
-            const href = notifHref(n)
+            const href = notifHref(n, { command: isCommand })
             return (
               <button
                 key={n.id}

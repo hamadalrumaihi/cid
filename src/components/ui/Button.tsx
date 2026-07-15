@@ -6,8 +6,12 @@
  *  variants so a restyle is one edit and the danger shade never drifts again.
  *
  *  Behaviour is a plain <button> — same DOM, same events — so swapping a
- *  hand-rolled button for <Button> never changes what it does. */
+ *  hand-rolled button for <Button> never changes what it does. Two opt-ins:
+ *  `loading` (disabled + inline spinner, children stay rendered so the width
+ *  doesn't collapse) and `onAction` (an async handler routed through
+ *  useAction, so busy-guarding + error toasts come for free). */
 import { forwardRef } from 'react'
+import { useAction } from '@/lib/useAction'
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost'
 type Size = 'sm' | 'md'
@@ -15,6 +19,12 @@ type Size = 'sm' | 'md'
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant
   size?: Size
+  /** Externally-driven busy state: disables and shows the inline spinner. */
+  loading?: boolean
+  /** Async click handler with built-in busy-guarding (useAction): no
+   *  double-fire, errors → danger toast, spinner while pending. Takes
+   *  precedence over `onClick` when both are provided. */
+  onAction?: () => Promise<unknown> | unknown
 }
 
 const BASE =
@@ -37,16 +47,28 @@ const VARIANTS: Record<Variant, string> = {
   ghost: 'text-slate-300 hover:bg-white/5 hover:text-white',
 }
 
+// useAction must be called unconditionally (hook rules), so buttons without
+// an onAction run this placeholder — its busy flag is simply never read.
+const NO_ACTION = () => {}
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = 'secondary', size = 'md', className = '', type, ...rest },
+  { variant = 'secondary', size = 'md', className = '', type, loading, onAction, onClick, disabled, children, ...rest },
   ref,
 ) {
+  const action = useAction(onAction ?? NO_ACTION)
+  const busy = Boolean(loading) || (onAction ? action.busy : false)
   return (
     <button
       ref={ref}
       type={type ?? 'button'}
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
+      onClick={onAction ? () => { void action.run() } : onClick}
       className={`${BASE} ${SIZES[size]} ${VARIANTS[variant]} ${className}`}
       {...rest}
-    />
+    >
+      {busy && <span aria-hidden className="btn-spinner" />}
+      {children}
+    </button>
   )
 })

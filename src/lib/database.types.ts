@@ -4314,6 +4314,15 @@ export type Database = {
         Args: { p_audience: string; p_mentions?: Json }
         Returns: number
       }
+      case_reassign_bureau: {
+        Args: {
+          p_case: string
+          p_reason: string
+          p_to_bureau: Database["public"]["Enums"]["bureau"]
+          p_update_originating?: boolean
+        }
+        Returns: Database["public"]["Tables"]["cases"]["Row"]
+      }
       convert_case_to_joint: {
         Args: { p_case: string; p_members: Json; p_note?: string }
         Returns: Json
