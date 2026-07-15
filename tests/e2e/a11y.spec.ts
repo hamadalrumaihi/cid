@@ -67,6 +67,8 @@ async function settle(page: Page, path: string) {
 
 const routes: Array<{ key: string; path: string; account: LiveAccount }> = [
   { key: '/inbox', path: '/inbox', account: LIVE.lsb },
+  // Director sees the fullest Action Center (command decisions + personal work).
+  { key: '/action', path: '/action', account: LIVE.director },
   { key: '/cases', path: '/cases', account: LIVE.lsb },
   { key: '/gangs', path: '/gangs', account: LIVE.lsb },
   { key: '/persons', path: '/persons', account: LIVE.lsb },

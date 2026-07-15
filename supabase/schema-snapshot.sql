@@ -2175,7 +2175,8 @@ begin
   if p_type not in (
     'member_approved', 'access_requested', 'stale_case',
     'task_assigned', 'chat_mention', 'case_handover',
-    'tracker_authorized', 'tracker_pending'
+    'tracker_authorized', 'tracker_pending',
+    'access_granted', 'access_denied'
   ) then
     raise exception 'unsupported notification type';
   end if;
@@ -2187,6 +2188,12 @@ begin
       select 1 from public.case_access_requests r
       where r.case_id = v_case and r.requester_id = v_actor and r.status = 'pending'
     ) then raise exception 'not authorized'; end if;
+  elsif p_type in ('access_granted', 'access_denied') then
+    -- Decision notices: only someone who can decide the underlying request
+    -- (car_upd / cag_ins authority) may tell the requester the outcome.
+    if v_case is null or not private.can_grant_case(v_case) then
+      raise exception 'not authorized';
+    end if;
   elsif p_type in ('stale_case', 'task_assigned', 'chat_mention', 'case_handover') then
     if v_case is null or not private.can_access_case(v_case) then
       raise exception 'not authorized';
