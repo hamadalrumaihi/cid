@@ -33,7 +33,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   'case-files': { title: 'Case Files — Attachments', sub: 'Files uploaded and linked per case' },
   heatmap:    { title: 'Commander Heatmap', sub: 'Gang turf, places, raids & case concentration by area' },
   inbox:      { title: 'My Desk', sub: 'Everything waiting on you — sign-off, overdue cases, mentions & draft reports' },
-  action:     { title: 'Action Center', sub: 'One prioritized queue of everything awaiting a decision or action from you' },
+  action:     { title: 'Action Center', sub: 'Prioritized work requiring your attention across cases, command, and personnel' },
   shifts:     { title: 'Weekly Shift Reports', sub: 'Detective activity rolled up to bureau leadership' },
   audit:      { title: 'Audit Log', sub: 'Division-wide action history (owner-only)' },
   feedback:   { title: 'Feedback', sub: 'Suggest a feature or report a bug' },
