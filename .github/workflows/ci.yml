@@ -31,6 +31,12 @@ jobs:
         run: npm run gen:guide && git diff --exit-code src/components/guide/guideContent.ts
       - name: Schema artifacts sync check
         run: npm run check:schema
+      - name: Snapshot freshness check
+        # Content-based: every migration must leave a trace in
+        # supabase/schema-snapshot.sql (scripts/check-snapshot-freshness.mjs).
+        run: npm run check:freshness
+      - name: Dead exports / dead deps (knip)
+        run: npm run check:dead
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Lint (zero warnings)
@@ -39,6 +45,12 @@ jobs:
         run: npm test
       - name: Production build
         run: npm run build
+      - name: Bundle budget (shared first-load JS)
+        # Advisory while the current src/ sweep settles; promote to blocking
+        # (drop continue-on-error) after the budget in
+        # scripts/check-bundle-budget.mjs is re-baselined on the merged tree.
+        continue-on-error: true
+        run: npm run check:bundle
 
   # Live security suites — run only when the rls-test-* account passwords are
   # configured as repository secrets (Settings → Secrets → Actions). Without
@@ -73,6 +85,9 @@ jobs:
       - name: Build for E2E
         if: env.RLS_TEST_PASSWORD_LSB != ''
         run: npm run build
-      - name: E2E smoke
+      - name: E2E smoke + axe a11y ratchet
+        # tests/e2e includes a11y.spec.ts (axe, baseline in
+        # tests/e2e/a11y-baseline.json); it self-skips without the secrets
+        # like every other live spec, so forks stay green.
         if: env.RLS_TEST_PASSWORD_LSB != ''
         run: npm run test:e2e

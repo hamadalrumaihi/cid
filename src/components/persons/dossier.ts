@@ -9,6 +9,7 @@
 import type { Json, Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import type { DocxPara } from '@/lib/docx'
+import { fmtDate, fmtDateTime } from '@/lib/format'
 import { WARRANT_TPLS, reportTitle, warrantStatusOf } from '@/lib/forms'
 import { parseProperties, type PersonProperty, type PersonRow } from './PersonModal'
 
@@ -111,7 +112,7 @@ export function dossierPdfSpec(d: PersonDossier): import('@/lib/pdf').PdfDocSpec
       title: `Warrants naming subject (${d.warrants.length})`,
       headers: ['Warrant', 'Status', 'Filed'],
       widths: [2.2, 1, 1],
-      rows: d.warrants.map((r) => [reportTitle(r), warrantStatusOf(r), new Date(r.created_at).toLocaleDateString('en-US')]),
+      rows: d.warrants.map((r) => [reportTitle(r), warrantStatusOf(r), fmtDate(r.created_at)]),
     },
     {
       title: `Known properties (${d.props.length})`,
@@ -147,7 +148,7 @@ export function dossierPdfSpec(d: PersonDossier): import('@/lib/pdf').PdfDocSpec
   return {
     docType: 'PERSON DOSSIER',
     refCode: p.name || 'Unknown subject',
-    subtitle: `${p.alias ? `"${p.alias}" · ` : ''}${p.status || 'Person of interest'} · prepared ${new Date().toLocaleString('en-US')}`,
+    subtitle: `${p.alias ? `"${p.alias}" · ` : ''}${p.status || 'Person of interest'} · prepared ${fmtDateTime(new Date())}`,
     meta: [
       ['Gang affiliation', d.gang || '—'],
       ['CCW', p.ccw ? 'Yes' : 'No'],
@@ -167,7 +168,7 @@ export function dossierParas(d: PersonDossier): DocxPara[] {
   const P: DocxPara[] = [
     { text: 'Criminal Investigation Division — State of San Andreas', style: 'subtitle' },
     { text: `PERSON DOSSIER — ${p.name || 'Unknown'}`, style: 'title' },
-    { text: `${p.alias ? `"${p.alias}" · ` : ''}${p.status || 'Person of interest'} · prepared ${new Date().toLocaleString('en-US')}`, style: 'subtitle' },
+    { text: `${p.alias ? `"${p.alias}" · ` : ''}${p.status || 'Person of interest'} · prepared ${fmtDateTime(new Date())}`, style: 'subtitle' },
     { text: '', style: 'normal' },
     { text: 'Profile', style: 'heading' },
     { text: `Gang: ${d.gang || '—'} · CCW: ${p.ccw ? 'Yes' : 'No'} · VCH: ${p.vch || 0} · Felonies: ${p.felony_count || 0}${p.bolo ? ' · ACTIVE BOLO' : ''}${p.dob ? ` · DOB ${p.dob}` : ''}`, style: 'normal' },
@@ -183,7 +184,7 @@ export function dossierParas(d: PersonDossier): DocxPara[] {
   if (d.caseIds.length > d.cases.length) {
     P.push({ text: `(${d.caseIds.length - d.cases.length} additional linked case(s) — access restricted)`, style: 'normal' })
   }
-  section('Warrants naming subject', d.warrants, (r) => `${reportTitle(r)} — status: ${warrantStatusOf(r)} · ${new Date(r.created_at).toLocaleDateString('en-US')}`)
+  section('Warrants naming subject', d.warrants, (r) => `${reportTitle(r)} — status: ${warrantStatusOf(r)} · ${fmtDate(r.created_at)}`)
   section('Known properties', d.props, (pr) => `${pr.address || '—'}${pr.type ? ` · ${pr.type}` : ''}${pr.notes ? ` · ${pr.notes}` : ''}`)
   section('Registered vehicles', d.vehicles, (v) => `${v.plate}${v.model ? ` — ${v.model}` : ''}${v.color ? ` · ${v.color}` : ''}`)
   section('Gang memberships', d.members, (m) => `${m.rank || m.status || 'member'}${caseNum(m.case_id) ? ` · per ${caseNum(m.case_id)}` : ''}`)

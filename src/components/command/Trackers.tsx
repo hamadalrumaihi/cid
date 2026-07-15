@@ -13,9 +13,11 @@ import { officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { SignatureViewer } from '@/components/shared/SignatureViewer'
 import { caseNumById, fmtCountdown, type CaseRow, type TrackerRow } from './commandUtils'
+import { Card } from '@/components/ui/Card'
 
 type Bureau = Database['public']['Enums']['bureau']
 
@@ -81,13 +83,13 @@ export function Trackers({ cases }: { cases: CaseRow[] }) {
   }
 
   return (
-    <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+    <Card pad="lg">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-base font-semibold text-white"><span aria-hidden="true">🛰️</span> Tracker Deployment Logs</h3>
         {canDelete && (
-          <button onClick={() => setModalOpen(true)} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
+          <Button size="sm" variant="primary" onClick={() => setModalOpen(true)}>
             + Authorize
-          </button>
+          </Button>
         )}
       </div>
       <p className="mb-4 text-xs text-slate-400">GPS tracker deployment requires dual digital signatures (Director &amp; Deputy Director). Live countdown shows remaining authorized duration.</p>
@@ -152,7 +154,7 @@ export function Trackers({ cases }: { cases: CaseRow[] }) {
       </div>
 
       {modalOpen && <TrackerModal cases={cases} onClose={() => setModalOpen(false)} onSaved={() => { setModalOpen(false); void refresh() }} />}
-    </div>
+    </Card>
   )
 }
 
@@ -220,9 +222,9 @@ function TrackerModal({ cases, onClose, onSaved }: { cases: CaseRow[]; onClose: 
             </div>
           </div>
         </div>
-        <button onClick={() => void deploy()} disabled={busy} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+        <Button variant="primary" className="mt-5 w-full" disabled={busy} onClick={() => void deploy()}>
           {busy ? 'Deploying…' : 'Deploy (awaiting deputy co-sign)'}
-        </button>
+        </Button>
       </div>
     </Modal>
   )

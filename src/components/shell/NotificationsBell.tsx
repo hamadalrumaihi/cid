@@ -28,6 +28,7 @@ function ctaLabel(href: string): string {
 import { useTableVersion } from '@/lib/realtime'
 import { timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
+import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { BellIcon } from './icons'
 
@@ -96,9 +97,9 @@ export function NotificationsBell() {
       <Modal open={open} onClose={() => setOpen(false)}>
         <ModalHeader title="Notifications" onClose={() => setOpen(false)} />
         {unread > 0 && (
-          <button onClick={() => void markAll()} className="mb-3 rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 hover:bg-white/10">
+          <Button size="sm" className="mb-3" onClick={() => void markAll()}>
             Mark all read
-          </button>
+          </Button>
         )}
         <div className="max-h-[60vh] space-y-2 overflow-y-auto">
           {notifs.length ? notifs.map((n) => {

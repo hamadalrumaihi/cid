@@ -11,9 +11,10 @@ import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { officerName } from '@/lib/profiles'
-import { copyText } from '@/lib/format'
+import { copyText, fmtDateTime } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { Notice } from '@/components/ui/Notice'
 
@@ -49,7 +50,7 @@ export function AuditView() {
     {
       key: 'when',
       label: 'When',
-      value: (r) => new Date(r.created_at).toLocaleString('en-US'),
+      value: (r) => fmtDateTime(r.created_at),
       sortValue: (r) => r.created_at,
       className: 'whitespace-nowrap px-3 py-2 text-slate-400',
     },
@@ -86,7 +87,7 @@ export function AuditView() {
   if (!isOwner) return <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-amber-200">Restricted — the audit log is owner-only.</div>
 
   return (
-    <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+    <Card pad="lg">
       {loading && rows.length === 0 ? (
         <Notice text="Loading audit log…" />
       ) : (
@@ -113,6 +114,6 @@ export function AuditView() {
           )}
         </>
       )}
-    </div>
+    </Card>
   )
 }

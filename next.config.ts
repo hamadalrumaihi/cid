@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import bundleAnalyzer from "@next/bundle-analyzer";
 
 // Security headers ported from main's vercel.json (vanilla app) so the rebase
 // does not lose security posture. CSP adjusted for Next.js:
@@ -22,6 +23,14 @@ const csp = [
   "form-action 'self'",
 ].join("; ");
 
+// Bundle analyzer — opt-in only (`ANALYZE=1 npm run build`). Normal builds
+// are untouched: without ANALYZE=1 this wrapper is the identity function.
+// NOTE: Turbopack builds (Next 16 default) skip the webpack analyzer report;
+// use `npx next experimental-analyze` there, or ANALYZE=1 with a webpack
+// build. The CI bundle budget (scripts/check-bundle-budget.mjs) parses the
+// build manifest directly and does NOT need the analyzer either way.
+const withBundleAnalyzer = bundleAnalyzer({ enabled: process.env.ANALYZE === "1" });
+
 const nextConfig: NextConfig = {
   async headers() {
     return [
@@ -40,4 +49,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withBundleAnalyzer(nextConfig);

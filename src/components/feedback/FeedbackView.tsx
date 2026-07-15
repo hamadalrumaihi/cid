@@ -10,7 +10,11 @@ import { insert, list, remove, update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { officerName } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
+import { fmtDateTime } from '@/lib/format'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { Notice, EmptyState } from '@/components/ui/Notice'
 
 type FeedbackRow = Tables<'feedback'>
@@ -81,7 +85,7 @@ export function FeedbackView() {
     const k = FB_KIND[f.kind] ?? FB_KIND.feature
     const s = FB_STATUS[f.status] ?? FB_STATUS.open
     const who = profile && f.created_by === profile.id ? 'You' : officerName(f.created_by) ?? 'Member'
-    const when = new Date(f.created_at).toLocaleString('en-US')
+    const when = fmtDateTime(f.created_at)
     return (
       <div key={f.id} className="rounded-xl border border-white/10 bg-ink-900 p-4">
         <div className="flex items-start justify-between gap-2">
@@ -91,8 +95,8 @@ export function FeedbackView() {
             <p className="mt-1.5 text-[11px] text-slate-400">{owner ? `${who} · ${when}` : when}</p>
           </div>
           <span className="flex flex-shrink-0 items-center gap-1.5">
-            <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${k.tint}`}>{k.label}</span>
-            <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${s.tint}`}>{s.label}</span>
+            <Badge tint={k.tint} className="uppercase">{k.label}</Badge>
+            <Badge tint={s.tint} className="uppercase">{s.label}</Badge>
           </span>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -117,7 +121,7 @@ export function FeedbackView() {
 
   return (
     <div>
-      <div className="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <Card pad="lg" className="mb-6">
         <p className="mb-4 text-sm text-slate-400">
           {owner
             ? 'Triage box — every member’s feature requests and bug reports land here. Mark them done, won’t-fix, or reopen.'
@@ -145,12 +149,12 @@ export function FeedbackView() {
               placeholder="Details (optional) — steps to reproduce, context, what you'd want…"
               className={`mt-3 w-full ${inputCls}`}
             />
-            <button onClick={() => void submit()} disabled={busy} className="mt-3 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+            <Button variant="primary" className="mt-3" disabled={busy} onClick={() => void submit()}>
               Submit
-            </button>
+            </Button>
           </>
         )}
-      </div>
+      </Card>
       {!items.length ? (
         <EmptyState
           icon="💡"

@@ -261,7 +261,7 @@ export function GuideView() {
         <p className="t-readout mb-3 inline-flex items-center gap-2 rounded border border-blue-400/20 bg-blue-500/10 px-2 py-1 text-[10px] uppercase tracking-widest text-blue-200">
           <span className="t-dot t-dot-cyan" /> New member orientation
         </p>
-        <h2 className="text-xl font-black text-white">Welcome to the CID Portal</h2>
+        <h1 className="text-xl font-black text-white">Welcome to the CID Portal</h1>
         <p className="mt-1 text-sm text-slate-400">
           A live, shared investigation workspace — when a detective updates a case, everyone sees it in seconds.
           What you can see and change follows your <b className="text-slate-200">role and bureau</b>, enforced by the server.

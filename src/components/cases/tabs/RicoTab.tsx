@@ -6,6 +6,7 @@ import { todayISO } from '@/lib/format'
 import { PENAL_CODE } from '@/lib/penal'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
+import { Button } from '@/components/ui/Button'
 import { RelatedRecordPicker } from '@/components/shared/RelatedRecordPicker'
 import { type CaseRow, type EvidenceRow, type GangRow, type PredicateRow, type RicoRow } from './shared'
 
@@ -77,7 +78,7 @@ export function RicoTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolea
         <input type="date" value={form.act_date} onChange={(e) => setForm({ ...form, act_date: e.target.value })} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
         <input value={form.evidence_ref} onChange={(e) => setForm({ ...form, evidence_ref: e.target.value })} placeholder="Text ref" className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
         <textarea value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Predicate note" rows={2} className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
-        <button onClick={addPredicate} className="md:col-span-2 rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Add predicate act</button>
+        <Button variant="primary" className="md:col-span-2" onClick={addPredicate}>Add predicate act</Button>
       </div>}
       <div className="space-y-2">
         {preds.map((p) => <div key={p.id} className="rounded-xl border border-white/10 bg-ink-950/50 p-3"><p className="font-bold text-white">{p.predicate_type}</p><p className="text-sm text-slate-500">{p.act_date || 'No date'}{p.evidence_ref ? ` - ${p.evidence_ref}` : ''}</p>{p.note && <p className="mt-1 text-sm text-slate-300">{p.note}</p>}{canDelete && <button aria-label={`Delete predicate act: ${p.predicate_type}`} onClick={() => void deleteWithUndo('predicate_acts', p, { confirmTitle: 'Delete predicate act', confirmMessage: `Delete the predicate act “${p.predicate_type}”? You can undo this for a few seconds.`, confirmText: 'Delete act', label: 'predicate act', after: refresh })} className="mt-2 text-xs font-bold text-rose-300 hover:text-rose-200">Delete</button>}</div>)}

@@ -18,7 +18,10 @@
     "typecheck": "tsc --noEmit",
     "gen:handbook": "node scripts/generate-handbook.mjs",
     "gen:guide": "node scripts/generate-guide.mjs",
-    "check:schema": "node scripts/check-schema-sync.mjs"
+    "check:schema": "node scripts/check-schema-sync.mjs",
+    "check:dead": "knip",
+    "check:freshness": "node scripts/check-snapshot-freshness.mjs",
+    "check:bundle": "node scripts/check-bundle-budget.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
@@ -34,6 +37,8 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@next/bundle-analyzer": "^16.2.10",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
@@ -41,6 +46,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
+    "knip": "^6.26.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.10"

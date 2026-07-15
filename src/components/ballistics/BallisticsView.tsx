@@ -12,6 +12,9 @@ import { useTableVersion } from '@/lib/realtime'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -68,7 +71,7 @@ export function BallisticsView() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <Card pad="lg" className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <PageHeader
           className="flex-1"
           title="🛠️ Ballistics & Logistics"
@@ -89,14 +92,14 @@ export function BallisticsView() {
                 ))}
               </div>
               {canEdit && (
-                <button onClick={() => setBenchEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
+                <Button variant="primary" onClick={() => setBenchEditor({ record: null })}>
                   + Bench
-                </button>
+                </Button>
               )}
             </div>
           }
         />
-      </div>
+      </Card>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -114,7 +117,7 @@ export function BallisticsView() {
               const heatTint = b.heat === 'Active' ? 'bg-rose-500/10 text-rose-300' : b.heat === 'Raid Pending' ? 'bg-amber-500/10 text-amber-300' : 'bg-blue-500/10 text-blue-300'
               const cn = caseNum(b.case_id)
               return (
-                <div key={b.id} className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+                <Card key={b.id} pad="lg">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h2 className="text-base font-semibold text-white">{b.name}</h2>
@@ -123,9 +126,9 @@ export function BallisticsView() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {b.tier && <span className={`rounded-md border px-2.5 py-1 text-[10px] font-semibold uppercase ${tierTint}`}>{b.tier}-Tier</span>}
-                      {b.heat && <span className={`rounded-md px-2.5 py-1 text-[10px] font-semibold uppercase ${heatTint}`}>{b.heat}</span>}
-                      {canEdit && <button onClick={() => setBenchEditor({ record: b })} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
+                      {b.tier && <Badge tint={`border ${tierTint}`} className="uppercase">{b.tier}-Tier</Badge>}
+                      {b.heat && <Badge tint={heatTint} className="uppercase">{b.heat}</Badge>}
+                      {canEdit && <Button size="sm" onClick={() => setBenchEditor({ record: b })}>Edit</Button>}
                     </div>
                   </div>
                   <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -148,19 +151,19 @@ export function BallisticsView() {
                       </div>
                     </div>
                   </div>
-                </div>
+                </Card>
               )
             })}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+        <Card pad="lg">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-white"><span aria-hidden>🧬</span> Ballistic Footprint Log</h2>
             {canEdit && (
-              <button onClick={() => setFpEditor({ record: null })} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">
+              <Button size="sm" onClick={() => setFpEditor({ record: null })}>
                 + Footprint
-              </button>
+              </Button>
             )}
           </div>
           <p className="mb-4 text-xs text-slate-400">Seized weapon signatures linked to active gang investigations.</p>
@@ -181,7 +184,7 @@ export function BallisticsView() {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       </div>
 
       {benchEditor && (
@@ -278,9 +281,9 @@ function BenchModal({ record, cases, canDelete, onClose, onSaved }: {
         </div>
       </div>
       <div className="mt-5 flex gap-2">
-        <button onClick={() => void save()} disabled={busy} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+        <Button variant="primary" className="flex-1" disabled={busy} onClick={() => void save()}>
           {record ? 'Save changes' : 'Create bench'}
-        </button>
+        </Button>
         {record && canDelete && (
           <button onClick={() => void del()} className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>
         )}
@@ -353,9 +356,9 @@ function FootprintModal({ record, cases, gangs, canDelete, onClose, onSaved }: {
         </div>
       </div>
       <div className="mt-5 flex gap-2">
-        <button onClick={() => void save()} disabled={busy} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+        <Button variant="primary" className="flex-1" disabled={busy} onClick={() => void save()}>
           {record ? 'Save' : 'Log footprint'}
-        </button>
+        </Button>
         {record && canDelete && (
           <button onClick={() => void del()} className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>
         )}

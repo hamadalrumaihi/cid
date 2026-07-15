@@ -11,6 +11,7 @@
  *  offered (and the server rejects it): bureau='JTF' means visible to every
  *  active member, so it can never be a reassignment destination. */
 import { useEffect, useState } from 'react'
+import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { rpc } from '@/lib/db'
 import { bureauLabel, PERMANENT_BUREAUS } from '@/lib/roles'
@@ -84,8 +85,8 @@ export function ReassignBureauModal({ open, c, onClose, onDone }: ReassignBureau
           </label>
         )}
         <div className="mt-5 flex justify-end gap-2">
-          <button onClick={onClose} disabled={busy} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 disabled:opacity-60">Cancel</button>
-          <button onClick={() => void run()} disabled={busy || !to || !reason.trim()} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{busy ? 'Reassigning…' : 'Reassign case'}</button>
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" onClick={() => void run()} disabled={busy || !to || !reason.trim()}>{busy ? 'Reassigning…' : 'Reassign case'}</Button>
         </div>
       </div>
     </Modal>

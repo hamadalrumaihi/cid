@@ -6,6 +6,7 @@
  *  and any actions (e.g. SOP restore) stay domain-specific via render props.
  *  Old versions are always readable, never editable. */
 import { useState } from 'react'
+import { fmtDateTime } from '@/lib/format'
 
 export interface VersionItem {
   id: string
@@ -40,7 +41,7 @@ export function VersionViewer({ versions, renderContent, actions, empty = 'No ve
                 {i === 0 && <span className="rounded bg-badge-500/15 px-1.5 text-[10px] font-bold text-blue-200">latest</span>}
                 {v.label && <span className="truncate text-sm text-slate-200">{v.label}</span>}
                 <span className="text-xs text-slate-500">
-                  {v.at ? new Date(v.at).toLocaleString() : ''}{v.byName ? ` · ${v.byName}` : ''}
+                  {v.at ? fmtDateTime(v.at) : ''}{v.byName ? ` · ${v.byName}` : ''}
                 </span>
                 <span className="text-xs text-slate-500">{open ? '▾' : '▸'}</span>
               </button>

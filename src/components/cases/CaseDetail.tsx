@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
+import { Button } from '@/components/ui/Button'
 import { DetailSkeleton } from '@/components/ui/Skeleton'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { uiConfirm } from '@/components/ui/dialog'
@@ -231,7 +232,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
               <Badge tint={signoffTint(c.signoff_status)}>{signoffLabel(c.signoff_status)}</Badge>
               <StaleBadge c={c} />
             </div>
-            <h2 className="text-2xl font-black text-white">{c.title || 'Untitled case'}</h2>
+            <h1 className="text-2xl font-black text-white">{c.title || 'Untitled case'}</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-300">{c.summary || 'No summary recorded.'}</p>
             {hint && <p className={`mt-3 inline-flex rounded-lg px-3 py-2 text-sm font-semibold ${hint.c}`}>{hint.t}</p>}
           </div>
@@ -242,16 +243,16 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
               </select>
             ) : <span className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300">Read-only</span>}
             {op && <Link href={`/operations?op=${op.id}`} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Operation: {op.name}</Link>}
-            <button onClick={() => { togglePinCase(c.id); setCase({ ...c }) }} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">{pinned ? 'Pinned' : 'Pin'}</button>
+            <Button onClick={() => { togglePinCase(c.id); setCase({ ...c }) }}>{pinned ? 'Pinned' : 'Pin'}</Button>
             <WatchButton type="case" id={c.id} label={c.case_number} />
             <JointCaseControls c={c} onChanged={() => { onChanged(); void fetchCase() }} />
             {canEdit && <FollowUpButton c={c} onChanged={fetchCase} />}
-            <button onClick={() => copyText(`${window.location.origin}/cases?case=${c.id}`, 'Case link copied.')} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Link</button>
+            <Button onClick={() => copyText(`${window.location.origin}/cases?case=${c.id}`, 'Case link copied.')}>Link</Button>
             <PacketButton c={c} />
-            {canEdit && <button onClick={() => setEdit(true)} className="rounded-lg bg-white/10 px-3 py-2 text-sm font-semibold text-white hover:bg-white/15">Edit</button>}
-            {canHandover && <button onClick={() => setHandover(true)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Hand over</button>}
-            {canReassignBureau && <button onClick={() => setReassign(true)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Reassign bureau</button>}
-            {canDelete && <button onClick={() => void deleteCase()} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-500">Delete</button>}
+            {canEdit && <Button onClick={() => setEdit(true)}>Edit</Button>}
+            {canHandover && <Button onClick={() => setHandover(true)}>Hand over</Button>}
+            {canReassignBureau && <Button onClick={() => setReassign(true)}>Reassign bureau</Button>}
+            {canDelete && <Button variant="danger" onClick={() => void deleteCase()}>Delete</Button>}
           </div>
         </div>
       </section>
@@ -368,9 +369,9 @@ function JointCaseControls({ c, onChanged }: { c: CaseRow; onChanged: () => void
   }
   return (
     <>
-      <button onClick={() => void openConvert()} className="min-h-[44px] rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10 sm:min-h-0">
+      <Button className="min-h-[44px] sm:min-h-0" onClick={() => void openConvert()}>
         Make This a Joint Case
-      </button>
+      </Button>
       <JointCaseModal
         open={open}
         onClose={() => setOpen(false)}
@@ -413,14 +414,14 @@ function PacketButton({ c }: { c: CaseRow }) {
   }
   return (
     <>
-      <button onClick={() => setOpen(true)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Packet</button>
+      <Button onClick={() => setOpen(true)}>Packet</Button>
       <Modal open={open} onClose={() => setOpen(false)}>
         <div className="p-5">
           <ModalHeader title="Case packet" onClose={() => setOpen(false)} />
           <div className="grid gap-2">
-            <button onClick={exportDocx} className="rounded-lg bg-badge-600 px-4 py-3 text-sm font-bold text-white">Download DOCX</button>
-            <button onClick={exportMd} className="rounded-lg bg-badge-600 px-4 py-3 text-sm font-bold text-white">Download Markdown</button>
-            <button onClick={() => void exportPdf()} disabled={pdfBusy} className="rounded-lg bg-badge-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">{pdfBusy ? 'Rendering PDF…' : 'Download PDF'}</button>
+            <Button variant="primary" onClick={exportDocx}>Download DOCX</Button>
+            <Button variant="primary" onClick={exportMd}>Download Markdown</Button>
+            <Button variant="primary" onClick={() => void exportPdf()} disabled={pdfBusy}>{pdfBusy ? 'Rendering PDF…' : 'Download PDF'}</Button>
           </div>
         </div>
       </Modal>
@@ -449,8 +450,8 @@ function FollowUpButton({ c, onChanged }: { c: CaseRow; onChanged: () => void })
           <ModalHeader title="Follow-up" onClose={() => setOpen(false)} />
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white" />
           <div className="mt-5 flex justify-end gap-2">
-            <button onClick={() => void save(true)} className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-200">Clear</button>
-            <button onClick={() => void save()} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Save</button>
+            <Button onClick={() => void save(true)}>Clear</Button>
+            <Button variant="primary" onClick={() => void save()}>Save</Button>
           </div>
         </div>
       </Modal>
@@ -503,8 +504,8 @@ function HandoverModal({ open, c, onClose, onDone }: { open: boolean; c: CaseRow
           <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Context for the incoming lead" className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white" />
         </label>
         <div className="mt-5 flex justify-end gap-2">
-          <button onClick={onClose} disabled={busy} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 disabled:opacity-60">Cancel</button>
-          <button onClick={() => void run()} disabled={busy || !to} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{busy ? 'Handing over…' : 'Hand over'}</button>
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" onClick={() => void run()} disabled={busy || !to}>{busy ? 'Handing over…' : 'Hand over'}</Button>
         </div>
       </div>
     </Modal>

@@ -17,7 +17,10 @@ import { RichEditor } from '@/components/ui/RichEditor'
 import { officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
+import { fmtDate } from '@/lib/format'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -101,18 +104,18 @@ export function SopsView() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <Card pad="lg" className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <PageHeader
           className="flex-1"
           title="📚 SOPs & Library"
           subtitle="Division policy & reference library, managed by command staff."
           actions={isCommand && (
-            <button onClick={() => setEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+            <Button variant="primary" onClick={() => setEditor({ record: null })}>
               + New SOP
-            </button>
+            </Button>
           )}
         />
-      </div>
+      </Card>
 
       {loading && !shelf.length ? (
         <CardGridSkeleton cols="sm:grid-cols-2 xl:grid-cols-3" />
@@ -210,7 +213,7 @@ function DocPage({ d, sops, lib, canManage, onSelect, onBack, onEdit, onHistory,
               <h1 className="text-2xl font-black text-white">{sopTitle(d)}</h1>
               {canManage && (
                 <div className="flex flex-shrink-0 gap-2">
-                  <button onClick={onEdit} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10">Edit</button>
+                  <Button size="sm" onClick={onEdit}>Edit</Button>
                   <button onClick={onHistory} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-blue-200 transition hover:bg-white/10">History</button>
                   <button onClick={() => void del()} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>
                 </div>
@@ -253,7 +256,7 @@ function EditorModal({ record, onClose, onSaved }: { record: DocRow | null; onCl
       name: n,
       kind: 'doc' as DocRow['kind'],
       content,
-      modified_label: new Date().toLocaleDateString('en-GB'),
+      modified_label: fmtDate(new Date()),
     }
     const res = record ? await update('documents', record.id, payload) : await insert('documents', payload)
     setBusy(false)
@@ -270,9 +273,9 @@ function EditorModal({ record, onClose, onSaved }: { record: DocRow | null; onCl
       <input id="sop-title" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Use of Force Policy" className="mb-3 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
       <label className="mb-1 block text-xs font-semibold text-slate-400">Procedure text * <span className="font-normal text-slate-400">(Markdown: # headings, **bold**, &gt; notes, lists, | tables |)</span></label>
       <RichEditor value={body} onChange={setBody} minHeight="22rem" />
-      <button onClick={() => void save()} disabled={busy} className="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+      <Button variant="primary" className="mt-4 w-full" disabled={busy} onClick={() => void save()}>
         {record ? 'Save changes' : 'Publish SOP'}
-      </button>
+      </Button>
     </Modal>
   )
 }
@@ -292,7 +295,7 @@ function HistoryModal({ d, canManage, onClose, onRestored }: { d: DocRow; canMan
     if (!(await uiConfirm('Restore this version? The current text is snapshotted first.', { confirmText: 'Restore' }))) return
     // Snapshot current, then overwrite with the chosen version (vanilla flow).
     await insert('documents_versions', { document_id: d.id, name: d.name, kind: d.kind, content: d.content, modified_label: d.modified_label })
-    const res = await update('documents', d.id, { name: v.name ?? d.name, kind: v.kind ?? d.kind, content: v.content, modified_label: new Date().toLocaleDateString('en-GB') })
+    const res = await update('documents', d.id, { name: v.name ?? d.name, kind: v.kind ?? d.kind, content: v.content, modified_label: fmtDate(new Date()) })
     if (res.error) { toast(`Restore failed: ${res.error.message}`, 'danger'); return }
     toast('Version restored', 'success')
     onRestored()

@@ -1,0 +1,37 @@
+{
+  // Dead-export / dead-dependency gate (P2-4): `npm run check:dead`.
+  // Entries come from knip's Next.js / Playwright / Vitest plugins (app
+  // router pages, playwright*.config.ts + tests, vitest configs), so no
+  // manual `entry` list is needed — it tracks the repo layout automatically.
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": [
+    // Generated TypeScript mirror of the live schema — exports exist for
+    // completeness, not for use.
+    "src/lib/database.types.ts",
+    // Deno edge functions: deployed to Supabase, never imported by the app.
+    "supabase/functions/**",
+    // TEMPORARY (2026-07-15): these files carry the unused exports found when
+    // the gate was introduced (20 exports, 6 types, 3 duplicate aliases). A
+    // concurrent src/ sweep owns the deletions — drop each file from this
+    // list as the sweep lands so knip guards it again. Candidates are listed
+    // in the gate's introduction PR.
+    "src/components/gangs/gangShared.tsx",
+    "src/components/justice/legalShared.tsx",
+    "src/components/ui/Skeleton.tsx",
+    "src/lib/db.ts",
+    "src/lib/forms.ts",
+    "src/lib/justice.ts",
+    "src/lib/notifText.ts",
+    "src/lib/penal.ts",
+    "src/lib/roles.ts",
+    "src/lib/signoff.ts",
+    "src/lib/tint.ts"
+  ],
+  "ignoreBinaries": [
+    "semgrep", // installed ad hoc in code-quality.yml (pip), not an npm bin
+    "lhci", // run via `npx --yes @lhci/cli` in code-quality.yml
+    "psql" // scripts/test-seed.mjs shells out to the system Postgres client
+  ],
+  // An export used elsewhere in its own module is not dead code.
+  "ignoreExportsUsedInFile": true
+}

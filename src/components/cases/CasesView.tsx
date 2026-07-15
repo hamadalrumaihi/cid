@@ -12,6 +12,10 @@ import { useTableVersion } from '@/lib/realtime'
 import { caseStatusTint, signoffLabel, signoffTint } from '@/lib/signoff'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
+import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { Notice } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { CaseBoard } from './CaseBoard'
 import { CaseDetail } from './CaseDetail'
 import { CaseFilterBar } from './CaseFilterBar'
@@ -96,35 +100,35 @@ export function CasesView() {
 
   return (
     <div className="space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">LIVE CASES</p>
-          <h2 className="text-2xl font-black text-white">Case Files</h2>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {canDelete && <button onClick={setAllSelected} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">{selected.length === filtered.length && filtered.length ? 'Deselect all' : `Select all (${filtered.length})`}</button>}
-          <div className="flex rounded-lg border border-white/10 bg-ink-950 p-1">
-            {['mine', 'all'].map((s) => <button key={s} onClick={() => setScope(s)} className={`rounded-md px-3 py-1.5 text-sm font-bold capitalize ${scope === s ? 'bg-badge-600 text-white' : 'text-slate-400'}`}>{s}</button>)}
-          </div>
-          <div className="flex rounded-lg border border-white/10 bg-ink-950 p-1">
-            {['grid', 'board'].map((v) => <button key={v} onClick={() => setView(v)} className={`rounded-md px-3 py-1.5 text-sm font-bold capitalize ${view === v ? 'bg-badge-600 text-white' : 'text-slate-400'}`}>{v}</button>)}
-          </div>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search cases" className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white" />
-          <button onClick={() => void fetchCases()} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200">Refresh</button>
-          {canEdit && <button onClick={() => { setEditRecord(null); setModalOpen(true) }} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-2 text-sm font-bold text-white">New Case</button>}
-        </div>
-      </header>
+      <PageHeader
+        title="Case Files"
+        eyebrow="Live Cases"
+        actions={
+          <>
+            {canDelete && <Button onClick={setAllSelected}>{selected.length === filtered.length && filtered.length ? 'Deselect all' : `Select all (${filtered.length})`}</Button>}
+            <div className="flex rounded-lg border border-white/10 bg-ink-950 p-1">
+              {['mine', 'all'].map((s) => <button key={s} onClick={() => setScope(s)} className={`rounded-md px-3 py-1.5 text-sm font-bold capitalize ${scope === s ? 'bg-badge-600 text-white' : 'text-slate-400'}`}>{s}</button>)}
+            </div>
+            <div className="flex rounded-lg border border-white/10 bg-ink-950 p-1">
+              {['grid', 'board'].map((v) => <button key={v} onClick={() => setView(v)} className={`rounded-md px-3 py-1.5 text-sm font-bold capitalize ${view === v ? 'bg-badge-600 text-white' : 'text-slate-400'}`}>{v}</button>)}
+            </div>
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search cases" className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white" />
+            <Button onClick={() => void fetchCases()}>Refresh</Button>
+            {canEdit && <Button variant="primary" onClick={() => { setEditRecord(null); setModalOpen(true) }}>New Case</Button>}
+          </>
+        }
+      />
 
       <CaseFilterBar filters={filters} scope={scope} query={query} activeViewName={activeViewName} onFilters={setFilters} onScope={setScope} onQuery={setQuery} onActiveViewName={setActiveViewName} />
 
-      {loading ? <p className="rounded-2xl border border-white/10 bg-ink-900/50 p-6 text-slate-300">Loading cases...</p>
+      {loading ? <Notice text="Loading cases..." />
         : view === 'board' ? <CaseBoard items={filtered} canEdit={canEdit} onOpen={openCase} onMoved={fetchCases} />
         : <div className={CASE_GRID_CLASS}>{filtered.map((c, i) => <CaseCard key={c.id} c={c} index={i} selected={selected.includes(c.id)} canDelete={canDelete} onSelect={(on) => setSelected((s) => on ? [...s, c.id] : s.filter((x) => x !== c.id))} onOpen={() => openCase(c.id)} />)}</div>}
-      {!loading && !filtered.length && <p className="rounded-2xl border border-white/10 bg-ink-900/50 p-8 text-center text-sm text-slate-400">No cases match this view.</p>}
+      {!loading && !filtered.length && <Notice text="No cases match this view." />}
 
       {selected.length > 0 && <div className="sticky bottom-4 z-20 flex items-center justify-between rounded-2xl border border-white/10 bg-ink-850 p-3 shadow-glow">
         <p className="text-sm font-bold text-white">{selected.length} selected</p>
-        <div className="flex gap-2"><button onClick={() => setSelected([])} className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-200">Clear</button><button onClick={() => void deleteSelected()} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white">Delete selected</button></div>
+        <div className="flex gap-2"><Button onClick={() => setSelected([])}>Clear</Button><Button variant="danger" onClick={() => void deleteSelected()}>Delete selected</Button></div>
       </div>}
 
       <CaseModal open={modalOpen} record={editRecord} onClose={() => setModalOpen(false)} onSaved={(id) => { setModalOpen(false); void fetchCases(); if (id) openCase(id) }} />
@@ -144,9 +148,9 @@ function CaseCard({ c, index, selected, canDelete, onSelect, onOpen }: { c: Case
       </div>
       <p className="mt-3 line-clamp-3 min-h-[3.75rem] text-sm text-slate-400">{c.summary || 'No summary recorded.'}</p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <span className={`rounded-full px-2 py-1 text-xs font-bold uppercase ${caseStatusTint(c.status)}`}>{c.status}</span>
-        <span className={`rounded-full px-2 py-1 text-xs font-bold ${signoffTint(c.signoff_status)}`}>{signoffLabel(c.signoff_status)}</span>
-        <span className="rounded-full bg-white/5 px-2 py-1 text-xs font-bold text-slate-300">{c.bureau}</span>
+        <Badge tint={caseStatusTint(c.status)} className="uppercase">{c.status}</Badge>
+        <Badge tint={signoffTint(c.signoff_status)}>{signoffLabel(c.signoff_status)}</Badge>
+        <Badge>{c.bureau}</Badge>
         <StaleBadge c={c} />
       </div>
       <div className="mt-4 flex items-center justify-between gap-2 text-xs text-slate-500">

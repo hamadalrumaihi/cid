@@ -19,6 +19,7 @@ import { activeProfiles } from '@/lib/profiles'
 import { ROLE_LABEL, ROLE_ORDER } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import {
   AUDIENCE_LABEL, mentionLabel, parseLinks, parseMentions,
@@ -214,12 +215,12 @@ export function AnnouncementModal({ record, caseOptions, onClose, onSaved }: Ann
             <p className="text-sm leading-relaxed text-slate-200">{confirmMsg}</p>
             <p className="text-xs text-slate-400">Each active recipient gets one notification. Later edits won’t re-notify unless you choose to.</p>
             <div className="flex gap-2">
-              <button onClick={() => setConfirming(false)} disabled={busy} className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50">
+              <Button disabled={busy} onClick={() => setConfirming(false)}>
                 Cancel
-              </button>
-              <button onClick={() => void publish()} disabled={busy} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50">
+              </Button>
+              <Button variant="primary" className="flex-1" disabled={busy} onClick={() => void publish()}>
                 Publish
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
@@ -303,9 +304,9 @@ export function AnnouncementModal({ record, caseOptions, onClose, onSaved }: Ann
               )}
             </div>
             <div className="mt-5 flex gap-2">
-              <button onClick={() => void save()} disabled={busy} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50">
+              <Button variant="primary" className="flex-1" disabled={busy} onClick={() => void save()}>
                 {record ? 'Save' : 'Post'}
-              </button>
+              </Button>
               {record && (
                 <button onClick={() => void del()} className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">
                   Delete

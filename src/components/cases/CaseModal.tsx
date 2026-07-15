@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { insert, list, update, deleteWithUndo } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
@@ -171,8 +172,8 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
           </label>
         </div>
         <div className="mt-5 flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200">Cancel</button>
-          <button onClick={save} disabled={saving} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{saving ? 'Saving...' : 'Save'}</button>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
         </div>
       </div>
       <TemplateManager open={managerOpen} templates={templates} onClose={() => setManagerOpen(false)} onChanged={fetchTemplates} />
@@ -234,7 +235,7 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
             <input value={row.summary || ''} onChange={(e) => patchDraft(row.id, { summary: e.target.value })} placeholder="Prefill summary" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
             <input type="number" min={0} value={row.followup_days ?? ''} onChange={(e) => patchDraft(row.id, { followup_days: e.target.value === '' ? null : Math.max(0, parseInt(e.target.value, 10) || 0) })} placeholder="Follow-up days" title="Default review cadence in days" className="md:col-span-4 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
             <textarea value={taskDrafts[row.id] ?? tplTasks(row).join('\n')} onChange={(e) => setTaskDrafts((m) => ({ ...m, [row.id]: e.target.value }))} rows={3} placeholder={'Checklist tasks — one per line, auto-created with each new case\nCanvass witnesses\nPull CCTV'} className="md:col-span-4 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />
-            <div className="md:col-span-4 flex justify-end gap-2"><button onClick={() => void saveRow(row)} className="rounded-lg bg-badge-600 px-3 py-2 text-xs font-bold text-white">Save</button><button onClick={() => void deleteWithUndo('case_templates', row, { confirmTitle: 'Delete template', confirmMessage: `Delete the “${row.name}” case template? Existing cases are unaffected — only the template is removed. You can undo this for a few seconds.`, confirmText: 'Delete template', label: 'template', after: onChanged })} className="rounded-lg border border-rose-400/30 px-3 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/10">Delete</button></div>
+            <div className="md:col-span-4 flex justify-end gap-2"><Button size="sm" variant="primary" onClick={() => void saveRow(row)}>Save</Button><button onClick={() => void deleteWithUndo('case_templates', row, { confirmTitle: 'Delete template', confirmMessage: `Delete the “${row.name}” case template? Existing cases are unaffected — only the template is removed. You can undo this for a few seconds.`, confirmText: 'Delete template', label: 'template', after: onChanged })} className="rounded-lg border border-rose-400/30 px-3 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/10">Delete</button></div>
           </div>)}
         </div>
         <div className="mt-4 grid gap-2 rounded-xl border border-white/10 bg-white/5 p-3 md:grid-cols-[4rem_1fr_6rem_7rem]">

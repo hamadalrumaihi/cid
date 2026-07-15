@@ -1,5 +1,7 @@
 'use client'
 
+import { fmtDateTime } from '@/lib/format'
+
 /** Shared signature viewer (v1.14) — the legal version-bound signature block
  *  promoted portal-wide (adoption register: "signature display tied to
  *  immutable versions"). Purely presentational: what a signature AUTHORIZES
@@ -35,7 +37,7 @@ export function SignatureViewer({ signatures, empty = 'No signatures recorded.' 
           {s.role && <span className="text-xs text-slate-500">({s.role})</span>}
           {s.action && <span className="text-xs text-slate-400">{s.action}</span>}
           {s.versionLabel && <span className="font-mono text-xs text-blue-300">{s.versionLabel}</span>}
-          {s.at && <span className="text-xs text-slate-500">{new Date(s.at).toLocaleString()}</span>}
+          {s.at && <span className="text-xs text-slate-500">{fmtDateTime(s.at)}</span>}
           {s.superseded && (
             <span className="rounded border border-amber-500/25 bg-amber-500/10 px-1.5 text-[10px] font-semibold text-amber-300">superseded</span>
           )}

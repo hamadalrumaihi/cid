@@ -11,6 +11,8 @@ import type { Json, Tables } from '@/lib/database.types'
 import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
@@ -96,9 +98,9 @@ export function MediaView() {
           ))}
         </div>
         {canEdit && (
-          <button onClick={() => setIngest(true)} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+          <Button variant="primary" onClick={() => setIngest(true)}>
             + Ingest Media
-          </button>
+          </Button>
         )}
       </div>
 
@@ -186,7 +188,7 @@ function MediaCard({ m, canEdit, caseNum, gangName, onOpen, onCase, onForward, o
   const src = mediaSrc(m)
   const safe = safeUrl(src)
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/5 bg-ink-900/60">
+    <Card pad="none" className="overflow-hidden">
       {m.type === 'image' && safe && !imgFailed ? (
         // eslint-disable-next-line @next/next/no-img-element -- external evidence URL
         <img src={safe} alt={m.title} onError={() => setImgFailed(true)} onClick={onOpen} className="h-40 w-full cursor-zoom-in object-cover" />
@@ -206,13 +208,13 @@ function MediaCard({ m, canEdit, caseNum, gangName, onOpen, onCase, onForward, o
         <div className="mt-2 flex flex-wrap gap-1"><TagChips m={m} caseNum={caseNum} gangName={gangName} onCase={onCase} /></div>
         {(canEdit || onDelete) && (
           <div className="mt-3 flex items-center gap-2">
-            {canEdit && <button onClick={onForward} className="flex-1 rounded-lg border border-white/10 bg-white/5 py-2 text-xs font-semibold text-white transition hover:bg-white/10">↗ Forward to Case</button>}
+            {canEdit && <Button size="sm" className="flex-1" onClick={onForward}>↗ Forward to Case</Button>}
             {canEdit && <button onClick={onTags} title="Edit tags" className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-fuchsia-200 transition hover:bg-white/10">🏷️</button>}
             {onDelete && <button onClick={onDelete} title="Delete from vault" aria-label={`Delete ${m.title}`} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">🗑️</button>}
           </div>
         )}
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -285,7 +287,7 @@ function TagsModal({ m, onClose, onSaved }: { m: MediaRow; onClose: () => void; 
       <ModalHeader title="Edit Tags" onClose={onClose} />
       <p className="mb-3 truncate text-xs text-slate-400">{m.title || 'Untitled'}</p>
       <TagsField value={value} onChange={setValue} />
-      <button onClick={() => void save()} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Save tags</button>
+      <Button variant="primary" className="mt-5 w-full" onClick={() => void save()}>Save tags</Button>
     </Modal>
   )
 }
@@ -404,9 +406,9 @@ function IngestModal({ cases, gangs, onClose, onSaved }: { cases: CaseOption[]; 
         </div>
         <TagsField value={tags} onChange={setTags} />
       </div>
-      <button onClick={() => void save()} disabled={busy} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+      <Button variant="primary" className="mt-5 w-full" disabled={busy} onClick={() => void save()}>
         Add to Vault
-      </button>
+      </Button>
     </Modal>
   )
 }

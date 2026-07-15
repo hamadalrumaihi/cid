@@ -18,6 +18,25 @@ export function todayISO(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/** Canonical date-only rendering ("7/15/2026"). Views used to hand-roll
+ *  `new Date(x).toLocaleDateString(…)` with drifting locales (en-US / en-GB /
+ *  browser default); this pins the app-wide convention and dashes empty or
+ *  unparseable input. Callsites with deliberate custom option bags (e.g. the
+ *  timeline band's "Jul 15" micro-format) keep their own calls. */
+export function fmtDate(ts: string | number | Date | null | undefined): string {
+  if (ts == null || ts === '') return '—'
+  const d = new Date(ts)
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-US')
+}
+
+/** Canonical date + time rendering ("7/15/2026, 3:45:12 PM") — the datetime
+ *  sibling of fmtDate, for audit stamps and activity feeds. */
+export function fmtDateTime(ts: string | number | Date | null | undefined): string {
+  if (ts == null || ts === '') return '—'
+  const d = new Date(ts)
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('en-US')
+}
+
 export function fmtUSD(n: number | null | undefined): string {
   if (n == null) return '—'
   return '$' + Number(n).toLocaleString('en-US')

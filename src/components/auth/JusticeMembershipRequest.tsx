@@ -15,6 +15,7 @@ import {
   AGENCY_LABEL, AGENCY_ROLES, JMR_COLS, JUSTICE_ROLE_LABEL,
   justiceRoleLabel, type JusticeAgency, type JusticeRole,
 } from '@/lib/justice'
+import { fmtDateTime } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { uiConfirm } from '@/components/ui/dialog'
@@ -239,7 +240,7 @@ export function JusticeMembershipRequest({ initialAgency = 'doj' }: { initialAge
         <div className="space-y-1.5 rounded-lg border border-white/10 bg-ink-950/50 p-4">
           <InfoRow label="Requested agency" value={AGENCY_LABEL[req!.requested_agency as JusticeAgency] ?? req!.requested_agency} />
           <InfoRow label="Requested role" value={justiceRoleLabel(req!.requested_justice_role)} />
-          <InfoRow label="Submitted" value={req?.submitted_at ? new Date(req.submitted_at).toLocaleString() : '—'} />
+          <InfoRow label="Submitted" value={fmtDateTime(req?.submitted_at)} />
         </div>
         <Button size="sm" variant="ghost" className="w-full" aria-expanded={histOpen} onClick={() => void toggleHistory()}>
           {histOpen ? 'Hide request history' : 'Request history'}

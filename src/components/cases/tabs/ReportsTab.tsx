@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
 import type { Json, Tables } from '@/lib/database.types'
-import { downloadTextFile, timeAgo } from '@/lib/format'
+import { downloadTextFile, fmtDateTime, timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
@@ -36,7 +37,7 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
   // REFRESHED row (Finalize flips the chip live) and a deleted report falls
   // back to the list.
   const open = openId ? reports.find((r) => r.id === openId) ?? null : null
-  const seed = (): FormValues => ({ case_number: c.case_number, report_type: 'Initial', filed_at: new Date().toLocaleString('en-US'), det_name: profile?.display_name || '', narrative: c.summary || '', summary: c.summary || '' })
+  const seed = (): FormValues => ({ case_number: c.case_number, report_type: 'Initial', filed_at: fmtDateTime(new Date()), det_name: profile?.display_name || '', narrative: c.summary || '', summary: c.summary || '' })
   // Never-lose-work: field values are stashed per case+template (or per
   // report when editing) while typing, restored when the editor reopens,
   // and cleared on a successful save. Closing/cancelling keeps the draft.
@@ -84,7 +85,7 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
           onChanged={() => void refresh()}
           onDelete={() => { void deleteWithUndo('reports', open, { label: reportTitle(open), after: refresh }); setOpenId(null) }} />
       ) : (<>
-        {canEdit && <div className="flex flex-wrap gap-2">{REPORT_TEMPLATES.map((tpl) => <button key={tpl.id} onClick={() => openEditor(tpl.id)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-bold text-slate-200 hover:bg-white/10">{tpl.icon} {tpl.name}</button>)}</div>}
+        {canEdit && <div className="flex flex-wrap gap-2">{REPORT_TEMPLATES.map((tpl) => <Button key={tpl.id} onClick={() => openEditor(tpl.id)}>{tpl.icon} {tpl.name}</Button>)}</div>}
         <div className="space-y-2">
           {reports.map((r) => <div key={r.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3"><button onClick={() => setOpenId(r.id)} className="min-w-0 flex-1 text-left"><p className="font-bold text-white">{reportTitle(r)}</p><p className="text-xs text-slate-500">{r.finalized ? 'Finalized' : 'Draft'} - {timeAgo(r.created_at)}</p></button>{!r.finalized && canEdit && <button onClick={() => setConfirm({ kind: 'finalize', r })} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Finalize</button>}{!r.finalized && canEdit && <button onClick={() => openEditor(r.template, r)} className="text-sm font-bold text-badge-200">Edit</button>}{canDelete && <button onClick={() => { void deleteWithUndo('reports', r, { label: reportTitle(r), after: refresh }) }} className="text-sm font-bold text-rose-300">Delete</button>}</div>)}
           {!reports.length && <p className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-500">No reports yet.</p>}
@@ -94,7 +95,7 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
         <div className="p-5">
           <ModalHeader title={editing ? FORM_SCHEMAS[editing.template]?.title || 'Report' : 'Report'} onClose={() => setEditing(null)} />
           {editing && <FormEditor template={editing.template} caseId={c.id} values={editing.values} onChange={(values) => { setEditing({ ...editing, values }); Drafts.save(draftKey(editing.template, editing.report), values) }} />}
-          <div className="mt-5 flex justify-end gap-2"><button onClick={() => setEditing(null)} className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-200">Cancel</button><button onClick={save} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Save</button></div>
+          <div className="mt-5 flex justify-end gap-2"><Button onClick={() => setEditing(null)}>Cancel</Button><Button variant="primary" onClick={save}>Save</Button></div>
         </div>
       </Modal>
       <Modal open={!!confirm} onClose={() => setConfirm(null)}>
@@ -107,7 +108,7 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
                 {gaps.length > 0 && <p className="rounded-lg bg-amber-500/10 p-3 text-amber-200">Still empty: {gaps.join(', ')}. You can seal it anyway.</p>}
               </div> })()}
           <div className="mt-5 flex justify-end gap-2">
-            <button onClick={() => setConfirm(null)} className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-200">Cancel</button>
+            <Button onClick={() => setConfirm(null)}>Cancel</Button>
             <button onClick={() => { if (!confirm) return; const { kind, r } = confirm; setConfirm(null); if (kind === 'finalize') void finalize(r); else void reopen(r) }} className={`rounded-lg px-3 py-2 text-sm font-bold text-white ${confirm?.kind === 'reopen' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{confirm?.kind === 'reopen' ? 'Reopen report' : 'Finalize & seal'}</button>
           </div>
         </div>
@@ -218,10 +219,10 @@ function ReportDetail({ r, c, canEdit, canDelete, onBack, onEdit, onFinalize, on
           {r.finalized && isCommandRole(profile?.role) && <button onClick={onReopen} className="rounded-lg border border-amber-500/40 px-3 py-2 text-sm font-bold text-amber-300 hover:bg-amber-500/10">Reopen</button>}
           {!r.finalized && canEdit && <button onClick={onEdit} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-badge-200 hover:bg-white/5">Edit</button>}
           {canDelete && <button onClick={onDelete} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-rose-300 hover:bg-rose-500/10">Delete</button>}
-          <button onClick={toggleVersions} aria-expanded={showVersions} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-slate-200 hover:bg-white/5">{showVersions ? 'Hide versions' : 'Versions'}</button>
+          <Button onClick={toggleVersions} aria-expanded={showVersions}>{showVersions ? 'Hide versions' : 'Versions'}</Button>
           {/* Court-ready paper copy for warrants — browser print flow only. */}
           {WARRANT_TPLS[r.template] && <WarrantPrintButton r={r} c={c} />}
-          <button onClick={() => downloadTextFile(`${c.case_number}-${r.template}.md`, formToText(schema, parseFormValues(r.fields)), 'text/markdown')} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Download .md</button>
+          <Button variant="primary" onClick={() => downloadTextFile(`${c.case_number}-${r.template}.md`, formToText(schema, parseFormValues(r.fields)), 'text/markdown')}>Download .md</Button>
         </div>
       </div>
       {(r.finalized || reopenLog.length > 0) && (
@@ -376,7 +377,7 @@ function FormEditor({ template, caseId, values, onChange }: { template: string; 
           })}</div>
           <button onClick={() => set(s.id, rows.filter((_, idx) => idx !== i))} aria-label={`Remove row ${i + 1} from ${s.label}`} title="Remove row" className="mt-5 shrink-0 rounded-lg border border-white/10 px-2.5 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/10">✕</button>
         </div>)}
-        <button onClick={() => set(s.id, [...rows, {}])} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-bold text-slate-200">Add row</button>
+        <Button size="sm" onClick={() => set(s.id, [...rows, {}])}>Add row</Button>
         {totals.length > 0 && <div className="mt-2 space-y-0.5">{totals.map((t) => <p key={t.label} className="text-xs font-bold text-slate-400">{t.label}: ${t.sum.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>)}</div>}
       </div>
     }

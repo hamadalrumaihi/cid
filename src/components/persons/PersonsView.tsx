@@ -12,7 +12,9 @@ import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Card } from '@/components/ui/Card'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
@@ -114,7 +116,7 @@ export function PersonsView() {
 
   return (
     <section className="view-in space-y-4">
-      <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <Card pad="lg">
         <PageHeader
           title="🧑‍⚖️ Persons of Interest"
           subtitle="Suspects & persons of interest — linked to gangs & cases. ≥8 violent felonies flagged."
@@ -126,14 +128,14 @@ export function PersonsView() {
                 </span>
               )}
               {canEdit && (
-                <button onClick={() => setEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+                <Button variant="primary" onClick={() => setEditor({ record: null })}>
                   + New Person
-                </button>
+                </Button>
               )}
             </>
           }
         />
-      </div>
+      </Card>
 
       <div className="flex flex-wrap items-center gap-3">
         <input
@@ -143,15 +145,15 @@ export function PersonsView() {
           placeholder="Filter persons…"
           className="min-w-[12rem] flex-1 rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-sm text-slate-200 outline-none transition focus:border-badge-500"
         />
-        <button onClick={() => void refresh()} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">↻ Refresh</button>
+        <Button onClick={() => void refresh()}>↻ Refresh</Button>
       </div>
 
       {selected.size > 0 && (
         <div className="sticky top-2 z-10 flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 backdrop-blur">
           <span className="text-sm font-semibold text-rose-200">{selected.size} selected</span>
           <span className="flex gap-2">
-            <button onClick={() => void deleteSelected()} className="rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500">Delete selected</button>
-            <button onClick={() => setSelected(new Set())} className="rounded-md border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Clear</button>
+            <Button size="sm" variant="danger" onClick={() => void deleteSelected()}>Delete selected</Button>
+            <Button size="sm" onClick={() => setSelected(new Set())}>Clear</Button>
           </span>
         </div>
       )}
@@ -167,12 +169,12 @@ export function PersonsView() {
           </div>
         ) : !items.length ? (
           query.trim() && canEdit ? (
-            <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center sm:col-span-2 xl:col-span-3">
+            <Card pad="none" className="p-8 text-center sm:col-span-2 xl:col-span-3">
               <p className="text-sm text-slate-400">No persons match &ldquo;{query.trim()}&rdquo;.</p>
-              <button onClick={() => setEditor({ record: null, prefillName: query.trim() })} className="mt-3 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+              <Button variant="primary" className="mt-3" onClick={() => setEditor({ record: null, prefillName: query.trim() })}>
                 ➕ Add &ldquo;{query.trim()}&rdquo; to registry
-              </button>
-            </div>
+              </Button>
+            </Card>
           ) : persons.length ? (
             <Notice text="No persons match your filter." className="sm:col-span-2 xl:col-span-3" />
           ) : (
@@ -201,9 +203,9 @@ export function PersonsView() {
             ))}
             {remaining > 0 && (
               <div className="col-span-full pt-1 text-center">
-                <button onClick={() => setPage({ q, shown: shown + PAGE })} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10">
+                <Button size="sm" className="min-h-[44px] sm:min-h-0" onClick={() => setPage({ q, shown: shown + PAGE })}>
                   Load {Math.min(remaining, PAGE)} more · {remaining} remaining
-                </button>
+                </Button>
               </div>
             )}
           </>
@@ -243,7 +245,7 @@ function PersonCard({ p, gang, canEdit, canDelete, selected, onSelect, onProfile
   const mug = safeUrl(p.mugshot_url ?? '')
   const propCount = Array.isArray(p.properties) ? p.properties.length : 0
   return (
-    <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+    <Card>
       <div className="flex items-start gap-3">
         {mug && !imgBroken ? (
           /* eslint-disable-next-line @next/next/no-img-element -- external mugshot CDN */
@@ -277,7 +279,7 @@ function PersonCard({ p, gang, canEdit, canDelete, selected, onSelect, onProfile
         </button>
       )}
       {p.notes && <p className="mt-3 line-clamp-2 text-xs text-slate-400">{p.notes}</p>}
-    </div>
+    </Card>
   )
 }
 
@@ -318,9 +320,9 @@ function AttachToCaseModal({ person, caseOptions, onClose }: { person: PersonRow
             <select value={caseId} onChange={(e) => setCaseId(e.target.value)} aria-label="Case to attach the reference to" className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">
               {sorted.map((c) => <option key={c.id} value={c.id}>{c.case_number} · {c.title || ''}</option>)}
             </select>
-            <button onClick={() => void go()} className="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+            <Button variant="primary" className="mt-4 w-full" onClick={() => void go()}>
               Attach reference
-            </button>
+            </Button>
           </>
         ) : (
           <p className="text-sm text-slate-400">No cases available to attach to.</p>

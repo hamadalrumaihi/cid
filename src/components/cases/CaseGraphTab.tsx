@@ -34,6 +34,7 @@ import { caseStatusTint } from '@/lib/signoff'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/Button'
 
 type CaseRow = Tables<'cases'>
 type LinkRow = Tables<'case_intel_links'>
@@ -570,9 +571,9 @@ function LinkIntelPanel({ caseId, data, onClose, onLinked }: {
         </select>
         {!options.length && <p className="text-[11px] text-slate-500">Every {kind} on file is already linked.</p>}
         <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Role (suspect, witness, stash…)" className={selCls} />
-        <button onClick={() => void add()} disabled={busy || !refId} className="w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-1.5 text-xs font-bold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50">
+        <Button size="sm" variant="primary" className="w-full" onClick={() => void add()} disabled={busy || !refId}>
           {busy ? 'Linking…' : 'Link to case'}
-        </button>
+        </Button>
       </div>
     </div>
   )

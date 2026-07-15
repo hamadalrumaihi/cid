@@ -7,6 +7,7 @@
  *  modal never touches case_assignments directly. Two steps: pick members
  *  (searchable listbox + per-member role/expiry), then confirm a summary. */
 import { useEffect, useId, useMemo, useState } from 'react'
+import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { rpc } from '@/lib/db'
@@ -285,8 +286,8 @@ export function JointCaseModal({ open, onClose, c, mode, existingAssignments, on
             )}
 
             <div className="mt-5 flex justify-end gap-2">
-              <button onClick={onClose} className="min-h-[44px] rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/5 sm:min-h-0">Cancel</button>
-              <button onClick={goConfirm} disabled={!selected.length} className="min-h-[44px] rounded-lg bg-badge-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60 sm:min-h-0">Continue</button>
+              <Button className="min-h-[44px] sm:min-h-0" onClick={onClose}>Cancel</Button>
+              <Button variant="primary" className="min-h-[44px] sm:min-h-0" onClick={goConfirm} disabled={!selected.length}>Continue</Button>
             </div>
           </>
         ) : (
@@ -309,10 +310,10 @@ export function JointCaseModal({ open, onClose, c, mode, existingAssignments, on
               </ul>
             </div>
             <div className="mt-5 flex justify-end gap-2">
-              <button onClick={() => setStep('pick')} disabled={busy} className="min-h-[44px] rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/5 disabled:opacity-60 sm:min-h-0">Back</button>
-              <button onClick={() => void submit()} disabled={busy} className="min-h-[44px] rounded-lg bg-badge-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60 sm:min-h-0">
+              <Button className="min-h-[44px] sm:min-h-0" onClick={() => setStep('pick')} disabled={busy}>Back</Button>
+              <Button variant="primary" className="min-h-[44px] sm:min-h-0" onClick={() => void submit()} disabled={busy}>
                 {busy ? 'Saving…' : mode === 'convert' ? 'Confirm — create joint case' : 'Confirm — add members'}
-              </button>
+              </Button>
             </div>
           </>
         )}

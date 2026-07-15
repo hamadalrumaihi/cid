@@ -16,6 +16,8 @@ import { activeProfiles } from '@/lib/profiles'
 import { COMMAND_ROLES } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { uiPrompt } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -128,14 +130,14 @@ export function ModusView() {
 
   return (
     <div>
-      <div className="mb-6 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <Card pad="lg" className="mb-6">
         <PageHeader
           title="🔍 Modus Operandi (M.O.) Detector & Criminal Profiler"
           subtitle="Paste narrative incident updates, scene notes or witness statements — the engine extracts tactical indicators and cross-references open / cold files."
         />
-      </div>
+      </Card>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+        <Card pad="lg">
           <label className="mb-2 block text-sm font-semibold text-white" htmlFor="mo-input">Incident Narrative / Scene Notes</label>
           <textarea
             id="mo-input"
@@ -146,10 +148,10 @@ export function ModusView() {
             className="w-full rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-sm leading-relaxed text-white outline-none transition focus:border-badge-500"
           />
           <div className="mt-3 flex flex-wrap gap-3">
-            <button onClick={run} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">Run M.O. Analysis</button>
-            <button onClick={() => setText(SAMPLE_MO)} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">Load Sample</button>
+            <Button variant="primary" onClick={run}>Run M.O. Analysis</Button>
+            <Button onClick={() => setText(SAMPLE_MO)}>Load Sample</Button>
             {scan && all.length > 0 && canEdit && (
-              <button onClick={() => setSaveOpen(true)} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">Save as Case Profile</button>
+              <Button onClick={() => setSaveOpen(true)}>Save as Case Profile</Button>
             )}
           </div>
           {scan && (
@@ -165,8 +167,8 @@ export function ModusView() {
               )) : <p className="text-sm text-slate-400">No known indicators detected.</p>}
             </div>
           )}
-        </div>
-        <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+        </Card>
+        <Card pad="lg">
           <h2 className="mb-1 text-sm font-semibold text-white">🎯 M.O. Cross-Reference</h2>
           <p className="mb-4 text-xs text-slate-400">Matching open / cold files sharing tactical operational profiles.</p>
           <div className="space-y-3">
@@ -198,13 +200,13 @@ export function ModusView() {
                   Indicators (<span className="text-amber-200">{row.shared.join(', ')}</span>) match case{' '}
                   <span className="font-mono text-amber-200">{row.case_number}</span> you don&rsquo;t have access to. Details are restricted.
                 </p>
-                <button onClick={() => void requestAccess(row.case_id, row.case_number)} className="mt-2 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
+                <Button size="sm" variant="primary" className="mt-2" onClick={() => void requestAccess(row.case_id, row.case_number)}>
                   Request access
-                </button>
+                </Button>
               </div>
             ))}
           </div>
-        </div>
+        </Card>
       </div>
 
       {saveOpen && scan && (
@@ -253,9 +255,9 @@ function SaveProfileModal({ indicators, narrative, cases, onClose, onSaved }: {
         {!cases.length && <option value="">— no cases —</option>}
         {cases.map((c) => <option key={c.id} value={c.id}>{c.case_number}</option>)}
       </select>
-      <button onClick={() => void save()} disabled={busy} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+      <Button variant="primary" className="mt-5 w-full" disabled={busy} onClick={() => void save()}>
         Save Profile
-      </button>
+      </Button>
     </Modal>
   )
 }

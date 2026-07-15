@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { fmtUSD } from '@/lib/format'
 import { BRACKETS, COMP_SPLIT, findBracket } from './commandUtils'
+import { Card } from '@/components/ui/Card'
 
 export function RaidComp() {
   const [raw, setRaw] = useState('')
@@ -15,7 +16,7 @@ export function RaidComp() {
   const retain = v - given
 
   return (
-    <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+    <Card pad="lg">
       <h3 className="mb-1 flex items-center gap-2 text-base font-semibold text-white"><span aria-hidden="true">💰</span> Raid Compensation Breakdown</h3>
       <p className="mb-4 text-xs text-slate-400">Official payout brackets applied to net seizure value, split across Primary Detective / Supporting Units / CIs.</p>
       <label htmlFor="comp-input" className="mb-1 block text-xs font-semibold text-slate-300">Total Net Seizure Value ($)</label>
@@ -88,6 +89,6 @@ export function RaidComp() {
           </tbody>
         </table>
       </div>
-    </div>
+    </Card>
   )
 }

@@ -10,6 +10,7 @@ import { deleteWithUndo, insert, update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { officerName } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
+import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 
 export type CommendationRow = Tables<'commendations'>
@@ -32,9 +33,9 @@ export function Commendations({ rows, onChanged }: { rows: CommendationRow[]; on
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Medals &amp; Support Commendations</h2>
         {canEdit && (
-          <button onClick={() => setEditing('new')} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">
+          <Button size="sm" onClick={() => setEditing('new')}>
             + Award Commendation
-          </button>
+          </Button>
         )}
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -128,9 +129,9 @@ function CommendModal({ record, onClose, onSaved }: { record: CommendationRow | 
           </div>
         </div>
         <div className="mt-5 flex gap-2">
-          <button onClick={() => void save()} disabled={busy} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+          <Button variant="primary" className="flex-1" disabled={busy} onClick={() => void save()}>
             {busy ? 'Saving…' : record ? 'Save' : 'Award'}
-          </button>
+          </Button>
           {record && canDelete && (
             <button onClick={() => void del()} className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">
               Delete

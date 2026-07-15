@@ -12,6 +12,8 @@ import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -171,7 +173,7 @@ export function PlacesView() {
 
   return (
     <section className="view-in space-y-4">
-      <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <Card pad="lg">
         <PageHeader
           title="Criminal Places & Production"
           subtitle="Drug labs, stash houses, dead drops and fronts with production process flows."
@@ -183,21 +185,21 @@ export function PlacesView() {
                 </span>
               )}
               {canEdit && (
-                <button onClick={() => setEditor('new')} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-glow transition hover:brightness-110">
+                <Button variant="primary" onClick={() => setEditor('new')}>
                   + New Location
-                </button>
+                </Button>
               )}
             </>
           }
         />
-      </div>
+      </Card>
 
       {selected.size > 0 && (
         <div className="sticky top-2 z-10 flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 backdrop-blur">
           <span className="text-sm font-semibold text-rose-200">{selected.size} selected</span>
           <span className="flex gap-2">
-            <button onClick={() => void deleteRows(places.filter((p) => selected.has(p.id)))} className="rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500">Delete selected</button>
-            <button onClick={() => setSelected(new Set())} className="rounded-md border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Clear</button>
+            <Button size="sm" variant="danger" onClick={() => void deleteRows(places.filter((p) => selected.has(p.id)))}>Delete selected</Button>
+            <Button size="sm" onClick={() => setSelected(new Set())}>Clear</Button>
           </span>
         </div>
       )}
@@ -324,9 +326,9 @@ function AddPlacePhotoModal({ place, onClose, onSaved }: { place: PlaceRow; onCl
             <img src={safeUrl(src)!} alt="Preview" className="max-h-48 w-full rounded-lg border border-white/10 object-contain" />
           )}
         </div>
-        <button onClick={() => void save()} disabled={busy || uploading} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-50">
+        <Button variant="primary" className="mt-5 w-full" disabled={busy || uploading} onClick={() => void save()}>
           {busy ? 'Saving…' : 'Add photo'}
-        </button>
+        </Button>
       </div>
     </Modal>
   )
@@ -374,7 +376,7 @@ function PlaceCard({ place, gang, caseNumber, drug, customSteps, photos, onOpenP
   const generated = place.type === 'drug_lab' ? recipeFor(drug) : []
   const recipe = customSteps.length ? customSteps.map((s) => s.description) : generated
   return (
-    <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+    <Card pad="lg">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h4 className="truncate text-base font-semibold text-white">{place.name}</h4>
@@ -431,7 +433,7 @@ function PlaceCard({ place, gang, caseNumber, drug, customSteps, photos, onOpenP
           </div>
         </div>
       )}
-    </div>
+    </Card>
   )
 }
 
@@ -523,9 +525,9 @@ function PlaceModal({ record, gangs, cases, drugs, onClose, onSaved }: {
           )}
           <div><label htmlFor="place-notes" className="mb-1 block text-xs font-semibold text-slate-400">Notes</label><textarea id="place-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className={input} /></div>
         </div>
-        <button onClick={() => void save()} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+        <Button variant="primary" className="mt-5 w-full" onClick={() => void save()}>
           {record ? 'Save changes' : 'Create location'}
-        </button>
+        </Button>
       </div>
     </Modal>
   )
@@ -565,9 +567,9 @@ function AttachPlaceModal({ place, caseOptions, onClose }: { place: PlaceRow; ca
             <select value={caseId} onChange={(e) => setCaseId(e.target.value)} aria-label="Case to attach the reference to" className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">
               {sorted.map((c) => <option key={c.id} value={c.id}>{c.case_number} · {c.title || ''}</option>)}
             </select>
-            <button onClick={() => void go()} className="mt-4 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+            <Button variant="primary" className="mt-4 w-full" onClick={() => void go()}>
               Attach reference
-            </button>
+            </Button>
           </>
         ) : (
           <p className="text-sm text-slate-400">No cases available to attach to.</p>

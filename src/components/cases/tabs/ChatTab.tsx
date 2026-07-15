@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { insert, list, deleteWithUndo } from '@/lib/db'
+import { Button } from '@/components/ui/Button'
 import { timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { Drafts } from '@/lib/drafts'
@@ -81,7 +82,7 @@ export function ChatTab({ c }: { c: CaseRow }) {
           <option value="">＠ Mention…</option>
           {activeProfiles().map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}
         </select>
-        <button onClick={() => void send()} disabled={sending} className="rounded-lg bg-badge-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">Send</button>
+        <Button variant="primary" onClick={() => void send()} disabled={sending}>Send</Button>
       </div>
     </div>
   )

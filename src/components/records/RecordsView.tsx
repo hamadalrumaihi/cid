@@ -13,6 +13,9 @@ import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
+import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -74,7 +77,7 @@ export function RecordsView() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <Card pad="lg" className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <PageHeader
           className="flex-1"
           title="🗃️ CID Records"
@@ -88,7 +91,7 @@ export function RecordsView() {
             </>
           }
         />
-      </div>
+      </Card>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative min-w-[12rem] flex-1">
@@ -103,13 +106,13 @@ export function RecordsView() {
           />
         </div>
         {canEdit && (
-          <button onClick={() => setEditor({ record: null })} className="rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-glow transition hover:brightness-110">
+          <Button variant="primary" onClick={() => setEditor({ record: null })}>
             + New Record
-          </button>
+          </Button>
         )}
-        <button onClick={() => void refresh()} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">
+        <Button onClick={() => void refresh()}>
           ↻ Refresh
-        </button>
+        </Button>
       </div>
 
       {err && <ErrorNotice message={err} onRetry={() => void refresh()} className="mb-6" />}
@@ -134,9 +137,9 @@ export function RecordsView() {
           </div>
           {items.length > shown && (
             <div className="mt-4 text-center">
-              <button onClick={() => setPage({ q, shown: shown + PAGE })} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10">
+              <Button size="sm" className="min-h-[44px] sm:min-h-0" onClick={() => setPage({ q, shown: shown + PAGE })}>
                 Load more ({items.length - shown} remaining)
-              </button>
+              </Button>
             </div>
           )}
         </>
@@ -158,7 +161,7 @@ function RecordCard({ r, canEdit, onEdit }: { r: RecordRow; canEdit: boolean; on
   const [imgFailed, setImgFailed] = useState(false)
   const mug = safeUrl(r.mugshot_url ?? '')
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/5 bg-ink-900/60">
+    <Card pad="none" className="overflow-hidden">
       <div className="flex gap-4 p-5">
         {mug && !imgFailed ? (
           // eslint-disable-next-line @next/next/no-img-element -- external mugshot URL
@@ -172,7 +175,7 @@ function RecordCard({ r, canEdit, onEdit }: { r: RecordRow; canEdit: boolean; on
               <p className="truncate font-semibold text-white">{r.name}</p>
               <p className="text-xs text-slate-400">{r.callsign || '—'}{r.bureau && ` · ${r.bureau}`}</p>
             </div>
-            <span className={`flex-shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${statusTint(r.status)}`}>{r.status || '—'}</span>
+            <Badge tint={statusTint(r.status)} className="flex-shrink-0 uppercase">{r.status || '—'}</Badge>
           </div>
           {r.case_number && <p className="mt-1 font-mono text-[11px] text-blue-300">{r.case_number}</p>}
           {r.gang && <p className="mt-1 text-xs text-violet-300">🚩 {r.gang}</p>}
@@ -181,9 +184,9 @@ function RecordCard({ r, canEdit, onEdit }: { r: RecordRow; canEdit: boolean; on
       </div>
       <div className="flex items-center justify-between border-t border-white/5 px-5 py-2.5 text-[11px] text-slate-400">
         <span>{r.officer || 'Unassigned'}{r.last_seen && ` · last seen ${r.last_seen}`}</span>
-        {canEdit && <button onClick={onEdit} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Edit</button>}
+        {canEdit && <Button size="sm" onClick={onEdit}>Edit</Button>}
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -272,9 +275,9 @@ function RecordModal({ record, meId, onClose, onSaved }: {
           <textarea id="rec-notes" value={f.notes} onChange={set('notes')} rows={3} className={inputCls} />
         </div>
       </div>
-      <button onClick={() => void save()} disabled={busy} className="mt-5 w-full rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
+      <Button variant="primary" className="mt-5 w-full" disabled={busy} onClick={() => void save()}>
         {record ? 'Save changes' : 'Create record'}
-      </button>
+      </Button>
     </Modal>
   )
 }

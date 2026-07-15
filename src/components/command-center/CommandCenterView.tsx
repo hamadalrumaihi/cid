@@ -13,6 +13,9 @@
 import { useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
+import { Card } from '@/components/ui/Card'
+import { Notice } from '@/components/ui/Notice'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { CommandCenterOverview } from './sections/Overview'
 import { ChainOfCommand } from './sections/ChainOfCommand'
 import { PersonnelAdmin } from './sections/PersonnelAdmin'
@@ -52,7 +55,7 @@ export function CommandCenterView() {
   const active = useMemo(() => CC_SECTIONS.find((s) => s.id === section) ?? CC_SECTIONS[0], [section])
 
   if (state !== 'in') {
-    return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">Sign in to access the Command Center.</div>
+    return <Notice text="Sign in to access the Command Center." />
   }
   if (!canAccess) {
     return (
@@ -65,10 +68,12 @@ export function CommandCenterView() {
 
   return (
     <div className="space-y-5">
-      <header className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
-        <h2 className="flex items-center gap-2 text-2xl font-black text-white">🛡️ Command Center</h2>
-        <p className="mt-1 text-sm text-slate-400">The single home for command administration — {active.sub.toLowerCase()}.</p>
-      </header>
+      <Card>
+        <PageHeader
+          title="🛡️ Command Center"
+          subtitle={`The single home for command administration — ${active.sub.toLowerCase()}.`}
+        />
+      </Card>
 
       <div className="grid gap-5 lg:grid-cols-[15rem_1fr]">
         <nav className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible" aria-label="Command Center sections">

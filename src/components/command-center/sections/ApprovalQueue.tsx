@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { list, rpc } from '@/lib/db'
 import type { Database, Tables } from '@/lib/database.types'
+import { fmtDateTime } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { notify } from '@/lib/notify'
 import { officerName, type RosterProfile, useProfilesStore } from '@/lib/profiles'
@@ -288,7 +289,7 @@ export function ApprovalQueue() {
                 </div>
                 <div className="mt-2 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
                   <p className="text-slate-400">Badge <span className="text-slate-200">{r.badge_number || '—'}</span></p>
-                  <p className="text-slate-400">Submitted <span className="text-slate-200">{r.submitted_at ? new Date(r.submitted_at).toLocaleString() : '—'}</span></p>
+                  <p className="text-slate-400">Submitted <span className="text-slate-200">{fmtDateTime(r.submitted_at)}</span></p>
                   <p className="text-slate-400">Requested department <span className="text-slate-200">{bureauLabel(r.requested_bureau)}</span></p>
                   <p className="text-slate-400">Requested role <span className="text-slate-200">{roleLabel(r.requested_role)}</span></p>
                 </div>
