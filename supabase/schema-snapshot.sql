@@ -1477,6 +1477,21 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.block_direct_case_bureau()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if current_user in ('authenticated','anon') and (
+       new.bureau              is distinct from old.bureau or
+       new.originating_bureau  is distinct from old.originating_bureau) then
+    raise exception 'case bureau can only be changed via case_reassign_bureau()';
+  end if;
+  return new;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.block_direct_report_finalize()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -1928,6 +1943,82 @@ begin
   insert into public.role_events (target_id, actor_id, old_role, new_role,
     old_division, new_division, old_active, new_active, source)
   values (target, v_uid, t.role, t.role, t.division, t.division, t.active, set_active, 'activation');
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.case_reassign_bureau(p_case uuid, p_to_bureau public.bureau, p_reason text, p_update_originating boolean DEFAULT false)
+ RETURNS public.cases
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  me public.profiles;
+  c public.cases;
+  v_from public.bureau;
+  v_orig_from public.bureau;
+  v_orig_to public.bureau;
+  v_reason text := btrim(coalesce(p_reason, ''));
+  v_is_test boolean;
+begin
+  select * into me from public.profiles where id = v_uid;
+  if me.id is null or not (coalesce(me.active, false)
+       and (me.role in ('deputy_director', 'director') or coalesce(me.is_owner, false))) then
+    raise exception 'only a Deputy Director or higher may reassign a case between bureaus';
+  end if;
+  if v_reason = '' then raise exception 'a reason is required'; end if;
+  if p_to_bureau not in ('LSB', 'BCB', 'SAB') then
+    raise exception 'JTF is a shared-visibility designation, not a bureau — cases cannot be reassigned into it';
+  end if;
+
+  select * into c from public.cases where id = p_case for update;
+  if c.id is null then raise exception 'case not found'; end if;
+  -- Post-lock revalidation: a concurrent reassignment that already applied
+  -- makes this a stale request, not a silent success.
+  if c.bureau = p_to_bureau then
+    raise exception 'case is already in % — reload and retry', p_to_bureau;
+  end if;
+
+  v_from := c.bureau;
+  v_orig_from := c.originating_bureau;
+  v_orig_to := case when p_update_originating then p_to_bureau else c.originating_bureau end;
+
+  update public.cases
+     set bureau = p_to_bureau, originating_bureau = v_orig_to
+   where id = p_case returning * into c;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'REASSIGN_BUREAU', 'cases', p_case, jsonb_build_object(
+    'case_number', c.case_number,
+    'from', v_from, 'to', p_to_bureau,
+    'originating_from', v_orig_from, 'originating_to', v_orig_to,
+    'reason', left(v_reason, 500),
+    'status', c.status, 'is_joint_case', c.is_joint_case));
+
+  -- Recipient-scoped notification: header text only. A fixture actor never
+  -- reaches a real member's bell (transfer_notify precedent).
+  select u.email like 'rls-test-%@cidportal.test' into v_is_test
+    from auth.users u where u.id = v_uid;
+  insert into public.notifications (user_id, type, payload)
+  select p.id, 'case_reassigned', jsonb_build_object(
+    'case_id', p_case, 'case_number', c.case_number,
+    'from', v_from, 'to', p_to_bureau,
+    'reason', 'Case ' || coalesce(c.case_number, '') || ' was reassigned from '
+      || v_from || ' to ' || p_to_bureau || '. Reason: ' || v_reason,
+    'actor_id', v_uid, 'actor_name', me.display_name)
+    from public.profiles p
+   where p.active and p.removed_at is null and p.id <> v_uid
+     and (p.id is not distinct from c.lead_detective_id
+          or exists (select 1 from public.case_assignments a
+                      where a.case_id = p_case and a.officer_id = p.id
+                        and a.removed_at is null
+                        and (a.expires_at is null or a.expires_at > now())))
+     and (not coalesce(v_is_test, false)
+          or exists (select 1 from auth.users u
+                      where u.id = p.id and u.email like 'rls-test-%@cidportal.test'));
+
+  return c;
 end $function$
 ;
 
@@ -2601,6 +2692,7 @@ CREATE TRIGGER case_templates_touch BEFORE UPDATE ON public.case_templates FOR E
 CREATE TRIGGER cases_audit AFTER INSERT OR DELETE OR UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER cases_touch BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.touch_cases();
 CREATE TRIGGER trg_block_direct_signoff BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_signoff();
+CREATE TRIGGER trg_block_direct_case_bureau BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_bureau();
 CREATE TRIGGER trg_case_closed_at BEFORE UPDATE OF status ON public.cases FOR EACH ROW EXECUTE FUNCTION public.set_case_closed_at();
 CREATE TRIGGER cid_records_touch BEFORE UPDATE ON public.cid_records FOR EACH ROW EXECUTE FUNCTION public.cid_touch_updated_at();
 CREATE TRIGGER client_errors_notify AFTER INSERT ON public.client_errors FOR EACH ROW EXECUTE FUNCTION private.notify_owners_client_error();

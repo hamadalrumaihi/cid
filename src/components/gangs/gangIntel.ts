@@ -108,6 +108,55 @@ export function duplicateMemberIds(members: MemberRow[]): Set<string> {
   return ids
 }
 
+// ── Duplicate merge planning (pure — execution lives in MergeMembersModal) ───
+/** Fields the merge flow compares and can carry from a duplicate onto the
+ *  survivor. name/gang_id are the cluster identity; created_at/updated_at are
+ *  row bookkeeping — none of those are merge candidates. */
+export const MERGE_FIELDS = [
+  'rank', 'callsign', 'status', 'person_id', 'ccw', 'vch', 'felony_count', 'mugshot_url', 'provenance',
+] as const
+export type MergeField = (typeof MERGE_FIELDS)[number]
+export type MergeValue = MemberRow[MergeField]
+export type MergePatch = Partial<Pick<MemberRow, MergeField>>
+
+/** "Empty" for merge purposes: null/blank, plus the schema defaults (false, 0)
+ *  — so a duplicate's CCW=yes or a real felony count is treated as richer than
+ *  the survivor's default. */
+const isEmptyMergeValue = (v: MergeValue | undefined): boolean =>
+  v === null || v === undefined || v === false || v === 0 || (typeof v === 'string' && !v.trim())
+
+export interface MergePlan {
+  /** Field values to write onto the survivor — only fields that actually
+   *  change; an empty patch means no survivor update is needed. */
+  patch: MergePatch
+  /** The rows to delete. The survivor is never in this list, even if the
+   *  caller passed it inside `duplicates`. */
+  deletions: MemberRow[]
+}
+
+/** Plan a non-destructive-by-review merge: keep the survivor's value for every
+ *  field, except where the survivor's value is empty and a duplicate has one —
+ *  then the first non-empty duplicate value is adopted (this covers person_id
+ *  adoption). Explicit `choices` (from the review UI) override both. Pure:
+ *  plans only, never mutates or writes. */
+export function planMerge(
+  survivor: MemberRow,
+  duplicates: MemberRow[],
+  choices: Partial<Record<MergeField, MergeValue>> = {},
+): MergePlan {
+  const deletions = duplicates.filter((d) => d.id !== survivor.id)
+  const patch: Record<string, MergeValue> = {}
+  for (const f of MERGE_FIELDS) {
+    const chosen = Object.prototype.hasOwnProperty.call(choices, f)
+      ? choices[f] ?? null
+      : isEmptyMergeValue(survivor[f])
+        ? deletions.map((d) => d[f]).find((v) => !isEmptyMergeValue(v)) ?? survivor[f]
+        : survivor[f]
+    if (!Object.is(chosen ?? null, survivor[f] ?? null)) patch[f] = chosen ?? null
+  }
+  return { patch: patch as MergePatch, deletions }
+}
+
 // ── Staleness / review ───────────────────────────────────────────────────────
 export const DEFAULT_REVIEW_DAYS = 90
 

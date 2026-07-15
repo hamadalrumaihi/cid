@@ -17,7 +17,12 @@ import { useTableVersion } from './realtime'
 
 export interface Registry<T> {
   rows: T[]
+  /** True during the FIRST fetch only — the "show a skeleton" signal. */
   loading: boolean
+  /** True while re-fetching after rows have already loaded (realtime bump or
+   *  manual refresh). Stale rows stay visible — views may show a subtle hint
+   *  or ignore this entirely. */
+  refreshing: boolean
   error: string | null
   refresh: () => Promise<void>
   setRows: Dispatch<SetStateAction<T[]>>
@@ -38,6 +43,7 @@ export function useRegistry<T>(opts: {
   const on = opts.enabled ?? state === 'in'
   const [rows, setRows] = useState<T[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const v = useTableVersion(opts.table)
 
@@ -46,16 +52,25 @@ export function useRegistry<T>(opts: {
   const loadRef = useRef(opts.load)
   useEffect(() => { loadRef.current = opts.load })
 
+  // Stale-while-revalidate: once a load has succeeded, later re-fetches must
+  // not blank the screen back to a skeleton — realtime bumps arrive mid-read.
+  // A ref (not state) so back-to-back refreshes in one tick see it flip.
+  const hasLoaded = useRef(false)
+
   const refresh = useCallback(async () => {
     if (!on) return
-    setLoading(true)
+    if (hasLoaded.current) setRefreshing(true)
+    else setLoading(true)
     setError(null)
     try {
       setRows(await loadRef.current())
+      hasLoaded.current = true
     } catch (e) {
+      // Failed refresh: surface the error but keep the stale rows visible.
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }, [on])
 
@@ -67,5 +82,5 @@ export function useRegistry<T>(opts: {
     return () => window.clearTimeout(t)
   }, [refresh, v, watchKey])
 
-  return { rows, loading, error, refresh, setRows }
+  return { rows, loading, refreshing, error, refresh, setRows }
 }

@@ -155,8 +155,8 @@ function InvestigationStatus({ gang, now }: { gang: GangRow; now: number }) {
 }
 
 // ── Territory ────────────────────────────────────────────────────────────────
-function TerritorySection({ turf, canEdit, canDelete, onAdd, onDelete, now }: {
-  turf: TurfRow[]; canEdit: boolean; canDelete: boolean; onAdd: () => void; onDelete: (t: TurfRow) => void; now: number
+function TerritorySection({ gangId, turf, canEdit, canDelete, onAdd, onDelete, now }: {
+  gangId: string; turf: TurfRow[]; canEdit: boolean; canDelete: boolean; onAdd: () => void; onDelete: (t: TurfRow) => void; now: number
 }) {
   const router = useRouter()
   const [density, setDensity] = useState('any')
@@ -167,7 +167,7 @@ function TerritorySection({ turf, canEdit, canDelete, onAdd, onDelete, now }: {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2"><h3 className="text-sm font-bold text-white">Territory</h3><Badge>{turf.length}</Badge></div>
         <div className="flex items-center gap-2">
-          <button onClick={() => router.push('/heatmap')} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-blue-200 hover:bg-white/10">View on map</button>
+          <button onClick={() => router.push(`/heatmap?gang=${encodeURIComponent(gangId)}`)} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-blue-200 hover:bg-white/10">View on map</button>
           {canEdit && <button onClick={onAdd} className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10">+ Turf</button>}
         </div>
       </div>
@@ -526,7 +526,7 @@ export function GangDossier({ gang, people, caseOptions, canEdit, canDelete, onB
   const menuItems = [
     { label: 'Open intel profile', onClick: onProfile, icon: '🗂' },
     { label: 'Open in Network', onClick: () => router.push(`/network?focus=g:${gang.id}`), icon: '🕸' },
-    { label: 'View on map', onClick: () => router.push('/heatmap'), icon: '🗺' },
+    { label: 'View on map', onClick: () => router.push(`/heatmap?gang=${encodeURIComponent(gang.id)}`), icon: '🗺' },
     ...(canEdit ? [gang.status === 'disbanded'
       ? { label: 'Mark active', onClick: () => void setLifecycle('active'), icon: '↺', separatorBefore: true }
       : { label: 'Mark disbanded', onClick: () => void setLifecycle('disbanded'), icon: '⚑', separatorBefore: true }] : []),
@@ -593,8 +593,8 @@ export function GangDossier({ gang, people, caseOptions, canEdit, canDelete, onB
             </div>
           </div>
         )}
-        {section === 'members' && <RosterSection members={members} canEdit={canEdit} onAddMember={() => setMemberEditor('new')} onEditMember={(m) => setMemberEditor(m)} />}
-        {section === 'territory' && <TerritorySection turf={turf} canEdit={canEdit} canDelete={canDelete} onAdd={() => setTurfOpen(true)} onDelete={(t) => void deleteTurf(t)} now={now} />}
+        {section === 'members' && <RosterSection members={members} canEdit={canEdit} canDelete={canDelete} onAddMember={() => setMemberEditor('new')} onEditMember={(m) => setMemberEditor(m)} onRefresh={() => void load()} />}
+        {section === 'territory' && <TerritorySection gangId={gang.id} turf={turf} canEdit={canEdit} canDelete={canDelete} onAdd={() => setTurfOpen(true)} onDelete={(t) => void deleteTurf(t)} now={now} />}
         {section === 'places' && <PlacesSection linked={linkedPlaces} media={media} canEdit={canEdit} canDelete={canDelete} onLink={() => setLinkPlaceOpen(true)} onUnlink={(l) => void unlinkPlace(l)} />}
         {section === 'vehicles' && <VehiclesSection vehicles={vehicles} />}
         {section === 'cases' && <CasesSection links={intelLinks} cases={linkedCases} indirect={indirectCases} canEdit={canEdit} onAttach={() => setAttachOpen(true)} onUnlink={(l) => void unlinkCase(l)} />}

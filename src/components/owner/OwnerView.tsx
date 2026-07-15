@@ -401,7 +401,8 @@ function ClientErrorsPanel() {
   const [busy, setBusy] = useState(false)
   const v = useTableVersion('client_errors')
   const refresh = useCallback(async () => {
-    try { setRows((await list('client_errors', { order: 'created_at', ascending: false })).slice(0, 25)) }
+    // Cap in the query, not client-side — the panel only ever shows 25.
+    try { setRows(await list('client_errors', { order: 'created_at', ascending: false, limit: 25 })) }
     catch { /* offline — panel shows empty */ }
   }, [])
   useEffect(() => {

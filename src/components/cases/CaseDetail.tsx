@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
+import { DetailSkeleton } from '@/components/ui/Skeleton'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { uiConfirm } from '@/components/ui/dialog'
 import { deleteWithUndo, list, rpc, update, withRetry } from '@/lib/db'
@@ -26,6 +27,7 @@ import { StaleBadge } from './StaleBadge'
 import { WatchButton } from './WatchButton'
 import { CaseModal } from './CaseModal'
 import { JointCaseModal } from './JointCaseModal'
+import { ReassignBureauModal } from './ReassignBureauModal'
 import { OverviewTab } from './tabs/OverviewTab'
 import { NotesTab } from './tabs/NotesTab'
 import { EvidenceTab } from './tabs/EvidenceTab'
@@ -54,12 +56,13 @@ type TabId = (typeof TABS)[number]
 export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () => void; onChanged: () => void }) {
   const router = useRouter()
   const sp = useSearchParams()
-  const { profile, canEdit, canDelete, isCommand } = useAuth()
+  const { profile, canEdit, canDelete, isCommand, isOwner } = useAuth()
   const operations = useOperationsStore((s) => s.operations)
   const [c, setCase] = useState<CaseRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [edit, setEdit] = useState(false)
   const [handover, setHandover] = useState(false)
+  const [reassign, setReassign] = useState(false)
   const casesV = useTableVersion('cases')
   const tab = (sp.get('tab') && TABS.includes(sp.get('tab') as TabId) ? sp.get('tab') : 'overview') as TabId
 
@@ -143,7 +146,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     tabRefs.current[TABS[next]]?.focus()
   }
 
-  if (loading) return <p className="rounded-2xl border border-white/10 bg-ink-900/50 p-6 text-slate-300">Loading case...</p>
+  if (loading) return <DetailSkeleton />
   if (!c) return <p className="rounded-2xl border border-white/10 bg-ink-900/50 p-6 text-slate-300">Case not found.</p>
 
   const op = operations.find((x) => x.id === c.operation_id)
@@ -151,6 +154,10 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const pinned = isPinnedCase(c.id)
   // The current lead (or command) may hand the case to another officer.
   const canHandover = !!profile && (c.lead_detective_id === profile.id || isCommand)
+  // Bureau reassignment is Deputy Director+/Owner (never bureau_lead) — the
+  // cosmetic mirror of case_reassign_bureau's server rule; RLS + the freeze
+  // trigger enforce the real one.
+  const canReassignBureau = isOwner || (isCommand && (profile?.role === 'deputy_director' || profile?.role === 'director'))
   // "Awaiting a decision" reuses the established sign-off vocabulary: every
   // awaiting state is prefixed awaiting_ (lib/signoff), same set caseCourtHint
   // keys off. No new states invented.
@@ -243,6 +250,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
             <PacketButton c={c} />
             {canEdit && <button onClick={() => setEdit(true)} className="rounded-lg bg-white/10 px-3 py-2 text-sm font-semibold text-white hover:bg-white/15">Edit</button>}
             {canHandover && <button onClick={() => setHandover(true)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Hand over</button>}
+            {canReassignBureau && <button onClick={() => setReassign(true)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Reassign bureau</button>}
             {canDelete && <button onClick={() => void deleteCase()} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-500">Delete</button>}
           </div>
         </div>
@@ -312,6 +320,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       </section>
       <CaseModal open={edit} record={c} onClose={() => setEdit(false)} onSaved={() => { setEdit(false); onChanged(); void fetchCase() }} />
       <HandoverModal open={handover} c={c} onClose={() => setHandover(false)} onDone={() => { setHandover(false); onChanged(); void fetchCase() }} />
+      <ReassignBureauModal open={reassign} c={c} onClose={() => setReassign(false)} onDone={() => { setReassign(false); onChanged(); void fetchCase() }} />
     </div>
   )
 }

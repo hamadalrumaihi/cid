@@ -17,14 +17,6 @@ import { VehiclesView } from '@/components/vehicles/VehiclesView'
 import { PenalView } from '@/components/penal/PenalView'
 import { RecordsView } from '@/components/records/RecordsView'
 import { ShiftsView } from '@/components/shifts/ShiftsView'
-import { AuditView } from '@/components/audit/AuditView'
-import { FeedbackView } from '@/components/feedback/FeedbackView'
-import { NarcoticsView } from '@/components/narcotics/NarcoticsView'
-import { BallisticsView } from '@/components/ballistics/BallisticsView'
-import { RicoView } from '@/components/rico/RicoView'
-import { HeatmapView } from '@/components/heatmap/HeatmapView'
-import { NetworkView } from '@/components/network/NetworkView'
-import { ModusView } from '@/components/modus/ModusView'
 import { MediaView } from '@/components/media/MediaView'
 import { CaseFilesView } from '@/components/casefiles/CaseFilesView'
 import { SopsView } from '@/components/sops/SopsView'
@@ -32,12 +24,17 @@ import { GuideView } from '@/components/guide/GuideView'
 import { CalendarView } from '@/components/calendar/CalendarView'
 import { AnalyticsView } from '@/components/analytics/AnalyticsView'
 import { IndicatorsView } from '@/components/indicators/IndicatorsView'
-import { DevDocsView } from '@/components/devdocs/DevDocsView'
-import { OwnerView } from '@/components/owner/OwnerView'
 import { ProfileView } from '@/components/profile/ProfileView'
 import { CommandCenterView } from '@/components/command-center/CommandCenterView'
 import { LegalView } from '@/components/legal/LegalView'
 import { JusticePortalView } from '@/components/justice/JusticePortalView'
+// Long-tail screens are code-split (client dynamic wrappers, ssr off) so the
+// heavy/rare views — owner tooling, the handbook, chart-heavy analysis tabs —
+// stay out of the page chunk every route shares. Hot paths stay static above.
+import {
+  AuditView, BallisticsView, DevDocsView, FeedbackView, HeatmapView,
+  ModusView, NarcoticsView, NetworkView, OwnerView, RicoView,
+} from './lazyViews'
 
 /** One route per leaf tab, statically prerendered via generateStaticParams. */
 

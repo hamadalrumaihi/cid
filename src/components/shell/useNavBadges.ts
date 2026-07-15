@@ -60,17 +60,42 @@ export function useNavBadges(): NavBadges {
   const vProfiles = useTableVersion('profiles')
   const vJustice = useTableVersion('justice_memberships')
 
+  // One effect per input so a realtime bump on one table refetches ONLY that
+  // table (the old single effect re-pulled all three lists + both stores on
+  // any of five version counters). Each fetch projects just the columns the
+  // memo below reads — never announcement bodies or case notes/summaries.
+  useEffect(() => {
+    if (state !== 'in') return
+    const t = window.setTimeout(() => {
+      list('announcements', { select: 'id,author_id,audience,mentions,pinned,created_at', order: 'created_at', ascending: false }).then(setAnns).catch(() => undefined)
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [state, vAnn])
+
+  useEffect(() => {
+    if (state !== 'in') return
+    const t = window.setTimeout(() => {
+      list('cases', { select: 'id,status,bureau,lead_detective_id,follow_up_at,updated_at,signoff_status,signoff_assignee_id,signoff_submitted_by' }).then(setCases).catch(() => undefined)
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [state, vCases])
+
+  useEffect(() => {
+    if (state !== 'in') return
+    const t = window.setTimeout(() => {
+      list('notifications', { select: 'id,type,read', eq: { read: false } }).then(setNotifs).catch(() => undefined)
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [state, vNotifs])
+
   useEffect(() => {
     if (state !== 'in') return
     const t = window.setTimeout(() => {
       void fetchProfiles()
       if (isCommand) void fetchJustice()
-      list('announcements', { order: 'created_at', ascending: false }).then(setAnns).catch(() => undefined)
-      list('cases', {}).then(setCases).catch(() => undefined)
-      list('notifications', { eq: { read: false } }).then(setNotifs).catch(() => undefined)
     }, 0)
     return () => window.clearTimeout(t)
-  }, [state, isCommand, fetchProfiles, fetchJustice, vAnn, vCases, vNotifs, vProfiles, vJustice])
+  }, [state, isCommand, fetchProfiles, fetchJustice, vProfiles, vJustice])
 
   return useMemo<NavBadges>(() => {
     if (state !== 'in' || !profile) return { pending: 0, announcements: 0, signoff: 0, command: 0 }

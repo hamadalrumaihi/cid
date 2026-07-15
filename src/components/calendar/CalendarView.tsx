@@ -1,9 +1,10 @@
 'use client'
 
 /** Division Calendar — flowintel-inspired month view of everything with a
- *  date: case follow-ups, open task deadlines, and shift-report weeks.
- *  Read-only aggregation; RLS scopes every source to what the viewer can
- *  see. Click a day for its items with deep links. */
+ *  date: case follow-ups, open task deadlines, legal-request deadlines
+ *  (response due / expiry) and shift-report weeks. Read-only aggregation;
+ *  RLS scopes every source to what the viewer can see (a denied legal read
+ *  simply contributes nothing). Click a day for its items with deep links. */
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
@@ -16,6 +17,15 @@ import { Notice } from '@/components/ui/Notice'
 type CaseRow = Tables<'cases'>
 type TaskRow = Tables<'case_tasks'>
 type ShiftRow = Tables<'shift_reports'>
+type LegalRow = Tables<'legal_requests'>
+
+/** Slim legal projection — the calendar only needs identity + the two
+ *  deadline timestamps, never form_data/narrative. */
+const LEGAL_COLS = 'id,request_number,title,review_status,fulfilment_status,response_deadline,expires_at'
+/** States whose deadlines no longer bind — mirrors legalShared's DeadlineChip
+ *  (live requests warn; resolved records keep a quiet history). */
+const LEGAL_DONE_FULFILMENT = new Set(['closed', 'returned', 'return_recorded', 'revoked'])
+const LEGAL_DONE_REVIEW = new Set(['denied', 'withdrawn', 'closed'])
 
 interface DayItem {
   key: string
@@ -23,7 +33,7 @@ interface DayItem {
   label: string
   sub: string
   href: string
-  tone: 'amber' | 'blue' | 'slate'
+  tone: 'amber' | 'blue' | 'rose' | 'slate'
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -33,7 +43,7 @@ const iso = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(
 
 export function CalendarView() {
   const { state } = useAuth()
-  const [data, setData] = useState<{ cases: CaseRow[]; tasks: TaskRow[]; shifts: ShiftRow[] }>({ cases: [], tasks: [], shifts: [] })
+  const [data, setData] = useState<{ cases: CaseRow[]; tasks: TaskRow[]; shifts: ShiftRow[]; legal: LegalRow[] }>({ cases: [], tasks: [], shifts: [], legal: [] })
   const [loading, setLoading] = useState(true)
   // {y, m} of the displayed month; seeded from the client clock in an effect
   // (never during render) so prerender stays deterministic.
@@ -42,18 +52,21 @@ export function CalendarView() {
   const vCases = useTableVersion('cases')
   const vTasks = useTableVersion('case_tasks')
   const vShifts = useTableVersion('shift_reports')
+  const vLegal = useTableVersion('legal_requests')
 
   const refresh = useCallback(async () => {
     if (state !== 'in') return
     await Promise.resolve()
     setLoading(true)
     try {
-      const [cases, tasks, shifts] = await Promise.all([
+      const [cases, tasks, shifts, legal] = await Promise.all([
         list('cases', {}).catch(() => [] as CaseRow[]),
         list('case_tasks', {}).catch(() => [] as TaskRow[]),
         list('shift_reports', {}).catch(() => [] as ShiftRow[]),
+        // Fail-closed: only rows RLS returns; a denied read shows nothing.
+        list('legal_requests', { select: LEGAL_COLS }).catch(() => [] as LegalRow[]),
       ])
-      setData({ cases, tasks, shifts })
+      setData({ cases, tasks, shifts, legal })
     } finally { setLoading(false) }
   }, [state])
 
@@ -64,7 +77,7 @@ export function CalendarView() {
       void refresh()
     }, 0)
     return () => window.clearTimeout(t)
-  }, [refresh, vCases, vTasks, vShifts])
+  }, [refresh, vCases, vTasks, vShifts, vLegal])
 
   const byDay = useMemo(() => {
     const map: Record<string, DayItem[]> = {}
@@ -87,6 +100,14 @@ export function CalendarView() {
     }
     for (const s of data.shifts) {
       push(s.week_start, { icon: '📝', label: `Shift report — ${s.author_name || 'Officer'}`, sub: `Week of ${s.week_start}`, href: '/shifts', tone: 'slate' })
+    }
+    // Legal deadlines are read-only entries deep-linking into the request;
+    // resolved requests keep a quiet history and stay off the calendar.
+    for (const lr of data.legal) {
+      if (LEGAL_DONE_FULFILMENT.has(lr.fulfilment_status) || LEGAL_DONE_REVIEW.has(lr.review_status)) continue
+      const href = `/legal?request=${encodeURIComponent(lr.id)}`
+      if (lr.response_deadline) push(lr.response_deadline, { icon: '⚖️', label: `${lr.request_number} response due`, sub: lr.title, href, tone: 'rose' })
+      if (lr.expires_at) push(lr.expires_at, { icon: '⚖️', label: `${lr.request_number} expires`, sub: lr.title, href, tone: 'rose' })
     }
     return map
   }, [data])
@@ -112,7 +133,7 @@ export function CalendarView() {
   const goToday = () => { setSel(null); setMonth({ y: Number(today.slice(0, 4)), m: Number(today.slice(5, 7)) - 1 }) }
 
   const monthTotal = Object.entries(byDay).filter(([d]) => d.startsWith(`${month.y}-${String(month.m + 1).padStart(2, '0')}-`)).reduce((n, [, v]) => n + v.length, 0)
-  const tint: Record<DayItem['tone'], string> = { amber: 'bg-amber-500/15 text-amber-200', blue: 'bg-blue-500/15 text-blue-200', slate: 'bg-white/10 text-slate-300' }
+  const tint: Record<DayItem['tone'], string> = { amber: 'bg-amber-500/15 text-amber-200', blue: 'bg-blue-500/15 text-blue-200', rose: 'bg-rose-500/15 text-rose-200', slate: 'bg-white/10 text-slate-300' }
 
   return (
     <div>
@@ -176,7 +197,7 @@ export function CalendarView() {
       )}
 
       <p className="mt-4 text-[11px] text-slate-400">
-        📌 case follow-ups · ☑️ open task deadlines · 📝 shift-report weeks. Scoped to records you can access; days in red have overdue items. Click a day for details.
+        📌 case follow-ups · ☑️ open task deadlines · ⚖️ legal-request deadlines · 📝 shift-report weeks. Scoped to records you can access; days in red have overdue items. Click a day for details.
       </p>
     </div>
   )

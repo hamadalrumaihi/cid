@@ -13,9 +13,10 @@ import { Badge } from '@/components/ui/Badge'
 import { ProvenanceBadge } from '@/components/ui/IntelBadges'
 import { EmptyState } from '@/components/ui/Notice'
 import {
-  duplicateMemberIds, findDuplicateMembers, groupByTier, humanize, normalizeName,
-  rankTier, tierMeta, type TierId,
+  findDuplicateMembers, groupByTier, humanize, normalizeName,
+  rankTier, tierMeta, type DuplicateCluster, type TierId,
 } from './gangIntel'
+import { MergeMembersModal } from './MergeMembersModal'
 import type { MemberRow } from './gangShared'
 
 const felonyFlag = (n: number | null) => (n ?? 0) >= 8
@@ -92,11 +93,15 @@ type Sort = 'hierarchy' | 'name' | 'updated' | 'felony'
 const selCls = 'rounded-lg border border-white/10 bg-ink-850 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-badge-500'
 const activeSelCls = 'border-badge-500 text-white'
 
-export function RosterSection({ members, canEdit, onAddMember, onEditMember }: {
+export function RosterSection({ members, canEdit, canDelete, onAddMember, onEditMember, onRefresh }: {
   members: MemberRow[]
   canEdit: boolean
+  /** Merging deletes duplicate rows — command-tier, gated separately from edit. */
+  canDelete: boolean
   onAddMember: () => void
   onEditMember: (m: MemberRow) => void
+  /** Reload the roster after a merge (also re-fires after an undo re-insert). */
+  onRefresh: () => void
 }) {
   const router = useRouter()
   const [view, setView] = useState<'hierarchy' | 'table'>('hierarchy')
@@ -110,9 +115,16 @@ export function RosterSection({ members, canEdit, onAddMember, onEditMember }: {
   const [dupOnly, setDupOnly] = useState(false)
   const [sort, setSort] = useState<Sort>('hierarchy')
   const [showDups, setShowDups] = useState(false)
+  // False-positive dismissals are session-local review state only — nothing is
+  // written to the schema, so a reload resurfaces the cluster.
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+  const [mergeCluster, setMergeCluster] = useState<DuplicateCluster | null>(null)
 
-  const dupIds = useMemo(() => duplicateMemberIds(members), [members])
-  const dupClusters = useMemo(() => findDuplicateMembers(members), [members])
+  const dupClusters = useMemo(
+    () => findDuplicateMembers(members).filter((c) => !dismissed.has(c.key)),
+    [members, dismissed],
+  )
+  const dupIds = useMemo(() => new Set(dupClusters.flatMap((c) => c.members.map((m) => m.id))), [dupClusters])
   const statuses = useMemo(() => [...new Set(members.map((m) => m.status).filter(Boolean))] as string[], [members])
 
   const filtered = useMemo(() => {
@@ -184,7 +196,15 @@ export function RosterSection({ members, canEdit, onAddMember, onEditMember }: {
             <ul className="mt-2 space-y-2">
               {dupClusters.map((c) => (
                 <li key={c.key} className="rounded-lg bg-ink-900/60 p-2">
-                  <p className="text-[11px] text-amber-200/80">{c.reason} — {c.members.length} rows</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[11px] text-amber-200/80">{c.reason} — {c.members.length} rows</p>
+                    <div className="flex items-center gap-1.5">
+                      {canDelete && (
+                        <button onClick={() => setMergeCluster(c)} className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-200 hover:bg-amber-500/20">Merge…</button>
+                      )}
+                      <button onClick={() => setDismissed((d) => new Set(d).add(c.key))} title="Not a duplicate — hide this cluster for this session" className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-slate-300 hover:bg-white/10">Dismiss</button>
+                    </div>
+                  </div>
                   <div className="mt-1 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                     {c.members.map((m) => (
                       <div key={m.id} className="flex items-center justify-between gap-2 rounded bg-ink-850 px-2 py-1 text-xs">
@@ -195,7 +215,11 @@ export function RosterSection({ members, canEdit, onAddMember, onEditMember }: {
                   </div>
                 </li>
               ))}
-              <li className="text-[11px] text-slate-500">Detection is non-destructive — records are never merged or removed automatically. Open a row to correct or unlink it.</li>
+              <li className="text-[11px] text-slate-500">
+                Detection is non-destructive — nothing is merged or removed automatically. Open a row to correct or
+                unlink it{canDelete ? ', or use Merge to fold the rows together (duplicate deletions are undo-backed)' : ''}.
+                Dismiss hides a false positive for this session only.
+              </li>
             </ul>
           )}
         </div>
@@ -297,6 +321,10 @@ export function RosterSection({ members, canEdit, onAddMember, onEditMember }: {
             </div>
           ))}
         </div>
+      )}
+
+      {mergeCluster && (
+        <MergeMembersModal cluster={mergeCluster} onClose={() => setMergeCluster(null)} onMerged={onRefresh} />
       )}
     </div>
   )

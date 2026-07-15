@@ -110,6 +110,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Serialize evaluations: auth events can burst (INITIAL_SESSION + SIGNED_IN);
   // a stale earlier evaluation must not overwrite a newer result.
   const evalSeq = useRef(0)
+  // User id the gate last settled to 'in' for — lets the auth listener treat
+  // the hourly TOKEN_REFRESHED as token-only (skip the profile/justice
+  // refetch). Cleared on every non-'in' outcome so pending/error users keep
+  // the old re-evaluate-on-refresh behavior (it can pick up an approval).
+  const settledUser = useRef<string | null>(null)
 
   const evaluate = useCallback(async () => {
     // 'setup' (env missing) is covered by the state initializer — nothing to
@@ -127,6 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!s) {
       // Signed out: drop the cached identity and tear down realtime so a
       // different account on a shared browser doesn't inherit state.
+      settledUser.current = null
       setProfile(null)
       setJustice(null)
       try { supabase().removeAllChannels() } catch { /* no channels yet */ }
@@ -138,7 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let p: Profile | null = null
     let j: JusticeIdentity | null = null
     try { [p, j] = await Promise.all([fetchProfile(s.user.id), fetchJustice(s.user.id)]) }
-    catch { if (!stale()) setState('error'); return } // transient — offer retry
+    catch { if (!stale()) { settledUser.current = null; setState('error') } return } // transient — offer retry
     if (stale()) return
 
     // Own email is not selectable from profiles (command-only column); take it
@@ -151,9 +157,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // renders in PendingBody); otherwise an active justice membership passes
     // the gate on its own — the layout routes those users to the Justice
     // portal, never the CID shell.
-    if (p?.login_denied) { setState('pending'); return }
-    if (j?.active && !(p && p.active)) { setState('in'); return }
+    if (p?.login_denied) { settledUser.current = null; setState('pending'); return }
+    if (j?.active && !(p && p.active)) { settledUser.current = s.user.id; setState('in'); return }
     if (p && p.active) {
+      settledUser.current = s.user.id
       setState('in')
       // Capture the Discord user id (for DM notifications) from a Discord
       // OAuth identity — fire-and-forget, best effort (vanilla auth.js:130-138).
@@ -166,6 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch { /* capture is best-effort */ }
     } else {
+      settledUser.current = null
       setState('pending')
     }
   }, [])
@@ -176,7 +184,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // supabase-js fires INITIAL_SESSION on subscribe, so this one callback
     // covers boot AND every later auth event (sign-in, sign-out, hourly
     // token refresh) — the versions of vanilla boot() + onAuth() combined.
-    const { data: sub } = supabase().auth.onAuthStateChange(() => { void evaluate() })
+    const { data: sub } = supabase().auth.onAuthStateChange((event, s) => {
+      // TOKEN_REFRESHED only rotates the access token — same user, same
+      // profile. Re-running evaluate() would refetch profile + justice and
+      // churn every auth consumer hourly for no new information, so when the
+      // gate already settled to 'in' for this exact user just store the fresh
+      // session. Every other event (INITIAL_SESSION, SIGNED_IN, SIGNED_OUT,
+      // USER_UPDATED) — and a refresh while pending/error, where re-evaluating
+      // can pick up an approval or recover from a blip — still evaluates.
+      if (event === 'TOKEN_REFRESHED' && s && s.user.id === settledUser.current) {
+        setSession(s)
+        return
+      }
+      void evaluate()
+    })
     return () => sub.subscription.unsubscribe()
   }, [evaluate])
 

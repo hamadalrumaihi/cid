@@ -4,7 +4,7 @@
  *  (core.js:980-1049): backdrop + centered card (or right slide-over), focus
  *  trap, Escape/backdrop close routed through a dirty-guard prompt, focus
  *  restore, body scroll lock, and mobile keyboard re-centering. */
-import { useCallback, useEffect, useRef } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { uiConfirm } from './dialog'
 
@@ -30,29 +30,41 @@ const FOCUSABLE =
 // a slide-over) the first close must not unlock the page under the survivor.
 let scrollLocks = 0
 
+// ModalHeader's × receives the caller's raw onClose, so on its own it would
+// skip the dirty prompt that Esc/backdrop go through (audit P1-5). The parent
+// Modal publishes its guard here so the × takes the same route; the default
+// (no surrounding Modal) always allows the close.
+const ModalGuardContext = createContext<() => Promise<boolean>>(() => Promise.resolve(true))
+
 export function Modal({ open, onClose, children, wide, slide, dismissible = true, dirty }: ModalProps) {
   const cardRef = useRef<HTMLDivElement>(null)
   const lastFocused = useRef<Element | null>(null)
-
-  const requestClose = useCallback(async () => {
-    if (dirty?.()) {
-      const ok = await uiConfirm('You have unsaved changes here. Leave without saving?', {
-        title: 'Unsaved changes',
-        confirmText: 'Discard changes',
-        cancelText: 'Keep editing',
-      })
-      if (!ok) return
-    }
-    onClose()
-  }, [dirty, onClose])
 
   // Callers pass inline onClose/dirty props, so their identities change on
   // every parent re-render (which AuthProvider guarantees at least hourly via
   // TOKEN_REFRESHED). Route them through refs so the setup effect below can
   // depend on [open] alone — otherwise each re-render would tear down and
   // re-run it, yanking focus back to the first control mid-interaction.
-  const requestCloseRef = useRef(requestClose)
   const dirtyRef = useRef(dirty)
+
+  // "May we close?" — the single dirty check EVERY close path routes through:
+  // Esc, backdrop, and ModalHeader's × (via ModalGuardContext). Stable
+  // identity (reads through dirtyRef) so the context value doesn't churn
+  // consumers on every parent re-render.
+  const guard = useCallback(async () => {
+    if (!dirtyRef.current?.()) return true
+    return uiConfirm('You have unsaved changes here. Leave without saving?', {
+      title: 'Unsaved changes',
+      confirmText: 'Discard changes',
+      cancelText: 'Keep editing',
+    })
+  }, [])
+
+  const requestClose = useCallback(async () => {
+    if (await guard()) onClose()
+  }, [guard, onClose])
+
+  const requestCloseRef = useRef(requestClose)
   useEffect(() => {
     requestCloseRef.current = requestClose
     dirtyRef.current = dirty
@@ -120,19 +132,26 @@ export function Modal({ open, onClose, children, wide, slide, dismissible = true
             : `modal-card relative w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-ink-850 shadow-glow`
         }
       >
-        {children}
+        <ModalGuardContext.Provider value={guard}>{children}</ModalGuardContext.Provider>
       </div>
     </div>,
     document.body,
   )
 }
 
-/** Standard modal header with a dirty-guarded close ×. */
+/** Standard modal header with a dirty-guarded close ×. The × runs the parent
+ *  Modal's guard first (unsaved-changes prompt), then the caller's onClose —
+ *  so callers keep passing their raw close function unchanged. */
 export function ModalHeader({ title, onClose }: { title: React.ReactNode; onClose: () => void }) {
+  const guard = useContext(ModalGuardContext)
   return (
     <div className="mb-4 flex items-center justify-between">
       <h3 id="cid-modal-title" className="text-xl font-bold text-white">{title}</h3>
-      <button aria-label="Close" onClick={onClose} className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg text-2xl leading-none text-slate-400 transition hover:bg-white/5 hover:text-white">
+      <button
+        aria-label="Close"
+        onClick={() => { void guard().then((ok) => { if (ok) onClose() }) }}
+        className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg text-2xl leading-none text-slate-400 transition hover:bg-white/5 hover:text-white"
+      >
         &times;
       </button>
     </div>

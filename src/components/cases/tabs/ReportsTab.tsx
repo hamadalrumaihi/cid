@@ -19,6 +19,7 @@ import { SignatureViewer, type SignatureItem } from '@/components/shared/Signatu
 import { VersionViewer } from '@/components/shared/VersionViewer'
 import { Drafts } from '@/lib/drafts'
 import { toast } from '@/lib/toast'
+import { WarrantPrintButton } from './WarrantPrint'
 import type { CaseRow, EvidenceRow, MediaRow, PersonRow, ReportRow } from './shared'
 
 export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; canDelete: boolean }) {
@@ -218,6 +219,8 @@ function ReportDetail({ r, c, canEdit, canDelete, onBack, onEdit, onFinalize, on
           {!r.finalized && canEdit && <button onClick={onEdit} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-badge-200 hover:bg-white/5">Edit</button>}
           {canDelete && <button onClick={onDelete} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-rose-300 hover:bg-rose-500/10">Delete</button>}
           <button onClick={toggleVersions} aria-expanded={showVersions} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-slate-200 hover:bg-white/5">{showVersions ? 'Hide versions' : 'Versions'}</button>
+          {/* Court-ready paper copy for warrants — browser print flow only. */}
+          {WARRANT_TPLS[r.template] && <WarrantPrintButton r={r} c={c} />}
           <button onClick={() => downloadTextFile(`${c.case_number}-${r.template}.md`, formToText(schema, parseFormValues(r.fields)), 'text/markdown')} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Download .md</button>
         </div>
       </div>

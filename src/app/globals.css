@@ -179,6 +179,28 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
 @keyframes cid-skel { 0%, 100% { opacity: 0.9; } 50% { opacity: 0.4; } }
 .skel { animation: cid-skel 1.4s ease-in-out infinite; }
 
+/* Button loading spinner (Button.tsx `loading` / `onAction`). Under reduced
+   motion the rotation stops but the notched ring still reads as "pending". */
+.btn-spinner {
+  flex: none;
+  width: 0.875em;
+  height: 0.875em;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: cid-spin 0.7s linear infinite;
+}
+@keyframes cid-spin { to { transform: rotate(360deg); } }
+
+/* iOS safe areas — fixed shell chrome must clear the home indicator / notch.
+   layout.tsx sets viewport-fit=cover, so env() insets are live. max() keeps
+   any utility padding as the floor on devices without insets. */
+.safe-bottom { padding-bottom: max(0px, env(safe-area-inset-bottom)); }
+.safe-x {
+  padding-left: max(0px, env(safe-area-inset-left));
+  padding-right: max(0px, env(safe-area-inset-right));
+}
+
 /* Collapsed sidebar (desktop): icon rail + hover flyout labels. */
 @media (min-width: 1024px) {
   .nav-collapsed #sidebar { width: 4.75rem; }
@@ -205,7 +227,7 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pulse-dot::after, .gate-boot > *, .view-in, .modal-backdrop, .modal-card, .skel {
+  .pulse-dot::after, .gate-boot > *, .view-in, .modal-backdrop, .modal-card, .skel, .btn-spinner {
     animation: none !important;
   }
 }

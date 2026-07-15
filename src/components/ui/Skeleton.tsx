@@ -38,3 +38,40 @@ export function CardGridSkeleton({ count = 6, cols = 'sm:grid-cols-2 xl:grid-col
     </div>
   )
 }
+
+/** Stacked row placeholders — the drop-in first-load state for list/table
+ *  screens (queues, logs, rosters). */
+export function ListSkeleton({ count = 6 }: { count?: number }) {
+  return (
+    <div role="status" aria-busy="true" aria-label="Loading…" className="space-y-2">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="flex items-center gap-3 rounded-lg border border-white/5 bg-ink-900/60 px-4 py-3">
+          <Skeleton className="h-3 w-1/4" />
+          <Skeleton className="h-3 flex-1" />
+          <Skeleton className="h-3 w-16" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Header bar + content blocks — the drop-in first-load state for detail
+ *  screens (profiles, dossiers), replacing hand-rolled "Loading…" lines. */
+export function DetailSkeleton({ blocks = 2 }: { blocks?: number }) {
+  return (
+    <div role="status" aria-busy="true" aria-label="Loading…" className="space-y-6">
+      <div className="space-y-2">
+        <Skeleton className="h-7 w-1/3" />
+        <Skeleton className="h-3 w-1/4" />
+      </div>
+      {Array.from({ length: blocks }, (_, i) => (
+        <div key={i} className="space-y-2 rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+          <Skeleton className="h-4 w-1/4" />
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-5/6" />
+          <Skeleton className="h-3 w-2/3" />
+        </div>
+      ))}
+    </div>
+  )
+}
