@@ -121,12 +121,12 @@ export function SectionTabs<Id extends string>({
               title={t.marker ? (t.markerLabel ?? 'Needs attention') : undefined}
               onClick={() => onChange(t.id)}
               className={`flex min-h-[44px] flex-shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold sm:min-h-0 ${
-                on ? 'bg-badge-500 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                on ? 'bg-badge-500 text-ink-950' : 'bg-white/5 text-slate-300 hover:bg-white/10'
               }`}
             >
               {t.label}
               {t.count !== undefined && (
-                <span className={`rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${on ? 'bg-white/20 text-white' : 'bg-white/10 text-slate-400'}`}>
+                <span className={`rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${on ? 'bg-white/20 text-ink-950' : 'bg-white/10 text-slate-400'}`}>
                   {t.count}
                 </span>
               )}

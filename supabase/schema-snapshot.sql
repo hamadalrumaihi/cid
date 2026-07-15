@@ -388,6 +388,39 @@ alter table public.custody_chain add constraint custody_chain_evidence_id_fkey F
 alter table public.custody_chain add constraint custody_chain_transferred_by_fkey FOREIGN KEY (transferred_by) REFERENCES public.profiles(id);
 alter table public.custody_chain enable row level security;
 
+create table public.deleted_member_ledger (
+  id uuid not null default gen_random_uuid(),
+  target_id uuid not null,
+  display_name text not null,
+  badge_number text,
+  role text,
+  division text,
+  email text,
+  reason text not null,
+  deleted_by uuid,
+  armed_at timestamp with time zone,
+  executed_at timestamp with time zone not null default now(),
+  "references" jsonb not null default '{}'::jsonb
+);
+alter table public.deleted_member_ledger add constraint deleted_member_ledger_pkey PRIMARY KEY (id);
+alter table public.deleted_member_ledger add constraint deleted_member_ledger_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES public.profiles(id);
+alter table public.deleted_member_ledger enable row level security;
+-- target_id has NO FK on purpose: the referenced profile is deleted.
+-- Write access: RPC-only (INSERT/UPDATE/DELETE/TRUNCATE revoked from clients).
+
+create table public.deletion_tokens (
+  id uuid not null default gen_random_uuid(),
+  target_id uuid not null,
+  created_by uuid not null,
+  created_at timestamp with time zone not null default now(),
+  expires_at timestamp with time zone not null,
+  used_at timestamp with time zone
+);
+alter table public.deletion_tokens add constraint deletion_tokens_pkey PRIMARY KEY (id);
+alter table public.deletion_tokens enable row level security;
+-- app_secrets precedent: RLS on, ZERO policies, all client grants revoked —
+-- visible/writable only through the permanent-deletion definer RPCs.
+
 create table public.documents (
   id uuid not null default gen_random_uuid(),
   folder text not null,
@@ -1108,7 +1141,8 @@ create table public.profiles (
   login_denied boolean not null default false,
   login_denied_at timestamp with time zone,
   login_denied_by uuid,
-  login_denied_reason text
+  login_denied_reason text,
+  is_system boolean not null default false
 );
 alter table public.profiles add constraint profiles_pkey PRIMARY KEY (id);
 alter table public.profiles add constraint profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
@@ -1387,6 +1421,10 @@ CREATE INDEX commendations_created_by_fkey_idx ON public.commendations USING btr
 CREATE INDEX commendations_recipient_id_fkey_idx ON public.commendations USING btree (recipient_id);
 CREATE INDEX custody_chain_evidence_id_at_idx ON public.custody_chain USING btree (evidence_id, at);
 CREATE INDEX custody_chain_transferred_by_fkey_idx ON public.custody_chain USING btree (transferred_by);
+CREATE INDEX deleted_member_ledger_deleted_by_fkey_idx ON public.deleted_member_ledger USING btree (deleted_by);
+CREATE INDEX deleted_member_ledger_target_id_idx ON public.deleted_member_ledger USING btree (target_id);
+CREATE INDEX deletion_tokens_created_by_idx ON public.deletion_tokens USING btree (created_by);
+CREATE INDEX deletion_tokens_target_id_idx ON public.deletion_tokens USING btree (target_id);
 CREATE INDEX documents_case_id_fkey_idx ON public.documents USING btree (case_id);
 CREATE INDEX documents_updated_by_fkey_idx ON public.documents USING btree (updated_by);
 CREATE INDEX documents_versions_doc_idx ON public.documents_versions USING btree (document_id, saved_at DESC);
@@ -1658,8 +1696,27 @@ begin
     new.active := old.active;
     new.is_owner := old.is_owner;
     new.removed_at := old.removed_at;
+    new.is_test := old.is_test;
+    new.is_system := old.is_system;
   end if;
   return new;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.assert_fresh_session()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_created timestamptz;
+begin
+  select s.created_at into v_created
+    from auth.sessions s
+   where s.id = nullif(auth.jwt()->>'session_id', '')::uuid;
+  if v_created is null or v_created <= now() - interval '5 minutes' then
+    raise exception 'permanent deletion requires a fresh sign-in (within the last 5 minutes) — sign out, sign back in, and retry';
+  end if;
 end $function$
 ;
 
@@ -1722,6 +1779,17 @@ AS $function$
   select coalesce(
     (select p.is_owner and p.active from public.profiles p where p.id = (select auth.uid())),
     false)
+$function$
+;
+
+-- Backfilled from 20260716030000_owner_maintenance_gate.sql (snapshot drift closed)
+CREATE OR REPLACE FUNCTION private.is_owner_maintenance()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce((select p.is_owner from public.profiles p where p.id = (select auth.uid())), false)
 $function$
 ;
 
@@ -1842,9 +1910,27 @@ CREATE OR REPLACE FUNCTION public.admin_member_emails()
 AS $function$
 begin
   if not private.is_command() then raise exception 'not authorized'; end if;
-  return query select p.id, p.email from public.profiles p;
+  return query select p.id, p.email from public.profiles p
+   where (not p.is_test or private.is_test_user((select auth.uid())))
+     and not p.is_system;
 end $function$
 ;
+
+-- private.permanent_delete_refmap(p_target uuid) returns jsonb — the single
+-- source of truth for what references a member (Phase B). Buckets every
+-- profile-referencing table.column count as: blockers (immutable records —
+-- all 20 legal_request* actor/assignee columns, case_signoff_history.actor_id,
+-- trackers.deputy_sig/director_sig, reports.author_id,
+-- custody_chain.transferred_by, evidence.collected_by,
+-- justice_memberships.user_id, prosecutor_bureau_assignments.prosecutor_id),
+-- active_work (cases.lead_detective_id / signoff_assignee_id /
+-- signoff_submitted_by, gangs.lead_detective_id), repoint (the 43 remaining
+-- NO-ACTION FK columns → tombstone), cascade (the 9 CASCADE paths), deleted
+-- (justice_membership_requests.applicant_id + its history — UNIQUE(applicant_id)
+-- forbids repointing), set_null (6 SET NULL columns incl. the two
+-- auth.users-keyed ones), plus blocker_total. Non-zero entries only.
+-- SECURITY DEFINER, stable, search_path ''. Definitive SQL:
+-- supabase/migrations/20260726010000_phase_b_permanent_deletion.sql.
 
 CREATE OR REPLACE FUNCTION public.admin_remove_member(p_target uuid, p_reason text DEFAULT NULL::text)
  RETURNS void
@@ -2274,7 +2360,10 @@ declare
   ids uuid[];
   caller uuid := (select auth.uid());
   case_ids uuid[];
-  n_cases int; n_reports int; n_evidence int; n_feedback int;
+  legal_ids uuid[];
+  disp_ids uuid[];
+  n_cases int; n_reports int; n_evidence int; n_feedback int; n_requests int;
+  n_legal int; n_justice int; n_transfers int; n_tokens int; n_ledger int; n_disposables int;
 begin
   select array_agg(id) into ids from auth.users where email like 'rls-test-%@cidportal.test';
   if caller is null or ids is null or not (caller = any(ids)) then
@@ -2282,6 +2371,27 @@ begin
   end if;
 
   select coalesce(array_agg(id), '{}') into case_ids from public.cases where created_by = any(ids);
+  select coalesce(array_agg(id), '{}') into legal_ids
+    from public.legal_requests where created_by = any(ids) or case_id = any(case_ids);
+
+  -- Legal records first (they restrict-reference cases and reports).
+  delete from public.mdt_wanted_projections where legal_request_id = any(legal_ids);
+  delete from public.legal_request_signatures where legal_request_id = any(legal_ids);
+  delete from public.legal_request_exhibits where legal_request_id = any(legal_ids);
+  delete from public.legal_request_participants where legal_request_id = any(legal_ids);
+  delete from public.legal_request_actions where legal_request_id = any(legal_ids);
+  update public.legal_requests set current_version_id = null where id = any(legal_ids);
+  delete from public.legal_request_versions where legal_request_id = any(legal_ids);
+  delete from public.legal_requests where id = any(legal_ids);
+  get diagnostics n_legal = row_count;
+
+  delete from public.prosecutor_bureau_assignments
+    where prosecutor_id = any(ids) or assigned_by = any(ids);
+  delete from public.justice_membership_request_history where request_id in
+    (select id from public.justice_membership_requests where applicant_id = any(ids));
+  delete from public.justice_membership_requests where applicant_id = any(ids);
+  get diagnostics n_justice = row_count;
+  delete from public.justice_memberships where user_id = any(ids) and approved_by = any(ids);
 
   delete from public.case_messages where case_id = any(case_ids);
   delete from public.case_tasks where case_id = any(case_ids);
@@ -2300,12 +2410,179 @@ begin
   delete from public.feedback where created_by = any(ids);
   get diagnostics n_feedback = row_count;
   delete from public.notifications where user_id = any(ids);
+  delete from public.transfer_requests where target_id = any(ids) or requested_by = any(ids);
+  get diagnostics n_transfers = row_count;
   delete from public.role_events where target_id = any(ids) or actor_id = any(ids);
   delete from public.client_errors where reporter_id = any(ids);
+  delete from public.membership_request_history where request_id in
+    (select id from public.membership_requests where applicant_id = any(ids));
+  delete from public.membership_requests where applicant_id = any(ids);
+  get diagnostics n_requests = row_count;
+  delete from public.announcements where author_id = any(ids);
   delete from public.cases where id = any(case_ids);
   get diagnostics n_cases = row_count;
 
-  return jsonb_build_object('cases', n_cases, 'reports', n_reports, 'evidence', n_evidence, 'feedback', n_feedback);
+  -- Phase B (permanent deletion) leftovers. Ledger rows are matched by the
+  -- snapshotted email (the target's auth row no longer exists after a real
+  -- execute); disposables are removed profile-first, auth-row-last, after
+  -- defensively clearing any active-work pointer a crashed run left behind.
+  delete from public.deletion_tokens where created_by = any(ids) or target_id = any(ids);
+  get diagnostics n_tokens = row_count;
+  delete from public.deleted_member_ledger where email like 'rls-test-disposable-%@cidportal.test';
+  get diagnostics n_ledger = row_count;
+  select coalesce(array_agg(id), '{}') into disp_ids
+    from auth.users where email like 'rls-test-disposable-%@cidportal.test';
+  update public.cases set lead_detective_id = null where lead_detective_id = any(disp_ids);
+  update public.gangs set lead_detective_id = null where lead_detective_id = any(disp_ids);
+  delete from public.profiles where id = any(disp_ids);
+  delete from auth.users where id = any(disp_ids);
+  get diagnostics n_disposables = row_count;
+
+  return jsonb_build_object('cases', n_cases, 'reports', n_reports, 'evidence', n_evidence,
+    'feedback', n_feedback, 'membership_requests', n_requests,
+    'legal_requests', n_legal, 'justice_requests', n_justice, 'transfer_requests', n_transfers,
+    'deletion_tokens', n_tokens, 'ledger_rows', n_ledger, 'disposables', n_disposables);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.permanent_delete_preview(p_target uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  t public.profiles;
+  v_map jsonb;
+  v_reasons text[] := '{}';
+begin
+  if not private.is_owner() then
+    raise exception 'permanent deletion is restricted to the owner';
+  end if;
+  select * into t from public.profiles where id = p_target;
+  if not found then raise exception 'member not found'; end if;
+  v_map := private.permanent_delete_refmap(p_target);
+  if p_target = (select auth.uid()) then v_reasons := v_reasons || 'target is the caller'; end if;
+  if t.is_owner then v_reasons := v_reasons || 'target is an owner account'; end if;
+  if t.is_system then v_reasons := v_reasons || 'target is a system account'; end if;
+  if (v_map->>'blocker_total')::bigint > 0 then v_reasons := v_reasons || 'blocking references exist'; end if;
+  return v_map || jsonb_build_object(
+    'target', jsonb_build_object(
+      'id', t.id, 'display_name', t.display_name, 'badge_number', t.badge_number,
+      'role', t.role, 'division', t.division, 'active', t.active,
+      'removed_at', t.removed_at, 'is_test', t.is_test, 'is_system', t.is_system),
+    'eligible', cardinality(v_reasons) = 0,
+    'ineligible_reasons', to_jsonb(v_reasons));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.permanent_delete_arm(p_target uuid, p_reason text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_tombstone constant uuid := '00000000-0000-4000-a000-000000000001';
+  t public.profiles;
+  v_reason text := btrim(coalesce(p_reason, ''));
+  v_map jsonb;
+  v_token public.deletion_tokens;
+begin
+  if not private.is_owner() then
+    raise exception 'permanent deletion is restricted to the owner';
+  end if;
+  perform private.assert_fresh_session();
+  if v_reason = '' then
+    raise exception 'a reason is required to arm a permanent deletion';
+  end if;
+  select * into t from public.profiles where id = p_target for update;
+  if not found then raise exception 'member not found'; end if;
+  if p_target = v_uid then raise exception 'you cannot permanently delete yourself'; end if;
+  if p_target = v_tombstone or t.is_system then
+    raise exception 'system accounts cannot be permanently deleted';
+  end if;
+  if t.is_owner then raise exception 'owner accounts cannot be permanently deleted'; end if;
+  v_map := private.permanent_delete_refmap(p_target);
+  if (v_map->>'blocker_total')::bigint > 0 then
+    raise exception 'permanent deletion blocked — this member is still referenced by immutable records or active work: % — reassign the active work; immutable-record references can never be cleared (deactivate/remove remains the default)',
+      (v_map->'blockers') || (v_map->'active_work');
+  end if;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'PERMANENT_DELETE_ARMED', 'profiles', p_target, jsonb_build_object(
+    'reason', left(v_reason, 500),
+    'display_name', t.display_name,
+    'preview', v_map));
+
+  insert into public.deletion_tokens (target_id, created_by, expires_at)
+  values (p_target, v_uid, now() + interval '5 minutes')
+  returning * into v_token;
+
+  return jsonb_build_object(
+    'token', v_token.id,
+    'expires_at', v_token.expires_at,
+    'display_name', t.display_name);
+end $function$
+;
+
+-- public.permanent_delete_execute(p_token uuid, p_confirm text) returns jsonb
+-- — Phase B step 2 of 2. Validates: active owner, fresh session (again), the
+-- token (FOR UPDATE; issued to this caller, unused, unexpired), the target
+-- profile (FOR UPDATE; still exists, not system/owner), and
+-- p_confirm = 'DELETE ' || display_name exactly; re-checks blockers. Then, in
+-- one transaction: snapshots role_events into the ledger "references" jsonb
+-- (with the repoint/cascade/deleted/set_null maps), inserts the
+-- deleted_member_ledger row, repoints all 43 NO-ACTION FK columns to the
+-- tombstone ('00000000-0000-4000-a000-000000000001'), deletes the target's
+-- justice_membership_requests (+history), deletes the profile (CASCADE),
+-- deletes the auth.users row LAST, marks the token used, and writes the
+-- PERMANENT_DELETE_EXECUTED audit row. Idempotent refusals for reused tokens
+-- and already-deleted targets. SECURITY DEFINER, search_path '',
+-- revoke-then-grant. Definitive SQL:
+-- supabase/migrations/20260726010000_phase_b_permanent_deletion.sql.
+
+CREATE OR REPLACE FUNCTION public.rls_test_spawn_disposable(p_suffix text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  caller uuid := (select auth.uid());
+  v_suffix text := lower(regexp_replace(coalesce(p_suffix, ''), '[^a-zA-Z0-9-]', '', 'g'));
+  v_id uuid := gen_random_uuid();
+  v_email text;
+begin
+  if caller is null or not exists (
+    select 1 from auth.users where id = caller and email like 'rls-test-%@cidportal.test'
+  ) then
+    raise exception 'rls_test_spawn_disposable: caller is not an RLS test account';
+  end if;
+  if v_suffix = '' then
+    raise exception 'rls_test_spawn_disposable: a non-empty suffix is required';
+  end if;
+  v_email := 'rls-test-disposable-' || v_suffix || '@cidportal.test';
+  if exists (select 1 from auth.users where email = v_email) then
+    raise exception 'rls_test_spawn_disposable: % already exists — run rls_test_cleanup() first', v_email;
+  end if;
+  insert into auth.users (
+    instance_id, id, aud, role, email, email_confirmed_at, banned_until,
+    raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+    confirmation_token, recovery_token, email_change,
+    email_change_token_new, email_change_token_current, is_sso_user)
+  values (
+    '00000000-0000-0000-0000-000000000000', v_id, 'authenticated', 'authenticated',
+    v_email, now(), 'infinity'::timestamptz,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    jsonb_build_object('full_name', 'RLS Disposable ' || v_suffix),
+    now(), now(), '', '', '', '', '', false);
+  insert into public.profiles (id, email, display_name, role, division, active, is_test, is_system)
+  values (v_id, v_email, 'RLS Disposable ' || v_suffix, 'detective', 'JTF', false, true, false)
+  on conflict (id) do update
+    set display_name = excluded.display_name, active = false, is_test = true, is_system = false;
+  return v_id;
 end $function$
 ;
 
@@ -2674,6 +2951,336 @@ begin
 end $function$
 ;
 
+-- Backfilled from 20260716020000_legal_import_provenance.sql (snapshot drift closed)
+CREATE OR REPLACE FUNCTION public.import_legal_warrant(p_case uuid, p_subtype text, p_title text, p_priority text, p_form jsonb, p_narrative text, p_person uuid, p_classification text, p_source_submitted_at timestamp with time zone, p_source_submitter uuid, p_import_key text, p_exhibits jsonb DEFAULT '[]'::jsonb)
+ RETURNS legal_requests
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  r public.legal_requests; c public.cases; v_person public.persons;
+  v_bureau public.bureau; v_ver uuid; ex jsonb; v_type text; v_url text; v_existing public.legal_requests;
+begin
+  if not private.is_owner_maintenance() then raise exception 'import is restricted to the owner'; end if;
+  if btrim(coalesce(p_import_key, '')) = '' then raise exception 'an import_key is required'; end if;
+  if p_subtype not in ('arrest_warrant', 'search_warrant') then
+    raise exception 'import_legal_warrant handles warrant subtypes only';
+  end if;
+  select * into v_existing from public.legal_requests where import_key = p_import_key;
+  if found then return v_existing; end if;
+  select * into c from public.cases where id = p_case;
+  if not found then raise exception 'case not found'; end if;
+  if p_source_submitter is null
+     or not exists (select 1 from public.profiles where id = p_source_submitter) then
+    raise exception 'a valid historical source submitter is required';
+  end if;
+  if p_person is not null then
+    select * into v_person from public.persons where id = p_person;
+    if not found then raise exception 'person not found'; end if;
+  end if;
+  if p_subtype = 'arrest_warrant' and p_person is null then
+    raise exception 'an arrest warrant requires a suspect from the Persons registry';
+  end if;
+  if p_subtype = 'search_warrant'
+     and p_person is null
+     and nullif(btrim(coalesce(p_form->>'search_targets', '')), '') is null then
+    raise exception 'a search warrant requires a subject or at least one search target';
+  end if;
+  if p_classification is not null
+     and p_classification not in ('standard', 'restricted', 'classified', 'sealed') then
+    raise exception 'invalid classification';
+  end if;
+  v_bureau := private.legal_resolve_bureau(p_case);
+  insert into public.legal_requests
+    (request_type, subtype, case_id, created_by, responsible_bureau, classification,
+     priority, title, form_data, narrative, person_id, person_name_snapshot,
+     case_number_snapshot, case_title_snapshot, approval_route,
+     document_status, review_status,
+     submitted_to_cid_at, submitted_to_doj_at, created_at,
+     source_system, source_submitted_at, source_submitter_id, imported_by, imported_at, import_key)
+  values
+    ('warrant', p_subtype, p_case, p_source_submitter, v_bureau,
+     coalesce(p_classification, private.legal_default_classification('warrant', p_subtype)),
+     p_priority, btrim(p_title), coalesce(p_form, '{}'::jsonb), p_narrative,
+     p_person, v_person.name, c.case_number, c.title,
+     private.legal_default_route('warrant', p_subtype),
+     'finalized', 'submitted_to_doj',
+     p_source_submitted_at, p_source_submitted_at, coalesce(p_source_submitted_at, now()),
+     'in_city_classified_warrants', p_source_submitted_at, p_source_submitter, v_uid, now(), p_import_key)
+  returning * into r;
+  for ex in select * from jsonb_array_elements(coalesce(p_exhibits, '[]'::jsonb)) loop
+    v_type := ex->>'type';
+    v_url := btrim(coalesce(ex->>'url', ''));
+    if v_type is null then continue; end if;
+    if v_type = 'external_link' then
+      if v_url = '' or v_url !~* '^https?://' then
+        raise exception 'external-link exhibit % has a non-http(s) url', coalesce(ex->>'source_label', '?');
+      end if;
+    end if;
+    insert into public.legal_request_exhibits
+      (legal_request_id, exhibit_type, source_id, display_title, snapshot_metadata, added_by)
+    values (r.id, v_type, nullif(ex->>'source_id', '')::uuid,
+            coalesce(nullif(btrim(coalesce(ex->>'title', '')), ''), 'Exhibit'),
+            jsonb_strip_nulls(jsonb_build_object('url', nullif(v_url, ''), 'source_label', ex->>'source_label',
+              'source_system', 'in_city_classified_warrants', 'imported', true)), v_uid);
+  end loop;
+  v_ver := private.legal_freeze_version(r.id, 'cid_supervisor_review');
+  perform private.legal_add_participant(r.id, p_source_submitter, 'requesting_investigator');
+  perform private.legal_log(r.id, v_ver, 'imported', null, 'submitted_to_doj',
+    'Imported from the in-city Classified Warrants system; placed in DOJ intake pending assignment.', null);
+  perform private.legal_audit(r.id, 'LEGAL_IMPORTED', jsonb_build_object(
+    'source_system', 'in_city_classified_warrants', 'source_submitted_at', p_source_submitted_at,
+    'source_submitter_id', p_source_submitter, 'imported_by', v_uid, 'import_key', p_import_key,
+    'subtype', p_subtype, 'case_id', p_case));
+  select * into r from public.legal_requests where id = r.id;
+  return r;
+end $function$
+;
+
+-- Backfilled from 20260716020000_legal_import_provenance.sql (snapshot drift closed)
+CREATE OR REPLACE FUNCTION public.import_rollback_by_key(p_import_key text)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); rid uuid; n integer := 0;
+begin
+  if not private.is_owner_maintenance() then raise exception 'rollback is restricted to the owner'; end if;
+  if btrim(coalesce(p_import_key, '')) = '' then raise exception 'an import_key is required'; end if;
+  for rid in select id from public.legal_requests where import_key = p_import_key loop
+    perform private.legal_audit(rid, 'LEGAL_IMPORT_ROLLBACK',
+      jsonb_build_object('import_key', p_import_key, 'rolled_back_by', v_uid));
+    delete from public.legal_request_signatures  where legal_request_id = rid;
+    delete from public.legal_request_actions     where legal_request_id = rid;
+    delete from public.legal_request_exhibits    where legal_request_id = rid;
+    delete from public.legal_request_participants where legal_request_id = rid;
+    delete from public.mdt_wanted_projections    where legal_request_id = rid;
+    update public.legal_requests set current_version_id = null where id = rid;
+    delete from public.legal_request_versions    where legal_request_id = rid;
+    delete from public.legal_requests            where id = rid;
+    n := n + 1;
+  end loop;
+  return n;
+end $function$
+;
+
+-- Backfilled from 20260719030000_org_correction.sql (snapshot drift closed)
+CREATE OR REPLACE FUNCTION public.correct_membership_organization(p_target uuid, p_direction text, p_reason text, p_requested_justice_role text DEFAULT NULL::text, p_requested_bureau bureau DEFAULT NULL::bureau, p_requested_role app_role DEFAULT NULL::app_role)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  me public.profiles;
+  t public.profiles;
+  v_role text;
+  v_agency text;
+  v_req uuid;
+  v_existing record;
+  n_lead int; n_assign int; n_tasks int; n_transfers int; n_legal int; n_cov int;
+begin
+  select * into me from public.profiles where id = v_uid;
+  if not private.is_owner() then
+    raise exception 'organization correction is restricted to the owner';
+  end if;
+  if p_target = v_uid then raise exception 'you cannot correct your own membership'; end if;
+  if btrim(coalesce(p_reason, '')) = '' then raise exception 'a reason is required'; end if;
+  if p_direction not in ('cid_to_doj', 'cid_to_judiciary', 'justice_to_cid') then
+    raise exception 'invalid direction';
+  end if;
+
+  select * into t from public.profiles where id = p_target for update;
+  if t.id is null then raise exception 'member not found'; end if;
+  if t.removed_at is not null then raise exception 'member has been removed — restore them first'; end if;
+  if t.login_denied then raise exception 'member login is denied — restore login first'; end if;
+  if t.is_test then raise exception 'test fixtures cannot be moved between organizations'; end if;
+
+  if p_direction in ('cid_to_doj', 'cid_to_judiciary') then
+    v_agency := case when p_direction = 'cid_to_doj' then 'doj' else 'judiciary' end;
+    v_role := case when p_direction = 'cid_to_judiciary' then 'judge' else p_requested_justice_role end;
+    if v_role is null
+       or (v_agency = 'doj' and v_role not in ('assistant_district_attorney', 'district_attorney', 'attorney_general'))
+       or (v_agency = 'judiciary' and v_role <> 'judge') then
+      raise exception 'invalid justice role for %', v_agency;
+    end if;
+    if not t.active then raise exception 'target is not an active CID member'; end if;
+    if exists (select 1 from public.justice_memberships m where m.user_id = p_target and m.active) then
+      raise exception 'member already holds an active justice membership';
+    end if;
+
+    select count(*) into n_lead from public.cases c
+     where c.lead_detective_id = p_target and c.status <> 'closed';
+    select count(*) into n_assign from public.case_assignments a
+     where a.officer_id = p_target and (a.expires_at is null or a.expires_at > now());
+    select count(*) into n_tasks from public.case_tasks k
+     where k.assignee = p_target and not k.done;
+    select count(*) into n_transfers from public.transfer_requests r
+     where r.target_id = p_target and r.status in ('pending_source', 'pending_target', 'approved');
+    if n_lead + n_assign + n_tasks + n_transfers > 0 then
+      raise exception 'unresolved active assignments block this correction (% lead cases, % case assignments, % open tasks, % open transfers) — reassign them first',
+        n_lead, n_assign, n_tasks, n_transfers;
+    end if;
+
+    update public.profiles set active = false where id = p_target;
+    insert into public.role_events (target_id, actor_id, old_role, new_role,
+      old_division, new_division, old_active, new_active, reason, source)
+    values (p_target, v_uid, t.role, t.role, t.division, t.division, true, false,
+      p_reason, 'activation');
+
+    select id, status into v_existing from public.justice_membership_requests
+     where applicant_id = p_target for update;
+    if v_existing.id is not null and v_existing.status in ('draft', 'pending', 'correction_requested') then
+      raise exception 'member already has an open justice membership request';
+    end if;
+    if v_existing.id is not null then
+      update public.justice_membership_requests
+         set requested_agency = v_agency, requested_justice_role = v_role,
+             display_name = coalesce(t.display_name, 'Officer'),
+             reason = p_reason, additional_notes = 'Organization correction initiated by the owner.',
+             status = 'pending', submitted_at = now(),
+             decided_agency = null, decided_justice_role = null,
+             applicant_visible_decision_note = null, decided_by = null, decided_at = null
+       where id = v_existing.id returning id into v_req;
+      perform private.jmr_history(v_req, 'submitted', v_existing.status, 'pending',
+        'Organization correction: ' || p_reason, false);
+    else
+      insert into public.justice_membership_requests
+        (applicant_id, display_name, requested_agency, requested_justice_role,
+         reason, additional_notes, status, submitted_at)
+      values (p_target, coalesce(t.display_name, 'Officer'), v_agency, v_role,
+        p_reason, 'Organization correction initiated by the owner.', 'pending', now())
+      returning id into v_req;
+      perform private.jmr_history(v_req, 'submitted', 'draft', 'pending',
+        'Organization correction: ' || p_reason, false);
+    end if;
+
+  else  -- justice_to_cid
+    if p_requested_bureau is null or p_requested_bureau not in ('LSB', 'BCB', 'SAB') then
+      raise exception 'a permanent CID department (LSB/BCB/SAB) is required';
+    end if;
+    if p_requested_role is null
+       or p_requested_role not in ('detective','senior_detective','bureau_lead','deputy_director','director') then
+      raise exception 'invalid CID role';
+    end if;
+    if not exists (select 1 from public.justice_memberships m where m.user_id = p_target and m.active) then
+      raise exception 'target has no active justice membership';
+    end if;
+
+    select count(*) into n_legal from public.legal_requests l
+     where (l.assigned_ada_id = p_target or l.assigned_judge_id = p_target)
+       and l.review_status not in ('denied', 'withdrawn', 'closed');
+    select count(*) into n_cov from public.prosecutor_bureau_assignments a
+     where a.prosecutor_id = p_target and (a.ends_at is null or a.ends_at > now());
+    if n_legal + n_cov > 0 then
+      raise exception 'unresolved justice work blocks this correction (% assigned legal requests, % bureau coverage assignments) — reassign them first',
+        n_legal, n_cov;
+    end if;
+
+    update public.justice_memberships set active = false where user_id = p_target;
+
+    select id, status into v_existing from public.membership_requests
+     where applicant_id = p_target for update;
+    if v_existing.id is not null and v_existing.status in ('draft', 'pending', 'correction_requested') then
+      raise exception 'member already has an open CID membership request';
+    end if;
+    if v_existing.id is not null then
+      update public.membership_requests
+         set requested_bureau = p_requested_bureau, requested_role = p_requested_role,
+             display_name = coalesce(t.display_name, 'Officer'),
+             reason = p_reason, additional_notes = 'Organization correction initiated by the owner.',
+             status = 'pending', submitted_at = now(),
+             decided_bureau = null, decided_role = null,
+             applicant_visible_decision_note = null, decided_by = null, decided_at = null
+       where id = v_existing.id returning id into v_req;
+      perform private.mr_history(v_req, 'submitted', v_existing.status, 'pending',
+        'Organization correction: ' || p_reason, false);
+    else
+      insert into public.membership_requests
+        (applicant_id, display_name, requested_bureau, requested_role,
+         reason, additional_notes, status, submitted_at)
+      values (p_target, coalesce(t.display_name, 'Officer'), p_requested_bureau, p_requested_role,
+        p_reason, 'Organization correction initiated by the owner.', 'pending', now())
+      returning id into v_req;
+      perform private.mr_history(v_req, 'submitted', 'draft', 'pending',
+        'Organization correction: ' || p_reason, false);
+    end if;
+  end if;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'ORG_CORRECTION_INITIATED', 'profiles', p_target,
+    jsonb_build_object('direction', p_direction, 'reason', p_reason,
+      'request_id', v_req,
+      'requested_justice_role', case when p_direction <> 'justice_to_cid' then v_role end,
+      'requested_bureau', case when p_direction = 'justice_to_cid' then p_requested_bureau::text end,
+      'requested_role', case when p_direction = 'justice_to_cid' then p_requested_role::text end));
+  insert into public.notifications (user_id, type, payload)
+  values (p_target, 'membership_update', jsonb_build_object(
+    'status', 'org_correction', 'request_id', v_req,
+    'reason', case when p_direction = 'justice_to_cid'
+      then 'Your account is being moved to CID — a membership request is awaiting Command approval. Reason: ' || p_reason
+      else 'Your account is being moved to ' || case when p_direction = 'cid_to_doj' then 'the DOJ' else 'the Judiciary' end
+        || ' — a membership request is awaiting approval. Reason: ' || p_reason end,
+    'actor_id', v_uid, 'actor_name', me.display_name));
+
+  return jsonb_build_object('request_id', v_req, 'direction', p_direction);
+end $function$
+;
+
+-- Backfilled from 20260719040000_owner_justice_grant.sql (snapshot drift closed)
+CREATE OR REPLACE FUNCTION public.owner_grant_justice_membership(p_target uuid, p_agency text, p_justice_role text, p_reason text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  me public.profiles;
+  t public.profiles;
+begin
+  select * into me from public.profiles where id = v_uid;
+  if not private.is_owner() then
+    raise exception 'granting justice memberships directly is restricted to the owner';
+  end if;
+  if btrim(coalesce(p_reason, '')) = '' then raise exception 'a reason is required'; end if;
+  if p_agency not in ('doj', 'judiciary')
+     or (p_agency = 'doj' and p_justice_role not in ('assistant_district_attorney', 'district_attorney', 'attorney_general'))
+     or (p_agency = 'judiciary' and p_justice_role <> 'judge') then
+    raise exception 'invalid agency/role combination';
+  end if;
+  select * into t from public.profiles where id = p_target for update;
+  if t.id is null then raise exception 'member not found'; end if;
+  if t.removed_at is not null or t.login_denied then raise exception 'member is removed or login-denied'; end if;
+  if t.is_test then raise exception 'test fixtures cannot be granted justice memberships'; end if;
+
+  insert into public.justice_memberships (user_id, agency, justice_role, active, approved_by, approved_at)
+  values (p_target, p_agency, p_justice_role, true, v_uid, now())
+  on conflict (user_id) do update
+    set agency = excluded.agency, justice_role = excluded.justice_role,
+        active = true, approved_by = excluded.approved_by, approved_at = excluded.approved_at;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'JUSTICE_GRANTED', 'justice_memberships', p_target,
+    jsonb_build_object('agency', p_agency, 'justice_role', p_justice_role, 'reason', p_reason,
+      'dual_with_cid', t.active));
+  insert into public.notifications (user_id, type, payload)
+  values (p_target, 'justice_membership_update', jsonb_build_object(
+    'status', 'granted', 'justice_role', p_justice_role,
+    'reason', 'You have been appointed ' ||
+      case p_justice_role
+        when 'assistant_district_attorney' then 'a department prosecutor (Assistant District Attorney)'
+        when 'district_attorney' then 'District Attorney'
+        when 'attorney_general' then 'Attorney General'
+        else 'Judge' end || '. Reason: ' || p_reason,
+    'actor_id', v_uid, 'actor_name', me.display_name));
+end $function$
+;
+
 -- ============================================================
 -- Triggers (non-internal)
 -- ============================================================
@@ -3017,6 +3624,13 @@ create policy custody_sel on public.custody_chain
   using ((EXISTS ( SELECT 1
    FROM public.evidence e
   WHERE ((e.id = custody_chain.evidence_id) AND private.can_access_case(e.case_id)))));
+
+create policy dml_sel on public.deleted_member_ledger
+  as permissive for select to authenticated
+  using (private.is_owner());
+-- deleted_member_ledger: SELECT is the ONLY policy — writes are RPC-only
+-- (permanent_delete_execute); INSERT/UPDATE/DELETE/TRUNCATE grants revoked.
+-- deletion_tokens: RLS enabled with ZERO policies and no client grants.
 
 create policy documents_del on public.documents
   as permissive for delete to authenticated
@@ -3386,7 +4000,7 @@ create policy profiles_command on public.profiles
 
 create policy profiles_sel on public.profiles
   as permissive for select to authenticated
-  using (((id = ( SELECT auth.uid() AS uid)) OR (private.is_active() AND (private.is_test_user(( SELECT auth.uid() AS uid)) OR (NOT is_test)))));
+  using (((id = ( SELECT auth.uid() AS uid)) OR (private.is_active() AND (private.is_test_user(( SELECT auth.uid() AS uid)) OR (NOT is_test)) AND ((NOT is_system) OR private.is_owner()))));
 
 create policy profiles_upd_self on public.profiles
   as permissive for update to authenticated
@@ -3585,6 +4199,9 @@ create policy wl_sel on public.watchlist
 --   public.tickets
 --   public.trackers
 --   public.vehicles
+--
+-- Deliberately NOT published: public.deleted_member_ledger and
+-- public.deletion_tokens (Phase B — owner-only / definer-only tables).
 
 -- ============================================================
 -- Table grants (anon / authenticated)
@@ -3625,6 +4242,10 @@ create policy wl_sel on public.watchlist
 --   commendations -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   custody_chain -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   custody_chain -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   deleted_member_ledger -> anon: REFERENCES, SELECT, TRIGGER (writes revoked)
+--   deleted_member_ledger -> authenticated: REFERENCES, SELECT, TRIGGER (writes revoked)
+--   deletion_tokens -> anon: (all revoked)
+--   deletion_tokens -> authenticated: (all revoked)
 --   documents -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   documents -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   documents_versions -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -3706,6 +4327,8 @@ create policy wl_sel on public.watchlist
 --   profiles.discord_id: {authenticated=r/postgres}
 --   profiles.removed_at: {authenticated=r/postgres}
 --   profiles.is_owner: {authenticated=r/postgres}
+--   profiles.is_test: {authenticated=r/postgres}
+--   profiles.is_system: {authenticated=r/postgres}
 
 -- ============================================================
 -- Functions added by the 20260713 membership/joint/announcement
@@ -3776,3 +4399,11 @@ create policy wl_sel on public.watchlist
 -- public.owner_security_overview() back the Owner Security Testing dashboard.
 -- 20260715040000_v114_hardening: add_legal_exhibit() now rejects external_link
 -- URLs that are not http(s):// (security-review finding M1).
+-- 20260726010000_phase_b_permanent_deletion (Phase B): profiles.is_system,
+-- the tombstone member ('00000000-0000-4000-a000-000000000001',
+-- tombstone@system.invalid, banned), deleted_member_ledger + deletion_tokens,
+-- private.assert_fresh_session() / private.permanent_delete_refmap(),
+-- public.permanent_delete_preview/_arm/_execute(), rls_test_spawn_disposable();
+-- profiles_sel, admin_member_emails, block_direct_privileged_profile and
+-- rls_test_cleanup updated (all mirrored above). The tombstone auth.users row
+-- is data, not schema — recreate it from the migration on a fresh rebuild.

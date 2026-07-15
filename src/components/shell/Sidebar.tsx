@@ -121,7 +121,7 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
       </div>
 
       <nav className="mt-4 flex-1 space-y-1 overflow-y-auto px-3 pb-4" role="navigation">
-        <p className="sidebar-hide px-3 pb-2 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Divisions</p>
+        <p className="sidebar-hide px-3 pb-2 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Divisions</p>
         {NAV_CATEGORIES.map((c) => {
           const on = c.id === activeCategory
           return (

@@ -31,17 +31,7 @@ const SNAPSHOT = 'supabase/schema-snapshot.sql'
 /** Migrations whose created objects are deliberately NOT in the snapshot.
  *  Add entries only with a reason — this list is part of the gate's audit
  *  trail. Filename -> why the snapshot legitimately omits it. */
-const EXCEPTIONS = new Map([
-  // Pre-existing drift found when this gate was introduced (2026-07-15):
-  // these owner-only maintenance RPCs are live and documented in
-  // supabase/README.md, but were never mirrored into schema-snapshot.sql.
-  // They are BASELINE DEBT, not approved omissions — remove each entry when
-  // the snapshot is next regenerated from the live catalogs.
-  ['20260716020000_legal_import_provenance.sql', 'import_legal_warrant/import_rollback_by_key not yet in snapshot — remove on next snapshot regen'],
-  ['20260716030000_owner_maintenance_gate.sql', 'is_owner_maintenance gate not yet in snapshot — remove on next snapshot regen'],
-  ['20260719030000_org_correction.sql', 'correct_membership_organization not yet in snapshot — remove on next snapshot regen'],
-  ['20260719040000_owner_justice_grant.sql', 'owner_grant_justice_membership not yet in snapshot — remove on next snapshot regen'],
-])
+const EXCEPTIONS = new Map([])
 
 const snapshot = readFileSync(SNAPSHOT, 'utf8').toLowerCase()
 

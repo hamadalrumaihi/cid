@@ -45,10 +45,7 @@ export const justiceRoleAbbr = (r?: string | null): string =>
 export type LegalRequest = Tables<'legal_requests'>
 export type LegalVersion = Tables<'legal_request_versions'>
 export type LegalExhibit = Tables<'legal_request_exhibits'>
-export type LegalParticipant = Tables<'legal_request_participants'>
 export type LegalSignature = Tables<'legal_request_signatures'>
-export type JusticeMembership = Tables<'justice_memberships'>
-export type ProsecutorAssignment = Tables<'prosecutor_bureau_assignments'>
 
 /** legal_request_actions is column-revoked (internal_note) — always select
  *  this projection, never '*'. */
@@ -153,9 +150,6 @@ export const WARRANT_FIELDS: Record<WarrantType, { key: string; label: string; r
     { key: 'vehicle_targets', label: 'Vehicle Targets' },
   ],
 }
-
-export const warrantTypeLabel = (s?: string | null): string =>
-  (s && WARRANT_TYPES.find(([v]) => v === s)?.[1]) || s || '—'
 
 export const REVIEW_STATUS_LABEL: Record<string, string> = {
   not_submitted: 'Draft — not submitted',

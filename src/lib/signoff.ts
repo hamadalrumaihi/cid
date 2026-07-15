@@ -9,16 +9,6 @@ import { statusTint } from './tint'
 
 export type CaseRow = Tables<'cases'>
 
-export const SIGNOFF_ORDER = ['bureau_lead', 'deputy', 'director'] as const
-export type SignoffStage = (typeof SIGNOFF_ORDER)[number]
-
-/** Which roles satisfy each chain stage. */
-export const SIGNOFF_ROLES: Record<SignoffStage, string[]> = {
-  bureau_lead: ['bureau_lead'],
-  deputy: ['deputy_director'],
-  director: ['director'],
-}
-
 export const SIGNOFF_STAGE_LABEL: Record<string, string> = {
   bureau_lead: 'Bureau Lead',
   deputy: 'Deputy Director',

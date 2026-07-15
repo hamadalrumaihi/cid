@@ -36,6 +36,7 @@ import {
 } from './ownerData'
 import { useOwnerVitals } from './ownerVitals'
 import { SecurityTestingSection } from './SecurityTestingSection'
+import { PermanentDeletionSection } from './PermanentDeletionSection'
 import { parseStringArray } from '@/lib/jsonShapes'
 
 type FeedbackRow = Tables<'feedback'>
@@ -55,6 +56,7 @@ const SECTIONS: { id: string; icon: string; label: string; sub: string }[] = [
   { id: 'realtime', icon: '📡', label: 'Realtime', sub: 'Channels, session activity & failure points' },
   { id: 'workflow', icon: '🚦', label: 'Workflow', sub: 'Safe development, deploys, rollback & permissions' },
   { id: 'learning', icon: '🎓', label: 'Learning Center', sub: 'Paths, common mistakes, what to avoid early' },
+  { id: 'deletion', icon: '🗑️', label: 'Permanent deletion', sub: 'Irreversible member erasure — arm, confirm, execute' },
 ]
 
 /** Desktop rail grouping — same section ids + deep-links, grouped by purpose. */
@@ -63,7 +65,7 @@ const NAV_GROUPS: { label: string; ids: string[] }[] = [
   { label: 'Monitor', ids: ['health', 'security', 'realtime'] },
   { label: 'Improve', ids: ['feedback', 'suggestions', 'impact'] },
   { label: 'Understand', ids: ['architecture', 'routes', 'env'] },
-  { label: 'Operate', ids: ['workflow', 'learning'] },
+  { label: 'Operate', ids: ['workflow', 'learning', 'deletion'] },
 ]
 
 export function OwnerView() {
@@ -196,6 +198,7 @@ export function OwnerView() {
           {active.id === 'realtime' && <RealtimeSection />}
           {active.id === 'workflow' && <WorkflowSection />}
           {active.id === 'learning' && <LearningSection />}
+          {active.id === 'deletion' && <PermanentDeletionSection />}
         </div>
       </div>
     </div>

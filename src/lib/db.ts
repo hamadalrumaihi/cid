@@ -137,18 +137,6 @@ export async function invokeFunction(name: string, body: unknown): Promise<{ err
   }
 }
 
-/** Chain-of-custody rows for every evidence item on a case, via the embedded
- *  inner-join filter (custody_chain → evidence!inner.case_id) the vanilla
- *  timeline uses. THROWS on error like list(). */
-export async function custodyForCase(caseId: string): Promise<Tables<'custody_chain'>[]> {
-  const { data, error } = await raw()
-    .from('custody_chain')
-    .select('*, evidence!inner(case_id)')
-    .eq('evidence.case_id', caseId)
-  if (error) throw new Error(error.message)
-  return (data ?? []) as Tables<'custody_chain'>[]
-}
-
 /* ---- deleteWithUndo (vanilla core.js:484-533) -----------------------------
  * Delete a row (or rows) with a 6s "Undo" toast that re-inserts them,
  * preserving ids so references survive. For ON DELETE CASCADE children pass

@@ -46,10 +46,8 @@ jobs:
       - name: Production build
         run: npm run build
       - name: Bundle budget (shared first-load JS)
-        # Advisory while the current src/ sweep settles; promote to blocking
-        # (drop continue-on-error) after the budget in
-        # scripts/check-bundle-budget.mjs is re-baselined on the merged tree.
-        continue-on-error: true
+        # Blocking since the src/ sweep landed green on main (PR #163) — the
+        # budget lives in scripts/check-bundle-budget.mjs.
         run: npm run check:bundle
 
   # Live security suites — run only when the rls-test-* account passwords are

@@ -9,23 +9,7 @@
     // completeness, not for use.
     "src/lib/database.types.ts",
     // Deno edge functions: deployed to Supabase, never imported by the app.
-    "supabase/functions/**",
-    // TEMPORARY (2026-07-15): these files carry the unused exports found when
-    // the gate was introduced (20 exports, 6 types, 3 duplicate aliases). A
-    // concurrent src/ sweep owns the deletions — drop each file from this
-    // list as the sweep lands so knip guards it again. Candidates are listed
-    // in the gate's introduction PR.
-    "src/components/gangs/gangShared.tsx",
-    "src/components/justice/legalShared.tsx",
-    "src/components/ui/Skeleton.tsx",
-    "src/lib/db.ts",
-    "src/lib/forms.ts",
-    "src/lib/justice.ts",
-    "src/lib/notifText.ts",
-    "src/lib/penal.ts",
-    "src/lib/roles.ts",
-    "src/lib/signoff.ts",
-    "src/lib/tint.ts"
+    "supabase/functions/**"
   ],
   "ignoreBinaries": [
     "semgrep", // installed ad hoc in code-quality.yml (pip), not an npm bin

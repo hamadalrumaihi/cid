@@ -1046,6 +1046,86 @@ export type Database = {
           },
         ]
       }
+      deleted_member_ledger: {
+        Row: {
+          armed_at: string | null
+          badge_number: string | null
+          deleted_by: string | null
+          display_name: string
+          division: string | null
+          email: string | null
+          executed_at: string
+          id: string
+          reason: string
+          references: Json
+          role: string | null
+          target_id: string
+        }
+        Insert: {
+          armed_at?: string | null
+          badge_number?: string | null
+          deleted_by?: string | null
+          display_name: string
+          division?: string | null
+          email?: string | null
+          executed_at?: string
+          id?: string
+          reason: string
+          references?: Json
+          role?: string | null
+          target_id: string
+        }
+        Update: {
+          armed_at?: string | null
+          badge_number?: string | null
+          deleted_by?: string | null
+          display_name?: string
+          division?: string | null
+          email?: string | null
+          executed_at?: string
+          id?: string
+          reason?: string
+          references?: Json
+          role?: string | null
+          target_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deleted_member_ledger_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deletion_tokens: {
+        Row: {
+          created_at: string
+          created_by: string
+          expires_at: string
+          id: string
+          target_id: string
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          expires_at: string
+          id?: string
+          target_id: string
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          expires_at?: string
+          id?: string
+          target_id?: string
+          used_at?: string | null
+        }
+        Relationships: []
+      }
       documents: {
         Row: {
           case_id: string | null
@@ -3220,6 +3300,7 @@ export type Database = {
           email: string | null
           id: string
           is_owner: boolean
+          is_system: boolean
           is_test: boolean
           loa: boolean
           loa_since: string | null
@@ -3242,6 +3323,7 @@ export type Database = {
           email?: string | null
           id: string
           is_owner?: boolean
+          is_system?: boolean
           is_test?: boolean
           loa?: boolean
           loa_since?: string | null
@@ -3264,6 +3346,7 @@ export type Database = {
           email?: string | null
           id?: string
           is_owner?: boolean
+          is_system?: boolean
           is_test?: boolean
           loa?: boolean
           loa_since?: string | null
@@ -4444,6 +4527,22 @@ export type Database = {
       set_profile_test_flag: {
         Args: { p_is_test: boolean; p_target: string }
         Returns: undefined
+      }
+      permanent_delete_preview: {
+        Args: { p_target: string }
+        Returns: Json
+      }
+      permanent_delete_arm: {
+        Args: { p_reason: string; p_target: string }
+        Returns: Json
+      }
+      permanent_delete_execute: {
+        Args: { p_confirm: string; p_token: string }
+        Returns: Json
+      }
+      rls_test_spawn_disposable: {
+        Args: { p_suffix: string }
+        Returns: string
       }
       rls_test_reset_member: {
         Args: {

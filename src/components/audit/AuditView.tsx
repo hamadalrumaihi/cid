@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { Notice } from '@/components/ui/Notice'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 
 type AuditRow = Tables<'audit_log'>
 
@@ -89,7 +90,9 @@ export function AuditView() {
   return (
     <Card pad="lg">
       {loading && rows.length === 0 ? (
-        <Notice text="Loading audit log…" />
+        // First load renders the shape of the incoming table rows instead of a
+        // bare "Loading…" line that reads as an empty state for a beat.
+        <ListSkeleton count={8} />
       ) : (
         <>
           <DataTable
