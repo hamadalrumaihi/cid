@@ -32,7 +32,7 @@ jobs:
       TEST_PW_DIRECTOR: ${{ secrets.TEST_PW_DIRECTOR }}
       TEST_PW_OWNER: ${{ secrets.TEST_PW_OWNER }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22

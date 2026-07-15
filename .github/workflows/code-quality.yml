@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -48,7 +48,7 @@ jobs:
       NEXT_PUBLIC_FIVEMANAGE_API_KEY: Z3ctM38GCUw5aPam9xscHYcxjghj8iTE
       NEXT_PUBLIC_FIVEMANAGE_BASE_URL: https://api.fivemanage.com
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
