@@ -389,10 +389,6 @@ export function reportTitle(r: ReportLike): string {
   return base
 }
 
-export function reportKindLabel(r: ReportLike): string {
-  return r.kind === 'initial' ? 'Initial' : r.kind === 'supplemental' ? `Supplemental #${r.seq}` : `Follow-up #${r.seq}`
-}
-
 /** Warrant lifecycle rides inside report fields — vanilla reports.js:29-35. */
 export const WARRANT_TPLS: Record<string, 1> = { arrest_warrant: 1, search_warrant: 1, wiretap_warrant: 1 }
 export const WARRANT_TINT: Record<string, string> = {
@@ -431,19 +427,6 @@ export function formToText(schema: FormSchema, values: FormValues): string {
   return lines.join('\n')
 }
 
-/** Pull the person-flagged field values out of a filled form (reports.js:144). */
-export function collectPersonNames(schema: FormSchema, fields: FormValues): string[] {
-  const names: string[] = []
-  schema.sections.forEach((s) => {
-    if (s.type === 'kv') s.fields.forEach((f) => { if (f.person && fields[f.key]) names.push(String(fields[f.key]).trim()) })
-    else if (s.type === 'grid') {
-      const rows = Array.isArray(fields[s.id]) ? (fields[s.id] as Record<string, string>[]) : []
-      rows.forEach((row) => s.cols.forEach((col) => { if (col.person && row[col.key]) names.push(String(row[col.key]).trim()) }))
-    }
-  })
-  return names.filter(Boolean)
-}
-
 /** Soft "required field" check before a report is sealed (reports.js:383-398).
  *  Non-blocking: the modal shows gaps but lets the officer finalize anyway. */
 export function reportFinalizeGaps(r: ReportLike): string[] {
@@ -467,12 +450,3 @@ export function reportFinalizeGaps(r: ReportLike): string[] {
   if (primary.length && !primary.some(has)) gaps.push('Narrative / probable cause')
   return gaps
 }
-
-/** Reusable boilerplate snippets for report prose (reports.js:115-121). */
-export const REPORT_SNIPPETS: { label: string; text: string }[] = [
-  { label: 'Miranda', text: 'The subject was advised of their Miranda rights per Article 31 and indicated understanding prior to questioning. ' },
-  { label: 'Chain of custody', text: 'All recovered items were photographed, sealed, and entered into the chain of custody at the time of recovery. ' },
-  { label: 'Positive ID', text: 'A positive identification was made via comparison of the subject against their DOC booking photograph. ' },
-  { label: 'Vehicle stop', text: 'A traffic stop was initiated; the operator was identified via the vehicle registration return. ' },
-  { label: 'Use of force', text: 'No use of force was applied during this contact. ' },
-]

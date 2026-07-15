@@ -53,21 +53,21 @@ export function CaseFilterBar({ filters, scope, query, activeViewName, onFilters
   return (
     <div className="rounded-2xl border border-white/10 bg-ink-900/50 p-3">
       <div className="grid gap-2 md:grid-cols-5">
-        <select value={filters.bureau} onChange={(e) => patch({ bureau: e.target.value })} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
+        <select aria-label="Filter by bureau" value={filters.bureau} onChange={(e) => patch({ bureau: e.target.value })} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
           <option value="">All bureaus</option>
           {BUREAUS.map((b) => <option key={b} value={b}>{b}</option>)}
         </select>
-        <select value={filters.status} onChange={(e) => patch({ status: e.target.value })} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
+        <select aria-label="Filter by status" value={filters.status} onChange={(e) => patch({ status: e.target.value })} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
           <option value="">All statuses</option>
           {STATUSES.map((s) => <option key={s} value={s}>{s.toUpperCase()}</option>)}
         </select>
-        <select value={filters.assignee} onChange={(e) => patch({ assignee: e.target.value })} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
+        <select aria-label="Filter by lead" value={filters.assignee} onChange={(e) => patch({ assignee: e.target.value })} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
           <option value="">Any lead</option>
           <option value="me">Me</option>
           <option value="unassigned">Unassigned</option>
           {activeProfiles().map((p) => <option key={p.id} value={p.id}>{officerName(p.id) || p.display_name}</option>)}
         </select>
-        <select value={filters.stale} onChange={(e) => patch({ stale: e.target.value })} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
+        <select aria-label="Filter by case age" value={filters.stale} onChange={(e) => patch({ stale: e.target.value })} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
           <option value="">Any age</option>
           <option value="stale">Stale (14d+)</option>
           <option value="fresh">Fresh</option>
@@ -80,7 +80,7 @@ export function CaseFilterBar({ filters, scope, query, activeViewName, onFilters
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <select value={activeViewName} onChange={(e) => applyView(e.target.value)} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
+        <select aria-label="Saved views" value={activeViewName} onChange={(e) => applyView(e.target.value)} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
           <option value="">Saved views</option>
           {views.map((v) => <option key={v.name} value={v.name}>{v.name}</option>)}
         </select>

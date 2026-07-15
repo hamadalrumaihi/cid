@@ -99,8 +99,8 @@ export function SignoffTab({ c }: { c: CaseRow }) {
         <p className="mt-2 text-sm text-slate-400">Assignee: {officerName(c.signoff_assignee_id) || 'None'}</p>
         <div className="mt-4 flex flex-wrap gap-2">
           {owner && <button onClick={() => void callRpc('submit')} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Submit / Resubmit</button>}
-          {owner && c.signoff_status === 'approved_deputy' && <><button onClick={() => void callRpc('complete')} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white">Complete at Deputy</button><button onClick={() => void callRpc('escalate')} className="rounded-lg bg-amber-600 px-3 py-2 text-sm font-bold text-white">Escalate</button></>}
-          {reviewer && <><button onClick={() => void callRpc('approve')} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white">Approve</button><button onClick={() => void callRpc('changes')} className="rounded-lg bg-orange-600 px-3 py-2 text-sm font-bold text-white">Changes</button><button onClick={() => void callRpc('deny')} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white">Deny</button></>}
+          {owner && c.signoff_status === 'approved_deputy' && <><Button variant="success" onClick={() => void callRpc('complete')}>Complete at Deputy</Button><Button variant="warn" onClick={() => void callRpc('escalate')}>Escalate</Button></>}
+          {reviewer && <><Button variant="success" onClick={() => void callRpc('approve')}>Approve</Button><button onClick={() => void callRpc('changes')} className="rounded-lg bg-orange-600 px-3 py-2 text-sm font-bold text-white">Changes</button><button onClick={() => void callRpc('deny')} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white">Deny</button></>}
         </div>
         {(reviewer || owner) && <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Decision note" className="mt-3 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />}
         {canOverride && (

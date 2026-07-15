@@ -225,7 +225,7 @@ export function GangsView() {
         <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search gang, alias, member, callsign, turf, place, case…" className={`min-w-[14rem] flex-1 rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-sm text-slate-200 outline-none transition focus:border-badge-500`} />
         <div role="tablist" aria-label="Layout" className="inline-flex rounded-lg border border-white/10 bg-ink-850 p-0.5">
           {(['grid', 'list'] as const).map((v) => (
-            <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)} className={`rounded-md px-2.5 py-1 text-xs font-semibold capitalize ${view === v ? 'bg-badge-500 text-white' : 'text-slate-300 hover:bg-white/10'}`}>{v}</button>
+            <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)} className={`rounded-md px-2.5 py-1 text-xs font-semibold capitalize ${view === v ? 'bg-badge-500 text-ink-950' : 'text-slate-300 hover:bg-white/10'}`}>{v}</button>
           ))}
         </div>
         <button onClick={() => void refresh()} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">Refresh</button>

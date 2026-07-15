@@ -247,7 +247,7 @@ function TemplateManager({ open, templates, onClose, onChanged }: { open: boolea
           <input value={newRow.summary} onChange={(e) => setNewRow({ ...newRow, summary: e.target.value })} placeholder="Prefill summary" className="md:col-span-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
           <input type="number" min={0} value={newRow.followup} onChange={(e) => setNewRow({ ...newRow, followup: e.target.value })} placeholder="Follow-up days (optional)" title="Default review cadence in days" className="md:col-span-4 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />
           <textarea value={newRow.tasks} onChange={(e) => setNewRow({ ...newRow, tasks: e.target.value })} rows={3} placeholder={'Checklist tasks — one per line, auto-created with each new case'} className="md:col-span-4 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />
-          <button onClick={add} className="md:col-span-4 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white">Add template</button>
+          <Button variant="success" className="md:col-span-4" onClick={add}>Add template</Button>
         </div>
       </div>
     </Modal>

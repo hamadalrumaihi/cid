@@ -171,7 +171,7 @@ export function RosterSection({ members, canEdit, canDelete, onAddMember, onEdit
           <div role="tablist" aria-label="Roster view" className="inline-flex rounded-lg border border-white/10 bg-ink-850 p-0.5">
             {(['hierarchy', 'table'] as const).map((v) => (
               <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}
-                className={`rounded-md px-2.5 py-1 text-xs font-semibold capitalize ${view === v ? 'bg-badge-500 text-white' : 'text-slate-300 hover:bg-white/10'}`}>
+                className={`rounded-md px-2.5 py-1 text-xs font-semibold capitalize ${view === v ? 'bg-badge-500 text-ink-950' : 'text-slate-300 hover:bg-white/10'}`}>
                 {v}
               </button>
             ))}

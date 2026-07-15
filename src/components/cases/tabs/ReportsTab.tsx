@@ -87,7 +87,7 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
       ) : (<>
         {canEdit && <div className="flex flex-wrap gap-2">{REPORT_TEMPLATES.map((tpl) => <Button key={tpl.id} onClick={() => openEditor(tpl.id)}>{tpl.icon} {tpl.name}</Button>)}</div>}
         <div className="space-y-2">
-          {reports.map((r) => <div key={r.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3"><button onClick={() => setOpenId(r.id)} className="min-w-0 flex-1 text-left"><p className="font-bold text-white">{reportTitle(r)}</p><p className="text-xs text-slate-500">{r.finalized ? 'Finalized' : 'Draft'} - {timeAgo(r.created_at)}</p></button>{!r.finalized && canEdit && <button onClick={() => setConfirm({ kind: 'finalize', r })} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Finalize</button>}{!r.finalized && canEdit && <button onClick={() => openEditor(r.template, r)} className="text-sm font-bold text-badge-200">Edit</button>}{canDelete && <button onClick={() => { void deleteWithUndo('reports', r, { label: reportTitle(r), after: refresh }) }} className="text-sm font-bold text-rose-300">Delete</button>}</div>)}
+          {reports.map((r) => <div key={r.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3"><button onClick={() => setOpenId(r.id)} className="min-w-0 flex-1 text-left"><p className="font-bold text-white">{reportTitle(r)}</p><p className="text-xs text-slate-500">{r.finalized ? 'Finalized' : 'Draft'} - {timeAgo(r.created_at)}</p></button>{!r.finalized && canEdit && <Button size="sm" variant="success" onClick={() => setConfirm({ kind: 'finalize', r })}>Finalize</Button>}{!r.finalized && canEdit && <button onClick={() => openEditor(r.template, r)} className="text-sm font-bold text-badge-200">Edit</button>}{canDelete && <button onClick={() => { void deleteWithUndo('reports', r, { label: reportTitle(r), after: refresh }) }} className="text-sm font-bold text-rose-300">Delete</button>}</div>)}
           {!reports.length && <p className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-500">No reports yet.</p>}
         </div>
       </>)}
@@ -109,7 +109,7 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
               </div> })()}
           <div className="mt-5 flex justify-end gap-2">
             <Button onClick={() => setConfirm(null)}>Cancel</Button>
-            <button onClick={() => { if (!confirm) return; const { kind, r } = confirm; setConfirm(null); if (kind === 'finalize') void finalize(r); else void reopen(r) }} className={`rounded-lg px-3 py-2 text-sm font-bold text-white ${confirm?.kind === 'reopen' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{confirm?.kind === 'reopen' ? 'Reopen report' : 'Finalize & seal'}</button>
+            <Button variant={confirm?.kind === 'reopen' ? 'warn' : 'success'} onClick={() => { if (!confirm) return; const { kind, r } = confirm; setConfirm(null); if (kind === 'finalize') void finalize(r); else void reopen(r) }}>{confirm?.kind === 'reopen' ? 'Reopen report' : 'Finalize & seal'}</Button>
           </div>
         </div>
       </Modal>
@@ -210,12 +210,11 @@ function ReportDetail({ r, c, canEdit, canDelete, onBack, onEdit, onFinalize, on
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {r.template === 'arrest_warrant' && r.finalized && canEdit && (
-            <button onClick={() => void submitForLegalReview()} disabled={legalBusy}
-              className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50">
+            <Button size="sm" variant="warn" onClick={() => void submitForLegalReview()} disabled={legalBusy}>
               ⚖️ Submit for Legal Review
-            </button>
+            </Button>
           )}
-          {!r.finalized && canEdit && <button onClick={onFinalize} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Finalize</button>}
+          {!r.finalized && canEdit && <Button size="sm" variant="success" onClick={onFinalize}>Finalize</Button>}
           {r.finalized && isCommandRole(profile?.role) && <button onClick={onReopen} className="rounded-lg border border-amber-500/40 px-3 py-2 text-sm font-bold text-amber-300 hover:bg-amber-500/10">Reopen</button>}
           {!r.finalized && canEdit && <button onClick={onEdit} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-badge-200 hover:bg-white/5">Edit</button>}
           {canDelete && <button onClick={onDelete} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-rose-300 hover:bg-rose-500/10">Delete</button>}

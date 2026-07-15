@@ -1,4 +1,4 @@
-/** Single source of truth for status / priority / role → tint classes.
+/** Single source of truth for status / confidence / threat → tint classes.
  *  Before this, the same "resolved = emerald, high = amber, critical = rose"
  *  convention was re-declared independently in owner/ownerData, CommandView,
  *  OperationsView and the guide legend, free to drift apart. These helpers
@@ -41,29 +41,6 @@ export function statusTint(status?: string | null): string {
       return NEUTRAL
   }
 }
-
-/** Priority / severity: low → slate, medium → blue, high → amber, critical →
- *  rose. Shared by feedback, BOLO and anywhere else that ranks urgency. */
-export function priorityTint(priority?: string | null): string {
-  switch ((priority ?? '').toLowerCase()) {
-    case 'low':
-      return NEUTRAL
-    case 'medium':
-    case 'moderate':
-      return 'bg-blue-500/15 text-blue-300'
-    case 'high':
-      return 'bg-amber-500/15 text-amber-300'
-    case 'critical':
-    case 'severe':
-      return 'bg-rose-500/15 text-rose-300'
-    default:
-      return NEUTRAL
-  }
-}
-
-/** Risk level — same warm ramp as priority, named separately so callers read
- *  clearly and the two can diverge later without a find-replace. */
-export const riskTint = priorityTint
 
 /** Intelligence confidence — how reliable a claim/relationship is (NOT the
  *  whole record). confirmed → emerald, probable → blue, possible → amber,
@@ -122,22 +99,5 @@ export function threatTint(level?: string | null): string {
       return 'bg-emerald-500/15 text-emerald-300'
     default:
       return NEUTRAL
-  }
-}
-
-/** Rank → tint. Command roles get the accent; line detectives stay neutral so
- *  command staff stand out on the roster without shouting. */
-export function roleTint(role?: string | null): string {
-  switch ((role ?? '').toLowerCase()) {
-    case 'director':
-      return 'bg-rose-500/15 text-rose-300'
-    case 'deputy_director':
-      return 'bg-amber-500/15 text-amber-300'
-    case 'bureau_lead':
-      return 'bg-blue-500/15 text-blue-300'
-    case 'senior_detective':
-      return 'bg-cyan-500/15 text-cyan-300'
-    default:
-      return 'bg-white/5 text-slate-300'
   }
 }

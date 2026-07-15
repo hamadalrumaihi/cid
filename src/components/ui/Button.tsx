@@ -13,7 +13,7 @@
 import { forwardRef } from 'react'
 import { useAction } from '@/lib/useAction'
 
-type Variant = 'primary' | 'secondary' | 'danger' | 'ghost'
+type Variant = 'primary' | 'secondary' | 'danger' | 'success' | 'warn' | 'ghost'
 type Size = 'sm' | 'md'
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -43,6 +43,12 @@ const VARIANTS: Record<Variant, string> = {
   secondary: 'border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10',
   // Destructive — one canonical rose shade (was rose-500 / rose-600 split).
   danger: 'bg-rose-600 text-white shadow-glow hover:bg-rose-500',
+  // Confirming/positive — Finalize, Approve, Complete. Mirrors danger's
+  // structure so the semantic solids read as one family.
+  success: 'bg-emerald-600 text-white shadow-glow hover:bg-emerald-500',
+  // Cautionary — Reopen, Escalate, Submit-for-review. Amber counterpart of
+  // success; NOT for destructive actions (that's danger).
+  warn: 'bg-amber-600 text-white shadow-glow hover:bg-amber-500',
   // Bare — no chrome until hover; for low-emphasis inline actions.
   ghost: 'text-slate-300 hover:bg-white/5 hover:text-white',
 }

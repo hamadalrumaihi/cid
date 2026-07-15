@@ -8,12 +8,12 @@ import { list } from './db'
 import type { Tables } from './database.types'
 
 export const ROSTER_COLS =
-  'id,display_name,avatar_url,badge_number,division,role,active,created_at,updated_at,loa,loa_since,discord_id,removed_at,is_owner,login_denied' as const
+  'id,display_name,avatar_url,badge_number,division,role,active,created_at,updated_at,loa,loa_since,discord_id,removed_at,is_owner,login_denied,is_system' as const
 
 export type RosterProfile = Pick<
   Tables<'profiles'>,
   'id' | 'display_name' | 'avatar_url' | 'badge_number' | 'division' | 'role'
-  | 'active' | 'created_at' | 'updated_at' | 'loa' | 'loa_since' | 'discord_id' | 'removed_at' | 'is_owner' | 'login_denied'
+  | 'active' | 'created_at' | 'updated_at' | 'loa' | 'loa_since' | 'discord_id' | 'removed_at' | 'is_owner' | 'login_denied' | 'is_system'
 >
 
 interface ProfilesState {
@@ -40,10 +40,13 @@ export function officerName(id: string | null | undefined): string | null {
   return p ? p.display_name : 'Officer'
 }
 
-/** Active members, name-sorted — the standard assignee/mention option pool. */
+/** Active members, name-sorted — the standard assignee/mention option pool.
+ *  System accounts (the Phase B deletion tombstone) never appear: RLS already
+ *  hides them from ordinary members; the client mirror keeps owner sessions
+ *  (which CAN read system rows) from offering them in pickers. */
 export function activeProfiles(): RosterProfile[] {
   return useProfilesStore.getState().profiles
-    .filter((p) => p.active)
+    .filter((p) => p.active && !p.is_system)
     .slice()
     .sort((a, b) => (a.display_name || '').localeCompare(b.display_name || ''))
 }

@@ -14,7 +14,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { list, rpc } from '@/lib/db'
 import { useTableVersion } from '@/lib/realtime'
 import {
-  CLASSIFICATION_STYLE, deadlineInfo, fulfilmentLabel, justiceRoleAbbr,
+  CLASSIFICATION_STYLE, deadlineInfo, fulfilmentLabel,
   reviewStatusLabel, type Classification, type LegalRequest,
 } from '@/lib/justice'
 
@@ -156,8 +156,4 @@ export function QueueSection({ title, rows, onOpen, empty }: {
         : <div className="space-y-1.5">{rows.map((r) => <LegalRequestRow key={r.id} r={r} onOpen={onOpen} />)}</div>}
     </section>
   )
-}
-
-export function justiceRoleTag(role: string | null): string {
-  return role ? justiceRoleAbbr(role) : ''
 }

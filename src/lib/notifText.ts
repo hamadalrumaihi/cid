@@ -76,11 +76,6 @@ export function notifSub(n: NotificationRow): string | null {
   return p.reason || p.title || [p.tracker_code, p.target].filter(Boolean).join(' · ') || null
 }
 
-/** Case deep-link target when the payload carries one. */
-export function notifCaseId(n: NotificationRow): string | null {
-  return asPayload(n.payload).case_id ?? null
-}
-
 /** Case tab that owns each case-scoped type — the click lands on the section
  *  where the event happened, not just the case Overview (same ?case=&tab=
  *  URLs the tab strip writes). Types not listed open the Overview. */

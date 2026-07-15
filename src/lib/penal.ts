@@ -177,21 +177,6 @@ export const PENAL_CODE: PenalCharge[] = [
 // O(1) code → charge lookup (prebuilt once, mirrors PENAL_BY_CODE in the vanilla script).
 const PENAL_BY_CODE: Record<string, PenalCharge> = Object.fromEntries(PENAL_CODE.map((c) => [c.code, c]))
 export const penalByCode = (code: string): PenalCharge | null => PENAL_BY_CODE[code] || null
-// Back-compat alias for earlier imports; same O(1) lookup, `undefined` when missing (find() semantics).
-export const chargeByCode = (code: string): PenalCharge | undefined => PENAL_BY_CODE[code]
-
-export const TITLE_NAMES: Record<number, string> = {
-  1: "Crimes Against the Person",
-  2: "Crimes Against Property",
-  3: "Crimes Against Public Safety and Order",
-  4: "Crimes Against Justice",
-  5: "Crimes Committed with Firearms, Deadly Weapons, or Enhancements",
-  6: "Crimes Against Public Health",
-  7: "Crimes Against Natural Resources and Wildlife",
-  8: "Crimes Relating to Commercial Vehicles",
-  9: "Crimes and Offenses Related to Traffic",
-  10: "Racketeering Influenced Corrupt Organizations (RICO)",
-}
 
 export const PENAL_LEVEL_TINT: Record<string, string> = {
   Felony: "text-rose-300 bg-rose-500/10 border-rose-500/20",
