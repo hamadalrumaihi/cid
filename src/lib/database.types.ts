@@ -1337,6 +1337,7 @@ export type Database = {
           mugshot_url: string | null
           name: string
           person_id: string | null
+          provenance: string | null
           rank: string | null
           rank_id: string | null
           status: string | null
@@ -1354,6 +1355,7 @@ export type Database = {
           mugshot_url?: string | null
           name: string
           person_id?: string | null
+          provenance?: string | null
           rank?: string | null
           rank_id?: string | null
           status?: string | null
@@ -1371,6 +1373,7 @@ export type Database = {
           mugshot_url?: string | null
           name?: string
           person_id?: string | null
+          provenance?: string | null
           rank?: string | null
           rank_id?: string | null
           status?: string | null
@@ -1408,6 +1411,67 @@ export type Database = {
           },
         ]
       }
+      gang_places: {
+        Row: {
+          confidence: string | null
+          created_at: string
+          created_by: string | null
+          gang_id: string
+          id: string
+          note: string | null
+          place_id: string
+          provenance: string | null
+          role: string | null
+          updated_at: string
+        }
+        Insert: {
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          gang_id: string
+          id?: string
+          note?: string | null
+          place_id: string
+          provenance?: string | null
+          role?: string | null
+          updated_at?: string
+        }
+        Update: {
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          gang_id?: string
+          id?: string
+          note?: string | null
+          place_id?: string
+          provenance?: string | null
+          role?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gang_places_gang_id_fkey"
+            columns: ["gang_id"]
+            isOneToOne: false
+            referencedRelation: "gangs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gang_places_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gang_places_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gang_ranks: {
         Row: {
           gang_id: string
@@ -1440,27 +1504,45 @@ export type Database = {
       gang_turf: {
         Row: {
           block: string
+          confidence: string | null
           created_at: string
           density: Database["public"]["Enums"]["density"]
+          first_observed: string | null
           gang_id: string
           hotspot_area: string | null
           id: string
+          last_confirmed: string | null
+          notes: string | null
+          status: string | null
+          updated_at: string
         }
         Insert: {
           block: string
+          confidence?: string | null
           created_at?: string
           density?: Database["public"]["Enums"]["density"]
+          first_observed?: string | null
           gang_id: string
           hotspot_area?: string | null
           id?: string
+          last_confirmed?: string | null
+          notes?: string | null
+          status?: string | null
+          updated_at?: string
         }
         Update: {
           block?: string
+          confidence?: string | null
           created_at?: string
           density?: Database["public"]["Enums"]["density"]
+          first_observed?: string | null
           gang_id?: string
           hotspot_area?: string | null
           id?: string
+          last_confirmed?: string | null
+          notes?: string | null
+          status?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
@@ -1474,32 +1556,59 @@ export type Database = {
       }
       gangs: {
         Row: {
+          aliases: string | null
+          classification: string | null
           colors: string | null
+          confidence: string | null
           created_at: string
           created_by: string | null
           id: string
+          intelligence_summary: Json
+          lead_detective_id: string | null
           name: string
+          next_review_at: string | null
           notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string | null
           threat_level: Database["public"]["Enums"]["threat_level"]
           updated_at: string
         }
         Insert: {
+          aliases?: string | null
+          classification?: string | null
           colors?: string | null
+          confidence?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
+          intelligence_summary?: Json
+          lead_detective_id?: string | null
           name: string
+          next_review_at?: string | null
           notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string | null
           threat_level?: Database["public"]["Enums"]["threat_level"]
           updated_at?: string
         }
         Update: {
+          aliases?: string | null
+          classification?: string | null
           colors?: string | null
+          confidence?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
+          intelligence_summary?: Json
+          lead_detective_id?: string | null
           name?: string
+          next_review_at?: string | null
           notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string | null
           threat_level?: Database["public"]["Enums"]["threat_level"]
           updated_at?: string
         }
@@ -1507,6 +1616,20 @@ export type Database = {
           {
             foreignKeyName: "gangs_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gangs_lead_detective_id_fkey"
+            columns: ["lead_detective_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gangs_reviewed_by_fkey"
+            columns: ["reviewed_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]

@@ -65,6 +65,66 @@ export function priorityTint(priority?: string | null): string {
  *  clearly and the two can diverge later without a find-replace. */
 export const riskTint = priorityTint
 
+/** Intelligence confidence — how reliable a claim/relationship is (NOT the
+ *  whole record). confirmed → emerald, probable → blue, possible → amber,
+ *  unverified → neutral slate, disproven → rose. Shared by gang intel,
+ *  relationship provenance chips, and anywhere a claim carries confidence. */
+export function confidenceTint(confidence?: string | null): string {
+  switch ((confidence ?? '').toLowerCase()) {
+    case 'confirmed':
+      return 'bg-emerald-500/15 text-emerald-300'
+    case 'probable':
+      return 'bg-blue-500/15 text-blue-300'
+    case 'possible':
+      return 'bg-amber-500/15 text-amber-300'
+    case 'disproven':
+      return 'bg-rose-500/15 text-rose-300'
+    case 'unverified':
+    default:
+      return NEUTRAL
+  }
+}
+
+/** Relationship provenance — how an association is known. A confirmed link and
+ *  an inferred one must never look alike, so inferred/disputed stay warm and
+ *  only manually-confirmed goes emerald. imported/historical read as muted
+ *  fact-of-record. */
+export function provenanceTint(provenance?: string | null): string {
+  switch ((provenance ?? '').toLowerCase()) {
+    case 'manually_confirmed':
+    case 'confirmed':
+      return 'bg-emerald-500/15 text-emerald-300'
+    case 'reported':
+      return 'bg-blue-500/15 text-blue-300'
+    case 'inferred':
+      return 'bg-amber-500/15 text-amber-300'
+    case 'disputed':
+      return 'bg-rose-500/15 text-rose-300'
+    case 'historical':
+      return 'bg-white/5 text-slate-400'
+    case 'imported':
+    default:
+      return NEUTRAL
+  }
+}
+
+/** Threat level — high → rose, medium → amber, low → emerald. Promoted from
+ *  the gangs-local helper so BOLO/threat chips read the same everywhere.
+ *  (Bordered idiom lives in gangShared for the legacy gang chip; this returns
+ *  the standard bg/text chip so it composes with <Badge tint=…>.) */
+export function threatTint(level?: string | null): string {
+  switch ((level ?? '').toLowerCase()) {
+    case 'high':
+      return 'bg-rose-500/15 text-rose-300'
+    case 'medium':
+      return 'bg-amber-500/15 text-amber-300'
+    case 'low':
+      return 'bg-emerald-500/15 text-emerald-300'
+    default:
+      return NEUTRAL
+  }
+}
+
 /** Rank → tint. Command roles get the accent; line detectives stay neutral so
  *  command staff stand out on the roster without shouting. */
 export function roleTint(role?: string | null): string {

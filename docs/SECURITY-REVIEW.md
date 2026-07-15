@@ -43,6 +43,8 @@ The one-line model ([ch. 18](handbook/18-security.md)): **anon key public → RL
 
 **Closed** (Sprint 1C, [`20260723010000`](../supabase/migrations/20260723010000_justice_denial_orphan_files_removal_audit.sql)): `admin_remove_member` / `admin_restore_member` now write a `role_events` row (`source=admin_remove_member` / `admin_restore_member`, with an optional removal reason) and an `audit_log` row. Two other audit findings closed the same migration: justice access now respects `profiles.login_denied` (`private.is_justice_active`), and orphaned `case_files` under an unknown case number are command-only (`private.can_access_case_number`). Pinned by `v121`.
 
+**Closed** (Gang intelligence, [`20260724010000`](../supabase/migrations/20260724010000_gang_intelligence.sql)): `gang_turf` was previously un-audited (turf edits left no trail) — it now carries the standard `private.audit()` + `private.touch()` triggers, closing that gap. The additive gang-intel columns and the new `gang_places` link table follow the existing permissive gang RLS (`is_active` read/write, `can_delete` delete) with CHECK-constrained controlled vocabularies; new columns stay client-writable, consistent with the already-client-writable gang tables (no new freeze machinery introduced). Pinned by `v122`.
+
 ## 5. Incident precedent: production command removed the test fixtures
 
 What happened: a production command user, exercising legitimate roster authority, manually removed/denied the `rls-test-*` fixture accounts — to a human administrator they look like ordinary (odd) roster members.

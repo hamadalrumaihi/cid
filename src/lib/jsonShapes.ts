@@ -36,3 +36,15 @@ export function parseFormValues(v: unknown): FormValues {
 export function parseStringArray(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
 }
+
+/** `gangs.intelligence_summary` — a string-keyed map of section → text. Any
+ *  non-string value is dropped so a malformed row renders as an empty summary
+ *  (falling back to the legacy `notes`) rather than crashing the dossier. */
+export function parseIntelSummary(v: unknown): Record<string, string> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
+  const out: Record<string, string> = {}
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof val === 'string' && val.trim()) out[k] = val
+  }
+  return out
+}
