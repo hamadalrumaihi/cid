@@ -38,6 +38,9 @@ const TYPE_FILTERS: { key: string; label: string; types: readonly ActionItem['so
   { key: 'legal', label: 'Legal', types: ['legal_request'] },
   { key: 'followup', label: 'Follow-ups', types: ['case_followup'] },
   { key: 'blocker', label: 'Blockers', types: ['blocker'] },
+  // Library governance is navigation-only by design: acknowledging happens in
+  // the reader AFTER reading — never as a one-click inline write here.
+  { key: 'library', label: 'Library', types: ['document_ack', 'document_review', 'document_approval', 'document_sync'] },
   { key: 'mention', label: 'Mentions', types: ['mention', 'handover'] },
 ]
 

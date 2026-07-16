@@ -36,7 +36,9 @@ import { signoffLabel } from './signoff'
 export type ActionSourceType =
   | 'task' | 'signoff' | 'returned_case' | 'transfer' | 'access_request'
   | 'membership_request' | 'legal_request' | 'case_followup' | 'handover'
-  | 'mention' | 'blocker' | 'other'
+  | 'mention' | 'blocker'
+  | 'document_ack' | 'document_review' | 'document_approval' | 'document_sync'
+  | 'other'
 
 export type ActionPriority = 'critical' | 'high' | 'normal' | 'low'
 export type ActionStatus =
@@ -99,6 +101,27 @@ export type AcBlocker = Pick<Tables<'case_blockers'>,
 /** All notifications columns — notifText helpers take the full row. */
 export type AcNotif = Pick<Tables<'notifications'>,
   'id' | 'user_id' | 'type' | 'payload' | 'read' | 'created_at'>
+/** Library governance facts, PRE-DERIVED by the loader through the sops
+ *  docModel (ack state, review state, approval/resolve authority) so this
+ *  module stays free of component imports and every flag is unit-testable
+ *  at the source. One entry per RLS-visible document that matters. */
+export interface AcDoc {
+  id: string
+  title: string
+  status: string
+  /** ackState(...) === 'pending' | 'reack_needed' for the current user. */
+  ackPending: boolean
+  ackDeadline: string | null
+  /** reviewState(...) for docs the current user owns (else null). */
+  reviewDue: 'overdue' | 'due_soon' | null
+  reviewDueAt: string | null
+  /** status === 'in_review' AND the current user holds approval authority. */
+  awaitingMyApproval: boolean
+  /** sync_status === 'conflict' AND the current user may resolve it. */
+  syncConflict: boolean
+  createdAt: string
+  updatedAt: string
+}
 
 export interface ActionSources {
   me: string
@@ -119,6 +142,8 @@ export interface ActionSources {
   legal: AcLegal[]             // slim projection, non-terminal
   blockers: AcBlocker[]        // open case_blockers where owner_id = me
   notifications: AcNotif[]     // my UNREAD notifications (read = false)
+  /** Additive (defaults []): library governance items, pre-derived. */
+  documents?: AcDoc[]
 }
 
 export interface ActionQueue { items: ActionItem[]; suppressedCount: number }
@@ -226,6 +251,8 @@ function semanticKey(n: AcNotif): string | null {
   }
   if (n.type === 'membership_request') return 'membership:pending'
   if (n.type.startsWith('legal') && p.request_id) return `legal:${p.request_id}`
+  // Required-reading fan-out is covered by the structural document_ack item.
+  if (n.type === 'document_required' && p.document_id) return `document_ack:${p.document_id}`
   return null
 }
 
@@ -490,6 +517,71 @@ export function buildActionItems(s: ActionSources): ActionQueue {
       sourceMetadata: { case_id: b.case_id, type: b.type },
       dedupeKey: `blocker:${b.id}`,
     })
+  }
+
+  /* 9b · library governance — pre-derived AcDoc facts (see the interface):
+   *      required acknowledgements (mine), overdue reviews (docs I own),
+   *      approvals waiting on my authority, and sync conflicts I can
+   *      resolve. Deep links open the reader (?doc=). */
+  for (const d of s.documents ?? []) {
+    if (d.ackPending) {
+      const dl = deadlineInfo(d.ackDeadline, 'due', { now: s.nowMs, urgentHours: 72 })
+      add({
+        id: `document_ack:${d.id}`, sourceType: 'document_ack', sourceId: d.id,
+        title: d.title, summary: 'Required reading',
+        reason: dl?.overdue ? `Acknowledgement is overdue — ${dl.text}`
+          : dl ? `Acknowledgement due — ${dl.text}` : 'Read and acknowledge the current version',
+        status: dl?.overdue ? 'overdue' : dl?.urgent ? 'due_soon' : 'needs_action',
+        dueAt: d.ackDeadline, createdAt: d.createdAt, updatedAt: d.updatedAt,
+        ownerId: s.me, deepLink: `/sops?doc=${d.id}`,
+        actionLabel: 'Read & acknowledge', canAct: true,
+        isPersonalItem: true, isWaitingOnCurrentUser: true,
+        sourceMetadata: { document_id: d.id },
+        dedupeKey: `document_ack:${d.id}`,
+      })
+    }
+    if (d.reviewDue) {
+      add({
+        id: `document_review:${d.id}`, sourceType: 'document_review', sourceId: d.id,
+        title: d.title, summary: 'Policy review',
+        reason: d.reviewDue === 'overdue' ? 'Scheduled review is overdue' : 'Scheduled review is due soon',
+        status: d.reviewDue === 'overdue' ? 'overdue' : 'due_soon',
+        dueAt: d.reviewDueAt, createdAt: d.createdAt, updatedAt: d.updatedAt,
+        ownerId: s.me, deepLink: `/sops?doc=${d.id}`,
+        actionLabel: 'Record review', canAct: true,
+        isPersonalItem: true, isWaitingOnCurrentUser: true,
+        sourceMetadata: { document_id: d.id },
+        dedupeKey: `document_review:${d.id}`,
+      })
+    }
+    if (d.awaitingMyApproval) {
+      add({
+        id: `document_approval:${d.id}`, sourceType: 'document_approval', sourceId: d.id,
+        title: d.title, summary: 'Document review',
+        reason: 'Submitted for review — your approval authority applies',
+        status: 'needs_action',
+        createdAt: d.createdAt, updatedAt: d.updatedAt,
+        deepLink: `/sops?doc=${d.id}`,
+        actionLabel: 'Review & approve', canAct: true,
+        isCommandItem: true, isWaitingOnCurrentUser: true,
+        sourceMetadata: { document_id: d.id },
+        dedupeKey: `document_approval:${d.id}`,
+      })
+    }
+    if (d.syncConflict) {
+      add({
+        id: `document_sync:${d.id}`, sourceType: 'document_sync', sourceId: d.id,
+        title: d.title, summary: 'Google Drive conflict',
+        reason: 'Portal and Drive both changed — an authorized resolution is required',
+        status: 'blocked',
+        createdAt: d.createdAt, updatedAt: d.updatedAt,
+        deepLink: `/sops?doc=${d.id}`,
+        actionLabel: 'Resolve conflict', canAct: true,
+        isCommandItem: true, isWaitingOnCurrentUser: true, nudge: 40,
+        sourceMetadata: { document_id: d.id },
+        dedupeKey: `document_sync:${d.id}`,
+      })
+    }
   }
 
   /* 10 · notifications — suppressed when a structural item covers the same

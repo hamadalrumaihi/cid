@@ -1236,49 +1236,373 @@ export type Database = {
         }
         Relationships: []
       }
+      document_acknowledgements: {
+        Row: {
+          acknowledged_at: string
+          document_id: string
+          document_version_id: string
+          id: string
+          method: string
+          user_id: string
+        }
+        Insert: {
+          acknowledged_at?: string
+          document_id: string
+          document_version_id: string
+          id?: string
+          method?: string
+          user_id: string
+        }
+        Update: {
+          acknowledged_at?: string
+          document_id?: string
+          document_version_id?: string
+          id?: string
+          method?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_acknowledgements_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_acknowledgements_document_version_id_fkey"
+            columns: ["document_version_id"]
+            isOneToOne: false
+            referencedRelation: "documents_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_acknowledgements_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_reading_campaigns: {
+        Row: {
+          audience: string
+          created_at: string
+          created_by: string
+          deadline: string | null
+          document_id: string
+          document_version_id: string
+          effective_at: string
+          id: string
+          reason: string
+          status: string
+          targets: Json
+          updated_at: string
+        }
+        Insert: {
+          audience?: string
+          created_at?: string
+          created_by?: string
+          deadline?: string | null
+          document_id: string
+          document_version_id: string
+          effective_at?: string
+          id?: string
+          reason: string
+          status?: string
+          targets?: Json
+          updated_at?: string
+        }
+        Update: {
+          audience?: string
+          created_at?: string
+          created_by?: string
+          deadline?: string | null
+          document_id?: string
+          document_version_id?: string
+          effective_at?: string
+          id?: string
+          reason?: string
+          status?: string
+          targets?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_reading_campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_reading_campaigns_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_reading_campaigns_document_version_id_fkey"
+            columns: ["document_version_id"]
+            isOneToOne: false
+            referencedRelation: "documents_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_relations: {
+        Row: {
+          created_at: string
+          created_by: string
+          document_id: string
+          id: string
+          label: string | null
+          relation: string
+          target_document_id: string | null
+          target_id: string | null
+          target_kind: string
+          target_route: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          document_id: string
+          id?: string
+          label?: string | null
+          relation: string
+          target_document_id?: string | null
+          target_id?: string | null
+          target_kind: string
+          target_route?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          document_id?: string
+          id?: string
+          label?: string | null
+          relation?: string
+          target_document_id?: string | null
+          target_id?: string | null
+          target_kind?: string
+          target_route?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_relations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_relations_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_relations_target_document_id_fkey"
+            columns: ["target_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_user_state: {
+        Row: {
+          bookmarked: boolean
+          document_id: string
+          last_anchor: string | null
+          last_viewed_at: string | null
+          user_id: string
+        }
+        Insert: {
+          bookmarked?: boolean
+          document_id: string
+          last_anchor?: string | null
+          last_viewed_at?: string | null
+          user_id: string
+        }
+        Update: {
+          bookmarked?: boolean
+          document_id?: string
+          last_anchor?: string | null
+          last_viewed_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_user_state_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_user_state_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documents: {
         Row: {
+          acknowledgement_deadline: string | null
+          acknowledgement_required: boolean
+          approval_required: boolean
+          approved_at: string | null
+          approved_by: string | null
+          canonical_source: string
           case_id: string | null
+          category: string | null
+          classification: string
           content: Json | null
+          content_hash: string | null
           created_at: string
+          current_version_number: number
+          document_type: string
+          effective_at: string | null
+          excerpt: string | null
+          expires_at: string | null
           folder: string
           id: string
           kind: Database["public"]["Enums"]["doc_kind"]
+          last_synced_at: string | null
+          mandatory: boolean
           modified_label: string | null
           name: string
+          owner_role: string | null
+          owner_user_id: string | null
+          review_due_at: string | null
+          review_note: string | null
+          review_outcome: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          search_tsv: unknown | null
+          source_id: string | null
+          source_modified_at: string | null
+          source_system: string
+          status: string
+          sync_error: string | null
+          sync_status: string | null
+          tags: Json
           updated_at: string
           updated_by: string | null
         }
         Insert: {
+          acknowledgement_deadline?: string | null
+          acknowledgement_required?: boolean
+          approval_required?: boolean
+          approved_at?: string | null
+          approved_by?: string | null
+          canonical_source?: string
           case_id?: string | null
+          category?: string | null
+          classification?: string
           content?: Json | null
           created_at?: string
+          current_version_number?: number
+          document_type?: string
+          effective_at?: string | null
+          expires_at?: string | null
           folder: string
           id?: string
           kind?: Database["public"]["Enums"]["doc_kind"]
+          last_synced_at?: string | null
+          mandatory?: boolean
           modified_label?: string | null
           name: string
+          owner_role?: string | null
+          owner_user_id?: string | null
+          review_due_at?: string | null
+          review_note?: string | null
+          review_outcome?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source_id?: string | null
+          source_modified_at?: string | null
+          source_system?: string
+          status?: string
+          sync_error?: string | null
+          sync_status?: string | null
+          tags?: Json
           updated_at?: string
           updated_by?: string | null
         }
         Update: {
+          acknowledgement_deadline?: string | null
+          acknowledgement_required?: boolean
+          approval_required?: boolean
+          approved_at?: string | null
+          approved_by?: string | null
+          canonical_source?: string
           case_id?: string | null
+          category?: string | null
+          classification?: string
           content?: Json | null
           created_at?: string
+          current_version_number?: number
+          document_type?: string
+          effective_at?: string | null
+          expires_at?: string | null
           folder?: string
           id?: string
           kind?: Database["public"]["Enums"]["doc_kind"]
+          last_synced_at?: string | null
+          mandatory?: boolean
           modified_label?: string | null
           name?: string
+          owner_role?: string | null
+          owner_user_id?: string | null
+          review_due_at?: string | null
+          review_note?: string | null
+          review_outcome?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source_id?: string | null
+          source_modified_at?: string | null
+          source_system?: string
+          status?: string
+          sync_error?: string | null
+          sync_status?: string | null
+          tags?: Json
           updated_at?: string
           updated_by?: string | null
         }
         Relationships: [
           {
+            foreignKeyName: "documents_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "documents_case_id_fkey"
             columns: ["case_id"]
             isOneToOne: false
             referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_owner_user_id_fkey"
+            columns: ["owner_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -1292,34 +1616,62 @@ export type Database = {
       }
       documents_versions: {
         Row: {
+          change_summary: string | null
+          change_type: string | null
           content: Json | null
+          content_hash: string | null
           document_id: string
+          effective_at: string | null
           id: string
           kind: Database["public"]["Enums"]["doc_kind"] | null
+          metadata: Json | null
           modified_label: string | null
           name: string | null
+          requires_reack: boolean
+          restored_from: string | null
           saved_at: string
           saved_by: string | null
+          source_revision: string | null
+          source_system: string | null
+          version_number: number | null
         }
         Insert: {
+          change_summary?: string | null
+          change_type?: string | null
           content?: Json | null
           document_id: string
+          effective_at?: string | null
           id?: string
           kind?: Database["public"]["Enums"]["doc_kind"] | null
+          metadata?: Json | null
           modified_label?: string | null
           name?: string | null
+          requires_reack?: boolean
+          restored_from?: string | null
           saved_at?: string
           saved_by?: string | null
+          source_revision?: string | null
+          source_system?: string | null
+          version_number?: number | null
         }
         Update: {
+          change_summary?: string | null
+          change_type?: string | null
           content?: Json | null
           document_id?: string
+          effective_at?: string | null
           id?: string
           kind?: Database["public"]["Enums"]["doc_kind"] | null
+          metadata?: Json | null
           modified_label?: string | null
           name?: string | null
+          requires_reack?: boolean
+          restored_from?: string | null
           saved_at?: string
           saved_by?: string | null
+          source_revision?: string | null
+          source_system?: string | null
+          version_number?: number | null
         }
         Relationships: [
           {
@@ -1327,6 +1679,13 @@ export type Database = {
             columns: ["document_id"]
             isOneToOne: false
             referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_versions_restored_from_fkey"
+            columns: ["restored_from"]
+            isOneToOne: false
+            referencedRelation: "documents_versions"
             referencedColumns: ["id"]
           },
           {
@@ -5207,6 +5566,85 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      acknowledge_document: {
+        Args: { p_document: string }
+        Returns: Database["public"]["Tables"]["document_acknowledgements"]["Row"]
+      }
+      close_reading_campaign: {
+        Args: { p_campaign: string; p_reason?: string }
+        Returns: Database["public"]["Tables"]["document_reading_campaigns"]["Row"]
+      }
+      document_ack_summary: {
+        Args: { p_document: string }
+        Returns: {
+          acknowledged_at: string | null
+          display_name: string
+          user_id: string
+        }[]
+      }
+      document_record_review: {
+        Args: {
+          p_document: string
+          p_next_due?: string
+          p_note?: string
+          p_outcome: string
+        }
+        Returns: Database["public"]["Tables"]["documents"]["Row"]
+      }
+      document_restore_version: {
+        Args: { p_document: string; p_reason: string; p_version: string }
+        Returns: Database["public"]["Tables"]["documents"]["Row"]
+      }
+      document_save: {
+        Args: {
+          p_body: string
+          p_change_summary?: string
+          p_change_type?: string
+          p_document: string
+          p_name: string
+          p_requires_reack?: boolean
+        }
+        Returns: Database["public"]["Tables"]["documents"]["Row"]
+      }
+      document_workflow: {
+        Args: {
+          p_action: string
+          p_document: string
+          p_effective_at?: string
+          p_reason?: string
+          p_replacement?: string
+        }
+        Returns: Database["public"]["Tables"]["documents"]["Row"]
+      }
+      publish_reading_campaign: {
+        Args: {
+          p_audience: string
+          p_deadline?: string
+          p_document: string
+          p_reason?: string
+          p_targets?: Json
+        }
+        Returns: Database["public"]["Tables"]["document_reading_campaigns"]["Row"]
+      }
+      resolve_document_sync: {
+        Args: { p_document: string; p_reason: string; p_resolution: string }
+        Returns: Database["public"]["Tables"]["documents"]["Row"]
+      }
+      search_documents: {
+        Args: { p_limit?: number; p_offset?: number; p_query: string }
+        Returns: {
+          category: string | null
+          classification: string
+          document_type: string
+          headline: string | null
+          id: string
+          mandatory: boolean
+          name: string
+          rank: number
+          status: string
+          updated_at: string
+        }[]
       }
     }
     Enums: {

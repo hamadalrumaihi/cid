@@ -145,6 +145,8 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
     else if (hit.kind === 'report') router.push(caseLink(hit.id, 'reports'))
     else if (hit.kind === 'evidence') router.push(caseLink(hit.id, 'evidence'))
     else if (hit.kind === 'legal') router.push(`/legal?request=${encodeURIComponent(hit.id)}`)
+    // Documents deep-link straight into the reader (SopsView reads ?doc=).
+    else if (hit.kind === 'document') router.push(`/sops?doc=${encodeURIComponent(hit.id)}`)
     else if (hit.term && Q_SEEDED_TABS.has(meta.tab)) router.push(`/${meta.tab}?q=${encodeURIComponent(hit.term)}`)
     else router.push(`/${meta.tab}`)
   }, [onClose, query, router])
