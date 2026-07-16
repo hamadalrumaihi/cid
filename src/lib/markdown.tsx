@@ -84,7 +84,39 @@ const H3 = ({ children }: { children: ReactNode }) => (
   <h3 className="mb-2 mt-5 text-sm font-bold uppercase tracking-wider text-blue-300/90 first:mt-0">{children}</h3>
 )
 
-export function renderMarkdown(body: string | null | undefined): ReactNode {
+/** One heading the document renderer emitted — the TOC consumes exactly this
+ *  list, produced during the SAME render pass (never a second parser). */
+export interface DocHeading { id: string; text: string; level: 2 | 3 }
+
+/** Deterministic, URL-safe anchor id; uniqueness handled by the collector. */
+const slugify = (t: string): string =>
+  t.toLowerCase().replace(/\*\*|`/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64) || 'section'
+
+/** Collector threaded through a doc-mode render: assigns unique ids and
+ *  records every emitted heading in document order. */
+interface HeadingCollector { used: Map<string, number>; out: DocHeading[] }
+
+/** Emit a heading. Legacy mode (no collector) keeps the exact pre-doc-mode
+ *  rendering — one styled visual h3, no ids — so case notes are unchanged.
+ *  Doc mode maps #/## and heuristic headings to a semantic <h2> and ###+ to
+ *  <h3>, each with a stable unique id for TOC/anchor navigation. */
+function heading(raw: string, mdLevel: number | null, collect: HeadingCollector | null, key: number): ReactNode {
+  if (!collect) return <H3 key={key}>{inline(raw)}</H3>
+  const level: 2 | 3 = mdLevel !== null && mdLevel >= 3 ? 3 : 2
+  const text = raw.replace(/\*\*|`/g, '').trim()
+  const base = slugify(text)
+  const n = collect.used.get(base) ?? 0
+  collect.used.set(base, n + 1)
+  const id = n === 0 ? base : `${base}-${n + 1}`
+  collect.out.push({ id, text, level })
+  return level === 2 ? (
+    <h2 key={key} id={id} className="mb-2 mt-7 scroll-mt-24 text-base font-bold text-white first:mt-0">{inline(raw)}</h2>
+  ) : (
+    <h3 key={key} id={id} className="mb-2 mt-5 scroll-mt-24 text-sm font-bold uppercase tracking-wider text-blue-300/90 first:mt-0">{inline(raw)}</h3>
+  )
+}
+
+function renderBlocks(body: string | null | undefined, collect: HeadingCollector | null): ReactNode {
   const norm = String(body ?? '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').replace(/^_{4,}\s*$/gm, '')
   const blocks = norm.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean)
   if (!blocks.length) return <p className="text-slate-500">No content.</p>
@@ -97,7 +129,7 @@ export function renderMarkdown(body: string | null | undefined): ReactNode {
     if (!lines.length) return null
     // Markdown heading / quote blocks.
     if (/^#{1,6}\s/.test(lines[0]) && lines.length === 1)
-      return <H3 key={bi}>{inline(lines[0].replace(/^#{1,6}\s+/, ''))}</H3>
+      return heading(lines[0].replace(/^#{1,6}\s+/, ''), (lines[0].match(/^#+/) as RegExpMatchArray)[0].length, collect, bi)
     if (lines.every((l) => /^>\s?/.test(l)))
       return (
         <blockquote key={bi} className="my-3 rounded-lg border-l-2 border-amber-500/50 bg-amber-500/5 px-3 py-2 text-sm text-amber-100/90">
@@ -126,14 +158,14 @@ export function renderMarkdown(body: string | null | undefined): ReactNode {
       const rows = rest.filter((l) => !isSep(l)).map(splitRow)
       return (
         <div key={bi}>
-          {head && <H3>{inline(head.replace(/:$/, ''))}</H3>}
+          {head && heading(head.replace(/:$/, ''), null, collect, 0)}
           {tableNode(rows, false, bi)}
         </div>
       )
     }
     // Single short ALL-CAPS / colon line → heading.
     if (lines.length === 1 && isHeadingText(lines[0]))
-      return <H3 key={bi}>{inline(lines[0].replace(/:$/, ''))}</H3>
+      return heading(lines[0].replace(/:$/, ''), null, collect, bi)
     // Mixed blocks: inline # headings split paragraphs.
     const out: ReactNode[] = []
     let para: string[] = []
@@ -153,10 +185,25 @@ export function renderMarkdown(body: string | null | undefined): ReactNode {
       para = []
     }
     for (const l of lines) {
-      if (/^#{1,6}\s/.test(l)) { flush(); out.push(<H3 key={k++}>{inline(l.replace(/^#{1,6}\s+/, ''))}</H3>) }
+      if (/^#{1,6}\s/.test(l)) { flush(); out.push(heading(l.replace(/^#{1,6}\s+/, ''), (l.match(/^#+/) as RegExpMatchArray)[0].length, collect, k++)) }
       else para.push(l)
     }
     flush()
     return <div key={bi}>{out}</div>
   })
+}
+
+/** Legacy renderer — exact pre-doc-mode output (case notes, previews). */
+export function renderMarkdown(body: string | null | undefined): ReactNode {
+  return renderBlocks(body, null)
+}
+
+/** Document-mode renderer: the same block classifier as renderMarkdown, but
+ *  headings become semantic <h2>/<h3> with stable unique ids, and the emitted
+ *  heading list is returned alongside — the reader's table of contents is
+ *  BY CONSTRUCTION in lockstep with what rendered. */
+export function renderDocumentMarkdown(body: string | null | undefined): { nodes: ReactNode; headings: DocHeading[] } {
+  const collect: HeadingCollector = { used: new Map(), out: [] }
+  const nodes = renderBlocks(body, collect)
+  return { nodes, headings: collect.out }
 }

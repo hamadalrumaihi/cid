@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildActionItems, priorityFromScore, NUDGE, STATUS_BASE,
-  type AcAccess, type AcBlocker, type AcCase, type AcLegal, type AcNotif,
+  type AcAccess, type AcBlocker, type AcCase, type AcDoc, type AcLegal, type AcNotif,
   type AcTask, type AcTransfer, type ActionSources,
 } from './actionItems'
 
@@ -485,5 +485,57 @@ describe('ranking', () => {
     expect(priorityFromScore(299)).toBe('normal')
     expect(priorityFromScore(100)).toBe('normal')
     expect(priorityFromScore(99)).toBe('low')
+  })
+})
+
+describe('library governance items (AcDoc — pre-derived facts)', () => {
+  const mkDoc = (over: Partial<AcDoc> = {}): AcDoc => ({
+    id: 'd-1', title: 'Evidence Handling SOP', status: 'published',
+    ackPending: false, ackDeadline: null,
+    reviewDue: null, reviewDueAt: null,
+    awaitingMyApproval: false, syncConflict: false,
+    createdAt: NOW_ISO, updatedAt: NOW_ISO, ...over,
+  })
+
+  it('required acknowledgement: personal item, overdue past the deadline, deep-links to the reader', () => {
+    const q = buildActionItems(src({ documents: [
+      mkDoc({ ackPending: true, ackDeadline: '2026-07-10T00:00:00Z' }),
+    ] }))
+    const it1 = q.items.find((i) => i.sourceType === 'document_ack')!
+    expect(it1).toBeDefined()
+    expect(it1.status).toBe('overdue')
+    expect(it1.isPersonalItem).toBe(true)
+    expect(it1.deepLink).toBe('/sops?doc=d-1')
+    expect(it1.actionLabel).toBe('Read & acknowledge')
+  })
+
+  it('review due (docs I own), approval waiting on me, and sync conflict each emit their own item', () => {
+    const q = buildActionItems(src({ documents: [
+      mkDoc({ id: 'd-r', reviewDue: 'overdue', reviewDueAt: '2026-07-01T00:00:00Z' }),
+      mkDoc({ id: 'd-a', status: 'in_review', awaitingMyApproval: true }),
+      mkDoc({ id: 'd-s', syncConflict: true }),
+    ] }))
+    const types = q.items.map((i) => i.sourceType)
+    expect(types).toContain('document_review')
+    expect(types).toContain('document_approval')
+    expect(types).toContain('document_sync')
+    const sync = q.items.find((i) => i.sourceType === 'document_sync')!
+    expect(sync.isCommandItem).toBe(true)
+    expect(sync.status).toBe('blocked')
+  })
+
+  it('a quiet document emits nothing; a document_required notification is suppressed by its structural item', () => {
+    const quiet = buildActionItems(src({ documents: [mkDoc()] }))
+    expect(quiet.items.filter((i) => i.sourceType.startsWith('document_'))).toHaveLength(0)
+    const withNotif = buildActionItems(src({
+      documents: [mkDoc({ ackPending: true })],
+      notifications: [{
+        id: 'n-1', user_id: ME, type: 'document_required',
+        payload: { document_id: 'd-1' }, read: false, created_at: NOW_ISO,
+      }],
+    }))
+    expect(withNotif.suppressedCount).toBe(1)
+    const ack = withNotif.items.find((i) => i.sourceType === 'document_ack')!
+    expect(ack.sourceMetadata.notificationIds).toEqual(['n-1'])
   })
 })

@@ -6,7 +6,11 @@
  *  previous items stay on screen while a realtime-triggered refresh is in
  *  flight, so the queue never flashes empty. */
 import { useCallback, useEffect, useState } from 'react'
-import { buildActionItems, type ActionItem, type ActionSources } from '@/lib/actionItems'
+import { buildActionItems, type AcDoc, type ActionItem, type ActionSources } from '@/lib/actionItems'
+import {
+  ackState, canApproveDoc, docTitle, reviewState,
+  type MyAckVersions, type ShelfDoc,
+} from '@/components/sops/docModel'
 import { list, rpc } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { todayISO } from '@/lib/format'
@@ -27,6 +31,11 @@ const LEGAL_COLS =
   'id,case_id,case_number_snapshot,request_number,request_type,review_status,fulfilment_status,created_by,responsible_bureau,response_deadline,expires_at,created_at,updated_at'
 const BLOCKER_COLS = 'id,case_id,title,type,status,owner_id,review_at,created_at,updated_at'
 const NOTIF_COLS = 'id,user_id,type,payload,read,created_at'
+/** Library governance projection — never full bodies (docModel AcDoc inputs). */
+const DOC_COLS =
+  'id,name,folder,kind,status,category,classification,owner_user_id,mandatory,'
+  + 'acknowledgement_required,acknowledgement_deadline,review_due_at,sync_status,'
+  + 'current_version_number,created_at,updated_at'
 
 const TRANSFER_PENDING = ['pending_source', 'pending_target']
 
@@ -44,7 +53,7 @@ export interface ActionItemsResult {
 }
 
 export function useActionItems(): ActionItemsResult {
-  const { profile, state, isCommand, isOwner } = useAuth()
+  const { profile, state, isCommand, isOwner, justiceRole } = useAuth()
   const fetchProfiles = useProfilesStore((s) => s.fetch)
   const [built, setBuilt] = useState<{ items: ActionItem[]; suppressedCount: number } | null>(null)
   const [error, setError] = useState<unknown>(null)
@@ -61,6 +70,7 @@ export function useActionItems(): ActionItemsResult {
   const vProfiles = useTableVersion('profiles')
   const vMembership = useTableVersion('membership_requests')
   const vJusticeReqs = useTableVersion('justice_membership_requests')
+  const vDocuments = useTableVersion('documents')
 
   const refresh = useCallback(async () => {
     if (state !== 'in' || !profile) return
@@ -78,7 +88,7 @@ export function useActionItems(): ActionItemsResult {
     }
     try {
       const me = profile.id
-      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests] =
+      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks] =
         await Promise.all([
           list('cases', { select: CASE_COLS }),
           list('case_tasks', { select: TASK_COLS, eq: { assignee: me, done: false } }),
@@ -109,6 +119,12 @@ export function useActionItems(): ActionItemsResult {
                 in: { status: ['draft', 'pending', 'correction_requested'] },
               }).then((rows) => rows as JusticeRequestLite[]).catch(() => null)
             : Promise.resolve(null),
+          // Library governance: narrow RLS-scoped projection + my own acks —
+          // both fail-open to empty (the queue never sinks on the library).
+          list('documents', { select: DOC_COLS }).then((r) => r as unknown as ShelfDoc[]).catch(() => [] as ShelfDoc[]),
+          list('document_acknowledgements', {
+            select: 'document_id, documents_versions(version_number)',
+          }).catch(() => []),
         ])
       const nowMs = Date.now()
       // Command/owner: the shared awaitingCount (submitted + actionable
@@ -121,6 +137,32 @@ export function useActionItems(): ActionItemsResult {
             justiceRequests,
           ).awaitingCount
         : null
+      // Library governance facts, pre-derived through docModel so the pure
+      // builder stays free of component imports (AcDoc contract).
+      const myAcks: MyAckVersions = {}
+      for (const a of docAcks as Array<{ document_id: string; documents_versions: { version_number: number | null } | null }>) {
+        const v = a.documents_versions?.version_number
+        if (typeof v === 'number') (myAcks[a.document_id] ??= []).push(v)
+      }
+      const viewer = {
+        userId: me, active: !!profile.active, role: profile.role,
+        isCommand, isOwner, justiceRole,
+      }
+      const documents: AcDoc[] = docRows.flatMap((d) => {
+        const ack = ackState(d, myAcks)
+        const item: AcDoc = {
+          id: d.id, title: docTitle(d.name), status: d.status,
+          ackPending: ack === 'pending' || ack === 'reack_needed',
+          ackDeadline: d.acknowledgement_deadline,
+          reviewDue: d.owner_user_id === me ? reviewState(d, nowMs) : null,
+          reviewDueAt: d.review_due_at,
+          awaitingMyApproval: d.status === 'in_review' && canApproveDoc(viewer, d),
+          syncConflict: d.sync_status === 'conflict' && (isCommand || isOwner),
+          createdAt: d.created_at, updatedAt: d.updated_at,
+        }
+        return item.ackPending || item.reviewDue || item.awaitingMyApproval || item.syncConflict
+          ? [item] : []
+      })
       const sources: ActionSources = {
         me,
         role: profile.role,
@@ -138,6 +180,7 @@ export function useActionItems(): ActionItemsResult {
         legal,
         blockers,
         notifications,
+        documents,
       }
       setBuilt(buildActionItems(sources))
       setError(null)
@@ -147,12 +190,12 @@ export function useActionItems(): ActionItemsResult {
     } finally {
       setRefreshing(false)
     }
-  }, [state, profile, isCommand, isOwner, fetchProfiles])
+  }, [state, profile, isCommand, isOwner, justiceRole, fetchProfiles])
 
   useEffect(() => {
     const id = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(id)
-  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs])
+  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs, vDocuments])
 
   return {
     items: built?.items ?? [],

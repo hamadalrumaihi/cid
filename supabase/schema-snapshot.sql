@@ -453,6 +453,85 @@ alter table public.deletion_tokens enable row level security;
 -- app_secrets precedent: RLS on, ZERO policies, all client grants revoked —
 -- visible/writable only through the permanent-deletion definer RPCs.
 
+create table public.document_acknowledgements (
+  id uuid not null default gen_random_uuid(),
+  document_id uuid not null,
+  user_id uuid not null,
+  document_version_id uuid not null,
+  acknowledged_at timestamp with time zone not null default now(),
+  method text not null default 'manual'::text
+);
+alter table public.document_acknowledgements add constraint document_acknowledgements_pkey PRIMARY KEY (id);
+alter table public.document_acknowledgements add constraint document_acknowledgements_document_id_user_id_document_vers_key UNIQUE (document_id, user_id, document_version_id);
+alter table public.document_acknowledgements add constraint document_acknowledgements_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.documents(id) ON DELETE CASCADE;
+alter table public.document_acknowledgements add constraint document_acknowledgements_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.document_acknowledgements add constraint document_acknowledgements_document_version_id_fkey FOREIGN KEY (document_version_id) REFERENCES public.documents_versions(id);
+alter table public.document_acknowledgements add constraint document_acknowledgements_method_check CHECK ((method = 'manual'::text));
+alter table public.document_acknowledgements enable row level security;
+-- Immutable read receipts: SELECT (own rows) is the only policy; inserts go
+-- through acknowledge_document(); aggregate completion via document_ack_summary.
+
+create table public.document_reading_campaigns (
+  id uuid not null default gen_random_uuid(),
+  document_id uuid not null,
+  document_version_id uuid not null,
+  audience text not null default 'all'::text,
+  targets jsonb not null default '[]'::jsonb,
+  effective_at timestamp with time zone not null default now(),
+  deadline timestamp with time zone,
+  reason text not null,
+  status text not null default 'active'::text,
+  created_by uuid not null default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.document_reading_campaigns add constraint document_reading_campaigns_pkey PRIMARY KEY (id);
+alter table public.document_reading_campaigns add constraint document_reading_campaigns_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.documents(id) ON DELETE CASCADE;
+alter table public.document_reading_campaigns add constraint document_reading_campaigns_document_version_id_fkey FOREIGN KEY (document_version_id) REFERENCES public.documents_versions(id);
+alter table public.document_reading_campaigns add constraint document_reading_campaigns_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.document_reading_campaigns add constraint document_reading_campaigns_audience_check CHECK ((audience = ANY (ARRAY['all'::text, 'LSB'::text, 'BCB'::text, 'SAB'::text, 'JTF'::text, 'command'::text, 'detectives'::text, 'senior_detectives'::text, 'specific'::text])));
+alter table public.document_reading_campaigns add constraint document_reading_campaigns_status_check CHECK ((status = ANY (ARRAY['active'::text, 'closed'::text, 'cancelled'::text])));
+alter table public.document_reading_campaigns enable row level security;
+-- Writes are RPC-only (publish_reading_campaign / close_reading_campaign);
+-- SELECT is the only policy.
+
+create table public.document_relations (
+  id uuid not null default gen_random_uuid(),
+  document_id uuid not null,
+  relation text not null,
+  target_kind text not null,
+  target_document_id uuid,
+  target_id uuid,
+  target_route text,
+  label text,
+  created_by uuid not null default auth.uid(),
+  created_at timestamp with time zone not null default now()
+);
+alter table public.document_relations add constraint document_relations_pkey PRIMARY KEY (id);
+alter table public.document_relations add constraint document_relations_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.documents(id) ON DELETE CASCADE;
+alter table public.document_relations add constraint document_relations_target_document_id_fkey FOREIGN KEY (target_document_id) REFERENCES public.documents(id) ON DELETE CASCADE;
+alter table public.document_relations add constraint document_relations_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.document_relations add constraint document_relations_relation_check CHECK ((relation = ANY (ARRAY['applies_to'::text, 'required_for'::text, 'see_also'::text, 'supersedes'::text, 'related'::text, 'checklist_for'::text, 'policy_for'::text])));
+alter table public.document_relations add constraint document_relations_target_kind_check CHECK ((target_kind = ANY (ARRAY['document'::text, 'route'::text, 'case'::text, 'person'::text, 'gang'::text, 'place'::text, 'vehicle'::text, 'report'::text, 'legal_request'::text])));
+alter table public.document_relations add constraint document_relations_check CHECK ((((target_kind = 'document'::text) AND (target_document_id IS NOT NULL) AND (target_id IS NULL) AND (target_route IS NULL) AND (target_document_id <> document_id)) OR ((target_kind = 'route'::text) AND (target_route IS NOT NULL) AND (target_document_id IS NULL) AND (target_id IS NULL)) OR ((target_kind <> ALL (ARRAY['document'::text, 'route'::text])) AND (target_id IS NOT NULL) AND (target_document_id IS NULL) AND (target_route IS NULL))));
+alter table public.document_relations enable row level security;
+-- target_id has NO FK on purpose (polymorphic case/person/gang/place/vehicle/
+-- report/legal_request target); the table-level CHECK pins one target shape.
+
+create table public.document_user_state (
+  user_id uuid not null,
+  document_id uuid not null,
+  bookmarked boolean not null default false,
+  last_viewed_at timestamp with time zone,
+  last_anchor text
+);
+alter table public.document_user_state add constraint document_user_state_pkey PRIMARY KEY (user_id, document_id);
+alter table public.document_user_state add constraint document_user_state_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.document_user_state add constraint document_user_state_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.documents(id) ON DELETE CASCADE;
+alter table public.document_user_state enable row level security;
+-- Strictly private per-user reading state (bookmark/resume position): RLS
+-- admits only the owner and no aggregate RPC exists — never visible to command.
+
 create table public.documents (
   id uuid not null default gen_random_uuid(),
   folder text not null,
@@ -463,12 +542,54 @@ create table public.documents (
   modified_label text,
   updated_by uuid default auth.uid(),
   created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now()
+  updated_at timestamp with time zone not null default now(),
+  category text,
+  document_type text not null default 'reference'::text,
+  status text not null default 'published'::text,
+  classification text not null default 'internal'::text,
+  owner_user_id uuid,
+  owner_role text,
+  approval_required boolean not null default false,
+  approved_by uuid,
+  approved_at timestamp with time zone,
+  effective_at timestamp with time zone,
+  reviewed_at timestamp with time zone,
+  reviewed_by uuid,
+  review_due_at timestamp with time zone,
+  review_note text,
+  review_outcome text,
+  expires_at timestamp with time zone,
+  mandatory boolean not null default false,
+  acknowledgement_required boolean not null default false,
+  acknowledgement_deadline timestamp with time zone,
+  source_system text not null default 'portal'::text,
+  source_id text,
+  canonical_source text not null default 'portal'::text,
+  source_modified_at timestamp with time zone,
+  last_synced_at timestamp with time zone,
+  sync_status text,
+  sync_error text,
+  current_version_number integer not null default 1,
+  tags jsonb not null default '[]'::jsonb,
+  excerpt text generated always as (left((content ->> 'body'::text), 240)) stored,
+  content_hash text generated always as (md5(COALESCE((content ->> 'body'::text), ''::text))) stored,
+  search_tsv tsvector generated always as ((setweight(to_tsvector('english'::regconfig, COALESCE(name, ''::text)), 'A'::"char") || setweight(to_tsvector('english'::regconfig, COALESCE((content ->> 'body'::text), ''::text)), 'B'::"char"))) stored
 );
 alter table public.documents add constraint documents_folder_name_key UNIQUE (folder, name);
 alter table public.documents add constraint documents_pkey PRIMARY KEY (id);
 alter table public.documents add constraint documents_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
 alter table public.documents add constraint documents_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id);
+alter table public.documents add constraint documents_owner_user_id_fkey FOREIGN KEY (owner_user_id) REFERENCES public.profiles(id);
+alter table public.documents add constraint documents_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES public.profiles(id);
+alter table public.documents add constraint documents_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.profiles(id);
+alter table public.documents add constraint documents_category_check CHECK (((category IS NULL) OR (category = ANY (ARRAY['sops'::text, 'investigative'::text, 'command'::text, 'justice'::text, 'technical'::text]))));
+alter table public.documents add constraint documents_document_type_check CHECK ((document_type = ANY (ARRAY['sop'::text, 'policy'::text, 'guide'::text, 'checklist'::text, 'reference'::text, 'legal_guidance'::text, 'technical'::text, 'template'::text])));
+alter table public.documents add constraint documents_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'in_review'::text, 'approved'::text, 'published'::text, 'superseded'::text, 'archived'::text])));
+alter table public.documents add constraint documents_classification_check CHECK ((classification = ANY (ARRAY['internal'::text, 'restricted'::text, 'command'::text, 'justice'::text, 'owner'::text])));
+alter table public.documents add constraint documents_review_outcome_check CHECK (((review_outcome IS NULL) OR (review_outcome = ANY (ARRAY['no_change'::text, 'editorial_update'::text, 'material_update'::text, 'legal_review'::text, 'supersede'::text, 'archive'::text]))));
+alter table public.documents add constraint documents_source_system_check CHECK ((source_system = ANY (ARRAY['portal'::text, 'google_drive'::text, 'imported'::text])));
+alter table public.documents add constraint documents_canonical_source_check CHECK ((canonical_source = ANY (ARRAY['portal'::text, 'google_drive'::text])));
+alter table public.documents add constraint documents_sync_status_check CHECK (((sync_status IS NULL) OR (sync_status = ANY (ARRAY['synced'::text, 'pending'::text, 'source_newer'::text, 'portal_newer'::text, 'conflict'::text, 'disconnected'::text, 'error'::text, 'disabled'::text]))));
 alter table public.documents enable row level security;
 
 create table public.documents_versions (
@@ -479,11 +600,23 @@ create table public.documents_versions (
   content jsonb,
   modified_label text,
   saved_by uuid default auth.uid(),
-  saved_at timestamp with time zone not null default now()
+  saved_at timestamp with time zone not null default now(),
+  version_number integer,
+  change_summary text,
+  change_type text,
+  requires_reack boolean not null default false,
+  restored_from uuid,
+  source_system text,
+  source_revision text,
+  content_hash text generated always as (md5(COALESCE((content ->> 'body'::text), ''::text))) stored,
+  effective_at timestamp with time zone,
+  metadata jsonb
 );
 alter table public.documents_versions add constraint documents_versions_pkey PRIMARY KEY (id);
 alter table public.documents_versions add constraint documents_versions_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.documents(id) ON DELETE CASCADE;
 alter table public.documents_versions add constraint documents_versions_saved_by_fkey FOREIGN KEY (saved_by) REFERENCES public.profiles(id);
+alter table public.documents_versions add constraint documents_versions_restored_from_fkey FOREIGN KEY (restored_from) REFERENCES public.documents_versions(id);
+alter table public.documents_versions add constraint documents_versions_change_type_check CHECK (((change_type IS NULL) OR (change_type = ANY (ARRAY['editorial'::text, 'clarification'::text, 'procedural'::text, 'legal'::text, 'emergency'::text, 'deprecation'::text, 'restore'::text]))));
 alter table public.documents_versions enable row level security;
 
 create table public.evidence (
@@ -519,7 +652,7 @@ create table public.feedback (
 );
 alter table public.feedback add constraint feedback_pkey PRIMARY KEY (id);
 alter table public.feedback add constraint feedback_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
-alter table public.feedback add constraint feedback_kind_check CHECK ((kind = ANY (ARRAY['feature'::text, 'bug'::text])));
+alter table public.feedback add constraint feedback_kind_check CHECK ((kind = ANY (ARRAY['feature'::text, 'bug'::text, 'document'::text])));
 alter table public.feedback add constraint feedback_status_check CHECK ((status = ANY (ARRAY['open'::text, 'done'::text, 'wontfix'::text])));
 alter table public.feedback enable row level security;
 
@@ -1572,9 +1705,25 @@ CREATE INDEX deleted_member_ledger_deleted_by_fkey_idx ON public.deleted_member_
 CREATE INDEX deleted_member_ledger_target_id_idx ON public.deleted_member_ledger USING btree (target_id);
 CREATE INDEX deletion_tokens_created_by_idx ON public.deletion_tokens USING btree (created_by);
 CREATE INDEX deletion_tokens_target_id_idx ON public.deletion_tokens USING btree (target_id);
+CREATE INDEX document_acknowledgements_user_idx ON public.document_acknowledgements USING btree (user_id);
+CREATE INDEX document_acknowledgements_version_fkey_idx ON public.document_acknowledgements USING btree (document_version_id);
+CREATE INDEX document_reading_campaigns_created_by_fkey_idx ON public.document_reading_campaigns USING btree (created_by);
+CREATE INDEX document_reading_campaigns_doc_idx ON public.document_reading_campaigns USING btree (document_id, status);
+CREATE INDEX document_reading_campaigns_version_fkey_idx ON public.document_reading_campaigns USING btree (document_version_id);
+CREATE INDEX document_relations_created_by_fkey_idx ON public.document_relations USING btree (created_by);
+CREATE INDEX document_relations_target_document_fkey_idx ON public.document_relations USING btree (target_document_id);
+CREATE UNIQUE INDEX document_relations_unique_idx ON public.document_relations USING btree (document_id, relation, target_kind, COALESCE(target_document_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(target_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(target_route, ''::text));
+CREATE INDEX document_user_state_document_fkey_idx ON public.document_user_state USING btree (document_id);
+CREATE INDEX documents_approved_by_fkey_idx ON public.documents USING btree (approved_by);
 CREATE INDEX documents_case_id_fkey_idx ON public.documents USING btree (case_id);
+CREATE INDEX documents_owner_user_id_fkey_idx ON public.documents USING btree (owner_user_id);
+CREATE INDEX documents_review_due_idx ON public.documents USING btree (review_due_at) WHERE (review_due_at IS NOT NULL);
+CREATE INDEX documents_reviewed_by_fkey_idx ON public.documents USING btree (reviewed_by);
+CREATE INDEX documents_search_tsv_idx ON public.documents USING gin (search_tsv);
 CREATE INDEX documents_updated_by_fkey_idx ON public.documents USING btree (updated_by);
 CREATE INDEX documents_versions_doc_idx ON public.documents_versions USING btree (document_id, saved_at DESC);
+CREATE UNIQUE INDEX documents_versions_number_key ON public.documents_versions USING btree (document_id, version_number) WHERE (version_number IS NOT NULL);
+CREATE INDEX documents_versions_restored_from_fkey_idx ON public.documents_versions USING btree (restored_from);
 CREATE INDEX documents_versions_saved_by_fkey_idx ON public.documents_versions USING btree (saved_by);
 CREATE INDEX evidence_case_id_idx ON public.evidence USING btree (case_id);
 CREATE INDEX evidence_collected_by_fkey_idx ON public.evidence USING btree (collected_by);
@@ -3755,8 +3904,12 @@ CREATE TRIGGER cid_records_touch BEFORE UPDATE ON public.cid_records FOR EACH RO
 CREATE TRIGGER client_errors_notify AFTER INSERT ON public.client_errors FOR EACH ROW EXECUTE FUNCTION private.notify_owners_client_error();
 CREATE TRIGGER commendations_touch BEFORE UPDATE ON public.commendations FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER custody_chain_audit AFTER INSERT OR DELETE OR UPDATE ON public.custody_chain FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER document_reading_campaigns_audit AFTER INSERT OR DELETE OR UPDATE ON public.document_reading_campaigns FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER document_reading_campaigns_touch BEFORE UPDATE ON public.document_reading_campaigns FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER document_relations_audit AFTER INSERT OR DELETE OR UPDATE ON public.document_relations FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER documents_audit AFTER INSERT OR DELETE OR UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER documents_touch BEFORE UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER trg_guard_document BEFORE INSERT OR UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION private.guard_document();
 CREATE TRIGGER evidence_audit AFTER INSERT OR DELETE OR UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER evidence_touch BEFORE UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER feedback_meta_audit AFTER INSERT OR DELETE OR UPDATE ON public.feedback_meta FOR EACH ROW EXECUTE FUNCTION private.audit();
@@ -4105,22 +4258,73 @@ create policy dml_sel on public.deleted_member_ledger
 -- (permanent_delete_execute); INSERT/UPDATE/DELETE/TRUNCATE grants revoked.
 -- deletion_tokens: RLS enabled with ZERO policies and no client grants.
 
+create policy doc_ack_sel on public.document_acknowledgements
+  as permissive for select to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)));
+-- document_acknowledgements: SELECT (own rows) is the ONLY policy — inserts go
+-- through acknowledge_document(); rows are immutable (no UPDATE/DELETE).
+
+create policy doc_campaign_sel on public.document_reading_campaigns
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.documents d
+  WHERE (d.id = document_reading_campaigns.document_id))));
+-- document_reading_campaigns: SELECT is the ONLY policy — writes are RPC-only
+-- (publish_reading_campaign / close_reading_campaign).
+
+create policy doc_rel_del on public.document_relations
+  as permissive for delete to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.documents d
+  WHERE ((d.id = document_relations.document_id) AND private.can_edit_document(d.classification, d.owner_user_id, d.folder)))));
+
+create policy doc_rel_ins on public.document_relations
+  as permissive for insert to authenticated
+  with check ((EXISTS ( SELECT 1
+   FROM public.documents d
+  WHERE ((d.id = document_relations.document_id) AND private.can_edit_document(d.classification, d.owner_user_id, d.folder)))));
+
+create policy doc_rel_sel on public.document_relations
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.documents d
+  WHERE (d.id = document_relations.document_id))));
+
+create policy doc_state_del on public.document_user_state
+  as permissive for delete to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy doc_state_ins on public.document_user_state
+  as permissive for insert to authenticated
+  with check (((user_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
+   FROM public.documents d
+  WHERE (d.id = document_user_state.document_id)))));
+
+create policy doc_state_sel on public.document_user_state
+  as permissive for select to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)));
+
+create policy doc_state_upd on public.document_user_state
+  as permissive for update to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)))
+  with check ((user_id = ( SELECT auth.uid() AS uid)));
+
 create policy documents_del on public.documents
   as permissive for delete to authenticated
   using (private.can_delete());
 
 create policy documents_ins on public.documents
   as permissive for insert to authenticated
-  with check ((private.is_active() AND ((folder <> ALL (ARRAY['SOPs'::text, 'Resources'::text, 'Personnel'::text, 'Gang Intel'::text])) OR ( SELECT private.is_command() AS is_command))));
+  with check ((private.can_edit_document(classification, owner_user_id, folder) AND ((status = 'draft'::text) OR private.can_approve_document(category, classification) OR ((COALESCE(classification, 'internal'::text) = 'internal'::text) AND (folder <> ALL (ARRAY['SOPs'::text, 'Resources'::text, 'Personnel'::text, 'Gang Intel'::text]))))));
 
 create policy documents_sel on public.documents
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.doc_class_visible(classification, owner_user_id) AND ((status = ANY (ARRAY['published'::text, 'superseded'::text, 'archived'::text])) OR private.can_edit_document(classification, owner_user_id, folder) OR private.can_approve_document(category, classification))));
 
 create policy documents_upd on public.documents
   as permissive for update to authenticated
-  using ((private.is_active() AND ((folder <> ALL (ARRAY['SOPs'::text, 'Resources'::text, 'Personnel'::text, 'Gang Intel'::text])) OR ( SELECT private.is_command() AS is_command))))
-  with check ((private.is_active() AND ((folder <> ALL (ARRAY['SOPs'::text, 'Resources'::text, 'Personnel'::text, 'Gang Intel'::text])) OR ( SELECT private.is_command() AS is_command))));
+  using (private.can_edit_document(classification, owner_user_id, folder))
+  with check (private.can_edit_document(classification, owner_user_id, folder));
 
 create policy documents_versions_del on public.documents_versions
   as permissive for delete to authenticated
@@ -4128,11 +4332,15 @@ create policy documents_versions_del on public.documents_versions
 
 create policy documents_versions_ins on public.documents_versions
   as permissive for insert to authenticated
-  with check (( SELECT private.is_active() AS is_active));
+  with check ((EXISTS ( SELECT 1
+   FROM public.documents d
+  WHERE ((d.id = documents_versions.document_id) AND private.can_edit_document(d.classification, d.owner_user_id, d.folder)))));
 
 create policy documents_versions_sel on public.documents_versions
   as permissive for select to authenticated
-  using (( SELECT private.is_active() AS is_active));
+  using ((EXISTS ( SELECT 1
+   FROM public.documents d
+  WHERE (d.id = documents_versions.document_id))));
 
 create policy evidence_del on public.evidence
   as permissive for delete to authenticated
@@ -5041,3 +5249,33 @@ create policy wl_sel on public.watchlist
 -- authenticated user could read all justice requests incl. the revoked
 -- internal_decision_note. Guard re-coalesced; body otherwise the live
 -- fixture-filtered one. Definitive SQL in that migration file.
+-- 20260801010000_document_governance: documents/documents_versions gained the
+-- governance columns above; four new tables (document_acknowledgements,
+-- document_reading_campaigns, document_relations, document_user_state);
+-- documents_sel/ins/upd and documents_versions_sel/ins rewritten to the
+-- classification/edit-authority matrix (all mirrored above). New helpers:
+-- private.doc_class_visible(text, uuid), private.can_edit_document(text, uuid, text),
+-- private.can_approve_document(text, text), private.can_manage_required_reading(),
+-- private.can_resolve_doc_sync(), private.guard_document() [trigger
+-- trg_guard_document — workflow/sync columns are RPC-only for direct
+-- authenticated/anon writes; governance-metadata tier approver-only],
+-- private.document_campaign_recipients(uuid, text, jsonb, uuid). New RPCs:
+-- public.document_workflow(uuid, text, text, timestamptz, uuid),
+-- public.document_record_review(uuid, text, text, timestamptz),
+-- public.document_save(uuid, text, text, text, text, boolean),
+-- public.document_restore_version(uuid, uuid, text),
+-- public.resolve_document_sync(uuid, text, text),
+-- public.acknowledge_document(uuid),
+-- public.publish_reading_campaign(uuid, text, jsonb, timestamptz, text),
+-- public.close_reading_campaign(uuid, text),
+-- public.document_ack_summary(uuid),
+-- public.search_documents(text, integer, integer) (SECURITY INVOKER —
+-- caller RLS decides which rows exist). feedback_kind_check now admits
+-- 'document'. Definitive SQL in
+-- supabase/migrations/20260801010000_document_governance.sql.
+-- The sops-sync edge function contract changed to v2: it now maintains the
+-- explicit sync columns (source_system/source_id/canonical_source/
+-- source_modified_at/last_synced_at/sync_status/sync_error), writes conflict
+-- candidates as documents_versions rows (source_system='google_drive',
+-- metadata.conflict='true') instead of silently overwriting portal edits,
+-- and raises sync_status='conflict' for resolve_document_sync() to settle.

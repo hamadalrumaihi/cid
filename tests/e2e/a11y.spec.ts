@@ -72,6 +72,7 @@ const routes: Array<{ key: string; path: string; account: LiveAccount }> = [
   { key: '/cases', path: '/cases', account: LIVE.lsb },
   { key: '/gangs', path: '/gangs', account: LIVE.lsb },
   { key: '/persons', path: '/persons', account: LIVE.lsb },
+  { key: '/sops', path: '/sops', account: LIVE.lsb },
   { key: '/command-center', path: '/command-center', account: LIVE.director },
 ]
 

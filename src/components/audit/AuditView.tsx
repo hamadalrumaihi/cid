@@ -18,6 +18,7 @@ import { Card } from '@/components/ui/Card'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { Notice } from '@/components/ui/Notice'
 import { ListSkeleton } from '@/components/ui/Skeleton'
+import { DocGovernanceWarnings } from './DocGovernanceWarnings'
 
 type AuditRow = Tables<'audit_log'>
 
@@ -88,7 +89,9 @@ export function AuditView() {
   if (!isOwner) return <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-amber-200">Restricted — the audit log is owner-only.</div>
 
   return (
-    <Card pad="lg">
+    <div className="space-y-5">
+      <DocGovernanceWarnings />
+      <Card pad="lg">
       {loading && rows.length === 0 ? (
         // First load renders the shape of the incoming table rows instead of a
         // bare "Loading…" line that reads as an empty state for a beat.
@@ -117,6 +120,7 @@ export function AuditView() {
           )}
         </>
       )}
-    </Card>
+      </Card>
+    </div>
   )
 }
