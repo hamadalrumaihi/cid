@@ -21,7 +21,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { Store } from '@/lib/store'
 import { visibleAnnouncements, type AnnouncementRow } from '@/components/announce/announceUtils'
 import { isStaleCase } from '@/components/cases/caseUtils'
-import { pendingMembership } from '@/components/command-center/lib/membershipPending'
+import { pendingMembership, type JusticeRequestLite } from '@/components/command-center/lib/membershipPending'
 
 type CaseRow = Tables<'cases'>
 type NotificationRow = Tables<'notifications'>
@@ -56,11 +56,15 @@ export function useNavBadges(): NavBadges {
   const [anns, setAnns] = useState<AnnouncementRow[]>([])
   const [cases, setCases] = useState<CaseRow[]>([])
   const [notifs, setNotifs] = useState<NotificationRow[]>([])
+  // Open DOJ/Judiciary applications (command/owner read): keeps the badge from
+  // counting justice applicants as CID sign-ins. null = not loaded/authorized.
+  const [justiceReqs, setJusticeReqs] = useState<JusticeRequestLite[] | null>(null)
   const vAnn = useTableVersion('announcements')
   const vCases = useTableVersion('cases')
   const vNotifs = useTableVersion('notifications')
   const vProfiles = useTableVersion('profiles')
   const vJustice = useTableVersion('justice_memberships')
+  const vJusticeReqs = useTableVersion('justice_membership_requests')
 
   // One effect per input so a realtime bump on one table refetches ONLY that
   // table (the old single effect re-pulled all three lists + both stores on
@@ -99,6 +103,17 @@ export function useNavBadges(): NavBadges {
     return () => window.clearTimeout(t)
   }, [state, isCommand, isOwner, fetchProfiles, fetchJustice, vProfiles, vJustice])
 
+  useEffect(() => {
+    if (state !== 'in' || !(isCommand || isOwner)) return
+    const t = window.setTimeout(() => {
+      list('justice_membership_requests', {
+        select: 'applicant_id,status',
+        in: { status: ['draft', 'pending', 'correction_requested'] },
+      }).then((rows) => setJusticeReqs(rows as JusticeRequestLite[])).catch(() => undefined)
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [state, isCommand, isOwner, vJusticeReqs])
+
   return useMemo<NavBadges>(() => {
     if (state !== 'in' || !profile) return { pending: 0, announcements: 0, signoff: 0, command: 0 }
 
@@ -110,7 +125,7 @@ export function useNavBadges(): NavBadges {
     // requests fetch and therefore surface only in the Approval Queue, the
     // Overview tile and the Action Center. Rank-and-file keep a 0 badge.
     const pending = (isCommand || isOwner)
-      ? pendingMembership(profiles, null, justiceByUser).awaitingCount
+      ? pendingMembership(profiles, null, justiceByUser, justiceReqs).awaitingCount
       : 0
 
     const seen = Store.get<string>('annSeen', '')
@@ -127,5 +142,5 @@ export function useNavBadges(): NavBadges {
     const signoff = review.length + bounced.length + mentions + overdue + followUps
 
     return { pending, announcements, signoff, command: pending + announcements + signoff }
-  }, [state, profile, isCommand, isOwner, profiles, justiceByUser, anns, cases, notifs])
+  }, [state, profile, isCommand, isOwner, profiles, justiceByUser, justiceReqs, anns, cases, notifs])
 }
