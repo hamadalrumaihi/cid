@@ -5,22 +5,21 @@
  *  turf, ballistic footprints, media, evidence. All queries are RLS-scoped, so
  *  a linked case in another bureau surfaces as "access restricted" rather than
  *  404. Cross-links switch the profile in place; case chips deep-link out.
- *  The Network button waits on the `network` view slice. */
+ *  The person branch reuses profileLoad.loadPersonRollup (shared with the
+ *  full-page dossier); the dossier export itself moved to PersonProfile's
+ *  action menu — the "Full profile" button routes there. */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
-import { downloadDocx } from '@/lib/docx'
-import { slug } from '@/lib/format'
 import { useWatchlistStore } from '@/lib/watchlist'
 import { safeUrl } from '@/lib/safeUrl'
-import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
-import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Modal } from '@/components/ui/Modal'
 import { WatchButton } from '@/components/cases/WatchButton'
-import { dossierParas, dossierPdfSpec, gatherPersonDossier } from './dossier'
 import type { GangRow, PersonRow } from './PersonModal'
 import { parseProperties } from './PersonModal'
+import { loadPersonRollup } from './profileLoad'
 
 type CaseRow = Tables<'cases'>
 type GangMemberRow = Tables<'gang_members'>
@@ -50,21 +49,9 @@ async function loadProfile(type: 'person' | 'gang', id: string, gangs: GangRow[]
   // real message instead of masquerading as "not found".
   const opt = <T,>(p: Promise<T[]>) => p.catch(() => [] as T[])
   if (type === 'person') {
-    const [persons, members, media, direct] = await Promise.all([
-      list('persons', { eq: { id } }),
-      opt(list('gang_members', { eq: { person_id: id } })),
-      opt(list('media', { eq: { person_id: id } })),
-      list('case_intel_links', { select: 'case_id', eq: { kind: 'person', ref_id: id } })
-        .then((r) => r as unknown as { case_id: string }[]).catch(() => []),
-    ])
-    const person = persons[0]
-    if (!person) throw new Error('Person not found')
-    const caseIds = uniq([...members.map((m) => m.case_id), ...media.map((m) => m.case_id), ...direct.map((d) => d.case_id)].filter((x): x is string => !!x))
-    const [evidence, cases] = await Promise.all([
-      caseIds.length ? opt(list('evidence', { in: { case_id: caseIds } })) : Promise.resolve([]),
-      caseIds.length ? opt(list('cases', { in: { id: caseIds } })) : Promise.resolve([]),
-    ])
-    return { person, members, media, evidence, caseIds, cases, turf: [], places: [], footprints: [] }
+    // Shared with PersonProfile — one fan-out definition, no duplication.
+    const r = await loadPersonRollup(id)
+    return { ...r, turf: [], places: [], footprints: [] }
   }
   const [gangRows, members, turf, places, footprints, media, direct] = await Promise.all([
     gangs.some((g) => g.id === id) ? Promise.resolve([gangs.find((g) => g.id === id) as GangRow]) : list('gangs', { eq: { id } }),
@@ -117,7 +104,6 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
   const [target, setTarget] = useState<IntelTarget>(initial)
   const [data, setData] = useState<ProfileData | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [dossierOpen, setDossierOpen] = useState(false)
   const fetchWatch = useWatchlistStore((s) => s.fetch)
 
   // The parent refetches gangs on every realtime bump, giving the prop a fresh
@@ -168,25 +154,6 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
     ) : null
   }
 
-  const [pdfBusy, setPdfBusy] = useState(false)
-  const exportPdf = async () => {
-    if (!data?.person || pdfBusy) return
-    setPdfBusy(true)
-    try {
-      const d = await gatherPersonDossier(data.person, gangName(data.person.gang_id))
-      const { downloadPdf } = await import('@/lib/pdf')
-      await downloadPdf(dossierPdfSpec(d), `dossier-${slug(d.person.name || 'person')}.pdf`)
-      setDossierOpen(false)
-    } finally { setPdfBusy(false) }
-  }
-  const exportDocx = async () => {
-    if (!data?.person) return
-    const d = await gatherPersonDossier(data.person, gangName(data.person.gang_id))
-    downloadDocx(`Person Dossier — ${d.person.name || ''}`, dossierParas(d), `dossier-${slug(d.person.name || 'person')}.docx`)
-    toast('Dossier exported (.docx)', 'success')
-    setDossierOpen(false)
-  }
-
   const p = data?.person
   const g = data?.gang
   const props = p ? parseProperties(p.properties) : []
@@ -209,8 +176,13 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
           <div className="flex flex-shrink-0 items-center gap-2">
             {target.type === 'person' && <WatchButton type="person" id={target.id} label={p?.name} />}
             {target.type === 'person' && (
-              <Button size="sm" className="-my-1" title="Export the full dossier as .docx" onClick={() => setDossierOpen(true)}>
-                📇 Dossier
+              <Button
+                size="sm"
+                className="-my-1"
+                title="Open the full dossier page (sections, legal, export)"
+                onClick={() => { onClose(); router.push(`/persons?person=${encodeURIComponent(target.id)}`) }}
+              >
+                📇 Full profile
               </Button>
             )}
             <button aria-label="Close" onClick={onClose} className="-m-2 p-2 text-2xl leading-none text-slate-400 hover:text-white">&times;</button>
@@ -318,20 +290,6 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
         </div>
       </div>
 
-      {dossierOpen && p && (
-        <Modal open onClose={() => setDossierOpen(false)}>
-          <div className="p-6">
-            <ModalHeader title="Export Person Dossier" onClose={() => setDossierOpen(false)} />
-            <p className="mb-4 text-sm text-slate-400">
-              Compiles the full profile — bio, gang ties, properties, vehicles, linked cases, warrants, evidence &amp; media (only what you can access).
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => void exportDocx()} className="rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm font-semibold text-white transition hover:bg-white/10">📄<br />.docx</button>
-              <button onClick={() => void exportPdf()} disabled={pdfBusy} className="rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60">📕<br />{pdfBusy ? 'Rendering…' : '.pdf'}</button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </Modal>
   )
 }

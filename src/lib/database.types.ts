@@ -3175,21 +3175,251 @@ export type Database = {
         }
         Relationships: []
       }
+      person_places: {
+        Row: {
+          confidence: string | null
+          created_at: string
+          created_by: string | null
+          first_observed: string | null
+          id: string
+          last_confirmed: string | null
+          link_status: string
+          note: string | null
+          person_id: string
+          place_id: string
+          provenance: string | null
+          role: string | null
+          updated_at: string
+        }
+        Insert: {
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          first_observed?: string | null
+          id?: string
+          last_confirmed?: string | null
+          link_status?: string
+          note?: string | null
+          person_id: string
+          place_id: string
+          provenance?: string | null
+          role?: string | null
+          updated_at?: string
+        }
+        Update: {
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          first_observed?: string | null
+          id?: string
+          last_confirmed?: string | null
+          link_status?: string
+          note?: string | null
+          person_id?: string
+          place_id?: string
+          provenance?: string | null
+          role?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "person_places_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_places_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_places_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      person_relationships: {
+        Row: {
+          confidence: string | null
+          created_at: string
+          created_by: string | null
+          first_observed: string | null
+          id: string
+          last_confirmed: string | null
+          note: string | null
+          person_a: string
+          person_b: string
+          provenance: string | null
+          rel_status: string
+          relationship: string
+          updated_at: string
+        }
+        Insert: {
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          first_observed?: string | null
+          id?: string
+          last_confirmed?: string | null
+          note?: string | null
+          person_a: string
+          person_b: string
+          provenance?: string | null
+          rel_status?: string
+          relationship: string
+          updated_at?: string
+        }
+        Update: {
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          first_observed?: string | null
+          id?: string
+          last_confirmed?: string | null
+          note?: string | null
+          person_a?: string
+          person_b?: string
+          provenance?: string | null
+          rel_status?: string
+          relationship?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "person_relationships_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_relationships_person_a_fkey"
+            columns: ["person_a"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_relationships_person_b_fkey"
+            columns: ["person_b"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      person_vehicles: {
+        Row: {
+          confidence: string | null
+          created_at: string
+          created_by: string | null
+          first_observed: string | null
+          id: string
+          last_confirmed: string | null
+          link_status: string
+          note: string | null
+          person_id: string
+          provenance: string | null
+          role: string
+          updated_at: string
+          vehicle_id: string
+        }
+        Insert: {
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          first_observed?: string | null
+          id?: string
+          last_confirmed?: string | null
+          link_status?: string
+          note?: string | null
+          person_id: string
+          provenance?: string | null
+          role: string
+          updated_at?: string
+          vehicle_id: string
+        }
+        Update: {
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          first_observed?: string | null
+          id?: string
+          last_confirmed?: string | null
+          link_status?: string
+          note?: string | null
+          person_id?: string
+          provenance?: string | null
+          role?: string
+          updated_at?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "person_vehicles_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_vehicles_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_vehicles_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       persons: {
         Row: {
           alias: string | null
           bolo: boolean
+          bolo_case_id: string | null
+          bolo_expires_at: string | null
+          bolo_instructions: string | null
+          bolo_issued_at: string | null
+          bolo_issued_by: string | null
+          bolo_reason: string | null
+          bolo_risk: string | null
           ccw: boolean | null
+          classification: string | null
+          confidence: string | null
           created_at: string
           created_by: string | null
           dob: string | null
           felony_count: number | null
           gang_id: string | null
           id: string
+          identity: Json
+          intelligence_summary: Json
+          lead_detective_id: string | null
+          lifecycle: string
+          merged_into: string | null
           mugshot_url: string | null
           name: string
+          next_review_at: string | null
           notes: string | null
+          phone: string | null
+          priority: string | null
           properties: Json
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
           status: string | null
           updated_at: string
           vch: number | null
@@ -3197,17 +3427,37 @@ export type Database = {
         Insert: {
           alias?: string | null
           bolo?: boolean
+          bolo_case_id?: string | null
+          bolo_expires_at?: string | null
+          bolo_instructions?: string | null
+          bolo_issued_at?: string | null
+          bolo_issued_by?: string | null
+          bolo_reason?: string | null
+          bolo_risk?: string | null
           ccw?: boolean | null
+          classification?: string | null
+          confidence?: string | null
           created_at?: string
           created_by?: string | null
           dob?: string | null
           felony_count?: number | null
           gang_id?: string | null
           id?: string
+          identity?: Json
+          intelligence_summary?: Json
+          lead_detective_id?: string | null
+          lifecycle?: string
+          merged_into?: string | null
           mugshot_url?: string | null
           name: string
+          next_review_at?: string | null
           notes?: string | null
+          phone?: string | null
+          priority?: string | null
           properties?: Json
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           status?: string | null
           updated_at?: string
           vch?: number | null
@@ -3215,22 +3465,56 @@ export type Database = {
         Update: {
           alias?: string | null
           bolo?: boolean
+          bolo_case_id?: string | null
+          bolo_expires_at?: string | null
+          bolo_instructions?: string | null
+          bolo_issued_at?: string | null
+          bolo_issued_by?: string | null
+          bolo_reason?: string | null
+          bolo_risk?: string | null
           ccw?: boolean | null
+          classification?: string | null
+          confidence?: string | null
           created_at?: string
           created_by?: string | null
           dob?: string | null
           felony_count?: number | null
           gang_id?: string | null
           id?: string
+          identity?: Json
+          intelligence_summary?: Json
+          lead_detective_id?: string | null
+          lifecycle?: string
+          merged_into?: string | null
           mugshot_url?: string | null
           name?: string
+          next_review_at?: string | null
           notes?: string | null
+          phone?: string | null
+          priority?: string | null
           properties?: Json
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           status?: string | null
           updated_at?: string
           vch?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "persons_bolo_case_id_fkey"
+            columns: ["bolo_case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "persons_bolo_issued_by_fkey"
+            columns: ["bolo_issued_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "persons_created_by_fkey"
             columns: ["created_by"]
@@ -3243,6 +3527,27 @@ export type Database = {
             columns: ["gang_id"]
             isOneToOne: false
             referencedRelation: "gangs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "persons_lead_detective_id_fkey"
+            columns: ["lead_detective_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "persons_merged_into_fkey"
+            columns: ["merged_into"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "persons_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -4745,6 +5050,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      person_merge: {
+        Args: { p_reason: string; p_survivor: string; p_victims: string[] }
+        Returns: undefined
+      }
       search_all: {
         Args: { q: string }
         Returns: {
@@ -4754,6 +5063,13 @@ export type Database = {
           rank: number
           sublabel: string
           term: string
+        }[]
+      }
+      search_persons: {
+        Args: { p_limit?: number; p_offset?: number; p_q: string }
+        Returns: {
+          id: string
+          rank: number
         }[]
       }
       signoff_decide: {

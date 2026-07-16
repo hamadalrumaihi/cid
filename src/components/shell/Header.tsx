@@ -40,7 +40,7 @@ function AuthBar() {
   }
 
   return (
-    <div className="flex flex-shrink-0 items-center gap-2">
+    <div className="flex flex-shrink-0 items-center gap-1.5 sm:gap-2">
       <button
         onClick={() => navigate('profile')}
         title={`Open your profile · ${caps}`}
@@ -56,17 +56,19 @@ function AuthBar() {
       )}
       <button
         onClick={() => void toggleLoa()}
-        className={`rounded-lg border px-2.5 py-2 text-xs font-semibold transition ${
+        aria-label={onLoa ? 'Clear LOA' : 'Set LOA'}
+        className={`rounded-lg border px-2 py-2 text-xs font-semibold transition sm:px-2.5 ${
           onLoa
             ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300 hover:bg-emerald-500/10'
             : 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'
         }`}
       >
-        {onLoa ? 'Clear LOA' : 'Set LOA'}
+        <span className="hidden sm:inline">{onLoa ? 'Clear LOA' : 'Set LOA'}</span>
+        <span aria-hidden className="sm:hidden">LOA</span>
       </button>
       <button
         onClick={() => void signOut()}
-        className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-white/10"
+        className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-xs font-semibold text-white transition hover:bg-white/10 sm:px-2.5"
       >
         Sign out
       </button>
@@ -106,8 +108,8 @@ export function Header({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   }, [])
 
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-white/5 bg-ink-950/70 px-4 py-3.5 backdrop-blur-xl sm:px-8 sm:py-4">
-      <div className="flex min-w-0 items-center gap-3">
+    <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b sm:gap-3 border-white/5 bg-ink-950/70 px-3 py-3.5 backdrop-blur-xl sm:px-8 sm:py-4">
+      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <button
           onClick={onOpenDrawer}
           className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-lg border border-white/10 bg-ink-850 text-slate-200 transition hover:bg-white/10 lg:hidden"
@@ -121,7 +123,7 @@ export function Header({ onOpenDrawer }: { onOpenDrawer: () => void }) {
           <p className="truncate text-xs text-slate-400">{meta.sub}</p>
         </div>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
         <div className="relative hidden md:block">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <input

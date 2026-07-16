@@ -1,19 +1,22 @@
 'use client'
 
-/** Person dossier export (Wave 5) — vanilla intel.js:140-241. Compiles
- *  everything the viewer can see about a person into .docx paragraphs. Every
- *  input query is RLS-scoped, so the dossier only ever contains what the
- *  exporting member could already read on screen. Improvement over vanilla:
- *  vehicles and linked cases come from direct fetches instead of view caches
- *  that were empty unless those tabs had been visited. */
-import type { Json, Tables } from '@/lib/database.types'
+/** Person dossier export — compiles everything the viewer can see about a
+ *  person into .docx paragraphs / a PDF spec. Every input query is RLS-scoped,
+ *  so the dossier only ever contains what the exporting member could already
+ *  read on screen.
+ *
+ *  Redesign note: warrants/subpoenas now come from the STRUCTURED
+ *  `legal_requests.person_id` join (slim projection, RLS-sealed rows simply
+ *  absent). The old `warrantsNaming` helper — a full `reports` table scan with
+ *  exact free-text name matching — is gone everywhere. */
+import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import type { DocxPara } from '@/lib/docx'
 import { fmtDate, fmtDateTime } from '@/lib/format'
-import { WARRANT_TPLS, reportTitle, warrantStatusOf } from '@/lib/forms'
+import { fulfilmentLabel, reviewStatusLabel } from '@/lib/justice'
 import { parseProperties, type PersonProperty, type PersonRow } from './PersonModal'
+import { LEGAL_COLS, type LegalLite } from './profileLoad'
 
-type ReportRow = Tables<'reports'>
 type GangMemberRow = Tables<'gang_members'>
 type MediaRow = Tables<'media'>
 type EvidenceRow = Tables<'evidence'>
@@ -28,7 +31,8 @@ export interface PersonDossier {
   cases: CaseRow[]
   /** Ids RLS returned nothing for — rendered as access-restricted stubs. */
   caseIds: string[]
-  warrants: ReportRow[]
+  /** Structured legal instruments naming this person (legal_requests.person_id). */
+  legal: LegalLite[]
   members: GangMemberRow[]
   media: MediaRow[]
   evidence: EvidenceRow[]
@@ -36,36 +40,21 @@ export interface PersonDossier {
 
 const uniq = <T,>(arr: T[]): T[] => [...new Set(arr)]
 
-/** Warrant reports naming this person (matched on suspect/full name fields).
- *  Exported for PersonProfile's Warrants panel — there is no warrants table;
- *  warrants are derived from RLS-visible case reports. */
-export function warrantsNaming(reports: ReportRow[], name: string): ReportRow[] {
-  const nm = name.trim().toLowerCase()
-  if (!nm) return []
-  return reports.filter((r) => {
-    if (!WARRANT_TPLS[r.template]) return false
-    const f = (r.fields ?? {}) as Record<string, Json | undefined>
-    const names: string[] = []
-    if (Array.isArray(f.suspects)) {
-      for (const s of f.suspects) {
-        if (s && typeof s === 'object' && 'full_name' in s && typeof (s as Record<string, Json>).full_name === 'string') {
-          names.push((s as Record<string, string>).full_name)
-        }
-      }
-    }
-    if (typeof f.full_name === 'string') names.push(f.full_name)
-    return names.some((n) => n.trim().toLowerCase() === nm)
-  })
+const legalType = (r: LegalLite): string => {
+  const t = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+  return `${t(r.request_type)}${r.subtype && r.subtype !== r.request_type ? ` — ${t(r.subtype)}` : ''}`
 }
 
 export async function gatherPersonDossier(person: PersonRow, gangName: string | null): Promise<PersonDossier> {
-  const [members, media, direct, reports, vehicles] = await Promise.all([
+  const [members, media, direct, legal, vehicles] = await Promise.all([
     list('gang_members', { eq: { person_id: person.id } }).catch(() => [] as GangMemberRow[]),
     list('media', { eq: { person_id: person.id } }).catch(() => [] as MediaRow[]),
     list('case_intel_links', { select: 'case_id', eq: { kind: 'person', ref_id: person.id } })
       .then((r) => r as unknown as { case_id: string }[])
       .catch(() => [] as { case_id: string }[]),
-    list('reports', {}).catch(() => [] as ReportRow[]),
+    list('legal_requests', { select: LEGAL_COLS, eq: { person_id: person.id }, order: 'created_at', ascending: false })
+      .then((r) => r as unknown as LegalLite[])
+      .catch(() => [] as LegalLite[]),
     list('vehicles', { eq: { owner_id: person.id } }).catch(() => [] as VehicleRow[]),
   ])
   const caseIds = uniq(
@@ -83,7 +72,7 @@ export async function gatherPersonDossier(person: PersonRow, gangName: string | 
     vehicles,
     cases,
     caseIds,
-    warrants: warrantsNaming(reports, person.name || ''),
+    legal,
     members,
     media,
     evidence,
@@ -109,10 +98,10 @@ export function dossierPdfSpec(d: PersonDossier): import('@/lib/pdf').PdfDocSpec
   }
   sections.push(
     {
-      title: `Warrants naming subject (${d.warrants.length})`,
-      headers: ['Warrant', 'Status', 'Filed'],
-      widths: [2.2, 1, 1],
-      rows: d.warrants.map((r) => [reportTitle(r), warrantStatusOf(r), fmtDate(r.created_at)]),
+      title: `Legal instruments naming subject (${d.legal.length})`,
+      headers: ['Request', 'Type', 'Review', 'Fulfilment', 'Filed'],
+      widths: [1, 1.4, 0.9, 0.9, 0.8],
+      rows: d.legal.map((r) => [r.request_number, legalType(r), reviewStatusLabel(r.review_status), fulfilmentLabel(r.fulfilment_status), fmtDate(r.created_at)]),
     },
     {
       title: `Known properties (${d.props.length})`,
@@ -155,7 +144,7 @@ export function dossierPdfSpec(d: PersonDossier): import('@/lib/pdf').PdfDocSpec
       ['VCH', String(p.vch || 0)],
       ['Felony count', String(p.felony_count || 0)],
       ['DOB', p.dob || '—'],
-      ['BOLO', p.bolo ? 'ACTIVE' : 'No'],
+      ['BOLO', p.bolo ? `ACTIVE${p.bolo_risk ? ` (${p.bolo_risk} risk)` : ''}` : 'No'],
     ],
     sections,
     signatures: ['Compiled by (Detective)', 'Date'],
@@ -171,7 +160,7 @@ export function dossierParas(d: PersonDossier): DocxPara[] {
     { text: `${p.alias ? `"${p.alias}" · ` : ''}${p.status || 'Person of interest'} · prepared ${fmtDateTime(new Date())}`, style: 'subtitle' },
     { text: '', style: 'normal' },
     { text: 'Profile', style: 'heading' },
-    { text: `Gang: ${d.gang || '—'} · CCW: ${p.ccw ? 'Yes' : 'No'} · VCH: ${p.vch || 0} · Felonies: ${p.felony_count || 0}${p.bolo ? ' · ACTIVE BOLO' : ''}${p.dob ? ` · DOB ${p.dob}` : ''}`, style: 'normal' },
+    { text: `Gang: ${d.gang || '—'} · CCW: ${p.ccw ? 'Yes' : 'No'} · VCH: ${p.vch || 0} · Felonies: ${p.felony_count || 0}${p.bolo ? ` · ACTIVE BOLO${p.bolo_risk ? ` (${p.bolo_risk} risk)` : ''}` : ''}${p.dob ? ` · DOB ${p.dob}` : ''}`, style: 'normal' },
   ]
   if (p.notes) P.push({ text: `Notes: ${p.notes}`, style: 'normal' })
   const caseNum = (id: string | null) => (id && d.cases.find((c) => c.id === id)?.case_number) || null
@@ -184,7 +173,8 @@ export function dossierParas(d: PersonDossier): DocxPara[] {
   if (d.caseIds.length > d.cases.length) {
     P.push({ text: `(${d.caseIds.length - d.cases.length} additional linked case(s) — access restricted)`, style: 'normal' })
   }
-  section('Warrants naming subject', d.warrants, (r) => `${reportTitle(r)} — status: ${warrantStatusOf(r)} · ${fmtDate(r.created_at)}`)
+  section('Legal instruments naming subject', d.legal, (r) =>
+    `${r.request_number} — ${legalType(r)} · ${reviewStatusLabel(r.review_status)} / ${fulfilmentLabel(r.fulfilment_status)} · filed ${fmtDate(r.created_at)}${r.case_number_snapshot ? ` · ${r.case_number_snapshot}` : ''}`)
   section('Known properties', d.props, (pr) => `${pr.address || '—'}${pr.type ? ` · ${pr.type}` : ''}${pr.notes ? ` · ${pr.notes}` : ''}`)
   section('Registered vehicles', d.vehicles, (v) => `${v.plate}${v.model ? ` — ${v.model}` : ''}${v.color ? ` · ${v.color}` : ''}`)
   section('Gang memberships', d.members, (m) => `${m.rank || m.status || 'member'}${caseNum(m.case_id) ? ` · per ${caseNum(m.case_id)}` : ''}`)

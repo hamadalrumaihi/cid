@@ -1,75 +1,51 @@
 'use client'
 
-/** BOLO Board - port of vehicles.js BOLO section. Shows persons flagged
- *  `bolo=true`, enriched with latest RLS-visible warrant status where one
- *  names the subject. */
+/** BOLO Board — persons flagged `bolo=true`, rendered from the STRUCTURED
+ *  BOLO fields (reason/risk/instructions/issued/expiry) plus wanted/warrant
+ *  status from a projected `legal_requests.person_id` fetch. The old approach
+ *  (full `reports` table scan + exact free-text name matching) is gone; the
+ *  data spine is now the same structured legal join the person dossier uses.
+ *  Board layout unchanged: rose-framed cards, live filter, profile/edit. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Json, Tables } from '@/lib/database.types'
-import { list, update, withRetry } from '@/lib/db'
+import { list, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
+import { fmtDate, todayISO } from '@/lib/format'
+import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
-import { toast } from '@/lib/toast'
-import { uiConfirm } from '@/components/ui/dialog'
+import { priorityTint } from '@/lib/tint'
+import { useNow } from '@/lib/useNow'
+import { Badge } from '@/components/ui/Badge'
+import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
-import { WARRANT_TINT, WARRANT_TPLS, warrantStatusOf } from '@/lib/forms'
+import { humanize } from '@/components/gangs/gangIntel'
 import { IntelProfile, type IntelTarget } from '@/components/persons/IntelProfile'
 import { PersonModal, type GangRow, type PersonRow } from '@/components/persons/PersonModal'
-
-type ReportRow = Tables<'reports'>
-
-interface WarrantHit {
-  status: string
-  updatedAt: string
-}
-
-function namesFromReport(r: ReportRow): string[] {
-  const fields = (r.fields ?? {}) as Record<string, Json | undefined>
-  const names: string[] = []
-  if (Array.isArray(fields.suspects)) {
-    for (const suspect of fields.suspects) {
-      if (suspect && typeof suspect === 'object' && 'full_name' in suspect) {
-        const value = (suspect as Record<string, Json>).full_name
-        if (typeof value === 'string') names.push(value)
-      }
-    }
-  }
-  if (typeof fields.full_name === 'string') names.push(fields.full_name)
-  return names
-}
-
-function warrantLookup(reports: ReportRow[]): Map<string, WarrantHit> {
-  const m = new Map<string, WarrantHit>()
-  const warrants = reports
-    .filter((r) => !!r.template && WARRANT_TPLS[r.template])
-    .slice()
-    .sort((a, b) => new Date(a.updated_at || a.created_at || 0).getTime() - new Date(b.updated_at || b.created_at || 0).getTime())
-  for (const r of warrants) {
-    const status = warrantStatusOf(r)
-    const updatedAt = r.updated_at || r.created_at
-    namesFromReport(r).forEach((name) => {
-      const key = name.trim().toLowerCase()
-      if (key) m.set(key, { status, updatedAt })
-    })
-  }
-  return m
-}
+import { boloState, legalStatusOf } from '@/components/persons/personIntel'
+import { ManageBoloModal } from '@/components/persons/ProfileLegal'
+import { LEGAL_COLS, type LegalLite } from '@/components/persons/profileLoad'
 
 export function BoloView() {
   const { state, canEdit } = useAuth()
+  const now = useNow()
+  const [today] = useState(todayISO)
   const [persons, setPersons] = useState<PersonRow[]>([])
   const [gangs, setGangs] = useState<GangRow[]>([])
-  const [reports, setReports] = useState<ReportRow[]>([])
+  const [legal, setLegal] = useState<LegalLite[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [profile, setProfile] = useState<IntelTarget | null>(null)
   const [editor, setEditor] = useState<PersonRow | null>(null)
+  const [manage, setManage] = useState<PersonRow | null>(null)
   const vPersons = useTableVersion('persons')
-  const vReports = useTableVersion('reports')
+  const vLegal = useTableVersion('legal_requests')
   const vGangs = useTableVersion('gangs')
+  const fetchProfiles = useProfilesStore((s) => s.fetch)
+  // Re-render issued-by attributions once the roster cache lands.
+  useProfilesStore((s) => s.loaded)
 
   const refresh = useCallback(async () => {
     if (state !== 'in') return
@@ -77,14 +53,20 @@ export function BoloView() {
     setLoading(true)
     setErr(null)
     try {
-      const [p, g, r] = await Promise.all([
-        withRetry(() => list('persons', { order: 'updated_at', ascending: false })),
+      // Only flagged persons — never the whole registry, never `reports`.
+      const [p, g] = await Promise.all([
+        withRetry(() => list('persons', { eq: { bolo: true }, order: 'updated_at', ascending: false })),
         list('gangs', { order: 'name' }).catch(() => [] as GangRow[]),
-        list('reports', {}).catch(() => [] as ReportRow[]),
       ])
+      const ids = p.map((x) => x.id)
+      const lr = ids.length
+        ? await list('legal_requests', { select: LEGAL_COLS, in: { person_id: ids } })
+            .then((r) => r as unknown as LegalLite[])
+            .catch(() => [] as LegalLite[])
+        : []
       setPersons(p)
       setGangs(g)
-      setReports(r)
+      setLegal(lr)
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
     } finally {
@@ -93,33 +75,33 @@ export function BoloView() {
   }, [state])
 
   useEffect(() => {
-    const t = window.setTimeout(() => { void refresh() }, 0)
+    const t = window.setTimeout(() => { void fetchProfiles(); void refresh() }, 0)
     return () => window.clearTimeout(t)
-  }, [refresh, vPersons, vReports, vGangs])
+  }, [refresh, fetchProfiles, vPersons, vLegal, vGangs])
 
   const gangName = useCallback((id: string | null) => (id && gangs.find((g) => g.id === id)?.name) || null, [gangs])
-  const warrants = useMemo(() => warrantLookup(reports), [reports])
-  const allBolos = useMemo(() => persons.filter((p) => p.bolo), [persons])
+  const legalByPerson = useMemo(() => {
+    const m = new Map<string, LegalLite[]>()
+    for (const r of legal) {
+      if (!r.person_id) continue
+      m.set(r.person_id, [...(m.get(r.person_id) ?? []), r])
+    }
+    return m
+  }, [legal])
+
   const q = query.trim().toLowerCase()
   const items = useMemo(
-    () => allBolos.filter((p) => !q || [p.name, p.alias, p.status, gangName(p.gang_id)].some((s) => (s || '').toLowerCase().includes(q))),
-    [allBolos, q, gangName],
+    () => persons.filter((p) =>
+      !q || [p.name, p.alias, p.status, p.bolo_reason, gangName(p.gang_id)].some((s) => (s || '').toLowerCase().includes(q))),
+    [persons, q, gangName],
   )
-
-  const clearBolo = async (p: PersonRow) => {
-    if (!(await uiConfirm(`Clear the BOLO on ${p.name || 'this person'}?`, { confirmText: 'Clear' }))) return
-    const res = await update('persons', p.id, { bolo: false })
-    if (res.error) { toast(`Update failed: ${res.error.message}`, 'danger'); return }
-    toast('BOLO cleared', 'info')
-    void refresh()
-  }
 
   return (
     <section className="view-in space-y-4">
       <div className="rounded-2xl border border-rose-500/20 bg-ink-900/60 p-6">
         <PageHeader
           title="BOLO Board"
-          subtitle="At-large subjects flagged be-on-the-lookout, with warrant status where one exists."
+          subtitle="At-large subjects flagged be-on-the-lookout, with risk, instructions and live warrant status."
           actions={
             <>
               {state === 'in' && (
@@ -127,12 +109,12 @@ export function BoloView() {
                   <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-rose-400" />live
                 </span>
               )}
-              {allBolos.length > 0 && (
+              {persons.length > 0 && (
                 <input
                   type="search"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Filter name, alias, gang..."
+                  placeholder="Filter name, alias, gang, reason..."
                   aria-label="Filter BOLOs"
                   className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
                 />
@@ -151,10 +133,10 @@ export function BoloView() {
           <div className="sm:col-span-2 xl:col-span-3">
             <CardGridSkeleton cols="sm:grid-cols-2 xl:grid-cols-3" />
           </div>
-        ) : !allBolos.length ? (
+        ) : !persons.length ? (
           <EmptyState
             title="No active BOLOs"
-            hint="Flag a person as be-on-the-lookout via Persons → Edit → Active BOLO."
+            hint="Issue one from a person's profile via ⋯ → Manage BOLO."
             className="sm:col-span-2 xl:col-span-3"
           />
         ) : !items.length ? (
@@ -165,11 +147,13 @@ export function BoloView() {
               key={p.id}
               person={p}
               gang={gangName(p.gang_id)}
-              warrant={warrants.get((p.name || '').trim().toLowerCase())}
+              legal={legalByPerson.get(p.id) ?? []}
+              today={today}
+              now={now}
               canEdit={canEdit}
               onProfile={() => setProfile({ type: 'person', id: p.id })}
               onEdit={() => setEditor(p)}
-              onClear={() => void clearBolo(p)}
+              onManage={() => setManage(p)}
             />
           ))
         )}
@@ -177,33 +161,45 @@ export function BoloView() {
 
       {profile && <IntelProfile initial={profile} gangs={gangs} onClose={() => setProfile(null)} />}
       {editor && <PersonModal record={editor} gangs={gangs} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); void refresh() }} />}
+      {manage && <ManageBoloModal person={manage} onClose={() => setManage(null)} onSaved={() => { setManage(null); void refresh() }} />}
     </section>
   )
 }
 
-function BoloCard({ person, gang, warrant, canEdit, onProfile, onEdit, onClear }: {
+function BoloCard({ person, gang, legal, today, now, canEdit, onProfile, onEdit, onManage }: {
   person: PersonRow
   gang: string | null
-  warrant?: WarrantHit
+  legal: LegalLite[]
+  today: string
+  now: number
   canEdit: boolean
   onProfile: () => void
   onEdit: () => void
-  onClear: () => void
+  onManage: () => void
 }) {
   const [imgBroken, setImgBroken] = useState(false)
   const mug = safeUrl(person.mugshot_url ?? '')
-  const tint = warrant ? WARRANT_TINT[warrant.status] || WARRANT_TINT.draft : ''
+  const buckets = legalStatusOf(legal, today)
+  const bolo = boloState(person, today)
+  const issuedBy = officerName(person.bolo_issued_by)
 
   return (
     <div className="overflow-hidden rounded-2xl border border-rose-500/20 bg-ink-900/60">
       <div className="flex items-center justify-between gap-2 bg-rose-500/10 px-4 py-2">
         <span className="text-[11px] font-bold uppercase tracking-widest text-rose-300">Be on the lookout</span>
-        {warrant && <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${tint}`}>warrant: {warrant.status}</span>}
+        <span className="flex items-center gap-1.5">
+          {bolo.expired && <Badge tone="warn" className="uppercase" title="The BOLO expiry date has passed — review or clear it">Expired</Badge>}
+          {person.bolo_risk && (
+            <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${priorityTint(person.bolo_risk)}`}>
+              {humanize(person.bolo_risk)} risk
+            </span>
+          )}
+        </span>
       </div>
       <div className="flex gap-4 p-4">
         {mug && !imgBroken ? (
           /* eslint-disable-next-line @next/next/no-img-element -- external mugshot CDN */
-          <img src={mug} alt="" onError={() => setImgBroken(true)} className="h-20 w-20 flex-shrink-0 rounded-lg object-cover" />
+          <img src={mug} alt={`${person.name} photo`} onError={() => setImgBroken(true)} className="h-20 w-20 flex-shrink-0 rounded-lg object-cover" />
         ) : (
           <div className="grid h-20 w-20 flex-shrink-0 place-items-center rounded-lg bg-ink-800 text-lg font-bold text-slate-400" aria-hidden="true">POI</div>
         )}
@@ -214,14 +210,25 @@ function BoloCard({ person, gang, warrant, canEdit, onProfile, onEdit, onClear }
             <span className="rounded bg-white/5 px-1.5 py-0.5 text-slate-300">{person.status || 'Suspect'}</span>
             {gang && <span className="rounded bg-violet-500/10 px-1.5 py-0.5 text-violet-300">{gang}</span>}
             {person.ccw && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 font-semibold text-rose-300" title="May be armed - exercise caution">ARMED RISK</span>}
+            {buckets.arrestWarrants.length > 0 && <span className="rounded bg-rose-500/15 px-1.5 py-0.5 font-semibold text-rose-300">Arrest warrant ×{buckets.arrestWarrants.length}</span>}
+            {buckets.searchWarrants.length > 0 && <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-amber-300">Search warrant ×{buckets.searchWarrants.length}</span>}
+            {buckets.activeCount > 0 && <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-300" title="Legal instruments currently in force">{buckets.activeCount} active legal</span>}
             {!!person.felony_count && <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-amber-300">{person.felony_count} felonies</span>}
           </div>
+          {person.bolo_reason && <p className="mt-2 line-clamp-2 text-xs text-slate-300">{person.bolo_reason}</p>}
+          {person.bolo_instructions && (
+            <p className="mt-1 line-clamp-2 text-[11px] text-amber-200/90" title={person.bolo_instructions}>⚠ {person.bolo_instructions}</p>
+          )}
+          <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
+            {person.bolo_issued_at && <span>Issued {fmtDate(person.bolo_issued_at)}{issuedBy ? ` · ${issuedBy}` : ''}</span>}
+            <DeadlineChip at={person.bolo_expires_at} kind="expires" now={now} />
+          </p>
         </div>
       </div>
       <div className="flex gap-2 border-t border-white/5 px-4 py-2.5">
         <button onClick={onProfile} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-[11px] font-semibold text-blue-200 transition hover:bg-white/10">Profile</button>
+        {canEdit && <button onClick={onManage} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10">Manage BOLO</button>}
         {canEdit && <button onClick={onEdit} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10">Edit</button>}
-        {canEdit && <button onClick={onClear} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10">Clear BOLO</button>}
       </div>
     </div>
   )
