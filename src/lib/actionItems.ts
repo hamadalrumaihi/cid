@@ -115,7 +115,7 @@ export interface ActionSources {
   tasks: AcTask[]              // my open tasks (assignee = me, done = false)
   transfers: AcTransfer[]
   accessRequests: AcAccess[]   // status = pending
-  membershipPending: number | null  // command-only count, null when not command
+  membershipPending: number | null  // pendingMembership().awaitingCount — command/owner only, null otherwise
   legal: AcLegal[]             // slim projection, non-terminal
   blockers: AcBlocker[]        // open case_blockers where owner_id = me
   notifications: AcNotif[]     // my UNREAD notifications (read = false)
@@ -418,12 +418,16 @@ export function buildActionItems(s: ActionSources): ActionQueue {
     // Non-deciders' others' requests → excluded.
   }
 
-  /* 6 · membership requests — one command-only summary item. */
+  /* 6 · member approvals — one command/owner summary item. The count is the
+   *     shared pendingMembership awaitingCount (submitted requests + pending
+   *     sign-ins + open requests needing reconciliation), so the title says
+   *     "member approvals", not just "requests". Owner sessions without a
+   *     command role review the same queue, hence the isOwner bypass. */
   const pending = s.membershipPending ?? 0
-  if (s.isCommand && pending > 0) {
+  if ((s.isCommand || (s.isOwner ?? false)) && pending > 0) {
     add({
       id: 'membership:pending', sourceType: 'membership_request', sourceId: 'pending',
-      title: `${pending} membership request${pending === 1 ? '' : 's'} awaiting review`,
+      title: `${pending} member approval${pending === 1 ? '' : 's'} awaiting review`,
       summary: 'Command approvals queue',
       reason: 'New members are waiting on a command decision',
       status: 'needs_action',

@@ -15,6 +15,7 @@ import { toast } from '@/lib/toast'
 import { fmtDate } from '@/lib/format'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Card } from '@/components/ui/Card'
+import { pendingMembership, type RequestLite } from '@/components/command-center/lib/membershipPending'
 
 interface AdminPanelProps {
   profiles: RosterProfile[]
@@ -22,11 +23,15 @@ interface AdminPanelProps {
   /** Active DOJ/Judiciary identities keyed by CID user id — members here were
    *  moved out of CID and must not resurface as pending sign-ins. */
   justiceByUser?: Record<string, JusticeIdentity>
+  /** Membership requests (admin_membership_requests) — lets the quick-approve
+   *  guard spot recorded rejections/withdrawals client-side. May be null when
+   *  not loaded; the server refusal is still the authority. */
+  requests?: RequestLite[] | null
   onManage: (p: RosterProfile) => void
   onChanged: () => void
 }
 
-export function AdminPanel({ profiles, emails, justiceByUser = {}, onManage, onChanged }: AdminPanelProps) {
+export function AdminPanel({ profiles, emails, justiceByUser = {}, requests = null, onManage, onChanged }: AdminPanelProps) {
   const { profile: me } = useAuth()
   // A deactivated CID member who now holds an active justice identity was moved
   // out by an organization correction — list them separately, never as a
@@ -35,12 +40,30 @@ export function AdminPanel({ profiles, emails, justiceByUser = {}, onManage, onC
   const rows = profiles.filter((p) => !p.removed_at && !movedToJustice(p)).slice().sort((a, b) => Number(a.active) - Number(b.active))
   const moved = profiles.filter(movedToJustice).slice().sort((a, b) => (a.display_name || '').localeCompare(b.display_name || ''))
   const removed = profiles.filter((p) => p.removed_at).slice().sort((a, b) => (b.removed_at || '').localeCompare(a.removed_at || ''))
+  // Shared annotation (lib/membershipPending): a sign-in whose request was
+  // rejected/withdrawn is not quick-approvable — that would bypass the
+  // recorded decision. Empty when requests are null (guard degrades to the
+  // server refusal below).
+  const signInById = new Map(pendingMembership(profiles, requests, justiceByUser).signIns.map((s) => [s.profile.id, s]))
 
   // One-click approve for pending sign-ins (keeps their current role/bureau —
   // assign_member is activation-only since v1.16).
   const approve = async (p: RosterProfile) => {
+    const entry = signInById.get(p.id)
+    if (entry && !entry.actionable) {
+      toast(`${p.display_name}'s membership request was ${entry.requestStatus === 'withdrawn' ? 'withdrawn' : 'rejected'} — re-review it from the Approval Queue instead.`, 'warn')
+      return
+    }
     const res = await rpc('assign_member', { target: p.id, set_active: true })
-    if (res.error) { toast(`Approve failed: ${res.error.message}`, 'danger'); return }
+    if (res.error) {
+      // Server-side mirror of the same guard — map it to the re-review flow.
+      if (/reject|withdraw/i.test(String(res.error.message))) {
+        toast(`${p.display_name} has a previously decided membership request — use the Approval Queue to record a new decision.`, 'warn')
+      } else {
+        toast(`Approve failed: ${res.error.message}`, 'danger')
+      }
+      return
+    }
     toast(`${p.display_name} approved for access`, 'success')
     void notify(p.id, 'member_approved', { detective: me?.display_name || 'Command', reason: 'Your CID access has been approved — welcome aboard.' })
     onChanged()

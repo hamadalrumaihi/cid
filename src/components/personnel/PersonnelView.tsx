@@ -11,7 +11,7 @@ import { initials } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { type RosterProfile, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
-import { ROLE_LABEL } from '@/lib/roles'
+import { ROLE_LABEL, ROLE_ORDER } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { useNav } from '@/components/shell/useNav'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -19,6 +19,9 @@ import { Commendations, type CommendationRow } from './Commendations'
 import { Card } from '@/components/ui/Card'
 
 const ROSTER_PAGE = 30
+
+/** Seniority rank (director highest) for the roster sort below. */
+const ROLE_RANK = new Map<string, number>(ROLE_ORDER.map((r, i) => [r, i]))
 
 export function PersonnelView() {
   const { profile: me, state, isCommand } = useAuth()
@@ -42,7 +45,16 @@ export function PersonnelView() {
     return () => window.clearTimeout(id)
   }, [refresh, vProfiles, vCommendations])
 
-  const roster = profiles.filter((p) => !p.removed_at)
+  // Stable order BEFORE pagination (the fetch is unordered, so "Load more"
+  // pages were nondeterministic): active first, then seniority (ROLE_ORDER,
+  // director highest), then name.
+  const roster = profiles
+    .filter((p) => !p.removed_at)
+    .slice()
+    .sort((a, b) =>
+      Number(b.active) - Number(a.active)
+      || (ROLE_RANK.get(b.role) ?? -1) - (ROLE_RANK.get(a.role) ?? -1)
+      || (a.display_name || '').localeCompare(b.display_name || ''))
   const visible = roster.slice(0, shown)
   const remaining = Math.max(0, roster.length - visible.length)
 

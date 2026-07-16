@@ -10,8 +10,10 @@ import { buildActionItems, type ActionItem, type ActionSources } from '@/lib/act
 import { list, rpc } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { todayISO } from '@/lib/format'
+import { useJusticeRoster } from '@/lib/justiceRoster'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
+import { pendingMembership } from '@/components/command-center/lib/membershipPending'
 
 /* Column projections — each mirrors its Ac* Pick in lib/actionItems exactly
  * (the model documents that the loader builds selects from those lists).
@@ -57,18 +59,25 @@ export function useActionItems(): ActionItemsResult {
   const vBlockers = useTableVersion('case_blockers')
   const vLegal = useTableVersion('legal_requests')
   const vProfiles = useTableVersion('profiles')
+  const vMembership = useTableVersion('membership_requests')
 
   const refresh = useCallback(async () => {
     if (state !== 'in' || !profile) return
     setRefreshing(true)
+    const canAdmin = isCommand || isOwner
     // Item titles bake officer names in (buildActionItems takes the resolver),
     // so the first build waits for the roster; later refreshes revalidate it
-    // in the background.
+    // in the background. The membership count folds the roster + requests +
+    // justice identities through the shared pendingMembership model.
     if (!useProfilesStore.getState().loaded) await fetchProfiles()
     else void fetchProfiles()
+    if (canAdmin) {
+      if (!useJusticeRoster.getState().loaded) await useJusticeRoster.getState().fetch()
+      else void useJusticeRoster.getState().fetch()
+    }
     try {
       const me = profile.id
-      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipPending] =
+      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests] =
         await Promise.all([
           list('cases', { select: CASE_COLS }),
           list('case_tasks', { select: TASK_COLS, eq: { assignee: me, done: false } }),
@@ -85,12 +94,23 @@ export function useActionItems(): ActionItemsResult {
             ascending: false,
             limit: 50,
           }),
-          isCommand
+          // Fail-open to null (not 0): a failed load means "unknown", and the
+          // model then derives what it can from profiles alone.
+          canAdmin
             ? rpc('admin_membership_requests', undefined as never).then((r) =>
-                !r.error && Array.isArray(r.data) ? r.data.filter((x) => x.status === 'pending').length : 0)
+                !r.error && Array.isArray(r.data) ? r.data : null)
             : Promise.resolve(null),
         ])
       const nowMs = Date.now()
+      // Command/owner: the shared awaitingCount (submitted + actionable
+      // sign-ins + ghosts) — the same number as the badge, tile and queue.
+      const membershipPending = canAdmin
+        ? pendingMembership(
+            useProfilesStore.getState().profiles,
+            membershipRequests,
+            useJusticeRoster.getState().byUser,
+          ).awaitingCount
+        : null
       const sources: ActionSources = {
         me,
         role: profile.role,
@@ -122,7 +142,7 @@ export function useActionItems(): ActionItemsResult {
   useEffect(() => {
     const id = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(id)
-  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles])
+  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership])
 
   return {
     items: built?.items ?? [],

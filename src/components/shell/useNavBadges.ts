@@ -2,7 +2,8 @@
 
 /** Nav badge counts — port of the three vanilla nav badges that sit on the
  *  Command category button (index.html #pending/#ann/#signoff-nav-badge):
- *   · pending  — inactive, non-removed profiles awaiting approval (command only)
+ *   · pending  — members awaiting approval (command/owner only), via the shared
+ *                pendingMembership model in profiles-only mode (see the memo)
  *   · ann      — audience-visible announcements newer than the `annSeen` Store
  *                stamp (AnnounceView writes it on entry)
  *   · signoff  — My Desk needs-attention count (sign-off reviews + bounced +
@@ -20,6 +21,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { Store } from '@/lib/store'
 import { visibleAnnouncements, type AnnouncementRow } from '@/components/announce/announceUtils'
 import { isStaleCase } from '@/components/cases/caseUtils'
+import { pendingMembership } from '@/components/command-center/lib/membershipPending'
 
 type CaseRow = Tables<'cases'>
 type NotificationRow = Tables<'notifications'>
@@ -46,7 +48,7 @@ export interface NavBadges {
 }
 
 export function useNavBadges(): NavBadges {
-  const { state, profile, isCommand } = useAuth()
+  const { state, profile, isCommand, isOwner } = useAuth()
   const profiles = useProfilesStore((s) => s.profiles)
   const fetchProfiles = useProfilesStore((s) => s.fetch)
   const justiceByUser = useJusticeRoster((s) => s.byUser)
@@ -92,17 +94,24 @@ export function useNavBadges(): NavBadges {
     if (state !== 'in') return
     const t = window.setTimeout(() => {
       void fetchProfiles()
-      if (isCommand) void fetchJustice()
+      if (isCommand || isOwner) void fetchJustice()
     }, 0)
     return () => window.clearTimeout(t)
-  }, [state, isCommand, fetchProfiles, fetchJustice, vProfiles, vJustice])
+  }, [state, isCommand, isOwner, fetchProfiles, fetchJustice, vProfiles, vJustice])
 
   return useMemo<NavBadges>(() => {
     if (state !== 'in' || !profile) return { pending: 0, announcements: 0, signoff: 0, command: 0 }
 
-    // A deactivated member who now holds an active justice identity was moved
-    // out of CID by an organization correction — not a pending sign-in.
-    const pending = isCommand ? profiles.filter((p) => !p.active && !p.removed_at && !justiceByUser[p.id]).length : 0
+    // Shared membership model with requests = null: this hook runs for EVERY
+    // signed-in member, and `admin_membership_requests` is command/owner-only,
+    // so the badge stays on the profiles-derived count (submitted requests and
+    // plain sign-ins are indistinguishable here — both are inactive, so the
+    // total is right). Ghost requests (already-active applicants) need the
+    // requests fetch and therefore surface only in the Approval Queue, the
+    // Overview tile and the Action Center. Rank-and-file keep a 0 badge.
+    const pending = (isCommand || isOwner)
+      ? pendingMembership(profiles, null, justiceByUser).awaitingCount
+      : 0
 
     const seen = Store.get<string>('annSeen', '')
     const announcements = visibleAnnouncements(anns, profile.division, new Set<string>(), true).filter((a) => a.created_at > seen).length
@@ -118,5 +127,5 @@ export function useNavBadges(): NavBadges {
     const signoff = review.length + bounced.length + mentions + overdue + followUps
 
     return { pending, announcements, signoff, command: pending + announcements + signoff }
-  }, [state, profile, isCommand, profiles, justiceByUser, anns, cases, notifs])
+  }, [state, profile, isCommand, isOwner, profiles, justiceByUser, anns, cases, notifs])
 }
