@@ -1,8 +1,10 @@
 'use client'
 
 /** Criminal Places & Production - port of vanilla places.js. Live place cards,
- * FK-preserving create/edit modal, generated lab production recipes, linked
- * gang/case/narcotic chips, attach-to-case, and undo-backed deletes. */
+ * FK-preserving create/edit modal, linked gang/case/narcotic chips, attach-to-
+ * case, and undo-backed deletes. Drug labs surface a non-actionable "suspected
+ * production site" summary that deep-links the canonical substance dossier —
+ * no production recipe or step-by-step workflow is generated or rendered. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Database, Json, Tables } from '@/lib/database.types'
 import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
@@ -18,13 +20,13 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { EntityLink } from '@/components/ui/EntityLink'
 
 type PlaceRow = Tables<'places'>
 type GangRow = Tables<'gangs'>
 type NarcoticRow = Tables<'narcotics'>
 type PrecursorRow = Tables<'narcotic_precursors'>
 type HotspotRow = Tables<'narcotic_hotspots'>
-type ProcessStepRow = Tables<'place_process_steps'>
 type LocationType = Database['public']['Enums']['location_type']
 type CaseOption = Pick<Tables<'cases'>, 'id' | 'case_number' | 'title'>
 type PlacePhoto = Pick<Tables<'media'>, 'id' | 'title' | 'type' | 'external_url' | 'storage_path' | 'place_id'>
@@ -47,22 +49,12 @@ interface DrugBundle {
   hotspots: HotspotRow[]
 }
 
-function recipeFor(drug: DrugBundle | null): string[] {
-  if (!drug) return []
-  const precursors = drug.precursors
-    .slice()
-    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
-    .map((p) => p.name)
-    .join(', ') || 'TBD'
-  const hotspot = drug.hotspots[0]?.area || 'TBD'
-  return [
-    `Acquire precursors: ${precursors}`,
-    `Synthesize / cook ${drug.row.name} base`,
-    'Cut to street purity grade',
-    'Package into distribution units',
-    `Distribute to hotspot: ${hotspot}`,
-  ]
-}
+const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '')
+
+/** Generalized, non-actionable stage LABELS shown on a suspected production
+ *  site. These are broad phase names for intelligence context only — never
+ *  instructions, quantities or ordered steps. */
+const PRODUCTION_STAGES = ['Cultivation', 'Processing', 'Packaging', 'Distribution'] as const
 
 export function PlacesView() {
   const { state, canEdit, canDelete } = useAuth()
@@ -70,7 +62,6 @@ export function PlacesView() {
   const [gangs, setGangs] = useState<GangRow[]>([])
   const [cases, setCases] = useState<CaseOption[]>([])
   const [drugs, setDrugs] = useState<DrugBundle[]>([])
-  const [steps, setSteps] = useState<ProcessStepRow[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [photos, setPhotos] = useState<PlacePhoto[]>([])
@@ -84,7 +75,6 @@ export function PlacesView() {
   const vGangs = useTableVersion('gangs')
   const vCases = useTableVersion('cases')
   const vNarcotics = useTableVersion('narcotics')
-  const vSteps = useTableVersion('place_process_steps')
   const vMedia = useTableVersion('media')
 
   const refresh = useCallback(async () => {
@@ -93,7 +83,7 @@ export function PlacesView() {
     setLoading(true)
     setErr(null)
     try {
-      const [pl, g, c, n, prec, hot, ps, ph] = await Promise.all([
+      const [pl, g, c, n, prec, hot, ph] = await Promise.all([
         withRetry(() => list('places', { order: 'updated_at', ascending: false })),
         list('gangs', { order: 'name' }).catch(() => [] as GangRow[]),
         list('cases', { select: 'id,case_number,title', order: 'updated_at', ascending: false })
@@ -102,7 +92,6 @@ export function PlacesView() {
         list('narcotics', { order: 'name' }).catch(() => [] as NarcoticRow[]),
         list('narcotic_precursors', {}).catch(() => [] as PrecursorRow[]),
         list('narcotic_hotspots', {}).catch(() => [] as HotspotRow[]),
-        list('place_process_steps', {}).catch(() => [] as ProcessStepRow[]),
         list('media', { select: 'id,title,type,external_url,storage_path,place_id', order: 'created_at' })
           .then((rows) => (rows as unknown as PlacePhoto[]).filter((m) => m.place_id))
           .catch(() => [] as PlacePhoto[]),
@@ -110,7 +99,6 @@ export function PlacesView() {
       setPlaces(pl)
       setGangs(g)
       setCases(c)
-      setSteps(ps)
       setPhotos(ph)
       setDrugs(n.map((row) => ({
         row,
@@ -128,17 +116,11 @@ export function PlacesView() {
   useEffect(() => {
     const t = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(t)
-  }, [refresh, vPlaces, vGangs, vCases, vNarcotics, vSteps, vMedia])
+  }, [refresh, vPlaces, vGangs, vCases, vNarcotics, vMedia])
 
   const gangName = (id: string | null) => (id && gangs.find((g) => g.id === id)?.name) || null
   const caseNum = (id: string | null) => (id && cases.find((c) => c.id === id)?.case_number) || null
   const drugById = (id: string | null) => (id && drugs.find((d) => d.row.id === id)) || null
-  const stepsByPlace = useMemo(() => {
-    const m = new Map<string, ProcessStepRow[]>()
-    steps.forEach((s) => m.set(s.place_id, [...(m.get(s.place_id) ?? []), s]))
-    m.forEach((rows) => rows.sort((a, b) => (a.step_order || 0) - (b.step_order || 0)))
-    return m
-  }, [steps])
   const photosByPlace = useMemo(() => {
     const m = new Map<string, PlacePhoto[]>()
     photos.forEach((p) => { if (p.place_id) m.set(p.place_id, [...(m.get(p.place_id) ?? []), p]) })
@@ -176,7 +158,7 @@ export function PlacesView() {
       <Card pad="lg">
         <PageHeader
           title="Criminal Places & Production"
-          subtitle="Drug labs, stash houses, dead drops and fronts with production process flows."
+          subtitle="Drug labs, stash houses, dead drops and fronts, with linked gangs, cases and substance intelligence."
           actions={
             <>
               {state === 'in' && (
@@ -227,7 +209,6 @@ export function PlacesView() {
               gang={gangName(place.controlling_gang_id)}
               caseNumber={caseNum(place.case_id)}
               drug={drugById(place.narcotic_id)}
-              customSteps={stepsByPlace.get(place.id) ?? []}
               photos={photosByPlace.get(place.id) ?? []}
               onOpenPhoto={setLightbox}
               onAddPhoto={() => setAddPhoto(place)}
@@ -356,12 +337,11 @@ function PhotoLightbox({ photo, onClose }: { photo: PlacePhoto; onClose: () => v
   )
 }
 
-function PlaceCard({ place, gang, caseNumber, drug, customSteps, photos, onOpenPhoto, onAddPhoto, canEdit, canDelete, selected, onSelect, onEdit, onDelete, onAttach }: {
+function PlaceCard({ place, gang, caseNumber, drug, photos, onOpenPhoto, onAddPhoto, canEdit, canDelete, selected, onSelect, onEdit, onDelete, onAttach }: {
   place: PlaceRow
   gang: string | null
   caseNumber: string | null
   drug: DrugBundle | null
-  customSteps: ProcessStepRow[]
   photos: PlacePhoto[]
   onOpenPhoto: (p: PlacePhoto) => void
   onAddPhoto: () => void
@@ -373,8 +353,7 @@ function PlaceCard({ place, gang, caseNumber, drug, customSteps, photos, onOpenP
   onDelete: () => void
   onAttach: () => void
 }) {
-  const generated = place.type === 'drug_lab' ? recipeFor(drug) : []
-  const recipe = customSteps.length ? customSteps.map((s) => s.description) : generated
+  const productionSite = place.type === 'drug_lab' && drug
   return (
     <Card pad="lg">
       <div className="flex items-start justify-between gap-3">
@@ -394,10 +373,10 @@ function PlaceCard({ place, gang, caseNumber, drug, customSteps, photos, onOpenP
           )}
         </div>
       </div>
-      <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
         {gang && <span className="rounded-md bg-violet-500/10 px-2 py-1 text-violet-300">{gang}</span>}
         {caseNumber && <span className="rounded-md bg-blue-500/10 px-2 py-1 font-mono text-blue-300">{caseNumber}</span>}
-        {drug && <span className="rounded-md bg-emerald-500/10 px-2 py-1 text-emerald-300">{drug.row.name}</span>}
+        {drug && <EntityLink kind="narcotic" id={drug.row.id} label={drug.row.name} title={`Open ${drug.row.name} dossier`} />}
       </div>
       {place.notes && <p className="mt-3 text-xs text-slate-400">{place.notes}</p>}
       {photos.length > 0 && (
@@ -420,16 +399,23 @@ function PlaceCard({ place, gang, caseNumber, drug, customSteps, photos, onOpenP
           })}
         </div>
       )}
-      {recipe.length > 0 && (
-        <div className="mt-4">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-blue-300/70">Production Process</p>
-          <div className="space-y-1.5">
-            {recipe.map((step, index) => (
-              <div key={`${step}-${index}`} className="flex items-center gap-2 text-xs text-slate-300">
-                <span className="grid h-5 w-5 flex-shrink-0 place-items-center rounded-full bg-blue-500/15 font-mono text-[10px] text-blue-300">{index + 1}</span>
-                <span>{step}</span>
-              </div>
+      {productionSite && drug && (
+        <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-amber-300/70">Suspected production site</p>
+          <p className="text-xs text-slate-300">
+            <span className="text-white">{drug.row.name}</span>
+            {drug.row.category ? ` · ${cap(drug.row.category)}` : ''}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Generalized production stages">
+            {PRODUCTION_STAGES.map((stage) => (
+              <span key={stage} className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-slate-400">{stage}</span>
             ))}
+          </div>
+          {drug.precursors.length > 0 && (
+            <p className="mt-2 text-[11px] text-slate-400">Precursors of interest recorded on linked cases/evidence.</p>
+          )}
+          <div className="mt-3">
+            <EntityLink kind="narcotic" id={drug.row.id} label="View substance intelligence →" title={`Open ${drug.row.name} dossier`} />
           </div>
         </div>
       )}

@@ -3324,6 +3324,7 @@ export type Database = {
           gang_id: string | null
           id: string
           kind: string | null
+          narcotic_id: string | null
           person_id: string | null
           place_id: string | null
           storage_path: string | null
@@ -3340,6 +3341,7 @@ export type Database = {
           gang_id?: string | null
           id?: string
           kind?: string | null
+          narcotic_id?: string | null
           person_id?: string | null
           place_id?: string | null
           storage_path?: string | null
@@ -3356,6 +3358,7 @@ export type Database = {
           gang_id?: string | null
           id?: string
           kind?: string | null
+          narcotic_id?: string | null
           person_id?: string | null
           place_id?: string | null
           storage_path?: string | null
@@ -3378,6 +3381,13 @@ export type Database = {
             columns: ["gang_id"]
             isOneToOne: false
             referencedRelation: "gangs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_narcotic_id_fkey"
+            columns: ["narcotic_id"]
+            isOneToOne: false
+            referencedRelation: "narcotics"
             referencedColumns: ["id"]
           },
           {
@@ -3438,6 +3448,161 @@ export type Database = {
           },
         ]
       }
+      narcotic_aliases: {
+        Row: {
+          alias: string
+          alias_type: string
+          created_at: string
+          created_by: string | null
+          id: string
+          narcotic_id: string
+          server_specific: boolean
+          source_case_id: string | null
+        }
+        Insert: {
+          alias: string
+          alias_type?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          narcotic_id: string
+          server_specific?: boolean
+          source_case_id?: string | null
+        }
+        Update: {
+          alias?: string
+          alias_type?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          narcotic_id?: string
+          server_specific?: boolean
+          source_case_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "narcotic_aliases_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_aliases_narcotic_id_fkey"
+            columns: ["narcotic_id"]
+            isOneToOne: false
+            referencedRelation: "narcotics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_aliases_source_case_id_fkey"
+            columns: ["source_case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      narcotic_gangs: {
+        Row: {
+          confidence: string | null
+          created_at: string
+          created_by: string | null
+          first_observed: string | null
+          gang_id: string
+          id: string
+          last_confirmed: string | null
+          link_status: string
+          narcotic_id: string
+          notes: string | null
+          provenance: string | null
+          role: string
+          source_case_id: string | null
+          source_evidence_id: string | null
+          source_report_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          first_observed?: string | null
+          gang_id: string
+          id?: string
+          last_confirmed?: string | null
+          link_status?: string
+          narcotic_id: string
+          notes?: string | null
+          provenance?: string | null
+          role: string
+          source_case_id?: string | null
+          source_evidence_id?: string | null
+          source_report_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          first_observed?: string | null
+          gang_id?: string
+          id?: string
+          last_confirmed?: string | null
+          link_status?: string
+          narcotic_id?: string
+          notes?: string | null
+          provenance?: string | null
+          role?: string
+          source_case_id?: string | null
+          source_evidence_id?: string | null
+          source_report_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "narcotic_gangs_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_gangs_gang_id_fkey"
+            columns: ["gang_id"]
+            isOneToOne: false
+            referencedRelation: "gangs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_gangs_narcotic_id_fkey"
+            columns: ["narcotic_id"]
+            isOneToOne: false
+            referencedRelation: "narcotics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_gangs_source_case_id_fkey"
+            columns: ["source_case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_gangs_source_evidence_id_fkey"
+            columns: ["source_evidence_id"]
+            isOneToOne: false
+            referencedRelation: "evidence"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_gangs_source_report_id_fkey"
+            columns: ["source_report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       narcotic_hotspots: {
         Row: {
           area: string
@@ -3487,6 +3652,206 @@ export type Database = {
           },
         ]
       }
+      narcotic_persons: {
+        Row: {
+          confidence: string | null
+          created_at: string
+          created_by: string | null
+          first_observed: string | null
+          id: string
+          last_confirmed: string | null
+          link_status: string
+          narcotic_id: string
+          notes: string | null
+          person_id: string
+          provenance: string | null
+          role: string
+          source_case_id: string | null
+          source_evidence_id: string | null
+          source_report_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          first_observed?: string | null
+          id?: string
+          last_confirmed?: string | null
+          link_status?: string
+          narcotic_id: string
+          notes?: string | null
+          person_id: string
+          provenance?: string | null
+          role: string
+          source_case_id?: string | null
+          source_evidence_id?: string | null
+          source_report_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          first_observed?: string | null
+          id?: string
+          last_confirmed?: string | null
+          link_status?: string
+          narcotic_id?: string
+          notes?: string | null
+          person_id?: string
+          provenance?: string | null
+          role?: string
+          source_case_id?: string | null
+          source_evidence_id?: string | null
+          source_report_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "narcotic_persons_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_persons_narcotic_id_fkey"
+            columns: ["narcotic_id"]
+            isOneToOne: false
+            referencedRelation: "narcotics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_persons_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_persons_source_case_id_fkey"
+            columns: ["source_case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_persons_source_evidence_id_fkey"
+            columns: ["source_evidence_id"]
+            isOneToOne: false
+            referencedRelation: "evidence"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_persons_source_report_id_fkey"
+            columns: ["source_report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      narcotic_places: {
+        Row: {
+          confidence: string | null
+          created_at: string
+          created_by: string | null
+          first_observed: string | null
+          id: string
+          last_confirmed: string | null
+          link_status: string
+          narcotic_id: string
+          notes: string | null
+          place_id: string
+          provenance: string | null
+          role: string
+          source_case_id: string | null
+          source_evidence_id: string | null
+          source_report_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          first_observed?: string | null
+          id?: string
+          last_confirmed?: string | null
+          link_status?: string
+          narcotic_id: string
+          notes?: string | null
+          place_id: string
+          provenance?: string | null
+          role: string
+          source_case_id?: string | null
+          source_evidence_id?: string | null
+          source_report_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          first_observed?: string | null
+          id?: string
+          last_confirmed?: string | null
+          link_status?: string
+          narcotic_id?: string
+          notes?: string | null
+          place_id?: string
+          provenance?: string | null
+          role?: string
+          source_case_id?: string | null
+          source_evidence_id?: string | null
+          source_report_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "narcotic_places_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_places_narcotic_id_fkey"
+            columns: ["narcotic_id"]
+            isOneToOne: false
+            referencedRelation: "narcotics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_places_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_places_source_case_id_fkey"
+            columns: ["source_case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_places_source_evidence_id_fkey"
+            columns: ["source_evidence_id"]
+            isOneToOne: false
+            referencedRelation: "evidence"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_places_source_report_id_fkey"
+            columns: ["source_report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       narcotic_precursors: {
         Row: {
           default_purity: number | null
@@ -3515,6 +3880,334 @@ export type Database = {
             columns: ["narcotic_id"]
             isOneToOne: false
             referencedRelation: "narcotics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      narcotic_seizures: {
+        Row: {
+          amount_recorded: string | null
+          case_id: string | null
+          created_at: string
+          created_by: string | null
+          evidence_id: string | null
+          id: string
+          location: string | null
+          narcotic_id: string
+          notes: string | null
+          packaging: string | null
+          seized_at: string | null
+          state: string
+          unit_recorded: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_recorded?: string | null
+          case_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          evidence_id?: string | null
+          id?: string
+          location?: string | null
+          narcotic_id: string
+          notes?: string | null
+          packaging?: string | null
+          seized_at?: string | null
+          state?: string
+          unit_recorded?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_recorded?: string | null
+          case_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          evidence_id?: string | null
+          id?: string
+          location?: string | null
+          narcotic_id?: string
+          notes?: string | null
+          packaging?: string | null
+          seized_at?: string | null
+          state?: string
+          unit_recorded?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "narcotic_seizures_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_seizures_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_seizures_evidence_id_fkey"
+            columns: ["evidence_id"]
+            isOneToOne: false
+            referencedRelation: "evidence"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_seizures_narcotic_id_fkey"
+            columns: ["narcotic_id"]
+            isOneToOne: false
+            referencedRelation: "narcotics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      narcotic_suggestion_events: {
+        Row: {
+          actor_id: string | null
+          created_at: string
+          event_type: string
+          from_status: string | null
+          id: string
+          note: string | null
+          suggestion_id: string
+          to_status: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          created_at?: string
+          event_type: string
+          from_status?: string | null
+          id?: string
+          note?: string | null
+          suggestion_id: string
+          to_status?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          created_at?: string
+          event_type?: string
+          from_status?: string | null
+          id?: string
+          note?: string | null
+          suggestion_id?: string
+          to_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "narcotic_suggestion_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_suggestion_events_suggestion_id_fkey"
+            columns: ["suggestion_id"]
+            isOneToOne: false
+            referencedRelation: "narcotic_suggestions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      narcotic_suggestions: {
+        Row: {
+          created_at: string
+          created_by: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          explanation: string
+          id: string
+          narcotic_id: string | null
+          proposed_value: string | null
+          source_case_id: string | null
+          source_evidence_id: string | null
+          source_report_id: string | null
+          status: string
+          suggestion_type: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          explanation: string
+          id?: string
+          narcotic_id?: string | null
+          proposed_value?: string | null
+          source_case_id?: string | null
+          source_evidence_id?: string | null
+          source_report_id?: string | null
+          status?: string
+          suggestion_type?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          explanation?: string
+          id?: string
+          narcotic_id?: string | null
+          proposed_value?: string | null
+          source_case_id?: string | null
+          source_evidence_id?: string | null
+          source_report_id?: string | null
+          status?: string
+          suggestion_type?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "narcotic_suggestions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_suggestions_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_suggestions_narcotic_id_fkey"
+            columns: ["narcotic_id"]
+            isOneToOne: false
+            referencedRelation: "narcotics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_suggestions_source_case_id_fkey"
+            columns: ["source_case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_suggestions_source_evidence_id_fkey"
+            columns: ["source_evidence_id"]
+            isOneToOne: false
+            referencedRelation: "evidence"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_suggestions_source_report_id_fkey"
+            columns: ["source_report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      narcotic_vehicles: {
+        Row: {
+          confidence: string | null
+          created_at: string
+          created_by: string | null
+          first_observed: string | null
+          id: string
+          last_confirmed: string | null
+          link_status: string
+          narcotic_id: string
+          notes: string | null
+          provenance: string | null
+          role: string
+          source_case_id: string | null
+          source_evidence_id: string | null
+          source_report_id: string | null
+          updated_at: string
+          vehicle_id: string
+        }
+        Insert: {
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          first_observed?: string | null
+          id?: string
+          last_confirmed?: string | null
+          link_status?: string
+          narcotic_id: string
+          notes?: string | null
+          provenance?: string | null
+          role: string
+          source_case_id?: string | null
+          source_evidence_id?: string | null
+          source_report_id?: string | null
+          updated_at?: string
+          vehicle_id: string
+        }
+        Update: {
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          first_observed?: string | null
+          id?: string
+          last_confirmed?: string | null
+          link_status?: string
+          narcotic_id?: string
+          notes?: string | null
+          provenance?: string | null
+          role?: string
+          source_case_id?: string | null
+          source_evidence_id?: string | null
+          source_report_id?: string | null
+          updated_at?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "narcotic_vehicles_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_vehicles_narcotic_id_fkey"
+            columns: ["narcotic_id"]
+            isOneToOne: false
+            referencedRelation: "narcotics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_vehicles_source_case_id_fkey"
+            columns: ["source_case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_vehicles_source_evidence_id_fkey"
+            columns: ["source_evidence_id"]
+            isOneToOne: false
+            referencedRelation: "evidence"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_vehicles_source_report_id_fkey"
+            columns: ["source_report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_vehicles_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
             referencedColumns: ["id"]
           },
         ]
@@ -3650,39 +4343,152 @@ export type Database = {
       }
       narcotics: {
         Row: {
+          appearance: string | null
+          category: string
+          charge_codes: Json
           classification: string | null
+          confidence: string | null
           created_at: string
+          created_by: string | null
+          first_recorded_at: string | null
           icon: string | null
           id: string
+          in_city_significance: string | null
+          intelligence_gaps: string | null
+          last_confirmed_at: string | null
+          merged_into: string | null
           name: string
+          officer_safety: string | null
+          packaging: string | null
           popularity: number | null
+          provenance: string | null
+          representative_media_id: string | null
+          restricted: boolean
+          reviewed_at: string | null
+          reviewed_by: string | null
+          scene_indicators: string | null
+          search_tsv: unknown | null
+          server_specific: boolean
+          source_case_id: string | null
+          source_evidence_id: string | null
+          status: string
           street_price: number | null
+          summary: string | null
           updated_at: string
           wholesale_price: number | null
         }
         Insert: {
+          appearance?: string | null
+          category?: string
+          charge_codes?: Json
           classification?: string | null
+          confidence?: string | null
           created_at?: string
+          created_by?: string | null
+          first_recorded_at?: string | null
           icon?: string | null
           id?: string
+          in_city_significance?: string | null
+          intelligence_gaps?: string | null
+          last_confirmed_at?: string | null
+          merged_into?: string | null
           name: string
+          officer_safety?: string | null
+          packaging?: string | null
           popularity?: number | null
+          provenance?: string | null
+          representative_media_id?: string | null
+          restricted?: boolean
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          scene_indicators?: string | null
+          server_specific?: boolean
+          source_case_id?: string | null
+          source_evidence_id?: string | null
+          status?: string
           street_price?: number | null
+          summary?: string | null
           updated_at?: string
           wholesale_price?: number | null
         }
         Update: {
+          appearance?: string | null
+          category?: string
+          charge_codes?: Json
           classification?: string | null
+          confidence?: string | null
           created_at?: string
+          created_by?: string | null
+          first_recorded_at?: string | null
           icon?: string | null
           id?: string
+          in_city_significance?: string | null
+          intelligence_gaps?: string | null
+          last_confirmed_at?: string | null
+          merged_into?: string | null
           name?: string
+          officer_safety?: string | null
+          packaging?: string | null
           popularity?: number | null
+          provenance?: string | null
+          representative_media_id?: string | null
+          restricted?: boolean
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          scene_indicators?: string | null
+          server_specific?: boolean
+          source_case_id?: string | null
+          source_evidence_id?: string | null
+          status?: string
           street_price?: number | null
+          summary?: string | null
           updated_at?: string
           wholesale_price?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "narcotics_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotics_merged_into_fkey"
+            columns: ["merged_into"]
+            isOneToOne: false
+            referencedRelation: "narcotics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotics_representative_media_id_fkey"
+            columns: ["representative_media_id"]
+            isOneToOne: false
+            referencedRelation: "media"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotics_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotics_source_case_id_fkey"
+            columns: ["source_case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotics_source_evidence_id_fkey"
+            columns: ["source_evidence_id"]
+            isOneToOne: false
+            referencedRelation: "evidence"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notifications: {
         Row: {
@@ -5895,6 +6701,48 @@ export type Database = {
       link_document_suggestion_implementation: {
         Args: { p_suggestion: string; p_version: string }
         Returns: Database["public"]["Tables"]["document_suggestions"]["Row"]
+      }
+      merge_narcotics: {
+        Args: { p_merged: string; p_reason: string; p_survivor: string }
+        Returns: Database["public"]["Tables"]["narcotics"]["Row"]
+      }
+      resolve_provisional_narcotic: {
+        Args: {
+          p_action: string
+          p_canonical?: string
+          p_note?: string
+          p_provisional: string
+        }
+        Returns: Database["public"]["Tables"]["narcotics"]["Row"]
+      }
+      submit_narcotic_suggestion: {
+        Args: {
+          p_explanation: string
+          p_narcotic: string
+          p_proposed_value?: string
+          p_source_case?: string
+          p_source_evidence?: string
+          p_source_report?: string
+          p_title: string
+          p_type: string
+        }
+        Returns: Database["public"]["Tables"]["narcotic_suggestions"]["Row"]
+      }
+      decide_narcotic_suggestion: {
+        Args: { p_note?: string; p_status: string; p_suggestion: string }
+        Returns: Database["public"]["Tables"]["narcotic_suggestions"]["Row"]
+      }
+      search_narcotics: {
+        Args: { p_limit?: number; p_query: string }
+        Returns: {
+          category: string
+          confidence: string | null
+          id: string
+          name: string
+          rank: number
+          restricted: boolean
+          status: string
+        }[]
       }
     }
     Enums: {

@@ -1735,7 +1735,7 @@ bureau_lead → deputy_director → director.
 | Helper | Errors |
 |---|---|
 | \`list\`, \`custodyForCase\` | **throw** — wrap in try/catch |
-| \`insert/update/updateWhere/updateNoSelect/remove/removeWhere/rpc\` | **return \`{error}\`** — check it; empty-data update = blocked |
+| \`insert/update/updateWhere/updateNoSelect/remove/rpc\` | **return \`{error}\`** — check it; empty-data update = blocked |
 | \`withRetry\` | reads only |
 | \`deleteWithUndo\` | confirm + 6s Undo; configure \`children\`/\`setNullRefs\` |
 

@@ -143,7 +143,7 @@ export function SectionTabs<Id extends string>({
         tabIndex={on ? 0 : -1}
         title={t.marker ? (t.markerLabel ?? 'Needs attention') : undefined}
         onClick={() => onChange(t.id)}
-        className={`flex min-h-[44px] flex-shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold sm:min-h-0 ${
+        className={`relative flex min-h-[44px] flex-shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold sm:min-h-0 ${
           on ? 'bg-badge-500 text-ink-950' : 'bg-white/5 text-slate-300 hover:bg-white/10'
         }`}
       >

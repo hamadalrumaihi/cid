@@ -115,6 +115,19 @@ All writes are RPC-only (`submit_document_suggestion`, `decide_document_suggesti
 - **Accepting ≠ auto-editing** the SOP: a decision records the outcome and may assign a responsible editor; `link_document_suggestion_implementation` later pins the document version that carried the change and flips the status to `implemented`. Duplicates require selecting the original and never delete the row.
 - Notifications reuse `public.notifications` (`type='document_suggestion'`) and only reach users who can access the document (managers on submit; the submitter on decision/comment; a freshly assigned editor). Every transition is audited.
 
+## 4d. Narcotics intelligence ([`20260803010000_narcotics_intelligence.sql`](../supabase/migrations/20260803010000_narcotics_intelligence.sql))
+
+The Narcotics workspace is the canonical reference for reusable substance intelligence (cases/reports/evidence remain the source of truth for investigative events — they gain structured links, never rewrites). Authority is server-enforced by two helpers + a freeze trigger, never UI-only:
+
+| Actor | May |
+|---|---|
+| Detective | read non-restricted substances; create **provisional** records only (the `private.guard_narcotic()` freeze forces status `unidentified`, clears `restricted`/review columns, pins `created_by`); edit only their own still-provisional row; log seizures/observations on accessible cases; submit corrections/new-substance suggestions |
+| Senior Detective | + edit routine descriptive intelligence on any record (`can_edit_narcotics_intel()`); the freeze still blocks status/restricted/category/classification/charge_codes/review columns |
+| Bureau Lead / Deputy Director / Director | `can_manage_narcotics()`: create canonical records, edit all fields, confirm provisional (`resolve_provisional_narcotic`), merge duplicates (`merge_narcotics`, reasoned + tombstoned — never deleted), decide suggestions, manage restricted intel |
+| Owner | all of the above + the only role that may DELETE a substance row |
+
+Restricted substances are hidden below senior detective; child links/aliases/seizures inherit the parent's visibility. Suggestions (`narcotic_suggestions`) are RPC-only writes with SELECT visible to the submitter + managers + Owner. `merge_narcotics`/`resolve_provisional_narcotic`/`submit_/decide_narcotic_suggestion`/`search_narcotics` are SECURITY DEFINER, self-authorizing, anon-revoked. The `guard_narcotic()` trigger is **NON-definer** so its client-write freeze actually engages (docs/RLS.md §2). §2 safety: production intelligence is non-actionable only — no recipes/quantities/temperatures; the retired precursor-chemistry seed was never resurrected and `PlacesView`'s recipe generator was replaced with a non-actionable suspected-production-site card.
+
 ## 5. Permission table — major features
 
 Accurate as of the [schema snapshot](../supabase/schema-snapshot.sql) + v1.16 migrations. "Command" = `private.is_command()`; "case access" = `private.can_access_case()` (bureau match, JTF cases, lead/creator, command, explicit grant, or active joint assignment). This is the summary — the full per-table policy list is in [handbook ch. 08](handbook/08-database.md).
