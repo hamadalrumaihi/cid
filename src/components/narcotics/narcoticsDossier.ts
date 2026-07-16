@@ -18,7 +18,7 @@ export type NarcoticRow = Tables<'narcotics'>
 /* ── Sections + URL guard ─────────────────────────────────────────────────── */
 export const SECTION_IDS = [
   'overview', 'identification', 'packaging', 'intelligence',
-  'cases', 'seizures', 'places', 'people', 'media', 'activity',
+  'sales', 'cases', 'seizures', 'places', 'people', 'media', 'activity',
 ] as const
 export type SectionId = (typeof SECTION_IDS)[number]
 

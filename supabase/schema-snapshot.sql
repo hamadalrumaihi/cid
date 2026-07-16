@@ -1162,7 +1162,8 @@ create table public.media (
   tags jsonb default '{}'::jsonb,
   uploaded_by uuid default auth.uid(),
   created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now()
+  updated_at timestamp with time zone not null default now(),
+  restricted boolean not null default false
 );
 alter table public.media add constraint media_pkey PRIMARY KEY (id);
 alter table public.media add constraint media_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
@@ -1325,6 +1326,118 @@ create table public.narcotic_precursors (
 alter table public.narcotic_precursors add constraint narcotic_precursors_pkey PRIMARY KEY (id);
 alter table public.narcotic_precursors add constraint narcotic_precursors_narcotic_id_fkey FOREIGN KEY (narcotic_id) REFERENCES public.narcotics(id) ON DELETE CASCADE;
 alter table public.narcotic_precursors enable row level security;
+
+create table public.narcotic_sale_observations (
+  id uuid not null default gen_random_uuid(),
+  series_id uuid not null,
+  narcotic_id uuid not null,
+  observation_number integer,
+  product_name text,
+  product_state text not null default 'unknown'::text,
+  quality_tier text,
+  observed_at timestamp with time zone,
+  observed_date_precision text not null default 'unknown'::text,
+  investigator_id uuid,
+  payment_type text not null default 'dirty_money'::text,
+  payment_amount numeric not null default 0,
+  currency text not null default 'USD'::text,
+  total_units integer not null default 0,
+  recorded_weight_value numeric,
+  recorded_weight_unit text,
+  recorded_weight_text text,
+  weight_is_derived boolean not null default false,
+  state text not null default 'draft'::text,
+  source_confidence text default 'confirmed'::text,
+  provenance text default 'reported'::text,
+  restricted boolean not null default true,
+  location_ref text,
+  buyer_ref text,
+  methodology text,
+  analyst_note text,
+  notes text,
+  source_case_id uuid,
+  source_evidence_id uuid,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.narcotic_sale_observations add constraint narcotic_sale_observations_pkey PRIMARY KEY (id);
+alter table public.narcotic_sale_observations add constraint narcotic_sale_observations_series_id_fkey FOREIGN KEY (series_id) REFERENCES public.narcotic_sale_series(id) ON DELETE CASCADE;
+alter table public.narcotic_sale_observations add constraint narcotic_sale_observations_narcotic_id_fkey FOREIGN KEY (narcotic_id) REFERENCES public.narcotics(id) ON DELETE CASCADE;
+alter table public.narcotic_sale_observations add constraint narcotic_sale_observations_investigator_id_fkey FOREIGN KEY (investigator_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.narcotic_sale_observations add constraint narcotic_sale_observations_source_case_id_fkey FOREIGN KEY (source_case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.narcotic_sale_observations add constraint narcotic_sale_observations_source_evidence_id_fkey FOREIGN KEY (source_evidence_id) REFERENCES public.evidence(id) ON DELETE SET NULL;
+alter table public.narcotic_sale_observations add constraint narcotic_sale_observations_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.narcotic_sale_observations add constraint narcotic_sale_obs_units_check CHECK ((total_units >= 0));
+alter table public.narcotic_sale_observations add constraint narcotic_sale_obs_payment_check CHECK ((payment_amount >= (0)::numeric));
+alter table public.narcotic_sale_observations add constraint narcotic_sale_obs_weight_check CHECK (((recorded_weight_value IS NULL) OR (recorded_weight_value >= (0)::numeric)));
+alter table public.narcotic_sale_observations add constraint narcotic_sale_obs_product_state_check CHECK ((product_state = ANY (ARRAY['wet'::text, 'dried'::text, 'bagged'::text, 'unknown'::text])));
+alter table public.narcotic_sale_observations add constraint narcotic_sale_obs_precision_check CHECK ((observed_date_precision = ANY (ARRAY['exact'::text, 'day'::text, 'relative'::text, 'unknown'::text])));
+alter table public.narcotic_sale_observations add constraint narcotic_sale_obs_payment_type_check CHECK ((payment_type = ANY (ARRAY['dirty_money'::text, 'cash'::text, 'bank'::text, 'unknown'::text])));
+alter table public.narcotic_sale_observations add constraint narcotic_sale_obs_state_check CHECK ((state = ANY (ARRAY['draft'::text, 'confirmed'::text, 'archived'::text, 'disproven'::text])));
+alter table public.narcotic_sale_observations add constraint narcotic_sale_obs_confidence_check CHECK (((source_confidence IS NULL) OR (source_confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
+alter table public.narcotic_sale_observations add constraint narcotic_sale_obs_provenance_check CHECK (((provenance IS NULL) OR (provenance = ANY (ARRAY['imported'::text, 'reported'::text, 'manually_confirmed'::text, 'inferred'::text, 'historical'::text, 'disputed'::text]))));
+alter table public.narcotic_sale_observations enable row level security;
+-- One recorded controlled sale; raw values only — every $/unit, $/g, $/kg metric
+-- is DERIVED in the app, never written back. RESTRICTED intelligence.
+
+create table public.narcotic_sale_series (
+  id uuid not null default gen_random_uuid(),
+  narcotic_id uuid not null,
+  name text not null,
+  product_name text,
+  purpose text,
+  method text,
+  payment_type text not null default 'dirty_money'::text,
+  status text not null default 'active'::text,
+  collection_state text not null default 'ongoing'::text,
+  next_action text,
+  restricted boolean not null default true,
+  investigator_id uuid,
+  confidence text default 'confirmed'::text,
+  provenance text default 'reported'::text,
+  analyst_note text,
+  notes text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.narcotic_sale_series add constraint narcotic_sale_series_pkey PRIMARY KEY (id);
+alter table public.narcotic_sale_series add constraint narcotic_sale_series_narcotic_id_fkey FOREIGN KEY (narcotic_id) REFERENCES public.narcotics(id) ON DELETE CASCADE;
+alter table public.narcotic_sale_series add constraint narcotic_sale_series_investigator_id_fkey FOREIGN KEY (investigator_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.narcotic_sale_series add constraint narcotic_sale_series_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.narcotic_sale_series add constraint narcotic_sale_series_name_len_check CHECK (((char_length(btrim(name)) >= 1) AND (char_length(btrim(name)) <= 200)));
+alter table public.narcotic_sale_series add constraint narcotic_sale_series_status_check CHECK ((status = ANY (ARRAY['active'::text, 'paused'::text, 'concluded'::text])));
+alter table public.narcotic_sale_series add constraint narcotic_sale_series_collection_state_check CHECK ((collection_state = ANY (ARRAY['ongoing'::text, 'paused'::text, 'closed'::text])));
+alter table public.narcotic_sale_series add constraint narcotic_sale_series_payment_type_check CHECK ((payment_type = ANY (ARRAY['dirty_money'::text, 'cash'::text, 'bank'::text, 'unknown'::text])));
+alter table public.narcotic_sale_series add constraint narcotic_sale_series_confidence_check CHECK (((confidence IS NULL) OR (confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
+alter table public.narcotic_sale_series add constraint narcotic_sale_series_provenance_check CHECK (((provenance IS NULL) OR (provenance = ANY (ARRAY['imported'::text, 'reported'::text, 'manually_confirmed'::text, 'inferred'::text, 'historical'::text, 'disputed'::text]))));
+alter table public.narcotic_sale_series enable row level security;
+-- The ongoing street-value study (one per substance/product); future observations
+-- append to it. RESTRICTED intelligence — visible to senior_detective+ / Owner.
+
+create table public.narcotic_sale_stacks (
+  id uuid not null default gen_random_uuid(),
+  observation_id uuid not null,
+  stack_number integer not null,
+  units integer not null default 0,
+  recorded_weight_value numeric,
+  recorded_weight_unit text,
+  recorded_weight_text text,
+  weight_is_derived boolean not null default false,
+  notes text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.narcotic_sale_stacks add constraint narcotic_sale_stacks_pkey PRIMARY KEY (id);
+alter table public.narcotic_sale_stacks add constraint narcotic_sale_stacks_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES public.narcotic_sale_observations(id) ON DELETE CASCADE;
+alter table public.narcotic_sale_stacks add constraint narcotic_sale_stacks_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.narcotic_sale_stacks add constraint narcotic_sale_stacks_units_check CHECK ((units >= 0));
+alter table public.narcotic_sale_stacks add constraint narcotic_sale_stacks_weight_check CHECK (((recorded_weight_value IS NULL) OR (recorded_weight_value >= (0)::numeric)));
+alter table public.narcotic_sale_stacks enable row level security;
+-- Per-stack line items of an observation; original recorded weight + unit
+-- preserved verbatim. Visibility inherits from the parent observation.
 
 create table public.narcotic_seizures (
   id uuid not null default gen_random_uuid(),
@@ -2136,6 +2249,19 @@ CREATE INDEX narcotic_places_source_case_id_fkey_idx ON public.narcotic_places U
 CREATE INDEX narcotic_places_source_evidence_id_fkey_idx ON public.narcotic_places USING btree (source_evidence_id);
 CREATE INDEX narcotic_places_source_report_id_fkey_idx ON public.narcotic_places USING btree (source_report_id);
 CREATE INDEX narcotic_precursors_narcotic_id_fkey_idx ON public.narcotic_precursors USING btree (narcotic_id);
+CREATE INDEX narcotic_sale_obs_created_by_fkey_idx ON public.narcotic_sale_observations USING btree (created_by);
+CREATE INDEX narcotic_sale_obs_investigator_id_fkey_idx ON public.narcotic_sale_observations USING btree (investigator_id);
+CREATE INDEX narcotic_sale_obs_narcotic_id_fkey_idx ON public.narcotic_sale_observations USING btree (narcotic_id);
+CREATE INDEX narcotic_sale_obs_series_id_fkey_idx ON public.narcotic_sale_observations USING btree (series_id);
+CREATE INDEX narcotic_sale_obs_source_case_id_fkey_idx ON public.narcotic_sale_observations USING btree (source_case_id);
+CREATE INDEX narcotic_sale_obs_source_evidence_id_fkey_idx ON public.narcotic_sale_observations USING btree (source_evidence_id);
+CREATE INDEX narcotic_sale_obs_state_idx ON public.narcotic_sale_observations USING btree (state);
+CREATE INDEX narcotic_sale_series_created_by_fkey_idx ON public.narcotic_sale_series USING btree (created_by);
+CREATE INDEX narcotic_sale_series_investigator_id_fkey_idx ON public.narcotic_sale_series USING btree (investigator_id);
+CREATE INDEX narcotic_sale_series_narcotic_id_fkey_idx ON public.narcotic_sale_series USING btree (narcotic_id);
+CREATE INDEX narcotic_sale_stacks_created_by_fkey_idx ON public.narcotic_sale_stacks USING btree (created_by);
+CREATE UNIQUE INDEX narcotic_sale_stacks_obs_number_key ON public.narcotic_sale_stacks USING btree (observation_id, stack_number);
+CREATE INDEX narcotic_sale_stacks_observation_id_fkey_idx ON public.narcotic_sale_stacks USING btree (observation_id);
 CREATE INDEX narcotic_seizures_case_id_fkey_idx ON public.narcotic_seizures USING btree (case_id);
 CREATE INDEX narcotic_seizures_created_by_fkey_idx ON public.narcotic_seizures USING btree (created_by);
 CREATE INDEX narcotic_seizures_evidence_id_fkey_idx ON public.narcotic_seizures USING btree (evidence_id);
@@ -5005,12 +5131,12 @@ create policy media_ins on public.media
 
 create policy media_sel on public.media
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active() AND ((NOT restricted) OR private.can_edit_narcotics_intel())));
 
 create policy media_upd on public.media
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active() AND ((NOT restricted) OR private.can_edit_narcotics_intel())))
+  with check ((private.is_active() AND ((NOT restricted) OR private.can_edit_narcotics_intel())));
 
 create policy mo_profiles_del on public.mo_profiles
   as permissive for delete to authenticated
@@ -5146,6 +5272,65 @@ create policy narcotic_precursors_upd on public.narcotic_precursors
   as permissive for update to authenticated
   using (private.is_active())
   with check (private.is_active());
+
+create policy narcotic_sale_obs_del on public.narcotic_sale_observations
+  as permissive for delete to authenticated
+  using (private.is_owner());
+
+create policy narcotic_sale_obs_ins on public.narcotic_sale_observations
+  as permissive for insert to authenticated
+  with check (private.can_edit_narcotics_intel());
+
+create policy narcotic_sale_obs_sel on public.narcotic_sale_observations
+  as permissive for select to authenticated
+  using (private.can_edit_narcotics_intel());
+
+create policy narcotic_sale_obs_upd on public.narcotic_sale_observations
+  as permissive for update to authenticated
+  using ((private.can_manage_narcotics() OR (private.can_edit_narcotics_intel() AND (state = 'draft'::text))))
+  with check ((private.can_manage_narcotics() OR (private.can_edit_narcotics_intel() AND (state = 'draft'::text))));
+
+create policy narcotic_sale_series_del on public.narcotic_sale_series
+  as permissive for delete to authenticated
+  using (private.is_owner());
+
+create policy narcotic_sale_series_ins on public.narcotic_sale_series
+  as permissive for insert to authenticated
+  with check (private.can_edit_narcotics_intel());
+
+create policy narcotic_sale_series_sel on public.narcotic_sale_series
+  as permissive for select to authenticated
+  using (private.can_edit_narcotics_intel());
+
+create policy narcotic_sale_series_upd on public.narcotic_sale_series
+  as permissive for update to authenticated
+  using (private.can_edit_narcotics_intel())
+  with check (private.can_edit_narcotics_intel());
+
+create policy narcotic_sale_stacks_del on public.narcotic_sale_stacks
+  as permissive for delete to authenticated
+  using (private.can_manage_narcotics());
+
+create policy narcotic_sale_stacks_ins on public.narcotic_sale_stacks
+  as permissive for insert to authenticated
+  with check ((private.can_edit_narcotics_intel() AND (EXISTS ( SELECT 1
+   FROM public.narcotic_sale_observations o
+  WHERE (o.id = narcotic_sale_stacks.observation_id)))));
+
+create policy narcotic_sale_stacks_sel on public.narcotic_sale_stacks
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.narcotic_sale_observations o
+  WHERE (o.id = narcotic_sale_stacks.observation_id))));
+
+create policy narcotic_sale_stacks_upd on public.narcotic_sale_stacks
+  as permissive for update to authenticated
+  using ((private.can_edit_narcotics_intel() AND (EXISTS ( SELECT 1
+   FROM public.narcotic_sale_observations o
+  WHERE ((o.id = narcotic_sale_stacks.observation_id) AND (private.can_manage_narcotics() OR (o.state = 'draft'::text)))))))
+  with check ((private.can_edit_narcotics_intel() AND (EXISTS ( SELECT 1
+   FROM public.narcotic_sale_observations o
+  WHERE (o.id = narcotic_sale_stacks.observation_id)))));
 
 create policy narcotic_seizures_del on public.narcotic_seizures
   as permissive for delete to authenticated
@@ -5982,3 +6167,28 @@ create policy wl_sel on public.watchlist
 -- street/server aliases) is data, not schema — re-run the migration's section
 -- 18 on a fresh rebuild. Definitive SQL in
 -- supabase/migrations/20260803010000_narcotics_intelligence.sql.
+-- 20260804010000_narcotic_sales: media gained the restricted boolean (+ the
+-- media_restricted_idx partial index) and media_sel/media_upd were re-emitted to
+-- hide restricted media rows from members who cannot see restricted Narcotics
+-- intelligence (column + policies mirrored above). Three new RESTRICTED tables —
+-- narcotic_sale_series (the ongoing street-value study; one per substance),
+-- narcotic_sale_observations (one recorded controlled sale; raw values only,
+-- every $/unit, $/g, $/kg metric DERIVED in the app) and narcotic_sale_stacks
+-- (per-stack line items; original recorded weight + unit preserved) — with their
+-- typed FKs, CHECKs, FK indexes, the narcotic_sale_stacks_obs_number_key unique
+-- index, narcotic_sale_obs_state_idx, touch/audit triggers, RLS enabled and
+-- realtime SELECT, and the sel/ins/upd/del policies (all mirrored above). Every
+-- table gates read/create on private.can_edit_narcotics_intel() [senior_detective+
+-- / Owner]; confirmed-observation edits need private.can_manage_narcotics()
+-- [bureau_lead+]; delete is Owner-only (stacks delete manager-only). New helpers:
+-- NON-definer guard triggers private.guard_narcotic_sale_series() and
+-- private.guard_narcotic_sale_observation() pin created_by / parent FKs / the
+-- restricted flag and hold non-managers at state='draft'. New RPCs:
+-- public.add_narcotic_sale_observation(uuid, jsonb, jsonb) [atomically appends an
+-- observation + its stacks, assigning the next observation_number] and
+-- public.confirm_narcotic_sale_observation(uuid, text) [promotes a draft
+-- observation to 'confirmed'] — both SECURITY DEFINER, set search_path = '',
+-- audit-logged, revoked from public/anon and granted to authenticated,
+-- service_role. Seed data (the LeafOS — Ditch Witch Street-Value Study, Sale 1 +
+-- Sale 2) is data, not schema. Definitive SQL in
+-- supabase/migrations/20260804010000_narcotic_sales.sql.

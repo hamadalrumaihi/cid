@@ -128,6 +128,19 @@ The Narcotics workspace is the canonical reference for reusable substance intell
 
 Restricted substances are hidden below senior detective; child links/aliases/seizures inherit the parent's visibility. Suggestions (`narcotic_suggestions`) are RPC-only writes with SELECT visible to the submitter + managers + Owner. `merge_narcotics`/`resolve_provisional_narcotic`/`submit_/decide_narcotic_suggestion`/`search_narcotics` are SECURITY DEFINER, self-authorizing, anon-revoked. The `guard_narcotic()` trigger is **NON-definer** so its client-write freeze actually engages (docs/RLS.md §2). §2 safety: production intelligence is non-actionable only — no recipes/quantities/temperatures; the retired precursor-chemistry seed was never resurrected and `PlacesView`'s recipe generator was replaced with a non-actionable suspected-production-site card.
 
+## 4e. Street-value sales intelligence ([`20260804010000_narcotic_sales.sql`](../supabase/migrations/20260804010000_narcotic_sales.sql))
+
+Investigator-conducted controlled sales, grouped into an ongoing series (`narcotic_sale_series` → `narcotic_sale_observations` → `narcotic_sale_stacks`), record the *observed* street value of a substance. This is **restricted** intelligence — the canonical substance stays public, but the sale proceeds, per-unit values, and reporting investigator are visible only to members authorized for restricted narcotics intelligence. All access is server-enforced.
+
+| Tier | Street-value sales authority |
+|---|---|
+| Detective (LSB/BCB, non-restricted) | **no access** — restricted sales resolve zero rows under RLS; the dossier "Street-Value Observations" tab is hidden (the portal's restricted-narcotics tier is senior detective+, so the spec's "detective" abilities map to that tier) |
+| Senior Detective (`can_edit_narcotics_intel()`) | read the series/observations/stacks + restricted screenshots; add observations (`add_narcotic_sale_observation`, forced to `draft` for non-managers); mark drafts confirmed (`confirm_narcotic_sale_observation`); edit own draft; suggest corrections via the existing Feedback inbox |
+| Bureau Lead / Deputy Director / Director (`can_manage_narcotics()`) | + edit confirmed observations, archive duplicates, correct classifications, detach a screenshot (without deleting the source media) |
+| Owner | + the only role that may DELETE a series or observation |
+
+Both guard triggers are **NON-definer** and force `restricted=true` + pin `created_by`; the observation guard prevents a non-manager from self-confirming. Raw values only are stored — every $/unit, $/g, $/kg, $/lb metric is derived client-side and never written back as a raw fact; original recorded units are preserved (pounds stay pounds for the Fire-tier sale, grams are marked derived). Screenshot evidence lives in the Media Vault as `restricted=true` rows; the migration also fixes a pre-existing leak by gating `media_sel`/`media_upd` on the restricted flag. Sale payment values are never exposed through global search or graph labels — the series is reachable only through the RLS-gated dossier section, while the substance itself stays findable via its aliases (Ditch Witch / Mids / LeafOS).
+
 ## 5. Permission table — major features
 
 Accurate as of the [schema snapshot](../supabase/schema-snapshot.sql) + v1.16 migrations. "Command" = `private.is_command()`; "case access" = `private.can_access_case()` (bureau match, JTF cases, lead/creator, command, explicit grant, or active joint assignment). This is the summary — the full per-table policy list is in [handbook ch. 08](handbook/08-database.md).

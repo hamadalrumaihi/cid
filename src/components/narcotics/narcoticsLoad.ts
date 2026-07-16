@@ -19,6 +19,9 @@ export type NarcoticPersonRow = Tables<'narcotic_persons'>
 export type NarcoticGangRow = Tables<'narcotic_gangs'>
 export type IntelLinkRow = Tables<'case_intel_links'>
 export type MediaRow = Tables<'media'>
+export type SaleSeriesRow = Tables<'narcotic_sale_series'>
+export type SaleObservationRow = Tables<'narcotic_sale_observations'>
+export type SaleStackRow = Tables<'narcotic_sale_stacks'>
 
 export const CASE_COLS = 'id,case_number,title,status,bureau,updated_at,lead_detective_id'
 export type CaseLite = Pick<Tables<'cases'>, 'id' | 'case_number' | 'title' | 'status' | 'bureau' | 'updated_at' | 'lead_detective_id'>
@@ -68,19 +71,23 @@ export interface NarcoticCounts {
   places: number
   people: number
   media: number
+  /** Restricted sale observations — 0 (and the tab hidden) for members who
+   *  can't see restricted intelligence, since RLS returns no rows. */
+  sales: number
 }
 
 export async function loadCounts(id: string): Promise<NarcoticCounts> {
   const c = (p: Promise<number>) => p.catch(() => 0)
-  const [links, seizures, places, persons, gangs, media] = await Promise.all([
+  const [links, seizures, places, persons, gangs, media, sales] = await Promise.all([
     c(countRows('case_intel_links', { eq: { kind: 'narcotic', ref_id: id } })),
     c(countRows('narcotic_seizures', { eq: { narcotic_id: id } })),
     c(countRows('narcotic_places', { eq: { narcotic_id: id } })),
     c(countRows('narcotic_persons', { eq: { narcotic_id: id } })),
     c(countRows('narcotic_gangs', { eq: { narcotic_id: id } })),
     c(countRows('media', { eq: { narcotic_id: id } })),
+    c(countRows('narcotic_sale_observations', { eq: { narcotic_id: id } })),
   ])
-  return { caseLinks: links, seizures, places, people: persons + gangs, media }
+  return { caseLinks: links, seizures, places, people: persons + gangs, media, sales }
 }
 
 // ── Seizures — rows + resolved case/evidence (verbatim amounts stay on rows) ─
@@ -224,6 +231,46 @@ export async function loadActivity(id: string): Promise<ActivityData> {
     sel<ActivityData['media']>(list('media', { select: 'id,created_at,title', eq: { narcotic_id: id } })),
   ])
   return { aliases, seizures, places, persons, gangs, caseLinks, media }
+}
+
+// ── Street-value sales (restricted) — series + observations + stacks + media ─
+// RLS gates every table below to restricted-intel members, so an unauthorized
+// caller resolves an empty series and the dossier tab stays hidden.
+export interface SalesData {
+  series: SaleSeriesRow | null
+  observations: SaleObservationRow[]
+  stacksByObs: Map<string, SaleStackRow[]>
+  /** Screenshots keyed by sale_observation_id; series-level/context images are
+   *  under the '' key. */
+  mediaByObs: Map<string, MediaRow[]>
+}
+
+export async function loadSales(id: string): Promise<SalesData> {
+  const [seriesRows, observations] = await Promise.all([
+    opt(list('narcotic_sale_series', { eq: { narcotic_id: id }, order: 'created_at' })),
+    opt(list('narcotic_sale_observations', { eq: { narcotic_id: id }, order: 'observation_number' })),
+  ])
+  const obsIds = observations.map((o) => o.id)
+  const [stacks, media] = await Promise.all([
+    obsIds.length ? opt(list('narcotic_sale_stacks', { in: { observation_id: obsIds }, order: 'stack_number' })) : Promise.resolve([] as SaleStackRow[]),
+    opt(list('media', { eq: { narcotic_id: id }, order: 'created_at', ascending: false })),
+  ])
+  const stacksByObs = new Map<string, SaleStackRow[]>()
+  for (const s of stacks) {
+    const arr = stacksByObs.get(s.observation_id) ?? []
+    arr.push(s); stacksByObs.set(s.observation_id, arr)
+  }
+  const seriesId = seriesRows[0]?.id ?? null
+  const mediaByObs = new Map<string, MediaRow[]>()
+  for (const m of media) {
+    const tags = (m.tags ?? {}) as Record<string, unknown>
+    // Only sale-tagged, restricted screenshots belong in this section.
+    if (!m.restricted || (seriesId && tags.series_id !== seriesId)) continue
+    const key = typeof tags.sale_observation_id === 'string' ? tags.sale_observation_id : ''
+    const arr = mediaByObs.get(key) ?? []
+    arr.push(m); mediaByObs.set(key, arr)
+  }
+  return { series: seriesRows[0] ?? null, observations, stacksByObs, mediaByObs }
 }
 
 // ── Picker for Merge — slim other narcotics (id + name only) ─────────────────
