@@ -2,9 +2,9 @@
 
 /** Pure line diff + rendered diff view shared by DocHistory (compare/restore
  *  preview) and DocLifecycle (sync-conflict resolution). A small LCS over
- *  lines — SOP bodies are a few hundred lines at most — rendered as React
- *  elements (added "+" emerald / removed "−" rose prefixes, never
- *  color-alone, never dangerouslySetInnerHTML). */
+ *  lines — SOP bodies are a few hundred lines at most — grouped into
+ *  document-style added/removed/context sections that read top to bottom
+ *  (never color-alone, never dangerouslySetInnerHTML). */
 
 export interface DiffLine {
   type: 'same' | 'add' | 'del'
@@ -55,43 +55,92 @@ function diffMiddle(a: string[], b: string[]): DiffLine[] {
   return out
 }
 
-const ROW: Record<DiffLine['type'], { mark: string; cls: string }> = {
-  same: { mark: ' ', cls: 'text-slate-400' },
-  add: { mark: '+', cls: 'bg-emerald-500/10 text-emerald-200' },
-  del: { mark: '−', cls: 'bg-rose-500/10 text-rose-200' },
+/** A line diff grouped into document-style blocks: runs of unchanged context
+ *  (collapsed when long) and change blocks that read removed-then-added, top to
+ *  bottom — no columns, no table. */
+type DiffBlock =
+  | { kind: 'context'; lines: string[] }
+  | { kind: 'change'; removed: string[]; added: string[] }
+
+function groupBlocks(lines: DiffLine[]): DiffBlock[] {
+  const blocks: DiffBlock[] = []
+  for (let i = 0; i < lines.length; ) {
+    if (lines[i].type === 'same') {
+      let j = i
+      while (j < lines.length && lines[j].type === 'same') j++
+      blocks.push({ kind: 'context', lines: lines.slice(i, j).map((l) => l.text) })
+      i = j
+    } else {
+      let j = i
+      const removed: string[] = []
+      const added: string[] = []
+      while (j < lines.length && lines[j].type !== 'same') {
+        if (lines[j].type === 'del') removed.push(lines[j].text)
+        else added.push(lines[j].text)
+        j++
+      }
+      blocks.push({ kind: 'change', removed, added })
+      i = j
+    }
+  }
+  return blocks
 }
 
-/** Unified diff pane. Long unchanged runs collapse to a "… N unchanged lines"
- *  marker so a one-line edit in a long SOP stays readable. */
+/** Unchanged context — collapses runs longer than 6 lines to head 3 + a
+ *  "N unchanged lines" marker + tail 3 so a one-line edit in a long SOP stays
+ *  readable. */
+function ContextBlock({ lines }: { lines: string[] }) {
+  const collapse = lines.length > 6
+  const shown: (string | null)[] = collapse ? [...lines.slice(0, 3), null, ...lines.slice(-3)] : lines
+  return (
+    <div className="px-3 py-1.5">
+      {shown.map((t, i) =>
+        t === null ? (
+          <p key={i} className="py-1 text-center text-xs text-slate-500">{lines.length - 6} unchanged lines</p>
+        ) : (
+          <p key={i} className="whitespace-pre-wrap text-sm leading-6 text-slate-400">{t || ' '}</p>
+        ),
+      )}
+    </div>
+  )
+}
+
+/** Grouped diff view — removed and added text sit in their own labelled
+ *  (colour + text) sections; unchanged context reads quietly between them. */
 export function DiffView({ base, other, className = '' }: { base: string; other: string; className?: string }) {
   const lines = diffLines(base, other)
   if (lines.every((l) => l.type === 'same'))
     return <p className={`text-sm text-slate-400 ${className}`}>No text differences between these versions.</p>
 
-  // Collapse same-runs longer than 8 lines to head 3 + marker + tail 3.
-  const rows: (DiffLine | { type: 'skip'; count: number })[] = []
-  for (let i = 0; i < lines.length; ) {
-    if (lines[i].type !== 'same') { rows.push(lines[i]); i++; continue }
-    let j = i
-    while (j < lines.length && lines[j].type === 'same') j++
-    const run = j - i
-    if (run > 8) {
-      rows.push(...lines.slice(i, i + 3), { type: 'skip', count: run - 6 }, ...lines.slice(j - 3, j))
-    } else rows.push(...lines.slice(i, j))
-    i = j
-  }
-
+  const blocks = groupBlocks(lines)
   return (
-    <div className={`max-h-80 overflow-auto rounded-lg border border-white/10 bg-ink-950/60 font-mono text-xs leading-5 ${className}`}>
-      {rows.map((l, i) =>
-        l.type === 'skip' ? (
-          <p key={i} className="border-y border-white/5 px-3 py-1 text-center text-slate-500">… {l.count} unchanged lines …</p>
+    <div className={`max-h-80 space-y-2 overflow-auto rounded-lg border border-white/10 bg-ink-950/60 p-2 ${className}`}>
+      {blocks.map((b, i) =>
+        b.kind === 'context' ? (
+          <ContextBlock key={i} lines={b.lines} />
         ) : (
-          <p key={i} className={`whitespace-pre-wrap px-3 ${ROW[l.type].cls}`}>
-            <span aria-hidden className="mr-2 inline-block w-3 select-none text-center">{ROW[l.type].mark}</span>
-            <span className="sr-only">{l.type === 'add' ? 'added: ' : l.type === 'del' ? 'removed: ' : ''}</span>
-            {l.text || ' '}
-          </p>
+          <div key={i} className="overflow-hidden rounded-lg border border-white/10">
+            {b.removed.length > 0 && (
+              <div className="border-l-2 border-rose-500/60 bg-rose-500/10 px-3 py-2">
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-rose-300">Removed</p>
+                {b.removed.map((t, k) => (
+                  <p key={k} className="whitespace-pre-wrap text-sm leading-6 text-rose-200">
+                    <span className="sr-only">removed: </span>{t || ' '}
+                  </p>
+                ))}
+              </div>
+            )}
+            {b.added.length > 0 && (
+              <div className="border-l-2 border-emerald-500/60 bg-emerald-500/10 px-3 py-2">
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300">Added</p>
+                {b.added.map((t, k) => (
+                  <p key={k} className="whitespace-pre-wrap text-sm leading-6 text-emerald-200">
+                    <span className="sr-only">added: </span>{t || ' '}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
         ),
       )}
     </div>

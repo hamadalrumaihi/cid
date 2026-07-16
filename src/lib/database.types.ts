@@ -1413,6 +1413,218 @@ export type Database = {
           },
         ]
       }
+      document_suggestion_comments: {
+        Row: {
+          author_id: string
+          body: string
+          created_at: string
+          id: string
+          suggestion_id: string
+        }
+        Insert: {
+          author_id?: string
+          body: string
+          created_at?: string
+          id?: string
+          suggestion_id: string
+        }
+        Update: {
+          author_id?: string
+          body?: string
+          created_at?: string
+          id?: string
+          suggestion_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_suggestion_comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_suggestion_comments_suggestion_id_fkey"
+            columns: ["suggestion_id"]
+            isOneToOne: false
+            referencedRelation: "document_suggestions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_suggestion_events: {
+        Row: {
+          actor_id: string | null
+          created_at: string
+          event_type: string
+          from_status: string | null
+          id: string
+          note: string | null
+          suggestion_id: string
+          to_status: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          created_at?: string
+          event_type: string
+          from_status?: string | null
+          id?: string
+          note?: string | null
+          suggestion_id: string
+          to_status?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          created_at?: string
+          event_type?: string
+          from_status?: string | null
+          id?: string
+          note?: string | null
+          suggestion_id?: string
+          to_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_suggestion_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_suggestion_events_suggestion_id_fkey"
+            columns: ["suggestion_id"]
+            isOneToOne: false
+            referencedRelation: "document_suggestions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_suggestions: {
+        Row: {
+          assigned_editor: string | null
+          created_at: string
+          created_by: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          document_id: string | null
+          document_version_number: number | null
+          duplicate_of: string | null
+          explanation: string
+          id: string
+          implemented_at: string | null
+          implemented_version_id: string | null
+          proposed_text: string | null
+          related_case_id: string | null
+          section_id: string | null
+          section_title: string | null
+          source_url: string | null
+          status: string
+          suggestion_type: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_editor?: string | null
+          created_at?: string
+          created_by?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          document_id?: string | null
+          document_version_number?: number | null
+          duplicate_of?: string | null
+          explanation: string
+          id?: string
+          implemented_at?: string | null
+          implemented_version_id?: string | null
+          proposed_text?: string | null
+          related_case_id?: string | null
+          section_id?: string | null
+          section_title?: string | null
+          source_url?: string | null
+          status?: string
+          suggestion_type?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_editor?: string | null
+          created_at?: string
+          created_by?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          document_id?: string | null
+          document_version_number?: number | null
+          duplicate_of?: string | null
+          explanation?: string
+          id?: string
+          implemented_at?: string | null
+          implemented_version_id?: string | null
+          proposed_text?: string | null
+          related_case_id?: string | null
+          section_id?: string | null
+          section_title?: string | null
+          source_url?: string | null
+          status?: string
+          suggestion_type?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_suggestions_assigned_editor_fkey"
+            columns: ["assigned_editor"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_suggestions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_suggestions_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_suggestions_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_suggestions_duplicate_of_fkey"
+            columns: ["duplicate_of"]
+            isOneToOne: false
+            referencedRelation: "document_suggestions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_suggestions_implemented_version_id_fkey"
+            columns: ["implemented_version_id"]
+            isOneToOne: false
+            referencedRelation: "documents_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_suggestions_related_case_id_fkey"
+            columns: ["related_case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_user_state: {
         Row: {
           bookmarked: boolean
@@ -1459,6 +1671,7 @@ export type Database = {
           approval_required: boolean
           approved_at: string | null
           approved_by: string | null
+          bureau: string | null
           canonical_source: string
           case_id: string | null
           category: string | null
@@ -1502,6 +1715,7 @@ export type Database = {
           approval_required?: boolean
           approved_at?: string | null
           approved_by?: string | null
+          bureau?: string | null
           canonical_source?: string
           case_id?: string | null
           category?: string | null
@@ -1542,6 +1756,7 @@ export type Database = {
           approval_required?: boolean
           approved_at?: string | null
           approved_by?: string | null
+          bureau?: string | null
           canonical_source?: string
           case_id?: string | null
           category?: string | null
@@ -5645,6 +5860,41 @@ export type Database = {
           status: string
           updated_at: string
         }[]
+      }
+      submit_document_suggestion: {
+        Args: {
+          p_document: string
+          p_explanation: string
+          p_proposed_text?: string
+          p_related_case?: string
+          p_section_id?: string
+          p_section_title?: string
+          p_source_url?: string
+          p_title: string
+          p_type: string
+        }
+        Returns: Database["public"]["Tables"]["document_suggestions"]["Row"]
+      }
+      decide_document_suggestion: {
+        Args: {
+          p_assigned_editor?: string
+          p_note?: string
+          p_status: string
+          p_suggestion: string
+        }
+        Returns: Database["public"]["Tables"]["document_suggestions"]["Row"]
+      }
+      comment_on_document_suggestion: {
+        Args: { p_body: string; p_suggestion: string }
+        Returns: Database["public"]["Tables"]["document_suggestion_comments"]["Row"]
+      }
+      mark_document_suggestion_duplicate: {
+        Args: { p_note?: string; p_original: string; p_suggestion: string }
+        Returns: Database["public"]["Tables"]["document_suggestions"]["Row"]
+      }
+      link_document_suggestion_implementation: {
+        Args: { p_suggestion: string; p_version: string }
+        Returns: Database["public"]["Tables"]["document_suggestions"]["Row"]
       }
     }
     Enums: {

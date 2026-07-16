@@ -1,20 +1,19 @@
 'use client'
 
-/** Presentational shelf items — one card (grid) and one row (list) sharing a
- *  single chip strip so governance state never reads differently between
- *  layouts. All derivations come from docModel (status/ack/review/sync are
- *  text-labelled, never color-alone). The PRIMARY action is a real <button>
- *  around the title area; the bookmark toggle is its own small button OUTSIDE
- *  it (no nested buttons, ≥40px hit areas). */
+/** Presentational shelf card — one document "cover" in the library grid. All
+ *  derivations come from docModel (status/ack are text-labelled, never
+ *  colour-alone). The PRIMARY action is a real <button> around the title; the
+ *  bookmark toggle is its own small button OUTSIDE it (no nested buttons,
+ *  ≥40px hit areas). The cover shows at most THREE badges — fuller governance
+ *  state (review, expiry, sync, classification) lives in the reader rail. */
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import { fmtDate } from '@/lib/format'
 import { officerName } from '@/lib/profiles'
 import {
-  ACK_LABEL, CLASS_LABEL, STATUS_LABEL, STATUS_TONE, SYNC_LABEL, SYNC_TONE,
-  TYPE_LABEL, ackState, docTitle, isExpired, reviewState,
-  type DocumentClassification, type DocumentStatus, type DocumentType,
-  type MyAckVersions, type ShelfDoc, type SyncStatus,
+  ACK_LABEL, CATEGORY_LABEL, STATUS_LABEL, STATUS_TONE, TYPE_LABEL,
+  ackState, docCategory, docTitle,
+  type DocumentStatus, type DocumentType, type MyAckVersions, type ShelfDoc,
 } from './docModel'
 
 export interface DocItemProps {
@@ -28,33 +27,23 @@ export interface DocItemProps {
   onToggleBookmark: () => void
 }
 
-/** Governance chip strip — identical between card and row. */
-function DocChips({ d, myAcks, nowMs, deadline }: Pick<DocItemProps, 'd' | 'myAcks' | 'nowMs' | 'deadline'>) {
+/** Cover badges — at most three, in priority order: an unpublished status, the
+ *  mandatory / needs-acknowledgement flag, then the document type. */
+function DocCoverBadges({ d, myAcks }: Pick<DocItemProps, 'd' | 'myAcks'>) {
   const status = (d.status ?? 'draft') as DocumentStatus
-  const cls = (d.classification ?? 'internal') as DocumentClassification
   const type = d.document_type as DocumentType
   const ack = ackState(d, myAcks)
-  const review = reviewState(d, nowMs)
-  const sync = d.source_system === 'google_drive' ? ((d.sync_status ?? 'synced') as SyncStatus) : null
-  return (
-    <span className="flex flex-wrap items-center gap-1.5">
-      <Badge tone="neutral">{TYPE_LABEL[type] ?? d.document_type}</Badge>
-      <Badge tone={STATUS_TONE[status] ?? 'neutral'}>{STATUS_LABEL[status] ?? d.status}</Badge>
-      {cls !== 'internal' && <Badge tone="accent">{CLASS_LABEL[cls] ?? d.classification}</Badge>}
-      {d.mandatory && <Badge tone="warn">Mandatory</Badge>}
-      {ack !== 'not_required' && (
-        <Badge tone={ack === 'acknowledged' ? 'good' : 'warn'}>{ACK_LABEL[ack]}</Badge>
-      )}
-      {review && <Badge tone="warn">{review === 'overdue' ? 'Review overdue' : 'Review due soon'}</Badge>}
-      {isExpired(d, nowMs) && <Badge tone="danger">Expired</Badge>}
-      {sync && (
-        <Badge tone={SYNC_TONE[sync] ?? 'neutral'} title={SYNC_LABEL[sync] ?? undefined}>
-          {`Drive · ${sync.replace(/_/g, ' ')}`}
-        </Badge>
-      )}
-      {deadline && <Badge tone="warn">Due {fmtDate(deadline)}</Badge>}
-    </span>
-  )
+  const ackPending = ack === 'pending' || ack === 'reack_needed'
+
+  const badges: React.ReactNode[] = []
+  if (status !== 'published') {
+    badges.push(<Badge key="status" tone={STATUS_TONE[status] ?? 'neutral'}>{STATUS_LABEL[status] ?? d.status}</Badge>)
+  }
+  if (ackPending) badges.push(<Badge key="ack" tone="warn">{ACK_LABEL[ack]}</Badge>)
+  else if (d.mandatory) badges.push(<Badge key="mand" tone="warn">Mandatory</Badge>)
+  badges.push(<Badge key="type" tone="neutral">{TYPE_LABEL[type] ?? d.document_type}</Badge>)
+
+  return <span className="flex flex-wrap items-center gap-1.5">{badges.slice(0, 3)}</span>
 }
 
 function BookmarkToggle({ title, bookmarked, onToggle }: { title: string; bookmarked: boolean; onToggle: () => void }) {
@@ -74,55 +63,32 @@ function BookmarkToggle({ title, bookmarked, onToggle }: { title: string; bookma
   )
 }
 
-export function DocCard({ d, myAcks, bookmarked, nowMs, deadline, onOpen, onToggleBookmark }: DocItemProps) {
+export function DocCard({ d, myAcks, bookmarked, deadline, onOpen, onToggleBookmark }: DocItemProps) {
   const title = docTitle(d.name)
   const owner = d.owner_user_id ? officerName(d.owner_user_id) : null
+  const category = CATEGORY_LABEL[docCategory(d)]
   return (
-    <Card interactive className="flex flex-col">
+    <Card interactive className="flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
-        <button
-          type="button"
-          onClick={onOpen}
-          className="min-h-[44px] min-w-0 flex-1 rounded-lg text-left text-sm font-semibold text-white transition hover:text-badge-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-500"
-        >
-          {title}
-        </button>
+        <span className="min-w-0 flex-1 truncate pt-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          {category}
+        </span>
         <BookmarkToggle title={title} bookmarked={bookmarked} onToggle={onToggleBookmark} />
       </div>
-      <div className="mt-1.5">
-        <DocChips d={d} myAcks={myAcks} nowMs={nowMs} deadline={deadline} />
-      </div>
-      {d.excerpt && <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-400">{d.excerpt}</p>}
-      <p className="mt-auto pt-3 text-[11px] text-slate-400">
-        Updated {fmtDate(d.updated_at)}
-        {owner ? ` · ${owner}` : ''}
-      </p>
-    </Card>
-  )
-}
-
-/** List-layout row (≥sm only — the shelf falls back to cards below sm). */
-export function DocListRow({ d, myAcks, bookmarked, nowMs, deadline, onOpen, onToggleBookmark }: DocItemProps) {
-  const title = docTitle(d.name)
-  const owner = d.owner_user_id ? officerName(d.owner_user_id) : null
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-white/5 bg-ink-900/60 py-1.5 pl-4 pr-2 transition hover:border-white/10">
       <button
         type="button"
         onClick={onOpen}
-        className="min-h-[44px] min-w-0 flex-1 rounded-lg py-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-500"
+        className="min-h-[44px] min-w-0 rounded-lg text-left text-sm font-semibold leading-snug text-white transition hover:text-badge-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-500"
       >
-        <span className="block truncate text-sm font-semibold text-white">{title}</span>
-        <span className="block truncate text-xs text-slate-400">
-          Updated {fmtDate(d.updated_at)}
-          {owner ? ` · ${owner}` : ''}
-          {d.excerpt ? ` — ${d.excerpt}` : ''}
-        </span>
+        {title}
       </button>
-      <div className="hidden max-w-[50%] flex-shrink-0 justify-end md:flex">
-        <DocChips d={d} myAcks={myAcks} nowMs={nowMs} deadline={deadline} />
-      </div>
-      <BookmarkToggle title={title} bookmarked={bookmarked} onToggle={onToggleBookmark} />
-    </div>
+      <DocCoverBadges d={d} myAcks={myAcks} />
+      {d.excerpt && <p className="line-clamp-3 text-xs leading-5 text-slate-400">{d.excerpt}</p>}
+      <p className="mt-auto pt-2 text-[11px] text-slate-400">
+        Updated {fmtDate(d.updated_at)}
+        {owner ? ` · ${owner}` : ''}
+        {deadline ? <span className="text-amber-300"> · Due {fmtDate(deadline)}</span> : null}
+      </p>
+    </Card>
   )
 }

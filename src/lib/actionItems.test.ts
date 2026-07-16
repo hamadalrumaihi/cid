@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildActionItems, priorityFromScore, NUDGE, STATUS_BASE,
   type AcAccess, type AcBlocker, type AcCase, type AcDoc, type AcLegal, type AcNotif,
-  type AcTask, type AcTransfer, type ActionSources,
+  type AcSuggestion, type AcTask, type AcTransfer, type ActionSources,
 } from './actionItems'
 
 const ME = 'me-1'
@@ -537,5 +537,64 @@ describe('library governance items (AcDoc — pre-derived facts)', () => {
     expect(withNotif.suppressedCount).toBe(1)
     const ack = withNotif.items.find((i) => i.sourceType === 'document_ack')!
     expect(ack.sourceMetadata.notificationIds).toEqual(['n-1'])
+  })
+})
+
+describe('document suggestions (AcSuggestion — pre-derived facts)', () => {
+  const mkSug = (over: Partial<AcSuggestion> = {}): AcSuggestion => ({
+    id: 's-1', title: 'Clarify evidence chain', status: 'submitted',
+    documentId: 'd-1', canManage: false, mine: false, assignedToMe: false,
+    createdAt: NOW_ISO, updatedAt: NOW_ISO, ...over,
+  })
+
+  it('manager triage: a fresh submission on a doc I manage is a command needs-action item, deep-linked to the queue', () => {
+    const q = buildActionItems(src({ suggestions: [mkSug({ canManage: true })] }))
+    const it1 = q.items.find((i) => i.sourceType === 'document_suggestion')!
+    expect(it1).toBeDefined()
+    expect(it1.status).toBe('needs_action')
+    expect(it1.isCommandItem).toBe(true)
+    expect(it1.deepLink).toBe('/sops?view=suggestions&suggestion=s-1')
+    expect(it1.actionLabel).toBe('Review')
+  })
+
+  it('submitter reply: my suggestion in needs_more_information is a personal needs-action item on the doc', () => {
+    const q = buildActionItems(src({ suggestions: [
+      mkSug({ mine: true, canManage: false, status: 'needs_more_information' }),
+    ] }))
+    const it1 = q.items.find((i) => i.sourceType === 'document_suggestion')!
+    expect(it1).toBeDefined()
+    expect(it1.isPersonalItem).toBe(true)
+    expect(it1.deepLink).toBe('/sops?doc=d-1')
+    expect(it1.actionLabel).toBe('Reply')
+  })
+
+  it('assigned editor: an accepted suggestion assigned to me is a personal implement item', () => {
+    const q = buildActionItems(src({ suggestions: [
+      mkSug({ status: 'accepted', assignedToMe: true }),
+    ] }))
+    const it1 = q.items.find((i) => i.sourceType === 'document_suggestion')!
+    expect(it1).toBeDefined()
+    expect(it1.actionLabel).toBe('Implement')
+    expect(it1.isPersonalItem).toBe(true)
+  })
+
+  it('informational states emit nothing: my submitted suggestion (awaiting a reviewer) and an accepted one not assigned to me', () => {
+    const mineWaiting = buildActionItems(src({ suggestions: [mkSug({ mine: true, status: 'submitted' })] }))
+    expect(mineWaiting.items.filter((i) => i.sourceType === 'document_suggestion')).toHaveLength(0)
+    const acceptedElsewhere = buildActionItems(src({ suggestions: [mkSug({ status: 'accepted', assignedToMe: false })] }))
+    expect(acceptedElsewhere.items.filter((i) => i.sourceType === 'document_suggestion')).toHaveLength(0)
+  })
+
+  it('a document_suggestion notification is suppressed by its structural item', () => {
+    const q = buildActionItems(src({
+      suggestions: [mkSug({ canManage: true })],
+      notifications: [{
+        id: 'n-9', user_id: ME, type: 'document_suggestion',
+        payload: { suggestion_id: 's-1', document_id: 'd-1' }, read: false, created_at: NOW_ISO,
+      }],
+    }))
+    expect(q.suppressedCount).toBe(1)
+    const it1 = q.items.find((i) => i.sourceType === 'document_suggestion')!
+    expect(it1.sourceMetadata.notificationIds).toEqual(['n-9'])
   })
 })

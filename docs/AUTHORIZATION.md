@@ -87,11 +87,33 @@ Since [`20260801010000_document_governance.sql`](../supabase/migrations/20260801
 
 The document owner (`owner_user_id`) always sees their own document. Drafts/in-review/approved rows are visible only to users with edit or approval authority.
 
-**Content editing** (`private.can_edit_document`): command/Owner for the four locked legacy folders and all `command`-classified docs; DA/AG/Owner for `justice`; Owner for `owner`; the document owner for their own doc; legacy open folders keep any-active-member writes for `internal` docs only. Version-row inserts require the SAME authority (pre-v131 any active member could fabricate history).
+**Content editing** — bureau-scoped since [`20260802010000_document_bureau_scope_suggestions.sql`](../supabase/migrations/20260802010000_document_bureau_scope_suggestions.sql), which added a nullable `documents.bureau` column (NULL = division-wide) and `private.can_edit_document_for_bureau(class, owner, folder, bureau)`. The matrix is no longer one broad `is_command()`:
+
+| Doc | May edit |
+|---|---|
+| `owner` class | Owner |
+| `justice` class | DA/AG/Owner (Justice-role model — never inferred from CID rank) |
+| `command` class (org-wide security) | deputy_director / director / Owner — **a single Bureau Lead may not** |
+| `internal` / `restricted` (SOP & reference) | Owner; deputy_director / director (division-wide, any bureau incl. NULL); the document's `owner_user_id` while active; **a Bureau Lead only when `doc.bureau = their division`** |
+| `internal` in a legacy open folder (not SOPs/Resources/Personnel/Gang Intel) | any active member |
+
+Enforcement is at BOTH boundaries: the `documents` RLS policies (direct table writes) and the SECURITY DEFINER RPCs `document_save` / `document_workflow(submit)` / `document_restore_version`, whose internal guard calls the same 4-arg function (a definer function bypasses RLS, so its guard is the authority on the RPC path). The legacy 3-arg `private.can_edit_document` remains as a strict backstop (delegates with NULL bureau → Bureau Leads not granted). Version-row inserts require the SAME authority (pre-v131 any active member could fabricate history).
 
 **Workflow & approval** (`private.can_approve_document`; every transition RPC-only via `public.document_workflow` — `trg_guard_document` silently resets direct writes to status/approval/review/sync columns): `sops` category → command/Owner; `justice` category or classification → DA/AG/Owner; `owner` classification → Owner; everything else → deputy_director/director/Owner. Reasons are mandatory for reject, supersede, archive, and emergency publication; every transition is audited with from/to + reason. Restore (`document_restore_version`) never overwrites — it lands the historical content as a NEW version with a required reason, and requires approval authority on published approval-gated docs. Drive conflicts (`resolve_document_sync`) are command/Owner with a required reason; the sops-sync function never overwrites a diverged portal copy.
 
 **Required reading**: campaigns (`publish_reading_campaign`/`close_reading_campaign`) and aggregate completion (`document_ack_summary`) are command/Owner (`private.can_manage_required_reading`). Acknowledgements are version-specific, RPC-only (`acknowledge_document`), immutable, and readable only by their owner — they are read receipts, never proof of comprehension. Private reading state (`document_user_state`: bookmarks, resume position) is strictly per-user with no aggregate surface — command cannot see it.
+
+## 4c. Document suggestions (detective improvement requests)
+
+The same migration adds a structured suggestion tracker — `document_suggestions` plus a `document_suggestion_events` history and a `document_suggestion_comments` thread — distinct from the Owner-only `feedback` tracker (whose `feedback_meta` is 1:1 and cannot route to Bureau Leads without weakening the Owner wall). The lightweight ReportIssue → `feedback(kind='document')` flow is left untouched.
+
+All writes are RPC-only (`submit_document_suggestion`, `decide_document_suggestion`, `comment_on_document_suggestion`, `mark_document_suggestion_duplicate`, `link_document_suggestion_implementation`); the tables carry SELECT-only RLS and anonymous is denied.
+
+- **Submit**: any active member who can *view* the target document (existence is not leaked — an unviewable doc returns "document not found"). New-document proposals carry a NULL `document_id`.
+- **Visibility** (`document_suggestions_sel`): the submitter sees their own; the Owner sees all; a document *manager* sees suggestions for docs they can manage (`private.can_manage_document_suggestions` = the bureau-scoped edit authority above); NULL-document proposals are visible to bureau_lead/deputy_director/director. No restricted-doc suggestion leaks to someone who cannot manage the doc.
+- **Statuses**: `submitted → under_review → accepted → implemented`, plus `partially_accepted`, `declined`, `duplicate`, `needs_more_information`. `declined`/`needs_more_information` require a note.
+- **Accepting ≠ auto-editing** the SOP: a decision records the outcome and may assign a responsible editor; `link_document_suggestion_implementation` later pins the document version that carried the change and flips the status to `implemented`. Duplicates require selecting the original and never delete the row.
+- Notifications reuse `public.notifications` (`type='document_suggestion'`) and only reach users who can access the document (managers on submit; the submitter on decision/comment; a freshly assigned editor). Every transition is audited.
 
 ## 5. Permission table — major features
 

@@ -518,6 +518,82 @@ alter table public.document_relations enable row level security;
 -- target_id has NO FK on purpose (polymorphic case/person/gang/place/vehicle/
 -- report/legal_request target); the table-level CHECK pins one target shape.
 
+create table public.document_suggestion_comments (
+  id uuid not null default gen_random_uuid(),
+  suggestion_id uuid not null,
+  body text not null,
+  author_id uuid not null default auth.uid(),
+  created_at timestamp with time zone not null default now()
+);
+alter table public.document_suggestion_comments add constraint document_suggestion_comments_pkey PRIMARY KEY (id);
+alter table public.document_suggestion_comments add constraint document_suggestion_comments_suggestion_id_fkey FOREIGN KEY (suggestion_id) REFERENCES public.document_suggestions(id) ON DELETE CASCADE;
+alter table public.document_suggestion_comments add constraint document_suggestion_comments_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.document_suggestion_comments add constraint document_suggestion_comments_body_len CHECK (((char_length(btrim(body)) >= 1) AND (char_length(btrim(body)) <= 4000)));
+alter table public.document_suggestion_comments enable row level security;
+-- Writes are RPC-only (comment_on_document_suggestion); SELECT is the only
+-- policy and inherits the parent suggestion's visibility.
+
+create table public.document_suggestion_events (
+  id uuid not null default gen_random_uuid(),
+  suggestion_id uuid not null,
+  event_type text not null,
+  from_status text,
+  to_status text,
+  note text,
+  actor_id uuid,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.document_suggestion_events add constraint document_suggestion_events_pkey PRIMARY KEY (id);
+alter table public.document_suggestion_events add constraint document_suggestion_events_suggestion_id_fkey FOREIGN KEY (suggestion_id) REFERENCES public.document_suggestions(id) ON DELETE CASCADE;
+alter table public.document_suggestion_events add constraint document_suggestion_events_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.document_suggestion_events enable row level security;
+-- Append-only history written by the suggestion RPCs; SELECT is the only
+-- policy and inherits the parent suggestion's visibility.
+
+create table public.document_suggestions (
+  id uuid not null default gen_random_uuid(),
+  document_id uuid,
+  document_version_number integer,
+  section_id text,
+  section_title text,
+  source_url text,
+  related_case_id uuid,
+  suggestion_type text not null default 'other'::text,
+  title text not null,
+  explanation text not null,
+  proposed_text text,
+  status text not null default 'submitted'::text,
+  assigned_editor uuid,
+  decided_by uuid,
+  decided_at timestamp with time zone,
+  decision_note text,
+  duplicate_of uuid,
+  implemented_version_id uuid,
+  implemented_at timestamp with time zone,
+  created_by uuid not null default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.document_suggestions add constraint document_suggestions_pkey PRIMARY KEY (id);
+alter table public.document_suggestions add constraint document_suggestions_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.documents(id) ON DELETE CASCADE;
+alter table public.document_suggestions add constraint document_suggestions_related_case_id_fkey FOREIGN KEY (related_case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.document_suggestions add constraint document_suggestions_assigned_editor_fkey FOREIGN KEY (assigned_editor) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.document_suggestions add constraint document_suggestions_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.document_suggestions add constraint document_suggestions_duplicate_of_fkey FOREIGN KEY (duplicate_of) REFERENCES public.document_suggestions(id) ON DELETE SET NULL;
+alter table public.document_suggestions add constraint document_suggestions_implemented_version_id_fkey FOREIGN KEY (implemented_version_id) REFERENCES public.documents_versions(id) ON DELETE SET NULL;
+alter table public.document_suggestions add constraint document_suggestions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.document_suggestions add constraint document_suggestions_suggestion_type_check CHECK ((suggestion_type = ANY (ARRAY['unclear'::text, 'outdated'::text, 'incorrect'::text, 'missing_procedure'::text, 'new_section'::text, 'legal_concern'::text, 'broken_link'::text, 'formatting'::text, 'new_document'::text, 'other'::text])));
+alter table public.document_suggestions add constraint document_suggestions_status_check CHECK ((status = ANY (ARRAY['submitted'::text, 'under_review'::text, 'accepted'::text, 'partially_accepted'::text, 'declined'::text, 'duplicate'::text, 'needs_more_information'::text, 'implemented'::text])));
+alter table public.document_suggestions add constraint document_suggestions_title_len CHECK (((char_length(btrim(title)) >= 1) AND (char_length(btrim(title)) <= 200)));
+alter table public.document_suggestions add constraint document_suggestions_explanation_len CHECK (((char_length(btrim(explanation)) >= 1) AND (char_length(btrim(explanation)) <= 8000)));
+alter table public.document_suggestions add constraint document_suggestions_not_self_duplicate CHECK (((duplicate_of IS NULL) OR (duplicate_of <> id)));
+alter table public.document_suggestions enable row level security;
+-- Detective suggestion tracker: writes are RPC-only (submit_document_suggestion /
+-- decide_document_suggestion / comment_on_document_suggestion /
+-- mark_document_suggestion_duplicate / link_document_suggestion_implementation);
+-- SELECT is the only policy and is bureau-scoped (submitter + doc managers +
+-- Owner; new-document proposals to division leadership; anon denied).
+
 create table public.document_user_state (
   user_id uuid not null,
   document_id uuid not null,
@@ -549,6 +625,7 @@ create table public.documents (
   classification text not null default 'internal'::text,
   owner_user_id uuid,
   owner_role text,
+  bureau public.bureau,
   approval_required boolean not null default false,
   approved_by uuid,
   approved_at timestamp with time zone,
@@ -1713,8 +1790,20 @@ CREATE INDEX document_reading_campaigns_version_fkey_idx ON public.document_read
 CREATE INDEX document_relations_created_by_fkey_idx ON public.document_relations USING btree (created_by);
 CREATE INDEX document_relations_target_document_fkey_idx ON public.document_relations USING btree (target_document_id);
 CREATE UNIQUE INDEX document_relations_unique_idx ON public.document_relations USING btree (document_id, relation, target_kind, COALESCE(target_document_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(target_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(target_route, ''::text));
+CREATE INDEX document_suggestion_comments_author_idx ON public.document_suggestion_comments USING btree (author_id);
+CREATE INDEX document_suggestion_comments_suggestion_idx ON public.document_suggestion_comments USING btree (suggestion_id);
+CREATE INDEX document_suggestion_events_actor_idx ON public.document_suggestion_events USING btree (actor_id);
+CREATE INDEX document_suggestion_events_suggestion_idx ON public.document_suggestion_events USING btree (suggestion_id);
+CREATE INDEX document_suggestions_assigned_idx ON public.document_suggestions USING btree (assigned_editor);
+CREATE INDEX document_suggestions_case_idx ON public.document_suggestions USING btree (related_case_id);
+CREATE INDEX document_suggestions_created_by_idx ON public.document_suggestions USING btree (created_by);
+CREATE INDEX document_suggestions_document_idx ON public.document_suggestions USING btree (document_id);
+CREATE INDEX document_suggestions_duplicate_idx ON public.document_suggestions USING btree (duplicate_of);
+CREATE INDEX document_suggestions_status_idx ON public.document_suggestions USING btree (status);
+CREATE INDEX document_suggestions_version_idx ON public.document_suggestions USING btree (implemented_version_id);
 CREATE INDEX document_user_state_document_fkey_idx ON public.document_user_state USING btree (document_id);
 CREATE INDEX documents_approved_by_fkey_idx ON public.documents USING btree (approved_by);
+CREATE INDEX documents_bureau_idx ON public.documents USING btree (bureau);
 CREATE INDEX documents_case_id_fkey_idx ON public.documents USING btree (case_id);
 CREATE INDEX documents_owner_user_id_fkey_idx ON public.documents USING btree (owner_user_id);
 CREATE INDEX documents_review_due_idx ON public.documents USING btree (review_due_at) WHERE (review_due_at IS NOT NULL);
@@ -3907,6 +3996,7 @@ CREATE TRIGGER custody_chain_audit AFTER INSERT OR DELETE OR UPDATE ON public.cu
 CREATE TRIGGER document_reading_campaigns_audit AFTER INSERT OR DELETE OR UPDATE ON public.document_reading_campaigns FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER document_reading_campaigns_touch BEFORE UPDATE ON public.document_reading_campaigns FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER document_relations_audit AFTER INSERT OR DELETE OR UPDATE ON public.document_relations FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER document_suggestions_touch BEFORE UPDATE ON public.document_suggestions FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER documents_audit AFTER INSERT OR DELETE OR UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER documents_touch BEFORE UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_guard_document BEFORE INSERT OR UPDATE ON public.documents FOR EACH ROW EXECUTE FUNCTION private.guard_document();
@@ -4276,13 +4366,13 @@ create policy doc_rel_del on public.document_relations
   as permissive for delete to authenticated
   using ((EXISTS ( SELECT 1
    FROM public.documents d
-  WHERE ((d.id = document_relations.document_id) AND private.can_edit_document(d.classification, d.owner_user_id, d.folder)))));
+  WHERE ((d.id = document_relations.document_id) AND private.can_edit_document_for_bureau(d.classification, d.owner_user_id, d.folder, d.bureau)))));
 
 create policy doc_rel_ins on public.document_relations
   as permissive for insert to authenticated
   with check ((EXISTS ( SELECT 1
    FROM public.documents d
-  WHERE ((d.id = document_relations.document_id) AND private.can_edit_document(d.classification, d.owner_user_id, d.folder)))));
+  WHERE ((d.id = document_relations.document_id) AND private.can_edit_document_for_bureau(d.classification, d.owner_user_id, d.folder, d.bureau)))));
 
 create policy doc_rel_sel on public.document_relations
   as permissive for select to authenticated
@@ -4309,22 +4399,42 @@ create policy doc_state_upd on public.document_user_state
   using ((user_id = ( SELECT auth.uid() AS uid)))
   with check ((user_id = ( SELECT auth.uid() AS uid)));
 
+create policy document_suggestion_comments_sel on public.document_suggestion_comments
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.document_suggestions s
+  WHERE (s.id = document_suggestion_comments.suggestion_id))));
+
+create policy document_suggestion_events_sel on public.document_suggestion_events
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.document_suggestions s
+  WHERE (s.id = document_suggestion_events.suggestion_id))));
+
+create policy document_suggestions_sel on public.document_suggestions
+  as permissive for select to authenticated
+  using (((created_by = ( SELECT auth.uid() AS uid)) OR private.is_owner() OR ((document_id IS NOT NULL) AND (EXISTS ( SELECT 1
+   FROM public.documents d
+  WHERE ((d.id = document_suggestions.document_id) AND private.can_manage_document_suggestions(d.classification, d.owner_user_id, d.folder, d.bureau))))) OR ((document_id IS NULL) AND COALESCE(( SELECT (profiles.active AND (profiles.role = ANY (ARRAY['bureau_lead'::text, 'deputy_director'::text, 'director'::text])))
+   FROM public.profiles
+  WHERE (profiles.id = ( SELECT auth.uid() AS uid))), false))));
+
 create policy documents_del on public.documents
   as permissive for delete to authenticated
   using (private.can_delete());
 
 create policy documents_ins on public.documents
   as permissive for insert to authenticated
-  with check ((private.can_edit_document(classification, owner_user_id, folder) AND ((status = 'draft'::text) OR private.can_approve_document(category, classification) OR ((COALESCE(classification, 'internal'::text) = 'internal'::text) AND (folder <> ALL (ARRAY['SOPs'::text, 'Resources'::text, 'Personnel'::text, 'Gang Intel'::text]))))));
+  with check ((private.can_edit_document_for_bureau(classification, owner_user_id, folder, bureau) AND ((status = 'draft'::text) OR private.can_approve_document(category, classification) OR ((COALESCE(classification, 'internal'::text) = 'internal'::text) AND (folder <> ALL (ARRAY['SOPs'::text, 'Resources'::text, 'Personnel'::text, 'Gang Intel'::text]))))));
 
 create policy documents_sel on public.documents
   as permissive for select to authenticated
-  using ((private.doc_class_visible(classification, owner_user_id) AND ((status = ANY (ARRAY['published'::text, 'superseded'::text, 'archived'::text])) OR private.can_edit_document(classification, owner_user_id, folder) OR private.can_approve_document(category, classification))));
+  using ((private.doc_class_visible(classification, owner_user_id) AND ((status = ANY (ARRAY['published'::text, 'superseded'::text, 'archived'::text])) OR private.can_edit_document_for_bureau(classification, owner_user_id, folder, bureau) OR private.can_approve_document(category, classification))));
 
 create policy documents_upd on public.documents
   as permissive for update to authenticated
-  using (private.can_edit_document(classification, owner_user_id, folder))
-  with check (private.can_edit_document(classification, owner_user_id, folder));
+  using (private.can_edit_document_for_bureau(classification, owner_user_id, folder, bureau))
+  with check (private.can_edit_document_for_bureau(classification, owner_user_id, folder, bureau));
 
 create policy documents_versions_del on public.documents_versions
   as permissive for delete to authenticated
@@ -4334,7 +4444,7 @@ create policy documents_versions_ins on public.documents_versions
   as permissive for insert to authenticated
   with check ((EXISTS ( SELECT 1
    FROM public.documents d
-  WHERE ((d.id = documents_versions.document_id) AND private.can_edit_document(d.classification, d.owner_user_id, d.folder)))));
+  WHERE ((d.id = documents_versions.document_id) AND private.can_edit_document_for_bureau(d.classification, d.owner_user_id, d.folder, d.bureau)))));
 
 create policy documents_versions_sel on public.documents_versions
   as permissive for select to authenticated
@@ -4970,6 +5080,9 @@ create policy wl_sel on public.watchlist
 --   public.client_errors
 --   public.commendations
 --   public.custody_chain
+--   public.document_suggestion_comments
+--   public.document_suggestion_events
+--   public.document_suggestions
 --   public.documents
 --   public.evidence
 --   public.gang_members
@@ -5049,6 +5162,12 @@ create policy wl_sel on public.watchlist
 --   deleted_member_ledger -> authenticated: REFERENCES, SELECT, TRIGGER (writes revoked)
 --   deletion_tokens -> anon: (all revoked)
 --   deletion_tokens -> authenticated: (all revoked)
+--   document_suggestion_comments -> anon: (none — RPC-only writes; realtime SELECT via authenticated)
+--   document_suggestion_comments -> authenticated: SELECT (RLS-scoped; writes are RPC-only)
+--   document_suggestion_events -> anon: (none — RPC-only writes; realtime SELECT via authenticated)
+--   document_suggestion_events -> authenticated: SELECT (RLS-scoped; writes are RPC-only)
+--   document_suggestions -> anon: (none — RPC-only writes; realtime SELECT via authenticated)
+--   document_suggestions -> authenticated: SELECT (RLS-scoped; writes are RPC-only)
 --   documents -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   documents -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   documents_versions -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -5279,3 +5398,44 @@ create policy wl_sel on public.watchlist
 -- candidates as documents_versions rows (source_system='google_drive',
 -- metadata.conflict='true') instead of silently overwriting portal edits,
 -- and raises sync_status='conflict' for resolve_document_sync() to settle.
+-- 20260802010000_document_bureau_scope_suggestions: documents gained the
+-- nullable bureau column (public.bureau; NULL = division-wide) + documents_bureau_idx
+-- (both mirrored above). Three new tables — document_suggestions (detective
+-- suggestion tracker), document_suggestion_events (append-only history) and
+-- document_suggestion_comments (request-more-info thread) — with the
+-- document_suggestions_touch BEFORE UPDATE trigger, RLS enabled, and the SELECT
+-- policies document_suggestions_sel / document_suggestion_events_sel /
+-- document_suggestion_comments_sel (all mirrored above; writes are RPC-only,
+-- realtime SELECT granted to authenticated). The re-emitted documents_sel/ins/upd,
+-- documents_versions_ins and doc_rel_ins/del policies now call the bureau-aware
+-- 4-arg private.can_edit_document_for_bureau (mirrored above). New helpers:
+-- private.can_edit_document_for_bureau(text, uuid, text, public.bureau) [the
+-- bureau-scoped edit matrix], private.can_edit_document(text, uuid, text) now
+-- delegates to the 4-arg form with a NULL bureau (strict backstop),
+-- private.can_view_document(text, uuid), private.can_manage_document_suggestions(
+-- text, uuid, text, public.bureau), private.can_publish_document(text, text),
+-- private.document_suggestion_managers(uuid) [notification fan-out]. These
+-- private helpers are `revoke all ... from public`; EXECUTE is otherwise
+-- ungranted here (they run inside SECURITY DEFINER callers) except for the two
+-- referenced directly inside RLS policy predicates — see 20260802020000 below.
+-- public.document_workflow / document_save / document_restore_version had only
+-- their edit guard moved to can_edit_document_for_bureau(...d.bureau). New RPCs:
+-- public.submit_document_suggestion(uuid, text, text, text, text, text, text, uuid, text),
+-- public.decide_document_suggestion(uuid, text, text, uuid),
+-- public.comment_on_document_suggestion(uuid, text),
+-- public.mark_document_suggestion_duplicate(uuid, uuid, text),
+-- public.link_document_suggestion_implementation(uuid, uuid) — all SECURITY
+-- DEFINER, revoked from public/anon and granted to authenticated, service_role.
+-- Definitive SQL in
+-- supabase/migrations/20260802010000_document_bureau_scope_suggestions.sql.
+-- 20260802020000_fix_document_authority_grants (hotfix): grant execute on
+-- private.can_edit_document_for_bureau(text, uuid, text, public.bureau) and
+-- private.can_manage_document_suggestions(text, uuid, text, public.bureau) to
+-- authenticated. These two helpers are referenced DIRECTLY in RLS policy
+-- predicates (documents_sel/ins/upd, documents_versions_ins, doc_rel_ins/del,
+-- document_suggestions_sel), which are evaluated with the CALLING role's
+-- privileges; 20260802010000 revoked them from PUBLIC without re-granting, so
+-- authenticated document reads/writes failed with "permission denied for
+-- function" until this grant restored invoke rights (revoke from PUBLIC kept;
+-- grant scoped precisely to authenticated). Definitive SQL in
+-- supabase/migrations/20260802020000_fix_document_authority_grants.sql.
