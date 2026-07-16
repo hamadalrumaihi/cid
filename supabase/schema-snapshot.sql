@@ -2140,6 +2140,9 @@ begin
   if not private.is_command() then raise exception 'not authorized'; end if;
   select * into t from public.profiles where id = p_target;
   if not found then raise exception 'member not found'; end if;
+  -- System accounts (the permanent-deletion tombstone) are data anchors,
+  -- never members — same refusal the permanent_delete_* RPCs already make.
+  if t.is_system then raise exception 'system accounts cannot be modified'; end if;
   -- returns inactive; a command member must re-approve to grant access again
   update public.profiles set removed_at = null where id = p_target;
   insert into public.role_events (target_id, actor_id, old_role, new_role,
@@ -2161,6 +2164,7 @@ declare
   v_uid uuid := (select auth.uid());
   me public.profiles;
   t public.profiles;
+  r public.membership_requests;
 begin
   select * into me from public.profiles where id = v_uid;
   if me.id is null or not (me.active and (me.role in ('bureau_lead','deputy_director','director') or me.is_owner)) then
@@ -2168,6 +2172,11 @@ begin
   end if;
   select * into t from public.profiles where id = target for update;
   if t.id is null then raise exception 'target not found'; end if;
+  -- System accounts (the permanent-deletion tombstone) are data anchors,
+  -- never members — same refusal the permanent_delete_* RPCs already make.
+  if t.is_system then
+    raise exception 'system accounts cannot be modified';
+  end if;
   -- Bureau Lead restrictions (owner override bypasses these, as before).
   if me.role = 'bureau_lead' and not me.is_owner then
     if t.division is distinct from me.division then
@@ -2188,12 +2197,50 @@ begin
   ) then
     raise exception 'member holds an active DOJ/Judiciary membership — use organization correction (Move to CID) to bring them back, do not reactivate CID access';
   end if;
+  -- A recorded queue decision cannot be silently contradicted: activating an
+  -- applicant whose request was rejected or withdrawn must go back through
+  -- the approval queue. Only the inactive→active transition is guarded —
+  -- deactivation and already-active no-ops pass through untouched.
+  if set_active and not t.active and exists (
+    select 1 from public.membership_requests mr
+    where mr.applicant_id = target and mr.status in ('rejected', 'withdrawn')
+  ) then
+    raise exception 'this applicant''s membership request was rejected — re-review it in the approval queue before activating';
+  end if;
   if t.active = set_active then return; end if;
 
   update public.profiles set active = set_active where id = target;
   insert into public.role_events (target_id, actor_id, old_role, new_role,
     old_division, new_division, old_active, new_active, source)
   values (target, v_uid, t.role, t.role, t.division, t.division, t.active, set_active, 'activation');
+
+  -- Reconciliation: a direct activation closes the applicant's open request
+  -- so the approval queue never carries a ghost (pending row + active
+  -- profile). Bookkeeping only — review_membership_request owns the
+  -- applicant notification fan-out, so no notification is sent here.
+  if set_active then
+    select * into r from public.membership_requests
+     where applicant_id = target and status in ('pending', 'correction_requested')
+     for update;
+    if found then
+      update public.membership_requests
+         set status = 'approved',
+             decided_by = v_uid,
+             decided_at = now(),
+             decided_role = t.role,
+             decided_bureau = case when t.division in ('LSB', 'BCB', 'SAB')
+                                   then t.division else null end,
+             internal_decision_note = case
+               when internal_decision_note is null or btrim(internal_decision_note) = ''
+                 then 'Auto-reconciled: member activated directly via assign_member.'
+               else internal_decision_note || E'\n'
+                 || 'Auto-reconciled: member activated directly via assign_member.'
+             end
+       where id = r.id;
+      perform private.mr_history(r.id, 'approved', r.status, 'approved',
+        'Auto-reconciled: member activated directly via assign_member.', true);
+    end if;
+  end if;
 end $function$
 ;
 
@@ -4904,3 +4951,9 @@ create policy wl_sel on public.watchlist
 -- (SECURITY DEFINER, command-gated tombstone merge) — all mirrored above.
 -- rls_test_cleanup unchanged (registry fixtures are torn down explicitly by
 -- the suites; the new tables CASCADE from persons).
+-- 20260730010000_membership_reconciliation: assign_member() gained the
+-- is_system guard, the rejected/withdrawn activation refusal, and the
+-- pending/correction_requested auto-reconciliation (close as 'approved',
+-- appended internal note, internal mr_history row, NO notification);
+-- admin_restore_member() gained the same is_system guard — both bodies
+-- mirrored above. No table/column changes.

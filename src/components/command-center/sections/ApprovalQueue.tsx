@@ -3,11 +3,15 @@
 /** Command Center → Approval Queue. One aggregated view of everything waiting
  *  on a command decision: (1) submitted membership requests (reviewed through
  *  the `review_membership_request` RPC, which activates the profile atomically
- *  on approval), (2) pending sign-ins WITHOUT a request (the legacy one-click
- *  `assign_member` activate), and (3) cases whose sign-off stage THIS command
- *  user can decide — those deep-link into the case Sign-off tab (the
- *  `signoff_decide` RPC is the authority). */
-import { useCallback, useEffect, useState } from 'react'
+ *  on approval), (2) open requests for already-active members ("ghosts" —
+ *  activated directly, request never decided; reviewed through the same RPC),
+ *  (3) pending sign-ins WITHOUT a live request (the legacy one-click
+ *  `assign_member` activate — replaced by a DecisionModal re-review when a
+ *  recorded rejection/withdrawal exists), and (4) cases whose sign-off stage
+ *  THIS command user can decide — those deep-link into the case Sign-off tab
+ *  (the `signoff_decide` RPC is the authority). All membership buckets come
+ *  from the shared `pendingMembership` model so every surface counts alike. */
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { list, rpc } from '@/lib/db'
 import type { Database, Tables } from '@/lib/database.types'
@@ -24,8 +28,11 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Field, Select, Textarea } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { ErrorNotice } from '@/components/ui/Notice'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTimeline'
 import { canReviewCase } from '../lib/approvals'
+import { pendingMembership } from '../lib/membershipPending'
 
 type CaseRow = Tables<'cases'>
 type RequestRow = Tables<'membership_requests'>
@@ -214,14 +221,22 @@ function DecisionModal({ req, kind, onClose, onDone }: {
 }
 
 export function ApprovalQueue() {
-  const { profile, isCommand } = useAuth()
+  const { profile, isCommand, isOwner } = useAuth()
+  // The page admits command AND the owner — the fetch gate must match, or an
+  // owner without a command role sees a permanently empty queue.
+  const canAdmin = isCommand || isOwner
   const profiles = useProfilesStore((s) => s.profiles)
+  const profilesLoaded = useProfilesStore((s) => s.loaded)
   const fetchProfiles = useProfilesStore((s) => s.fetch)
   const justiceByUser = useJusticeRoster((s) => s.byUser)
   const fetchJustice = useJusticeRoster((s) => s.fetch)
   const router = useRouter()
   const [cases, setCases] = useState<CaseRow[]>([])
-  const [requests, setRequests] = useState<RequestRow[]>([])
+  // null until the first successful load — an error must never render as an
+  // empty-but-successful queue (the false all-clear).
+  const [requests, setRequests] = useState<RequestRow[] | null>(null)
+  const [reqError, setReqError] = useState<unknown>(null)
+  const reqErrorToasted = useRef(false)
   const [emails, setEmails] = useState<Record<string, string>>({})
   const [decision, setDecision] = useState<{ req: RequestRow; kind: Decision } | null>(null)
   const vP = useTableVersion('profiles')
@@ -233,37 +248,46 @@ export function ApprovalQueue() {
     void fetchProfiles()
     void fetchJustice()
     try { setCases(await list('cases', { order: 'updated_at', ascending: false })) } catch { /* stale */ }
-    if (isCommand) {
+    if (canAdmin) {
       const [rq, em] = await Promise.all([
         rpc('admin_membership_requests', undefined as never),
         rpc('admin_member_emails', undefined as never),
       ])
-      if (!rq.error && Array.isArray(rq.data)) setRequests(rq.data)
+      if (!rq.error && Array.isArray(rq.data)) {
+        setRequests(rq.data)
+        setReqError(null)
+        reqErrorToasted.current = false
+      } else {
+        setReqError(rq.error ?? new Error('Could not load membership requests.'))
+        if (!reqErrorToasted.current) {
+          reqErrorToasted.current = true
+          toast('Could not load membership requests — the queue may be incomplete.', 'danger')
+        }
+      }
       if (!em.error && Array.isArray(em.data)) setEmails(Object.fromEntries(em.data.map((x) => [x.id, x.email])))
     }
-  }, [fetchProfiles, fetchJustice, isCommand])
+  }, [fetchProfiles, fetchJustice, canAdmin])
   useEffect(() => { const t = window.setTimeout(() => { void refresh() }, 0); return () => window.clearTimeout(t) }, [refresh, vP, vC, vM, vJ])
 
-  const reqByApplicant = new Map(requests.map((r) => [r.applicant_id, r]))
-  // Members moved out of CID by an organization correction are inactive-with-a-
-  // justice-identity — they are not pending sign-ins and must never surface a
-  // quick Approve (which is now blocked server-side anyway).
-  const pending = profiles.filter((p) => !p.removed_at && !p.active && !justiceByUser[p.id])
-  const submitted = pending
-    .map((p) => ({ p, r: reqByApplicant.get(p.id) }))
-    .filter((x): x is { p: RosterProfile; r: RequestRow } => x.r?.status === 'pending')
-  // Members whose flow is running through a request stay out of quick approve.
-  const legacy = pending.filter((p) => {
-    const s = reqByApplicant.get(p.id)?.status
-    return s !== 'pending' && s !== 'correction_requested'
-  })
-  const awaitingApplicant = requests.filter((r) => r.status === 'correction_requested')
+  // Single source of truth for every membership bucket (and the shared
+  // awaitingCount the badge/tile/Action Center use) — see lib/membershipPending.
+  const pm = pendingMembership(profiles, requests, justiceByUser)
+  const membershipLoading = !profilesLoaded || (canAdmin && requests === null && reqError === null)
   const reviews = cases.filter((c) => canReviewCase(c, profile))
 
   const approve = async (p: RosterProfile) => {
     // Activation-only since v1.16 — role/division stay exactly as they are.
     const res = await rpc('assign_member', { target: p.id, set_active: true })
-    if (res.error) { toast(`Approve failed: ${res.error.message}`, 'danger'); return }
+    if (res.error) {
+      // The server refuses to quick-activate over a recorded rejection or
+      // withdrawal — map that to the re-review flow instead of raw SQL text.
+      if (/reject|withdraw/i.test(String(res.error.message))) {
+        toast(`${p.display_name} has a previously decided membership request — use Re-review to record a new decision.`, 'warn')
+      } else {
+        toast(`Approve failed: ${res.error.message}`, 'danger')
+      }
+      return
+    }
     toast(`${p.display_name} approved for access`, 'success')
     void notify(p.id, 'member_approved', { detective: profile?.display_name || 'Command', reason: 'Your CID access has been approved — welcome aboard.' })
     void refresh()
@@ -271,12 +295,18 @@ export function ApprovalQueue() {
 
   return (
     <div className="space-y-5">
+      {membershipLoading ? (
+        <ListSkeleton count={3} />
+      ) : reqError ? (
+        <ErrorNotice message={reqError} onRetry={() => void refresh()} />
+      ) : (
+        <>
       <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
-        <h3 className="mb-1 font-bold text-white">Pending membership requests <span className="text-slate-500">({submitted.length})</span></h3>
+        <h3 className="mb-1 font-bold text-white">Pending membership requests <span className="text-slate-500">({pm.submitted.length})</span></h3>
         <p className="mb-3 text-xs text-slate-400">Submitted department requests awaiting a Command decision. Approval activates the account atomically.</p>
-        {submitted.length ? (
+        {pm.submitted.length ? (
           <div className="space-y-3">
-            {submitted.map(({ p, r }) => (
+            {pm.submitted.map(({ profile: p, request: r }) => (
               <div key={r.id} className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
@@ -306,11 +336,11 @@ export function ApprovalQueue() {
             ))}
           </div>
         ) : <p className="text-sm text-emerald-300">✓ No submitted requests waiting.</p>}
-        {awaitingApplicant.length > 0 && (
+        {pm.corrections.length > 0 && (
           <div className="mt-4">
-            <p className="mb-2 text-xs font-semibold text-slate-400">Waiting on applicant ({awaitingApplicant.length}) — corrections requested, no action needed until they resubmit.</p>
+            <p className="mb-2 text-xs font-semibold text-slate-400">Waiting on applicant ({pm.corrections.length}) — corrections requested, no action needed until they resubmit.</p>
             <div className="space-y-2">
-              {awaitingApplicant.map((r) => (
+              {pm.corrections.map((r) => (
                 <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/5 bg-ink-950/40 px-4 py-2.5 opacity-80">
                   <div>
                     <p className="text-sm font-semibold text-slate-300">{r.display_name}</p>
@@ -324,20 +354,54 @@ export function ApprovalQueue() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
-        <h3 className="mb-1 font-bold text-white">Pending member approvals <span className="text-slate-500">({legacy.length})</span></h3>
-        <p className="mb-3 text-xs text-slate-400">Sign-ins without a submitted membership request. Quick approve activates them with their current profile role/division.</p>
-        {legacy.length ? (
+      {pm.ghosts.length > 0 && (
+        <section className="rounded-2xl border border-amber-500/20 bg-ink-900/45 p-5">
+          <h3 className="mb-1 font-bold text-white">Open requests for already-active members <span className="text-slate-500">({pm.ghosts.length})</span></h3>
+          <p className="mb-3 text-xs text-slate-400">These members were activated directly — the request was never decided. Review &amp; close records the decision so every count reconciles.</p>
           <div className="space-y-2">
-            {legacy.map((p) => (
+            {pm.ghosts.map((r) => (
+              <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-2.5">
+                <div>
+                  <p className="text-sm font-semibold text-white">{r.display_name}</p>
+                  <p className="text-[11px] text-slate-400">{bureauLabel(r.requested_bureau)} · {roleLabel(r.requested_role)} · submitted {fmtDateTime(r.submitted_at)}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone="warn">Needs reconciliation</Badge>
+                  <Button size="sm" variant="primary" onClick={() => setDecision({ req: r, kind: 'approve' })}>Review &amp; close</Button>
+                  <Button size="sm" variant="danger" onClick={() => setDecision({ req: r, kind: 'reject' })}>Reject</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
+        <h3 className="mb-1 font-bold text-white">Pending member approvals <span className="text-slate-500">({pm.signIns.length})</span></h3>
+        <p className="mb-3 text-xs text-slate-400">Sign-ins without a live membership request. Quick approve activates them with their current profile role/division; a recorded rejection or withdrawal requires a re-review instead.</p>
+        {pm.signIns.length ? (
+          <div className="space-y-2">
+            {pm.signIns.map(({ profile: p, requestStatus, request, actionable }) => (
               <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-2.5">
-                <div><p className="text-sm font-semibold text-white">{p.display_name}</p><p className="text-[11px] text-slate-400">{ROLE_LABEL[p.role] || p.role} · {p.division}</p></div>
-                <button onClick={() => void approve(p)} title="Legacy quick approve — activates with the profile's current role and division" className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20">✓ Approve</button>
+                <div>
+                  <p className="text-sm font-semibold text-white">{p.display_name}</p>
+                  <p className="text-[11px] text-slate-400">{ROLE_LABEL[p.role] || p.role} · {p.division}</p>
+                </div>
+                {actionable ? (
+                  <button onClick={() => void approve(p)} title="Legacy quick approve — activates with the profile's current role and division" className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20">✓ Approve</button>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone="warn">{requestStatus === 'withdrawn' ? 'Withdrawn' : 'Previously rejected'}</Badge>
+                    {request && <Button size="sm" onClick={() => setDecision({ req: request, kind: 'approve' })}>Re-review…</Button>}
+                  </div>
+                )}
               </div>
             ))}
           </div>
         ) : <p className="text-sm text-emerald-300">✓ No pending sign-ins.</p>}
       </section>
+        </>
+      )}
 
       <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
         <h3 className="mb-1 font-bold text-white">Sign-offs awaiting your decision <span className="text-slate-500">({reviews.length})</span></h3>

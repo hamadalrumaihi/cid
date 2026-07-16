@@ -5,16 +5,19 @@
  *  shared roster cache + cases; every count is RLS-scoped to what the caller
  *  can see (command staff see across bureaus). */
 import { useCallback, useEffect, useState } from 'react'
-import { list } from '@/lib/db'
+import { list, rpc } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { useProfilesStore } from '@/lib/profiles'
+import { useJusticeRoster } from '@/lib/justiceRoster'
 import { useTableVersion } from '@/lib/realtime'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { canReviewCase } from '../lib/approvals'
+import { pendingMembership } from '../lib/membershipPending'
 
 type CaseRow = Tables<'cases'>
+type RequestRow = Tables<'membership_requests'>
 
 function Tile({ label, value, hint, onClick }: { label: string; value: number | string; hint?: string; onClick?: () => void }) {
   const body = (
@@ -32,24 +35,41 @@ function Tile({ label, value, hint, onClick }: { label: string; value: number | 
 }
 
 export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) {
-  const { profile } = useAuth()
+  const { profile, isCommand, isOwner } = useAuth()
   const profiles = useProfilesStore((s) => s.profiles)
   const fetchProfiles = useProfilesStore((s) => s.fetch)
+  const justiceByUser = useJusticeRoster((s) => s.byUser)
+  const fetchJustice = useJusticeRoster((s) => s.fetch)
   const [cases, setCases] = useState<CaseRow[]>([])
+  // null until loaded — the tile then falls back to the profiles-only count.
+  const [requests, setRequests] = useState<RequestRow[] | null>(null)
   const vProfiles = useTableVersion('profiles')
   const vCases = useTableVersion('cases')
+  const vRequests = useTableVersion('membership_requests')
+  const vJustice = useTableVersion('justice_memberships')
+  const canAdmin = isCommand || isOwner
 
   const refresh = useCallback(async () => {
     void fetchProfiles()
+    void fetchJustice()
     try { setCases(await list('cases', {})) } catch { /* stale ok */ }
-  }, [fetchProfiles])
+    if (canAdmin) {
+      const rq = await rpc('admin_membership_requests', undefined as never)
+      if (!rq.error && Array.isArray(rq.data)) setRequests(rq.data)
+    }
+  }, [fetchProfiles, fetchJustice, canAdmin])
   useEffect(() => {
     const t = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(t)
-  }, [refresh, vProfiles, vCases])
+  }, [refresh, vProfiles, vCases, vRequests, vJustice])
 
   const roster = profiles.filter((p) => !p.removed_at)
-  const pending = roster.filter((p) => !p.active).length
+  // Shared membership model — the tile shows the same awaitingCount as the
+  // nav badge, the Approval Queue and the Action Center (lib/membershipPending).
+  const pm = pendingMembership(profiles, requests, justiceByUser)
+  const pendingHint = pm.requestsLoaded
+    ? `${pm.signIns.filter((s) => s.actionable).length} sign-ins · ${pm.submitted.length} requests${pm.ghosts.length ? ` · ${pm.ghosts.length} to reconcile` : ''}`
+    : 'new sign-ins awaiting activation'
   const onLoa = roster.filter((p) => p.active && p.loa).length
   const active = roster.filter((p) => p.active).length
   const awaitingMe = cases.filter((c) => canReviewCase(c, profile)).length
@@ -57,7 +77,7 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Tile label="Pending approvals" value={pending} hint="new sign-ins awaiting activation" onClick={() => onGo('approvals')} />
+        <Tile label="Pending approvals" value={pm.awaitingCount} hint={pendingHint} onClick={() => onGo('approvals')} />
         <Tile label="Sign-offs awaiting you" value={awaitingMe} hint="cases at your decision stage" onClick={() => onGo('approvals')} />
         <Tile label="Active officers" value={active} hint="approved & on the roster" onClick={() => onGo('duty')} />
         <Tile label="On LOA" value={onLoa} hint="active but on leave" onClick={() => onGo('duty')} />

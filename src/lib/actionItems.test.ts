@@ -250,15 +250,20 @@ describe('access requests', () => {
 
 /* ---- membership summary -------------------------------------------------------- */
 
-describe('membership requests', () => {
-  it('command sees ONE summary item with the count and +20 nudge', () => {
+describe('member approvals (membership summary)', () => {
+  it('command sees ONE summary item with the shared awaitingCount and +20 nudge', () => {
     const q = buildActionItems(src({ isCommand: true, role: 'director', membershipPending: 3 }))
     const item = byKey(q, 'membership:pending')
     expect(item).toMatchObject({
       sourceType: 'membership_request', status: 'needs_action', isCommandItem: true,
-      title: '3 membership requests awaiting review', deepLink: '/command-center?s=approvals',
+      title: '3 member approvals awaiting review', deepLink: '/command-center?s=approvals',
     })
     expect(item?.urgencyScore).toBe(STATUS_BASE.needs_action + NUDGE.membership)
+  })
+
+  it('an owner without a command role gets the same summary item', () => {
+    const q = buildActionItems(src({ isOwner: true, membershipPending: 1 }))
+    expect(byKey(q, 'membership:pending')?.title).toBe('1 member approval awaiting review')
   })
 
   it('non-command (null) and zero counts emit nothing', () => {

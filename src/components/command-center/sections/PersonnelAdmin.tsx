@@ -7,6 +7,7 @@
  *  `assign_member` / `admin_*` SECURITY DEFINER RPCs. */
 import { useCallback, useEffect, useState } from 'react'
 import { rpc } from '@/lib/db'
+import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { type RosterProfile, useProfilesStore } from '@/lib/profiles'
 import { useJusticeRoster } from '@/lib/justiceRoster'
@@ -15,29 +16,39 @@ import { AdminPanel } from '@/components/personnel/AdminPanel'
 import { AssignModal } from '@/components/personnel/AssignModal'
 
 export function PersonnelAdmin() {
-  const { isCommand } = useAuth()
+  const { isCommand, isOwner } = useAuth()
+  // The page admits command AND the owner — gate the admin fetches alike.
+  const canAdmin = isCommand || isOwner
   const profiles = useProfilesStore((s) => s.profiles)
   const fetchProfiles = useProfilesStore((s) => s.fetch)
   const justiceByUser = useJusticeRoster((s) => s.byUser)
   const fetchJustice = useJusticeRoster((s) => s.fetch)
   const [emails, setEmails] = useState<Record<string, string>>({})
+  // Feeds AdminPanel's quick-approve guard; null while unloaded (the guard
+  // then falls back to the server refusal + friendly toast).
+  const [requests, setRequests] = useState<Tables<'membership_requests'>[] | null>(null)
   const [target, setTarget] = useState<RosterProfile | null>(null)
   const v = useTableVersion('profiles')
   const vj = useTableVersion('justice_memberships')
+  const vm = useTableVersion('membership_requests')
 
   const refresh = useCallback(async () => {
     void fetchProfiles()
     void fetchJustice()
-    if (isCommand) {
-      const r = await rpc('admin_member_emails', undefined as never)
+    if (canAdmin) {
+      const [r, rq] = await Promise.all([
+        rpc('admin_member_emails', undefined as never),
+        rpc('admin_membership_requests', undefined as never),
+      ])
       if (!r.error && Array.isArray(r.data)) setEmails(Object.fromEntries(r.data.map((x) => [x.id, x.email])))
+      if (!rq.error && Array.isArray(rq.data)) setRequests(rq.data)
     }
-  }, [fetchProfiles, fetchJustice, isCommand])
-  useEffect(() => { const t = window.setTimeout(() => { void refresh() }, 0); return () => window.clearTimeout(t) }, [refresh, v, vj])
+  }, [fetchProfiles, fetchJustice, canAdmin])
+  useEffect(() => { const t = window.setTimeout(() => { void refresh() }, 0); return () => window.clearTimeout(t) }, [refresh, v, vj, vm])
 
   return (
     <div className="space-y-4">
-      <AdminPanel profiles={profiles} emails={emails} justiceByUser={justiceByUser} onManage={setTarget} onChanged={() => void refresh()} />
+      <AdminPanel profiles={profiles} emails={emails} justiceByUser={justiceByUser} requests={requests} onManage={setTarget} onChanged={() => void refresh()} />
       {target && (
         <AssignModal p={target} email={emails[target.id] || ''} onClose={() => setTarget(null)} onChanged={() => void refresh()} />
       )}
