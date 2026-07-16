@@ -1084,6 +1084,84 @@ create table public.operations (
 alter table public.operations add constraint operations_pkey PRIMARY KEY (id);
 alter table public.operations enable row level security;
 
+create table public.person_places (
+  id uuid not null default gen_random_uuid(),
+  person_id uuid not null,
+  place_id uuid not null,
+  role text,
+  link_status text not null default 'current'::text,
+  confidence text,
+  provenance text,
+  note text,
+  first_observed date,
+  last_confirmed date,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.person_places add constraint person_places_pkey PRIMARY KEY (id);
+alter table public.person_places add constraint person_places_person_id_place_id_key UNIQUE (person_id, place_id);
+alter table public.person_places add constraint person_places_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE CASCADE;
+alter table public.person_places add constraint person_places_place_id_fkey FOREIGN KEY (place_id) REFERENCES public.places(id) ON DELETE CASCADE;
+alter table public.person_places add constraint person_places_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.person_places add constraint person_places_role_check CHECK (((role IS NULL) OR (role = ANY (ARRAY['residence'::text, 'workplace'::text, 'hangout'::text, 'stash'::text, 'meeting'::text, 'business'::text, 'family_property'::text, 'historical_address'::text, 'observed_at'::text, 'other'::text]))));
+alter table public.person_places add constraint person_places_link_status_check CHECK ((link_status = ANY (ARRAY['current'::text, 'historical'::text, 'disputed'::text])));
+alter table public.person_places add constraint person_places_confidence_check CHECK (((confidence IS NULL) OR (confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
+alter table public.person_places add constraint person_places_provenance_check CHECK (((provenance IS NULL) OR (provenance = ANY (ARRAY['imported'::text, 'reported'::text, 'manually_confirmed'::text, 'inferred'::text, 'historical'::text, 'disputed'::text]))));
+alter table public.person_places enable row level security;
+
+create table public.person_relationships (
+  id uuid not null default gen_random_uuid(),
+  person_a uuid not null,
+  person_b uuid not null,
+  relationship text not null,
+  rel_status text not null default 'current'::text,
+  confidence text,
+  provenance text,
+  note text,
+  first_observed date,
+  last_confirmed date,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.person_relationships add constraint person_relationships_pkey PRIMARY KEY (id);
+alter table public.person_relationships add constraint person_relationships_person_a_fkey FOREIGN KEY (person_a) REFERENCES public.persons(id) ON DELETE CASCADE;
+alter table public.person_relationships add constraint person_relationships_person_b_fkey FOREIGN KEY (person_b) REFERENCES public.persons(id) ON DELETE CASCADE;
+alter table public.person_relationships add constraint person_relationships_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.person_relationships add constraint person_relationships_not_self_check CHECK ((person_a <> person_b));
+alter table public.person_relationships add constraint person_relationships_relationship_check CHECK ((relationship = ANY (ARRAY['associate'::text, 'family'::text, 'partner'::text, 'co_suspect'::text, 'gang_associate'::text, 'business'::text, 'known_contact'::text, 'witness'::text, 'victim'::text, 'informant'::text, 'unknown'::text])));
+alter table public.person_relationships add constraint person_relationships_rel_status_check CHECK ((rel_status = ANY (ARRAY['current'::text, 'historical'::text, 'disputed'::text])));
+alter table public.person_relationships add constraint person_relationships_confidence_check CHECK (((confidence IS NULL) OR (confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
+alter table public.person_relationships add constraint person_relationships_provenance_check CHECK (((provenance IS NULL) OR (provenance = ANY (ARRAY['imported'::text, 'reported'::text, 'manually_confirmed'::text, 'inferred'::text, 'historical'::text, 'disputed'::text]))));
+alter table public.person_relationships enable row level security;
+
+create table public.person_vehicles (
+  id uuid not null default gen_random_uuid(),
+  person_id uuid not null,
+  vehicle_id uuid not null,
+  role text not null,
+  link_status text not null default 'current'::text,
+  confidence text,
+  provenance text,
+  note text,
+  first_observed date,
+  last_confirmed date,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.person_vehicles add constraint person_vehicles_pkey PRIMARY KEY (id);
+alter table public.person_vehicles add constraint person_vehicles_person_id_vehicle_id_key UNIQUE (person_id, vehicle_id);
+alter table public.person_vehicles add constraint person_vehicles_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE CASCADE;
+alter table public.person_vehicles add constraint person_vehicles_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id) ON DELETE CASCADE;
+alter table public.person_vehicles add constraint person_vehicles_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.person_vehicles add constraint person_vehicles_role_check CHECK ((role = ANY (ARRAY['driver'::text, 'passenger'::text, 'seen_using'::text, 'associated'::text, 'gang_vehicle'::text, 'historical'::text, 'other'::text])));
+alter table public.person_vehicles add constraint person_vehicles_link_status_check CHECK ((link_status = ANY (ARRAY['current'::text, 'historical'::text, 'disputed'::text])));
+alter table public.person_vehicles add constraint person_vehicles_confidence_check CHECK (((confidence IS NULL) OR (confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
+alter table public.person_vehicles add constraint person_vehicles_provenance_check CHECK (((provenance IS NULL) OR (provenance = ANY (ARRAY['imported'::text, 'reported'::text, 'manually_confirmed'::text, 'inferred'::text, 'historical'::text, 'disputed'::text]))));
+alter table public.person_vehicles enable row level security;
+
 create table public.persons (
   id uuid not null default gen_random_uuid(),
   name text not null,
@@ -1100,11 +1178,41 @@ create table public.persons (
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
   properties jsonb not null default '[]'::jsonb,
-  bolo boolean not null default false
+  bolo boolean not null default false,
+  phone text,
+  classification text,
+  confidence text,
+  identity jsonb not null default '{}'::jsonb,
+  intelligence_summary jsonb not null default '{}'::jsonb,
+  priority text,
+  lifecycle text not null default 'active'::text,
+  merged_into uuid,
+  reviewed_at timestamp with time zone,
+  reviewed_by uuid,
+  next_review_at timestamp with time zone,
+  review_note text,
+  lead_detective_id uuid,
+  bolo_reason text,
+  bolo_risk text,
+  bolo_instructions text,
+  bolo_issued_by uuid,
+  bolo_issued_at timestamp with time zone,
+  bolo_expires_at date,
+  bolo_case_id uuid
 );
 alter table public.persons add constraint persons_pkey PRIMARY KEY (id);
 alter table public.persons add constraint persons_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
 alter table public.persons add constraint persons_gang_fk FOREIGN KEY (gang_id) REFERENCES public.gangs(id) ON DELETE SET NULL;
+alter table public.persons add constraint persons_merged_into_fkey FOREIGN KEY (merged_into) REFERENCES public.persons(id) ON DELETE SET NULL;
+alter table public.persons add constraint persons_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.profiles(id);
+alter table public.persons add constraint persons_lead_detective_id_fkey FOREIGN KEY (lead_detective_id) REFERENCES public.profiles(id);
+alter table public.persons add constraint persons_bolo_issued_by_fkey FOREIGN KEY (bolo_issued_by) REFERENCES public.profiles(id);
+alter table public.persons add constraint persons_bolo_case_id_fkey FOREIGN KEY (bolo_case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.persons add constraint persons_classification_check CHECK (((classification IS NULL) OR (classification = ANY (ARRAY['person_of_interest'::text, 'suspect'::text, 'witness'::text, 'victim'::text, 'informant'::text, 'associate'::text, 'other'::text]))));
+alter table public.persons add constraint persons_confidence_check CHECK (((confidence IS NULL) OR (confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
+alter table public.persons add constraint persons_priority_check CHECK (((priority IS NULL) OR (priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
+alter table public.persons add constraint persons_lifecycle_check CHECK ((lifecycle = ANY (ARRAY['active'::text, 'inactive'::text, 'historical'::text, 'cleared'::text, 'archived'::text, 'merged'::text])));
+alter table public.persons add constraint persons_bolo_risk_check CHECK (((bolo_risk IS NULL) OR (bolo_risk = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
 alter table public.persons enable row level security;
 
 create table public.place_process_steps (
@@ -1500,10 +1608,28 @@ CREATE INDEX narcotic_hotspots_place_id_fkey_idx ON public.narcotic_hotspots USI
 CREATE INDEX narcotic_precursors_narcotic_id_fkey_idx ON public.narcotic_precursors USING btree (narcotic_id);
 CREATE INDEX narcotics_name_trgm ON public.narcotics USING gin (name extensions.gin_trgm_ops);
 CREATE INDEX notifications_user_id_read_idx ON public.notifications USING btree (user_id, read);
+CREATE INDEX person_places_person_id_fkey_idx ON public.person_places USING btree (person_id);
+CREATE INDEX person_places_place_id_fkey_idx ON public.person_places USING btree (place_id);
+CREATE INDEX person_places_created_by_fkey_idx ON public.person_places USING btree (created_by);
+CREATE UNIQUE INDEX person_relationships_pair_key ON public.person_relationships USING btree (LEAST(person_a, person_b), GREATEST(person_a, person_b), relationship);
+CREATE INDEX person_relationships_person_a_fkey_idx ON public.person_relationships USING btree (person_a);
+CREATE INDEX person_relationships_person_b_fkey_idx ON public.person_relationships USING btree (person_b);
+CREATE INDEX person_relationships_created_by_fkey_idx ON public.person_relationships USING btree (created_by);
+CREATE INDEX person_vehicles_person_id_fkey_idx ON public.person_vehicles USING btree (person_id);
+CREATE INDEX person_vehicles_vehicle_id_fkey_idx ON public.person_vehicles USING btree (vehicle_id);
+CREATE INDEX person_vehicles_created_by_fkey_idx ON public.person_vehicles USING btree (created_by);
 CREATE INDEX persons_alias_trgm ON public.persons USING gin (alias extensions.gin_trgm_ops);
+CREATE INDEX persons_bolo_case_id_fkey_idx ON public.persons USING btree (bolo_case_id);
+CREATE INDEX persons_bolo_issued_by_fkey_idx ON public.persons USING btree (bolo_issued_by);
 CREATE INDEX persons_created_by_fkey_idx ON public.persons USING btree (created_by);
 CREATE INDEX persons_gang_fk_idx ON public.persons USING btree (gang_id);
+CREATE INDEX persons_lead_detective_id_fkey_idx ON public.persons USING btree (lead_detective_id);
+CREATE INDEX persons_lifecycle_idx ON public.persons USING btree (lifecycle);
+CREATE INDEX persons_merged_into_fkey_idx ON public.persons USING btree (merged_into);
 CREATE INDEX persons_name_trgm ON public.persons USING gin (name extensions.gin_trgm_ops);
+CREATE INDEX persons_notes_trgm ON public.persons USING gin (notes extensions.gin_trgm_ops);
+CREATE INDEX persons_phone_trgm ON public.persons USING gin (phone extensions.gin_trgm_ops);
+CREATE INDEX persons_reviewed_by_fkey_idx ON public.persons USING btree (reviewed_by);
 CREATE INDEX place_process_steps_place_id_fkey_idx ON public.place_process_steps USING btree (place_id);
 CREATE INDEX places_case_id_fkey_idx ON public.places USING btree (case_id);
 CREATE INDEX places_controlling_gang_id_fkey_idx ON public.places USING btree (controlling_gang_id);
@@ -2764,6 +2890,235 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.search_persons(p_q text, p_limit integer DEFAULT 30, p_offset integer DEFAULT 0)
+ RETURNS TABLE(id uuid, rank real)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'extensions'
+AS $function$
+  with p as (select lower(trim(p_q)) as lq, '%' || trim(p_q) || '%' as lk, 0.3::real as thr)
+  select u.id, max(u.rank)::real as rank from (
+    -- persons' own columns: name/alias/phone/status/notes at full rank,
+    -- the identity jsonb text at a lower rank.
+    select pe.id,
+           greatest(word_similarity(p.lq, lower(pe.name)),
+                    word_similarity(p.lq, lower(coalesce(pe.alias, ''))),
+                    word_similarity(p.lq, lower(coalesce(pe.phone, ''))),
+                    case when pe.name ilike p.lk or pe.alias ilike p.lk or pe.phone ilike p.lk
+                              or pe.status ilike p.lk or pe.notes ilike p.lk then 0.95 else 0 end,
+                    case when pe.identity::text ilike p.lk then 0.55 else 0 end)::real as rank
+    from public.persons pe, p
+    where length(p.lq) >= 2 and (pe.name ilike p.lk or pe.alias ilike p.lk or pe.phone ilike p.lk
+          or pe.status ilike p.lk or pe.notes ilike p.lk or pe.identity::text ilike p.lk
+          or word_similarity(p.lq, lower(pe.name || ' ' || coalesce(pe.alias, '') || ' ' || coalesce(pe.phone, ''))) > p.thr)
+    union all
+    -- gang name via the scalar gang_id join.
+    select pe.id,
+           (greatest(word_similarity(p.lq, lower(g.name)),
+                     case when g.name ilike p.lk then 0.9 else 0 end) * 0.85)::real
+    from public.persons pe
+    join public.gangs g on g.id = pe.gang_id, p
+    where length(p.lq) >= 2 and (g.name ilike p.lk or word_similarity(p.lq, lower(g.name)) > p.thr)
+    union all
+    -- vehicle plate via registered ownership (vehicles.owner_id).
+    select v.owner_id,
+           (greatest(word_similarity(p.lq, lower(v.plate)),
+                     case when v.plate ilike p.lk then 0.9 else 0 end) * 0.85)::real
+    from public.vehicles v, p
+    where length(p.lq) >= 2 and v.owner_id is not null
+      and (v.plate ilike p.lk or word_similarity(p.lq, lower(v.plate)) > p.thr)
+    union all
+    -- vehicle plate via person_vehicles (non-owner relations).
+    select pv.person_id,
+           (greatest(word_similarity(p.lq, lower(v.plate)),
+                     case when v.plate ilike p.lk then 0.9 else 0 end) * 0.85)::real
+    from public.person_vehicles pv
+    join public.vehicles v on v.id = pv.vehicle_id, p
+    where length(p.lq) >= 2 and (v.plate ilike p.lk or word_similarity(p.lq, lower(v.plate)) > p.thr)
+    union all
+    -- place name/area via person_places.
+    select pp.person_id,
+           (greatest(word_similarity(p.lq, lower(pl.name)),
+                     case when pl.name ilike p.lk or pl.area ilike p.lk then 0.9 else 0 end) * 0.85)::real
+    from public.person_places pp
+    join public.places pl on pl.id = pp.place_id, p
+    where length(p.lq) >= 2 and (pl.name ilike p.lk or pl.area ilike p.lk
+          or word_similarity(p.lq, lower(pl.name)) > p.thr)
+    union all
+    -- case number via case_intel_links → cases. SECURITY INVOKER: both tables
+    -- pass through the caller's case wall, so restricted cases fail closed.
+    select l.ref_id,
+           (greatest(word_similarity(p.lq, lower(c.case_number)),
+                     case when c.case_number ilike p.lk then 0.9 else 0 end) * 0.85)::real
+    from public.case_intel_links l
+    join public.cases c on c.id = l.case_id, p
+    where length(p.lq) >= 2 and l.kind = 'person'
+      and (c.case_number ilike p.lk or word_similarity(p.lq, lower(c.case_number)) > p.thr)
+  ) u
+  group by u.id
+  order by max(u.rank) desc, u.id
+  limit greatest(coalesce(p_limit, 30), 0) offset greatest(coalesce(p_offset, 0), 0);
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.person_merge(p_survivor uuid, p_victims uuid[], p_reason text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_uid uuid := (select auth.uid());
+  v_reason text := btrim(coalesce(p_reason, ''));
+  s public.persons;
+  v public.persons;
+  v_victim uuid;
+  n_gm int; n_media int; n_legal int; n_mdt int; n_veh int;
+  n_cil int; n_pp int; n_pv int; n_rel_a int; n_rel_b int; n_wl int;
+begin
+  if not private.can_delete() then
+    raise exception 'person merge is restricted to command (Bureau Lead or higher)';
+  end if;
+  if v_reason = '' then
+    raise exception 'a reason is required to merge person records';
+  end if;
+  if p_victims is null or cardinality(p_victims) = 0 then
+    raise exception 'at least one merge victim is required';
+  end if;
+  if p_survivor = any (p_victims) then
+    raise exception 'the survivor cannot also be a merge victim';
+  end if;
+
+  select * into s from public.persons where id = p_survivor for update;
+  if s.id is null then raise exception 'survivor person not found'; end if;
+  if s.lifecycle = 'merged' then
+    raise exception 'the survivor is already merged into another record — merge into its survivor instead';
+  end if;
+
+  -- Lock and validate every victim before mutating anything.
+  foreach v_victim in array p_victims loop
+    select * into v from public.persons where id = v_victim for update;
+    if v.id is null then raise exception 'merge victim % not found', v_victim; end if;
+    if v.lifecycle = 'merged' then
+      raise exception 'person % is already merged and cannot be merged again', v_victim;
+    end if;
+  end loop;
+
+  foreach v_victim in array p_victims loop
+    select * into v from public.persons where id = v_victim;
+
+    -- Plain repoints (no UNIQUE constraints involve person_id here).
+    update public.gang_members set person_id = p_survivor where person_id = v_victim;
+    get diagnostics n_gm = row_count;
+    update public.media set person_id = p_survivor where person_id = v_victim;
+    get diagnostics n_media = row_count;
+    update public.legal_requests set person_id = p_survivor where person_id = v_victim;
+    get diagnostics n_legal = row_count;
+    update public.mdt_wanted_projections set person_id = p_survivor where person_id = v_victim;
+    get diagnostics n_mdt = row_count;
+    update public.vehicles set owner_id = p_survivor where owner_id = v_victim;
+    get diagnostics n_veh = row_count;
+
+    -- case_intel_links: UNIQUE(case_id, kind, ref_id) — drop the victim link
+    -- where the survivor is already linked to the same case, repoint the rest.
+    delete from public.case_intel_links l
+     where l.kind = 'person' and l.ref_id = v_victim
+       and exists (select 1 from public.case_intel_links d
+                    where d.case_id = l.case_id and d.kind = 'person' and d.ref_id = p_survivor);
+    update public.case_intel_links set ref_id = p_survivor
+     where kind = 'person' and ref_id = v_victim;
+    get diagnostics n_cil = row_count;
+
+    -- person_places: UNIQUE(person_id, place_id).
+    delete from public.person_places l
+     where l.person_id = v_victim
+       and exists (select 1 from public.person_places d
+                    where d.person_id = p_survivor and d.place_id = l.place_id);
+    update public.person_places set person_id = p_survivor where person_id = v_victim;
+    get diagnostics n_pp = row_count;
+
+    -- person_vehicles: UNIQUE(person_id, vehicle_id).
+    delete from public.person_vehicles l
+     where l.person_id = v_victim
+       and exists (select 1 from public.person_vehicles d
+                    where d.person_id = p_survivor and d.vehicle_id = l.vehicle_id);
+    update public.person_vehicles set person_id = p_survivor where person_id = v_victim;
+    get diagnostics n_pv = row_count;
+
+    -- person_relationships: drop rows a repoint would turn into self-links,
+    -- drop rows whose canonical pair (least, greatest, relationship) would
+    -- collide with an existing survivor-side row, then repoint the rest.
+    delete from public.person_relationships r
+     where (r.person_a = v_victim and r.person_b = p_survivor)
+        or (r.person_b = v_victim and r.person_a = p_survivor);
+    delete from public.person_relationships r
+     where r.person_a = v_victim
+       and exists (select 1 from public.person_relationships d
+                    where d.id <> r.id and d.relationship = r.relationship
+                      and least(d.person_a, d.person_b) = least(p_survivor, r.person_b)
+                      and greatest(d.person_a, d.person_b) = greatest(p_survivor, r.person_b));
+    delete from public.person_relationships r
+     where r.person_b = v_victim
+       and exists (select 1 from public.person_relationships d
+                    where d.id <> r.id and d.relationship = r.relationship
+                      and least(d.person_a, d.person_b) = least(r.person_a, p_survivor)
+                      and greatest(d.person_a, d.person_b) = greatest(r.person_a, p_survivor));
+    update public.person_relationships set person_a = p_survivor where person_a = v_victim;
+    get diagnostics n_rel_a = row_count;
+    update public.person_relationships set person_b = p_survivor where person_b = v_victim;
+    get diagnostics n_rel_b = row_count;
+
+    -- watchlist: UNIQUE(user_id, target_type, target_id).
+    delete from public.watchlist w
+     where w.target_type = 'person' and w.target_id = v_victim
+       and exists (select 1 from public.watchlist d
+                    where d.user_id = w.user_id and d.target_type = 'person'
+                      and d.target_id = p_survivor);
+    update public.watchlist set target_id = p_survivor
+     where target_type = 'person' and target_id = v_victim;
+    get diagnostics n_wl = row_count;
+
+    -- Conservative scalar merge: the survivor keeps its own values.
+    if (s.alias is null or btrim(s.alias) = '')
+       and v.alias is not null and btrim(v.alias) <> '' then
+      update public.persons set alias = v.alias where id = p_survivor;
+      s.alias := v.alias;
+    end if;
+    if v.notes is not null and btrim(v.notes) <> '' then
+      update public.persons
+         set notes = case when notes is null or btrim(notes) = '' then '' else notes || e'\n\n' end
+                     || '── merged from ' || v.name || ' ──' || e'\n' || v.notes
+       where id = p_survivor;
+    end if;
+    if v.bolo and not s.bolo then
+      update public.persons
+         set bolo = true, bolo_reason = v.bolo_reason, bolo_risk = v.bolo_risk,
+             bolo_instructions = v.bolo_instructions, bolo_issued_by = v.bolo_issued_by,
+             bolo_issued_at = v.bolo_issued_at, bolo_expires_at = v.bolo_expires_at,
+             bolo_case_id = v.bolo_case_id
+       where id = p_survivor;
+      s.bolo := true;
+    end if;
+
+    -- Tombstone the victim (kept, never deleted).
+    update public.persons
+       set lifecycle = 'merged', merged_into = p_survivor, bolo = false, gang_id = null
+     where id = v_victim;
+
+    insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+    values (v_uid, 'PERSON_MERGED', 'persons', v_victim, jsonb_build_object(
+      'survivor_id', p_survivor, 'victim_id', v_victim, 'victim_name', v.name,
+      'reason', left(v_reason, 500),
+      'repointed', jsonb_build_object(
+        'gang_members', n_gm, 'media', n_media, 'legal_requests', n_legal,
+        'mdt_wanted_projections', n_mdt, 'vehicles', n_veh,
+        'case_intel_links', n_cil, 'person_places', n_pp,
+        'person_vehicles', n_pv, 'person_relationships', n_rel_a + n_rel_b,
+        'watchlist', n_wl)));
+  end loop;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.set_case_closed_at()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -3372,6 +3727,12 @@ CREATE TRIGGER media_touch BEFORE UPDATE ON public.media FOR EACH ROW EXECUTE FU
 CREATE TRIGGER mo_profiles_touch BEFORE UPDATE ON public.mo_profiles FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER narcotics_touch BEFORE UPDATE ON public.narcotics FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER operations_touch BEFORE UPDATE ON public.operations FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER person_places_audit AFTER INSERT OR DELETE OR UPDATE ON public.person_places FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER person_places_touch BEFORE UPDATE ON public.person_places FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER person_relationships_audit AFTER INSERT OR DELETE OR UPDATE ON public.person_relationships FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER person_relationships_touch BEFORE UPDATE ON public.person_relationships FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER person_vehicles_audit AFTER INSERT OR DELETE OR UPDATE ON public.person_vehicles FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER person_vehicles_touch BEFORE UPDATE ON public.person_vehicles FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER persons_audit AFTER INSERT OR DELETE OR UPDATE ON public.persons FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER persons_touch BEFORE UPDATE ON public.persons FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER places_audit AFTER INSERT OR DELETE OR UPDATE ON public.places FOR EACH ROW EXECUTE FUNCTION private.audit();
@@ -3982,6 +4343,57 @@ create policy operations_upd on public.operations
   using (private.is_active())
   with check (private.is_active());
 
+create policy person_places_del on public.person_places
+  as permissive for delete to authenticated
+  using ((private.can_delete() OR (created_by = ( SELECT auth.uid() AS uid))));
+
+create policy person_places_ins on public.person_places
+  as permissive for insert to authenticated
+  with check (private.is_active());
+
+create policy person_places_sel on public.person_places
+  as permissive for select to authenticated
+  using (private.is_active());
+
+create policy person_places_upd on public.person_places
+  as permissive for update to authenticated
+  using (private.is_active())
+  with check (private.is_active());
+
+create policy person_relationships_del on public.person_relationships
+  as permissive for delete to authenticated
+  using ((private.can_delete() OR (created_by = ( SELECT auth.uid() AS uid))));
+
+create policy person_relationships_ins on public.person_relationships
+  as permissive for insert to authenticated
+  with check (private.is_active());
+
+create policy person_relationships_sel on public.person_relationships
+  as permissive for select to authenticated
+  using (private.is_active());
+
+create policy person_relationships_upd on public.person_relationships
+  as permissive for update to authenticated
+  using (private.is_active())
+  with check (private.is_active());
+
+create policy person_vehicles_del on public.person_vehicles
+  as permissive for delete to authenticated
+  using ((private.can_delete() OR (created_by = ( SELECT auth.uid() AS uid))));
+
+create policy person_vehicles_ins on public.person_vehicles
+  as permissive for insert to authenticated
+  with check (private.is_active());
+
+create policy person_vehicles_sel on public.person_vehicles
+  as permissive for select to authenticated
+  using (private.is_active());
+
+create policy person_vehicles_upd on public.person_vehicles
+  as permissive for update to authenticated
+  using (private.is_active())
+  with check (private.is_active());
+
 create policy persons_del on public.persons
   as permissive for delete to authenticated
   using (private.can_delete());
@@ -4252,6 +4664,9 @@ create policy wl_sel on public.watchlist
 --   public.narcotic_precursors
 --   public.narcotics
 --   public.notifications
+--   public.person_places
+--   public.person_relationships
+--   public.person_vehicles
 --   public.persons
 --   public.place_process_steps
 --   public.places
@@ -4348,6 +4763,12 @@ create policy wl_sel on public.watchlist
 --   notifications -> authenticated: DELETE, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   operations -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   operations -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   person_places -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   person_places -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   person_relationships -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   person_relationships -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   person_vehicles -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   person_vehicles -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   persons -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   persons -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   place_process_steps -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -4475,3 +4896,11 @@ create policy wl_sel on public.watchlist
 -- profiles_sel, admin_member_emails, block_direct_privileged_profile and
 -- rls_test_cleanup updated (all mirrored above). The tombstone auth.users row
 -- is data, not schema — recreate it from the migration on a fresh rebuild.
+-- 20260729010000_person_intelligence: persons gained phone/classification/
+-- confidence/identity/intelligence_summary/priority/lifecycle/merged_into/
+-- review + BOLO detail columns; new link tables person_relationships /
+-- person_places / person_vehicles; public.search_persons(text, int, int)
+-- (SECURITY INVOKER, RLS-scoped) and public.person_merge(uuid, uuid[], text)
+-- (SECURITY DEFINER, command-gated tombstone merge) — all mirrored above.
+-- rls_test_cleanup unchanged (registry fixtures are torn down explicitly by
+-- the suites; the new tables CASCADE from persons).

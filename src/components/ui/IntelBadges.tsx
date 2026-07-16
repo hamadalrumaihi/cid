@@ -43,7 +43,10 @@ export function daysSince(iso: string | null | undefined, now: number): number |
   if (!iso) return null
   const t = Date.parse(iso)
   if (Number.isNaN(t)) return null
-  return Math.floor((now - t) / 86_400_000)
+  // Clamped at 0: a timestamp stamped moments after the caller's `now`
+  // snapshot (e.g. Mark reviewed on an already-open profile) reads as
+  // "0 days", never -1.
+  return Math.max(0, Math.floor((now - t) / 86_400_000))
 }
 
 // Module-scope so the impure read isn't "during render" (react-hooks/purity).

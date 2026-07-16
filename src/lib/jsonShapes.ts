@@ -39,7 +39,10 @@ export function parseStringArray(v: unknown): string[] {
 
 /** `gangs.intelligence_summary` — a string-keyed map of section → text. Any
  *  non-string value is dropped so a malformed row renders as an empty summary
- *  (falling back to the legacy `notes`) rather than crashing the dossier. */
+ *  (falling back to the legacy `notes`) rather than crashing the dossier.
+ *  `persons.intelligence_summary` (20260729010000) stores the exact same
+ *  section → text record shape, so the Persons workspace reuses this parser
+ *  as-is — no persons-specific duplicate. */
 export function parseIntelSummary(v: unknown): Record<string, string> {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
   const out: Record<string, string> = {}
@@ -47,4 +50,37 @@ export function parseIntelSummary(v: unknown): Record<string, string> {
     if (typeof val === 'string' && val.trim()) out[k] = val
   }
   return out
+}
+
+/** `persons.identity` — the documented (not SQL-enforced) shape from the
+ *  person-intelligence migration 20260729010000: alias/street-name/ID string
+ *  arrays plus free-text occupation and notes. */
+export interface PersonIdentity {
+  aliases: string[]
+  street_names: string[]
+  occupation: string
+  distinguishing: string[]
+  license_ids: string[]
+  notes: string
+}
+
+/** `persons.identity` parser. Arrays keep only trimmed non-empty strings and
+ *  non-arrays degrade to `[]`; the free-text fields degrade to `''`. A
+ *  wholesale-wrong value (scalar, array, null) parses as an empty identity —
+ *  never throws. */
+export function parsePersonIdentity(v: unknown): PersonIdentity {
+  const o = v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
+  const strings = (x: unknown): string[] =>
+    Array.isArray(x)
+      ? x.filter((s): s is string => typeof s === 'string').map((s) => s.trim()).filter(Boolean)
+      : []
+  const text = (x: unknown): string => (typeof x === 'string' ? x.trim() : '')
+  return {
+    aliases: strings(o.aliases),
+    street_names: strings(o.street_names),
+    occupation: text(o.occupation),
+    distinguishing: strings(o.distinguishing),
+    license_ids: strings(o.license_ids),
+    notes: text(o.notes),
+  }
 }
