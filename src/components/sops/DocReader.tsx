@@ -334,10 +334,14 @@ export function DocReader(props: {
   if (canApprove && status !== 'archived')
     menuItems.push({ label: 'Archive…', danger: true, separatorBefore: status !== 'published', onClick: () => setLifecycle({ kind: 'workflow', action: 'archive' }) })
 
+  // The article column is capped at a comfortable reading width (not an
+  // unbounded 1fr) and the whole track cluster is centred, so the reading
+  // column, contents rail and details rail line up as one balanced block
+  // instead of a narrow ribbon drifting inside a too-wide card on desktop.
   const showToc = headings.length >= 2
   const gridCols = showToc
-    ? 'lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,1fr)_18rem]'
-    : 'xl:grid-cols-[minmax(0,1fr)_18rem]'
+    ? 'lg:grid-cols-[13rem_minmax(0,44rem)] lg:justify-center xl:grid-cols-[13rem_minmax(0,44rem)_18rem]'
+    : 'xl:grid-cols-[minmax(0,44rem)_18rem] xl:justify-center'
 
   const metaRail = (
     <DocMetaRail
