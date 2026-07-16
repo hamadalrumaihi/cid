@@ -13,7 +13,7 @@ import { todayISO } from '@/lib/format'
 import { useJusticeRoster } from '@/lib/justiceRoster'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
-import { pendingMembership } from '@/components/command-center/lib/membershipPending'
+import { pendingMembership, type JusticeRequestLite } from '@/components/command-center/lib/membershipPending'
 
 /* Column projections — each mirrors its Ac* Pick in lib/actionItems exactly
  * (the model documents that the loader builds selects from those lists).
@@ -60,6 +60,7 @@ export function useActionItems(): ActionItemsResult {
   const vLegal = useTableVersion('legal_requests')
   const vProfiles = useTableVersion('profiles')
   const vMembership = useTableVersion('membership_requests')
+  const vJusticeReqs = useTableVersion('justice_membership_requests')
 
   const refresh = useCallback(async () => {
     if (state !== 'in' || !profile) return
@@ -77,7 +78,7 @@ export function useActionItems(): ActionItemsResult {
     }
     try {
       const me = profile.id
-      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests] =
+      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests] =
         await Promise.all([
           list('cases', { select: CASE_COLS }),
           list('case_tasks', { select: TASK_COLS, eq: { assignee: me, done: false } }),
@@ -100,6 +101,14 @@ export function useActionItems(): ActionItemsResult {
             ? rpc('admin_membership_requests', undefined as never).then((r) =>
                 !r.error && Array.isArray(r.data) ? r.data : null)
             : Promise.resolve(null),
+          // Open DOJ/Judiciary applications (command-readable rows): their
+          // applicants are Justice-portal work, never CID membership items.
+          canAdmin
+            ? list('justice_membership_requests', {
+                select: 'applicant_id,status',
+                in: { status: ['draft', 'pending', 'correction_requested'] },
+              }).then((rows) => rows as JusticeRequestLite[]).catch(() => null)
+            : Promise.resolve(null),
         ])
       const nowMs = Date.now()
       // Command/owner: the shared awaitingCount (submitted + actionable
@@ -109,6 +118,7 @@ export function useActionItems(): ActionItemsResult {
             useProfilesStore.getState().profiles,
             membershipRequests,
             useJusticeRoster.getState().byUser,
+            justiceRequests,
           ).awaitingCount
         : null
       const sources: ActionSources = {
@@ -142,7 +152,7 @@ export function useActionItems(): ActionItemsResult {
   useEffect(() => {
     const id = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(id)
-  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership])
+  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs])
 
   return {
     items: built?.items ?? [],

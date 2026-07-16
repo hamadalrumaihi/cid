@@ -12,8 +12,9 @@
  *  server RPCs (`review_membership_request`, `assign_member`) remain the
  *  authority; this only decides what to *show*.
  *
- *  Buckets (over profiles that are inactive, not removed, not system, and
- *  hold no active justice identity — the "applicant pool"):
+ *  Buckets (over profiles that are inactive, not removed, not system, hold no
+ *  active justice identity, and have no open DOJ/Judiciary application — the
+ *  "applicant pool"):
  *   · submitted   — applicant with a `pending` request → the request-review flow.
  *   · corrections — `correction_requested` requests whose applicant is still
  *                   inactive: waiting on the APPLICANT, no command action.
@@ -30,7 +31,21 @@
  *  `requests` may be null (not yet loaded / caller not authorized for the
  *  command-only `admin_membership_requests` RPC): everything derivable from
  *  profiles alone still works — all applicants land in `signIns` and
- *  `requestsLoaded` is false so callers can qualify the number. */
+ *  `requestsLoaded` is false so callers can qualify the number.
+ *
+ *  `justiceRequests` (open justice_membership_requests rows, readable by
+ *  command since jmr_sel gained is_command in 20260731010000) exists because
+ *  every auth user gets an inactive JTF profile shell from handle_new_user —
+ *  including DOJ/Judiciary applicants, who would otherwise render here as
+ *  phantom CID sign-ins with a wrong one-click assign_member Approve (the
+ *  live vanionn incident). An applicant with an OPEN justice application
+ *  (draft/pending/correction_requested) is a justice applicant, not a CID
+ *  sign-in: excluded from every CID bucket and surfaced via
+ *  `justiceApplicants` so the queue can point at the Justice portal, where
+ *  the Owner and the Attorney General decide judiciary requests — CID
+ *  command never does. A terminal justice status (rejected/withdrawn/…)
+ *  returns them to the CID sign-in pool. null → not loaded/authorized:
+ *  CID buckets behave exactly as before. */
 import type { Tables } from '@/lib/database.types'
 
 /** Subset of the roster projection (lib/profiles ROSTER_COLS) this model reads. */
@@ -47,8 +62,19 @@ export type RequestLite = Pick<
   | 'requested_role' | 'submitted_at' | 'updated_at'
 >
 
+/** Subset of a justice_membership_requests row this model reads (fetched by
+ *  command surfaces via a plain RLS-scoped list — never the internal note,
+ *  which stays column-revoked). */
+export type JusticeRequestLite = Pick<
+  Tables<'justice_membership_requests'>,
+  'applicant_id' | 'status'
+>
+
 /** Request statuses still awaiting a decision (the request flow is live). */
 const OPEN_STATUSES = new Set(['pending', 'correction_requested'])
+/** A justice application that is still live in ANY authoring/review state —
+ *  its applicant belongs to the Justice portal, not the CID queue. */
+const JUSTICE_OPEN_STATUSES = new Set(['draft', 'pending', 'correction_requested'])
 /** Recorded refusals — a quick approve would silently override them. */
 const BLOCKED_STATUSES = new Set(['rejected', 'withdrawn'])
 
@@ -74,6 +100,13 @@ export interface PendingMembership<P extends ProfileLite = ProfileLite, R extend
   /** False when `requests` was null — the count is profiles-derived only and
    *  ghosts/corrections/blocked annotations are not knowable. */
   requestsLoaded: boolean
+  /** Distinct applicants whose justice application is awaiting an
+   *  Owner/Attorney-General decision (`pending`) — the Justice-portal pointer
+   *  count. NOT part of awaitingCount: these are never CID work. */
+  justiceApplicants: number
+  /** False when `justiceRequests` was null — justice applicants could not be
+   *  told apart from CID sign-ins (pre-20260731 behavior). */
+  justiceLoaded: boolean
 }
 
 /** One request per applicant: an OPEN request always wins over a terminal one;
@@ -96,12 +129,28 @@ export function pendingMembership<P extends ProfileLite, R extends RequestLite>(
   profiles: readonly P[],
   requests: readonly R[] | null,
   justiceByUser: Record<string, unknown>,
+  justiceRequests: readonly JusticeRequestLite[] | null = null,
 ): PendingMembership<P, R> {
+  // A DOJ/Judiciary applicant's inactive profile shell is not a CID sign-in —
+  // their application lives in the Justice portal (Owner/AG authority).
+  const justiceApplicantIds = new Set(
+    (justiceRequests ?? [])
+      .filter((j) => JUSTICE_OPEN_STATUSES.has(j.status))
+      .map((j) => j.applicant_id),
+  )
+  const justiceApplicants = new Set(
+    (justiceRequests ?? [])
+      .filter((j) => j.status === 'pending')
+      .map((j) => j.applicant_id),
+  ).size
+  const justiceLoaded = justiceRequests !== null
+
   // A deactivated member holding an active justice identity was moved out of
   // CID by an organization correction — never a pending sign-in. System rows
   // (the deletion tombstone) are excluded defensively everywhere.
   const applicants = profiles.filter(
-    (p) => !p.active && !p.removed_at && !p.is_system && !justiceByUser[p.id],
+    (p) => !p.active && !p.removed_at && !p.is_system && !justiceByUser[p.id]
+      && !justiceApplicantIds.has(p.id),
   )
 
   if (requests === null) {
@@ -110,7 +159,11 @@ export function pendingMembership<P extends ProfileLite, R extends RequestLite>(
     const signIns = applicants.map((profile) => ({
       profile, requestStatus: null, request: null as R | null, actionable: true,
     }))
-    return { submitted: [], corrections: [], signIns, ghosts: [], awaitingCount: signIns.length, requestsLoaded: false }
+    return {
+      submitted: [], corrections: [], signIns, ghosts: [],
+      awaitingCount: signIns.length, requestsLoaded: false,
+      justiceApplicants, justiceLoaded,
+    }
   }
 
   const profileById = new Map(profiles.map((p) => [p.id, p]))
@@ -136,10 +189,14 @@ export function pendingMembership<P extends ProfileLite, R extends RequestLite>(
     if (!OPEN_STATUSES.has(r.status)) continue
     const p = profileById.get(r.applicant_id)
     if (!p || p.is_system || p.removed_at) continue // no viable applicant behind it
+    if (justiceApplicantIds.has(p.id)) continue     // theirs is a Justice-portal matter
     if (p.active) { ghosts.push(r); continue }      // activated directly — request never decided
     if (r.status === 'correction_requested' && !justiceByUser[p.id]) corrections.push(r)
   }
 
   const awaitingCount = submitted.length + signIns.filter((s) => s.actionable).length + ghosts.length
-  return { submitted, corrections, signIns, ghosts, awaitingCount, requestsLoaded: true }
+  return {
+    submitted, corrections, signIns, ghosts, awaitingCount, requestsLoaded: true,
+    justiceApplicants, justiceLoaded,
+  }
 }

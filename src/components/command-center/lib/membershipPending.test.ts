@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pendingMembership, type ProfileLite, type RequestLite } from './membershipPending'
+import { pendingMembership, type JusticeRequestLite, type ProfileLite, type RequestLite } from './membershipPending'
 
 const profile = (over: Partial<ProfileLite> & { id: string }): ProfileLite => ({
   display_name: 'Applicant', active: false, removed_at: null, is_system: false, ...over,
@@ -211,5 +211,86 @@ describe('awaitingCount — the audited live scenario', () => {
     expect(pm.signIns.filter((s) => !s.actionable)).toHaveLength(1)
     expect(pm.ghosts).toHaveLength(1)
     expect(pm.awaitingCount).toBe(4)
+  })
+})
+
+describe('justice applicants (the vanionn incident)', () => {
+  // A Judge applicant: the Gate created only a justice request, but
+  // handle_new_user provisioned an inactive JTF profile shell — pre-fix the
+  // queue showed it as a CID "pending sign-in" with a wrong assign_member
+  // Approve while the real request sat in the Justice portal.
+  const jr = (over: Partial<JusticeRequestLite> & { applicant_id: string }): JusticeRequestLite => ({
+    status: 'pending', ...over,
+  })
+
+  it('an applicant with a pending justice request is excluded from every CID bucket', () => {
+    const pm = pendingMembership(
+      [profile({ id: 'vanionn' }), profile({ id: 'cid-applicant' })],
+      [],
+      NO_JUSTICE,
+      [jr({ applicant_id: 'vanionn' })],
+    )
+    expect(pm.signIns.map((s) => s.profile.id)).toEqual(['cid-applicant'])
+    expect(pm.awaitingCount).toBe(1)
+    expect(pm.justiceApplicants).toBe(1)
+    expect(pm.justiceLoaded).toBe(true)
+  })
+
+  it('draft and correction_requested justice applications also exclude — but only pending counts for the pointer', () => {
+    const pm = pendingMembership(
+      [profile({ id: 'draft' }), profile({ id: 'corr' }), profile({ id: 'pend' })],
+      [],
+      NO_JUSTICE,
+      [
+        jr({ applicant_id: 'draft', status: 'draft' }),
+        jr({ applicant_id: 'corr', status: 'correction_requested' }),
+        jr({ applicant_id: 'pend' }),
+      ],
+    )
+    expect(pm.signIns).toEqual([])
+    expect(pm.awaitingCount).toBe(0)
+    expect(pm.justiceApplicants).toBe(1)
+  })
+
+  it('a terminal justice status returns the applicant to the CID sign-in pool', () => {
+    for (const status of ['rejected', 'withdrawn', 'approved', 'approved_with_changes']) {
+      const pm = pendingMembership(
+        [profile({ id: 'back' })], [], NO_JUSTICE, [jr({ applicant_id: 'back', status })],
+      )
+      expect(pm.signIns.map((s) => s.profile.id)).toEqual(['back'])
+      expect(pm.justiceApplicants).toBe(0)
+    }
+  })
+
+  it('null justiceRequests (not loaded/authorized) keeps the pre-fix behavior and flags it', () => {
+    const pm = pendingMembership([profile({ id: 'vanionn' })], [], NO_JUSTICE)
+    expect(pm.signIns.map((s) => s.profile.id)).toEqual(['vanionn'])
+    expect(pm.justiceLoaded).toBe(false)
+    expect(pm.justiceApplicants).toBe(0)
+  })
+
+  it('applies in profiles-only mode too (the nav badge path)', () => {
+    const pm = pendingMembership(
+      [profile({ id: 'vanionn' }), profile({ id: 'cid' })],
+      null,
+      NO_JUSTICE,
+      [jr({ applicant_id: 'vanionn' })],
+    )
+    expect(pm.awaitingCount).toBe(1)
+    expect(pm.justiceApplicants).toBe(1)
+    expect(pm.requestsLoaded).toBe(false)
+  })
+
+  it('a stale open CID request from a now-justice applicant is neither a ghost nor a correction', () => {
+    const pm = pendingMembership(
+      [profile({ id: 'both' })],
+      [request({ id: 'r-cid', applicant_id: 'both' })],
+      NO_JUSTICE,
+      [jr({ applicant_id: 'both' })],
+    )
+    expect(pm.submitted).toEqual([])
+    expect(pm.ghosts).toEqual([])
+    expect(pm.corrections).toEqual([])
+    expect(pm.awaitingCount).toBe(0)
   })
 })

@@ -14,7 +14,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { canReviewCase } from '../lib/approvals'
-import { pendingMembership } from '../lib/membershipPending'
+import { pendingMembership, type JusticeRequestLite } from '../lib/membershipPending'
 
 type CaseRow = Tables<'cases'>
 type RequestRow = Tables<'membership_requests'>
@@ -43,10 +43,14 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
   const [cases, setCases] = useState<CaseRow[]>([])
   // null until loaded — the tile then falls back to the profiles-only count.
   const [requests, setRequests] = useState<RequestRow[] | null>(null)
+  // Open DOJ/Judiciary applications: their applicants are not CID work and
+  // must not inflate the tile (they're decided in the Justice portal).
+  const [justiceReqs, setJusticeReqs] = useState<JusticeRequestLite[] | null>(null)
   const vProfiles = useTableVersion('profiles')
   const vCases = useTableVersion('cases')
   const vRequests = useTableVersion('membership_requests')
   const vJustice = useTableVersion('justice_memberships')
+  const vJusticeReqs = useTableVersion('justice_membership_requests')
   const canAdmin = isCommand || isOwner
 
   const refresh = useCallback(async () => {
@@ -56,19 +60,25 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
     if (canAdmin) {
       const rq = await rpc('admin_membership_requests', undefined as never)
       if (!rq.error && Array.isArray(rq.data)) setRequests(rq.data)
+      try {
+        setJusticeReqs(await list('justice_membership_requests', {
+          select: 'applicant_id,status',
+          in: { status: ['draft', 'pending', 'correction_requested'] },
+        }) as JusticeRequestLite[])
+      } catch { /* degrade to the pre-fix blended count */ }
     }
   }, [fetchProfiles, fetchJustice, canAdmin])
   useEffect(() => {
     const t = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(t)
-  }, [refresh, vProfiles, vCases, vRequests, vJustice])
+  }, [refresh, vProfiles, vCases, vRequests, vJustice, vJusticeReqs])
 
   const roster = profiles.filter((p) => !p.removed_at)
   // Shared membership model — the tile shows the same awaitingCount as the
   // nav badge, the Approval Queue and the Action Center (lib/membershipPending).
-  const pm = pendingMembership(profiles, requests, justiceByUser)
+  const pm = pendingMembership(profiles, requests, justiceByUser, justiceReqs)
   const pendingHint = pm.requestsLoaded
-    ? `${pm.signIns.filter((s) => s.actionable).length} sign-ins · ${pm.submitted.length} requests${pm.ghosts.length ? ` · ${pm.ghosts.length} to reconcile` : ''}`
+    ? `${pm.signIns.filter((s) => s.actionable).length} sign-ins · ${pm.submitted.length} requests${pm.ghosts.length ? ` · ${pm.ghosts.length} to reconcile` : ''}${pm.justiceApplicants ? ` · ${pm.justiceApplicants} in Justice portal` : ''}`
     : 'new sign-ins awaiting activation'
   const onLoa = roster.filter((p) => p.active && p.loa).length
   const active = roster.filter((p) => p.active).length

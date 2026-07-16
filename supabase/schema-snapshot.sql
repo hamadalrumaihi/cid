@@ -4275,6 +4275,61 @@ create policy indicators_upd on public.indicators
   using (private.is_active())
   with check (private.is_active());
 
+create policy jmrh_sel on public.justice_membership_request_history
+  as permissive for select to authenticated
+  using ((((NOT internal) AND (EXISTS ( SELECT 1
+   FROM justice_membership_requests r
+  WHERE ((r.id = justice_membership_request_history.request_id) AND (r.applicant_id = ( SELECT auth.uid() AS uid)))))) OR (private.justice_role() = ANY (ARRAY['district_attorney'::text, 'attorney_general'::text])) OR private.is_owner()));
+
+create policy jmr_ins on public.justice_membership_requests
+  as permissive for insert to authenticated
+  with check (((applicant_id = ( SELECT auth.uid() AS uid)) AND (status = 'draft'::text) AND (NOT private.is_active()) AND (NOT private.is_justice_active(( SELECT auth.uid() AS uid))) AND (NOT (EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = ( SELECT auth.uid() AS uid)) AND p.login_denied))))));
+
+create policy jmr_sel on public.justice_membership_requests
+  as permissive for select to authenticated
+  using (((applicant_id = ( SELECT auth.uid() AS uid)) OR (private.justice_role() = ANY (ARRAY['district_attorney'::text, 'attorney_general'::text])) OR private.is_command() OR private.is_owner()));
+
+create policy jmr_upd on public.justice_membership_requests
+  as permissive for update to authenticated
+  using (((applicant_id = ( SELECT auth.uid() AS uid)) AND (status = ANY (ARRAY['draft'::text, 'correction_requested'::text])) AND (NOT (EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = ( SELECT auth.uid() AS uid)) AND p.login_denied))))))
+  with check ((applicant_id = ( SELECT auth.uid() AS uid)));
+
+create policy jm_sel on public.justice_memberships
+  as permissive for select to authenticated
+  using (((user_id = ( SELECT auth.uid() AS uid)) OR (private.justice_role() IS NOT NULL) OR private.is_command() OR private.is_owner()));
+
+create policy lra_sel on public.legal_request_actions
+  as permissive for select to authenticated
+  using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
+
+create policy lre_sel on public.legal_request_exhibits
+  as permissive for select to authenticated
+  using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
+
+create policy lrp_sel on public.legal_request_participants
+  as permissive for select to authenticated
+  using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
+
+create policy lrs_sel on public.legal_request_signatures
+  as permissive for select to authenticated
+  using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
+
+create policy lrv_sel on public.legal_request_versions
+  as permissive for select to authenticated
+  using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
+
+create policy lr_sel on public.legal_requests
+  as permissive for select to authenticated
+  using (private.can_view_legal_request(id, ( SELECT auth.uid() AS uid)));
+
+create policy mdt_sel on public.mdt_wanted_projections
+  as permissive for select to authenticated
+  using ((private.is_active() OR (private.justice_role() IS NOT NULL) OR private.owner_flag(( SELECT auth.uid() AS uid))));
+
 create policy media_del on public.media
   as permissive for delete to authenticated
   using (private.can_delete());
@@ -4531,6 +4586,10 @@ create policy profiles_upd_self on public.profiles
   using ((id = ( SELECT auth.uid() AS uid)))
   with check ((id = ( SELECT auth.uid() AS uid)));
 
+create policy pba_sel on public.prosecutor_bureau_assignments
+  as permissive for select to authenticated
+  using (((private.justice_role() IS NOT NULL) OR private.is_active() OR (prosecutor_id = ( SELECT auth.uid() AS uid))));
+
 create policy raid_compensations_del on public.raid_compensations
   as permissive for delete to authenticated
   using (private.can_delete());
@@ -4547,6 +4606,12 @@ create policy raid_compensations_upd on public.raid_compensations
   as permissive for update to authenticated
   using (private.can_access_case(case_id))
   with check (private.can_access_case(case_id));
+
+create policy report_versions_sel on public.report_versions
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM reports r
+  WHERE ((r.id = report_versions.report_id) AND private.can_access_case(r.case_id)))));
 
 create policy reports_del on public.reports
   as permissive for delete to authenticated
@@ -4957,3 +5022,22 @@ create policy wl_sel on public.watchlist
 -- appended internal note, internal mr_history row, NO notification);
 -- admin_restore_member() gained the same is_system guard — both bodies
 -- mirrored above. No table/column changes.
+-- 20260731010000_justice_request_visibility: jmr_sel gained
+-- private.is_command() (read-only queue awareness — command holds NO
+-- judiciary decision authority; internal_decision_note stays column-revoked);
+-- private.can_review_justice_role() now lets the attorney_general review
+-- 'judge' (was Owner-only; AG seat itself remains Owner-only) — the submit
+-- fan-out, set_justice_membership_active and admin review surfaces inherit
+-- the matrix change; review_justice_membership_request() approve path now
+-- refuses an applicant who is an active CID member (organization correction
+-- is the sanctioned path). Policies mirrored above; definitive function SQL
+-- in supabase/migrations/20260731010000_justice_request_visibility.sql.
+-- This migration also backfilled the snapshot's missing 20260714-era
+-- policies (jmr_*/jm_sel/jmrh_sel/lr*_sel/mdt_sel/pba_sel/report_versions_sel)
+-- — a drift fix; nothing changed live except jmr_sel.
+-- 20260731020000_admin_justice_guard_fix (SECURITY): the 20260719020000
+-- redefinition of admin_justice_membership_requests() dropped the
+-- 20260714070000 coalesce, so `NULL in (...)` skipped the raise and ANY
+-- authenticated user could read all justice requests incl. the revoked
+-- internal_decision_note. Guard re-coalesced; body otherwise the live
+-- fixture-filtered one. Definitive SQL in that migration file.

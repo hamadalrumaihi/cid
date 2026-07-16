@@ -42,7 +42,9 @@ Onboarding mirrors `membership_requests` (own draft, definer-RPC transitions, tr
 | ADA | DA, AG, or Owner |
 | DA | AG or Owner |
 | AG | Owner only |
-| Judge | Owner only |
+| Judge | AG or Owner (Owner-only before [`20260731010000_justice_request_visibility.sql`](../supabase/migrations/20260731010000_justice_request_visibility.sql)) |
+
+CID Command holds **no** judiciary/DOJ approval authority: since `20260731010000` the `jmr_sel` policy lets active command **see** `justice_membership_requests` rows (so the Approval Queue can recognize a DOJ/Judiciary applicant instead of rendering them as a phantom CID sign-in), but every decide path (`review_justice_membership_request` via the matrix above, `admin_justice_membership_requests`) refuses command, and `internal_decision_note` stays column-revoked. The same migration added the **dual-active guard**: the approve path refuses an applicant who is an active CID member (organization correction is the sanctioned path) — the inverse of `assign_member`'s justice guard.
 
 Full workflow, ADA bureau coverage, routing precedence, and conflict-of-role rules: [DOJ-INTEGRATION.md](DOJ-INTEGRATION.md).
 

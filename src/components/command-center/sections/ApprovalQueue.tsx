@@ -19,6 +19,7 @@ import { fmtDateTime } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { notify } from '@/lib/notify'
 import { officerName, type RosterProfile, useProfilesStore } from '@/lib/profiles'
+import { AGENCY_LABEL, justiceRoleLabel, type JusticeAgency } from '@/lib/justice'
 import { useJusticeRoster } from '@/lib/justiceRoster'
 import { useTableVersion } from '@/lib/realtime'
 import { PERMANENT_BUREAUS, ROLE_LABEL, ROLE_ORDER, bureauLabel, canApproveRequestedRole, roleLabel, type RoleParty } from '@/lib/roles'
@@ -36,6 +37,13 @@ import { pendingMembership } from '../lib/membershipPending'
 
 type CaseRow = Tables<'cases'>
 type RequestRow = Tables<'membership_requests'>
+/** Projection of a justice application this queue may read (jmr_sel admits
+ *  command read-only since 20260731010000; internal notes stay revoked). */
+type JusticeRequestRow = Pick<
+  Tables<'justice_membership_requests'>,
+  'id' | 'applicant_id' | 'display_name' | 'requested_agency' | 'requested_justice_role' | 'status' | 'submitted_at'
+>
+const JUSTICE_QUEUE_COLS = 'id,applicant_id,display_name,requested_agency,requested_justice_role,status,submitted_at'
 type Bureau = RequestRow['requested_bureau']
 type Role = RequestRow['requested_role']
 type Decision = 'approve' | 'approve_with_changes' | 'request_correction' | 'reject'
@@ -237,12 +245,16 @@ export function ApprovalQueue() {
   const [requests, setRequests] = useState<RequestRow[] | null>(null)
   const [reqError, setReqError] = useState<unknown>(null)
   const reqErrorToasted = useRef(false)
+  // null = not loaded (justice applicants then blend into sign-ins, the
+  // pre-fix rendering) — a failed fetch degrades, it never sinks the queue.
+  const [justiceReqs, setJusticeReqs] = useState<JusticeRequestRow[] | null>(null)
   const [emails, setEmails] = useState<Record<string, string>>({})
   const [decision, setDecision] = useState<{ req: RequestRow; kind: Decision } | null>(null)
   const vP = useTableVersion('profiles')
   const vC = useTableVersion('cases')
   const vM = useTableVersion('membership_requests')
   const vJ = useTableVersion('justice_memberships')
+  const vJR = useTableVersion('justice_membership_requests')
 
   const refresh = useCallback(async () => {
     void fetchProfiles()
@@ -265,14 +277,24 @@ export function ApprovalQueue() {
         }
       }
       if (!em.error && Array.isArray(em.data)) setEmails(Object.fromEntries(em.data.map((x) => [x.id, x.email])))
+      // Open DOJ/Judiciary applications: read-only awareness so their
+      // applicants never render as CID sign-ins. Decided in the Justice
+      // portal by the Owner and the Attorney General — never here.
+      try {
+        setJusticeReqs(await list('justice_membership_requests', {
+          select: JUSTICE_QUEUE_COLS,
+          in: { status: ['draft', 'pending', 'correction_requested'] },
+        }) as JusticeRequestRow[])
+      } catch { /* degrade: applicants blend into sign-ins as before */ }
     }
   }, [fetchProfiles, fetchJustice, canAdmin])
-  useEffect(() => { const t = window.setTimeout(() => { void refresh() }, 0); return () => window.clearTimeout(t) }, [refresh, vP, vC, vM, vJ])
+  useEffect(() => { const t = window.setTimeout(() => { void refresh() }, 0); return () => window.clearTimeout(t) }, [refresh, vP, vC, vM, vJ, vJR])
 
   // Single source of truth for every membership bucket (and the shared
   // awaitingCount the badge/tile/Action Center use) — see lib/membershipPending.
-  const pm = pendingMembership(profiles, requests, justiceByUser)
+  const pm = pendingMembership(profiles, requests, justiceByUser, justiceReqs)
   const membershipLoading = !profilesLoaded || (canAdmin && requests === null && reqError === null)
+  const justicePending = (justiceReqs ?? []).filter((j) => j.status === 'pending')
   const reviews = cases.filter((c) => canReviewCase(c, profile))
 
   const approve = async (p: RosterProfile) => {
@@ -400,6 +422,33 @@ export function ApprovalQueue() {
           </div>
         ) : <p className="text-sm text-emerald-300">✓ No pending sign-ins.</p>}
       </section>
+
+      {justicePending.length > 0 && (
+        <section className="rounded-2xl border border-sky-500/20 bg-ink-900/45 p-5">
+          <h3 className="mb-1 font-bold text-white">DOJ / Judiciary applications <span className="text-slate-500">({justicePending.length})</span></h3>
+          <p className="mb-3 text-xs text-slate-400">
+            These applicants signed up for the Department of Justice or the Judiciary — not CID.
+            Their requests are decided in the <b>Justice portal</b> by the Owner and the Attorney
+            General; CID Command does not approve them, so they are listed here for awareness only.
+          </p>
+          <div className="space-y-2">
+            {justicePending.map((j) => (
+              <div key={j.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-500/20 bg-sky-500/5 px-4 py-2.5">
+                <div>
+                  <p className="text-sm font-semibold text-white">{j.display_name}</p>
+                  <p className="text-[11px] text-slate-400">
+                    {AGENCY_LABEL[j.requested_agency as JusticeAgency] ?? j.requested_agency} — {justiceRoleLabel(j.requested_justice_role)} · submitted {fmtDateTime(j.submitted_at)}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone="accent">Justice portal</Badge>
+                  {isOwner && <Button size="sm" variant="primary" onClick={() => router.push('/justice')}>Review in Justice portal</Button>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
         </>
       )}
 
