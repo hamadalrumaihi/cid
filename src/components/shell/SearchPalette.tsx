@@ -147,6 +147,8 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
     else if (hit.kind === 'legal') router.push(`/legal?request=${encodeURIComponent(hit.id)}`)
     // Documents deep-link straight into the reader (SopsView reads ?doc=).
     else if (hit.kind === 'document') router.push(`/sops?doc=${encodeURIComponent(hit.id)}`)
+    // Narcotics drill into the dossier by id (registry reads ?drug=).
+    else if (hit.kind === 'narcotic') router.push(`/narcotics?drug=${encodeURIComponent(hit.id)}`)
     else if (hit.term && Q_SEEDED_TABS.has(meta.tab)) router.push(`/${meta.tab}?q=${encodeURIComponent(hit.term)}`)
     else router.push(`/${meta.tab}`)
   }, [onClose, query, router])

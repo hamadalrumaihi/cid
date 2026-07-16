@@ -1,10 +1,11 @@
 'use client'
 
 /** Relationship Network — port of vanilla network.js. Hand-rolled SVG
- *  ego/overview graph, no graph dependency: gangs are hubs; persons (members)
- *  and places (turf/fronts) orbit them. Click a node to re-centre (ego view);
- *  click the centred gang/person to open its intel profile. Drag to pan,
- *  wheel or +/− to zoom. `?focus=g:<id>|p:<id>` deep-links a centred node. */
+ *  ego/overview graph, no graph dependency: gangs are hubs; persons (members),
+ *  places (turf/fronts) and narcotics (linked substances) orbit them. Click a
+ *  node to re-centre (ego view); click the centred gang/person to open its
+ *  intel profile. Drag to pan, wheel or +/− to zoom. `?focus=g:<id>|p:<id>|
+ *  n:<id>` deep-links a centred node. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
@@ -18,9 +19,9 @@ import { PageHeader } from '@/components/ui/PageHeader'
 
 type GangRow = Tables<'gangs'>
 
-const FILL = { gang: '#3b82f6', person: '#10b981', place: '#f59e0b' } as const
-const RADIUS = { gang: 26, person: 16, place: 14 } as const
-const ICON = { gang: '🚩', person: '👤', place: '📍' } as const
+const FILL = { gang: '#3b82f6', person: '#10b981', place: '#f59e0b', narcotic: '#a78bfa' } as const
+const RADIUS = { gang: 26, person: 16, place: 14, narcotic: 15 } as const
+const ICON = { gang: '🚩', person: '👤', place: '📍', narcotic: '💊' } as const
 const VBW = 1000
 const VBH = 640
 
@@ -52,11 +53,14 @@ export function NetworkView() {
     setErr(null)
     try {
       const safe = <T,>(p: Promise<T[]>) => p.catch(() => [] as T[])
-      const [gs, persons, places, members] = await Promise.all([
+      const [gs, persons, places, members, narcotics, narcPlaces, narcGangs] = await Promise.all([
         safe(list('gangs', {})),
         safe(list('persons', {})),
         safe(list('places', {})),
         safe(list('gang_members', {})),
+        safe(list('narcotics', {})),
+        safe(list('narcotic_places', {})),
+        safe(list('narcotic_gangs', {})),
       ])
       setGangs(gs)
       const nodes: Record<string, NetNode> = {}
@@ -75,8 +79,29 @@ export function NetworkView() {
         const p = m.person_id ? personById.get(m.person_id) : null
         if (p && m.gang_id && nodes[`g:${m.gang_id}`]) { add(`p:${p.id}`, 'person', p.name || 'Person', p.alias || p.status || ''); link(`p:${p.id}`, `g:${m.gang_id}`) }
       }
+      const placeById = new Map(places.map((pl) => [pl.id, pl]))
       for (const pl of places) {
         if (pl.controlling_gang_id && nodes[`g:${pl.controlling_gang_id}`]) { add(`pl:${pl.id}`, 'place', pl.name || 'Place', ''); link(`pl:${pl.id}`, `g:${pl.controlling_gang_id}`) }
+      }
+      // Substances enter only via a real link-table row (Substance→Gang /
+      // Substance→Place). Merged tombstones are excluded; unsourced text is not
+      // a link, so nothing here is inferred.
+      const narcById = new Map(narcotics.filter((n) => n.status !== 'merged').map((n) => [n.id, n]))
+      const addNarc = (id: string) => {
+        const n = narcById.get(id)
+        if (!n) return false
+        add(`n:${id}`, 'narcotic', n.name || 'Substance', n.category ? cap(n.category) : '')
+        return true
+      }
+      for (const ng of narcGangs) {
+        if (ng.narcotic_id && ng.gang_id && nodes[`g:${ng.gang_id}`] && addNarc(ng.narcotic_id)) link(`n:${ng.narcotic_id}`, `g:${ng.gang_id}`)
+      }
+      for (const np of narcPlaces) {
+        if (!np.narcotic_id || !np.place_id) continue
+        // Pull the linked place into the graph even if it isn't gang-controlled,
+        // so the Substance→Place edge has both ends.
+        if (!nodes[`pl:${np.place_id}`]) { const pl = placeById.get(np.place_id); if (pl) add(`pl:${pl.id}`, 'place', pl.name || 'Place', '') }
+        if (nodes[`pl:${np.place_id}`] && addNarc(np.narcotic_id)) link(`n:${np.narcotic_id}`, `pl:${np.place_id}`)
       }
       setGraph({ nodes, adj })
     } catch (e) {
@@ -181,7 +206,7 @@ export function NetworkView() {
           actions={
             <>
               <span className="hidden items-center gap-3 text-[11px] text-slate-400 sm:flex">
-                {(['gang', 'person', 'place'] as const).map((t) => (
+                {(['gang', 'person', 'place', 'narcotic'] as const).map((t) => (
                   <span key={t} className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: FILL[t] }} />{cap(t)}</span>
                 ))}
               </span>

@@ -236,7 +236,7 @@ alter table public.case_intel_links add constraint case_intel_links_case_id_kind
 alter table public.case_intel_links add constraint case_intel_links_pkey PRIMARY KEY (id);
 alter table public.case_intel_links add constraint case_intel_links_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
 alter table public.case_intel_links add constraint case_intel_links_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
-alter table public.case_intel_links add constraint case_intel_links_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'gang'::text, 'place'::text])));
+alter table public.case_intel_links add constraint case_intel_links_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'gang'::text, 'place'::text, 'narcotic'::text])));
 alter table public.case_intel_links enable row level security;
 
 create table public.case_messages (
@@ -1158,6 +1158,7 @@ create table public.media (
   gang_id uuid,
   place_id uuid,
   person_id uuid,
+  narcotic_id uuid,
   tags jsonb default '{}'::jsonb,
   uploaded_by uuid default auth.uid(),
   created_at timestamp with time zone not null default now(),
@@ -1166,6 +1167,7 @@ create table public.media (
 alter table public.media add constraint media_pkey PRIMARY KEY (id);
 alter table public.media add constraint media_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
 alter table public.media add constraint media_gang_id_fkey FOREIGN KEY (gang_id) REFERENCES public.gangs(id) ON DELETE SET NULL;
+alter table public.media add constraint media_narcotic_id_fkey FOREIGN KEY (narcotic_id) REFERENCES public.narcotics(id) ON DELETE SET NULL;
 alter table public.media add constraint media_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE SET NULL;
 alter table public.media add constraint media_place_id_fkey FOREIGN KEY (place_id) REFERENCES public.places(id) ON DELETE SET NULL;
 alter table public.media add constraint media_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.profiles(id);
@@ -1183,6 +1185,58 @@ alter table public.mo_profiles add constraint mo_profiles_pkey PRIMARY KEY (id);
 alter table public.mo_profiles add constraint mo_profiles_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
 alter table public.mo_profiles enable row level security;
 
+create table public.narcotic_aliases (
+  id uuid not null default gen_random_uuid(),
+  narcotic_id uuid not null,
+  alias text not null,
+  alias_type text not null default 'street_name'::text,
+  server_specific boolean not null default false,
+  source_case_id uuid,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now()
+);
+alter table public.narcotic_aliases add constraint narcotic_aliases_pkey PRIMARY KEY (id);
+alter table public.narcotic_aliases add constraint narcotic_aliases_narcotic_id_fkey FOREIGN KEY (narcotic_id) REFERENCES public.narcotics(id) ON DELETE CASCADE;
+alter table public.narcotic_aliases add constraint narcotic_aliases_source_case_id_fkey FOREIGN KEY (source_case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.narcotic_aliases add constraint narcotic_aliases_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.narcotic_aliases add constraint narcotic_aliases_alias_len_check CHECK (((char_length(btrim(alias)) >= 1) AND (char_length(btrim(alias)) <= 120)));
+alter table public.narcotic_aliases add constraint narcotic_aliases_alias_type_check CHECK ((alias_type = ANY (ARRAY['street_name'::text, 'server_item'::text, 'variant'::text, 'scientific'::text, 'other'::text])));
+alter table public.narcotic_aliases enable row level security;
+-- Street names / server item names / variants; unique per
+-- (narcotic_id, lower(alias)) via narcotic_aliases_narcotic_alias_key below.
+
+create table public.narcotic_gangs (
+  id uuid not null default gen_random_uuid(),
+  narcotic_id uuid not null,
+  gang_id uuid not null,
+  role text not null,
+  link_status text not null default 'current'::text,
+  confidence text,
+  provenance text,
+  source_case_id uuid,
+  source_report_id uuid,
+  source_evidence_id uuid,
+  first_observed timestamp with time zone,
+  last_confirmed timestamp with time zone,
+  notes text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.narcotic_gangs add constraint narcotic_gangs_pkey PRIMARY KEY (id);
+alter table public.narcotic_gangs add constraint narcotic_gangs_narcotic_id_gang_id_role_key UNIQUE (narcotic_id, gang_id, role);
+alter table public.narcotic_gangs add constraint narcotic_gangs_narcotic_id_fkey FOREIGN KEY (narcotic_id) REFERENCES public.narcotics(id) ON DELETE CASCADE;
+alter table public.narcotic_gangs add constraint narcotic_gangs_gang_id_fkey FOREIGN KEY (gang_id) REFERENCES public.gangs(id) ON DELETE CASCADE;
+alter table public.narcotic_gangs add constraint narcotic_gangs_source_case_id_fkey FOREIGN KEY (source_case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.narcotic_gangs add constraint narcotic_gangs_source_report_id_fkey FOREIGN KEY (source_report_id) REFERENCES public.reports(id) ON DELETE SET NULL;
+alter table public.narcotic_gangs add constraint narcotic_gangs_source_evidence_id_fkey FOREIGN KEY (source_evidence_id) REFERENCES public.evidence(id) ON DELETE SET NULL;
+alter table public.narcotic_gangs add constraint narcotic_gangs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.narcotic_gangs add constraint narcotic_gangs_role_check CHECK ((role = ANY (ARRAY['trafficking'::text, 'production'::text, 'distribution'::text, 'sale'::text, 'association'::text, 'possible_mention'::text, 'historical_association'::text])));
+alter table public.narcotic_gangs add constraint narcotic_gangs_link_status_check CHECK ((link_status = ANY (ARRAY['current'::text, 'historical'::text, 'disputed'::text])));
+alter table public.narcotic_gangs add constraint narcotic_gangs_confidence_check CHECK (((confidence IS NULL) OR (confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
+alter table public.narcotic_gangs add constraint narcotic_gangs_provenance_check CHECK (((provenance IS NULL) OR (provenance = ANY (ARRAY['imported'::text, 'reported'::text, 'manually_confirmed'::text, 'inferred'::text, 'historical'::text, 'disputed'::text]))));
+alter table public.narcotic_gangs enable row level security;
+
 create table public.narcotic_hotspots (
   id uuid not null default gen_random_uuid(),
   narcotic_id uuid not null,
@@ -1197,6 +1251,70 @@ alter table public.narcotic_hotspots add constraint narcotic_hotspots_narcotic_i
 alter table public.narcotic_hotspots add constraint narcotic_hotspots_place_id_fkey FOREIGN KEY (place_id) REFERENCES public.places(id) ON DELETE SET NULL;
 alter table public.narcotic_hotspots enable row level security;
 
+create table public.narcotic_persons (
+  id uuid not null default gen_random_uuid(),
+  narcotic_id uuid not null,
+  person_id uuid not null,
+  role text not null,
+  link_status text not null default 'current'::text,
+  confidence text,
+  provenance text,
+  source_case_id uuid,
+  source_report_id uuid,
+  source_evidence_id uuid,
+  first_observed timestamp with time zone,
+  last_confirmed timestamp with time zone,
+  notes text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.narcotic_persons add constraint narcotic_persons_pkey PRIMARY KEY (id);
+alter table public.narcotic_persons add constraint narcotic_persons_narcotic_id_person_id_role_key UNIQUE (narcotic_id, person_id, role);
+alter table public.narcotic_persons add constraint narcotic_persons_narcotic_id_fkey FOREIGN KEY (narcotic_id) REFERENCES public.narcotics(id) ON DELETE CASCADE;
+alter table public.narcotic_persons add constraint narcotic_persons_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE CASCADE;
+alter table public.narcotic_persons add constraint narcotic_persons_source_case_id_fkey FOREIGN KEY (source_case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.narcotic_persons add constraint narcotic_persons_source_report_id_fkey FOREIGN KEY (source_report_id) REFERENCES public.reports(id) ON DELETE SET NULL;
+alter table public.narcotic_persons add constraint narcotic_persons_source_evidence_id_fkey FOREIGN KEY (source_evidence_id) REFERENCES public.evidence(id) ON DELETE SET NULL;
+alter table public.narcotic_persons add constraint narcotic_persons_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.narcotic_persons add constraint narcotic_persons_role_check CHECK ((role = ANY (ARRAY['suspected_supplier'::text, 'distributor'::text, 'seller'::text, 'producer'::text, 'cultivator'::text, 'courier'::text, 'buyer'::text, 'user'::text, 'financier'::text, 'possible_mention'::text, 'historical_association'::text])));
+alter table public.narcotic_persons add constraint narcotic_persons_link_status_check CHECK ((link_status = ANY (ARRAY['current'::text, 'historical'::text, 'disputed'::text])));
+alter table public.narcotic_persons add constraint narcotic_persons_confidence_check CHECK (((confidence IS NULL) OR (confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
+alter table public.narcotic_persons add constraint narcotic_persons_provenance_check CHECK (((provenance IS NULL) OR (provenance = ANY (ARRAY['imported'::text, 'reported'::text, 'manually_confirmed'::text, 'inferred'::text, 'historical'::text, 'disputed'::text]))));
+alter table public.narcotic_persons enable row level security;
+
+create table public.narcotic_places (
+  id uuid not null default gen_random_uuid(),
+  narcotic_id uuid not null,
+  place_id uuid not null,
+  role text not null,
+  link_status text not null default 'current'::text,
+  confidence text,
+  provenance text,
+  source_case_id uuid,
+  source_report_id uuid,
+  source_evidence_id uuid,
+  first_observed timestamp with time zone,
+  last_confirmed timestamp with time zone,
+  notes text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.narcotic_places add constraint narcotic_places_pkey PRIMARY KEY (id);
+alter table public.narcotic_places add constraint narcotic_places_narcotic_id_place_id_role_key UNIQUE (narcotic_id, place_id, role);
+alter table public.narcotic_places add constraint narcotic_places_narcotic_id_fkey FOREIGN KEY (narcotic_id) REFERENCES public.narcotics(id) ON DELETE CASCADE;
+alter table public.narcotic_places add constraint narcotic_places_place_id_fkey FOREIGN KEY (place_id) REFERENCES public.places(id) ON DELETE CASCADE;
+alter table public.narcotic_places add constraint narcotic_places_source_case_id_fkey FOREIGN KEY (source_case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.narcotic_places add constraint narcotic_places_source_report_id_fkey FOREIGN KEY (source_report_id) REFERENCES public.reports(id) ON DELETE SET NULL;
+alter table public.narcotic_places add constraint narcotic_places_source_evidence_id_fkey FOREIGN KEY (source_evidence_id) REFERENCES public.evidence(id) ON DELETE SET NULL;
+alter table public.narcotic_places add constraint narcotic_places_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.narcotic_places add constraint narcotic_places_role_check CHECK ((role = ANY (ARRAY['produced_at'::text, 'cultivated_at'::text, 'processed_at'::text, 'packaged_at'::text, 'stored_at'::text, 'sold_at'::text, 'distributed_from'::text, 'seized_at'::text, 'observed_at'::text, 'suspected_at'::text, 'historical_association'::text])));
+alter table public.narcotic_places add constraint narcotic_places_link_status_check CHECK ((link_status = ANY (ARRAY['current'::text, 'historical'::text, 'disputed'::text])));
+alter table public.narcotic_places add constraint narcotic_places_confidence_check CHECK (((confidence IS NULL) OR (confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
+alter table public.narcotic_places add constraint narcotic_places_provenance_check CHECK (((provenance IS NULL) OR (provenance = ANY (ARRAY['imported'::text, 'reported'::text, 'manually_confirmed'::text, 'inferred'::text, 'historical'::text, 'disputed'::text]))));
+alter table public.narcotic_places enable row level security;
+
 create table public.narcotic_precursors (
   id uuid not null default gen_random_uuid(),
   narcotic_id uuid not null,
@@ -1207,6 +1325,116 @@ create table public.narcotic_precursors (
 alter table public.narcotic_precursors add constraint narcotic_precursors_pkey PRIMARY KEY (id);
 alter table public.narcotic_precursors add constraint narcotic_precursors_narcotic_id_fkey FOREIGN KEY (narcotic_id) REFERENCES public.narcotics(id) ON DELETE CASCADE;
 alter table public.narcotic_precursors enable row level security;
+
+create table public.narcotic_seizures (
+  id uuid not null default gen_random_uuid(),
+  narcotic_id uuid not null,
+  case_id uuid,
+  evidence_id uuid,
+  state text not null default 'suspected'::text,
+  amount_recorded text,
+  unit_recorded text,
+  packaging text,
+  location text,
+  seized_at timestamp with time zone,
+  notes text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.narcotic_seizures add constraint narcotic_seizures_pkey PRIMARY KEY (id);
+alter table public.narcotic_seizures add constraint narcotic_seizures_narcotic_id_fkey FOREIGN KEY (narcotic_id) REFERENCES public.narcotics(id) ON DELETE CASCADE;
+alter table public.narcotic_seizures add constraint narcotic_seizures_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.narcotic_seizures add constraint narcotic_seizures_evidence_id_fkey FOREIGN KEY (evidence_id) REFERENCES public.evidence(id) ON DELETE SET NULL;
+alter table public.narcotic_seizures add constraint narcotic_seizures_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.narcotic_seizures add constraint narcotic_seizures_state_check CHECK ((state = ANY (ARRAY['suspected'::text, 'confirmed'::text, 'lab_confirmed'::text, 'disproven'::text])));
+alter table public.narcotic_seizures enable row level security;
+-- Seizure log: amount_recorded/unit_recorded stay TEXT exactly as recorded —
+-- never normalized.
+
+create table public.narcotic_suggestion_events (
+  id uuid not null default gen_random_uuid(),
+  suggestion_id uuid not null,
+  event_type text not null,
+  from_status text,
+  to_status text,
+  note text,
+  actor_id uuid,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.narcotic_suggestion_events add constraint narcotic_suggestion_events_pkey PRIMARY KEY (id);
+alter table public.narcotic_suggestion_events add constraint narcotic_suggestion_events_suggestion_id_fkey FOREIGN KEY (suggestion_id) REFERENCES public.narcotic_suggestions(id) ON DELETE CASCADE;
+alter table public.narcotic_suggestion_events add constraint narcotic_suggestion_events_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.narcotic_suggestion_events enable row level security;
+-- Append-only history written by the suggestion RPCs; SELECT is the only
+-- policy and inherits the parent suggestion's visibility.
+
+create table public.narcotic_suggestions (
+  id uuid not null default gen_random_uuid(),
+  narcotic_id uuid,
+  suggestion_type text not null default 'other'::text,
+  title text not null,
+  explanation text not null,
+  proposed_value text,
+  source_case_id uuid,
+  source_report_id uuid,
+  source_evidence_id uuid,
+  status text not null default 'submitted'::text,
+  decided_by uuid,
+  decided_at timestamp with time zone,
+  decision_note text,
+  created_by uuid not null default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.narcotic_suggestions add constraint narcotic_suggestions_pkey PRIMARY KEY (id);
+alter table public.narcotic_suggestions add constraint narcotic_suggestions_narcotic_id_fkey FOREIGN KEY (narcotic_id) REFERENCES public.narcotics(id) ON DELETE SET NULL;
+alter table public.narcotic_suggestions add constraint narcotic_suggestions_source_case_id_fkey FOREIGN KEY (source_case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.narcotic_suggestions add constraint narcotic_suggestions_source_report_id_fkey FOREIGN KEY (source_report_id) REFERENCES public.reports(id) ON DELETE SET NULL;
+alter table public.narcotic_suggestions add constraint narcotic_suggestions_source_evidence_id_fkey FOREIGN KEY (source_evidence_id) REFERENCES public.evidence(id) ON DELETE SET NULL;
+alter table public.narcotic_suggestions add constraint narcotic_suggestions_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.narcotic_suggestions add constraint narcotic_suggestions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.narcotic_suggestions add constraint narcotic_suggestions_suggestion_type_check CHECK ((suggestion_type = ANY (ARRAY['incorrect_name'::text, 'missing_alias'::text, 'wrong_category'::text, 'incorrect_description'::text, 'missing_packaging'::text, 'missing_charge_link'::text, 'missing_case_link'::text, 'missing_place_link'::text, 'new_substance'::text, 'duplicate'::text, 'other'::text])));
+alter table public.narcotic_suggestions add constraint narcotic_suggestions_status_check CHECK ((status = ANY (ARRAY['submitted'::text, 'under_review'::text, 'accepted'::text, 'declined'::text, 'needs_more_information'::text, 'duplicate'::text])));
+alter table public.narcotic_suggestions add constraint narcotic_suggestions_title_len CHECK (((char_length(btrim(title)) >= 1) AND (char_length(btrim(title)) <= 200)));
+alter table public.narcotic_suggestions add constraint narcotic_suggestions_explanation_len CHECK (((char_length(btrim(explanation)) >= 1) AND (char_length(btrim(explanation)) <= 8000)));
+alter table public.narcotic_suggestions enable row level security;
+-- Detective suggestion tracker: writes are RPC-only (submit_narcotic_suggestion /
+-- decide_narcotic_suggestion); SELECT is the only policy (submitter + catalog
+-- managers + Owner; anon denied). narcotic_id is NULL only for 'new_substance'
+-- proposals.
+
+create table public.narcotic_vehicles (
+  id uuid not null default gen_random_uuid(),
+  narcotic_id uuid not null,
+  vehicle_id uuid not null,
+  role text not null,
+  link_status text not null default 'current'::text,
+  confidence text,
+  provenance text,
+  source_case_id uuid,
+  source_report_id uuid,
+  source_evidence_id uuid,
+  first_observed timestamp with time zone,
+  last_confirmed timestamp with time zone,
+  notes text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.narcotic_vehicles add constraint narcotic_vehicles_pkey PRIMARY KEY (id);
+alter table public.narcotic_vehicles add constraint narcotic_vehicles_narcotic_id_vehicle_id_role_key UNIQUE (narcotic_id, vehicle_id, role);
+alter table public.narcotic_vehicles add constraint narcotic_vehicles_narcotic_id_fkey FOREIGN KEY (narcotic_id) REFERENCES public.narcotics(id) ON DELETE CASCADE;
+alter table public.narcotic_vehicles add constraint narcotic_vehicles_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id) ON DELETE CASCADE;
+alter table public.narcotic_vehicles add constraint narcotic_vehicles_source_case_id_fkey FOREIGN KEY (source_case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.narcotic_vehicles add constraint narcotic_vehicles_source_report_id_fkey FOREIGN KEY (source_report_id) REFERENCES public.reports(id) ON DELETE SET NULL;
+alter table public.narcotic_vehicles add constraint narcotic_vehicles_source_evidence_id_fkey FOREIGN KEY (source_evidence_id) REFERENCES public.evidence(id) ON DELETE SET NULL;
+alter table public.narcotic_vehicles add constraint narcotic_vehicles_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.narcotic_vehicles add constraint narcotic_vehicles_role_check CHECK ((role = ANY (ARRAY['transport'::text, 'sale'::text, 'distribution'::text, 'storage'::text, 'seized_with'::text, 'observed_at_location'::text, 'suspected_association'::text, 'historical_association'::text])));
+alter table public.narcotic_vehicles add constraint narcotic_vehicles_link_status_check CHECK ((link_status = ANY (ARRAY['current'::text, 'historical'::text, 'disputed'::text])));
+alter table public.narcotic_vehicles add constraint narcotic_vehicles_confidence_check CHECK (((confidence IS NULL) OR (confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
+alter table public.narcotic_vehicles add constraint narcotic_vehicles_provenance_check CHECK (((provenance IS NULL) OR (provenance = ANY (ARRAY['imported'::text, 'reported'::text, 'manually_confirmed'::text, 'inferred'::text, 'historical'::text, 'disputed'::text]))));
+alter table public.narcotic_vehicles enable row level security;
 
 create table public.membership_request_history (
   id uuid not null default gen_random_uuid(),
@@ -1265,10 +1493,51 @@ create table public.narcotics (
   street_price numeric default 0,
   wholesale_price numeric default 0,
   created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now()
+  updated_at timestamp with time zone not null default now(),
+  category text not null default 'unknown'::text,
+  status text not null default 'reported'::text,
+  summary text,
+  appearance text,
+  packaging text,
+  scene_indicators text,
+  officer_safety text,
+  intelligence_gaps text,
+  in_city_significance text,
+  server_specific boolean not null default false,
+  restricted boolean not null default false,
+  confidence text,
+  provenance text,
+  charge_codes jsonb not null default '[]'::jsonb,
+  first_recorded_at timestamp with time zone,
+  last_confirmed_at timestamp with time zone,
+  reviewed_at timestamp with time zone,
+  reviewed_by uuid,
+  created_by uuid,
+  source_case_id uuid,
+  source_evidence_id uuid,
+  merged_into uuid,
+  representative_media_id uuid,
+  search_tsv tsvector generated always as (to_tsvector('english'::regconfig, ((((COALESCE(name, ''::text) || ' '::text) || COALESCE(classification, ''::text)) || ' '::text) || COALESCE(summary, ''::text)))) stored
 );
 alter table public.narcotics add constraint narcotics_pkey PRIMARY KEY (id);
+alter table public.narcotics add constraint narcotics_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.narcotics add constraint narcotics_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.narcotics add constraint narcotics_source_case_id_fkey FOREIGN KEY (source_case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.narcotics add constraint narcotics_source_evidence_id_fkey FOREIGN KEY (source_evidence_id) REFERENCES public.evidence(id) ON DELETE SET NULL;
+alter table public.narcotics add constraint narcotics_merged_into_fkey FOREIGN KEY (merged_into) REFERENCES public.narcotics(id) ON DELETE SET NULL;
+alter table public.narcotics add constraint narcotics_representative_media_id_fkey FOREIGN KEY (representative_media_id) REFERENCES public.media(id) ON DELETE SET NULL;
+alter table public.narcotics add constraint narcotics_category_check CHECK ((category = ANY (ARRAY['cannabis'::text, 'stimulant'::text, 'opioid'::text, 'sedative'::text, 'hallucinogen'::text, 'synthetic'::text, 'unknown'::text])));
+alter table public.narcotics add constraint narcotics_status_check CHECK ((status = ANY (ARRAY['confirmed'::text, 'reported'::text, 'unidentified'::text, 'suspected'::text, 'disproven'::text, 'archived'::text, 'merged'::text])));
+alter table public.narcotics add constraint narcotics_confidence_check CHECK (((confidence IS NULL) OR (confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
+alter table public.narcotics add constraint narcotics_provenance_check CHECK (((provenance IS NULL) OR (provenance = ANY (ARRAY['imported'::text, 'reported'::text, 'manually_confirmed'::text, 'inferred'::text, 'historical'::text, 'disputed'::text]))));
+alter table public.narcotics add constraint narcotics_not_self_merge_check CHECK (((merged_into IS NULL) OR (merged_into <> id)));
 alter table public.narcotics enable row level security;
+-- v1.25 narcotics intelligence: unidentified/suspected are the provisional
+-- "unknown substance" states, merged is a tombstone set only by
+-- merge_narcotics(); the narcotics_guard BEFORE trigger
+-- (private.guard_narcotic()) pins created_by/merged_into and, for
+-- non-managers, the authority columns (status/restricted/category/
+-- classification/charge_codes/reviewed_*) against direct client writes.
 
 create table public.notifications (
   id uuid not null default gen_random_uuid(),
@@ -1836,15 +2105,65 @@ CREATE INDEX indicators_created_by_fkey_idx ON public.indicators USING btree (cr
 CREATE INDEX indicators_value_idx ON public.indicators USING btree (lower(btrim(value)));
 CREATE INDEX media_case_id_idx ON public.media USING btree (case_id);
 CREATE INDEX media_gang_id_fkey_idx ON public.media USING btree (gang_id);
+CREATE INDEX media_narcotic_id_fkey_idx ON public.media USING btree (narcotic_id);
 CREATE INDEX media_person_id_fkey_idx ON public.media USING btree (person_id);
 CREATE INDEX media_place_id_fkey_idx ON public.media USING btree (place_id);
 CREATE INDEX media_uploaded_by_fkey_idx ON public.media USING btree (uploaded_by);
 CREATE INDEX mo_profiles_case_id_fkey_idx ON public.mo_profiles USING btree (case_id);
+CREATE INDEX narcotic_aliases_created_by_fkey_idx ON public.narcotic_aliases USING btree (created_by);
+CREATE UNIQUE INDEX narcotic_aliases_narcotic_alias_key ON public.narcotic_aliases USING btree (narcotic_id, lower(alias));
+CREATE INDEX narcotic_aliases_narcotic_id_fkey_idx ON public.narcotic_aliases USING btree (narcotic_id);
+CREATE INDEX narcotic_aliases_source_case_id_fkey_idx ON public.narcotic_aliases USING btree (source_case_id);
+CREATE INDEX narcotic_gangs_created_by_fkey_idx ON public.narcotic_gangs USING btree (created_by);
+CREATE INDEX narcotic_gangs_gang_id_fkey_idx ON public.narcotic_gangs USING btree (gang_id);
+CREATE INDEX narcotic_gangs_narcotic_id_fkey_idx ON public.narcotic_gangs USING btree (narcotic_id);
+CREATE INDEX narcotic_gangs_source_case_id_fkey_idx ON public.narcotic_gangs USING btree (source_case_id);
+CREATE INDEX narcotic_gangs_source_evidence_id_fkey_idx ON public.narcotic_gangs USING btree (source_evidence_id);
+CREATE INDEX narcotic_gangs_source_report_id_fkey_idx ON public.narcotic_gangs USING btree (source_report_id);
 CREATE INDEX narcotic_hotspots_case_id_fkey_idx ON public.narcotic_hotspots USING btree (case_id);
 CREATE INDEX narcotic_hotspots_narcotic_id_fkey_idx ON public.narcotic_hotspots USING btree (narcotic_id);
 CREATE INDEX narcotic_hotspots_place_id_fkey_idx ON public.narcotic_hotspots USING btree (place_id);
+CREATE INDEX narcotic_persons_created_by_fkey_idx ON public.narcotic_persons USING btree (created_by);
+CREATE INDEX narcotic_persons_narcotic_id_fkey_idx ON public.narcotic_persons USING btree (narcotic_id);
+CREATE INDEX narcotic_persons_person_id_fkey_idx ON public.narcotic_persons USING btree (person_id);
+CREATE INDEX narcotic_persons_source_case_id_fkey_idx ON public.narcotic_persons USING btree (source_case_id);
+CREATE INDEX narcotic_persons_source_evidence_id_fkey_idx ON public.narcotic_persons USING btree (source_evidence_id);
+CREATE INDEX narcotic_persons_source_report_id_fkey_idx ON public.narcotic_persons USING btree (source_report_id);
+CREATE INDEX narcotic_places_created_by_fkey_idx ON public.narcotic_places USING btree (created_by);
+CREATE INDEX narcotic_places_narcotic_id_fkey_idx ON public.narcotic_places USING btree (narcotic_id);
+CREATE INDEX narcotic_places_place_id_fkey_idx ON public.narcotic_places USING btree (place_id);
+CREATE INDEX narcotic_places_source_case_id_fkey_idx ON public.narcotic_places USING btree (source_case_id);
+CREATE INDEX narcotic_places_source_evidence_id_fkey_idx ON public.narcotic_places USING btree (source_evidence_id);
+CREATE INDEX narcotic_places_source_report_id_fkey_idx ON public.narcotic_places USING btree (source_report_id);
 CREATE INDEX narcotic_precursors_narcotic_id_fkey_idx ON public.narcotic_precursors USING btree (narcotic_id);
+CREATE INDEX narcotic_seizures_case_id_fkey_idx ON public.narcotic_seizures USING btree (case_id);
+CREATE INDEX narcotic_seizures_created_by_fkey_idx ON public.narcotic_seizures USING btree (created_by);
+CREATE INDEX narcotic_seizures_evidence_id_fkey_idx ON public.narcotic_seizures USING btree (evidence_id);
+CREATE INDEX narcotic_seizures_narcotic_id_fkey_idx ON public.narcotic_seizures USING btree (narcotic_id);
+CREATE INDEX narcotic_suggestion_events_actor_idx ON public.narcotic_suggestion_events USING btree (actor_id);
+CREATE INDEX narcotic_suggestion_events_suggestion_idx ON public.narcotic_suggestion_events USING btree (suggestion_id);
+CREATE INDEX narcotic_suggestions_case_idx ON public.narcotic_suggestions USING btree (source_case_id);
+CREATE INDEX narcotic_suggestions_created_by_idx ON public.narcotic_suggestions USING btree (created_by);
+CREATE INDEX narcotic_suggestions_decided_by_idx ON public.narcotic_suggestions USING btree (decided_by);
+CREATE INDEX narcotic_suggestions_evidence_idx ON public.narcotic_suggestions USING btree (source_evidence_id);
+CREATE INDEX narcotic_suggestions_narcotic_idx ON public.narcotic_suggestions USING btree (narcotic_id);
+CREATE INDEX narcotic_suggestions_report_idx ON public.narcotic_suggestions USING btree (source_report_id);
+CREATE INDEX narcotic_suggestions_status_idx ON public.narcotic_suggestions USING btree (status);
+CREATE INDEX narcotic_vehicles_created_by_fkey_idx ON public.narcotic_vehicles USING btree (created_by);
+CREATE INDEX narcotic_vehicles_narcotic_id_fkey_idx ON public.narcotic_vehicles USING btree (narcotic_id);
+CREATE INDEX narcotic_vehicles_source_case_id_fkey_idx ON public.narcotic_vehicles USING btree (source_case_id);
+CREATE INDEX narcotic_vehicles_source_evidence_id_fkey_idx ON public.narcotic_vehicles USING btree (source_evidence_id);
+CREATE INDEX narcotic_vehicles_source_report_id_fkey_idx ON public.narcotic_vehicles USING btree (source_report_id);
+CREATE INDEX narcotic_vehicles_vehicle_id_fkey_idx ON public.narcotic_vehicles USING btree (vehicle_id);
+CREATE INDEX narcotics_created_by_fkey_idx ON public.narcotics USING btree (created_by);
+CREATE INDEX narcotics_merged_into_fkey_idx ON public.narcotics USING btree (merged_into);
 CREATE INDEX narcotics_name_trgm ON public.narcotics USING gin (name extensions.gin_trgm_ops);
+CREATE INDEX narcotics_representative_media_id_fkey_idx ON public.narcotics USING btree (representative_media_id);
+CREATE INDEX narcotics_reviewed_by_fkey_idx ON public.narcotics USING btree (reviewed_by);
+CREATE INDEX narcotics_search_tsv_idx ON public.narcotics USING gin (search_tsv);
+CREATE INDEX narcotics_source_case_id_fkey_idx ON public.narcotics USING btree (source_case_id);
+CREATE INDEX narcotics_source_evidence_id_fkey_idx ON public.narcotics USING btree (source_evidence_id);
+CREATE INDEX narcotics_status_idx ON public.narcotics USING btree (status);
 CREATE INDEX notifications_user_id_read_idx ON public.notifications USING btree (user_id, read);
 CREATE INDEX person_places_person_id_fkey_idx ON public.person_places USING btree (person_id);
 CREATE INDEX person_places_place_id_fkey_idx ON public.person_places USING btree (place_id);
@@ -3090,12 +3409,26 @@ AS $function$
       where p.lq <> '' and (v.plate ilike p.lk or v.model ilike p.lk or v.color ilike p.lk or v.notes ilike p.lk
             or word_similarity(p.lq, lower(v.plate)) > p.thr)
       union all
+      -- Narcotics: merged tombstones excluded; aliases (street/server names)
+      -- searched alongside name/classification. SECURITY INVOKER: both tables
+      -- pass through the caller's RLS, so restricted rows (and their aliases)
+      -- fail closed for callers below senior_detective.
       select 'narcotic', n.id, n.name, coalesce(n.classification, ''), n.name,
              greatest(word_similarity(p.lq, lower(n.name)),
-                      case when n.name ilike p.lk or n.classification ilike p.lk then 0.95 else 0 end)
+                      case when n.name ilike p.lk or n.classification ilike p.lk then 0.95 else 0 end,
+                      case when exists (select 1 from public.narcotic_aliases a
+                                         where a.narcotic_id = n.id
+                                           and (a.alias ilike p.lk
+                                                or word_similarity(p.lq, lower(a.alias)) > p.thr))
+                           then 0.9 else 0 end)
       from public.narcotics n, p
-      where p.lq <> '' and (n.name ilike p.lk or n.classification ilike p.lk
-            or word_similarity(p.lq, lower(n.name)) > p.thr)
+      where p.lq <> '' and n.status <> 'merged'
+        and (n.name ilike p.lk or n.classification ilike p.lk
+            or word_similarity(p.lq, lower(n.name)) > p.thr
+            or exists (select 1 from public.narcotic_aliases a
+                        where a.narcotic_id = n.id
+                          and (a.alias ilike p.lk
+                               or word_similarity(p.lq, lower(a.alias)) > p.thr)))
       union all
       select 'bench', b.id, b.name, coalesce('Tier ' || b.tier, b.bench_type::text, 'bench'), null::text,
              greatest(word_similarity(p.lq, lower(coalesce(b.name, ''))),
@@ -4015,6 +4348,20 @@ CREATE TRIGGER gangs_touch BEFORE UPDATE ON public.gangs FOR EACH ROW EXECUTE FU
 CREATE TRIGGER media_audit AFTER INSERT OR DELETE OR UPDATE ON public.media FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER media_touch BEFORE UPDATE ON public.media FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER mo_profiles_touch BEFORE UPDATE ON public.mo_profiles FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER narcotic_aliases_audit AFTER INSERT OR DELETE OR UPDATE ON public.narcotic_aliases FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER narcotic_gangs_audit AFTER INSERT OR DELETE OR UPDATE ON public.narcotic_gangs FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER narcotic_gangs_touch BEFORE UPDATE ON public.narcotic_gangs FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER narcotic_persons_audit AFTER INSERT OR DELETE OR UPDATE ON public.narcotic_persons FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER narcotic_persons_touch BEFORE UPDATE ON public.narcotic_persons FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER narcotic_places_audit AFTER INSERT OR DELETE OR UPDATE ON public.narcotic_places FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER narcotic_places_touch BEFORE UPDATE ON public.narcotic_places FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER narcotic_seizures_audit AFTER INSERT OR DELETE OR UPDATE ON public.narcotic_seizures FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER narcotic_seizures_touch BEFORE UPDATE ON public.narcotic_seizures FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER narcotic_suggestions_touch BEFORE UPDATE ON public.narcotic_suggestions FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER narcotic_vehicles_audit AFTER INSERT OR DELETE OR UPDATE ON public.narcotic_vehicles FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER narcotic_vehicles_touch BEFORE UPDATE ON public.narcotic_vehicles FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER narcotics_audit AFTER INSERT OR DELETE OR UPDATE ON public.narcotics FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER narcotics_guard BEFORE INSERT OR UPDATE ON public.narcotics FOR EACH ROW EXECUTE FUNCTION private.guard_narcotic();
 CREATE TRIGGER narcotics_touch BEFORE UPDATE ON public.narcotics FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER operations_touch BEFORE UPDATE ON public.operations FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER person_places_audit AFTER INSERT OR DELETE OR UPDATE ON public.person_places FOR EACH ROW EXECUTE FUNCTION private.audit();
@@ -4682,6 +5029,48 @@ create policy mo_profiles_upd on public.mo_profiles
   using (private.can_access_case(case_id))
   with check (private.can_access_case(case_id));
 
+create policy narcotic_aliases_del on public.narcotic_aliases
+  as permissive for delete to authenticated
+  using (private.can_edit_narcotics_intel());
+
+create policy narcotic_aliases_ins on public.narcotic_aliases
+  as permissive for insert to authenticated
+  with check ((private.is_active() AND (EXISTS ( SELECT 1
+   FROM public.narcotics n
+  WHERE (n.id = narcotic_aliases.narcotic_id)))));
+
+create policy narcotic_aliases_sel on public.narcotic_aliases
+  as permissive for select to authenticated
+  using ((private.is_active() AND (EXISTS ( SELECT 1
+   FROM public.narcotics n
+  WHERE (n.id = narcotic_aliases.narcotic_id)))));
+
+create policy narcotic_aliases_upd on public.narcotic_aliases
+  as permissive for update to authenticated
+  using ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))))
+  with check ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))));
+
+create policy narcotic_gangs_del on public.narcotic_gangs
+  as permissive for delete to authenticated
+  using (private.can_edit_narcotics_intel());
+
+create policy narcotic_gangs_ins on public.narcotic_gangs
+  as permissive for insert to authenticated
+  with check ((private.is_active() AND (EXISTS ( SELECT 1
+   FROM public.narcotics n
+  WHERE (n.id = narcotic_gangs.narcotic_id)))));
+
+create policy narcotic_gangs_sel on public.narcotic_gangs
+  as permissive for select to authenticated
+  using ((private.is_active() AND (EXISTS ( SELECT 1
+   FROM public.narcotics n
+  WHERE (n.id = narcotic_gangs.narcotic_id)))));
+
+create policy narcotic_gangs_upd on public.narcotic_gangs
+  as permissive for update to authenticated
+  using ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))))
+  with check ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))));
+
 create policy narcotic_hotspots_del on public.narcotic_hotspots
   as permissive for delete to authenticated
   using (private.can_delete());
@@ -4698,6 +5087,48 @@ create policy narcotic_hotspots_upd on public.narcotic_hotspots
   as permissive for update to authenticated
   using (private.is_active())
   with check (private.is_active());
+
+create policy narcotic_persons_del on public.narcotic_persons
+  as permissive for delete to authenticated
+  using (private.can_edit_narcotics_intel());
+
+create policy narcotic_persons_ins on public.narcotic_persons
+  as permissive for insert to authenticated
+  with check ((private.is_active() AND (EXISTS ( SELECT 1
+   FROM public.narcotics n
+  WHERE (n.id = narcotic_persons.narcotic_id)))));
+
+create policy narcotic_persons_sel on public.narcotic_persons
+  as permissive for select to authenticated
+  using ((private.is_active() AND (EXISTS ( SELECT 1
+   FROM public.narcotics n
+  WHERE (n.id = narcotic_persons.narcotic_id)))));
+
+create policy narcotic_persons_upd on public.narcotic_persons
+  as permissive for update to authenticated
+  using ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))))
+  with check ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))));
+
+create policy narcotic_places_del on public.narcotic_places
+  as permissive for delete to authenticated
+  using (private.can_edit_narcotics_intel());
+
+create policy narcotic_places_ins on public.narcotic_places
+  as permissive for insert to authenticated
+  with check ((private.is_active() AND (EXISTS ( SELECT 1
+   FROM public.narcotics n
+  WHERE (n.id = narcotic_places.narcotic_id)))));
+
+create policy narcotic_places_sel on public.narcotic_places
+  as permissive for select to authenticated
+  using ((private.is_active() AND (EXISTS ( SELECT 1
+   FROM public.narcotics n
+  WHERE (n.id = narcotic_places.narcotic_id)))));
+
+create policy narcotic_places_upd on public.narcotic_places
+  as permissive for update to authenticated
+  using ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))))
+  with check ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))));
 
 create policy narcotic_precursors_del on public.narcotic_precursors
   as permissive for delete to authenticated
@@ -4716,9 +5147,61 @@ create policy narcotic_precursors_upd on public.narcotic_precursors
   using (private.is_active())
   with check (private.is_active());
 
+create policy narcotic_seizures_del on public.narcotic_seizures
+  as permissive for delete to authenticated
+  using (private.can_edit_narcotics_intel());
+
+create policy narcotic_seizures_ins on public.narcotic_seizures
+  as permissive for insert to authenticated
+  with check ((private.is_active() AND (EXISTS ( SELECT 1
+   FROM public.narcotics n
+  WHERE (n.id = narcotic_seizures.narcotic_id)))));
+
+create policy narcotic_seizures_sel on public.narcotic_seizures
+  as permissive for select to authenticated
+  using ((private.is_active() AND (EXISTS ( SELECT 1
+   FROM public.narcotics n
+  WHERE (n.id = narcotic_seizures.narcotic_id)))));
+
+create policy narcotic_seizures_upd on public.narcotic_seizures
+  as permissive for update to authenticated
+  using ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))))
+  with check ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))));
+
+create policy narcotic_suggestion_events_sel on public.narcotic_suggestion_events
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.narcotic_suggestions s
+  WHERE (s.id = narcotic_suggestion_events.suggestion_id))));
+
+create policy narcotic_suggestions_sel on public.narcotic_suggestions
+  as permissive for select to authenticated
+  using (((created_by = ( SELECT auth.uid() AS uid)) OR private.can_manage_narcotics() OR private.is_owner()));
+
+create policy narcotic_vehicles_del on public.narcotic_vehicles
+  as permissive for delete to authenticated
+  using (private.can_edit_narcotics_intel());
+
+create policy narcotic_vehicles_ins on public.narcotic_vehicles
+  as permissive for insert to authenticated
+  with check ((private.is_active() AND (EXISTS ( SELECT 1
+   FROM public.narcotics n
+  WHERE (n.id = narcotic_vehicles.narcotic_id)))));
+
+create policy narcotic_vehicles_sel on public.narcotic_vehicles
+  as permissive for select to authenticated
+  using ((private.is_active() AND (EXISTS ( SELECT 1
+   FROM public.narcotics n
+  WHERE (n.id = narcotic_vehicles.narcotic_id)))));
+
+create policy narcotic_vehicles_upd on public.narcotic_vehicles
+  as permissive for update to authenticated
+  using ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))))
+  with check ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))));
+
 create policy narcotics_del on public.narcotics
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using (private.is_owner());
 
 create policy narcotics_ins on public.narcotics
   as permissive for insert to authenticated
@@ -4726,12 +5209,12 @@ create policy narcotics_ins on public.narcotics
 
 create policy narcotics_sel on public.narcotics
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active() AND ((NOT restricted) OR private.can_edit_narcotics_intel())));
 
 create policy narcotics_upd on public.narcotics
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)) AND (status = ANY (ARRAY['unidentified'::text, 'suspected'::text])))))
+  with check ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)) AND (status = ANY (ARRAY['unidentified'::text, 'suspected'::text])))));
 
 create policy notif_del on public.notifications
   as permissive for delete to authenticated
@@ -5093,8 +5576,16 @@ create policy wl_sel on public.watchlist
 --   public.indicators
 --   public.media
 --   public.mo_profiles
+--   public.narcotic_aliases
+--   public.narcotic_gangs
 --   public.narcotic_hotspots
+--   public.narcotic_persons
+--   public.narcotic_places
 --   public.narcotic_precursors
+--   public.narcotic_seizures
+--   public.narcotic_suggestion_events
+--   public.narcotic_suggestions
+--   public.narcotic_vehicles
 --   public.narcotics
 --   public.notifications
 --   public.person_places
@@ -5192,10 +5683,26 @@ create policy wl_sel on public.watchlist
 --   media -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   mo_profiles -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   mo_profiles -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_aliases -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_aliases -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_gangs -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_gangs -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   narcotic_hotspots -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   narcotic_hotspots -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_persons -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_persons -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_places -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_places -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   narcotic_precursors -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   narcotic_precursors -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_seizures -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_seizures -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_suggestion_events -> anon: (none — RPC-only writes; realtime SELECT via authenticated)
+--   narcotic_suggestion_events -> authenticated: SELECT (RLS-scoped; writes are RPC-only)
+--   narcotic_suggestions -> anon: (none — RPC-only writes; realtime SELECT via authenticated)
+--   narcotic_suggestions -> authenticated: SELECT (RLS-scoped; writes are RPC-only)
+--   narcotic_vehicles -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_vehicles -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   narcotics -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   narcotics -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   notifications -> anon: DELETE, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -5439,3 +5946,39 @@ create policy wl_sel on public.watchlist
 -- function" until this grant restored invoke rights (revoke from PUBLIC kept;
 -- grant scoped precisely to authenticated). Definitive SQL in
 -- supabase/migrations/20260802020000_fix_document_authority_grants.sql.
+-- 20260803010000_narcotics_intelligence: narcotics gained the category/status
+-- lifecycle, intel narrative, server_specific/restricted/confidence/provenance/
+-- charge_codes, recorded/confirmed/review, provisional-origin
+-- (source_case_id/source_evidence_id), merged_into tombstone,
+-- representative_media_id and generated search_tsv columns (+ their CHECKs,
+-- FKs and indexes); media gained narcotic_id; case_intel_links_kind_check now
+-- admits 'narcotic' (all mirrored above). Eight new tables — narcotic_aliases,
+-- narcotic_places / narcotic_persons / narcotic_gangs / narcotic_vehicles
+-- (typed link tables, real FKs), narcotic_seizures (amounts stay TEXT), and
+-- narcotic_suggestions (+ narcotic_suggestion_events; RPC-only writes,
+-- SELECT-only RLS, realtime SELECT granted to authenticated) — with their
+-- touch/audit triggers, RLS enabled, and the policies mirrored above. The
+-- re-emitted narcotics_sel/ins/upd/del policies hide restricted rows below
+-- senior_detective, let detectives create/edit only their own provisional
+-- (unidentified/suspected) records and make delete Owner-only; the
+-- narcotics_guard BEFORE trigger (private.guard_narcotic(), deliberately
+-- NON-definer so current_user reflects the client role) pins created_by/
+-- merged_into and the non-manager authority columns; narcotics_audit closes
+-- the audit-trail gap. New helpers: private.can_manage_narcotics() [Bureau
+-- Lead/Deputy Director/Director/Owner] and private.can_edit_narcotics_intel()
+-- [senior_detective+] — both referenced DIRECTLY in RLS policy predicates, so
+-- both are revoke-from-public THEN granted to authenticated (the 20260802020000
+-- lesson applied up front). New RPCs: public.merge_narcotics(uuid, uuid, text)
+-- [tombstone merge; repoints children/media/legacy tables/case_intel_links],
+-- public.resolve_provisional_narcotic(uuid, text, uuid, text),
+-- public.submit_narcotic_suggestion(uuid, text, text, text, text, uuid, uuid, uuid),
+-- public.decide_narcotic_suggestion(uuid, text, text) — all SECURITY DEFINER,
+-- set search_path = '', audit-logged, revoked from public/anon and granted to
+-- authenticated, service_role. public.search_all(text) was re-emitted with
+-- only the narcotic branch extended (alias matches; merged tombstones
+-- excluded — mirrored above); NEW public.search_narcotics(text, int) is a
+-- SECURITY INVOKER narrow-projection search over search_tsv/name/aliases
+-- (caller RLS decides which rows exist). Seed data (canonical catalog rows +
+-- street/server aliases) is data, not schema — re-run the migration's section
+-- 18 on a fresh rebuild. Definitive SQL in
+-- supabase/migrations/20260803010000_narcotics_intelligence.sql.

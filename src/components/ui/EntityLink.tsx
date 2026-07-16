@@ -10,10 +10,10 @@
 import { useRouter } from 'next/navigation'
 import { caseLink } from '@/lib/caseLinks'
 
-export type EntityKind = 'person' | 'vehicle' | 'case' | 'gang' | 'place'
+export type EntityKind = 'person' | 'vehicle' | 'case' | 'gang' | 'place' | 'narcotic'
 
 /** Build the deep-link href for a record. `label` is used for gangs (which key
- *  off `?q=`), `id` for the id-addressed tabs. */
+ *  off `?q=`), `id` for the id-addressed tabs (narcotics key off `?drug=`). */
 export function entityHref(kind: EntityKind, ref: { id?: string; label?: string }): string {
   const enc = encodeURIComponent
   switch (kind) {
@@ -22,11 +22,12 @@ export function entityHref(kind: EntityKind, ref: { id?: string; label?: string 
     case 'case': return caseLink(ref.id ?? '')
     case 'gang': return `/gangs?q=${enc(ref.label ?? ref.id ?? '')}`
     case 'place': return `/places?q=${enc(ref.label ?? '')}`
+    case 'narcotic': return `/narcotics?drug=${enc(ref.id ?? '')}`
   }
 }
 
 const ICON: Record<EntityKind, string> = {
-  person: '👤', vehicle: '🚗', case: '📁', gang: '🚩', place: '📍',
+  person: '👤', vehicle: '🚗', case: '📁', gang: '🚩', place: '📍', narcotic: '💊',
 }
 
 export function EntityLink({
