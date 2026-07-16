@@ -6,7 +6,7 @@
  *  previous items stay on screen while a realtime-triggered refresh is in
  *  flight, so the queue never flashes empty. */
 import { useCallback, useEffect, useState } from 'react'
-import { buildActionItems, type AcDoc, type ActionItem, type ActionSources } from '@/lib/actionItems'
+import { buildActionItems, type AcDoc, type AcSuggestion, type ActionItem, type ActionSources } from '@/lib/actionItems'
 import {
   ackState, canApproveDoc, docTitle, reviewState,
   type MyAckVersions, type ShelfDoc,
@@ -36,8 +36,20 @@ const DOC_COLS =
   'id,name,folder,kind,status,category,classification,owner_user_id,mandatory,'
   + 'acknowledgement_required,acknowledgement_deadline,review_due_at,sync_status,'
   + 'current_version_number,created_at,updated_at'
+/** Document-suggestion projection — RLS already scopes visibility to the
+ *  submitter and the managers, so no body/thread columns are ever fetched. */
+const SUGGESTION_COLS = 'id,title,status,document_id,created_by,assigned_editor,created_at,updated_at'
 
 const TRANSFER_PENDING = ['pending_source', 'pending_target']
+
+/** Only open-work statuses can produce an action item (see buildActionItems
+ *  §9c); terminal/waiting rows never need a fetch-side row. */
+const SUGGESTION_OPEN = ['submitted', 'needs_more_information', 'accepted', 'partially_accepted']
+
+interface SuggestionRow {
+  id: string; title: string; status: string; document_id: string | null
+  created_by: string; assigned_editor: string | null; created_at: string; updated_at: string
+}
 
 export interface ActionItemsResult {
   items: ActionItem[]
@@ -71,6 +83,7 @@ export function useActionItems(): ActionItemsResult {
   const vMembership = useTableVersion('membership_requests')
   const vJusticeReqs = useTableVersion('justice_membership_requests')
   const vDocuments = useTableVersion('documents')
+  const vSuggestions = useTableVersion('document_suggestions')
 
   const refresh = useCallback(async () => {
     if (state !== 'in' || !profile) return
@@ -88,7 +101,7 @@ export function useActionItems(): ActionItemsResult {
     }
     try {
       const me = profile.id
-      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks] =
+      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks, suggestionRows] =
         await Promise.all([
           list('cases', { select: CASE_COLS }),
           list('case_tasks', { select: TASK_COLS, eq: { assignee: me, done: false } }),
@@ -125,6 +138,10 @@ export function useActionItems(): ActionItemsResult {
           list('document_acknowledgements', {
             select: 'document_id, documents_versions(version_number)',
           }).catch(() => []),
+          // Document suggestions: RLS returns the submitter's own rows plus any
+          // the viewer manages — open statuses only. Fail-open to empty.
+          list('document_suggestions', { select: SUGGESTION_COLS, in: { status: SUGGESTION_OPEN } })
+            .then((r) => r as unknown as SuggestionRow[]).catch(() => [] as SuggestionRow[]),
         ])
       const nowMs = Date.now()
       // Command/owner: the shared awaitingCount (submitted + actionable
@@ -163,6 +180,16 @@ export function useActionItems(): ActionItemsResult {
         return item.ackPending || item.reviewDue || item.awaitingMyApproval || item.syncConflict
           ? [item] : []
       })
+      // Document suggestions: RLS guarantees a visible non-self row is one the
+      // viewer can manage, so canManage mirrors !mine (the builder re-gates by
+      // status, and the server RPCs are the real authority).
+      const suggestions: AcSuggestion[] = suggestionRows.map((r) => ({
+        id: r.id, title: r.title, status: r.status, documentId: r.document_id,
+        mine: r.created_by === me,
+        canManage: r.created_by !== me,
+        assignedToMe: r.assigned_editor === me,
+        createdAt: r.created_at, updatedAt: r.updated_at,
+      }))
       const sources: ActionSources = {
         me,
         role: profile.role,
@@ -181,6 +208,7 @@ export function useActionItems(): ActionItemsResult {
         blockers,
         notifications,
         documents,
+        suggestions,
       }
       setBuilt(buildActionItems(sources))
       setError(null)
@@ -195,7 +223,7 @@ export function useActionItems(): ActionItemsResult {
   useEffect(() => {
     const id = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(id)
-  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs, vDocuments])
+  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs, vDocuments, vSuggestions])
 
   return {
     items: built?.items ?? [],

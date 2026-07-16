@@ -52,6 +52,7 @@ export const NOTIF_LABEL: Record<string, string> = {
   client_error: '⚠ App error reported',
   case_stale: 'Case going stale',
   stale_case: 'Case going stale',
+  document_suggestion: 'Document suggestion update',
 }
 
 // Payload parsing is zod-validated (v1.14): malformed payloads degrade to {}
@@ -111,6 +112,12 @@ export function notifHref(n: NotificationRow, opts: { command?: boolean } = {}):
   const isLegal = t.startsWith('legal')
   if (isLegal && p.request_id) return `/legal?request=${encodeURIComponent(p.request_id)}`
   if (isLegal) return '/legal'
+  // Document suggestions: open the target document if there is one, else the
+  // review workspace (managers land on the queue; others fall back to the shelf).
+  if (t === 'document_suggestion') {
+    const docId = typeof p.document_id === 'string' ? p.document_id : null
+    return docId ? `/sops?doc=${docId}` : '/sops?view=suggestions'
+  }
   if (t === 'membership_request' || t === 'access_requested') return '/command-center?s=approvals'
   if (t.startsWith('transfer')) return '/command-center?s=promotions'
   // membership_update doubles as the transfer-status fan-out (transfer_id in

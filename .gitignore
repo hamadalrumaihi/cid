@@ -75,3 +75,4 @@ next-env.d.ts
 test-results/
 playwright-report/
 .gang-shots/
+.artifacts/

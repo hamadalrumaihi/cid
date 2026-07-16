@@ -16,10 +16,9 @@ import { insert, list, rpc, updateWhere, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { renderDocumentMarkdown } from '@/lib/markdown'
 import { copyText, fmtDate, fmtDateTime } from '@/lib/format'
-import { officerName, useProfilesStore } from '@/lib/profiles'
+import { useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
-import { useNow } from '@/lib/useNow'
 import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Badge } from '@/components/ui/Badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
@@ -30,10 +29,10 @@ import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { DetailSkeleton } from '@/components/ui/Skeleton'
 import {
-  CATEGORY_LABEL, CLASS_LABEL, STATUS_LABEL, STATUS_TONE, SYNC_LABEL, SYNC_TONE, TYPE_LABEL,
-  ackState, canApproveDoc, canEditDoc, docCategory, docTitle, reviewState,
-  type AckState, type DocRow, type DocViewer, type DocumentClassification, type DocumentStatus,
-  type DocumentType, type MyAckVersions, type SyncStatus,
+  CATEGORY_LABEL, STATUS_LABEL, STATUS_TONE, TYPE_LABEL,
+  ackState, canApproveDoc, canEditDoc, docCategory, docTitle,
+  type AckState, type DocRow, type DocViewer, type DocumentStatus,
+  type DocumentType, type MyAckVersions,
 } from './docModel'
 import { DocToc, scrollToHeading, useActiveHeading } from './DocToc'
 import { DocMetaRail, type CampaignLite, type MyAckLite, type RelationRow, type RelatedDocMeta } from './DocMetaRail'
@@ -94,12 +93,20 @@ export function DocReader(props: {
   docId: string
   onBack: () => void
   onOpenDoc: (id: string) => void
+  /** Optional "Suggest a change" affordance — the button only renders when a
+   *  handler is supplied (a later phase wires the actual form). */
+  onSuggestChange?: (ctx: {
+    documentId: string
+    documentVersion: number
+    sectionId?: string
+    sectionTitle?: string
+    url: string
+  }) => void
 }): React.ReactElement {
-  const { docId, onBack, onOpenDoc } = props
+  const { docId, onBack, onOpenDoc, onSuggestChange } = props
   const { state, profile, isCommand, isOwner, justiceRole } = useAuth()
   const uid = profile?.id ?? null
   const version = useTableVersion('documents')
-  const nowMs = useNow()
 
   const [doc, setDoc] = useState<DocRow | null>(null)
   const [load, setLoad] = useState<'loading' | 'ready' | 'missing' | 'error'>('loading')
@@ -284,9 +291,6 @@ export function DocReader(props: {
 
   const title = docTitle(doc.name)
   const status = doc.status as DocumentStatus
-  const sync = (doc.sync_status ?? 'pending') as SyncStatus
-  const drive = doc.source_system === 'google_drive'
-  const review = reviewState(doc, nowMs)
   const canEdit = canEditDoc(viewer, doc)
   const canApprove = canApproveDoc(viewer, doc)
   const canManage = isCommand || isOwner
@@ -294,9 +298,21 @@ export function DocReader(props: {
 
   const menuItems: ActionItem[] = [
     { label: 'Copy link', onClick: () => copyText(window.location.href, 'Document link') },
+  ]
+  if (onSuggestChange) menuItems.push({
+    label: 'Suggest a change…',
+    onClick: () => onSuggestChange({
+      documentId: docId,
+      documentVersion: doc.current_version_number,
+      sectionId: activeId ?? undefined,
+      sectionTitle: activeId ? headings.find((h) => h.id === activeId)?.text : undefined,
+      url: window.location.href,
+    }),
+  })
+  menuItems.push(
     { label: 'Print', onClick: () => window.print() },
     { label: 'Report issue…', onClick: () => setLifecycle({ kind: 'report' }) },
-  ]
+  )
   if (canEdit) menuItems.push({ label: 'Edit…', separatorBefore: true, onClick: () => setEditorOpen(true) })
   if (canEdit || canApprove) menuItems.push({ label: 'View history', onClick: () => setHistoryOpen(true) })
   if (canEdit && status === 'draft')
@@ -363,33 +379,15 @@ export function DocReader(props: {
             </>
           }
         />
+        {/* Quiet header — collection, type, status, and when it last changed.
+            Everything else (owner, classification, dates, source, version,
+            tags) lives in the Document details panel / metadata rail. */}
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <Badge tone="accent">{TYPE_LABEL[doc.document_type as DocumentType] ?? doc.document_type}</Badge>
           <Badge tone="neutral">{CATEGORY_LABEL[docCategory(doc)]}</Badge>
+          <Badge tone="accent">{TYPE_LABEL[doc.document_type as DocumentType] ?? doc.document_type}</Badge>
           <Badge tone={STATUS_TONE[status] ?? 'neutral'}>{STATUS_LABEL[status] ?? doc.status}</Badge>
-          {doc.classification !== 'internal' && (
-            <Badge tone="warn">{CLASS_LABEL[doc.classification as DocumentClassification] ?? doc.classification}</Badge>
-          )}
           {doc.mandatory && <Badge tone="warn">Mandatory</Badge>}
-          {drive && <Badge tone={SYNC_TONE[sync] ?? 'neutral'}>{SYNC_LABEL[sync] ?? doc.sync_status}</Badge>}
-          <span className="font-mono text-xs font-bold text-slate-300">v{doc.current_version_number}</span>
-          <span className="text-xs text-slate-400">Owner {officerName(doc.owner_user_id) ?? '—'}</span>
-          {doc.approved_by && (
-            <span className="text-xs text-slate-400">
-              Approved {officerName(doc.approved_by)}{doc.approved_at ? ` · ${fmtDate(doc.approved_at)}` : ''}
-            </span>
-          )}
-          {doc.effective_at && <span className="text-xs text-slate-400">Effective {fmtDate(doc.effective_at)}</span>}
-          {review ? (
-            <Badge tone={review === 'overdue' ? 'danger' : 'warn'}>
-              {review === 'overdue' ? 'Review overdue' : 'Review due'} · {fmtDate(doc.review_due_at)}
-            </Badge>
-          ) : doc.review_due_at ? (
-            <span className="text-xs text-slate-400">Review due {fmtDate(doc.review_due_at)}</span>
-          ) : null}
-          {doc.expires_at && <span className="text-xs text-slate-400">Expires {fmtDate(doc.expires_at)}</span>}
           <span className="text-xs text-slate-400">Updated {fmtDateTime(doc.updated_at)}</span>
-          <span className="text-xs text-slate-400">Source {drive ? 'Google Drive' : 'Portal'}</span>
         </div>
       </Card>
 
@@ -441,7 +439,7 @@ export function DocReader(props: {
           )}
           <details className="mb-4 rounded-2xl border border-white/5 bg-ink-900/60 xl:hidden">
             <summary className="flex min-h-[44px] cursor-pointer select-none items-center px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Details, source & related
+              Document details
             </summary>
             <div className="px-4 pb-4">{metaRail}</div>
           </details>

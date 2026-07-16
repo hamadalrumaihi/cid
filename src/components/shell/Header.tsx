@@ -124,7 +124,7 @@ export function Header({ onOpenDrawer }: { onOpenDrawer: () => void }) {
         </div>
       </div>
       <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
-        <div className="relative hidden md:block">
+        <div className="relative hidden lg:block">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <input
             ref={searchRef}
@@ -140,12 +140,13 @@ export function Header({ onOpenDrawer }: { onOpenDrawer: () => void }) {
             }}
           />
         </div>
-        {/* Below md the full search box is hidden — this icon opens the same
-            palette so mobile keeps a search entry point (⌘K is desktop-only). */}
+        {/* Below lg the full search box is hidden — this icon opens the same
+            palette so mobile/tablet keep a search entry point (⌘K is desktop-only).
+            The box only appears at lg where the top bar has room for its width. */}
         <button
           onClick={() => setPalette({ open: true, query: '' })}
           aria-label="Search records"
-          className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-lg border border-white/10 bg-ink-850 text-slate-200 transition hover:bg-white/10 md:hidden"
+          className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-lg border border-white/10 bg-ink-850 text-slate-200 transition hover:bg-white/10 lg:hidden"
         >
           <SearchIcon className="h-5 w-5" />
         </button>

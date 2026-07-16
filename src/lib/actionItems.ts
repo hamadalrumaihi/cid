@@ -38,6 +38,7 @@ export type ActionSourceType =
   | 'membership_request' | 'legal_request' | 'case_followup' | 'handover'
   | 'mention' | 'blocker'
   | 'document_ack' | 'document_review' | 'document_approval' | 'document_sync'
+  | 'document_suggestion'
   | 'other'
 
 export type ActionPriority = 'critical' | 'high' | 'normal' | 'low'
@@ -123,6 +124,26 @@ export interface AcDoc {
   updatedAt: string
 }
 
+/** Document-suggestion facts, PRE-DERIVED by the loader (who manages the target
+ *  document, who submitted it, who is the assigned editor) so this module stays
+ *  free of the sops authority imports. One entry per RLS-visible suggestion that
+ *  is still open work. */
+export interface AcSuggestion {
+  id: string
+  title: string
+  status: string
+  documentId: string | null
+  /** The current user may manage this suggestion's target (or is leadership for
+   *  a new-document proposal). */
+  canManage: boolean
+  /** The current user submitted it. */
+  mine: boolean
+  /** The current user is the assigned editor. */
+  assignedToMe: boolean
+  createdAt: string
+  updatedAt: string
+}
+
 export interface ActionSources {
   me: string
   role: string | null          // profile.role
@@ -144,6 +165,8 @@ export interface ActionSources {
   notifications: AcNotif[]     // my UNREAD notifications (read = false)
   /** Additive (defaults []): library governance items, pre-derived. */
   documents?: AcDoc[]
+  /** Additive (defaults []): document-suggestion work, pre-derived. */
+  suggestions?: AcSuggestion[]
 }
 
 export interface ActionQueue { items: ActionItem[]; suppressedCount: number }
@@ -253,6 +276,9 @@ function semanticKey(n: AcNotif): string | null {
   if (n.type.startsWith('legal') && p.request_id) return `legal:${p.request_id}`
   // Required-reading fan-out is covered by the structural document_ack item.
   if (n.type === 'document_required' && p.document_id) return `document_ack:${p.document_id}`
+  // Suggestion fan-out is covered by the structural document_suggestion item
+  // (when one is owed); otherwise it stays an informational notification.
+  if (n.type === 'document_suggestion' && p.suggestion_id) return `document_suggestion:${p.suggestion_id}`
   return null
 }
 
@@ -580,6 +606,53 @@ export function buildActionItems(s: ActionSources): ActionQueue {
         isCommandItem: true, isWaitingOnCurrentUser: true, nudge: 40,
         sourceMetadata: { document_id: d.id },
         dedupeKey: `document_sync:${d.id}`,
+      })
+    }
+  }
+
+  /* 9c · document suggestions — surfaced ONLY when action is genuinely required:
+   *      a manager owes the first triage decision on a fresh submission; the
+   *      submitter owes a reply after a request for more information; an
+   *      assigned editor owes the actual implementation of an accepted change.
+   *      Waiting/terminal states (needs-info still with the reviewer, declined,
+   *      duplicate, implemented) are informational and emit nothing here. */
+  for (const g of s.suggestions ?? []) {
+    const base = {
+      sourceType: 'document_suggestion' as const, sourceId: g.id, title: g.title,
+      createdAt: g.createdAt, updatedAt: g.updatedAt,
+      canAct: true, isWaitingOnCurrentUser: true,
+      sourceMetadata: { suggestion_id: g.id, document_id: g.documentId },
+      dedupeKey: `document_suggestion:${g.id}`,
+    }
+    if (g.canManage && !g.mine && g.status === 'submitted') {
+      add({
+        ...base, id: `document_suggestion:${g.id}`,
+        summary: 'Suggestion awaiting triage',
+        reason: 'A new suggestion needs your review decision',
+        status: 'needs_action', waitingSince: g.createdAt,
+        ownerId: s.me, responsibleRole: s.role,
+        deepLink: `/sops?view=suggestions&suggestion=${g.id}`,
+        actionLabel: 'Review', isCommandItem: true,
+      })
+    } else if (g.mine && g.status === 'needs_more_information') {
+      add({
+        ...base, id: `document_suggestion:${g.id}`,
+        summary: 'More information requested',
+        reason: 'A reviewer asked for more information on your suggestion',
+        status: 'needs_action', waitingSince: g.updatedAt,
+        ownerId: s.me,
+        deepLink: g.documentId ? `/sops?doc=${g.documentId}` : '/sops?view=suggestions',
+        actionLabel: 'Reply', isPersonalItem: true,
+      })
+    } else if (g.assignedToMe && (g.status === 'accepted' || g.status === 'partially_accepted')) {
+      add({
+        ...base, id: `document_suggestion:${g.id}`,
+        summary: 'Accepted — implement the change',
+        reason: 'You are assigned to implement this accepted suggestion',
+        status: 'needs_action', waitingSince: g.updatedAt,
+        ownerId: s.me,
+        deepLink: g.documentId ? `/sops?doc=${g.documentId}` : '/sops?view=suggestions',
+        actionLabel: 'Implement', isPersonalItem: true,
       })
     }
   }

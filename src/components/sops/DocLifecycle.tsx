@@ -13,6 +13,7 @@ import { insert, list, rpc } from '@/lib/db'
 import { fmtDate, fmtDateTime } from '@/lib/format'
 import { activeProfiles, useProfilesStore } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { uiPrompt } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
@@ -266,19 +267,17 @@ export function ReadingCampaignModal({ doc, campaign, onClose, onDone }: {
       <ModalHeader title={`Required reading — ${docTitle(doc.name)}`} onClose={onClose} />
       <div className="space-y-5">
         {campaign ? (
-          <section className="rounded-2xl border border-white/10 bg-ink-950/50 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
-                <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active campaign</h4>
-                <p className="mt-1 text-sm text-slate-200">
-                  {AUDIENCE_LABEL[campaign.audience] ?? campaign.audience}
-                  {campaign.deadline ? ` · due ${fmtDate(campaign.deadline)}` : ' · no deadline'}
-                  {` · opened ${fmtDate(campaign.created_at)}`}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-400">{campaign.reason}</p>
-              </div>
-              <Button size="sm" onAction={closeCampaign}>Close campaign</Button>
+          <section className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-amber-200">Required reading active</p>
+              <p className="mt-0.5 text-xs text-slate-300">
+                {AUDIENCE_LABEL[campaign.audience] ?? campaign.audience}
+                {campaign.deadline ? ` · due ${fmtDate(campaign.deadline)}` : ' · no deadline'}
+                {` · opened ${fmtDate(campaign.created_at)}`}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-400">{campaign.reason}</p>
             </div>
+            <Button size="sm" onAction={closeCampaign}>Close campaign</Button>
           </section>
         ) : (
           <section className="space-y-3">
@@ -333,26 +332,26 @@ export function ReadingCampaignModal({ doc, campaign, onClose, onDone }: {
           ) : !summary.length ? (
             <Notice text="No completion data yet." />
           ) : (
-            <div className="max-h-64 overflow-y-auto rounded-lg border border-white/10">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="bg-ink-800 text-[10px] uppercase tracking-wider text-slate-400">
-                    <th className="border-b border-white/5 px-3 py-2 font-semibold">Member</th>
-                    <th className="border-b border-white/5 px-3 py-2 font-semibold">Acknowledged</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {summary.map((r) => (
-                    <tr key={r.user_id}>
-                      <td className="border-b border-white/5 px-3 py-1.5 text-slate-200">{r.display_name}</td>
-                      <td className="border-b border-white/5 px-3 py-1.5 text-slate-400">
-                        {r.acknowledged_at ? fmtDateTime(r.acknowledged_at) : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <p className="mb-2 text-xs text-slate-400" aria-live="polite">
+                {summary.filter((r) => r.acknowledged_at).length} of {summary.length} acknowledged
+              </p>
+              <ul className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                {summary.map((r) => (
+                  <li key={r.user_id} className="rounded-xl border border-white/5 bg-ink-900/60 px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-sm text-slate-200">{r.display_name}</span>
+                      {r.acknowledged_at
+                        ? <Badge tone="good">Acknowledged</Badge>
+                        : <Badge tone="warn">Awaiting</Badge>}
+                    </div>
+                    {r.acknowledged_at && (
+                      <p className="mt-0.5 text-xs text-slate-400">{fmtDateTime(r.acknowledged_at)}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </section>
       </div>

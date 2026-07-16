@@ -26,7 +26,7 @@ export function PageHeader({ title, subtitle, eyebrow, actions, className = '' }
         <h1 className="text-2xl font-black text-white">{title}</h1>
         {subtitle && <p className="mt-0.5 text-sm text-slate-400">{subtitle}</p>}
       </div>
-      {actions && <div className="flex flex-shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex max-w-full flex-wrap items-center justify-end gap-2">{actions}</div>}
     </div>
   )
 }
@@ -38,7 +38,7 @@ export function SectionHeader({ title, subtitle, actions, className = '' }: Omit
         <h2 className="text-lg font-bold text-white">{title}</h2>
         {subtitle && <p className="mt-0.5 text-sm text-slate-400">{subtitle}</p>}
       </div>
-      {actions && <div className="flex flex-shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex max-w-full flex-wrap items-center justify-end gap-2">{actions}</div>}
     </div>
   )
 }

@@ -22,6 +22,7 @@ type FeedbackRow = Tables<'feedback'>
 const FB_KIND: Record<string, { icon: string; label: string; tint: string }> = {
   feature: { icon: '💡', label: 'Feature', tint: 'bg-blue-500/15 text-blue-300' },
   bug: { icon: '🐞', label: 'Bug', tint: 'bg-rose-500/15 text-rose-300' },
+  document: { icon: '📄', label: 'Document', tint: 'bg-amber-500/15 text-amber-300' },
 }
 const FB_STATUS: Record<string, { label: string; tint: string }> = {
   open: { label: 'Open', tint: 'bg-amber-500/15 text-amber-300' },

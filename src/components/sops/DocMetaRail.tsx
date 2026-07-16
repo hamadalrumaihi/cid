@@ -95,6 +95,7 @@ export function DocMetaRail({ doc, relations, backlinks, relatedMeta, campaign, 
   const nowMs = useNow()
   const review = reviewState(doc, nowMs)
   const drive = doc.source_system === 'google_drive'
+  const tags: string[] = Array.isArray(doc.tags) ? doc.tags.filter((t): t is string => typeof t === 'string') : []
   const docLinks = relations.filter((r) => r.target_document_id)
   const otherLinks = relations.filter((r) => !r.target_document_id && (r.label || r.target_route))
 
@@ -122,6 +123,13 @@ export function DocMetaRail({ doc, relations, backlinks, relatedMeta, campaign, 
           </KV>
           {doc.expires_at && <KV label="Expires">{fmtDate(doc.expires_at)}</KV>}
           <KV label="Updated">{fmtDateTime(doc.updated_at)}</KV>
+          {tags.length > 0 && (
+            <KV label="Tags">
+              <span className="flex flex-wrap justify-end gap-1">
+                {tags.map((t) => <Badge key={t} tone="neutral">{t}</Badge>)}
+              </span>
+            </KV>
+          )}
         </dl>
       </Section>
 

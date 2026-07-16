@@ -9,17 +9,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
 import { list, rpc } from '@/lib/db'
-import { fmtDate } from '@/lib/format'
+import { fmtDate, fmtDateTime } from '@/lib/format'
 import { renderMarkdown } from '@/lib/markdown'
 import { officerName } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Field, Select, Textarea } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { ErrorNotice } from '@/components/ui/Notice'
 import { ListSkeleton } from '@/components/ui/Skeleton'
-import { VersionViewer } from '@/components/shared/VersionViewer'
 import { DiffView } from './docDiff'
 import { CHANGE_TYPE_LABEL, docTitle, type ChangeType, type DocRow } from './docModel'
 
@@ -71,6 +71,7 @@ export function DocHistoryModal({ doc, canEdit, onClose, onChanged }: {
   const [otherId, setOtherId] = useState<string>('')
   const [restoreId, setRestoreId] = useState<string | null>(null)
   const [reason, setReason] = useState('')
+  const [openId, setOpenId] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
@@ -123,27 +124,55 @@ export function DocHistoryModal({ doc, canEdit, onClose, onChanged }: {
         <div className="space-y-5">
           <section>
             <h4 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Versions</h4>
-            <div className="max-h-72 overflow-y-auto">
-              <VersionViewer
-                versions={versions.map((v) => ({
-                  id: v.id,
-                  number: v.version_number ?? '?',
-                  label: `${changeLabel(v.change_type)}${v.change_summary ? ` — ${v.change_summary}` : ''}`,
-                  at: v.saved_at,
-                  byName: officerName(v.saved_by),
-                }))}
-                empty="No versions recorded yet — a snapshot is captured on every save."
-                renderContent={(item) => {
-                  const v = versions.find((x) => x.id === item.id)
-                  return v ? renderMarkdown(versionBody(v)) : null
-                }}
-                actions={canEdit ? (item) => (
-                  item.id !== versions[0]?.id ? (
-                    <Button size="sm" onClick={() => { setRestoreId(item.id); setReason('') }}>Restore…</Button>
-                  ) : null
-                ) : undefined}
-              />
-            </div>
+            {!versions.length ? (
+              <p className="text-sm text-slate-500">No versions recorded yet — a snapshot is captured on every save.</p>
+            ) : (
+              <ol className="max-h-80 space-y-3 overflow-y-auto pr-1">
+                {versions.map((v, i) => {
+                  const latest = i === 0
+                  const open = openId === v.id
+                  const by = officerName(v.saved_by)
+                  return (
+                    <li key={v.id} className="relative pl-6">
+                      {/* Timeline rail — a node dot per version, a connector to the next. */}
+                      {i < versions.length - 1 && (
+                        <span aria-hidden className="absolute left-[6px] top-4 -bottom-3 w-px bg-white/10" />
+                      )}
+                      <span aria-hidden className={`absolute left-[2px] top-3 h-3 w-3 rounded-full border-2 ${latest ? 'border-badge-500 bg-badge-500/30' : 'border-white/20 bg-ink-900'}`} />
+                      <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-blue-300">v{v.version_number ?? '?'}</span>
+                          {latest && <Badge tone="accent">Latest</Badge>}
+                          <Badge tone="neutral">{changeLabel(v.change_type)}</Badge>
+                          <span className="ml-auto text-xs text-slate-400">
+                            {v.saved_at ? fmtDateTime(v.saved_at) : ''}{by ? ` · ${by}` : ''}
+                          </span>
+                        </div>
+                        {v.change_summary && <p className="mt-1.5 text-sm text-slate-300">{v.change_summary}</p>}
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            aria-expanded={open}
+                            onClick={() => setOpenId(open ? null : v.id)}
+                          >
+                            {open ? 'Hide contents' : 'View contents'}
+                          </Button>
+                          {canEdit && !latest && (
+                            <Button size="sm" onClick={() => { setRestoreId(v.id); setReason('') }}>Restore…</Button>
+                          )}
+                        </div>
+                        {open && (
+                          <div className="mt-2 border-t border-white/10 pt-2 text-sm text-slate-200">
+                            {renderMarkdown(versionBody(v))}
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ol>
+            )}
           </section>
 
           {restoreTarget && (
