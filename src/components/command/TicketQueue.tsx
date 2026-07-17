@@ -195,7 +195,7 @@ function TicketWizard({ ticket, onClose, onDone }: { ticket: TicketRow; onClose:
   }
 
   const finish = () => {
-    if (created) toast(`${created.caseNumber} created · saved to Supabase`, 'success')
+    if (created) toast(`${created.caseNumber} created`, 'success')
     onDone()
   }
 

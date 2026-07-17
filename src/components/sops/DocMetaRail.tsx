@@ -135,7 +135,7 @@ export function DocMetaRail({ doc, relations, backlinks, relatedMeta, campaign, 
 
       <Section title="Source">
         <dl className="divide-y divide-white/5">
-          <KV label="Canonical">{doc.canonical_source === 'google_drive' ? 'Google Drive' : 'Portal'}</KV>
+          <KV label="Maintained in">{doc.canonical_source === 'google_drive' ? 'Google Drive' : 'Portal'}</KV>
           {drive && (
             <>
               <KV label="Sync">

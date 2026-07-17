@@ -122,7 +122,7 @@ export function PromotionsTransfers() {
           ))}
           {!filtered.length && <p className="text-sm text-slate-500">No matching officers.</p>}
         </div>
-        <p className="mt-3 text-[11px] text-slate-500">Promotions and demotions go through <b>Change role</b> (audited, reason required — <code>change_member_role</code>); bureau moves go through <b>Transfer department</b> (<code>request_transfer</code>, source + destination approval). Every change is recorded with who, why, and when.</p>
+        <p className="mt-3 text-[11px] text-slate-500">Promotions and demotions go through <b>Change role</b> (audited, reason required); bureau moves go through <b>Transfer department</b> (both bureaus approve). Every change is recorded with who, why, and when.</p>
       </section>
 
       <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">

@@ -495,7 +495,7 @@ export function buildActionItems(s: ActionSources): ActionQueue {
    *     the active deadline; no status meaning is hand-rolled here. Included:
    *     requests I filed (waiting / returned to me / expiring) and requests
    *     whose NEXT ACTION is mine (e.g. CID supervisor review). Excluded:
-   *     bureau-awareness visibility (never assigned work, spec §9), judge
+   *     bureau-awareness visibility (never assigned work), judge
    *     claimable pickups (Justice-portal work), and closed/completed rows. */
   const legalViewer: LegalViewer = s.legalViewer ?? {
     myId: s.me, cidActive: true, cidRole: s.role, justiceRole: null,

@@ -61,7 +61,7 @@ export function CommandCenterView() {
     return (
       <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-amber-200">
         <p className="font-semibold text-amber-100">Command access required</p>
-        <p className="mt-1">The Command Center is for command staff (Bureau Lead and above) and the portal owner. Your account doesn’t hold a command role — this is enforced by the database, not just this screen.</p>
+        <p className="mt-1">The Command Center is for command staff (Bureau Lead and above) and the portal owner. Your account doesn’t hold a command role. Contact Command if you believe this is an error.</p>
       </div>
     )
   }

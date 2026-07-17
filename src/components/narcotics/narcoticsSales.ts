@@ -193,8 +193,8 @@ export interface StackReconciliation {
   observationUnits: number
 }
 
-/** Compare stack sums against the observation's recorded totals (spec §18:
- *  warn, never overwrite). weightMatch is null when weights can't be compared. */
+/** Compare stack sums against the observation's recorded totals (warn, never
+ *  overwrite). weightMatch is null when weights can't be compared. */
 export function reconcileStacks(
   obs: Pick<SaleObservationRow, 'total_units' | 'recorded_weight_value' | 'recorded_weight_unit'>,
   stacks: ReadonlyArray<StackInput>,
@@ -273,8 +273,8 @@ type SeriesObs = Pick<
   | 'weight_is_derived' | 'quality_tier' | 'observed_at' | 'observation_number'
 >
 
-/** Aggregate a series' observations. Payment-per-unit is the primary comparison
- *  (spec §9); weight-normalized values are deliberately NOT aggregated here. */
+/** Aggregate a series' observations. Payment-per-unit is the primary
+ *  comparison; weight-normalized values are deliberately NOT aggregated here. */
 export function seriesStats(observations: ReadonlyArray<SeriesObs>): SeriesStats {
   const count = observations.length
   let totalUnits = 0
@@ -327,7 +327,7 @@ export function seriesStats(observations: ReadonlyArray<SeriesObs>): SeriesStats
   }
 }
 
-/** Difference of one tier's average $/unit vs another (spec §8 tier comparison). */
+/** Difference of one tier's average $/unit vs another (tier comparison). */
 export interface TierComparison {
   a: TierStat
   b: TierStat
@@ -393,7 +393,7 @@ export const DATE_PRECISION_LABEL: Record<string, string> = {
 export const datePrecisionLabel = (s: string | null | undefined): string =>
   DATE_PRECISION_LABEL[(s ?? '').toLowerCase()] ?? 'Unverified'
 
-/* ── Screenshot evidence roles (spec §13) ─────────────────────────────────── */
+/* ── Screenshot evidence roles ────────────────────────────────────────────── */
 export const EVIDENCE_ROLES = [
   'Primary transaction evidence',
   'Supporting product evidence',
@@ -429,7 +429,7 @@ export interface SaleMediaTags {
   tier?: string | null
 }
 
-/* ── Validation (spec §18) ────────────────────────────────────────────────── */
+/* ── Validation ───────────────────────────────────────────────────────────── */
 export interface ObservationDraft {
   total_units?: number | null
   payment_amount?: number | null

@@ -241,7 +241,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
 
           {panel === 'role' && (
             <div className="mt-3 space-y-3 rounded-xl border border-badge-400/20 bg-ink-950/50 p-3">
-              <Field label="New role" required hint="Options are limited to roles you may grant (server-enforced).">
+              <Field label="New role" required hint="Options are limited to roles you may grant.">
                 {(id) => (
                   <Select id={id} value={newRole} onChange={(e) => setNewRole(e.target.value)}>
                     <option value="">Select…</option>

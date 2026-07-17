@@ -1,7 +1,7 @@
 'use client'
 
-/** Court-packet print/export for a legal request (audit §8 — the data was
- *  always there; this is pure UI). Renders the FROZEN version the reviewers
+/** Court-packet print/export for a legal request (the data was always there;
+ *  this is pure UI). Renders the FROZEN version the reviewers
  *  acted on (current_version_id): its narrative, form content and packet
  *  manifest, plus the decision record and the version-bound signature trail —
  *  scoped to exactly what the viewer already sees on screen, no new fetches.

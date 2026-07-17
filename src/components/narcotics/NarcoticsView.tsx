@@ -1,13 +1,13 @@
 'use client'
 
-/** Narcotics Intelligence — the visual substance registry (spec §6-7, §30-31).
+/** Narcotics Intelligence — the visual substance registry.
  *  Supersedes the old accordion: a quiet header with one prominent search
  *  (indexed search_narcotics RPC), category pills, a responsive grid of
  *  substance cards, a modest metric strip and a small filters popover. Merged
  *  tombstones are excluded everywhere. `?drug=<id>` drills into the dossier
- *  (owned by another agent, imported lazily). Registry model + card live in
- *  sibling files (narcoticsRegistry.ts / NarcoticsRegistryCard.tsx), matching
- *  the persons feature split. */
+ *  (lives in NarcoticsDossier.tsx, imported lazily). Registry model + card
+ *  live in sibling files (narcoticsRegistry.ts / NarcoticsRegistryCard.tsx),
+ *  matching the persons feature split. */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -36,7 +36,7 @@ import {
   type NarcoticFilters, type NarcoticStats, type RegistryNarcotic, type NarcoticSort,
 } from './narcoticsRegistry'
 
-// The dossier is built by another agent; import it lazily so the registry
+// The dossier lives in NarcoticsDossier.tsx; import it lazily so the registry
 // chunk never bundles it (and it can render client-only).
 const NarcoticsDossier = dynamic(
   () => import('./NarcoticsDossier').then((m) => m.NarcoticsDossier),
@@ -223,7 +223,7 @@ export function NarcoticsView() {
   const visible = items.slice(0, shown)
   const remaining = Math.max(0, items.length - visible.length)
 
-  // `?drug=<id>` drills into the dossier (owned by the dossier agent).
+  // `?drug=<id>` drills into the dossier.
   if (drugId) {
     if (state !== 'in') return <Notice text="Live narcotics records require sign-in." />
     return <NarcoticsDossier drugId={drugId} onClose={() => router.push('/narcotics')} />
@@ -486,7 +486,7 @@ function NarcoticCreateModal({ onClose, onCreated }: { onClose: () => void; onCr
             )}
           </Field>
         </div>
-        <Field label="Classification" hint="Legacy free-text label (optional).">
+        <Field label="Classification" hint="Free-text label (optional).">
           {(id) => <Input id={id} value={classification} onChange={(e) => setClassification(e.target.value)} />}
         </Field>
         <Field label="Summary">
@@ -511,9 +511,8 @@ function NarcoticCreateModal({ onClose, onCreated }: { onClose: () => void; onCr
   )
 }
 
-/* ---- Suggestion modal (placeholder — the dossier agent may replace with a
- * richer form). Any active member can report a missing substance or suggest a
- * correction; writes go through the RPC. */
+/* ---- Suggestion modal. Any active member can report a missing substance or
+ * suggest a correction; writes go through the RPC. */
 const SUGGESTION_TYPES: ReadonlyArray<{ value: string; label: string; needsNarcotic: boolean }> = [
   { value: 'new_substance', label: 'Missing / new substance', needsNarcotic: false },
   { value: 'incorrect_name', label: 'Incorrect name', needsNarcotic: true },

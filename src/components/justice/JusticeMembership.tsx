@@ -243,7 +243,7 @@ export function RosterSection() {
     <section className="space-y-3">
       <SectionHeader
         title="DOJ & Judiciary personnel"
-        subtitle="Membership changes go through the definer RPCs — the server re-checks every action."
+        subtitle="Every membership change is verified and recorded."
       />
       {groups.map((g) => (
         <div key={g.role} className="space-y-2">

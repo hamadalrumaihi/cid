@@ -94,7 +94,7 @@ export function decisionRequiresNote(s: SuggestionStatus): boolean {
   return s === 'declined' || s === 'needs_more_information'
 }
 
-/* ── Review-workspace grouping (spec §18 — grouped cards, never a table) ───── */
+/* ── Review-workspace grouping — grouped cards, never a table ─────────────── */
 export type SuggestionGroup = 'new' | 'under_review' | 'accepted' | 'implemented' | 'closed'
 
 export const SUGGESTION_GROUPS: readonly SuggestionGroup[] = [

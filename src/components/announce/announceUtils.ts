@@ -1,4 +1,4 @@
-/** Announcements vocabulary + pure helpers — vanilla collab.js §15.
+/** Announcements vocabulary + pure helpers — port of vanilla collab.js.
  *  mentions/links are loose Json in the DB (vanilla wrote plain strings before
  *  it wrote {target,label} objects), so everything normalizes here. */
 import type { Json, Tables } from '@/lib/database.types'

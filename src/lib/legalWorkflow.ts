@@ -51,7 +51,7 @@ const CID_SUPERVISOR_ROLES = new Set(['senior_detective', 'bureau_lead', 'deputy
 const DECIDED = new Set(['approved', 'denied', 'withdrawn'])
 const RETURNED = new Set(['returned_by_cid', 'returned_by_ada', 'returned_by_da', 'returned_by_ag', 'returned_by_judge'])
 
-/* ── Stage model (spec §15) ───────────────────────────────────────────────── */
+/* ── Stage model ──────────────────────────────────────────────────────────── */
 export type StageId =
   | 'draft' | 'cid_review' | 'doj_intake' | 'prosecutorial_review'
   | 'judicial_review' | 'issued' | 'fulfilment' | 'closed'
@@ -106,8 +106,8 @@ export function currentStage(r: LegalReqLike): StageId {
   return stageForReviewStatus(r.review_status)
 }
 
-/** Which stages to actually render for this request (spec §2/§15 — never force
- *  every request through every stage). Subpoenas skip nothing structurally but
+/** Which stages to actually render for this request (never force every request
+ *  through every stage). Subpoenas skip nothing structurally but
  *  the fulfilment label differs; da/ag-routed requests still pass a judicial
  *  stage only if judge-routed. */
 export function stagesForRequest(r: LegalReqLike): StageId[] {
@@ -120,7 +120,7 @@ export function stagesForRequest(r: LegalReqLike): StageId[] {
 }
 
 /** Did the judiciary lane or the prosecutorial lane carry the request forward?
- *  (spec §15 — show which lane advanced it). */
+ *  (Surfaces show which lane advanced it.) */
 export function laneThatAdvanced(r: LegalReqLike): 'judicial' | 'prosecutorial' | null {
   if (r.assigned_judge_id && (r.review_status === 'judicial_review' || r.review_status === 'approved' || r.review_status === 'denied' || r.review_status === 'returned_by_judge')) {
     // Claimed directly from DOJ intake (no ADA ever assigned) = judicial lane.
@@ -186,7 +186,7 @@ export const RESPONSIBLE_ROLE_LABEL: Record<ResponsibleRole, string> = {
   none: '—',
 }
 
-/* ── Operational grouping (spec §7 — ONE primary group per request/viewer) ─── */
+/* ── Operational grouping — ONE primary group per request/viewer ──────────── */
 export type OpGroup =
   | 'needs_action' | 'returned_to_you' | 'available_to_claim' | 'assigned_to_you'
   | 'waiting_cid' | 'waiting_doj' | 'waiting_prosecution' | 'waiting_judge'
@@ -208,20 +208,20 @@ export const OP_GROUP_LABEL: Record<OpGroup, string> = {
   awareness: 'Awareness only',
 }
 
-/* ── The disposition — the one object every surface consumes (spec §16) ────── */
+/* ── The disposition — the one object every surface consumes ──────────────── */
 export interface LegalDisposition {
   stage: StageId
   stageLabel: string
   statusLabel: string
   responsibleRole: ResponsibleRole
   responsibleRoleLabel: string
-  /** Plain-language next action label (spec §8). */
+  /** Plain-language next action label. */
   nextAction: string
   /** The viewer can perform the next action themselves right now. */
   viewerCanAct: boolean
   /** The viewer may CLAIM the request (judge parallel lane). */
   viewerCanClaim: boolean
-  /** The viewer only sees it for bureau awareness — NOT assigned work (spec §9). */
+  /** The viewer only sees it for bureau awareness — NOT assigned work. */
   awarenessOnly: boolean
   /** When !viewerCanAct, a short reason. */
   whyNoAction: string | null
@@ -321,7 +321,7 @@ export function isBureauAwareness(r: LegalReqLike, v: LegalViewer): boolean {
   return v.prosecutorBureaus.includes(r.responsible_bureau ?? '')
 }
 
-/* ── Next-action labels (spec §8) ─────────────────────────────────────────── */
+/* ── Next-action labels ───────────────────────────────────────────────────── */
 function nextActionLabel(
   r: LegalReqLike, v: LegalViewer,
   flags: { canAct: boolean; canClaim: boolean; awarenessOnly: boolean },
@@ -355,7 +355,7 @@ function nextActionLabel(
   return 'No action required'
 }
 
-/* ── Issued / service-return state (spec §29-30) ──────────────────────────── */
+/* ── Issued / service-return state ────────────────────────────────────────── */
 export function issuedActionLabel(r: LegalReqLike): string {
   const f = r.fulfilment_status ?? 'unissued'
   if (f === 'unissued') return 'Awaiting issuance'
@@ -403,7 +403,7 @@ export function issuedStateFor(r: LegalReqLike, now?: number): IssuedState {
   return 'active'
 }
 
-/* ── Urgency + deadline state (spec §31) ──────────────────────────────────── */
+/* ── Urgency + deadline state ─────────────────────────────────────────────── */
 const DAY = 86_400_000
 export function urgencyFor(r: LegalReqLike, now: number): Urgency {
   const d = activeDeadline(r)
@@ -425,7 +425,7 @@ export function activeDeadline(r: LegalReqLike): { at: string; kind: 'expires' |
   return null
 }
 
-/* ── Routing explanation (spec §17 — deterministic, never runtime AI) ─────── */
+/* ── Routing explanation — derived purely from the request's status fields ── */
 export function routingExplanation(r: LegalReqLike, v?: LegalViewer): string {
   const s = r.review_status
   const sealed = r.classification === 'sealed'
@@ -452,7 +452,7 @@ export function routingExplanation(r: LegalReqLike, v?: LegalViewer): string {
   return REVIEW_STATUS_LABEL[s] ?? s
 }
 
-/* ── Fulfilment event derivation (spec §29-30 — service/return event cards) ── */
+/* ── Fulfilment event derivation — service/return event cards ─────────────── */
 /** The operational columns the event model reads (issue → execute/serve →
  *  return/compliance → close). Presentation-only: the rows are already
  *  RLS-authorised; this just shapes them into an ordered event list. */
@@ -530,7 +530,7 @@ export function fulfilmentEvents(r: LegalFulfilmentLike): FulfilmentEvent[] {
   return out
 }
 
-/* ── Justice approval matrix (spec §38 — mirror of can_review_justice_role) ── */
+/* ── Justice approval matrix — client mirror of can_review_justice_role ───── */
 export function canReviewJusticeRole(
   reviewerRole: LegalViewer['justiceRole'], isOwner: boolean, requestedRole: string,
 ): boolean {
@@ -541,7 +541,7 @@ export function canReviewJusticeRole(
   return false
 }
 
-/* ── Assignment eligibility (spec §27) ────────────────────────────────────── */
+/* ── Assignment eligibility ───────────────────────────────────────────────── */
 export function canAssignAsJudge(entry: { active: boolean; justice_role: string }): boolean {
   return entry.active && entry.justice_role === 'judge'
 }
@@ -549,14 +549,14 @@ export function canAssignAsProsecutor(entry: { active: boolean; justice_role: st
   return entry.active && (entry.justice_role === 'assistant_district_attorney' || entry.justice_role === 'district_attorney')
 }
 
-/* ── Target formatting (spec §19) ─────────────────────────────────────────── */
+/* ── Target formatting ────────────────────────────────────────────────────── */
 export function formatTarget(r: Pick<Tables<'legal_requests'>, 'person_name_snapshot' | 'recipient_name' | 'recipient_type'>): string {
   if (r.person_name_snapshot) return r.person_name_snapshot
   if (r.recipient_name) return r.recipient_type ? `${r.recipient_name} (${humanize(r.recipient_type)})` : r.recipient_name
   return '—'
 }
 
-/* ── Subtype requirements (spec §11/§44 — the fields a subtype must fill) ──── */
+/* ── Subtype requirements — the fields a subtype must fill ────────────────── */
 export function subtypeRequiresPerson(requestType: string, subtype: string | null): boolean {
   if (requestType === 'warrant') return subtype === 'arrest_warrant' // arrest requires a canonical person
   return false
@@ -565,7 +565,7 @@ export function subtypeSupportsStructuredTargets(requestType: string, subtype: s
   return requestType === 'warrant' && subtype === 'search_warrant'
 }
 
-/* ── Guided create wizard (spec §15 — pure step model) ────────────────────────
+/* ── Guided create wizard — pure step model ───────────────────────────────────
  * The wizard component owns the UI; this owns the DERIVATION: which steps
  * exist, what each step still needs, and the exact client mirror of the
  * server-side validation in create_legal_request / submit_legal_request_to_cid.
@@ -661,7 +661,7 @@ export function legalWizardDraftIssues(w: LegalWizardInput): string[] {
   return issues
 }
 
-/* ── Structured search-warrant targets (spec §15 — typed exhibit rows) ─────── */
+/* ── Structured search-warrant targets — typed exhibit rows ───────────────── */
 export type StructuredTargetKind = 'person_record' | 'vehicle' | 'place' | 'prior_legal_request'
 
 export const STRUCTURED_TARGET_KINDS: readonly StructuredTargetKind[] =

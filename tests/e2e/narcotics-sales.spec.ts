@@ -1,5 +1,5 @@
 /** Street-Value Observations — the RESTRICTED sales section of the Narcotics
- *  substance dossier (spec §15–17 + the Reliability Correction), functional E2E
+ *  substance dossier, functional E2E
  *  against the LIVE test project. Mirrors narcotics.spec's injected-session
  *  harness EXACTLY (liveAuth grant → localStorage inject + PW_SUPABASE_SHIM
  *  relay; `next start` against the prebuilt app; chromium path via

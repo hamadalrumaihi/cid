@@ -171,8 +171,8 @@ function EditorForm({ doc, viewer, onSaved, registerDirty }: {
     <div className="space-y-3">
       {doc?.canonical_source === 'google_drive' && (
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-          Google Drive is the canonical source for this document. Portal edits diverge from Google Drive and
-          will raise a sync conflict when Drive changes.
+          This document is maintained in Google Drive. Edits made here may be flagged as conflicts
+          when Drive updates.
         </p>
       )}
 
@@ -196,7 +196,7 @@ function EditorForm({ doc, viewer, onSaved, registerDirty }: {
               </Select>
             )}
           </Field>
-          <Field label="Classification" hint="Who can read it — the server enforces the real rule.">
+          <Field label="Classification" hint="Who can read it.">
             {(id) => (
               <Select id={id} value={classification} onChange={(e) => setClassification(e.target.value as DocumentClassification)}>
                 {classOptions.map((t) => <option key={t} value={t}>{CLASS_LABEL[t]}</option>)}

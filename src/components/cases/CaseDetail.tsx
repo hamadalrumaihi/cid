@@ -178,7 +178,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         if (blockers.length) blockerLines = '\n\nStill open on this case:\n' + blockers.map((b) => `• ${b.label}`).join('\n') + '\n\nClose anyway?'
       } catch { /* checklist is best-effort; fall back to the plain confirm */ }
       const ok = await uiConfirm(
-        `Close ${c.case_number}? It moves to the Closed column and drops off active dashboards. You can reopen it by changing the status back.${blockerLines}`,
+        `Close ${c.case_number}? It will leave the active case board. You can reopen it later.${blockerLines}`,
         { title: 'Close case', confirmText: blockerLines ? 'Close anyway' : 'Close case', danger: !!blockerLines },
       )
       if (!ok) { void fetchCase(); return }

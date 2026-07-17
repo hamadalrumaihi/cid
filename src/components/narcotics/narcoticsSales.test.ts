@@ -7,7 +7,7 @@ import {
   productStateLabel, paymentTypeLabel, saleStateLabel,
 } from './narcoticsSales'
 
-// The two imported LeafOS observations (spec §6–8), as DB-shaped rows.
+// The two imported LeafOS observations, as DB-shaped rows.
 const SALE1 = {
   payment_amount: 15584, total_units: 70,
   recorded_weight_value: 4410, recorded_weight_unit: 'g', weight_is_derived: false,
@@ -46,7 +46,7 @@ describe('unit conversion', () => {
   })
 })
 
-describe('Sale 1 — Mids (spec §6, §18)', () => {
+describe('Sale 1 — Mids', () => {
   it('stacks total 70 units / 4,410 g', () => {
     const t = stackTotals(SALE1_STACKS)
     expect(t.units).toBe(70)
@@ -70,7 +70,7 @@ describe('Sale 1 — Mids (spec §6, §18)', () => {
   })
 })
 
-describe('Sale 2 — Fire (spec §7, §18) — pounds preserved, grams derived', () => {
+describe('Sale 2 — Fire — pounds preserved, grams derived', () => {
   it('stacks total 72 units / 4.176 lb', () => {
     const t = stackTotals(SALE2_STACKS)
     expect(t.units).toBe(72)
@@ -94,7 +94,7 @@ describe('Sale 2 — Fire (spec §7, §18) — pounds preserved, grams derived',
   })
 })
 
-describe('combined + tier comparison (spec §8)', () => {
+describe('combined + tier comparison', () => {
   const stats = seriesStats([SALE1, SALE2])
   it('combined totals', () => {
     expect(stats.count).toBe(2)
@@ -120,7 +120,7 @@ describe('combined + tier comparison (spec §8)', () => {
   })
 })
 
-describe('sample-size confidence (spec Correction · Reliability)', () => {
+describe('sample-size confidence', () => {
   it('maps counts to the four bands', () => {
     expect(sampleConfidence(1)).toBe('preliminary')
     expect(sampleConfidence(2)).toBe('preliminary')
@@ -136,7 +136,7 @@ describe('sample-size confidence (spec Correction · Reliability)', () => {
   })
 })
 
-describe('evidence roles (spec §13)', () => {
+describe('evidence roles', () => {
   it('classifies primary vs supporting', () => {
     expect(isPrimaryEvidence('Primary transaction evidence')).toBe(true)
     expect(isPrimaryEvidence('Supporting product evidence')).toBe(false)
@@ -149,7 +149,7 @@ describe('evidence roles (spec §13)', () => {
   })
 })
 
-describe('validation (spec §18)', () => {
+describe('validation', () => {
   it('accepts a valid draft', () => {
     expect(validateObservationDraft(
       { total_units: 70, payment_amount: 15584, recorded_weight_value: 4410, recorded_weight_unit: 'g' },

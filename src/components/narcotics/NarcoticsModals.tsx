@@ -234,7 +234,7 @@ export function NarcoticResolveModal({ narcotic, onClose, onResolved }: {
       <div className="p-5 sm:p-6">
         <ModalHeader title="Resolve provisional record" onClose={onClose} />
         <p className="mb-4 text-sm text-slate-400">
-          Confirm <span className="font-semibold text-white">{narcotic.name}</span> as an established substance, or reject it — optionally pointing to the canonical record it duplicates.
+          Confirm <span className="font-semibold text-white">{narcotic.name}</span> as an established substance, or reject it — optionally pointing to the established record it duplicates.
         </p>
         <div className="space-y-4">
           <Field label="Action">
@@ -245,7 +245,7 @@ export function NarcoticResolveModal({ narcotic, onClose, onResolved }: {
               </Select>
             )}
           </Field>
-          <Field label="Canonical substance" hint="Optional — the established record this one should defer to.">
+          <Field label="Established record" hint="Optional — the established record this one should defer to.">
             {(id) => (
               <Select id={id} value={canonicalId} onChange={(e) => setCanonicalId(e.target.value)}>
                 <option value="">None</option>

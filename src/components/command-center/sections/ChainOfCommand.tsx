@@ -81,7 +81,7 @@ export function ChainOfCommand() {
             </span>
           ))}
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">A Bureau Lead approves only cases in their own bureau; the Deputy stage has an owner stop-point; the Director stage is final. Enforced server-side by the <code>signoff_decide</code> RPC.</p>
+        <p className="mt-2 text-[11px] text-slate-500">A Bureau Lead approves only cases in their own bureau; the Deputy stage has an owner stop-point; the Director stage is final.</p>
       </div>
     </div>
   )

@@ -81,7 +81,7 @@ export function RecordsView() {
         <PageHeader
           className="flex-1"
           title="🗃️ CID Records"
-          subtitle="Shared, two-way records — synced for everyone via Supabase."
+          subtitle="Shared records — everyone sees updates instantly."
           actions={
             <>
               <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">

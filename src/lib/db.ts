@@ -9,7 +9,7 @@ type TableName = keyof Database['public']['Tables']
 export type DbError = { message: string; code?: string }
 export type MutationResult<T> = { data: T | null; error: DbError | null }
 
-/** Contract carried over from the vanilla data layer (spec §3.2):
+/** Contract carried over from the vanilla data layer:
  *  - list() THROWS on error → callers try/catch (or use the query hooks).
  *  - insert/update/remove RETURN { error } → callers check res.error.
  *  Server-authoritative flows (finalize, sign-off, roster) go through rpc()

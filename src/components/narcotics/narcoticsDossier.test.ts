@@ -74,7 +74,7 @@ describe('display vocabulary', () => {
   })
 })
 
-describe('charge resolution (§13)', () => {
+describe('charge resolution', () => {
   it('parses, trims, and de-dupes code strings', () => {
     expect(parseChargeCodes(['(6)01', ' (6)01 ', '', '(6)02'])).toEqual(['(6)01', '(6)02'])
     expect(parseChargeCodes(null)).toEqual([])

@@ -1,7 +1,7 @@
 'use client'
 
-/** Justice portal — the DOJ/Judiciary working surface (DOJ redesign §15,
- *  phase 4), rebuilt as authority-aware, deep-linkable sub-views (`?view=`):
+/** Justice portal — the DOJ/Judiciary working surface, built as
+ *  authority-aware, deep-linkable sub-views (`?view=`):
  *   - Overview — role-aware MetricStrip + urgency-ranked action items
  *     (dispositionFor.viewerCanAct / viewerCanClaim only — awareness rows
  *     never appear as work), a coverage strip for DA/AG/Owner, the quiet
@@ -112,7 +112,7 @@ function JusticePortalInner() {
   /* ── Overview derivations (same loaded set — no extra queries) ────────────── */
   // Action items: what the viewer can decide now + what a judge may claim.
   // Awareness-only rows are structurally excluded (the model never sets
-  // viewerCanAct/viewerCanClaim on them) — spec §9.
+  // viewerCanAct/viewerCanClaim on them) so they can't surface as work.
   const actionItems = useMemo(() => {
     const rank = (d: LegalDisposition) =>
       d.urgency === 'overdue' ? 0 : d.urgency === 'soon' ? 1 : d.urgency === 'normal' ? 2 : 3
@@ -129,7 +129,7 @@ function JusticePortalInner() {
       })
   }, [entries])
 
-  // The quiet bureau lane — notified, not a gate (spec §9). Only bureau
+  // The quiet bureau lane — notified, not a gate. Only bureau
   // prosecutors ever get these (isBureauAwareness needs prosecutorBureaus).
   const awarenessRows = useMemo(() => entries.filter(({ d }) => d.awarenessOnly), [entries])
 

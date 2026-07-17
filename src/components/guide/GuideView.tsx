@@ -246,8 +246,8 @@ const FEATURES: { icon: string; title: string; where: React.ReactNode; caption: 
 
 const FIXES: [string, string, string][] = [
   ['🕐', '“Signed in but not yet approved”', 'Normal for new accounts — ask Command to approve you, then reload.'],
-  ['🙈', 'A colleague’s case is invisible to you', 'Other bureau. Access is enforced server-side — ask the case lead.'],
-  ['⚠️', 'Save failed / Delete failed toast', 'The server refused the write (usually permissions). The toast says why.'],
+  ['🙈', 'A colleague’s case is invisible to you', 'Other bureau. You only see cases you’re authorized for — ask the case lead.'],
+  ['⚠️', 'Save failed / Delete failed toast', 'The change wasn’t allowed (usually permissions). The toast says why.'],
   ['🔍', 'Search finds nothing', 'Fewer letters, or a plate / case-number fragment. It tolerates typos.'],
   ['↩️', 'Deleted something by accident', 'Click Undo in the toast within a few seconds. Gone? Ask Command.'],
   ['📴', 'Changes not showing up', 'The portal is live; an offline banner appears if your connection drops — reload.'],
@@ -264,7 +264,7 @@ export function GuideView() {
         <h1 className="text-xl font-black text-white">Welcome to the CID Portal</h1>
         <p className="mt-1 text-sm text-slate-400">
           A live, shared investigation workspace — when a detective updates a case, everyone sees it in seconds.
-          What you can see and change follows your <b className="text-slate-200">role and bureau</b>, enforced by the server.
+          What you can see and change follows your <b className="text-slate-200">role and bureau</b>.
         </p>
       </div>
 

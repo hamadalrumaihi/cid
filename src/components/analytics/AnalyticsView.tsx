@@ -246,7 +246,7 @@ export function AnalyticsView() {
       </Panel>
 
       <p className="text-[11px] text-slate-500">
-        Live and RLS-scoped — you see analytics over the cases you can access. &ldquo;Closed&rdquo; weeks use the
+        Live — covers the cases you can access. &ldquo;Closed&rdquo; weeks use the
         case&rsquo;s last update as the close date. Weeks start Monday.
       </p>
     </div>

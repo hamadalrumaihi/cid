@@ -1,6 +1,6 @@
 'use client'
 
-/** Compact, accessible stage-progress tracker for a legal request (spec §8/§15).
+/** Compact, accessible stage-progress tracker for a legal request.
  *
  *  Presentation only — the stage model is the single source of truth. We render
  *  ONLY the stages the request can traverse (stagesForRequest), mark the current

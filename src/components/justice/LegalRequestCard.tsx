@@ -1,11 +1,11 @@
 'use client'
 
-/** A legal-request CARD (spec §4/§8) — the card-based replacement for the flat
- *  chip row. Everything shown here is derived from the deterministic model
+/** A legal-request CARD — the card-based replacement for the flat chip row.
+ *  Everything shown here is derived from the rule-based model
  *  (dispositionFor): the human stage (never a raw review_status), who owns the
  *  next action, what that action is called, and whether the viewer may act /
  *  claim / is merely aware. Awareness-only is always visually de-emphasised so
- *  bureau visibility never masquerades as assigned work (spec §9).
+ *  bureau visibility never masquerades as assigned work.
  *
  *  Reuses the Card surface + DeadlineChip; matches the NarcoticsRegistryCard
  *  idiom (one focusable, keyboard-accessible ≥44px target per record). */
