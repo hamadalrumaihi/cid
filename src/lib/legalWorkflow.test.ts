@@ -4,8 +4,8 @@ import {
   judgeClaimEligible, responsibleRole, dispositionFor, isBureauAwareness,
   routingExplanation, canReviewJusticeRole, canAssignAsJudge, canAssignAsProsecutor,
   issuedStateFor, issuedActionLabel, urgencyFor, activeDeadline, formatTarget,
-  subtypeRequiresPerson, subtypeSupportsStructuredTargets,
-  type LegalReqLike, type LegalViewer,
+  subtypeRequiresPerson, subtypeSupportsStructuredTargets, fulfilmentEvents,
+  type LegalFulfilmentLike, type LegalReqLike, type LegalViewer,
 } from './legalWorkflow'
 
 const NOW = Date.parse('2026-07-17T00:00:00Z')
@@ -196,6 +196,66 @@ describe('routing explanation (deterministic, no runtime AI)', () => {
   it('bureau awareness explanation', () => {
     const prosecutor = viewer({ myId: 'p-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['SAB'] })
     expect(routingExplanation(req(), prosecutor)).toContain('bureau awareness')
+  })
+})
+
+describe('fulfilment event derivation (service/return event cards)', () => {
+  // Minimal fulfilment factory — same non-null defaults as the request factory
+  // (service_status: 'not_served', compliance_status: 'pending').
+  function ful(over: Partial<LegalFulfilmentLike> = {}): LegalFulfilmentLike {
+    return {
+      request_type: 'warrant', fulfilment_status: 'unissued',
+      service_status: 'not_served', compliance_status: 'pending',
+      issued_at: null, issued_by: null,
+      executed_at: null, executed_by: null, execution_outcome: null, execution_notes: null,
+      returned_at: null, return_filed_by: null, return_narrative: null,
+      served_at: null, served_by: null, service_method: null, service_notes: null,
+      compliance_date: null, compliance_notes: null, non_compliance_reason: null,
+      revoked_at: null, revoked_by: null, revoke_reason: null,
+      closed_at: null, closed_by: null, close_note: null,
+      ...over,
+    }
+  }
+  it('an untouched request yields no events', () => {
+    expect(fulfilmentEvents(ful())).toEqual([])
+  })
+  it('warrant lifecycle: issued → executed → return filed', () => {
+    const events = fulfilmentEvents(ful({
+      fulfilment_status: 'returned',
+      issued_at: '2026-07-01T00:00:00Z', issued_by: 'cid-1',
+      executed_at: '2026-07-02T00:00:00Z', executed_by: 'cid-1',
+      execution_outcome: 'Suspect in custody', execution_notes: 'No resistance',
+      returned_at: '2026-07-03T00:00:00Z', return_filed_by: 'cid-1', return_narrative: 'Return complete',
+    }))
+    expect(events.map((e) => e.id)).toEqual(['issued', 'executed', 'return'])
+    expect(events[1].detail).toEqual([
+      { label: 'Outcome', value: 'Suspect in custody' },
+      { label: 'Notes', value: 'No resistance' },
+    ])
+    expect(events[2].byId).toBe('cid-1')
+  })
+  it('subpoena lifecycle: service + compliance surface with humanised labels', () => {
+    const events = fulfilmentEvents(ful({
+      request_type: 'subpoena', fulfilment_status: 'non_compliance',
+      served_at: '2026-07-04T00:00:00Z', served_by: 'cid-2',
+      service_status: 'served', service_method: 'In person',
+      compliance_status: 'non_compliant', compliance_date: '2026-07-10T00:00:00Z',
+      non_compliance_reason: 'Records withheld',
+    }))
+    expect(events.map((e) => e.label)).toEqual(['Service — Served', 'Compliance — Non Compliant'])
+    expect(events[1].detail[0]).toEqual({ label: 'Non-compliance reason', value: 'Records withheld' })
+  })
+  it('warrant never emits subpoena service/compliance events and vice versa', () => {
+    expect(fulfilmentEvents(ful({ service_status: 'served', compliance_status: 'complete' }))).toEqual([])
+    expect(fulfilmentEvents(ful({ request_type: 'subpoena', execution_outcome: 'x', return_narrative: 'y' }))).toEqual([])
+  })
+  it('revocation and closure events, with expired closures labelled as such', () => {
+    const revoked = fulfilmentEvents(ful({ fulfilment_status: 'revoked', revoked_at: '2026-07-05T00:00:00Z', revoked_by: 'da-1', revoke_reason: 'Superseded' }))
+    expect(revoked[0]).toMatchObject({ id: 'revoked', label: 'Revoked', byId: 'da-1' })
+    const expired = fulfilmentEvents(ful({ fulfilment_status: 'expired', closed_at: '2026-07-06T00:00:00Z', closed_by: 'cid-1' }))
+    expect(expired[0].label).toBe('Marked expired')
+    const closed = fulfilmentEvents(ful({ fulfilment_status: 'closed', closed_at: '2026-07-06T00:00:00Z', close_note: 'Done' }))
+    expect(closed[0]).toMatchObject({ label: 'Closed', detail: [{ label: 'Note', value: 'Done' }] })
   })
 })
 

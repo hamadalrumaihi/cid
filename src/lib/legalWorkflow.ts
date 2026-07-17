@@ -429,6 +429,84 @@ export function routingExplanation(r: LegalReqLike, v?: LegalViewer): string {
   return REVIEW_STATUS_LABEL[s] ?? s
 }
 
+/* ── Fulfilment event derivation (spec §29-30 — service/return event cards) ── */
+/** The operational columns the event model reads (issue → execute/serve →
+ *  return/compliance → close). Presentation-only: the rows are already
+ *  RLS-authorised; this just shapes them into an ordered event list. */
+export type LegalFulfilmentLike = Pick<
+  Tables<'legal_requests'>,
+  | 'request_type' | 'fulfilment_status' | 'service_status' | 'compliance_status'
+  | 'issued_at' | 'issued_by'
+  | 'executed_at' | 'executed_by' | 'execution_outcome' | 'execution_notes'
+  | 'returned_at' | 'return_filed_by' | 'return_narrative'
+  | 'served_at' | 'served_by' | 'service_method' | 'service_notes'
+  | 'compliance_date' | 'compliance_notes' | 'non_compliance_reason'
+  | 'revoked_at' | 'revoked_by' | 'revoke_reason'
+  | 'closed_at' | 'closed_by' | 'close_note'
+>
+
+export interface FulfilmentEvent {
+  id: string
+  /** Human event label ("Issued", "Service — Served", …). */
+  label: string
+  at: string | null
+  /** profiles.id of the recording actor — the caller resolves the name. */
+  byId: string | null
+  /** Already-labelled free-text details (outcome, notes, reasons). */
+  detail: { label: string; value: string }[]
+}
+
+const detailRows = (pairs: [string, string | null | undefined][]): { label: string; value: string }[] =>
+  pairs.filter((p): p is [string, string] => !!p[1]?.trim()).map(([label, value]) => ({ label, value }))
+
+/** Ordered fulfilment events recorded on a request. Pure: emits only what the
+ *  row already carries (no synthesised states), so an empty history stays empty. */
+export function fulfilmentEvents(r: LegalFulfilmentLike): FulfilmentEvent[] {
+  const warrant = r.request_type === 'warrant'
+  const out: FulfilmentEvent[] = []
+  if (r.issued_at) {
+    out.push({ id: 'issued', label: 'Issued', at: r.issued_at, byId: r.issued_by, detail: [] })
+  }
+  if (warrant && (r.executed_at || r.execution_outcome)) {
+    out.push({
+      id: 'executed', label: 'Execution recorded', at: r.executed_at, byId: r.executed_by,
+      detail: detailRows([['Outcome', r.execution_outcome], ['Notes', r.execution_notes]]),
+    })
+  }
+  if (warrant && (r.returned_at || r.return_narrative)) {
+    out.push({
+      id: 'return', label: 'Return filed', at: r.returned_at, byId: r.return_filed_by,
+      detail: detailRows([['Narrative', r.return_narrative]]),
+    })
+  }
+  if (!warrant && (r.served_at || r.service_status !== 'not_served')) {
+    out.push({
+      id: 'service', label: `Service — ${humanize(r.service_status)}`, at: r.served_at, byId: r.served_by,
+      detail: detailRows([['Method', r.service_method], ['Notes', r.service_notes]]),
+    })
+  }
+  if (!warrant && (r.compliance_date || r.compliance_status !== 'pending')) {
+    out.push({
+      id: 'compliance', label: `Compliance — ${humanize(r.compliance_status)}`, at: r.compliance_date, byId: null,
+      detail: detailRows([['Non-compliance reason', r.non_compliance_reason], ['Notes', r.compliance_notes]]),
+    })
+  }
+  if (r.revoked_at || r.revoke_reason) {
+    out.push({
+      id: 'revoked', label: 'Revoked', at: r.revoked_at, byId: r.revoked_by,
+      detail: detailRows([['Reason', r.revoke_reason]]),
+    })
+  }
+  if (r.closed_at) {
+    out.push({
+      id: 'closed', label: r.fulfilment_status === 'expired' ? 'Marked expired' : 'Closed',
+      at: r.closed_at, byId: r.closed_by,
+      detail: detailRows([['Note', r.close_note]]),
+    })
+  }
+  return out
+}
+
 /* ── Justice approval matrix (spec §38 — mirror of can_review_justice_role) ── */
 export function canReviewJusticeRole(
   reviewerRole: LegalViewer['justiceRole'], isOwner: boolean, requestedRole: string,
