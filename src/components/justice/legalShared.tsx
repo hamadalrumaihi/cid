@@ -125,10 +125,54 @@ export function useLegalRequests(): { requests: LegalRequest[]; loading: boolean
   return { requests, loading, reload: useCallback(() => setTick((t) => t + 1), []) }
 }
 
+/** The signed-in viewer's LIVE prosecutor bureau assignments — their OWN
+ *  `prosecutor_bureau_assignments` rows only (the pba_sel policy always allows
+ *  `prosecutor_id = auth.uid()`). Loaded once per user and cached module-wide
+ *  so both portals and the dossier share one cheap read; realtime on the table
+ *  refreshes it. Feeds LegalViewer.prosecutorBureaus, which activates the
+ *  model's bureau-awareness lane (isBureauAwareness). Non-prosecutors skip
+ *  the read entirely. */
+const NO_BUREAUS: readonly string[] = []
+let bureauCache: { key: string; value: readonly string[] } | null = null
+export function useMyProsecutorBureaus(): readonly string[] {
+  const { profile, justiceRole } = useAuth()
+  // Only DOJ prosecutors can hold live routing assignments.
+  const key = (justiceRole === 'assistant_district_attorney' || justiceRole === 'district_attorney')
+    ? profile?.id ?? null
+    : null
+  const v = useTableVersion('prosecutor_bureau_assignments')
+  const [bureaus, setBureaus] = useState<readonly string[]>(
+    () => (key && bureauCache?.key === key ? bureauCache.value : NO_BUREAUS),
+  )
+  useEffect(() => {
+    if (!key) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const rows = await list('prosecutor_bureau_assignments', {
+          select: 'bureau,starts_at,ends_at', eq: { prosecutor_id: key },
+        })
+        const now = Date.now()
+        const live = [...new Set(
+          rows.filter((r) => !r.ends_at && Date.parse(r.starts_at) <= now).map((r) => String(r.bureau)),
+        )]
+        bureauCache = { key, value: live }
+        if (!cancelled) setBureaus(live)
+      } catch { /* transient — the awareness lane just stays quiet */ }
+    })()
+    return () => { cancelled = true }
+  }, [key, v])
+  return key ? bureaus : NO_BUREAUS
+}
+
 /** Map the app's auth context → the workflow model's viewer. The model NEVER
  *  decides access (RLS + definer RPCs do); this only shapes what an authorised
- *  viewer is shown. */
-export function buildLegalViewer(auth: ReturnType<typeof useAuth>): LegalViewer {
+ *  viewer is shown. Pass `useMyProsecutorBureaus()` so the bureau-awareness
+ *  lane (isBureauAwareness) works — it defaults to none. */
+export function buildLegalViewer(
+  auth: ReturnType<typeof useAuth>,
+  prosecutorBureaus: readonly string[] = [],
+): LegalViewer {
   const p = auth.profile
   const jr = auth.justiceRole
   const justiceRole =
@@ -140,8 +184,7 @@ export function buildLegalViewer(auth: ReturnType<typeof useAuth>): LegalViewer 
     cidRole: p?.role ?? null,
     justiceRole,
     isOwner: auth.isOwner,
-    // TODO wire prosecutor bureaus (the portal does not surface them here yet).
-    prosecutorBureaus: [],
+    prosecutorBureaus,
   }
 }
 
@@ -173,35 +216,19 @@ export function LegalRequestRow({ r, onOpen, people }: {
   )
 }
 
-export function QueueSection({ title, rows, onOpen, empty }: {
-  title: string
-  rows: LegalRequest[]
-  onOpen: (id: string) => void
-  empty?: string
-}) {
-  return (
-    <section className="space-y-2">
-      <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
-        {title}
-        <span className="rounded-full bg-white/10 px-1.5 text-[10px] font-bold text-slate-300">{rows.length}</span>
-      </h3>
-      {rows.length === 0
-        ? <p className="rounded-lg border border-dashed border-white/10 px-3 py-2.5 text-xs text-slate-500">{empty ?? 'Nothing here.'}</p>
-        : <div className="space-y-1.5">{rows.map((r) => <LegalRequestRow key={r.id} r={r} onOpen={onOpen} />)}</div>}
-    </section>
-  )
-}
-
 /** Card-based queue section — the newer surfaces render requests as accessible
  *  LegalRequestCards (one per row on mobile) instead of the flat chip row.
- *  QueueSection/LegalRequestRow are kept for existing callers. */
-export function CardQueueSection({ title, rows, viewer, now, onOpen, empty }: {
+ *  LegalRequestRow is kept for existing callers (case overview). `hint`
+ *  renders an explanatory line under the heading (e.g. the judge parallel
+ *  pickup lane, the bureau awareness lane). */
+export function CardQueueSection({ title, rows, viewer, now, onOpen, empty, hint }: {
   title: string
   rows: LegalRequest[]
   viewer: LegalViewer
   now: number
   onOpen: (id: string) => void
   empty?: string
+  hint?: string
 }) {
   return (
     <section className="space-y-2">
@@ -209,6 +236,7 @@ export function CardQueueSection({ title, rows, viewer, now, onOpen, empty }: {
         {title}
         <span className="rounded-full bg-white/10 px-1.5 text-[10px] font-bold text-slate-300">{rows.length}</span>
       </h3>
+      {hint && <p className="text-xs text-slate-400">{hint}</p>}
       {rows.length === 0
         ? <p className="rounded-lg border border-dashed border-white/10 px-3 py-2.5 text-xs text-slate-500">{empty ?? 'Nothing here.'}</p>
         : (

@@ -4,6 +4,7 @@ import {
   judgeClaimEligible, responsibleRole, dispositionFor, isBureauAwareness,
   routingExplanation, canReviewJusticeRole, canAssignAsJudge, canAssignAsProsecutor,
   issuedStateFor, issuedActionLabel, urgencyFor, activeDeadline, formatTarget,
+  ISSUED_STATE_LABEL, ISSUED_STATE_ORDER,
   subtypeRequiresPerson, subtypeSupportsStructuredTargets, fulfilmentEvents,
   LEGAL_WIZARD_STEPS, legalWizardIssues, legalWizardDraftIssues,
   structuredTargetLine, appendSearchTargetLine,
@@ -167,6 +168,20 @@ describe('issued / service-return mapping (spec §15/§29-30)', () => {
   })
   it('expiry passes to expired even when marked issued', () => {
     expect(issuedStateFor(req({ review_status: 'approved', fulfilment_status: 'issued', expires_at: '2026-07-16T00:00:00Z' }), NOW)).toBe('expired')
+  })
+  it('the issued board covers every state exactly once, with a label', () => {
+    expect(new Set(ISSUED_STATE_ORDER).size).toBe(ISSUED_STATE_ORDER.length)
+    for (const s of ISSUED_STATE_ORDER) expect(ISSUED_STATE_LABEL[s]).toBeTruthy()
+  })
+  it('every fulfilment status lands on the issued board', () => {
+    const statuses = [
+      'unissued', 'issued', 'executed', 'served', 'returned', 'return_recorded',
+      'records_received', 'testimony_completed', 'compliance_pending',
+      'non_compliance', 'expired', 'revoked', 'closed',
+    ]
+    for (const f of statuses) {
+      expect(ISSUED_STATE_ORDER).toContain(issuedStateFor(req({ review_status: 'approved', fulfilment_status: f }), NOW))
+    }
   })
   it('issued-action label by type', () => {
     expect(issuedActionLabel(req({ request_type: 'warrant', fulfilment_status: 'issued' }))).toBe('Record execution')

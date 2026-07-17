@@ -30,7 +30,7 @@ import { PageHeader, SectionHeader } from '@/components/ui/PageHeader'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
 import { LegalRequestDetail } from '@/components/justice/LegalRequestDetail'
 import { LegalRequestCard } from '@/components/justice/LegalRequestCard'
-import { CardQueueSection, buildLegalViewer, useLegalRequests } from '@/components/justice/legalShared'
+import { CardQueueSection, buildLegalViewer, useLegalRequests, useMyProsecutorBureaus } from '@/components/justice/legalShared'
 import { LegalCreateWizard, type LegalWizardEntry } from './LegalCreateWizard'
 
 /** Canonical operational groups in the order the investigator should triage
@@ -78,14 +78,15 @@ function LegalViewInner() {
 
   // One disposition per request per render — the model resolves the canonical
   // group, claim eligibility, awareness and urgency for this viewer.
-  const viewer = buildLegalViewer(auth)
+  const prosecutorBureaus = useMyProsecutorBureaus()
+  const viewer = buildLegalViewer(auth, prosecutorBureaus)
   const now = useNow()
   const entries = useMemo(
     () => requests.map((r) => ({ r, d: dispositionFor(r, viewer, now) })),
     // `viewer` is recreated each render but is fully determined by the auth
-    // fields below; `now` is render-stable (useNow). requests drives the work.
+    // fields below + the cached bureau read; `now` is render-stable (useNow).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [requests, now, auth.profile?.id, auth.justiceRole, auth.isOwner],
+    [requests, now, auth.profile?.id, auth.justiceRole, auth.isOwner, prosecutorBureaus],
   )
 
   /* ── Overview derivations (same loaded set — no extra queries) ────────────── */

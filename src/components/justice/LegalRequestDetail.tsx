@@ -41,7 +41,7 @@ import { EmptyState, Notice } from '@/components/ui/Notice'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
 import {
   ClassificationBadge, DeadlineChip, StatusChip, buildLegalViewer, reviewTone,
-  useJusticeDirectory, useLegalPeople,
+  useJusticeDirectory, useLegalPeople, useMyProsecutorBureaus,
 } from './legalShared'
 import { LegalStageTracker } from './LegalStageTracker'
 import { CourtPacketPrint } from './dossier/CourtPacketPrint'
@@ -85,6 +85,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
   const [missing, setMissing] = useState(false)
   const [printPreparedAt, setPrintPreparedAt] = useState<string | null>(null)
   const people = useLegalPeople(requestId)
+  const prosecutorBureaus = useMyProsecutorBureaus()
   const { entries: directory } = useJusticeDirectory()
   const v = useTableVersion('legal_requests')
   const [tick, setTick] = useState(0)
@@ -220,7 +221,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
   const judges = directory.filter((d) => d.active && d.justice_role === 'judge')
   const currentVersion = versions.find((x) => x.id === r.current_version_id) ?? versions[0] ?? null
 
-  const viewer = buildLegalViewer(auth)
+  const viewer = buildLegalViewer(auth, prosecutorBureaus)
   const disposition = dispositionFor(r, viewer, now)
 
   const promptSig = () => uiPrompt('Type your name to sign this action.', { title: 'Signature', placeholder: profile?.display_name ?? '' })

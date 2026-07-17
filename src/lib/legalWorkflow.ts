@@ -369,6 +369,26 @@ export type IssuedState =
   | 'active' | 'served' | 'executed' | 'return_required' | 'returned'
   | 'expired' | 'revoked' | 'closed' | 'unissued'
 
+/** Presentation order for the issued / service & returns board: work states
+ *  (issuance due, execution/service due, returns outstanding) before terminal
+ *  states. Every issuedStateFor result appears here exactly once. */
+export const ISSUED_STATE_ORDER: readonly IssuedState[] = [
+  'unissued', 'active', 'executed', 'served', 'return_required', 'returned',
+  'expired', 'revoked', 'closed',
+]
+
+export const ISSUED_STATE_LABEL: Record<IssuedState, string> = {
+  unissued: 'Approved — awaiting issuance',
+  active: 'Issued — execution or service due',
+  executed: 'Executed — return outstanding',
+  served: 'Served — compliance pending',
+  return_required: 'Return required',
+  returned: 'Return recorded',
+  expired: 'Expired',
+  revoked: 'Revoked',
+  closed: 'Closed',
+}
+
 export function issuedStateFor(r: LegalReqLike, now?: number): IssuedState {
   const f = r.fulfilment_status ?? 'unissued'
   if (f === 'unissued') return 'unissued'
