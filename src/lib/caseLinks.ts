@@ -20,11 +20,12 @@ export function caseLink(
 }
 
 /** Legacy → current tab id mapping. The Evidence tab became Photos & Media
- *  (`media`) — saved links, notifications and search results that still say
- *  `?tab=evidence` must keep landing somewhere sensible forever. Resolvers
- *  call this before validating against the live tab list; generators emit the
+ *  (`media`) and the Notes tab folded into Intel & Notes (`intel`) — saved
+ *  links, notifications and search results that still say `?tab=evidence` or
+ *  `?tab=notes` must keep landing somewhere sensible forever. Resolvers call
+ *  this before validating against the live tab list; generators emit the
  *  current ids only. */
-const LEGACY_CASE_TABS: Record<string, string> = { evidence: 'media' }
+const LEGACY_CASE_TABS: Record<string, string> = { evidence: 'media', notes: 'intel' }
 
 export function normalizeCaseTab(tab: string | null | undefined): string | null {
   if (!tab) return null

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assessCase, type WfCase } from './caseWorkflow'
+import { assessCase, ricoTabVisible, type WfCase } from './caseWorkflow'
 
 const TODAY = '2026-07-14'
 const meId = 'me-0000'
@@ -91,10 +91,10 @@ describe('assessCase — tasks, legal, follow-ups', () => {
     expect(a.nextActions.find((x) => x.key === 'tasks_open')?.label).toContain('open')
   })
 
-  it('a legal request expiring within 3 days is urgent; one far out is not', () => {
+  it('a legal request expiring within 3 days is urgent and points at the Legal tab', () => {
     const soon = assessCase({ c: mkCase(), legal: [{ review_status: 'approved', expires_at: '2026-07-16' }], todayISO: TODAY })
     expect(soon.counts.expiringLegal).toBe(1)
-    expect(soon.nextActions.find((x) => x.key === 'legal_expiring')?.severity).toBe('urgent')
+    expect(soon.nextActions.find((x) => x.key === 'legal_expiring')).toMatchObject({ severity: 'urgent', tab: 'legal' })
     const later = assessCase({ c: mkCase(), legal: [{ review_status: 'approved', expires_at: '2026-08-30' }], todayISO: TODAY })
     expect(later.counts.expiringLegal).toBe(0)
   })
@@ -222,5 +222,23 @@ describe('assessCase — persisted blockers & closure checklist', () => {
     const a = assessCase({ c: mkCase({ status: 'closed' }), todayISO: TODAY })
     expect(a.closureChecklist.find((i) => i.key === 'case_open')?.ok).toBe(false)
     expect(a.closureChecklist.every((i) => i.ok)).toBe(a.closureReady)
+  })
+})
+
+describe('ricoTabVisible — conditional RICO tab', () => {
+  it('hidden by default on a case with no rico data', () => {
+    expect(ricoTabVisible({ hasData: false, sessionEnabled: false, activeTab: 'overview' })).toBe(false)
+  })
+
+  it('shows once the case has rico data, regardless of session state', () => {
+    expect(ricoTabVisible({ hasData: true, sessionEnabled: false, activeTab: 'overview' })).toBe(true)
+  })
+
+  it('shows after the viewer enabled tracking this session', () => {
+    expect(ricoTabVisible({ hasData: false, sessionEnabled: true, activeTab: 'overview' })).toBe(true)
+  })
+
+  it('a ?tab=rico deep link always resolves (saved links never break)', () => {
+    expect(ricoTabVisible({ hasData: false, sessionEnabled: false, activeTab: 'rico' })).toBe(true)
   })
 })

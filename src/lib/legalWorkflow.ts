@@ -295,6 +295,13 @@ export function dispositionFor(r: LegalReqLike, v: LegalViewer, now: number): Le
   }
 }
 
+/** How many of `rows` currently need THIS viewer's own action (dispositionFor's
+ *  viewerCanAct — awareness-only and claimable rows are excluded). Drives the
+ *  case Legal tab's attention marker; pure so it stays unit-testable. */
+export function countViewerActionable(rows: readonly LegalReqLike[], v: LegalViewer, now: number): number {
+  return rows.reduce((n, r) => n + (dispositionFor(r, v, now).viewerCanAct ? 1 : 0), 0)
+}
+
 function waitingLane(r: LegalReqLike): 'cid' | 'doj' | 'prosecution' | 'judge' {
   const s = r.review_status
   if (s === 'cid_supervisor_review') return 'cid'

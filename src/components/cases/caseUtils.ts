@@ -34,6 +34,30 @@ export function togglePinCase(id: string): void {
   Store.set('pinnedCases', (p.includes(id) ? p.filter((x) => x !== id) : [id, ...p]).slice(0, 12))
 }
 
+/* ---- RICO tab session reveal ---------------------------------------------
+ * The RICO tab is conditional (lib/caseWorkflow.ricoTabVisible): hidden until
+ * the case has tracker data, unless the viewer explicitly enabled tracking.
+ * That explicit reveal is a per-browser-tab SESSION flag (sessionStorage, not
+ * the localStorage Store blob) — it should not outlive the sitting, and once
+ * a record exists the data itself keeps the tab visible. */
+const RICO_SESSION_KEY = 'cid:ricoTabEnabled'
+
+export function ricoSessionEnabled(caseId: string): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return (JSON.parse(window.sessionStorage.getItem(RICO_SESSION_KEY) ?? '[]') as string[]).includes(caseId)
+  } catch { return false }
+}
+
+export function enableRicoSession(caseId: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    const raw = JSON.parse(window.sessionStorage.getItem(RICO_SESSION_KEY) ?? '[]')
+    const ids = Array.isArray(raw) ? (raw as string[]) : []
+    if (!ids.includes(caseId)) window.sessionStorage.setItem(RICO_SESSION_KEY, JSON.stringify([...ids, caseId]))
+  } catch { /* storage blocked — the reveal just doesn't survive navigation */ }
+}
+
 /* ---- Advanced filters + saved views (casefiles.js:53-124) ---------------- */
 export interface CaseFilters {
   bureau: string

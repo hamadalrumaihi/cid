@@ -130,6 +130,32 @@ interactive is client-side:
 - **No Supabase Storage** — media is stored as external (FiveManage) URLs in
   Postgres; there are no buckets or storage policies.
 
+### Case data ownership
+
+One owner per concept — every case-workspace surface reads/writes exactly one
+of these homes (per the case-ecosystem audit):
+
+- **Identity** (number, title, status, bureau, lead) → `cases`.
+- **Assignments** → `case_assignments` (lead pointer stays on `cases`).
+- **Narrative** (investigative reports, warrant reports) → `reports`.
+- **Visual** (photos, clips, documents) → `media`.
+- **Working notes** (informal scratchpad, no history) → `cases.notes` —
+  edited on the Intel & Notes tab.
+- **Structured intel** (person/gang/place/narcotic links with role + note) →
+  `case_intel_links` — the Intel & Notes tab is the ONE editor; the Graph tab
+  is a read-only view of the same rows.
+- **Chat** → `case_messages`.
+- **Charges** → `cases.charges` jsonb (static penal catalog in `lib/penal`).
+- **Tasks** → `case_tasks`.
+- **Legal** (warrants/subpoenas) → `legal_requests` (RPC-only writes) — the
+  case Legal tab renders only the viewer's own RLS-scoped rows.
+- **Approvals** → `case_signoff_history` (+ RPC-owned pointers on `cases`).
+- **Blockers** → `case_blockers`.
+- **Timeline** → derived (re-reads evidence/reports/tasks/history; owns
+  nothing).
+- **Graph** → derived (reads the canonical links + case rows; persists only a
+  per-device layout).
+
 ## 7. Authentication lifecycle
 
 [`src/components/auth/Gate.tsx`](../src/components/auth/Gate.tsx) renders

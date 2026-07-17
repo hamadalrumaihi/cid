@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  countViewerActionable,
   currentStage, stageForReviewStatus, stagesForRequest, laneThatAdvanced,
   judgeClaimEligible, responsibleRole, dispositionFor, isBureauAwareness,
   routingExplanation, canReviewJusticeRole, canAssignAsJudge, canAssignAsProsecutor,
@@ -155,6 +156,28 @@ describe('next-action derivation + grouping', () => {
     const d = dispositionFor(req({ review_status: 'ada_review', assigned_ada_id: 'a-9', created_by: 'inv-1' }), other, NOW)
     expect(d.viewerCanAct).toBe(false)
     expect(d.group).toBe('waiting_prosecution')
+  })
+})
+
+describe('countViewerActionable (case Legal tab marker)', () => {
+  it('counts only rows the viewer can act on — claimable and awareness excluded', () => {
+    const rows = [
+      req({ review_status: 'ada_review', assigned_ada_id: 'a-1' }),          // actionable for the ADA
+      req({ review_status: 'submitted_to_doj', responsible_bureau: 'SAB' }), // awareness for a SAB prosecutor
+      req({ review_status: 'ada_review', assigned_ada_id: 'a-9' }),          // someone else's review
+    ]
+    const ada = viewer({ myId: 'a-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['SAB'] })
+    expect(countViewerActionable(rows, ada, NOW)).toBe(1)
+    // A judge could CLAIM the parked request, but claimable is not "needs your action".
+    const judge = viewer({ myId: 'j-1', justiceRole: 'judge' })
+    expect(countViewerActionable(rows, judge, NOW)).toBe(0)
+    expect(countViewerActionable([], ada, NOW)).toBe(0)
+  })
+
+  it('returned requests count for their creator', () => {
+    const inv = viewer({ myId: 'inv-1', cidActive: true, cidRole: 'detective' })
+    expect(countViewerActionable([req({ review_status: 'returned_by_ada', created_by: 'inv-1' })], inv, NOW)).toBe(1)
+    expect(countViewerActionable([req({ review_status: 'returned_by_ada', created_by: 'other' })], inv, NOW)).toBe(0)
   })
 })
 

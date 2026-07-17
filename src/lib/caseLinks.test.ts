@@ -6,8 +6,12 @@ describe('normalizeCaseTab — legacy tab mapping', () => {
     expect(normalizeCaseTab('evidence')).toBe('media')
   })
 
+  it('maps the retired notes tab to intel (Notes folded into Intel & Notes)', () => {
+    expect(normalizeCaseTab('notes')).toBe('intel')
+  })
+
   it('passes current tab ids through unchanged', () => {
-    for (const t of ['overview', 'media', 'reports', 'tasks', 'signoff', 'timeline']) {
+    for (const t of ['overview', 'media', 'intel', 'reports', 'tasks', 'legal', 'signoff', 'timeline']) {
       expect(normalizeCaseTab(t)).toBe(t)
     }
   })

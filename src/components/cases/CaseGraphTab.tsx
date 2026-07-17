@@ -6,9 +6,12 @@
  *  vehicles connected by ownership or by their plate appearing in evidence
  *  text. Edges carry the relationship (owns, seen at, linked to, mentioned
  *  in, member of, …). Click a node for a details side panel with deep links.
- *  v2: link/unlink intel without leaving the chart, expand a person's other
- *  cases, and dragged layouts persist per case on this device. All queries
- *  are RLS-scoped; no new backend. */
+ *  Expand a person's other cases; dragged layouts persist per case on this
+ *  device. READ-ONLY over the links: the one place intel is linked/unlinked
+ *  is the Intel & Notes tab (the "Manage links" affordance points there).
+ *  Derived edges (vehicle plate/name substring matches — never persisted
+ *  rows) render dashed so inference is never mistaken for recorded intel.
+ *  All queries are RLS-scoped; no new backend. */
 import '@xyflow/react/dist/style.css'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -24,9 +27,8 @@ import {
   type NodeProps,
 } from '@xyflow/react'
 import type { Tables } from '@/lib/database.types'
-import { insert, list, remove } from '@/lib/db'
+import { list } from '@/lib/db'
 import { caseLink } from '@/lib/caseLinks'
-import { useAuth } from '@/lib/auth'
 import { timeAgo } from '@/lib/format'
 import { WARRANT_TPLS, reportTitle, warrantStatusOf, type ReportLike } from '@/lib/forms'
 import { officerName } from '@/lib/profiles'
@@ -34,8 +36,6 @@ import { useTableVersion } from '@/lib/realtime'
 import { caseStatusTint } from '@/lib/signoff'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
-import { uiConfirm } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/Button'
 
 type CaseRow = Tables<'cases'>
 type LinkRow = Tables<'case_intel_links'>
@@ -58,8 +58,6 @@ interface NodeData extends Record<string, unknown> {
   fields: [string, string][]
   href?: string
   hrefLabel?: string
-  /** The case_intel_links row behind this node — enables Unlink. */
-  linkId?: string
   /** Source entity id (person/gang/place) — enables Expand for persons. */
   refId?: string
 }
@@ -96,7 +94,6 @@ const norm = (s: string | null | undefined) => (s ?? '').toLowerCase()
 interface OtherCase { id: string; case_number: string; title: string | null; status: string }
 
 export function CaseGraphTab({ c }: { c: CaseRow }) {
-  const { canEdit } = useAuth()
   const layoutKey = `graphLayout:${c.id}`
   const [data, setData] = useState<{
     links: LinkRow[]; persons: PersonRow[]; gangs: GangRow[]; places: PlaceRow[]
@@ -106,7 +103,6 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
   const [savedPos, setSavedPos] = useState<Record<string, { x: number; y: number }>>(() => Store.get(layoutKey, {}))
   const [expanded, setExpanded] = useState<Record<string, OtherCase[]>>({})
   const [expandBusy, setExpandBusy] = useState<string | null>(null)
-  const [linker, setLinker] = useState(false)
   const vLinks = useTableVersion('case_intel_links')
   const vEvidence = useTableVersion('evidence')
   const vReports = useTableVersion('reports')
@@ -170,12 +166,14 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
     if (!data) return { nodes: [] as Node<NodeData>[], edges: [] as Edge[] }
     const nodes: Node<NodeData>[] = []
     const edges: Edge[] = []
-    const edge = (source: string, target: string, label: string, tone = '#64748b') => {
+    // `dashed` marks a DERIVED edge (render-time inference, not a stored
+    // link row) so it reads visually apart from recorded relationships.
+    const edge = (source: string, target: string, label: string, tone = '#64748b', dashed = false) => {
       edges.push({
         id: `${source}→${target}:${label}`,
         source, target, label,
         type: 'straight',
-        style: { stroke: tone, strokeWidth: 1.2, opacity: 0.7 },
+        style: { stroke: tone, strokeWidth: 1.2, opacity: 0.7, ...(dashed ? { strokeDasharray: '6 4' } : {}) },
         labelStyle: { fill: '#94a3b8', fontSize: 9, fontWeight: 700, textTransform: 'uppercase' },
         labelBgStyle: { fill: '#0b1120', fillOpacity: 0.85 },
       })
@@ -227,7 +225,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
           edgeTone: norm(l.role).includes('suspect') ? '#f43f5e' : undefined,
           data: {
             kind: 'person', icon: '👤', label: p.name || 'Person',
-            linkId: l.id, refId: p.id,
+            refId: p.id,
             sub: [l.role, p.alias ? `“${p.alias}”` : ''].filter(Boolean).join(' · '),
             fields: [
               ['Role in case', l.role || '—'],
@@ -250,7 +248,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
           edgeTone: '#f43f5e',
           data: {
             kind: 'gang', icon: '🏴', label: g.name,
-            linkId: l.id, refId: g.id,
+            refId: g.id,
             sub: g.threat_level ? `threat: ${g.threat_level}` : 'organization',
             fields: [
               ['Threat level', String(g.threat_level ?? '—')],
@@ -268,7 +266,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
           edgeLabel: l.role || 'linked to',
           data: {
             kind: 'place', icon: '📍', label: p.name,
-            linkId: l.id, refId: p.id,
+            refId: p.id,
             sub: [p.type, p.area].filter(Boolean).join(' · '),
             fields: [
               ['Type', p.type || '—'],
@@ -370,7 +368,9 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
           },
         })
       }
-      edge(anchorId, nodeId, label, '#22d3ee')
+      // Vehicle edges are inference (ownership join / plate substring), not
+      // stored links — dashed keeps them visually apart from recorded intel.
+      edge(anchorId, nodeId, label, '#22d3ee', true)
     }
     for (const v of data.vehicles) {
       if (v.owner_id && linkedPersons.some((p) => p.id === v.owner_id)) addVehicle(v, `person:${v.owner_id}`, 'owns')
@@ -397,12 +397,13 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
     for (const p of linkedPersons) {
       if (p.gang_id && linkedGangIds.has(p.gang_id)) edge(`person:${p.id}`, `gang:${p.gang_id}`, 'member of', '#f43f5e')
     }
-    // evidence text mentioning a linked person → "mentioned in"
+    // evidence text mentioning a linked person → "mentioned in" (substring
+    // inference — dashed, same as the vehicle matches)
     for (const p of linkedPersons) {
       const name = norm(p.name)
       if (name.length < 4) continue
       data.evidence.forEach((e, i) => {
-        if (evidenceText[i].includes(name)) edge(`person:${p.id}`, `evidence:${e.id}`, 'mentioned in', '#a78bfa')
+        if (evidenceText[i].includes(name)) edge(`person:${p.id}`, `evidence:${e.id}`, 'mentioned in', '#a78bfa', true)
       })
     }
 
@@ -445,7 +446,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
   if (graph.nodes.length <= 1) {
     return (
       <div className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-400">
-        Nothing to chart yet — link persons, gangs or places on the <b>Intel</b> tab, or add case photos and reports, and they appear here automatically.
+        Nothing to chart yet — link persons, gangs or places on the <b>Intel &amp; Notes</b> tab, or add case photos and reports, and they appear here automatically.
       </div>
     )
   }
@@ -473,26 +474,17 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
       </ReactFlow>
 
       <div className="absolute left-2 top-2 flex gap-2">
-        {canEdit && (
-          <button onClick={() => setLinker((v) => !v)} className="rounded-lg border border-white/10 bg-ink-900/90 px-2.5 py-1.5 text-xs font-semibold text-slate-200 shadow-lg backdrop-blur transition hover:bg-white/10">
-            🔗 Link intel
-          </button>
-        )}
+        {/* The graph is a read-only view of the links — editing lives in ONE
+            place (Intel & Notes), so there is exactly one insert/unlink rule. */}
+        <Link href={caseLink(c.id, 'intel')} className="rounded-lg border border-white/10 bg-ink-900/90 px-2.5 py-1.5 text-xs font-semibold text-slate-200 shadow-lg backdrop-blur transition hover:bg-white/10">
+          Manage links → Intel &amp; Notes
+        </Link>
         {Object.keys(savedPos).length > 0 && (
           <button onClick={resetLayout} title="Forget the dragged layout and rebuild the radial chart" className="rounded-lg border border-white/10 bg-ink-900/90 px-2.5 py-1.5 text-xs font-semibold text-slate-200 shadow-lg backdrop-blur transition hover:bg-white/10">
             ↺ Reset layout
           </button>
         )}
       </div>
-
-      {linker && data && (
-        <LinkIntelPanel
-          caseId={c.id}
-          data={data}
-          onClose={() => setLinker(false)}
-          onLinked={() => { setLinker(false); void refresh() }}
-        />
-      )}
 
       {selData && (
         <aside className="absolute right-2 top-2 bottom-2 w-72 overflow-y-auto rounded-xl border border-white/10 bg-ink-900/95 p-4 shadow-2xl backdrop-blur">
@@ -529,89 +521,10 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
           {selData.kind === 'person' && selData.refId && (expanded[selData.refId]?.length === 0) && (
             <p className="mt-2 text-center text-xs text-slate-500">No other visible cases.</p>
           )}
-          {canEdit && selData.linkId && (
-            <button
-              onClick={() => void (async () => {
-                if (!(await uiConfirm(`Unlink ${selData.label} from this case? The record itself is kept.`, { confirmText: 'Unlink' }))) return
-                const res = await remove('case_intel_links', selData.linkId!)
-                if (res.error) { toast(`Unlink failed: ${res.error.message}`, 'danger'); return }
-                toast('Unlinked from case', 'success')
-                setSel(null)
-                void refresh()
-              })()}
-              className="mt-2 block w-full rounded-lg border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-center text-sm font-semibold text-rose-300 transition hover:bg-rose-500/20"
-            >
-              ⛓️‍💥 Unlink from case
-            </button>
-          )}
         </aside>
       )}
 
       <p className="pointer-events-none absolute bottom-2 right-3 text-[10px] text-slate-600">drag to arrange (kept per case) · scroll to zoom · click a node for details</p>
-    </div>
-  )
-}
-
-/* ---- Quick-link intel (v2) ------------------------------------------------
-   Link a person/gang/place to the case without leaving the chart. Same
-   case_intel_links insert the Intel tab performs; realtime + refresh put the
-   new node on the ring immediately. */
-
-function LinkIntelPanel({ caseId, data, onClose, onLinked }: {
-  caseId: string
-  data: { links: LinkRow[]; persons: PersonRow[]; gangs: GangRow[]; places: PlaceRow[] }
-  onClose: () => void
-  onLinked: () => void
-}) {
-  const [kind, setKind] = useState<'person' | 'gang' | 'place'>('person')
-  const [refId, setRefId] = useState('')
-  const [role, setRole] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const linked = useMemo(
-    () => new Set(data.links.map((l) => `${l.kind}:${l.ref_id}`)),
-    [data.links],
-  )
-  const options = useMemo(() => {
-    const src = kind === 'person' ? data.persons.map((p) => ({ id: p.id, name: p.name || 'Person' }))
-      : kind === 'gang' ? data.gangs.map((g) => ({ id: g.id, name: g.name }))
-      : data.places.map((p) => ({ id: p.id, name: p.name }))
-    return src.filter((o) => !linked.has(`${kind}:${o.id}`)).sort((a, b) => a.name.localeCompare(b.name))
-  }, [kind, data, linked])
-
-  const add = async () => {
-    if (!refId) { toast('Pick who or what to link.', 'warn'); return }
-    setBusy(true)
-    const res = await insert('case_intel_links', { case_id: caseId, kind, ref_id: refId, role: role.trim() || null })
-    setBusy(false)
-    if (res.error) { toast(`Link failed: ${res.error.message}`, 'danger'); return }
-    toast('Linked to case', 'success')
-    onLinked()
-  }
-
-  const selCls = 'w-full rounded-lg border border-white/10 bg-ink-950 px-2.5 py-1.5 text-xs text-white outline-none focus:border-badge-500'
-  return (
-    <div className="absolute left-2 top-11 z-10 w-64 rounded-xl border border-white/10 bg-ink-900/95 p-3 shadow-2xl backdrop-blur">
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-xs font-black uppercase tracking-wider text-slate-400">Link intel to case</p>
-        <button onClick={onClose} aria-label="Close link panel" className="rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-xs text-slate-300 hover:bg-white/10">✕</button>
-      </div>
-      <div className="space-y-2">
-        <select value={kind} onChange={(e) => { setKind(e.target.value as 'person' | 'gang' | 'place'); setRefId('') }} className={selCls} aria-label="Intel type">
-          <option value="person">👤 Person</option>
-          <option value="gang">🏴 Gang</option>
-          <option value="place">📍 Place</option>
-        </select>
-        <select value={refId} onChange={(e) => setRefId(e.target.value)} className={selCls} aria-label="Intel record">
-          <option value="">— pick a {kind} —</option>
-          {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-        </select>
-        {!options.length && <p className="text-[11px] text-slate-500">Every {kind} on file is already linked.</p>}
-        <input value={role} onChange={(e) => setRole(e.target.value)} placeholder="Role (suspect, witness, stash…)" className={selCls} />
-        <Button size="sm" variant="primary" className="w-full" onClick={() => void add()} disabled={busy || !refId}>
-          {busy ? 'Linking…' : 'Link to case'}
-        </Button>
-      </div>
     </div>
   )
 }

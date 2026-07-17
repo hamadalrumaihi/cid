@@ -9,7 +9,7 @@ export interface HandbookPage {
   body: string
 }
 
-export const HANDBOOK_UPDATED = '2026-07-16'
+export const HANDBOOK_UPDATED = '2026-07-17'
 
 export const HANDBOOK_PAGES: HandbookPage[] = [
   {
@@ -543,10 +543,11 @@ scoped (\`can_access_case\`); deletes command-only.
    wizard) → \`CaseModal\`: template chips prefill fields + a task
    checklist; \`insert('cases')\` with \`case_number = BUREAU-digits\`;
    checklist rows → \`insert('case_tasks')\`.
-2. **Work it** — \`CaseDetail\`'s 12 tabs (Overview, Graph, Evidence, Notes,
-   Charges, RICO, Intel, Reports, Tasks, Sign-off, Chat, Timeline) each
-   fetch and write their own case-scoped tables. Custody transfers append
-   to the immutable \`custody_chain\`.
+2. **Work it** — \`CaseDetail\`'s 12 tabs (Overview, Graph, Photos & Media,
+   Intel & Notes, Charges, RICO — conditional, shown when the case has
+   tracker data or the viewer enables tracking, Reports, Tasks, Legal,
+   Sign-off, Chat, Timeline) each fetch and write their own case-scoped
+   tables. Custody transfers append to the immutable \`custody_chain\`.
 3. **Move it** — drag on the board → \`update('cases', {status})\`; triggers
    stamp \`closed_at\`/\`updated_at\`.
 4. **Stale escalation (automatic)** — once per session, \`CasesView\` finds

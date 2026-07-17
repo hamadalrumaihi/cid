@@ -14,26 +14,29 @@ import { countRows, deleteWithUndo, list, update, withRetry } from '@/lib/db'
 import { todayISO } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useOperationsStore } from '@/lib/operations'
-import { assessCase } from '@/lib/caseWorkflow'
+import { assessCase, ricoTabVisible } from '@/lib/caseWorkflow'
 import { normalizeCaseTab } from '@/lib/caseLinks'
 import type { Tables } from '@/lib/database.types'
 import type { LegalRequest } from '@/lib/justice'
+import { countViewerActionable } from '@/lib/legalWorkflow'
 import { parseCharges } from '@/lib/jsonShapes'
 import { officerName, activeProfiles } from '@/lib/profiles'
 import { notify } from '@/lib/notify'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
-import { isPinnedCase, pushRecentCase, togglePinCase } from './caseUtils'
+import { useNow } from '@/lib/useNow'
+import { LEGAL_LIST_COLS, buildLegalViewer, useMyProsecutorBureaus } from '@/components/justice/legalShared'
+import { enableRicoSession, isPinnedCase, pushRecentCase, ricoSessionEnabled, togglePinCase } from './caseUtils'
 import { CaseModal } from './CaseModal'
 import { CaseCommandHeader } from './CaseCommandHeader'
 import { ReassignBureauModal } from './ReassignBureauModal'
 import { OverviewTab } from './tabs/OverviewTab'
-import { NotesTab } from './tabs/NotesTab'
 import { MediaTab } from './tabs/MediaTab'
 import type { BlockerRow } from './tabs/CaseBlockersPanel'
 import { ChargesTab } from './tabs/ChargesTab'
 import { RicoTab } from './tabs/RicoTab'
 import { IntelTab } from './tabs/IntelTab'
+import { LegalTab } from './tabs/LegalTab'
 import { ReportsTab } from './tabs/ReportsTab'
 import { TasksTab } from './tabs/TasksTab'
 import { SignoffTab } from './tabs/SignoffTab'
@@ -50,22 +53,23 @@ const CaseGraphTab = dynamic(() => import('./CaseGraphTab').then((m) => m.CaseGr
   loading: () => <p className="py-10 text-center text-sm text-slate-500">Building the link chart…</p>,
 })
 
-const TABS = ['overview', 'graph', 'media', 'notes', 'charges', 'rico', 'intel', 'reports', 'tasks', 'signoff', 'chat', 'timeline'] as const
+const TABS = ['overview', 'graph', 'media', 'intel', 'charges', 'rico', 'reports', 'tasks', 'legal', 'signoff', 'chat', 'timeline'] as const
 type TabId = (typeof TABS)[number]
 
 const TAB_LABELS: Record<TabId, string> = {
-  overview: 'Overview', graph: 'Graph', media: 'Photos & Media', notes: 'Notes',
-  charges: 'Charges', rico: 'RICO', intel: 'Intel', reports: 'Reports',
-  tasks: 'Tasks', signoff: 'Sign-off', chat: 'Chat', timeline: 'Timeline',
+  overview: 'Overview', graph: 'Graph', media: 'Photos & Media', intel: 'Intel & Notes',
+  charges: 'Charges', rico: 'RICO', reports: 'Reports', tasks: 'Tasks',
+  legal: 'Legal', signoff: 'Sign-off', chat: 'Chat', timeline: 'Timeline',
 }
 
 // Visual grouping only — `?tab=` URL values match the ids (legacy
-// `tab=evidence` links resolve to `media` via normalizeCaseTab).
+// `tab=evidence`/`tab=notes` links resolve via normalizeCaseTab). RICO is
+// conditional (ricoTabVisible): the group simply skips it when hidden.
 const TAB_GROUPS: ReadonlyArray<SectionTabGroup<TabId>> = [
-  { label: 'Command', tabs: ['overview', 'signoff', 'timeline'] },
-  { label: 'Investigation', tabs: ['graph', 'media', 'notes', 'charges', 'rico', 'intel'] },
-  { label: 'Documentation', tabs: ['reports'] },
-  { label: 'Collaboration', tabs: ['tasks', 'chat'] },
+  { label: 'Command', tabs: ['overview'] },
+  { label: 'Investigation', tabs: ['graph', 'media', 'intel', 'charges', 'rico'] },
+  { label: 'Casework', tabs: ['reports', 'tasks', 'legal'] },
+  { label: 'Oversight', tabs: ['signoff', 'chat', 'timeline'] },
 ]
 
 /** Slim media projection — enough for the metric count + Overview recap. */
@@ -77,15 +81,21 @@ type WfMediaRow = Pick<Tables<'media'>, 'id' | 'created_at' | 'archived_at'>
 export interface WorkflowRows {
   tasks: Tables<'case_tasks'>[]
   reports: Tables<'reports'>[]
+  /** Narrow LEGAL_LIST_COLS projection — everything the cards, the workflow
+   *  model and the Legal tab read; RLS scopes the rows, unchanged. */
   legal: LegalRequest[]
   media: WfMediaRow[]
   blockers: BlockerRow[]
+  /** rico_cases rows for this case (0/1 — UNIQUE case_id). HEAD count only;
+   *  drives the conditional RICO tab. */
+  rico: number
 }
 
 export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () => void; onChanged: () => void }) {
   const router = useRouter()
   const sp = useSearchParams()
-  const { profile, canEdit, canDelete, isCommand, isOwner } = useAuth()
+  const auth = useAuth()
+  const { profile, canEdit, canDelete, isCommand, isOwner } = auth
   const operations = useOperationsStore((s) => s.operations)
   const [c, setCase] = useState<CaseRow | null>(null)
   const [loading, setLoading] = useState(true)
@@ -132,21 +142,25 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const vT = useTableVersion('case_tasks')
   const vL = useTableVersion('legal_requests')
   const vB = useTableVersion('case_blockers')
+  const vRi = useTableVersion('rico_cases')
   const fetchWorkflow = useCallback(async () => {
     try {
-      const [tasks, reports, legal, media, blockers] = await Promise.all([
+      const [tasks, reports, legal, media, blockers, rico] = await Promise.all([
         list('case_tasks', { eq: { case_id: id } }),
         list('reports', { eq: { case_id: id } }),
         // Legal is read-scoped by RLS; a failure must not sink the header.
-        list('legal_requests', { eq: { case_id: id }, order: 'created_at', ascending: false }).catch(() => [] as LegalRequest[]),
+        // Narrow projection — the Legal tab + cards read the same columns.
+        list('legal_requests', { select: LEGAL_LIST_COLS, eq: { case_id: id }, order: 'created_at', ascending: false }).catch(() => [] as LegalRequest[]),
         list('media', { select: 'id,created_at,archived_at', eq: { case_id: id } })
           .then((r) => r as unknown as WfMediaRow[]),
         list('case_blockers', { eq: { case_id: id }, order: 'created_at', ascending: false }).catch(() => [] as BlockerRow[]),
+        // Cheap HEAD count — has this case ever grown a RICO tracker?
+        countRows('rico_cases', { eq: { case_id: id } }).catch(() => 0),
       ])
-      setWf({ tasks, reports, legal: legal as LegalRequest[], media, blockers })
+      setWf({ tasks, reports, legal: legal as LegalRequest[], media, blockers, rico })
     } catch { /* header/metrics render with em-dashes until a fetch lands */ }
   }, [id])
-  useEffect(() => { queueMicrotask(() => { void fetchWorkflow() }) }, [fetchWorkflow, casesV, vM, vR, vT, vL, vB])
+  useEffect(() => { queueMicrotask(() => { void fetchWorkflow() }) }, [fetchWorkflow, casesV, vM, vR, vT, vL, vB, vRi])
 
   // Photos = non-archived case media (archived rows stay out of every count).
   const mediaCount = useMemo(() => (wf ? wf.media.filter((m) => !m.archived_at).length : null), [wf])
@@ -159,6 +173,22 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     meId: profile?.id ?? null,
     assigneeName: officerName(c.signoff_assignee_id),
   }) : null), [c, wf, mediaCount, profile?.id])
+
+  // Legal-tab attention marker: how many of THIS viewer's case legal rows need
+  // their own action (dispositionFor — awareness excluded). Same fetched rows
+  // as the tab; sealed rows outside the viewer's RLS never reach this.
+  const prosecutorBureaus = useMyProsecutorBureaus()
+  const legalNow = useNow()
+  const legalNeedsAction = useMemo(
+    () => (wf ? countViewerActionable(wf.legal, buildLegalViewer(auth, prosecutorBureaus), legalNow) : 0),
+    [wf, auth, prosecutorBureaus, legalNow],
+  )
+
+  // Conditional RICO tab: visible with data, after an explicit session enable,
+  // or under a direct ?tab=rico deep link (saved links never break). A deep
+  // link also stamps the session flag so the tab survives switching away.
+  useEffect(() => { if (tab === 'rico') enableRicoSession(id) }, [tab, id])
+  const ricoOn = ricoTabVisible({ hasData: (wf?.rico ?? 0) > 0, sessionEnabled: ricoSessionEnabled(id), activeTab: tab })
 
   if (loading) return <DetailSkeleton />
   if (!c) return <p className="rounded-2xl border border-white/10 bg-ink-900/50 p-6 text-slate-300">Case not found.</p>
@@ -245,7 +275,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     { label: 'Charges', value: chargesCount, onClick: () => setTab('charges') },
   ]
 
-  const tabDefs: Array<SectionTab<TabId>> = TABS.map((t) => ({
+  const tabDefs: Array<SectionTab<TabId>> = TABS.filter((t) => t !== 'rico' || ricoOn).map((t) => ({
     id: t,
     label: TAB_LABELS[t],
     count:
@@ -253,9 +283,13 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       : t === 'reports' ? wf?.reports.length
       : t === 'tasks' ? openTasks ?? undefined
       : t === 'charges' ? chargesCount
+      : t === 'legal' ? wf?.legal.length
       : undefined,
-    marker: t === 'signoff' && awaitingSignoff,
-    markerLabel: t === 'signoff' ? 'Sign-off requires attention' : undefined,
+    marker: t === 'signoff' ? awaitingSignoff : t === 'legal' && legalNeedsAction > 0,
+    markerLabel:
+      t === 'signoff' ? 'Sign-off requires attention'
+      : t === 'legal' ? 'Legal requests need your action'
+      : undefined,
   }))
 
   return (
@@ -297,15 +331,24 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         />
       </div>
       <section role="tabpanel" id={panelDomId('case', tab)} aria-labelledby={tabDomId('case', tab)} tabIndex={0} className="rounded-2xl border border-white/10 bg-ink-900/45 p-4">
-        {tab === 'overview' && <OverviewTab c={c} canEdit={canEdit} canDelete={canDelete} wf={wf} assessment={assessment} onWorkflowChanged={() => void fetchWorkflow()} />}
+        {tab === 'overview' && (
+          <OverviewTab
+            c={c} canEdit={canEdit} canDelete={canDelete} wf={wf} assessment={assessment}
+            onWorkflowChanged={() => void fetchWorkflow()}
+            /* !!wf: only offer the enable once the rico count is known, so the
+               action never flashes on a case that already has tracker data. */
+            showEnableRico={canEdit && !!wf && !ricoOn}
+            onEnableRico={() => { enableRicoSession(c.id); setTab('rico') }}
+          />
+        )}
         {tab === 'graph' && <CaseGraphTab c={c} />}
         {tab === 'media' && <MediaTab c={c} canEdit={canEdit} canDelete={canDelete} />}
-        {tab === 'notes' && <NotesTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
+        {tab === 'intel' && <IntelTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
         {tab === 'charges' && <ChargesTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
         {tab === 'rico' && <RicoTab c={c} canEdit={canEdit} canDelete={canDelete} />}
-        {tab === 'intel' && <IntelTab c={c} canEdit={canEdit} canDelete={canDelete} />}
         {tab === 'reports' && <ReportsTab c={c} canEdit={canEdit} canDelete={canDelete} />}
         {tab === 'tasks' && <TasksTab c={c} canEdit={canEdit} canDelete={canDelete} />}
+        {tab === 'legal' && <LegalTab rows={wf?.legal ?? null} />}
         {tab === 'signoff' && <SignoffTab c={c} />}
         {tab === 'chat' && <ChatTab c={c} />}
         {tab === 'timeline' && <TimelineTab c={c} />}

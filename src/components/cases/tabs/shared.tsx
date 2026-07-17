@@ -16,7 +16,6 @@ export type PredicateRow = Tables<'predicate_acts'>
 export type GangRow = Tables<'gangs'>
 export type IntelRow = Tables<'case_intel_links'>
 export type PersonRow = Tables<'persons'>
-export type PlaceRow = Tables<'places'>
 
 /** One-click row mutations (delete chips, detach) previously discarded the
  *  returned {error}, so an RLS-denied or failed write looked like a silent

@@ -139,6 +139,15 @@ function deriveStage(c: WfCase, activeLegal: number): CaseStage {
   return 'investigation'
 }
 
+/** Whether the RICO tab renders in the case tab strip. RICO is rare (few
+ *  cases ever grow a tracker), so the tab stays hidden until: the case HAS
+ *  rico data, OR the viewer explicitly enabled tracking this session, OR a
+ *  deep link (`?tab=rico`) is already pointing at it — saved links must never
+ *  break. Pure so the rule stays unit-testable. */
+export function ricoTabVisible(i: { hasData: boolean; sessionEnabled: boolean; activeTab: string }): boolean {
+  return i.hasData || i.sessionEnabled || i.activeTab === 'rico'
+}
+
 /** Evaluate a case's workflow position and surface what to do next / what
  *  blocks closure. Pure — same inputs always yield the same assessment. */
 export function assessCase(input: CaseInputs): CaseAssessment {
@@ -187,7 +196,7 @@ export function assessCase(input: CaseInputs): CaseAssessment {
       push({ key: 'signoff_waiting', label: `Waiting on ${assigneeName || 'the reviewer'} for sign-off`, severity: 'info', tab: 'signoff' })
     }
 
-    if (expiringLegal > 0) push({ key: 'legal_expiring', label: expiringLegal === 1 ? 'A warrant/subpoena expires within 3 days' : `${expiringLegal} legal requests expire within 3 days`, severity: 'urgent', tab: 'reports' })
+    if (expiringLegal > 0) push({ key: 'legal_expiring', label: expiringLegal === 1 ? 'A warrant/subpoena expires within 3 days' : `${expiringLegal} legal requests expire within 3 days`, severity: 'urgent', tab: 'legal' })
     if (overdueTasks > 0) push({ key: 'tasks_overdue', label: `${overdueTasks} ${overdueTasks === 1 ? 'task is' : 'tasks are'} overdue`, severity: 'urgent', tab: 'tasks' })
     if (isDue(c.follow_up_at, today)) push({ key: 'followup_due', label: 'Follow-up is due', detail: c.follow_up_at ?? undefined, severity: 'warn' })
     if (openTasks - overdueTasks > 0) push({ key: 'tasks_open', label: `${openTasks} open ${openTasks === 1 ? 'task' : 'tasks'}`, severity: 'info', tab: 'tasks' })
