@@ -56,8 +56,9 @@ requests are a separate, visually distinct lane ("any judge may claim").
 
 - **Unit**: `npx vitest run` — 21 files, **376 passed** (was 319 pre-redesign).
 - **Live RLS**: full sweep — **24 files, 364 passed, 1 env-gated skip**, zero
-  fixture leftovers; plus new **v136 (11)** structured-targets suite and
-  **v137** reviewer-visibility suite (results in `tests/rls/`).
+  fixture leftovers; plus new **v136 (11 passed)** structured-targets suite
+  and **v137 (7 passed)** reviewer-visibility suite — v137 also pins that a
+  supervisor who approves stays visible afterwards as a recorded participant.
 - **E2E**: `npx playwright test` — **90 passed, 0 failed** (16 new redesign
   flows incl. a live judge claim through the real RPC path; 12 documented
   env-gated skips). Fixtures built through the same definer RPCs as the RLS
