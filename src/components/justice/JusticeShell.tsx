@@ -19,7 +19,8 @@ export function JusticeShell() {
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
           <div className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-amber-500 to-amber-700 text-lg" aria-hidden>⚖️</div>
           <div className="min-w-0 leading-tight">
-            <h1 className="truncate text-sm font-bold text-white">Justice Portal · San Andreas</h1>
+            {/* Not an <h1> — the portal view's PageHeader owns the page's one h1. */}
+            <p className="truncate text-sm font-bold text-white">Justice Portal · San Andreas</p>
             <p className="text-[11px] text-slate-400">
               {who} — {justiceRoleLabel(justice?.justice_role)}
             </p>

@@ -24,6 +24,7 @@ import { canDecideTransfer, canReviewCase } from '@/components/command-center/li
 import { caseLink } from './caseLinks'
 import type { Tables } from './database.types'
 import { deadlineInfo } from './deadlines'
+import { activeDeadline, dispositionFor, humanize, type LegalViewer } from './legalWorkflow'
 import { notifDetail, notifHref, notifSub, notifTitle } from './notifText'
 import { parseNotifPayload } from './schemas'
 import { signoffLabel } from './signoff'
@@ -92,10 +93,16 @@ export type AcTransfer = Pick<Tables<'transfer_requests'>,
   | 'reason' | 'created_at' | 'updated_at'>
 export type AcAccess = Pick<Tables<'case_access_requests'>,
   'id' | 'case_id' | 'requester_id' | 'requester_name' | 'reason' | 'status' | 'created_at'>
+/** A superset of the workflow model's LegalReqLike so the legal branch can
+ *  fold every row through dispositionFor (lib/legalWorkflow) — actionability,
+ *  urgency and the active deadline are never hand-rolled here. */
 export type AcLegal = Pick<Tables<'legal_requests'>,
   'id' | 'case_id' | 'case_number_snapshot' | 'request_number' | 'request_type'
-  | 'review_status' | 'fulfilment_status' | 'created_by' | 'responsible_bureau'
-  | 'response_deadline' | 'expires_at' | 'created_at' | 'updated_at'>
+  | 'subtype' | 'review_status' | 'document_status' | 'fulfilment_status'
+  | 'service_status' | 'compliance_status' | 'approval_route' | 'classification'
+  | 'created_by' | 'responsible_bureau' | 'assigned_ada_id' | 'assigned_judge_id'
+  | 'response_deadline' | 'expires_at' | 'submitted_to_doj_at'
+  | 'created_at' | 'updated_at'>
 export type AcBlocker = Pick<Tables<'case_blockers'>,
   'id' | 'case_id' | 'title' | 'type' | 'status' | 'owner_id' | 'review_at'
   | 'created_at' | 'updated_at'>
@@ -161,6 +168,11 @@ export interface ActionSources {
   accessRequests: AcAccess[]   // status = pending
   membershipPending: number | null  // pendingMembership().awaitingCount — command/owner only, null otherwise
   legal: AcLegal[]             // slim projection, non-terminal
+  /** Additive (defaults to a plain active-CID viewer): the workflow model's
+   *  viewer for the legal branch (dispositionFor). The loader passes the real
+   *  one (buildLegalViewer + live prosecutor bureaus) so bureau-awareness rows
+   *  are recognised and NEVER surface as assigned work. */
+  legalViewer?: LegalViewer
   blockers: AcBlocker[]        // open case_blockers where owner_id = me
   notifications: AcNotif[]     // my UNREAD notifications (read = false)
   /** Additive (defaults []): library governance items, pre-derived. */
@@ -198,21 +210,12 @@ export function priorityFromScore(score: number): ActionPriority {
 /** Same values as caseWorkflow's module-private AWAITING / RETURNED sets. */
 const AWAITING_SIGNOFF = new Set(['awaiting_bureau_lead', 'awaiting_deputy', 'awaiting_director'])
 const RETURNED_SIGNOFF = new Set(['changes_requested', 'denied'])
-/** caseWorkflow's LEGAL_TERMINAL + CalendarView's LEGAL_DONE_FULFILMENT. */
-const LEGAL_TERMINAL_REVIEW = new Set(['denied', 'withdrawn', 'closed'])
-const LEGAL_DONE_FULFILMENT = new Set(['closed', 'returned', 'return_recorded', 'revoked', 'expired'])
-/** Review states where the ball is back with CID (justice.EDITABLE_REVIEW_STATES). */
-const LEGAL_ON_CID = new Set([
-  'not_submitted', 'returned_by_cid', 'returned_by_ada',
-  'returned_by_da', 'returned_by_ag', 'returned_by_judge',
-])
 const COMMAND_ROLES = new Set(['bureau_lead', 'deputy_director', 'director'])
 
 /* ---- pure date helpers ----------------------------------------------------- */
 
 const DAY_MS = 86_400_000
 const H48 = 48 * 3_600_000
-const H72 = 72 * 3_600_000
 
 /** Timestamp in ms; date-only values count as end of day (deadlines.ts idiom). */
 function tsMs(iso: string | null | undefined): number | null {
@@ -220,12 +223,6 @@ function tsMs(iso: string | null | undefined): number | null {
   const raw = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T23:59:59` : iso
   const t = new Date(raw).getTime()
   return Number.isNaN(t) ? null : t
-}
-
-function earlierIso(a: string | null, b: string | null): string | null {
-  if (!a) return b
-  if (!b) return a
-  return (tsMs(a) ?? Number.POSITIVE_INFINITY) <= (tsMs(b) ?? Number.POSITIVE_INFINITY) ? a : b
 }
 
 function urgency(status: ActionStatus, dueAt: string | null, since: string | null, nudge: number, nowMs: number): number {
@@ -493,32 +490,48 @@ export function buildActionItems(s: ActionSources): ActionQueue {
     })
   }
 
-  /* 7 · legal requests — conservative: only requests I filed (created_by = me).
-   *     Waiting on DOJ unless the review state puts the ball back with CID
-   *     (returned_by_* / not_submitted drafts) or a deadline escalates it. */
+  /* 7 · legal requests — disposition-driven: dispositionFor (lib/legalWorkflow)
+   *     is the single authority for actionability (viewerCanAct), urgency and
+   *     the active deadline; no status meaning is hand-rolled here. Included:
+   *     requests I filed (waiting / returned to me / expiring) and requests
+   *     whose NEXT ACTION is mine (e.g. CID supervisor review). Excluded:
+   *     bureau-awareness visibility (never assigned work, spec §9), judge
+   *     claimable pickups (Justice-portal work), and closed/completed rows. */
+  const legalViewer: LegalViewer = s.legalViewer ?? {
+    myId: s.me, cidActive: true, cidRole: s.role, justiceRole: null,
+    isOwner: s.isOwner ?? false, prosecutorBureaus: [],
+  }
   for (const l of s.legal) {
-    if (l.created_by !== s.me) continue
-    if (LEGAL_TERMINAL_REVIEW.has(l.review_status || '') || LEGAL_DONE_FULFILMENT.has(l.fulfilment_status || '')) continue
-    const dueAt = earlierIso(l.response_deadline, l.expires_at)
-    const dl = deadlineInfo(dueAt, dueAt !== null && dueAt === l.expires_at ? 'expires' : 'deadline', { now: s.nowMs, urgentHours: 48 })
-    const onCid = LEGAL_ON_CID.has(l.review_status || '')
-    const status: ActionStatus = dl?.overdue ? 'overdue' : onCid ? 'needs_action' : dl?.urgent ? 'due_soon' : 'waiting'
-    const expMs = tsMs(l.expires_at)
-    const expiring = expMs !== null && expMs - s.nowMs >= 0 && expMs - s.nowMs <= H72
+    const d = dispositionFor(l, legalViewer, s.nowMs)
+    if (d.group === 'closed' || d.group === 'completed') continue
+    if (d.awarenessOnly) continue
+    const isCreator = l.created_by === s.me
+    if (!isCreator && !d.viewerCanAct) continue
+    const deadline = activeDeadline(l)
+    const dl = deadline ? deadlineInfo(deadline.at, deadline.kind, { now: s.nowMs, soonHours: 72, urgentHours: 72 }) : null
+    const returned = d.group === 'returned_to_you'
+    const status: ActionStatus =
+      d.urgency === 'overdue' ? 'overdue'
+        : returned ? 'returned'
+          : d.viewerCanAct ? 'needs_action'
+            : d.urgency === 'soon' ? 'due_soon' : 'waiting'
+    // Warrant-expiry pressure (≤72h out) keeps its documented +60 nudge.
+    const expiring = deadline?.kind === 'expires' && d.urgency === 'soon'
     add({
       id: `legal:${l.id}`, sourceType: 'legal_request', sourceId: l.id,
-      title: `${l.request_number} — ${(l.request_type || 'request').replace(/_/g, ' ')}`,
+      title: `${l.request_number} — ${humanize(l.request_type || 'request')}`,
       summary: l.case_number_snapshot ? `Case ${l.case_number_snapshot}` : 'Legal request',
-      reason: l.review_status === 'not_submitted' ? 'Draft — finish and submit'
-        : onCid ? 'Returned to CID — revise and resubmit'
-          : dl && (dl.overdue || dl.urgent) ? dl.text
-            : 'Filed by you — waiting on DOJ',
-      status, dueAt,
+      reason: d.viewerCanAct ? d.nextAction
+        : dl && (dl.overdue || dl.urgent) ? dl.text
+          : d.whyNoAction ?? d.groupLabel,
+      status, dueAt: deadline?.at ?? null,
       createdAt: l.created_at, updatedAt: l.updated_at, waitingSince: l.created_at,
-      ownerId: s.me, caseId: l.case_id, caseNumber: l.case_number_snapshot,
+      ownerId: s.me, responsibleRole: !isCreator && d.viewerCanAct ? s.role : null,
+      caseId: l.case_id, caseNumber: l.case_number_snapshot,
       bureau: l.responsible_bureau,
       deepLink: `/legal?request=${encodeURIComponent(l.id)}`,
-      isPersonalItem: true, isWaitingOnCurrentUser: status !== 'waiting',
+      isPersonalItem: isCreator, isCommandItem: !isCreator && d.viewerCanAct,
+      isWaitingOnCurrentUser: d.viewerCanAct,
       nudge: expiring ? NUDGE.legalExpiring : 0,
       dedupeKey: `legal:${l.id}`,
     })

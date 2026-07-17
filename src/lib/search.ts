@@ -4,6 +4,7 @@
  *  (app.js supaSearch/paletteSources). Charges are static reference data and
  *  are matched client-side against the penal catalog, exactly like vanilla. */
 import { rpc } from './db'
+import { REVIEW_STATUS_LABEL } from './legalWorkflow'
 import { PENAL_CODE, penalSentence, type PenalCharge } from './penal'
 import { Store } from './store'
 
@@ -56,6 +57,23 @@ export function chargeHits(q: string, max = 6): SearchHit[] {
     }))
 }
 
+/** The RPC's legal sublabel is `initcap(request_type) · replace(review_status,
+ *  '_', ' ')` — a machine status with the underscores swapped, not the model's
+ *  vocabulary. Re-derive the workflow model's human label from that token so
+ *  search rows read like every other legal surface ("Warrant · Submitted to
+ *  DOJ — awaiting assignment", never "submitted to doj"). Pure and lossless:
+ *  an unrecognised token passes through unchanged; the RPC itself (RLS-scoped,
+ *  sealed-safe) is untouched. */
+export function legalHitSublabel(sublabel: string | null): string | null {
+  if (!sublabel) return sublabel
+  const sep = sublabel.indexOf(' · ')
+  if (sep < 0) return sublabel
+  const head = sublabel.slice(0, sep)
+  const token = sublabel.slice(sep + 3).trim().replace(/ /g, '_').toLowerCase()
+  const label = REVIEW_STATUS_LABEL[token]
+  return label ? `${head} · ${label}` : sublabel
+}
+
 /** One round-trip cross-entity search. Returns hits sorted by rank within
  *  their kind (the RPC caps at 8 per kind / 60 total). Throws on RPC error so
  *  the palette can show a real failure state instead of "no matches". */
@@ -65,7 +83,9 @@ export async function runSearch(q: string): Promise<SearchHit[]> {
   const res = await rpc('search_all', { q: query })
   if (res.error) throw new Error(res.error.message)
   const rows = (res.data ?? []) as SearchHit[]
-  return rows.concat(chargeHits(query))
+  return rows
+    .map((h) => (h.kind === 'legal' ? { ...h, sublabel: legalHitSublabel(h.sublabel) } : h))
+    .concat(chargeHits(query))
 }
 
 /** Recent-search memory — same Store key + shape as vanilla (deduped,

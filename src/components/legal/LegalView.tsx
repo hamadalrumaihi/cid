@@ -1,26 +1,50 @@
 'use client'
 
-/** CID Legal Requests — the investigator side of the DOJ legal-review system.
- *  Queues (drafts, awaiting CID review, returned, submitted, My Warrants /
- *  My Subpoenas), plus the File Warrant Request and File Subpoena forms. The
- *  case selector only offers cases the officer can already access (RLS), the
- *  suspect/recipient comes from the canonical Persons registry, and every
- *  create/submit is a definer RPC. Deep link: /legal?request=<id>. */
-import { Suspense, useEffect, useMemo, useState } from 'react'
+/** CID Legal Requests — the investigator side of the DOJ legal-review system
+ *  (DOJ redesign §15, phase 3). Two deep-linkable sub-views (`?view=`):
+ *   - Overview — a MetricStrip over the SAME loaded request set (every count
+ *     comes through dispositionFor; no extra queries), a "Needs your
+ *     attention" list (returns to fix + approaching/blown deadlines, never
+ *     awareness-only items), and a compact recent-activity rail.
+ *   - Requests — the canonical card registry (one group per request via
+ *     dispositionFor) with simple filters: text search, type/subtype, and
+ *     status group.
+ *  Creation and revision run through the guided LegalCreateWizard; every
+ *  write stays on the existing definer RPCs. Deep link: /legal?request=<id>. */
+import { Suspense, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
-import { list, rpc } from '@/lib/db'
-import type { Tables } from '@/lib/database.types'
-import { Drafts, type Draft } from '@/lib/drafts'
 import { timeAgo } from '@/lib/format'
-import { SUBPOENA_FIELDS, SUBPOENA_TYPES, SOCIAL_PLATFORMS, WARRANT_FIELDS, WARRANT_TYPES, type SubpoenaType, type WarrantType } from '@/lib/justice'
-import { toast } from '@/lib/toast'
+import { SUBPOENA_TYPES, WARRANT_TYPES, isEditableDraft, type LegalRequest } from '@/lib/justice'
+import {
+  OP_GROUP_LABEL, activeDeadline, dispositionFor,
+  type LegalDisposition, type OpGroup,
+} from '@/lib/legalWorkflow'
+import { useNow } from '@/lib/useNow'
 import { Button } from '@/components/ui/Button'
-import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { Card } from '@/components/ui/Card'
+import { Input, Select } from '@/components/ui/Field'
+import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
+import { EmptyState } from '@/components/ui/Notice'
+import { PageHeader, SectionHeader } from '@/components/ui/PageHeader'
+import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
 import { LegalRequestDetail } from '@/components/justice/LegalRequestDetail'
-import { QueueSection, useLegalRequests } from '@/components/justice/legalShared'
+import { LegalRequestCard } from '@/components/justice/LegalRequestCard'
+import { CardQueueSection, buildLegalViewer, useLegalRequests, useMyProsecutorBureaus } from '@/components/justice/legalShared'
+import { LegalCreateWizard, type LegalWizardEntry } from './LegalCreateWizard'
 
-const SUPERVISOR_ROLES = new Set(['senior_detective', 'bureau_lead', 'deputy_director', 'director'])
+/** Canonical operational groups in the order the investigator should triage
+ *  them (spec §7). Each request lands in exactly ONE group via dispositionFor,
+ *  so a request never double-appears (e.g. "My Warrants" + "Submitted to DOJ"). */
+const GROUP_ORDER: OpGroup[] = [
+  'needs_action', 'returned_to_you', 'available_to_claim', 'assigned_to_you',
+  'waiting_cid', 'waiting_doj', 'waiting_prosecution', 'waiting_judge',
+  'issued_active', 'service_return_pending', 'completed', 'closed',
+]
+
+const WAITING_GROUPS: readonly OpGroup[] = ['waiting_cid', 'waiting_doj', 'waiting_prosecution', 'waiting_judge']
+
+type ViewId = 'overview' | 'requests'
 
 export function LegalView() {
   return (
@@ -31,332 +55,285 @@ export function LegalView() {
 }
 
 function LegalViewInner() {
-  const { profile } = useAuth()
-  const me = profile?.id ?? null
+  const auth = useAuth()
   const router = useRouter()
   const params = useSearchParams()
   const openId = params.get('request')
-  const [creating, setCreating] = useState<null | 'warrant' | 'subpoena'>(null)
-  const { requests, loading } = useLegalRequests()
+  const view: ViewId = params.get('view') === 'requests' ? 'requests' : 'overview'
+  const [wizard, setWizard] = useState<LegalWizardEntry | null>(null)
+  const { requests, loading, reload } = useLegalRequests()
+  const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState('')
+  const [groupFilter, setGroupFilter] = useState<OpGroup | ''>('')
 
   const open = (id: string) => router.push(`/legal?request=${encodeURIComponent(id)}`)
-  const back = () => router.push('/legal')
+  // The landing stays mounted behind the dossier; refetch on return so
+  // in-dossier actions show without relying on the realtime channel.
+  const back = () => { router.push('/legal'); reload() }
+  const setView = (v: ViewId) => {
+    const p = new URLSearchParams(params.toString())
+    if (v === 'overview') p.delete('view')
+    else p.set('view', v)
+    const qs = p.toString()
+    router.replace(qs ? `/legal?${qs}` : '/legal', { scroll: false })
+  }
+
+  // One disposition per request per render — the model resolves the canonical
+  // group, claim eligibility, awareness and urgency for this viewer.
+  const prosecutorBureaus = useMyProsecutorBureaus()
+  const viewer = buildLegalViewer(auth, prosecutorBureaus)
+  const now = useNow()
+  const entries = useMemo(
+    () => requests.map((r) => ({ r, d: dispositionFor(r, viewer, now) })),
+    // `viewer` is recreated each render but is fully determined by the auth
+    // fields below + the cached bureau read; `now` is render-stable (useNow).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [requests, now, auth.profile?.id, auth.justiceRole, auth.isOwner, prosecutorBureaus],
+  )
+
+  /* ── Overview derivations (same loaded set — no extra queries) ────────────── */
+  const counts = useMemo(() => {
+    const c = { drafts: 0, returned: 0, awaiting: 0, inReview: 0, issued: 0 }
+    for (const { r, d } of entries) {
+      if (d.group === 'returned_to_you') c.returned++
+      else if (d.viewerCanAct && r.review_status === 'not_submitted') c.drafts++
+      else if (d.viewerCanAct || d.viewerCanClaim) c.awaiting++
+      else if (WAITING_GROUPS.includes(d.group)) c.inReview++
+      else if (d.group === 'issued_active' || d.group === 'service_return_pending') c.issued++
+    }
+    return c
+  }, [entries])
+
+  // Returns to fix + expiring/expired instruments + approaching response
+  // deadlines. Awareness-only items NEVER appear here (spec §9).
+  const attention = useMemo(() => {
+    const rank = (d: LegalDisposition) => (d.urgency === 'overdue' ? 0 : d.urgency === 'soon' ? 1 : 2)
+    return entries
+      .filter(({ d }) => !d.awarenessOnly && (d.group === 'returned_to_you' || d.urgency === 'overdue' || d.urgency === 'soon'))
+      .sort((a, b) => {
+        const ra = rank(a.d), rb = rank(b.d)
+        if (ra !== rb) return ra - rb
+        const da = activeDeadline(a.r), db = activeDeadline(b.r)
+        const ta = da ? Date.parse(da.at) : Infinity
+        const tb = db ? Date.parse(db.at) : Infinity
+        if (ta !== tb) return ta - tb
+        return Date.parse(b.r.updated_at) - Date.parse(a.r.updated_at)
+      })
+      .slice(0, 5)
+  }, [entries])
+
+  // Latest status movement from the already-loaded projection (updated_at +
+  // the model's human status label — no per-request action queries).
+  const activity = useMemo(
+    () => [...entries].sort((a, b) => Date.parse(b.r.updated_at) - Date.parse(a.r.updated_at)).slice(0, 8),
+    [entries],
+  )
+
+  /* ── Requests view: filters over the loaded projection ────────────────────── */
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const [ft, fs] = typeFilter.split(':')
+    return entries.filter(({ r, d }) => {
+      if (ft && r.request_type !== ft) return false
+      if (fs && r.subtype !== fs) return false
+      if (groupFilter && d.group !== groupFilter) return false
+      if (q) {
+        const hay = `${r.request_number ?? ''} ${r.title ?? ''} ${r.person_name_snapshot ?? ''} ${r.recipient_name ?? ''} ${r.case_number_snapshot ?? ''}`.toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      return true
+    })
+  }, [entries, search, typeFilter, groupFilter])
+
+  const grouped = useMemo(() => {
+    const map = new Map<OpGroup, LegalRequest[]>()
+    for (const { r, d } of filtered) {
+      const bucket = map.get(d.group)
+      if (bucket) bucket.push(r)
+      else map.set(d.group, [r])
+    }
+    return map
+  }, [filtered])
 
   if (openId) return <LegalRequestDetail requestId={openId} onBack={back} />
-  if (creating) {
+  if (wizard) {
     return (
-      <CreateRequestForm
-        kind={creating}
-        onCancel={() => setCreating(null)}
-        onCreated={(id) => { setCreating(null); open(id) }}
+      <LegalCreateWizard
+        entry={wizard}
+        onCancel={() => setWizard(null)}
+        onDone={(id) => { setWizard(null); open(id) }}
       />
     )
   }
 
-  const supervisor = !!profile && (SUPERVISOR_ROLES.has(profile.role) || !!profile.is_owner)
-  const mine = requests.filter((r) => r.created_by === me)
-  const editableStates = new Set(['not_submitted', 'returned_by_cid', 'returned_by_ada', 'returned_by_da', 'returned_by_ag', 'returned_by_judge'])
+  const gotoGroup = (g: OpGroup | '') => { setGroupFilter(g); setView('requests') }
+  const metrics: Metric[] = [
+    { label: 'My drafts', value: counts.drafts, onClick: () => gotoGroup('needs_action') },
+    { label: 'Returned to me', value: counts.returned, onClick: () => gotoGroup('returned_to_you') },
+    { label: 'Awaiting my action', value: counts.awaiting, onClick: () => gotoGroup('') },
+    { label: 'In review', value: counts.inReview, onClick: () => gotoGroup('') },
+    { label: 'Issued & active', value: counts.issued, onClick: () => gotoGroup('issued_active') },
+  ]
+
+  const tabs: SectionTab<ViewId>[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'requests', label: 'Requests', count: requests.length },
+  ]
+
+  const filtersActive = !!(search.trim() || typeFilter || groupFilter)
+  const clearFilters = () => { setSearch(''); setTypeFilter(''); setGroupFilter('') }
+  const activeGroups = GROUP_ORDER.filter((g) => (grouped.get(g)?.length ?? 0) > 0)
+  const canRevise = (r: LegalRequest) => auth.profile?.id === r.created_by && isEditableDraft(r)
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2">
-        <Button variant="primary" onClick={() => setCreating('warrant')}>+ File Warrant Request</Button>
-        <Button variant="primary" onClick={() => setCreating('subpoena')}>+ File Subpoena</Button>
-      </div>
-      {loading && <p className="text-sm text-slate-400">Loading legal requests…</p>}
-      <QueueSection title="My Legal Drafts" onOpen={open}
-        rows={mine.filter((r) => r.review_status === 'not_submitted')}
-        empty="No drafts — file a warrant request or subpoena above." />
-      <QueueSection title="Returned for Revision" onOpen={open}
-        rows={mine.filter((r) => editableStates.has(r.review_status) && r.review_status !== 'not_submitted')} />
-      {supervisor && (
-        <QueueSection title="Awaiting CID Review" onOpen={open}
-          rows={requests.filter((r) => r.review_status === 'cid_supervisor_review')}
-          empty="Nothing is waiting for supervisor review." />
-      )}
-      <QueueSection title="Submitted to DOJ" onOpen={open}
-        rows={requests.filter((r) => !editableStates.has(r.review_status)
-          && !['cid_supervisor_review', 'approved', 'denied', 'withdrawn'].includes(r.review_status))} />
-      <QueueSection title="My Warrants" onOpen={open}
-        rows={mine.filter((r) => r.request_type === 'warrant')} />
-      <QueueSection title="My Subpoenas" onOpen={open}
-        rows={mine.filter((r) => r.request_type === 'subpoena')} />
-    </div>
-  )
-}
+      <PageHeader
+        title="Legal Requests"
+        subtitle="Warrant and subpoena requests you filed or can act on."
+        actions={
+          <Button variant="primary" onClick={() => setWizard({ mode: 'create' })}>
+            + File legal request
+          </Button>
+        }
+      />
 
-/* ---- Create form (warrant request / subpoena) ----------------------------- */
+      <SectionTabs<ViewId> tabs={tabs} active={view} onChange={setView} idBase="legalview" ariaLabel="Legal request views" />
 
-type SlimCase = Pick<Tables<'cases'>, 'id' | 'case_number' | 'title' | 'bureau' | 'originating_bureau'>
-type SlimPerson = Pick<Tables<'persons'>, 'id' | 'name' | 'alias'>
-
-/** Never-lose-work stash for the create form (same Drafts scheme as report
- *  editors: `legal:new:<kind>`). Restore is always user-triggered. */
-interface LegalDraftData {
-  title: string
-  priority: string
-  narrative: string
-  subtype: SubpoenaType
-  warrantSubtype: WarrantType
-  recipientType: 'player' | 'entity'
-  recipientName: string
-  form: Record<string, string>
-  caseId: string
-  personId: string
-}
-
-function CreateRequestForm({ kind, onCancel, onCreated }: {
-  kind: 'warrant' | 'subpoena'
-  onCancel: () => void
-  onCreated: (id: string) => void
-}) {
-  const [cases, setCases] = useState<SlimCase[]>([])
-  const [persons, setPersons] = useState<SlimPerson[]>([])
-  const [caseQuery, setCaseQuery] = useState('')
-  const [personQuery, setPersonQuery] = useState('')
-  const [caseId, setCaseId] = useState('')
-  const [personId, setPersonId] = useState('')
-  const [title, setTitle] = useState('')
-  const [priority, setPriority] = useState('Medium')
-  const [narrative, setNarrative] = useState('')
-  const [subtype, setSubtype] = useState<SubpoenaType>('testimony')
-  const [warrantSubtype, setWarrantSubtype] = useState<WarrantType>('arrest_warrant')
-  const [recipientType, setRecipientType] = useState<'player' | 'entity'>('player')
-  const [recipientName, setRecipientName] = useState('')
-  const [form, setForm] = useState<Record<string, string>>({})
-  const [busy, setBusy] = useState(false)
-
-  // Draft recovery: an existing stash surfaces as a banner (read once,
-  // lazily — never auto-filled); Restore applies it, Discard clears it.
-  const draftKey = `legal:new:${kind}`
-  const [pendingDraft, setPendingDraft] = useState<Draft<LegalDraftData> | null>(() => Drafts.load<LegalDraftData>(draftKey))
-  const restoreDraft = () => {
-    if (!pendingDraft) return
-    const d = pendingDraft.data
-    setTitle(d.title); setPriority(d.priority); setNarrative(d.narrative)
-    setSubtype(d.subtype); setWarrantSubtype(d.warrantSubtype ?? 'arrest_warrant')
-    setRecipientType(d.recipientType); setRecipientName(d.recipientName)
-    setForm(d.form); setCaseId(d.caseId); setPersonId(d.personId)
-    setPendingDraft(null)
-  }
-  const discardDraft = () => { Drafts.clear(draftKey); setPendingDraft(null) }
-
-  // Stash while typing (write-only effect — no state changes). Pristine forms
-  // never save, so an unrestored draft is not overwritten by an empty mount.
-  const hasContent = !!(title.trim() || narrative.trim() || recipientName.trim() || caseId || personId || Object.keys(form).length)
-  useEffect(() => {
-    if (!hasContent) return
-    Drafts.save(draftKey, { title, priority, narrative, subtype, warrantSubtype, recipientType, recipientName, form, caseId, personId } satisfies LegalDraftData)
-  }, [draftKey, hasContent, title, priority, narrative, subtype, warrantSubtype, recipientType, recipientName, form, caseId, personId])
-
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      try {
-        const [cs, ps] = await Promise.all([
-          list('cases', { select: 'id,case_number,title,bureau,originating_bureau', order: 'created_at', ascending: false }) as unknown as Promise<SlimCase[]>,
-          list('persons', { select: 'id,name,alias', order: 'name' }) as unknown as Promise<SlimPerson[]>,
-        ])
-        if (cancelled) return
-        setCases(cs); setPersons(ps)
-      } catch { /* pickers degrade to empty */ }
-    })()
-    return () => { cancelled = true }
-  }, [])
-
-  const filteredCases = useMemo(() => {
-    const q = caseQuery.trim().toLowerCase()
-    const base = q
-      ? cases.filter((c) => c.case_number.toLowerCase().includes(q) || (c.title ?? '').toLowerCase().includes(q))
-      : cases
-    return base.slice(0, 30)
-  }, [cases, caseQuery])
-  const filteredPersons = useMemo(() => {
-    const q = personQuery.trim().toLowerCase()
-    const base = q
-      ? persons.filter((p) => p.name.toLowerCase().includes(q) || (p.alias ?? '').toLowerCase().includes(q))
-      : persons
-    return base.slice(0, 30)
-  }, [persons, personQuery])
-
-  const selectedCase = cases.find((c) => c.id === caseId)
-  const needsBureauResolution = !!selectedCase && !['LSB', 'BCB', 'SAB'].includes(selectedCase.bureau)
-    && !['LSB', 'BCB', 'SAB'].includes(selectedCase.originating_bureau ?? '')
-  const spec = kind === 'subpoena' ? SUBPOENA_FIELDS[subtype] : WARRANT_FIELDS[warrantSubtype]
-  // Search warrants may target a place/property/vehicle with no suspect — the
-  // server accepts a search-target-only search warrant, so the suspect is
-  // optional there (arrest warrants still require it).
-  const suspectOptional = kind === 'warrant' && warrantSubtype === 'search_warrant'
-
-  const setF = (k: string, val: string) => setForm((f) => ({ ...f, [k]: val }))
-
-  const suggestTitle = () => {
-    const person = persons.find((p) => p.id === personId)
-    if (kind === 'warrant' && person && selectedCase && !title.trim()) {
-      const label = warrantSubtype === 'search_warrant' ? 'Search Warrant' : 'Arrest Warrant'
-      setTitle(`${label} — ${person.name} (${selectedCase.case_number})`)
-    }
-  }
-
-  const create = async () => {
-    if (!caseId) { toast('Select a case.', 'warn'); return }
-    if (!title.trim()) { toast('A title is required.', 'warn'); return }
-    if (!narrative.trim()) { toast(`A ${kind === 'warrant' ? 'description / justification' : 'reason for subpoena'} is required.`, 'warn'); return }
-    if (kind === 'warrant') {
-      if (!suspectOptional && !personId) { toast('Search and select the suspect from the Persons registry.', 'warn'); return }
-      // Mirror the server rule: a search warrant needs a subject OR at least
-      // one search target.
-      if (suspectOptional && !personId && !String(form.search_targets ?? '').trim()) {
-        toast('A search warrant needs a subject or at least one search target.', 'warn'); return
-      }
-    }
-    if (kind === 'subpoena') {
-      if (recipientType === 'player' && !personId) { toast('Search and select the player recipient.', 'warn'); return }
-      if (recipientType === 'entity' && !recipientName.trim()) { toast('A recipient name is required.', 'warn'); return }
-    }
-    const missing = spec.filter((f) => f.req && !String(form[f.key] ?? '').trim())
-    if (missing.length) { toast(`Required: ${missing.map((f) => f.label).join(', ')}`, 'warn'); return }
-    setBusy(true)
-    const res = await rpc('create_legal_request', {
-      p_case: caseId,
-      p_request_type: kind,
-      p_subtype: kind === 'warrant' ? warrantSubtype : subtype,
-      p_title: title.trim(),
-      p_priority: kind === 'warrant' ? priority : undefined,
-      p_narrative: narrative,
-      p_person: (kind === 'warrant' || recipientType === 'player') ? (personId || undefined) : undefined,
-      p_recipient_type: kind === 'subpoena' ? recipientType : undefined,
-      p_recipient_name: kind === 'subpoena' && recipientType === 'entity' ? recipientName.trim() : undefined,
-      p_form: form,
-    })
-    setBusy(false)
-    if (res.error) { toast(res.error.message, 'danger'); return }
-    Drafts.clear(draftKey)
-    toast('Draft created — add supporting items, then submit for CID review.', 'success')
-    if (res.data) onCreated(res.data.id)
-  }
-
-  return (
-    <div className="max-w-2xl space-y-3">
-      <div className="flex items-center gap-2">
-        <Button onClick={onCancel}>← Cancel</Button>
-        <h2 className="text-lg font-bold text-white">{kind === 'warrant' ? 'File Warrant Request' : 'File Subpoena'}</h2>
-      </div>
-
-      {pendingDraft && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2 text-xs text-amber-200">
-          <span className="min-w-0 flex-1">Draft from {timeAgo(pendingDraft.at)} found — restore your unsaved {kind === 'warrant' ? 'warrant request' : 'subpoena'}?</span>
-          <Button size="sm" variant="secondary" onClick={restoreDraft}>Restore</Button>
-          <Button size="sm" variant="ghost" onClick={discardDraft}>Discard</Button>
-        </div>
-      )}
-
-      <Field label="Case" required>
-        {(id) => (
-          <div className="space-y-1.5">
-            <Input id={id} value={caseQuery} onChange={(e) => setCaseQuery(e.target.value)} placeholder="Search case number or title…" />
-            <Select value={caseId} onChange={(e) => setCaseId(e.target.value)} aria-label="Select case">
-              <option value="">Choose a case…</option>
-              {filteredCases.map((c) => (
-                <option key={c.id} value={c.id}>{c.case_number} — {c.title ?? 'Untitled'} ({c.bureau}{c.bureau === 'JTF' && c.originating_bureau ? ` · origin ${c.originating_bureau}` : ''})</option>
-              ))}
-            </Select>
-          </div>
+      <div
+        id={panelDomId('legalview', view)}
+        role="tabpanel"
+        aria-labelledby={tabDomId('legalview', view)}
+        tabIndex={-1}
+        className="space-y-6"
+      >
+        {loading && <p className="text-sm text-slate-400">Loading legal requests…</p>}
+        {!loading && requests.length === 0 && (
+          <EmptyState
+            icon="⚖️"
+            title="No legal requests yet"
+            hint="File a warrant or subpoena request to start the DOJ review workflow."
+            action={{ label: 'File legal request', onClick: () => setWizard({ mode: 'create' }) }}
+          />
         )}
-      </Field>
-      {needsBureauResolution && (
-        <p className="rounded border border-amber-500/20 bg-amber-500/5 p-2 text-xs text-amber-200">
-          This JTF case has no originating bureau on record — a CID supervisor must set it (case Overview) before
-          this request can be submitted to DOJ.
-        </p>
-      )}
 
-      {kind === 'warrant' && (
-        <Field label="Warrant Type" required>
-          {(id) => (
-            <Select id={id} value={warrantSubtype} onChange={(e) => { setWarrantSubtype(e.target.value as WarrantType); setForm({}) }}>
-              {WARRANT_TYPES.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
-            </Select>
-          )}
-        </Field>
-      )}
-      {kind === 'subpoena' && (
-        <>
-          <Field label="Subpoena Type" required>
-            {(id) => (
-              <Select id={id} value={subtype} onChange={(e) => { setSubtype(e.target.value as SubpoenaType); setForm({}) }}>
-                {SUBPOENA_TYPES.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
-              </Select>
-            )}
-          </Field>
-          <Field label="Recipient Type" required>
-            {(id) => (
-              <Select id={id} value={recipientType} onChange={(e) => setRecipientType(e.target.value as 'player' | 'entity')}>
-                <option value="player">Player</option>
-                <option value="entity">Other — Business / Entity</option>
-              </Select>
-            )}
-          </Field>
-        </>
-      )}
-
-      {(kind === 'warrant' || recipientType === 'player') && (
-        <Field label={kind === 'warrant' ? (suspectOptional ? 'Subject (optional for search warrants)' : 'Search Suspect') : 'Search Player'} required={!suspectOptional}>
-          {(id) => (
-            <div className="space-y-1.5">
-              <Input id={id} value={personQuery} onChange={(e) => setPersonQuery(e.target.value)} placeholder="Search by name or alias…" />
-              <Select value={personId} onChange={(e) => { setPersonId(e.target.value) }} onBlur={suggestTitle} aria-label="Select person">
-                <option value="">Choose from the Persons registry…</option>
-                {filteredPersons.map((p) => <option key={p.id} value={p.id}>{p.name}{p.alias ? ` “${p.alias}”` : ''}</option>)}
-              </Select>
+        {/* ── Overview ─────────────────────────────────────────────────────── */}
+        {!loading && requests.length > 0 && view === 'overview' && (
+          <>
+            <MetricStrip metrics={metrics} />
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+              <section className="space-y-3">
+                <SectionHeader
+                  title="Needs your attention"
+                  subtitle="Returns to fix and approaching deadlines. Awareness-only items never appear here."
+                />
+                {attention.length === 0 ? (
+                  <Card pad="sm">
+                    <p className="text-sm text-slate-400">Nothing needs your attention right now.</p>
+                  </Card>
+                ) : (
+                  <div className="grid gap-2">
+                    {attention.map(({ r }) => (
+                      <div key={r.id} className="space-y-1.5">
+                        <LegalRequestCard request={r} viewer={viewer} now={now} onOpen={() => open(r.id)} showClassification />
+                        {canRevise(r) && (
+                          <div className="flex justify-end">
+                            <Button size="sm" onClick={() => setWizard({ mode: 'edit', requestId: r.id })}>
+                              Revise in guided editor
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+              <section className="space-y-3">
+                <SectionHeader title="Recent activity" subtitle="Latest status movement on your requests." />
+                <Card pad="sm">
+                  <ul className="divide-y divide-white/5">
+                    {activity.map(({ r, d }) => (
+                      <li key={r.id}>
+                        <button
+                          type="button"
+                          onClick={() => open(r.id)}
+                          className="flex min-h-[44px] w-full flex-col justify-center gap-0.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-white/5"
+                        >
+                          <span className="flex items-baseline gap-2 text-xs">
+                            <span className="flex-shrink-0 font-mono text-blue-300">{r.request_number}</span>
+                            <span className="min-w-0 truncate font-semibold text-slate-200">{r.title}</span>
+                          </span>
+                          <span className="text-[11px] text-slate-400">{d.statusLabel} · {timeAgo(r.updated_at)}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              </section>
             </div>
-          )}
-        </Field>
-      )}
-      {kind === 'subpoena' && recipientType === 'entity' && (
-        <Field label="Recipient Name" required>
-          {(id) => <Input id={id} value={recipientName} onChange={(e) => setRecipientName(e.target.value)} placeholder="Business or entity name" />}
-        </Field>
-      )}
+          </>
+        )}
 
-      <Field label={kind === 'warrant' ? 'Warrant Title' : 'Title'} required>
-        {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={kind === 'warrant' ? (warrantSubtype === 'search_warrant' ? 'Search Warrant — target (case)' : 'Arrest Warrant — name (case)') : 'Subpoena — records sought'} />}
-      </Field>
-      {kind === 'warrant' && (
-        <Field label="Priority" required>
-          {(id) => (
-            <Select id={id} value={priority} onChange={(e) => setPriority(e.target.value)}>
-              {['Medium', 'High', 'Critical'].map((p) => <option key={p} value={p}>{p}</option>)}
-            </Select>
-          )}
-        </Field>
-      )}
-      <Field label={kind === 'warrant' ? 'Description / Justification' : 'Reason for Subpoena'} required>
-        {(id) => <Textarea id={id} rows={5} value={narrative} onChange={(e) => setNarrative(e.target.value)} />}
-      </Field>
-
-      {spec.map((f) => (
-        <Field key={f.key} label={f.label} required={f.req}>
-          {(id) => f.key === 'platform' ? (
-            <Select id={id} value={form[f.key] ?? ''} onChange={(e) => setF(f.key, e.target.value)}>
-              <option value="">Choose…</option>
-              {SOCIAL_PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
-            </Select>
-          ) : f.kind === 'textarea' ? (
-            <Textarea id={id} rows={3} value={form[f.key] ?? ''} onChange={(e) => setF(f.key, e.target.value)} />
-          ) : (
-            <Input id={id} type={f.kind === 'datetime' ? 'datetime-local' : 'text'} value={form[f.key] ?? ''} onChange={(e) => setF(f.key, e.target.value)} />
-          )}
-        </Field>
-      ))}
-
-      <Button variant="primary" className="w-full" disabled={busy} onClick={() => void create()}>
-        Create draft
-      </Button>
-      <p className="text-xs text-slate-500">
-        The draft stays editable until you submit it for CID supervisor review. Supporting evidence, attachments,
-        finalized reports and links are selected on the draft’s Packet tab.
-      </p>
+        {/* ── Requests (canonical card registry + filters) ─────────────────── */}
+        {!loading && requests.length > 0 && view === 'requests' && (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                aria-label="Search requests"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search number, title, target or case…"
+                className="sm:max-w-xs"
+              />
+              <Select
+                aria-label="Filter by type"
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="sm:w-auto"
+              >
+                <option value="">All types</option>
+                <optgroup label="Warrants">
+                  <option value="warrant">All warrants</option>
+                  {WARRANT_TYPES.map(([v, l]) => <option key={v} value={`warrant:${v}`}>{l}</option>)}
+                </optgroup>
+                <optgroup label="Subpoenas">
+                  <option value="subpoena">All subpoenas</option>
+                  {SUBPOENA_TYPES.map(([v, l]) => <option key={v} value={`subpoena:${v}`}>{l}</option>)}
+                </optgroup>
+              </Select>
+              <Select
+                aria-label="Filter by status group"
+                value={groupFilter}
+                onChange={(e) => setGroupFilter(e.target.value as OpGroup | '')}
+                className="sm:w-auto"
+              >
+                <option value="">All statuses</option>
+                {GROUP_ORDER.map((g) => <option key={g} value={g}>{OP_GROUP_LABEL[g]}</option>)}
+              </Select>
+              {filtersActive && (
+                <Button size="sm" variant="ghost" onClick={clearFilters}>Clear filters</Button>
+              )}
+            </div>
+            {activeGroups.length === 0 ? (
+              <EmptyState
+                title="No requests match"
+                hint="Adjust the search or filters to see more."
+                action={{ label: 'Clear filters', onClick: clearFilters }}
+              />
+            ) : (
+              activeGroups.map((g) => (
+                <CardQueueSection
+                  key={g}
+                  title={OP_GROUP_LABEL[g]}
+                  rows={grouped.get(g) ?? []}
+                  viewer={viewer}
+                  now={now}
+                  onOpen={open}
+                />
+              ))
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }

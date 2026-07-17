@@ -58,10 +58,13 @@ function mkAccess(over: Partial<AcAccess> = {}): AcAccess {
 function mkLegal(over: Partial<AcLegal> = {}): AcLegal {
   return {
     id: 'lr-1', case_id: 'c-1', case_number_snapshot: 'CID-26-001',
-    request_number: 'LR-26-004', request_type: 'search_warrant',
-    review_status: 'submitted_to_doj', fulfilment_status: 'unissued',
+    request_number: 'LR-26-004', request_type: 'warrant', subtype: 'search_warrant',
+    review_status: 'submitted_to_doj', document_status: 'submitted',
+    fulfilment_status: 'unissued', service_status: 'not_served',
+    compliance_status: 'pending', approval_route: 'judge', classification: 'standard',
     created_by: ME, responsible_bureau: 'LSB',
-    response_deadline: null, expires_at: null,
+    assigned_ada_id: null, assigned_judge_id: null,
+    response_deadline: null, expires_at: null, submitted_to_doj_at: NOW_ISO,
     created_at: NOW_ISO, updated_at: NOW_ISO, ...over,
   }
 }
@@ -274,20 +277,28 @@ describe('member approvals (membership summary)', () => {
 
 /* ---- legal requests -------------------------------------------------------------- */
 
-describe('legal requests', () => {
-  it('filed by me, in DOJ review, no deadline → waiting on DOJ', () => {
+describe('legal requests (disposition-driven — lib/legalWorkflow)', () => {
+  it('filed by me, waiting at DOJ, no deadline → waiting with the model’s why-not text', () => {
     const q = buildActionItems(src({ legal: [mkLegal()] }))
     const item = byKey(q, 'legal:lr-1')
     expect(item).toMatchObject({
       sourceType: 'legal_request', status: 'waiting', waitingSince: NOW_ISO,
       deepLink: '/legal?request=lr-1', isPersonalItem: true, isWaitingOnCurrentUser: false,
     })
-    expect(item?.reason).toContain('waiting on DOJ')
+    // Judge-routed + unassigned → the model says who is actually waited on.
+    expect(item?.reason).toBe('Waiting on any eligible judge.')
   })
 
-  it('returned_by_* puts the ball back with CID → needs_action', () => {
+  it('returned_by_* puts the ball back with me → RETURNED band (350), actionable', () => {
     const q = buildActionItems(src({ legal: [mkLegal({ review_status: 'returned_by_ada' })] }))
-    expect(byKey(q, 'legal:lr-1')).toMatchObject({ status: 'needs_action', isWaitingOnCurrentUser: true })
+    const item = byKey(q, 'legal:lr-1')
+    expect(item).toMatchObject({ status: 'returned', isWaitingOnCurrentUser: true, reason: 'Revise and resubmit' })
+    expect(item?.urgencyScore).toBe(STATUS_BASE.returned)
+  })
+
+  it('a draft I filed → needs_action with the model’s next-action label', () => {
+    const q = buildActionItems(src({ legal: [mkLegal({ review_status: 'not_submitted', document_status: 'draft' })] }))
+    expect(byKey(q, 'legal:lr-1')).toMatchObject({ status: 'needs_action', reason: 'Finish draft' })
   })
 
   it('expiring within 72h → due_soon with the +60 nudge (250 + 50 + 60 = 360)', () => {
@@ -298,20 +309,64 @@ describe('legal requests', () => {
     expect(item?.urgencyScore).toBe(360)
   })
 
-  it('a past response_deadline escalates to overdue', () => {
+  it('a past response_deadline escalates to overdue (activeDeadline + urgencyFor)', () => {
     const q = buildActionItems(src({ legal: [mkLegal({ response_deadline: '2026-07-14T12:00:00.000Z' })] }))
     expect(byKey(q, 'legal:lr-1')?.status).toBe('overdue')
   })
 
-  it('excludes requests filed by others and terminal states', () => {
+  it('a CID supervisor owns the review on another investigator’s request → needs_action', () => {
+    const q = buildActionItems(src({
+      role: 'senior_detective',
+      legal: [mkLegal({ created_by: 'off-2', review_status: 'cid_supervisor_review' })],
+    }))
+    const item = byKey(q, 'legal:lr-1')
+    expect(item).toMatchObject({
+      status: 'needs_action', reason: 'Review as CID supervisor',
+      isCommandItem: true, isPersonalItem: false, isWaitingOnCurrentUser: true,
+    })
+  })
+
+  it('my own request in CID supervisor review just waits (conflict-of-role mirror)', () => {
+    const q = buildActionItems(src({
+      role: 'senior_detective',
+      legal: [mkLegal({ review_status: 'cid_supervisor_review' })],
+    }))
+    expect(byKey(q, 'legal:lr-1')).toMatchObject({
+      status: 'waiting', isWaitingOnCurrentUser: false, reason: 'Waiting on cid supervisor.',
+    })
+  })
+
+  it('bureau-awareness visibility NEVER surfaces as work (spec §9)', () => {
+    const q = buildActionItems(src({
+      legalViewer: {
+        myId: ME, cidActive: true, cidRole: 'detective',
+        justiceRole: 'assistant_district_attorney', isOwner: false,
+        prosecutorBureaus: ['LSB'],
+      },
+      legal: [mkLegal({ created_by: 'off-2' })], // submitted_to_doj, LSB, unassigned
+    }))
+    expect(q.items).toHaveLength(0)
+  })
+
+  it('excludes rows I merely see, judge-claimable pickups, and closed/completed states', () => {
     const q = buildActionItems(src({
       legal: [
-        mkLegal({ created_by: 'off-2' }),
+        mkLegal({ created_by: 'off-2' }), // visible, not mine, not my action
         mkLegal({ id: 'lr-2', review_status: 'withdrawn' }),
-        mkLegal({ id: 'lr-3', fulfilment_status: 'closed' }),
+        mkLegal({ id: 'lr-3', review_status: 'approved', fulfilment_status: 'closed' }),
+        mkLegal({ id: 'lr-4', review_status: 'approved', fulfilment_status: 'return_recorded' }),
       ],
     }))
     expect(q.items).toHaveLength(0)
+    // A judge could CLAIM the waiting request — still Justice-portal work.
+    const judge = buildActionItems(src({
+      legalViewer: {
+        myId: ME, cidActive: false, cidRole: null,
+        justiceRole: 'judge', isOwner: false, prosecutorBureaus: [],
+      },
+      legal: [mkLegal({ created_by: 'off-2' })],
+    }))
+    expect(judge.items).toHaveLength(0)
   })
 })
 
