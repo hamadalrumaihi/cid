@@ -14,7 +14,10 @@ import { countRows, deleteWithUndo, list, update, withRetry } from '@/lib/db'
 import { todayISO } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useOperationsStore } from '@/lib/operations'
-import { assessCase, type PersistedBlocker, type WfLegal, type WfReport, type WfTask } from '@/lib/caseWorkflow'
+import { assessCase } from '@/lib/caseWorkflow'
+import { normalizeCaseTab } from '@/lib/caseLinks'
+import type { Tables } from '@/lib/database.types'
+import type { LegalRequest } from '@/lib/justice'
 import { parseCharges } from '@/lib/jsonShapes'
 import { officerName, activeProfiles } from '@/lib/profiles'
 import { notify } from '@/lib/notify'
@@ -26,7 +29,8 @@ import { CaseCommandHeader } from './CaseCommandHeader'
 import { ReassignBureauModal } from './ReassignBureauModal'
 import { OverviewTab } from './tabs/OverviewTab'
 import { NotesTab } from './tabs/NotesTab'
-import { EvidenceTab } from './tabs/EvidenceTab'
+import { MediaTab } from './tabs/MediaTab'
+import type { BlockerRow } from './tabs/CaseBlockersPanel'
 import { ChargesTab } from './tabs/ChargesTab'
 import { RicoTab } from './tabs/RicoTab'
 import { IntelTab } from './tabs/IntelTab'
@@ -46,29 +50,36 @@ const CaseGraphTab = dynamic(() => import('./CaseGraphTab').then((m) => m.CaseGr
   loading: () => <p className="py-10 text-center text-sm text-slate-500">Building the link chart…</p>,
 })
 
-const TABS = ['overview', 'graph', 'evidence', 'notes', 'charges', 'rico', 'intel', 'reports', 'tasks', 'signoff', 'chat', 'timeline'] as const
+const TABS = ['overview', 'graph', 'media', 'notes', 'charges', 'rico', 'intel', 'reports', 'tasks', 'signoff', 'chat', 'timeline'] as const
 type TabId = (typeof TABS)[number]
 
 const TAB_LABELS: Record<TabId, string> = {
-  overview: 'Overview', graph: 'Graph', evidence: 'Evidence', notes: 'Notes',
+  overview: 'Overview', graph: 'Graph', media: 'Photos & Media', notes: 'Notes',
   charges: 'Charges', rico: 'RICO', intel: 'Intel', reports: 'Reports',
   tasks: 'Tasks', signoff: 'Sign-off', chat: 'Chat', timeline: 'Timeline',
 }
 
-// Visual grouping only — the tab ids and ?tab= URL values are unchanged.
+// Visual grouping only — `?tab=` URL values match the ids (legacy
+// `tab=evidence` links resolve to `media` via normalizeCaseTab).
 const TAB_GROUPS: ReadonlyArray<SectionTabGroup<TabId>> = [
   { label: 'Command', tabs: ['overview', 'signoff', 'timeline'] },
-  { label: 'Investigation', tabs: ['graph', 'evidence', 'notes', 'charges', 'rico', 'intel'] },
+  { label: 'Investigation', tabs: ['graph', 'media', 'notes', 'charges', 'rico', 'intel'] },
   { label: 'Documentation', tabs: ['reports'] },
   { label: 'Collaboration', tabs: ['tasks', 'chat'] },
 ]
 
-interface WorkflowRows {
-  tasks: WfTask[]
-  reports: WfReport[]
-  legal: WfLegal[]
-  evidence: number
-  blockers: PersistedBlocker[]
+/** Slim media projection — enough for the metric count + Overview recap. */
+type WfMediaRow = Pick<Tables<'media'>, 'id' | 'created_at' | 'archived_at'>
+
+/** The case-scoped workflow snapshot — fetched ONCE here and shared with the
+ *  command header, metric strip AND OverviewTab (which used to run the same
+ *  five queries again in parallel — the audit's triple-fetch). */
+export interface WorkflowRows {
+  tasks: Tables<'case_tasks'>[]
+  reports: Tables<'reports'>[]
+  legal: LegalRequest[]
+  media: WfMediaRow[]
+  blockers: BlockerRow[]
 }
 
 export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () => void; onChanged: () => void }) {
@@ -82,7 +93,9 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const [handover, setHandover] = useState(false)
   const [reassign, setReassign] = useState(false)
   const casesV = useTableVersion('cases')
-  const tab = (sp.get('tab') && TABS.includes(sp.get('tab') as TabId) ? sp.get('tab') : 'overview') as TabId
+  // Legacy ?tab=evidence (old links/notifications/search hits) maps to media.
+  const requestedTab = normalizeCaseTab(sp.get('tab'))
+  const tab = (requestedTab && TABS.includes(requestedTab as TabId) ? requestedTab : 'overview') as TabId
 
   const fetchCase = useCallback(async () => {
     setLoading(true)
@@ -106,41 +119,46 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     router.replace(`/cases?${params.toString()}`)
   }
 
-  // ── Workflow snapshot for the command header + metric strip. Row fetches are
-  //    the same case-scoped queries the tabs run; evidence uses a HEAD count so
-  //    no rows move. Open blockers come over as rows (not a count) so the same
-  //    fetch feeds assessCase's persistedBlockers — header, metric strip and
-  //    Overview all gate on identical data. Best-effort: the header renders
+  // ── Workflow snapshot — the ONE case-scoped fetch behind the command
+  //    header, metric strip and OverviewTab (passed down as props; Overview
+  //    no longer re-runs these queries). Media comes over as slim rows so
+  //    the same fetch feeds the Photos metric AND the Overview recap; blockers
+  //    come over whole (open + resolved) for the blockers panel history —
+  //    assessCase filters open rows itself. Best-effort: the header renders
   //    without it. ──
   const [wf, setWf] = useState<WorkflowRows | null>(null)
-  const vE = useTableVersion('evidence')
+  const vM = useTableVersion('media')
   const vR = useTableVersion('reports')
   const vT = useTableVersion('case_tasks')
   const vL = useTableVersion('legal_requests')
   const vB = useTableVersion('case_blockers')
   const fetchWorkflow = useCallback(async () => {
     try {
-      const [tasks, reports, legal, evidence, blockers] = await Promise.all([
+      const [tasks, reports, legal, media, blockers] = await Promise.all([
         list('case_tasks', { eq: { case_id: id } }),
         list('reports', { eq: { case_id: id } }),
         // Legal is read-scoped by RLS; a failure must not sink the header.
-        list('legal_requests', { eq: { case_id: id } }).catch(() => [] as WfLegal[]),
-        countRows('evidence', { eq: { case_id: id } }),
-        list('case_blockers', { eq: { case_id: id, status: 'open' } }).catch(() => [] as PersistedBlocker[]),
+        list('legal_requests', { eq: { case_id: id }, order: 'created_at', ascending: false }).catch(() => [] as LegalRequest[]),
+        list('media', { select: 'id,created_at,archived_at', eq: { case_id: id } })
+          .then((r) => r as unknown as WfMediaRow[]),
+        list('case_blockers', { eq: { case_id: id }, order: 'created_at', ascending: false }).catch(() => [] as BlockerRow[]),
       ])
-      setWf({ tasks, reports, legal, evidence, blockers })
+      setWf({ tasks, reports, legal: legal as LegalRequest[], media, blockers })
     } catch { /* header/metrics render with em-dashes until a fetch lands */ }
   }, [id])
-  useEffect(() => { queueMicrotask(() => { void fetchWorkflow() }) }, [fetchWorkflow, casesV, vE, vR, vT, vL, vB])
+  useEffect(() => { queueMicrotask(() => { void fetchWorkflow() }) }, [fetchWorkflow, casesV, vM, vR, vT, vL, vB])
+
+  // Photos = non-archived case media (archived rows stay out of every count).
+  const mediaCount = useMemo(() => (wf ? wf.media.filter((m) => !m.archived_at).length : null), [wf])
 
   const assessment = useMemo(() => (c && wf ? assessCase({
     c,
     tasks: wf.tasks, reports: wf.reports, legal: wf.legal,
-    evidenceCount: wf.evidence,
+    mediaCount: mediaCount ?? 0,
     persistedBlockers: wf.blockers,
     meId: profile?.id ?? null,
     assigneeName: officerName(c.signoff_assignee_id),
-  }) : null), [c, wf, profile?.id])
+  }) : null), [c, wf, mediaCount, profile?.id])
 
   if (loading) return <DetailSkeleton />
   if (!c) return <p className="rounded-2xl border border-white/10 bg-ink-900/50 p-6 text-slate-300">Case not found.</p>
@@ -167,14 +185,14 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       // is advisory — command can still close over it (reason lives in history).
       let blockerLines = ''
       try {
-        const [tasks, reports, legal, evidence, persisted] = await Promise.all([
+        const [tasks, reports, legal, liveMedia, persisted] = await Promise.all([
           list('case_tasks', { eq: { case_id: c.id } }),
           list('reports', { eq: { case_id: c.id } }),
           list('legal_requests', { eq: { case_id: c.id } }).catch(() => []),
-          list('evidence', { eq: { case_id: c.id } }),
-          list('case_blockers', { eq: { case_id: c.id, status: 'open' } }).catch(() => [] as PersistedBlocker[]),
+          countRows('media', { eq: { case_id: c.id }, is: { archived_at: null } }),
+          list('case_blockers', { eq: { case_id: c.id, status: 'open' } }).catch(() => [] as BlockerRow[]),
         ])
-        const { blockers } = assessCase({ c, tasks, reports, legal, evidenceCount: evidence.length, persistedBlockers: persisted, meId: profile?.id ?? null, todayISO: todayISO() })
+        const { blockers } = assessCase({ c, tasks, reports, legal, mediaCount: liveMedia, persistedBlockers: persisted, meId: profile?.id ?? null, todayISO: todayISO() })
         if (blockers.length) blockerLines = '\n\nStill open on this case:\n' + blockers.map((b) => `• ${b.label}`).join('\n') + '\n\nClose anyway?'
       } catch { /* checklist is best-effort; fall back to the plain confirm */ }
       const ok = await uiConfirm(
@@ -206,10 +224,11 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   // Header/metric derivations — cheap, render-pure.
   const chargesCount = parseCharges(c.charges).reduce((n, x) => n + Math.max(1, x.count || 1), 0)
   const openTasks = wf ? wf.tasks.filter((t) => !t.done).length : null
+  const openBlockers = wf ? wf.blockers.filter((b) => b.status === 'open').length : null
   const counts = assessment?.counts ?? null
 
   const metrics: Metric[] = [
-    { label: 'Evidence', value: wf ? wf.evidence : '—', onClick: () => setTab('evidence') },
+    { label: 'Photos', value: mediaCount ?? '—', onClick: () => setTab('media') },
     {
       label: 'Open tasks', value: openTasks ?? '—', onClick: () => setTab('tasks'),
       hint: counts && counts.overdueTasks > 0 ? `${counts.overdueTasks} overdue` : undefined,
@@ -220,8 +239,8 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       hint: counts && counts.draftReports > 0 ? `${counts.draftReports} draft` : undefined,
     },
     {
-      label: 'Open blockers', value: wf ? wf.blockers.length : '—', onClick: () => setTab('overview'),
-      tint: wf && wf.blockers.length > 0 ? 'bg-amber-500/15 text-amber-300' : undefined,
+      label: 'Open blockers', value: openBlockers ?? '—', onClick: () => setTab('overview'),
+      tint: openBlockers ? 'bg-amber-500/15 text-amber-300' : undefined,
     },
     { label: 'Charges', value: chargesCount, onClick: () => setTab('charges') },
   ]
@@ -230,7 +249,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     id: t,
     label: TAB_LABELS[t],
     count:
-      t === 'evidence' ? wf?.evidence
+      t === 'media' ? mediaCount ?? undefined
       : t === 'reports' ? wf?.reports.length
       : t === 'tasks' ? openTasks ?? undefined
       : t === 'charges' ? chargesCount
@@ -278,9 +297,9 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         />
       </div>
       <section role="tabpanel" id={panelDomId('case', tab)} aria-labelledby={tabDomId('case', tab)} tabIndex={0} className="rounded-2xl border border-white/10 bg-ink-900/45 p-4">
-        {tab === 'overview' && <OverviewTab c={c} canEdit={canEdit} canDelete={canDelete} />}
+        {tab === 'overview' && <OverviewTab c={c} canEdit={canEdit} canDelete={canDelete} wf={wf} assessment={assessment} onWorkflowChanged={() => void fetchWorkflow()} />}
         {tab === 'graph' && <CaseGraphTab c={c} />}
-        {tab === 'evidence' && <EvidenceTab c={c} canEdit={canEdit} canDelete={canDelete} />}
+        {tab === 'media' && <MediaTab c={c} canEdit={canEdit} canDelete={canDelete} />}
         {tab === 'notes' && <NotesTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
         {tab === 'charges' && <ChargesTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
         {tab === 'rico' && <RicoTab c={c} canEdit={canEdit} canDelete={canDelete} />}

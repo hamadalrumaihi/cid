@@ -45,8 +45,9 @@ type PlaceRow = Tables<'places'>
 type VehicleRow = Tables<'vehicles'>
 type EvidenceRow = Tables<'evidence'>
 type ReportRow = Tables<'reports'>
+type MediaLite = Pick<Tables<'media'>, 'id' | 'report_id' | 'vehicle_id' | 'archived_at'>
 
-type Kind = 'case' | 'person' | 'gang' | 'place' | 'vehicle' | 'evidence' | 'report' | 'warrant'
+type Kind = 'case' | 'person' | 'gang' | 'place' | 'vehicle' | 'evidence' | 'media' | 'report' | 'warrant'
 
 interface NodeData extends Record<string, unknown> {
   kind: Kind
@@ -70,6 +71,7 @@ const KIND_TINT: Record<Kind, string> = {
   place: 'border-emerald-400/50 bg-emerald-500/10 text-emerald-100',
   vehicle: 'border-cyan-400/50 bg-cyan-500/10 text-cyan-100',
   evidence: 'border-violet-400/50 bg-violet-500/10 text-violet-100',
+  media: 'border-fuchsia-400/50 bg-fuchsia-500/10 text-fuchsia-100',
   report: 'border-slate-400/40 bg-white/5 text-slate-200',
   warrant: 'border-yellow-400/60 bg-yellow-500/10 text-yellow-100',
 }
@@ -98,7 +100,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
   const layoutKey = `graphLayout:${c.id}`
   const [data, setData] = useState<{
     links: LinkRow[]; persons: PersonRow[]; gangs: GangRow[]; places: PlaceRow[]
-    vehicles: VehicleRow[]; evidence: EvidenceRow[]; reports: ReportRow[]
+    vehicles: VehicleRow[]; evidence: EvidenceRow[]; reports: ReportRow[]; media: MediaLite[]
   } | null>(null)
   const [sel, setSel] = useState<string | null>(null)
   const [savedPos, setSavedPos] = useState<Record<string, { x: number; y: number }>>(() => Store.get(layoutKey, {}))
@@ -108,6 +110,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
   const vLinks = useTableVersion('case_intel_links')
   const vEvidence = useTableVersion('evidence')
   const vReports = useTableVersion('reports')
+  const vMedia = useTableVersion('media')
 
   // Persist dragged positions (skip the empty object so a fresh mount or a
   // just-reset layout doesn't write a useless entry).
@@ -143,7 +146,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [links, persons, gangs, places, vehicles, evidence, reports] = await Promise.all([
+      const [links, persons, gangs, places, vehicles, evidence, reports, media] = await Promise.all([
         list('case_intel_links', { eq: { case_id: c.id } }),
         list('persons', {}).catch(() => [] as PersonRow[]),
         list('gangs', {}).catch(() => [] as GangRow[]),
@@ -151,15 +154,17 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
         list('vehicles', {}).catch(() => [] as VehicleRow[]),
         list('evidence', { eq: { case_id: c.id } }).catch(() => [] as EvidenceRow[]),
         list('reports', { eq: { case_id: c.id } }).catch(() => [] as ReportRow[]),
+        list('media', { select: 'id,report_id,vehicle_id,archived_at', eq: { case_id: c.id } })
+          .then((r) => r as unknown as MediaLite[]).catch(() => [] as MediaLite[]),
       ])
-      setData({ links, persons, gangs, places, vehicles, evidence, reports })
-    } catch { setData({ links: [], persons: [], gangs: [], places: [], vehicles: [], evidence: [], reports: [] }) }
+      setData({ links, persons, gangs, places, vehicles, evidence, reports, media })
+    } catch { setData({ links: [], persons: [], gangs: [], places: [], vehicles: [], evidence: [], reports: [], media: [] }) }
   }, [c.id])
 
   useEffect(() => {
     const t = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(t)
-  }, [refresh, vLinks, vEvidence, vReports])
+  }, [refresh, vLinks, vEvidence, vReports, vMedia])
 
   const graph = useMemo(() => {
     if (!data) return { nodes: [] as Node<NodeData>[], edges: [] as Edge[] }
@@ -277,7 +282,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
       }
     }
 
-    // Evidence (right side of the ring)
+    // Legacy evidence (frozen table — read-only rows on the media tab)
     for (const e of data.evidence) {
       direct.push({
         id: `evidence:${e.id}`,
@@ -292,7 +297,27 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
             ['Chain', String(e.tamper ?? 'ok')],
             ['Description', (e.description || '—').slice(0, 140)],
           ],
-          href: caseLink(c.id, 'evidence', { evidence: e.id }), hrefLabel: 'Open evidence item',
+          href: caseLink(c.id, 'media', { evidence: e.id }), hrefLabel: 'Open legacy evidence',
+        },
+      })
+    }
+
+    // Case media — ONE grouped node (no per-photo nodes, no caption-inferred
+    // edges); typed-FK edges to reports/vehicles land after those nodes exist.
+    const liveMedia = data.media.filter((m) => !m.archived_at)
+    if (liveMedia.length) {
+      direct.push({
+        id: 'case-media',
+        edgeLabel: 'photos & media',
+        edgeTone: '#e879f9',
+        data: {
+          kind: 'media', icon: '🖼️', label: `Case media (${liveMedia.length})`,
+          sub: 'photos, clips & documents',
+          fields: [
+            ['Items', String(liveMedia.length)],
+            ['Linked to reports', String(liveMedia.filter((m) => m.report_id).length)],
+          ],
+          href: caseLink(c.id, 'media'), hrefLabel: 'Open Photos & Media',
         },
       })
     }
@@ -357,6 +382,17 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
       }
     }
 
+    // Media → report/vehicle edges: typed FK columns ONLY, and only when the
+    // linked entity is already on the chart.
+    if (liveMedia.length) {
+      for (const rid of new Set(liveMedia.map((m) => m.report_id).filter((x): x is string => !!x))) {
+        if (nodes.some((n) => n.id === `report:${rid}`)) edge('case-media', `report:${rid}`, 'report media', '#8b5cf6')
+      }
+      for (const vid of new Set(liveMedia.map((m) => m.vehicle_id).filter((x): x is string => !!x))) {
+        if (nodes.some((n) => n.id === `vehicle:${vid}`)) edge('case-media', `vehicle:${vid}`, 'depicts', '#22d3ee')
+      }
+    }
+
     // person → gang membership (both already on the chart)
     for (const p of linkedPersons) {
       if (p.gang_id && linkedGangIds.has(p.gang_id)) edge(`person:${p.id}`, `gang:${p.gang_id}`, 'member of', '#f43f5e')
@@ -409,7 +445,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
   if (graph.nodes.length <= 1) {
     return (
       <div className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-400">
-        Nothing to chart yet — link persons, gangs or places on the <b>Intel</b> tab, or log evidence and reports, and they appear here automatically.
+        Nothing to chart yet — link persons, gangs or places on the <b>Intel</b> tab, or add case photos and reports, and they appear here automatically.
       </div>
     )
   }

@@ -106,19 +106,20 @@ describe('assessCase — tasks, legal, follow-ups', () => {
 })
 
 describe('assessCase — investigation nudges', () => {
-  it('an empty open case is nudged to add evidence', () => {
-    const a = assessCase({ c: mkCase(), evidenceCount: 0, todayISO: TODAY })
-    expect(a.nextActions.find((x) => x.key === 'add_evidence')).toBeTruthy()
+  it('an empty open case is nudged to add case photos (media tab)', () => {
+    const a = assessCase({ c: mkCase(), mediaCount: 0, todayISO: TODAY })
+    expect(a.nextActions.find((x) => x.key === 'add_photos')).toMatchObject({ severity: 'info', tab: 'media' })
+    expect(a.nextActions.find((x) => x.key === 'add_photos')?.label).toContain('Add case photos')
   })
 
-  it('evidence present, no drafts, no tasks → ready to request sign-off', () => {
-    const a = assessCase({ c: mkCase(), evidenceCount: 3, reports: [{ finalized: true }], tasks: [], todayISO: TODAY })
+  it('photos present, no drafts, no tasks → ready to request sign-off', () => {
+    const a = assessCase({ c: mkCase(), mediaCount: 3, reports: [{ finalized: true }], tasks: [], todayISO: TODAY })
     expect(a.nextActions.find((x) => x.key === 'request_signoff')).toBeTruthy()
-    expect(a.nextActions.find((x) => x.key === 'add_evidence')).toBeFalsy()
+    expect(a.nextActions.find((x) => x.key === 'add_photos')).toBeFalsy()
   })
 
   it('draft reports prompt finalization', () => {
-    const a = assessCase({ c: mkCase(), evidenceCount: 1, reports: [{ finalized: false }, { finalized: true }], todayISO: TODAY })
+    const a = assessCase({ c: mkCase(), mediaCount: 1, reports: [{ finalized: false }, { finalized: true }], todayISO: TODAY })
     expect(a.counts.draftReports).toBe(1)
     expect(a.nextActions.find((x) => x.key === 'finalize_reports')?.label).toContain('1 draft report')
   })
@@ -126,9 +127,18 @@ describe('assessCase — investigation nudges', () => {
 
 describe('assessCase — closure readiness / pre-close checklist', () => {
   it('a clean open case with no pending work is closure-ready', () => {
-    const a = assessCase({ c: mkCase(), evidenceCount: 2, reports: [{ finalized: true }], tasks: [], legal: [], todayISO: TODAY })
+    const a = assessCase({ c: mkCase(), mediaCount: 2, reports: [{ finalized: true }], tasks: [], legal: [], todayISO: TODAY })
     expect(a.blockers).toHaveLength(0)
     expect(a.closureReady).toBe(true)
+  })
+
+  it('a case with ZERO photos stays closable — photos are advisory only', () => {
+    const a = assessCase({ c: mkCase(), mediaCount: 0, reports: [{ finalized: true }], tasks: [], legal: [], todayISO: TODAY })
+    expect(a.blockers).toHaveLength(0)
+    expect(a.closureReady).toBe(true)
+    expect(a.closureChecklist.every((i) => i.ok)).toBe(true)
+    // The zero-photo state surfaces only as an info nudge, never a blocker.
+    expect(a.nextActions.find((x) => x.key === 'add_photos')?.severity).toBe('info')
   })
 
   it('open tasks, active legal, drafts, and in-flight sign-off all block closure', () => {
@@ -160,14 +170,14 @@ describe('assessCase — persisted blockers & closure checklist', () => {
   const openBlocker = { title: 'Waiting on ballistics', type: 'awaiting_evidence', review_at: null, status: 'open' }
 
   it('an open persisted blocker surfaces as a blocker and gates closure', () => {
-    const a = assessCase({ c: mkCase(), evidenceCount: 2, reports: [{ finalized: true }], persistedBlockers: [openBlocker], todayISO: TODAY })
+    const a = assessCase({ c: mkCase(), mediaCount: 2, reports: [{ finalized: true }], persistedBlockers: [openBlocker], todayISO: TODAY })
     expect(a.blockers.find((b) => b.key === 'open_blockers')).toMatchObject({ count: 1, severity: 'warn' })
     expect(a.closureReady).toBe(false)
     expect(a.closureChecklist.find((i) => i.key === 'blockers_clear')?.ok).toBe(false)
   })
 
   it('resolved persisted blockers are ignored', () => {
-    const a = assessCase({ c: mkCase(), evidenceCount: 2, reports: [{ finalized: true }], persistedBlockers: [{ ...openBlocker, status: 'resolved' }], todayISO: TODAY })
+    const a = assessCase({ c: mkCase(), mediaCount: 2, reports: [{ finalized: true }], persistedBlockers: [{ ...openBlocker, status: 'resolved' }], todayISO: TODAY })
     expect(a.blockers.find((b) => b.key === 'open_blockers')).toBeFalsy()
     expect(a.closureChecklist.find((i) => i.key === 'blockers_clear')?.ok).toBe(true)
     expect(a.closureReady).toBe(true)
@@ -180,13 +190,13 @@ describe('assessCase — persisted blockers & closure checklist', () => {
   })
 
   it('an open blocker suppresses the request-signoff nudge and shows an info line', () => {
-    const a = assessCase({ c: mkCase(), evidenceCount: 3, reports: [{ finalized: true }], tasks: [], persistedBlockers: [openBlocker], todayISO: TODAY })
+    const a = assessCase({ c: mkCase(), mediaCount: 3, reports: [{ finalized: true }], tasks: [], persistedBlockers: [openBlocker], todayISO: TODAY })
     expect(a.nextActions.find((x) => x.key === 'request_signoff')).toBeFalsy()
     expect(a.nextActions.find((x) => x.key === 'blockers_open')).toMatchObject({ severity: 'info' })
   })
 
   it('a clean open case has an all-ok checklist matching closureReady', () => {
-    const a = assessCase({ c: mkCase(), evidenceCount: 2, reports: [{ finalized: true }], tasks: [], legal: [], todayISO: TODAY })
+    const a = assessCase({ c: mkCase(), mediaCount: 2, reports: [{ finalized: true }], tasks: [], legal: [], todayISO: TODAY })
     expect(a.closureChecklist.every((i) => i.ok)).toBe(true)
     expect(a.closureReady).toBe(true)
   })

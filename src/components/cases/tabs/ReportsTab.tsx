@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
@@ -13,6 +14,7 @@ import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { FORM_SCHEMAS, REPORT_TEMPLATES, WARRANT_TINT, WARRANT_TPLS, formToText, reportFinalizeGaps, reportTitle, warrantStatusOf, type FormSchema, type FormValues } from '@/lib/forms'
+import { mediaRefLine, parseMediaRefEntries, resolveMediaRefText } from '@/lib/mediaRefs'
 import { isCommandRole } from '@/lib/roles'
 import { parseFormValues } from '@/lib/jsonShapes'
 import { parseReopenLog, parseReportSignature } from '@/lib/schemas'
@@ -64,6 +66,9 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
   }
   const save = async () => {
     if (!editing) return
+    const hasMediaRefs = !!FORM_SCHEMAS[editing.template]?.sections.some((s) => s.type === 'textarea' && s.mediaPick)
+    const prevRefs = editing.report ? String(parseFormValues(editing.report.fields).media_refs ?? '') : ''
+    let reportId = editing.report?.id ?? null
     if (editing.report) {
       // Editing changes only what was typed — kind/seq/author stay as filed.
       const res = await update('reports', editing.report.id, { fields: editing.values as Json })
@@ -74,7 +79,9 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
       const seq = reports.filter((r) => r.template === editing.template && r.kind === kind).length + 1
       const res = await insert('reports', { case_id: c.id, template: editing.template, kind, seq, fields: editing.values as Json, author_id: profile?.id ?? null })
       if (res.error) { toast(res.error.message, 'danger'); return }
+      reportId = res.data?.[0]?.id ?? null
     }
+    if (hasMediaRefs && reportId) await syncReportMediaLinks(reportId, prevRefs, String(editing.values.media_refs ?? ''))
     Drafts.clear(draftKey(editing.template, editing.report)); setEditing(null); toast('Report saved.', 'success'); void refresh()
   }
   const finalize = async (r: ReportRow) => {
@@ -96,18 +103,18 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
           onFinalize={() => setConfirm({ kind: 'finalize', r: open })}
           onReopen={() => setConfirm({ kind: 'reopen', r: open })}
           onChanged={() => void refresh()}
-          onDelete={() => { void deleteWithUndo('reports', open, { label: reportTitle(open), after: refresh }); setOpenId(null) }} />
+          onDelete={() => { void deleteWithUndo('reports', open, { label: reportTitle(open), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }); setOpenId(null) }} />
       ) : (<>
         {canEdit && <div className="flex flex-wrap gap-2">{REPORT_TEMPLATES.map((tpl) => <Button key={tpl.id} onClick={() => openEditor(tpl.id)}>{tpl.icon} {tpl.name}</Button>)}</div>}
         <div className="space-y-2">
-          {reports.map((r) => <div key={r.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3"><button onClick={() => setOpenId(r.id)} className="min-w-0 flex-1 text-left"><p className="font-bold text-white">{reportTitle(r)}</p><p className="text-xs text-slate-500">{r.finalized ? 'Finalized' : 'Draft'} - {timeAgo(r.created_at)}</p></button>{!r.finalized && canEdit && <Button size="sm" variant="success" onClick={() => setConfirm({ kind: 'finalize', r })}>Finalize</Button>}{!r.finalized && canEdit && <button onClick={() => openEditor(r.template, r)} className="text-sm font-bold text-badge-200">Edit</button>}{canDelete && <button onClick={() => { void deleteWithUndo('reports', r, { label: reportTitle(r), after: refresh }) }} className="text-sm font-bold text-rose-300">Delete</button>}</div>)}
+          {reports.map((r) => <div key={r.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3"><button onClick={() => setOpenId(r.id)} className="min-w-0 flex-1 text-left"><p className="font-bold text-white">{reportTitle(r)}</p><p className="text-xs text-slate-500">{r.finalized ? 'Finalized' : 'Draft'} - {timeAgo(r.created_at)}</p></button>{!r.finalized && canEdit && <Button size="sm" variant="success" onClick={() => setConfirm({ kind: 'finalize', r })}>Finalize</Button>}{!r.finalized && canEdit && <button onClick={() => openEditor(r.template, r)} className="text-sm font-bold text-badge-200">Edit</button>}{canDelete && <button onClick={() => { void deleteWithUndo('reports', r, { label: reportTitle(r), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }) }} className="text-sm font-bold text-rose-300">Delete</button>}</div>)}
           {!reports.length && <p className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-500">No reports yet.</p>}
         </div>
       </>)}
       <Modal open={!!editing} onClose={() => setEditing(null)} wide>
         <div className="p-5">
           <ModalHeader title={editing ? FORM_SCHEMAS[editing.template]?.title || 'Report' : 'Report'} onClose={() => setEditing(null)} />
-          {editing && <FormEditor template={editing.template} caseId={c.id} values={editing.values} onChange={(values) => { setEditing({ ...editing, values }); Drafts.save(draftKey(editing.template, editing.report), values) }} />}
+          {editing && <FormEditor template={editing.template} caseId={c.id} reportId={editing.report?.id} values={editing.values} onChange={(values) => { setEditing({ ...editing, values }); Drafts.save(draftKey(editing.template, editing.report), values) }} />}
           <div className="mt-5 flex justify-end gap-2"><Button onClick={() => setEditing(null)}>Cancel</Button><Button variant="primary" onClick={save}>Save</Button></div>
         </div>
       </Modal>
@@ -178,19 +185,37 @@ function ReportDetail({ r, c, canEdit, canDelete, onBack, onEdit, onFinalize, on
     toast('Legal request created — build the packet, then submit for CID review.', 'success')
     router.push(`/legal?request=${encodeURIComponent(res.data.id)}`)
   }
-  const [pools, setPools] = useState<{ evidence: EvidenceRow[]; media: MediaRow[]; persons: PersonRow[] }>({ evidence: [], media: [], persons: [] })
+  const [pools, setPools] = useState<{ evidence: EvidenceRow[]; media: MediaRow[]; linked: MediaRow[]; persons: PersonRow[] }>({ evidence: [], media: [], linked: [], persons: [] })
   useEffect(() => {
     let alive = true
     void (async () => {
-      const [ev, m, p] = await Promise.all([
+      const [ev, m, lk, p] = await Promise.all([
         list('evidence', { eq: { case_id: c.id }, order: 'created_at' }).catch(() => [] as EvidenceRow[]),
         list('media', { eq: { case_id: c.id } }).catch(() => [] as MediaRow[]),
+        // Typed-FK linked media (media.report_id) — thumbnails below.
+        list('media', { eq: { report_id: r.id } }).catch(() => [] as MediaRow[]),
         list('persons', { select: 'id,name', order: 'name' }).catch(() => [] as PersonRow[]),
       ])
-      if (alive) setPools({ evidence: ev, media: m, persons: p })
+      if (alive) setPools({ evidence: ev, media: m, linked: lk, persons: p })
     })()
     return () => { alive = false }
   }, [c.id, r.id])
+  // Reference resolution pool: case media + report-linked rows (a linked row
+  // can outlive its case_id), deduped by id.
+  const mediaPool = useMemo(() => {
+    const seen = new Set(pools.media.map((m) => m.id))
+    return [...pools.media, ...pools.linked.filter((m) => !seen.has(m.id))]
+  }, [pools.media, pools.linked])
+  // Exports flatten media tokens to the CURRENT "title — url" (legacy plain
+  // lines pass through untouched).
+  const exportValues = (values: FormValues): FormValues => {
+    if (typeof values.media_refs !== 'string' || !values.media_refs) return values
+    const lookup = (id: string) => {
+      const m = mediaPool.find((x) => x.id === id)
+      return m ? { title: m.title, url: m.external_url ? safeUrl(m.external_url) || null : null } : null
+    }
+    return { ...values, media_refs: resolveMediaRefText(values.media_refs, lookup) }
+  }
   // Seal provenance: the current signature plus any previous seals a reopen
   // preserved in fields._reopen_log — both purely presentational.
   const reopenLog = parseReopenLog((parseFormValues(r.fields)._reopen_log ?? null) as Json)
@@ -236,7 +261,7 @@ function ReportDetail({ r, c, canEdit, canDelete, onBack, onEdit, onFinalize, on
           <Button onClick={toggleVersions} aria-expanded={showVersions}>{showVersions ? 'Hide versions' : 'Versions'}</Button>
           {/* Court-ready paper copy for warrants — browser print flow only. */}
           {WARRANT_TPLS[r.template] && <WarrantPrintButton r={r} c={c} />}
-          <Button variant="primary" onClick={() => downloadTextFile(`${c.case_number}-${r.template}.md`, formToText(schema, parseFormValues(r.fields)), 'text/markdown')}>Download .md</Button>
+          <Button variant="primary" onClick={() => downloadTextFile(`${c.case_number}-${r.template}.md`, formToText(schema, exportValues(parseFormValues(r.fields))), 'text/markdown')}>Download .md</Button>
         </div>
       </div>
       {(r.finalized || reopenLog.length > 0) && (
@@ -259,7 +284,7 @@ function ReportDetail({ r, c, canEdit, canDelete, onBack, onEdit, onFinalize, on
                   <div className="space-y-3">
                     {vsig && <SignatureViewer signatures={[{ id: ver.id, name: vsig.officer, badge: vsig.badge ?? null, action: 'report seal', at: vsig.signed_at ?? null, versionLabel: `v${ver.version_number}` }]} />}
                     {schema
-                      ? <ReportView schema={schema} values={parseFormValues(ver.fields)} evidence={pools.evidence} media={pools.media} persons={pools.persons} onOpenPerson={(id) => router.push(`/persons?person=${encodeURIComponent(id)}`)} />
+                      ? <ReportView schema={schema} values={parseFormValues(ver.fields)} evidence={pools.evidence} media={mediaPool} persons={pools.persons} onOpenPerson={(id) => router.push(`/persons?person=${encodeURIComponent(id)}`)} />
                       : <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{JSON.stringify(ver.fields, null, 2)}</pre>}
                   </div>
                 )
@@ -268,17 +293,63 @@ function ReportDetail({ r, c, canEdit, canDelete, onBack, onEdit, onFinalize, on
           )}
         </div>
       )}
+      {pools.linked.length > 0 && (
+        <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+          <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Linked media ({pools.linked.length})</h4>
+          <ul className="flex flex-wrap gap-2">
+            {pools.linked.map((m) => {
+              const url = m.external_url ? safeUrl(m.external_url) : ''
+              const tile = m.type === 'image' && url
+                // eslint-disable-next-line @next/next/no-img-element -- external media URL
+                ? <img src={url} alt={m.title} loading="lazy" className="h-16 w-16 rounded-lg border border-white/10 object-cover" />
+                : <span aria-hidden className="flex h-16 w-16 items-center justify-center rounded-lg border border-white/10 bg-ink-800 text-2xl">{m.type === 'video' ? '🎬' : '📄'}</span>
+              return (
+                <li key={m.id}>
+                  {url
+                    ? <a href={url} target="_blank" rel="noreferrer" title={m.title} aria-label={`Open ${m.title}`}>{tile}</a>
+                    : <span title={m.title}>{tile}</span>}
+                </li>
+              )
+            })}
+          </ul>
+          <Link href={caseLink(c.id, 'media')} className="mt-2 inline-block text-xs font-semibold text-badge-200 hover:text-white">Manage in Photos &amp; Media →</Link>
+        </div>
+      )}
       {schema
-        ? <ReportView schema={schema} values={parseFormValues(r.fields)} evidence={pools.evidence} media={pools.media} persons={pools.persons} onOpenPerson={(id) => router.push(`/persons?person=${encodeURIComponent(id)}`)} />
+        ? <ReportView schema={schema} values={parseFormValues(r.fields)} evidence={pools.evidence} media={mediaPool} persons={pools.persons} onOpenPerson={(id) => router.push(`/persons?person=${encodeURIComponent(id)}`)} />
         : <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-ink-950 p-4 text-sm text-slate-200">{JSON.stringify(r.fields, null, 2)}</pre>}
     </div>
   )
 }
 
+/** Typed-FK side of the media picker (media.report_id, §26/§32): picks added
+ *  to media_refs SET report_id on rows that have none; picks removed clear it
+ *  only when it points at THIS report. One report per media row — a row
+ *  already linked elsewhere keeps its link and rides along as a text ref.
+ *  Best-effort under RLS: a failed write leaves the id-bearing text reference,
+ *  which still resolves at render/export. */
+async function syncReportMediaLinks(reportId: string, prevText: string, nextText: string): Promise<void> {
+  const idsOf = (t: string) => new Set(parseMediaRefEntries(t).map((e) => e.id).filter((x): x is string => !!x))
+  const prev = idsOf(prevText)
+  const next = idsOf(nextText)
+  const added = [...next].filter((id) => !prev.has(id))
+  const removed = [...prev].filter((id) => !next.has(id))
+  try {
+    if (added.length) {
+      const rows = (await list('media', { select: 'id,report_id', in: { id: added } })) as unknown as { id: string; report_id: string | null }[]
+      for (const m of rows) if (!m.report_id) await update('media', m.id, { report_id: reportId })
+    }
+    if (removed.length) {
+      const rows = (await list('media', { select: 'id,report_id', in: { id: removed } })) as unknown as { id: string; report_id: string | null }[]
+      for (const m of rows) if (m.report_id === reportId) await update('media', m.id, { report_id: null })
+    }
+  } catch { /* text refs remain the durable record */ }
+}
+
 /** kv text-field keys that get a one-click "Now" timestamp fill. */
 const DATE_QUICK = new Set(['date', 'filed_at', 'submitted', 'seizure_date', 'dist_date', 'return_date', 'start_time', 'end_time', 'rights_dt', 'inc_dt'])
 
-function FormEditor({ template, caseId, values, onChange }: { template: string; caseId: string; values: FormValues; onChange: (v: FormValues) => void }) {
+function FormEditor({ template, caseId, reportId, values, onChange }: { template: string; caseId: string; reportId?: string; values: FormValues; onChange: (v: FormValues) => void }) {
   const schema = FORM_SCHEMAS[template]
   // Case-scoped evidence/attachment pool for sections flagged evidenceLookup,
   // evidencePick or mediaPick. Loaded once per editor; a load failure shows a
@@ -295,7 +366,9 @@ function FormEditor({ template, caseId, values, onChange }: { template: string; 
       try {
         const [ev, m, rp] = await Promise.all([
           list('evidence', { eq: { case_id: caseId }, order: 'created_at' }),
-          list('media', { eq: { case_id: caseId } }),
+          // Pickers offer live media only — archived rows stay resolvable in
+          // saved reports but are not offered for new attachments.
+          list('media', { eq: { case_id: caseId }, is: { archived_at: null } }),
           list('reports', { eq: { case_id: caseId }, order: 'created_at' }).catch(() => [] as ReportRow[]),
         ])
         if (alive) setPool({ evidence: ev, media: m, reports: rp.filter((r) => r.finalized) })
@@ -332,7 +405,7 @@ function FormEditor({ template, caseId, values, onChange }: { template: string; 
   const lookup = poolErr
     ? <p className="mb-2 text-xs text-slate-400">Case evidence lookup unavailable — enter items manually.</p>
     : pool && !pool.evidence.length && !pool.media.length
-      ? <p className="mb-2 text-xs text-slate-400">No evidence or attachments on this case yet — log them in the Evidence tab first.</p>
+      ? <p className="mb-2 text-xs text-slate-400">No photos or attachments on this case yet — add them in the Photos &amp; Media tab first.</p>
       : pool && <div className="mb-2">
           <RelatedRecordPicker
             sources={[
@@ -362,7 +435,7 @@ function FormEditor({ template, caseId, values, onChange }: { template: string; 
       const taId = `${template}-${s.key}`
       return <div key={s.id}>
         <label htmlFor={taId} className="block text-sm font-bold text-white">{s.label}</label>
-        {s.mediaPick && pool && pool.media.length > 0 && <select aria-label={`Add attachment reference to ${s.label}`} value="" onChange={(e) => { const m = pool.media.find((x) => x.id === e.target.value); if (!m) return; const title = m.title || m.type || 'Attachment'; const url = m.external_url ? safeUrl(m.external_url) : ''; const line = url ? `${title} — ${url}` : title; const cur = String(values[s.key] ?? '').trimEnd(); set(s.key, cur ? `${cur}\n${line}` : line) }} className="mt-2 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Add from case attachments…</option>{pool.media.map((m) => <option key={m.id} value={m.id}>{m.title || m.type || 'Attachment'}</option>)}</select>}
+        {s.mediaPick && pool && pool.media.length > 0 && <select aria-label={`Add attachment reference to ${s.label}`} value="" onChange={(e) => { const m = pool.media.find((x) => x.id === e.target.value); if (!m) return; /* Id-bearing token — render/export resolve the CURRENT title/url, so renames never orphan the reference. Legacy "title — url" lines keep rendering as plain text. */ const line = mediaRefLine(m.id, m.title || m.type || 'Attachment'); if (m.report_id && m.report_id !== reportId) toast('Already attached to another report — added as a text reference only.', 'info'); const cur = String(values[s.key] ?? '').trimEnd(); set(s.key, cur ? `${cur}\n${line}` : line) }} className="mt-2 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Add from case attachments…</option>{pool.media.map((m) => <option key={m.id} value={m.id}>{m.title || m.type || 'Attachment'}</option>)}</select>}
         <textarea id={taId} value={String(values[s.key] ?? '')} onChange={(e) => set(s.key, e.target.value)} rows={5} className="mt-2 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm font-normal text-white" />
       </div>
     }
@@ -455,7 +528,9 @@ function ReportView({ schema, values, evidence = [], media = [], persons = [], o
         return (
           <section key={s.id} className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
             <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">{s.label}</h4>
-            {s.type === 'textarea' && (text(V[s.key]) ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{text(V[s.key])}</p> : <p className="text-sm text-slate-500">—</p>)}
+            {s.type === 'textarea' && (s.mediaPick
+              ? <MediaRefsView raw={text(V[s.key])} media={media} />
+              : text(V[s.key]) ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{text(V[s.key])}</p> : <p className="text-sm text-slate-500">—</p>)}
             {s.type === 'kv' && <dl className="divide-y divide-white/5">{s.fields.map((f) => {
               const v = text(V[f.key])
               const lookupKey = s.evidenceLookup && (f.key === 'ev_items' || f.key === 'ev_files') ? f.key : null
@@ -473,5 +548,31 @@ function ReportView({ schema, values, evidence = [], media = [], persons = [], o
         )
       })}
     </div>
+  )
+}
+
+/** media_refs display: `[media:<id>]` token lines resolve to the row's CURRENT
+ *  title + URL (rename-proof); legacy plain-text lines render exactly as the
+ *  text they are. A token whose row is deleted/RLS-hidden falls back to its
+ *  label snapshot. */
+function MediaRefsView({ raw, media }: { raw: string; media: MediaRow[] }) {
+  const entries = parseMediaRefEntries(raw)
+  if (!entries.length) return <p className="text-sm text-slate-500">—</p>
+  return (
+    <ul className="space-y-1 text-sm">
+      {entries.map((e, i) => {
+        if (!e.id) return <li key={`${e.label}-${i}`} className="whitespace-pre-wrap text-slate-200">{e.label}</li>
+        const m = media.find((x) => x.id === e.id)
+        if (!m) return <li key={`${e.id}-${i}`} className="text-slate-400">{e.label} <span className="text-xs">(no longer available)</span></li>
+        const url = m.external_url ? safeUrl(m.external_url) : ''
+        return (
+          <li key={`${e.id}-${i}`}>
+            {url
+              ? <a href={url} target="_blank" rel="noreferrer" className="text-badge-200 hover:underline">{m.title} ↗</a>
+              : <span className="text-slate-200">{m.title}</span>}
+          </li>
+        )
+      })}
+    </ul>
   )
 }

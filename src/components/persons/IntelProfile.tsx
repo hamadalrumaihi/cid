@@ -59,7 +59,7 @@ async function loadProfile(type: 'person' | 'gang', id: string, gangs: GangRow[]
     opt(list('gang_turf', { eq: { gang_id: id } })),
     opt(list('places', { eq: { controlling_gang_id: id } })),
     opt(list('ballistic_footprints', { eq: { gang_id: id } })),
-    opt(list('media', { eq: { gang_id: id } })),
+    opt(list('media', { eq: { gang_id: id }, is: { archived_at: null } })),
     list('case_intel_links', { select: 'case_id', eq: { kind: 'gang', ref_id: id } })
       .then((r) => r as unknown as { case_id: string }[]).catch(() => []),
   ])

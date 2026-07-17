@@ -13,13 +13,18 @@ export interface BandEvent {
   at: string
   label: string
   sub?: string
-  type: 'opened' | 'followup' | 'evidence' | 'report' | 'task' | 'signoff'
+  type: 'opened' | 'followup' | 'evidence' | 'media' | 'report' | 'task' | 'signoff'
+  /** Case deep link for the list row (band dots stay hover-only). */
+  href?: string
+  /** Grouped bulk-upload titles — the list row renders them expandable. */
+  items?: string[]
 }
 
 const LANES: { type: BandEvent['type']; label: string; color: string }[] = [
   { type: 'opened',   label: 'Case',      color: '#3b82f6' },
   { type: 'followup', label: 'Follow-up', color: '#f59e0b' },
   { type: 'evidence', label: 'Evidence',  color: '#059669' },
+  { type: 'media',    label: 'Media',     color: '#e879f9' },
   { type: 'report',   label: 'Reports',   color: '#8b5cf6' },
   { type: 'task',     label: 'Tasks',     color: '#22d3ee' },
   { type: 'signoff',  label: 'Sign-off',  color: '#fb7185' },

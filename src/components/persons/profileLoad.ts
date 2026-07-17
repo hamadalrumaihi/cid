@@ -93,7 +93,7 @@ export async function loadProfileCounts(id: string): Promise<ProfileCounts> {
     c(countRows('person_places', { eq: { person_id: id } })),
     c(countRows('person_vehicles', { eq: { person_id: id } })),
     c(countRows('vehicles', { eq: { owner_id: id } })),
-    c(countRows('media', { eq: { person_id: id } })),
+    c(countRows('media', { eq: { person_id: id }, is: { archived_at: null } })),
     c(countRows('case_intel_links', { eq: { kind: 'person', ref_id: id } })),
   ])
   return { relationships: ra + rb, places: pp, vehicles: pv + own, media: med, caseLinks: cil }
@@ -207,7 +207,7 @@ export async function loadPlacesData(id: string): Promise<PlacesData> {
 
 // ── Media ────────────────────────────────────────────────────────────────────
 export async function loadMediaRows(id: string): Promise<MediaRow[]> {
-  const rows = await opt(list('media', { eq: { person_id: id }, order: 'created_at', ascending: false }))
+  const rows = await opt(list('media', { eq: { person_id: id }, is: { archived_at: null }, order: 'created_at', ascending: false }))
   return rows
 }
 
@@ -253,7 +253,7 @@ export async function loadPersonRollup(id: string): Promise<PersonRollup> {
   const [persons, members, media, direct] = await Promise.all([
     list('persons', { eq: { id } }),
     opt(list('gang_members', { eq: { person_id: id } })),
-    opt(list('media', { eq: { person_id: id } })),
+    opt(list('media', { eq: { person_id: id }, is: { archived_at: null } })),
     list('case_intel_links', { select: 'case_id', eq: { kind: 'person', ref_id: id } })
       .then((r) => r as unknown as { case_id: string }[]).catch(() => [] as { case_id: string }[]),
   ])

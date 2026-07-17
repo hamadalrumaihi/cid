@@ -57,7 +57,8 @@ export interface CaseCounts {
   draftReports: number
   activeLegal: number
   expiringLegal: number
-  evidence: number
+  /** Non-archived case media (Photos & Media tab). */
+  media: number
   supportOfficers: number
 }
 
@@ -88,7 +89,9 @@ export interface CaseInputs {
   tasks?: WfTask[]
   reports?: WfReport[]
   legal?: WfLegal[]
-  evidenceCount?: number
+  /** Non-archived case media count (photos & media). Advisory only — a case
+   *  with zero photos gets a nudge, never a blocker, and stays closable. */
+  mediaCount?: number
   supportCount?: number
   meId?: string | null
   /** Display name of the current sign-off assignee, for "waiting on X" copy. */
@@ -156,13 +159,13 @@ export function assessCase(input: CaseInputs): CaseAssessment {
     const d = daysBetween(today, l.expires_at)
     return d >= 0 && d <= 3
   }).length
-  const evidence = input.evidenceCount ?? 0
+  const media = input.mediaCount ?? 0
   const supportOfficers = input.supportCount ?? 0
   const openPersisted = (input.persistedBlockers ?? []).filter((b) => b.status === 'open')
   const openBlockers = openPersisted.length
   const dueBlockers = openPersisted.filter((b) => isDue(b.review_at, today)).length
 
-  const counts: CaseCounts = { openTasks, overdueTasks, draftReports, activeLegal, expiringLegal, evidence, supportOfficers }
+  const counts: CaseCounts = { openTasks, overdueTasks, draftReports, activeLegal, expiringLegal, media, supportOfficers }
   const stage = deriveStage(c, activeLegal)
 
   const s = c.signoff_status || 'none'
@@ -197,11 +200,12 @@ export function assessCase(input: CaseInputs): CaseAssessment {
       push({ key: 'blockers_open', label: `${openBlockers} open ${openBlockers === 1 ? 'blocker' : 'blockers'}`, severity: 'info' })
     }
 
-    // Investigation-stage nudges toward being sign-off-ready.
+    // Investigation-stage nudges toward being sign-off-ready. Photos are
+    // advisory only — zero photos never blocks sign-off or closure.
     if (stage === 'investigation') {
-      if (evidence === 0) push({ key: 'add_evidence', label: 'Add evidence before requesting sign-off', severity: 'info', tab: 'evidence' })
+      if (media === 0) push({ key: 'add_photos', label: 'Add case photos before requesting sign-off', severity: 'info', tab: 'media' })
       if (draftReports > 0) push({ key: 'finalize_reports', label: `Finalize ${draftReports} draft ${draftReports === 1 ? 'report' : 'reports'}`, severity: 'info', tab: 'reports' })
-      if (SIGNOFF_IDLE.has(s) && evidence > 0 && draftReports === 0 && openTasks === 0 && openBlockers === 0) {
+      if (SIGNOFF_IDLE.has(s) && media > 0 && draftReports === 0 && openTasks === 0 && openBlockers === 0) {
         push({ key: 'request_signoff', label: 'Ready — request sign-off when you are', severity: 'info', tab: 'signoff' })
       }
     }

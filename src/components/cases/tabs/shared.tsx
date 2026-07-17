@@ -10,7 +10,6 @@ export type HistoryRow = Tables<'case_signoff_history'>
 export type EvidenceRow = Tables<'evidence'>
 export type ReportRow = Tables<'reports'>
 export type AssignmentRow = Tables<'case_assignments'>
-export type CustodyRow = Tables<'custody_chain'>
 export type MediaRow = Tables<'media'>
 export type RicoRow = Tables<'rico_cases'>
 export type PredicateRow = Tables<'predicate_acts'>

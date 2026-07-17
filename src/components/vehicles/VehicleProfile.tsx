@@ -9,11 +9,14 @@
  *  cases linked to the registered owner via case_intel_links. Both fail
  *  CLOSED: any query error shows a Retry banner, never a false "nothing". */
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
 import { list, withRetry } from '@/lib/db'
+import { caseLink } from '@/lib/caseLinks'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
+import { safeUrl } from '@/lib/safeUrl'
 import { copyText, fmtDate, timeAgo } from '@/lib/format'
 import { Badge } from '@/components/ui/Badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
@@ -165,6 +168,61 @@ function LinkedCasesPanel({ plate, ownerId }: { plate: string; ownerId: string |
           )}
         </div>
       )}
+    </Card>
+  )
+}
+
+/* ---- photos strip ---------------------------------------------------------
+   media.vehicle_id is a typed FK (RLS trims what the viewer may see). Live
+   rows only (archived hidden); image thumbs click through to the source
+   case's Photos & Media tab, caseless rows open the hosted file. */
+
+type VehicleMediaRow = Pick<Tables<'media'>, 'id' | 'title' | 'type' | 'external_url' | 'storage_path' | 'case_id'>
+
+function VehiclePhotosPanel({ vehicleId }: { vehicleId: string }) {
+  const [rows, setRows] = useState<VehicleMediaRow[] | null>(null)
+  const vMedia = useTableVersion('media')
+  useEffect(() => {
+    let cancelled = false
+    const t = window.setTimeout(async () => {
+      const m = await list('media', {
+        select: 'id,title,type,external_url,storage_path,case_id',
+        eq: { vehicle_id: vehicleId },
+        is: { archived_at: null },
+        order: 'created_at', ascending: false, limit: 12,
+      }).then((r) => r as unknown as VehicleMediaRow[]).catch(() => [] as VehicleMediaRow[])
+      if (!cancelled) setRows(m)
+    }, 0)
+    return () => { cancelled = true; window.clearTimeout(t) }
+  }, [vehicleId, vMedia])
+
+  if (!rows?.length) return null
+  return (
+    <Card>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className={PANEL_TITLE}>Photos</h3>
+        <span className="text-[11px] text-slate-400">{rows.length}</span>
+      </div>
+      <ul className="flex flex-wrap gap-2">
+        {rows.map((m) => {
+          const url = safeUrl(m.external_url || m.storage_path || '')
+          const tile = m.type === 'image' && url
+            // eslint-disable-next-line @next/next/no-img-element -- external media URL
+            ? <img src={url} alt={m.title} loading="lazy" className="h-20 w-20 rounded-lg border border-white/10 object-cover transition hover:brightness-110" />
+            : <span aria-hidden className="flex h-20 w-20 items-center justify-center rounded-lg border border-white/10 bg-ink-800 text-2xl">{m.type === 'video' ? '🎬' : '📄'}</span>
+          return (
+            <li key={m.id}>
+              {m.case_id ? (
+                <Link href={caseLink(m.case_id, 'media')} title={`${m.title} — open source case`} aria-label={`${m.title} — open source case`}>{tile}</Link>
+              ) : url ? (
+                <a href={url} target="_blank" rel="noopener noreferrer" title={m.title} aria-label={`Open ${m.title}`}>{tile}</a>
+              ) : (
+                <span title={m.title}>{tile}</span>
+              )}
+            </li>
+          )
+        })}
+      </ul>
     </Card>
   )
 }
@@ -327,6 +385,7 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
               legal_request_exhibits target rows (RLS-trimmed, sealed-safe);
               linked cases stay a text-scan derivation. */}
           <div className="min-w-0 flex-1 space-y-4">
+            <VehiclePhotosPanel vehicleId={id} />
             <EntityLegalPanel exhibitType="vehicle" sourceId={id} noun="vehicle" />
             <LinkedCasesPanel plate={v.plate} ownerId={v.owner_id} />
           </div>
