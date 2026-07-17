@@ -75,13 +75,15 @@ test.describe('v1.14 — packet preview & owner security dashboard', () => {
       await expect(submitBtn).toBeVisible()
 
       // Step 2: confirm — the request moves to CID supervisor review and the
-      // draft freezes (submit button gone, Form tab shows the immutable version).
+      // draft freezes (submit button gone; the dossier's Request section shows
+      // the immutable version instead of the editor).
       await submitBtn.click()
       await expect(dialog).toBeVisible()
       await dialog.getByRole('button', { name: 'Confirm & submit to CID' }).click()
       await expect(page.getByText('CID supervisor review').first()).toBeVisible({ timeout: 20_000 })
       await expect(page.getByRole('button', { name: 'Submit for CID review' })).toHaveCount(0)
-      await page.getByRole('tab', { name: 'Form' }).click()
+      await page.getByRole('tablist', { name: 'Legal request sections' })
+        .getByRole('tab', { name: 'Request' }).click()
       await expect(page.getByText(/Immutable submitted version v1/)).toBeVisible()
     } finally {
       const cleanup = await callRpc(live, 'rls_test_cleanup')
