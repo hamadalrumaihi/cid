@@ -33,6 +33,7 @@ import {
   ClassificationBadge, DeadlineChip, StatusChip, reviewTone,
   useJusticeDirectory, useLegalPeople,
 } from './legalShared'
+import { LegalStageTracker } from './LegalStageTracker'
 
 type ActionRow = Pick<Tables<'legal_request_actions'>,
   'id' | 'legal_request_id' | 'version_id' | 'actor_id' | 'action' | 'from_status' | 'to_status' | 'public_note' | 'created_at'>
@@ -436,6 +437,8 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
         <DeadlineChip request={r} />
       </div>
       <h2 className="text-lg font-bold text-white">{r.title}</h2>
+
+      <LegalStageTracker request={r} className="rounded-xl border border-white/5 bg-ink-900/40 px-4 py-3" />
 
       <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Legal request sections">
         {SECTION_TABS.map((t) => (

@@ -15,12 +15,22 @@ import { Drafts, type Draft } from '@/lib/drafts'
 import { timeAgo } from '@/lib/format'
 import { SUBPOENA_FIELDS, SUBPOENA_TYPES, SOCIAL_PLATFORMS, WARRANT_FIELDS, WARRANT_TYPES, type SubpoenaType, type WarrantType } from '@/lib/justice'
 import { toast } from '@/lib/toast'
+import { dispositionFor, OP_GROUP_LABEL, type OpGroup } from '@/lib/legalWorkflow'
+import { useNow } from '@/lib/useNow'
 import { Button } from '@/components/ui/Button'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { LegalRequestDetail } from '@/components/justice/LegalRequestDetail'
-import { QueueSection, useLegalRequests } from '@/components/justice/legalShared'
+import { CardQueueSection, buildLegalViewer, useLegalRequests } from '@/components/justice/legalShared'
 
-const SUPERVISOR_ROLES = new Set(['senior_detective', 'bureau_lead', 'deputy_director', 'director'])
+/** Canonical operational groups in the order the investigator should triage
+ *  them (spec §7). Each request lands in exactly ONE group via dispositionFor,
+ *  so a request never double-appears (e.g. "My Warrants" + "Submitted to DOJ"). */
+const GROUP_ORDER: OpGroup[] = [
+  'needs_action', 'returned_to_you', 'available_to_claim', 'assigned_to_you',
+  'waiting_cid', 'waiting_doj', 'waiting_prosecution', 'waiting_judge',
+  'issued_active', 'service_return_pending', 'completed', 'closed',
+]
 
 export function LegalView() {
   return (
@@ -31,8 +41,7 @@ export function LegalView() {
 }
 
 function LegalViewInner() {
-  const { profile } = useAuth()
-  const me = profile?.id ?? null
+  const auth = useAuth()
   const router = useRouter()
   const params = useSearchParams()
   const openId = params.get('request')
@@ -41,6 +50,24 @@ function LegalViewInner() {
 
   const open = (id: string) => router.push(`/legal?request=${encodeURIComponent(id)}`)
   const back = () => router.push('/legal')
+
+  // Bucket every request into its ONE canonical operational group (the model
+  // resolves supervisor-actionable vs waiting, claim eligibility and awareness).
+  const viewer = buildLegalViewer(auth)
+  const now = useNow()
+  const grouped = useMemo(() => {
+    const map = new Map<OpGroup, typeof requests>()
+    for (const r of requests) {
+      const g = dispositionFor(r, viewer, now).group
+      const bucket = map.get(g)
+      if (bucket) bucket.push(r)
+      else map.set(g, [r])
+    }
+    return map
+    // `viewer` is recreated each render but is fully determined by the auth
+    // fields below; `now` is render-stable (useNow). requests drives the work.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requests, now, auth.profile?.id, auth.justiceRole, auth.isOwner])
 
   if (openId) return <LegalRequestDetail requestId={openId} onBack={back} />
   if (creating) {
@@ -53,34 +80,36 @@ function LegalViewInner() {
     )
   }
 
-  const supervisor = !!profile && (SUPERVISOR_ROLES.has(profile.role) || !!profile.is_owner)
-  const mine = requests.filter((r) => r.created_by === me)
-  const editableStates = new Set(['not_submitted', 'returned_by_cid', 'returned_by_ada', 'returned_by_da', 'returned_by_ag', 'returned_by_judge'])
+  const active = GROUP_ORDER.filter((g) => (grouped.get(g)?.length ?? 0) > 0)
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2">
-        <Button variant="primary" onClick={() => setCreating('warrant')}>+ File Warrant Request</Button>
-        <Button variant="primary" onClick={() => setCreating('subpoena')}>+ File Subpoena</Button>
-      </div>
+      <PageHeader
+        title="Legal Requests"
+        subtitle="Warrant and subpoena requests you filed or can act on."
+        actions={
+          <>
+            <Button variant="primary" onClick={() => setCreating('warrant')}>+ File Warrant Request</Button>
+            <Button variant="primary" onClick={() => setCreating('subpoena')}>+ File Subpoena</Button>
+          </>
+        }
+      />
       {loading && <p className="text-sm text-slate-400">Loading legal requests…</p>}
-      <QueueSection title="My Legal Drafts" onOpen={open}
-        rows={mine.filter((r) => r.review_status === 'not_submitted')}
-        empty="No drafts — file a warrant request or subpoena above." />
-      <QueueSection title="Returned for Revision" onOpen={open}
-        rows={mine.filter((r) => editableStates.has(r.review_status) && r.review_status !== 'not_submitted')} />
-      {supervisor && (
-        <QueueSection title="Awaiting CID Review" onOpen={open}
-          rows={requests.filter((r) => r.review_status === 'cid_supervisor_review')}
-          empty="Nothing is waiting for supervisor review." />
+      {!loading && active.length === 0 && (
+        <p className="rounded-lg border border-dashed border-white/10 px-3 py-2.5 text-sm text-slate-400">
+          No legal requests yet — file a warrant request or subpoena above.
+        </p>
       )}
-      <QueueSection title="Submitted to DOJ" onOpen={open}
-        rows={requests.filter((r) => !editableStates.has(r.review_status)
-          && !['cid_supervisor_review', 'approved', 'denied', 'withdrawn'].includes(r.review_status))} />
-      <QueueSection title="My Warrants" onOpen={open}
-        rows={mine.filter((r) => r.request_type === 'warrant')} />
-      <QueueSection title="My Subpoenas" onOpen={open}
-        rows={mine.filter((r) => r.request_type === 'subpoena')} />
+      {active.map((g) => (
+        <CardQueueSection
+          key={g}
+          title={OP_GROUP_LABEL[g]}
+          rows={grouped.get(g) ?? []}
+          viewer={viewer}
+          now={now}
+          onOpen={open}
+        />
+      ))}
     </div>
   )
 }

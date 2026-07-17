@@ -13,10 +13,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { list, rpc } from '@/lib/db'
 import { useTableVersion } from '@/lib/realtime'
+import { useAuth } from '@/lib/auth'
+import type { LegalViewer } from '@/lib/legalWorkflow'
 import {
   CLASSIFICATION_STYLE, deadlineInfo, fulfilmentLabel,
   reviewStatusLabel, type Classification, type LegalRequest,
 } from '@/lib/justice'
+import { LegalRequestCard } from './LegalRequestCard'
 
 export function ClassificationBadge({ value }: { value: string }) {
   const cls = CLASSIFICATION_STYLE[(value as Classification)] ?? CLASSIFICATION_STYLE.standard
@@ -90,6 +93,17 @@ export function useJusticeDirectory(): { entries: JusticeDirEntry[]; reload: () 
   return { entries, reload: useCallback(() => setTick((t) => t + 1), []) }
 }
 
+/** Narrow projection for the queue/card lists — only the columns the cards and
+ *  the workflow model read. Trims the wire payload versus SELECT * (the wide
+ *  row carries body markdown, exhibit blobs, audit fields); RLS still scopes
+ *  which rows come back, unchanged. */
+const LEGAL_LIST_COLS =
+  'id,request_number,request_type,subtype,title,review_status,document_status,' +
+  'fulfilment_status,service_status,compliance_status,approval_route,classification,' +
+  'responsible_bureau,assigned_ada_id,assigned_judge_id,person_name_snapshot,' +
+  'recipient_name,recipient_type,case_number_snapshot,expires_at,response_deadline,' +
+  'submitted_to_doj_at,created_by,priority,created_at,updated_at,current_version_id'
+
 /** RLS-scoped legal request loader — every queue filters CLIENT-side over
  *  rows the server already authorized; the queue predicate is presentation. */
 export function useLegalRequests(): { requests: LegalRequest[]; loading: boolean; reload: () => void } {
@@ -101,7 +115,7 @@ export function useLegalRequests(): { requests: LegalRequest[]; loading: boolean
     let cancelled = false
     void (async () => {
       try {
-        const rows = await list('legal_requests', { order: 'created_at', ascending: false })
+        const rows = await list('legal_requests', { select: LEGAL_LIST_COLS, order: 'created_at', ascending: false })
         if (!cancelled) setRequests(rows)
       } catch { /* transient */ }
       if (!cancelled) setLoading(false)
@@ -109,6 +123,26 @@ export function useLegalRequests(): { requests: LegalRequest[]; loading: boolean
     return () => { cancelled = true }
   }, [v, tick])
   return { requests, loading, reload: useCallback(() => setTick((t) => t + 1), []) }
+}
+
+/** Map the app's auth context → the workflow model's viewer. The model NEVER
+ *  decides access (RLS + definer RPCs do); this only shapes what an authorised
+ *  viewer is shown. */
+export function buildLegalViewer(auth: ReturnType<typeof useAuth>): LegalViewer {
+  const p = auth.profile
+  const jr = auth.justiceRole
+  const justiceRole =
+    jr === 'assistant_district_attorney' || jr === 'district_attorney' ||
+    jr === 'attorney_general' || jr === 'judge' ? jr : null
+  return {
+    myId: p?.id ?? null,
+    cidActive: p?.active ?? false,
+    cidRole: p?.role ?? null,
+    justiceRole,
+    isOwner: auth.isOwner,
+    // TODO wire prosecutor bureaus (the portal does not surface them here yet).
+    prosecutorBureaus: [],
+  }
 }
 
 export function LegalRequestRow({ r, onOpen, people }: {
@@ -154,6 +188,36 @@ export function QueueSection({ title, rows, onOpen, empty }: {
       {rows.length === 0
         ? <p className="rounded-lg border border-dashed border-white/10 px-3 py-2.5 text-xs text-slate-500">{empty ?? 'Nothing here.'}</p>
         : <div className="space-y-1.5">{rows.map((r) => <LegalRequestRow key={r.id} r={r} onOpen={onOpen} />)}</div>}
+    </section>
+  )
+}
+
+/** Card-based queue section — the newer surfaces render requests as accessible
+ *  LegalRequestCards (one per row on mobile) instead of the flat chip row.
+ *  QueueSection/LegalRequestRow are kept for existing callers. */
+export function CardQueueSection({ title, rows, viewer, now, onOpen, empty }: {
+  title: string
+  rows: LegalRequest[]
+  viewer: LegalViewer
+  now: number
+  onOpen: (id: string) => void
+  empty?: string
+}) {
+  return (
+    <section className="space-y-2">
+      <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+        {title}
+        <span className="rounded-full bg-white/10 px-1.5 text-[10px] font-bold text-slate-300">{rows.length}</span>
+      </h3>
+      {rows.length === 0
+        ? <p className="rounded-lg border border-dashed border-white/10 px-3 py-2.5 text-xs text-slate-500">{empty ?? 'Nothing here.'}</p>
+        : (
+          <div className="grid gap-2">
+            {rows.map((r) => (
+              <LegalRequestCard key={r.id} request={r} viewer={viewer} now={now} onOpen={() => onOpen(r.id)} showClassification />
+            ))}
+          </div>
+        )}
     </section>
   )
 }
