@@ -61,13 +61,15 @@ function LegalViewInner() {
   const openId = params.get('request')
   const view: ViewId = params.get('view') === 'requests' ? 'requests' : 'overview'
   const [wizard, setWizard] = useState<LegalWizardEntry | null>(null)
-  const { requests, loading } = useLegalRequests()
+  const { requests, loading, reload } = useLegalRequests()
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [groupFilter, setGroupFilter] = useState<OpGroup | ''>('')
 
   const open = (id: string) => router.push(`/legal?request=${encodeURIComponent(id)}`)
-  const back = () => router.push('/legal')
+  // The landing stays mounted behind the dossier; refetch on return so
+  // in-dossier actions show without relying on the realtime channel.
+  const back = () => { router.push('/legal'); reload() }
   const setView = (v: ViewId) => {
     const p = new URLSearchParams(params.toString())
     if (v === 'overview') p.delete('view')

@@ -6241,3 +6241,17 @@ create policy wl_sel on public.watchlist
 -- service_role. No policy/trigger/grant-audience change; client writes on
 -- legal tables remain revoked (RPC-only). Definitive SQL in
 -- supabase/migrations/20260806010000_legal_structured_targets.sql.
+-- 20260806040000_legal_cid_reviewer_visibility (fix; DOJ redesign
+-- verification): private.can_view_legal_request gains ONE narrowly-scoped
+-- branch — review authority implies view authority while the request is
+-- parked at 'cid_supervisor_review': `r.review_status =
+-- 'cid_supervisor_review' and private.can_review_as_cid(p_request, p_user)`.
+-- Closes the stall where warrants (default classification 'classified')
+-- notified the CID supervisor who held review authority but got zero rows
+-- from SELECT (the CID branch is 'standard'-only). Audience is exactly the
+-- set the review RPC already accepts (active senior CID rank + case access +
+-- not the creator); sealed is included deliberately for this one status
+-- because the CID gate is mandatory for sealed requests too. No other branch
+-- changed; sealed keeps its explicit-assignment audience everywhere else.
+-- Definitive SQL in
+-- supabase/migrations/20260806040000_legal_cid_reviewer_visibility.sql.

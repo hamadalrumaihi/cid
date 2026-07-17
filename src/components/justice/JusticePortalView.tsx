@@ -88,7 +88,7 @@ function JusticePortalInner() {
   const canManage = role === 'district_attorney' || role === 'attorney_general' || isOwnerFlag
   const hasPortal = !!role || isOwnerFlag
 
-  const { requests, loading } = useLegalRequests()
+  const { requests, loading, reload } = useLegalRequests()
   const prosecutorBureaus = useMyProsecutorBureaus()
   // Same gates the old portal used for these sections — judges never fire the
   // coverage RPC; only DA/AG/Owner load applications.
@@ -218,6 +218,10 @@ function JusticePortalInner() {
     p.delete('section')
     const qs = p.toString()
     router.push(qs ? `${pathname}?${qs}` : pathname)
+    // The portal stays mounted behind the dossier; in-dossier actions (claim,
+    // review, issue) only reach the queues via realtime, so refetch on return
+    // in case the websocket is degraded.
+    reload()
   }
 
   if (!hasPortal) {
