@@ -145,7 +145,8 @@ export function DecisionPanel({
     }
     const sig = await promptSig()
     if (sig === null) return
-    const expIso = expires?.trim() ? new Date(expires.trim()).toISOString() : undefined
+    const expMs = expires?.trim() ? Date.parse(expires.trim()) : Number.NaN
+    const expIso = Number.isFinite(expMs) ? new Date(expMs).toISOString() : undefined
     if (expires?.trim() && !expIso) { toast('Could not parse that expiration date.', 'warn'); return }
     await act(() => rpc('decide_legal_request_as_judge', {
       p_request: r.id, p_decision: decision, p_note: note || undefined,

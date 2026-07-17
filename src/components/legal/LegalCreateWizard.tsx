@@ -328,12 +328,20 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     // prior_legal_request — RLS already scopes which requests come back.
     const or = ilikeAny(['request_number', 'title'], q)
     const rows = (await list('legal_requests', {
-      select: 'id,request_number,title,request_type,subtype',
+      select: 'id,request_number,title,request_type,subtype,classification',
       order: 'created_at', ascending: false, limit: 20, ...(or ? { or } : {}),
-    })) as unknown as Pick<Tables<'legal_requests'>, 'id' | 'request_number' | 'title' | 'request_type' | 'subtype'>[]
+    })) as unknown as Pick<Tables<'legal_requests'>, 'id' | 'request_number' | 'title' | 'request_type' | 'subtype' | 'classification'>[]
     return rows
       .filter((r) => r.id !== editId)
-      .map((r) => ({ id: r.id, label: `${r.request_number} — ${r.title}`, sublabel: humanize(r.subtype) }))
+      // A sealed prior is labelled by its number alone — the new request's
+      // audience is broader than the sealed one's, so its title never rides
+      // along into chips or the mirrored search_targets text (same discipline
+      // as the server's default exhibit title).
+      .map((r) => ({
+        id: r.id,
+        label: r.classification === 'sealed' ? r.request_number : `${r.request_number} — ${r.title}`,
+        sublabel: r.classification === 'sealed' ? `${humanize(r.subtype)} · Sealed` : humanize(r.subtype),
+      }))
   }, [tKind, searchPersons, editId])
 
   /** Mirror one structured target into the legacy free-text field — the server
