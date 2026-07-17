@@ -2694,6 +2694,7 @@ export type Database = {
           exhibit_type: string
           id: string
           legal_request_id: string
+          rationale: string | null
           snapshot_metadata: Json
           source_id: string | null
           version_id: string | null
@@ -2705,6 +2706,7 @@ export type Database = {
           exhibit_type: string
           id?: string
           legal_request_id: string
+          rationale?: string | null
           snapshot_metadata?: Json
           source_id?: string | null
           version_id?: string | null
@@ -2716,6 +2718,7 @@ export type Database = {
           exhibit_type?: string
           id?: string
           legal_request_id?: string
+          rationale?: string | null
           snapshot_metadata?: Json
           source_id?: string | null
           version_id?: string | null
@@ -2863,6 +2866,7 @@ export type Database = {
       }
       legal_request_versions: {
         Row: {
+          change_summary: string | null
           content_hash: string | null
           created_at: string
           created_by: string
@@ -2871,10 +2875,12 @@ export type Database = {
           legal_request_id: string
           narrative: string | null
           packet_manifest: Json
+          returned_from: string | null
           submitted_stage: string | null
           version_number: number
         }
         Insert: {
+          change_summary?: string | null
           content_hash?: string | null
           created_at?: string
           created_by: string
@@ -2883,10 +2889,12 @@ export type Database = {
           legal_request_id: string
           narrative?: string | null
           packet_manifest?: Json
+          returned_from?: string | null
           submitted_stage?: string | null
           version_number: number
         }
         Update: {
+          change_summary?: string | null
           content_hash?: string | null
           created_at?: string
           created_by?: string
@@ -2895,6 +2903,7 @@ export type Database = {
           legal_request_id?: string
           narrative?: string | null
           packet_manifest?: Json
+          returned_from?: string | null
           submitted_stage?: string | null
           version_number?: number
         }
@@ -6145,6 +6154,7 @@ export type Database = {
       add_legal_exhibit: {
         Args: {
           p_meta?: Json
+          p_rationale?: string
           p_request: string
           p_source_id?: string
           p_title?: string
@@ -6430,7 +6440,7 @@ export type Database = {
         Returns: Database["public"]["Tables"]["prosecutor_bureau_assignments"]["Row"]
       }
       submit_legal_request_to_cid: {
-        Args: { p_request: string }
+        Args: { p_change_summary?: string; p_request: string }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
       }
       submit_legal_request_to_doj: {

@@ -962,12 +962,14 @@ create table public.legal_request_exhibits (
   display_title text not null,
   snapshot_metadata jsonb not null default '{}'::jsonb,
   added_by uuid not null,
-  created_at timestamp with time zone not null default now()
+  created_at timestamp with time zone not null default now(),
+  rationale text
 );
 alter table public.legal_request_exhibits add constraint legal_request_exhibits_pkey PRIMARY KEY (id);
 alter table public.legal_request_exhibits add constraint legal_request_exhibits_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id);
 alter table public.legal_request_exhibits add constraint legal_request_exhibits_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.legal_request_versions(id);
 alter table public.legal_request_exhibits add constraint legal_request_exhibits_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id);
+alter table public.legal_request_exhibits add constraint legal_request_exhibits_exhibit_type_check CHECK ((exhibit_type = ANY (ARRAY['evidence'::text, 'attachment'::text, 'finalized_report'::text, 'case_media'::text, 'related_case'::text, 'external_link'::text, 'person_record'::text, 'vehicle'::text, 'place'::text, 'prior_legal_request'::text])));
 alter table public.legal_request_exhibits enable row level security;
 
 create table public.legal_request_participants (
@@ -1013,7 +1015,9 @@ create table public.legal_request_versions (
   created_by uuid not null,
   created_at timestamp with time zone not null default now(),
   submitted_stage text,
-  content_hash text
+  content_hash text,
+  change_summary text,
+  returned_from text
 );
 alter table public.legal_request_versions add constraint legal_request_versions_pkey PRIMARY KEY (id);
 alter table public.legal_request_versions add constraint legal_request_versions_legal_request_id_version_number_key UNIQUE (legal_request_id, version_number);
@@ -6211,3 +6215,29 @@ create policy wl_sel on public.watchlist
 -- (informational — never a gate). The SAB coverage re-establishment + backlog
 -- notifications are data, not schema. Definitive SQL in
 -- supabase/migrations/20260805010000_legal_parallel_judiciary.sql.
+-- 20260806010000_legal_structured_targets (additive; DOJ redesign phase 1):
+-- legal_request_exhibits_exhibit_type_check widened (strictly) to admit
+-- 'vehicle' / 'place' / 'prior_legal_request' — structured search-warrant
+-- targets referencing public.vehicles / public.places / public.legal_requests
+-- through the existing generic source_id (no new FK columns); new nullable
+-- legal_request_exhibits.rationale (why this target is in the request).
+-- legal_request_versions gained nullable change_summary (author-supplied on
+-- resubmission) and returned_from (the returned_by_* review status the version
+-- supersedes — DERIVED server-side in the freeze, never client-supplied). All
+-- mirrored above. Three definer functions gained optional defaulted params
+-- (old signature dropped first — a defaulted param is a new signature and
+-- keeping both would be ambiguous; existing named-arg call-sites unchanged):
+-- public.add_legal_exhibit(uuid, text, uuid, text, jsonb, text) [+p_rationale;
+-- + the three new kind branches: vehicle/place are existence-checked against
+-- the is_active()-audience registries like person_record, prior_legal_request
+-- requires private.can_view_legal_request and forbids self-reference, and a
+-- sealed prior request's default title is its number only — the sealed title
+-- never leaks into another packet]; public.submit_legal_request_to_cid(uuid,
+-- text) [+p_change_summary, threaded into the freeze]; private.
+-- legal_freeze_version(uuid, text, text) [+p_change_summary; writes
+-- change_summary/returned_from; the packet manifest now snapshots each
+-- exhibit's rationale]. All SECURITY DEFINER, set search_path = '', revoked
+-- from public/anon; the two public RPCs re-granted to authenticated,
+-- service_role. No policy/trigger/grant-audience change; client writes on
+-- legal tables remain revoked (RPC-only). Definitive SQL in
+-- supabase/migrations/20260806010000_legal_structured_targets.sql.
