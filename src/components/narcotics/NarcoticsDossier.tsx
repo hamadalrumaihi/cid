@@ -36,12 +36,13 @@ import {
 } from './narcoticsDossier'
 import {
   loadActivity, loadCasesData, loadCounts, loadIntelligence, loadMedia, loadNarcoticCore,
-  loadPeople, loadPlaces, loadSeizures,
+  loadPeople, loadPlaces, loadSales, loadSeizures,
   type ActivityData, type CasesData, type IntelligenceData, type MediaRow, type NarcoticCore,
-  type NarcoticCounts, type PeopleData, type PlacesData, type SeizuresData,
+  type NarcoticCounts, type PeopleData, type PlacesData, type SalesData, type SeizuresData,
 } from './narcoticsLoad'
 import { NarcoticOverview, IdentificationSection, PackagingSection, IntelligenceSection } from './NarcoticsSections'
 import { ActivitySection, CasesSection, MediaSection, PeopleSection, PlacesSection, SeizuresSection } from './NarcoticsRelations'
+import { SalesSection } from './NarcoticsSalesSection'
 import { NarcoticEditModal, NarcoticMergeModal, NarcoticResolveModal } from './NarcoticsModals'
 import { NarcoticsSuggestionForm } from './NarcoticsSuggestionForm'
 
@@ -54,6 +55,7 @@ interface Slices {
   intelligence?: IntelligenceData
   media?: MediaRow[]
   activity?: ActivityData
+  sales?: SalesData
 }
 
 export function NarcoticsDossier({ drugId, onClose }: { drugId: string; onClose: () => void }) {
@@ -85,12 +87,25 @@ export function NarcoticsDossier({ drugId, onClose }: { drugId: string; onClose:
     + useTableVersion('narcotic_gangs')
     + useTableVersion('case_intel_links')
     + useTableVersion('media')
+    + useTableVersion('narcotic_sale_series')
+    + useTableVersion('narcotic_sale_observations')
+    + useTableVersion('narcotic_sale_stacks')
 
   const section = sectionFromParam(sp.get('section'))
   const setSection = useCallback((next: SectionId) => {
     const params = new URLSearchParams(sp.toString())
     params.set('drug', drugId)
     params.set('section', next)
+    router.replace(`/narcotics?${params.toString()}`)
+  }, [sp, drugId, router])
+
+  // Deep-link an individual sale observation: ?…&section=sales&sale=<id>.
+  const setSale = useCallback((saleId: string | null) => {
+    const params = new URLSearchParams(sp.toString())
+    params.set('drug', drugId)
+    params.set('section', 'sales')
+    if (saleId) params.set('sale', saleId)
+    else params.delete('sale')
     router.replace(`/narcotics?${params.toString()}`)
   }, [sp, drugId, router])
 
@@ -125,6 +140,7 @@ export function NarcoticsDossier({ drugId, onClose }: { drugId: string; onClose:
       case 'places': apply({ places: await loadPlaces(drugId) }); break
       case 'people': apply({ people: await loadPeople(drugId) }); break
       case 'media': apply({ media: await loadMedia(drugId) }); break
+      case 'sales': apply({ sales: await loadSales(drugId) }); break
       case 'activity': apply({ activity: await loadActivity(drugId) }); break
       case 'identification': break // served by the core (aliases + row)
     }
@@ -197,6 +213,10 @@ export function NarcoticsDossier({ drugId, onClose }: { drugId: string; onClose:
     { id: 'identification', label: 'Identification' },
     { id: 'packaging', label: 'Packaging' },
     { id: 'intelligence', label: 'Intelligence' },
+    // Restricted — only surfaces once RLS returns sale rows (senior_detective+).
+    ...((counts?.sales ?? slices.sales?.observations.length ?? 0) > 0
+      ? [{ id: 'sales' as const, label: 'Street-Value Observations', count: counts?.sales ?? slices.sales?.observations.length }]
+      : []),
     { id: 'cases', label: 'Cases', count: counts?.caseLinks },
     { id: 'seizures', label: 'Seizures', count: counts?.seizures },
     { id: 'places', label: 'Places', count: counts?.places },
@@ -297,6 +317,18 @@ export function NarcoticsDossier({ drugId, onClose }: { drugId: string; onClose:
             {section === 'seizures' && (slices.seizures ? <SeizuresSection data={slices.seizures} /> : <Notice text="Loading seizures…" />)}
             {section === 'places' && (slices.places ? <PlacesSection data={slices.places} /> : <Notice text="Loading places…" />)}
             {section === 'people' && (slices.people ? <PeopleSection data={slices.people} /> : <Notice text="Loading people &amp; gangs…" />)}
+            {section === 'sales' && (
+              slices.sales
+                ? <SalesSection
+                    narcotic={n}
+                    data={slices.sales}
+                    openSaleId={sp.get('sale')}
+                    onOpenSale={setSale}
+                    onOpenMedia={setLightbox}
+                    onChanged={refresh}
+                  />
+                : <Notice text="Loading street-value observations…" />
+            )}
             {section === 'media' && (
               slices.media
                 ? <MediaSection media={slices.media} representativeId={n.representative_media_id} canEdit={mayEdit} onOpen={setLightbox} onSetRepresentative={(m) => void setRepresentative(m)} />

@@ -3327,6 +3327,7 @@ export type Database = {
           narcotic_id: string | null
           person_id: string | null
           place_id: string | null
+          restricted: boolean
           storage_path: string | null
           tags: Json | null
           title: string
@@ -3344,6 +3345,7 @@ export type Database = {
           narcotic_id?: string | null
           person_id?: string | null
           place_id?: string | null
+          restricted?: boolean
           storage_path?: string | null
           tags?: Json | null
           title: string
@@ -3361,6 +3363,7 @@ export type Database = {
           narcotic_id?: string | null
           person_id?: string | null
           place_id?: string | null
+          restricted?: boolean
           storage_path?: string | null
           tags?: Json | null
           title?: string
@@ -3880,6 +3883,302 @@ export type Database = {
             columns: ["narcotic_id"]
             isOneToOne: false
             referencedRelation: "narcotics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      narcotic_sale_observations: {
+        Row: {
+          analyst_note: string | null
+          buyer_ref: string | null
+          created_at: string
+          created_by: string | null
+          currency: string
+          id: string
+          investigator_id: string | null
+          location_ref: string | null
+          methodology: string | null
+          narcotic_id: string
+          notes: string | null
+          observation_number: number | null
+          observed_at: string | null
+          observed_date_precision: string
+          payment_amount: number
+          payment_type: string
+          product_name: string | null
+          product_state: string
+          provenance: string | null
+          quality_tier: string | null
+          recorded_weight_text: string | null
+          recorded_weight_unit: string | null
+          recorded_weight_value: number | null
+          restricted: boolean
+          series_id: string
+          source_case_id: string | null
+          source_confidence: string | null
+          source_evidence_id: string | null
+          state: string
+          total_units: number
+          updated_at: string
+          weight_is_derived: boolean
+        }
+        Insert: {
+          analyst_note?: string | null
+          buyer_ref?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          id?: string
+          investigator_id?: string | null
+          location_ref?: string | null
+          methodology?: string | null
+          narcotic_id: string
+          notes?: string | null
+          observation_number?: number | null
+          observed_at?: string | null
+          observed_date_precision?: string
+          payment_amount?: number
+          payment_type?: string
+          product_name?: string | null
+          product_state?: string
+          provenance?: string | null
+          quality_tier?: string | null
+          recorded_weight_text?: string | null
+          recorded_weight_unit?: string | null
+          recorded_weight_value?: number | null
+          restricted?: boolean
+          series_id: string
+          source_case_id?: string | null
+          source_confidence?: string | null
+          source_evidence_id?: string | null
+          state?: string
+          total_units?: number
+          updated_at?: string
+          weight_is_derived?: boolean
+        }
+        Update: {
+          analyst_note?: string | null
+          buyer_ref?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          id?: string
+          investigator_id?: string | null
+          location_ref?: string | null
+          methodology?: string | null
+          narcotic_id?: string
+          notes?: string | null
+          observation_number?: number | null
+          observed_at?: string | null
+          observed_date_precision?: string
+          payment_amount?: number
+          payment_type?: string
+          product_name?: string | null
+          product_state?: string
+          provenance?: string | null
+          quality_tier?: string | null
+          recorded_weight_text?: string | null
+          recorded_weight_unit?: string | null
+          recorded_weight_value?: number | null
+          restricted?: boolean
+          series_id?: string
+          source_case_id?: string | null
+          source_confidence?: string | null
+          source_evidence_id?: string | null
+          state?: string
+          total_units?: number
+          updated_at?: string
+          weight_is_derived?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "narcotic_sale_observations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_sale_observations_investigator_id_fkey"
+            columns: ["investigator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_sale_observations_narcotic_id_fkey"
+            columns: ["narcotic_id"]
+            isOneToOne: false
+            referencedRelation: "narcotics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_sale_observations_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "narcotic_sale_series"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_sale_observations_source_case_id_fkey"
+            columns: ["source_case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_sale_observations_source_evidence_id_fkey"
+            columns: ["source_evidence_id"]
+            isOneToOne: false
+            referencedRelation: "evidence"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      narcotic_sale_series: {
+        Row: {
+          analyst_note: string | null
+          collection_state: string
+          confidence: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          investigator_id: string | null
+          method: string | null
+          name: string
+          narcotic_id: string
+          next_action: string | null
+          notes: string | null
+          payment_type: string
+          product_name: string | null
+          provenance: string | null
+          purpose: string | null
+          restricted: boolean
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          analyst_note?: string | null
+          collection_state?: string
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          investigator_id?: string | null
+          method?: string | null
+          name: string
+          narcotic_id: string
+          next_action?: string | null
+          notes?: string | null
+          payment_type?: string
+          product_name?: string | null
+          provenance?: string | null
+          purpose?: string | null
+          restricted?: boolean
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          analyst_note?: string | null
+          collection_state?: string
+          confidence?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          investigator_id?: string | null
+          method?: string | null
+          name?: string
+          narcotic_id?: string
+          next_action?: string | null
+          notes?: string | null
+          payment_type?: string
+          product_name?: string | null
+          provenance?: string | null
+          purpose?: string | null
+          restricted?: boolean
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "narcotic_sale_series_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_sale_series_investigator_id_fkey"
+            columns: ["investigator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_sale_series_narcotic_id_fkey"
+            columns: ["narcotic_id"]
+            isOneToOne: false
+            referencedRelation: "narcotics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      narcotic_sale_stacks: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          observation_id: string
+          recorded_weight_text: string | null
+          recorded_weight_unit: string | null
+          recorded_weight_value: number | null
+          stack_number: number
+          units: number
+          updated_at: string
+          weight_is_derived: boolean
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          observation_id: string
+          recorded_weight_text?: string | null
+          recorded_weight_unit?: string | null
+          recorded_weight_value?: number | null
+          stack_number: number
+          units?: number
+          updated_at?: string
+          weight_is_derived?: boolean
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          observation_id?: string
+          recorded_weight_text?: string | null
+          recorded_weight_unit?: string | null
+          recorded_weight_value?: number | null
+          stack_number?: number
+          units?: number
+          updated_at?: string
+          weight_is_derived?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "narcotic_sale_stacks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "narcotic_sale_stacks_observation_id_fkey"
+            columns: ["observation_id"]
+            isOneToOne: false
+            referencedRelation: "narcotic_sale_observations"
             referencedColumns: ["id"]
           },
         ]
@@ -6743,6 +7042,14 @@ export type Database = {
           restricted: boolean
           status: string
         }[]
+      }
+      add_narcotic_sale_observation: {
+        Args: { p_observation: Json; p_series: string; p_stacks?: Json }
+        Returns: string
+      }
+      confirm_narcotic_sale_observation: {
+        Args: { p_id: string; p_reason?: string }
+        Returns: undefined
       }
     }
     Enums: {

@@ -13,9 +13,10 @@ const NOW = Date.parse('2026-07-16T00:00:00Z')
 
 describe('section whitelist + URL guard', () => {
   it('exposes the ten spec sections', () => {
-    expect(SECTION_IDS).toHaveLength(10)
+    expect(SECTION_IDS).toHaveLength(11)
     expect(SECTION_IDS).toContain('intelligence')
     expect(SECTION_IDS).toContain('people')
+    expect(SECTION_IDS).toContain('sales')
   })
 
   it('defaults unknown/absent to overview, keeps valid ids', () => {
