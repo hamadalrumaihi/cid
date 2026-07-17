@@ -446,14 +446,17 @@ describe.skipIf(!enabled)('DOJ legal review — RLS/RPC security wall (live)', (
     expect(daApprove.error).not.toBeNull() // wrong stage AND judge-only route
   })
 
-  it('assigned Judge sees the immutable version; the unassigned Judge sees nothing', async () => {
+  it('assigned Judge sees the immutable version; the unassigned Judge may read but never decide', async () => {
     const asg = await adaLsb.rpc('assign_judge', { p_request: warrantId, p_judge: ids.judge })
     expect(asg.error).toBeNull()
     expect(asg.data).toMatchObject({ review_status: 'judicial_review', assigned_judge_id: ids.judge })
     const seen = await judge.from('legal_request_versions').select('id,version_number').eq('legal_request_id', warrantId)
     expect((seen.data ?? []).length).toBeGreaterThanOrEqual(1)
-    const hidden = await judge2.from('legal_requests').select('id').eq('id', warrantId)
-    expect(hidden.data ?? []).toHaveLength(0)
+    // Parallel judiciary lane (20260805010000): every active judge has READ
+    // visibility of judge-routed, DOJ-submitted, non-sealed requests — pinned
+    // in v135. Decision authority stays with the assigned judge alone.
+    const visible = await judge2.from('legal_requests').select('id').eq('id', warrantId)
+    expect(visible.data ?? []).toHaveLength(1)
     const decideStranger = await judge2.rpc('decide_legal_request_as_judge', { p_request: warrantId, p_decision: 'approve' })
     expect(decideStranger.error).not.toBeNull()
   })
