@@ -236,6 +236,12 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
   const agActing = justiceRole === 'attorney_general' && status === 'ag_review'
   const canAssignJudge = status === 'submitted_to_judge' && (canManage || (!!me && r.assigned_ada_id === me))
   const judgeActing = !!me && r.assigned_judge_id === me && status === 'judicial_review'
+  // Parallel judiciary lane: a judge may take a waiting judge-routed request
+  // without a prosecutor hand-off. Client mirror only — the RPC re-checks role,
+  // route, sealed, conflicts, and no-judge-yet server-side.
+  const canJudgeClaim = justiceRole === 'judge' && !isCreator && !r.assigned_judge_id
+    && (r.approval_route ?? 'judge') === 'judge' && r.classification !== 'sealed'
+    && ['submitted_to_doj', 'submitted_to_judge'].includes(status)
   const canWithdraw = isCreator && !['approved', 'denied', 'withdrawn'].includes(status)
   const prosecutors = directory.filter((d) => d.active && (d.justice_role === 'assistant_district_attorney' || d.justice_role === 'district_attorney'))
   const judges = directory.filter((d) => d.active && d.justice_role === 'judge')
@@ -368,6 +374,15 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
     if (!j) return
     if (!(await uiConfirm(`Assign ${j.display_name} for judicial review?`, { title: 'Assign Judge' }))) return
     await act(() => rpc('assign_judge', { p_request: r.id, p_judge: judgeId }), 'Judge assigned.')
+  }
+
+  const judgeClaim = async () => {
+    const ok = await uiConfirm(
+      'Take this request for judicial review? It moves to your queue immediately — the prosecution is notified but not required to act first.',
+      { title: 'Take for judicial review', confirmText: 'Take it' },
+    )
+    if (!ok) return
+    await act(() => rpc('claim_legal_request_as_judge', { p_request: r.id }), 'Taken for judicial review.')
   }
 
   const judgeDecide = async (decision: 'approve' | 'deny' | 'return') => {
@@ -669,6 +684,9 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
         {canAssignJudge && judges.length === 0 && (
           <span className="text-xs text-amber-300">No active Judges are available for assignment.</span>
         )}
+        {canJudgeClaim && (
+          <Button variant="primary" disabled={busy} onClick={() => void judgeClaim()}>Take for judicial review</Button>
+        )}
         {judgeActing && (
           <>
             <Button variant="primary" disabled={busy} onClick={() => void judgeDecide('approve')}>Approve warrant/subpoena</Button>
@@ -677,7 +695,7 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
           </>
         )}
         {canWithdraw && <Button disabled={busy} onClick={() => void withdraw()}>Withdraw</Button>}
-        {!editable && !canCidReview && !canManage && !adaActing && !daActing && !agActing && !canAssignJudge && !judgeActing && !canWithdraw && (
+        {!editable && !canCidReview && !canManage && !adaActing && !daActing && !agActing && !canAssignJudge && !judgeActing && !canJudgeClaim && !canWithdraw && (
           <span className="text-xs text-slate-500">No actions available for your role at this stage.</span>
         )}
       </div>

@@ -62,6 +62,16 @@ export function JusticePortalView() {
           <QueueSection title="Assigned for Judicial Review" onOpen={setOpenId}
             rows={requests.filter((r) => judgeMine(r) && r.review_status === 'judicial_review')}
             empty="No requests are assigned to you." />
+          {/* Parallel judiciary lane: judge-routed requests waiting at DOJ are
+              visible (RLS) and claimable without waiting on a prosecutor.
+              Sealed requests never appear here — they need formal assignment. */}
+          <QueueSection title="Available for Judicial Review" onOpen={setOpenId}
+            rows={requests.filter((r) =>
+              !r.assigned_judge_id
+              && r.created_by !== me
+              && (r.approval_route ?? 'judge') === 'judge'
+              && ['submitted_to_doj', 'submitted_to_judge'].includes(r.review_status))}
+            empty="Nothing is waiting for judicial pickup." />
           <QueueSection title="Returned for Revision" onOpen={setOpenId}
             rows={requests.filter((r) => judgeMine(r) && r.review_status === 'returned_by_judge')} />
           <QueueSection title="Recently Decided" onOpen={setOpenId}
@@ -74,6 +84,15 @@ export function JusticePortalView() {
               <QueueSection title="Assigned to Me" onOpen={setOpenId}
                 rows={requests.filter((r) => mine(r) && r.review_status === 'ada_review')}
                 empty="Nothing is assigned to you." />
+              {/* Bureau-prosecutor awareness (not a gate): requests for a bureau
+                  this prosecutor covers, waiting at DOJ. RLS already scopes the
+                  list to their own bureau(s); a judge may pick these up in
+                  parallel, so this queue is informational. */}
+              {role === 'assistant_district_attorney' && (
+                <QueueSection title="Bureau Requests at DOJ" onOpen={setOpenId}
+                  rows={requests.filter((r) => !mine(r) && r.review_status === 'submitted_to_doj')}
+                  empty="No bureau requests are waiting at DOJ." />
+              )}
               <QueueSection title="Awaiting DA / AG / Judge" onOpen={setOpenId}
                 rows={requests.filter((r) => mine(r) && ['da_review', 'ag_review', 'submitted_to_judge', 'judicial_review'].includes(r.review_status))} />
               <QueueSection title="Returned to CID" onOpen={setOpenId}

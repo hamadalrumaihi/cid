@@ -6170,6 +6170,10 @@ export type Database = {
         Args: { p_judge: string; p_request: string }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
       }
+      claim_legal_request_as_judge: {
+        Args: { p_request: string }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
       close_legal_request: {
         Args: { p_note?: string; p_outcome?: string; p_request: string }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]

@@ -139,6 +139,17 @@ to the bureau ADA → ADA Review → (Returned | Submitted to Judge) → Judicia
 Review → Approved / Denied / Returned → Issued → Executed / Expired / Revoked →
 Return Filed → Closed.
 
+**Parallel judiciary lane** ([`20260805010000`](../supabase/migrations/20260805010000_legal_parallel_judiciary.sql)):
+the prosecution is informed, never a gate. Once a judge-routed request reaches
+DOJ it is visible to every active Judge and to the responsible bureau's
+prosecutor(s) (who are also notified on submission), and any Judge may take it
+straight into Judicial Review (`claim_legal_request_as_judge`) from
+`submitted_to_doj` or `submitted_to_judge` — no ADA hand-off required, same
+conflict guards as formal assignment (never prosecution-side, never the
+creator). Sealed requests are excluded from both the widened visibility and the
+claim path; they keep the explicit-assignment audience. The ADA lane is
+unchanged when it moves first — whichever lane acts first carries the request.
+
 A warrant **always** requires Judge approval. DA/AG oversight may reassign,
 return, or forward, but never substitutes for judicial approval. The CID
 supervisor gate requires: source report finalized, required fields complete,

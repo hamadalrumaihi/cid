@@ -6192,3 +6192,22 @@ create policy wl_sel on public.watchlist
 -- service_role. Seed data (the LeafOS — Ditch Witch Street-Value Study, Sale 1 +
 -- Sale 2) is data, not schema. Definitive SQL in
 -- supabase/migrations/20260804010000_narcotic_sales.sql.
+-- 20260805010000_legal_parallel_judiciary: the judiciary becomes a PARALLEL
+-- lane on judge-routed legal requests — it no longer waits on the prosecutor.
+-- private.can_view_legal_request(uuid, uuid) was re-emitted with two additive
+-- OR-branches (both gated classification <> 'sealed' so the sealed audience is
+-- unchanged): any active Judge sees judge-routed DOJ-submitted requests, and
+-- the responsible bureau's live prosecutor(s) (acting/primary/supporting ADA or
+-- DA per prosecutor_bureau_assignments) see their bureau's DOJ-submitted
+-- requests. New RPC public.claim_legal_request_as_judge(uuid) — a Judge takes a
+-- waiting judge-routed non-sealed request (submitted_to_doj or
+-- submitted_to_judge, no judge assigned yet) straight into judicial_review,
+-- with the assign_judge conflict guards (not prosecution-side, not the
+-- creator); SECURITY DEFINER, set search_path = '', logged + audited
+-- (LEGAL_JUDGE_CLAIMED), revoked from public/anon, granted to authenticated,
+-- service_role. public.review_legal_request_as_cid(...) was re-emitted with one
+-- addition: after auto-route / coverage-gap handling, submit-to-DOJ also
+-- notifies the responsible bureau's prosecutor(s) who aren't the routed ADA
+-- (informational — never a gate). The SAB coverage re-establishment + backlog
+-- notifications are data, not schema. Definitive SQL in
+-- supabase/migrations/20260805010000_legal_parallel_judiciary.sql.
