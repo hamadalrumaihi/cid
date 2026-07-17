@@ -465,16 +465,22 @@ function TierBarChart({ observations }: { observations: SaleObservationRow[] }) 
         ))}
       </div>
 
-      {/* a11y table fallback */}
-      <table className="sr-only">
-        <caption>{title}</caption>
-        <thead><tr><th>Observation</th><th>Tier</th><th>Payment per unit</th></tr></thead>
-        <tbody>
-          {bars.map((b, i) => (
-            <tr key={b.id}><td>#{b.n || i + 1}</td><td>{cap(b.tier)}</td><td>{formatMoney(b.value)}</td></tr>
-          ))}
-        </tbody>
-      </table>
+      {/* a11y table fallback — wrapped in an sr-only DIV (not the table itself):
+          a bare `<table className="sr-only">` keeps auto-layout, ignores the
+          1px width and renders full-width absolutely-positioned, inflating page
+          scrollWidth on mobile. The div's overflow:hidden clips it (same class
+          of fix as the SectionTabs marker escape). */}
+      <div className="sr-only">
+        <table>
+          <caption>{title}</caption>
+          <thead><tr><th>Observation</th><th>Tier</th><th>Payment per unit</th></tr></thead>
+          <tbody>
+            {bars.map((b, i) => (
+              <tr key={b.id}><td>#{b.n || i + 1}</td><td>{cap(b.tier)}</td><td>{formatMoney(b.value)}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   )
 }
