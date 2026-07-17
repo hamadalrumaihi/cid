@@ -2,11 +2,12 @@
 
 /** Vehicle profile — panelled drill-down for a single plate (`?vehicle=`).
  *  Left: identity card (round icon tile, model, mono plate) over a labelled
- *  key-value list, then notes. Right: derived linked cases — there is no
- *  vehicle↔case join, so the panel scans RLS-scoped report fields for the
- *  plate string (CrossrefPanel's approach) and folds in cases linked to the
- *  registered owner via case_intel_links. The scan fails CLOSED: any query
- *  error shows a Retry banner, never a false "no linked cases". */
+ *  key-value list, then notes. Right: the structured Legal section (RLS-safe
+ *  legal_request_exhibits vehicle targets — EntityLegalPanel) and derived
+ *  linked cases — there is no vehicle↔case join, so the panel scans RLS-scoped
+ *  report fields for the plate string (CrossrefPanel's approach) and folds in
+ *  cases linked to the registered owner via case_intel_links. Both fail
+ *  CLOSED: any query error shows a Retry banner, never a false "nothing". */
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
@@ -21,6 +22,7 @@ import { Card } from '@/components/ui/Card'
 import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { WatchButton } from '@/components/cases/WatchButton'
+import { EntityLegalPanel } from '@/components/justice/EntityLegalSection'
 import { VehicleModal, type GangOption, type PersonOption } from './VehiclesView'
 
 type VehicleRow = Tables<'vehicles'>
@@ -321,9 +323,11 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
             </Card>
           </div>
 
-          {/* RIGHT — derived intelligence. Warrants/tags panels are omitted:
-              no such tables exist and this view never fabricates fields. */}
+          {/* RIGHT — derived intelligence. Legal comes from the STRUCTURED
+              legal_request_exhibits target rows (RLS-trimmed, sealed-safe);
+              linked cases stay a text-scan derivation. */}
           <div className="min-w-0 flex-1 space-y-4">
+            <EntityLegalPanel exhibitType="vehicle" sourceId={id} noun="vehicle" />
             <LinkedCasesPanel plate={v.plate} ownerId={v.owner_id} />
           </div>
         </div>

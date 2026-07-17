@@ -53,7 +53,7 @@ import {
 import { ActivitySection, DecisionSection, ReviewSection, ServiceSection, SummarySection } from './dossier/InfoSections'
 import { RequestSection } from './dossier/RequestSection'
 import { SubmitPreview } from './dossier/SubmitPreview'
-import { SupportingSection } from './dossier/SupportingSection'
+import { SupportingSection, type ReferencedBy } from './dossier/SupportingSection'
 
 export function LegalRequestDetail({ requestId, onBack }: { requestId: string; onBack: () => void }) {
   // useSearchParams needs a Suspense boundary in every host (LegalView has
@@ -81,6 +81,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
   const [participants, setParticipants] = useState<Tables<'legal_request_participants'>[]>([])
   const [actions, setActions] = useState<ActionRow[]>([])
   const [signatures, setSignatures] = useState<LegalSignature[]>([])
+  const [referencedBy, setReferencedBy] = useState<ReferencedBy[]>([])
   const [busy, setBusy] = useState(false)
   const [missing, setMissing] = useState(false)
   const [printPreparedAt, setPrintPreparedAt] = useState<string | null>(null)
@@ -107,6 +108,15 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
     onBack()
   }, [sp, pathname, router, onBack])
+  // Cross-reference navigation (prior-request exhibits / "referenced by"):
+  // swap the host's ?request= in place — both hosts read it reactively, and
+  // the section key is dropped so it can't leak into the next request.
+  const openRequest = useCallback((id: string) => {
+    const params = new URLSearchParams(sp.toString())
+    params.set('request', id)
+    params.delete('section')
+    router.push(`${pathname}?${params.toString()}`, { scroll: false })
+  }, [sp, pathname, router])
 
   useEffect(() => {
     let cancelled = false
@@ -127,6 +137,23 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
         ])
         if (cancelled) return
         setVersions(vs); setExhibits(ex); setParticipants(pa); setActions(ac); setSignatures(sg)
+        // Reverse cross-references: OTHER requests citing this one as a
+        // 'prior_legal_request' exhibit. RLS trims both legs (the exhibit row
+        // is visible only when ITS parent passes can_view_legal_request, and
+        // the parent fetch is scoped the same way) — a sealed or out-of-scope
+        // referencing request never appears. Optional garnish: a failure here
+        // degrades to an empty list, never a "request unavailable".
+        try {
+          const refEx = (await list('legal_request_exhibits', {
+            select: 'legal_request_id',
+            eq: { exhibit_type: 'prior_legal_request', source_id: requestId },
+          })) as unknown as { legal_request_id: string }[]
+          const refIds = [...new Set(refEx.map((x) => x.legal_request_id))].filter((x) => x !== requestId)
+          const refRows = refIds.length
+            ? ((await list('legal_requests', { select: 'id,request_number,title', in: { id: refIds } })) as unknown as ReferencedBy[])
+            : []
+          if (!cancelled) setReferencedBy(refRows)
+        } catch { if (!cancelled) setReferencedBy([]) }
       } catch { if (!cancelled) setMissing(true) }
     })()
     return () => { cancelled = true }
@@ -413,6 +440,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
             r={r} exhibits={exhibits} signatures={signatures} versions={versions}
             editable={editable} busy={busy} onChanged={reload}
             records={caseRecords} manifest={parsePacketManifest(currentVersion?.packet_manifest)}
+            referencedBy={referencedBy} onOpenRequest={openRequest}
           />
         )}
         {section === 'review' && <ReviewSection actions={actions} name={name} />}

@@ -18,6 +18,7 @@ import { useJusticeRoster } from '@/lib/justiceRoster'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { pendingMembership, type JusticeRequestLite } from '@/components/command-center/lib/membershipPending'
+import { buildLegalViewer, useMyProsecutorBureaus } from '@/components/justice/legalShared'
 
 /* Column projections — each mirrors its Ac* Pick in lib/actionItems exactly
  * (the model documents that the loader builds selects from those lists).
@@ -28,7 +29,10 @@ const TASK_COLS = 'id,case_id,title,due,done,assignee,created_at,updated_at'
 const TRANSFER_COLS = 'id,status,target_id,requested_by,from_bureau,to_bureau,reason,created_at,updated_at'
 const ACCESS_COLS = 'id,case_id,requester_id,requester_name,reason,status,created_at'
 const LEGAL_COLS =
-  'id,case_id,case_number_snapshot,request_number,request_type,review_status,fulfilment_status,created_by,responsible_bureau,response_deadline,expires_at,created_at,updated_at'
+  'id,case_id,case_number_snapshot,request_number,request_type,subtype,review_status,'
+  + 'document_status,fulfilment_status,service_status,compliance_status,approval_route,'
+  + 'classification,created_by,responsible_bureau,assigned_ada_id,assigned_judge_id,'
+  + 'response_deadline,expires_at,submitted_to_doj_at,created_at,updated_at'
 const BLOCKER_COLS = 'id,case_id,title,type,status,owner_id,review_at,created_at,updated_at'
 const NOTIF_COLS = 'id,user_id,type,payload,read,created_at'
 /** Library governance projection — never full bodies (docModel AcDoc inputs). */
@@ -65,7 +69,11 @@ export interface ActionItemsResult {
 }
 
 export function useActionItems(): ActionItemsResult {
-  const { profile, state, isCommand, isOwner, justiceRole } = useAuth()
+  const auth = useAuth()
+  const { profile, state, isCommand, isOwner, justiceRole } = auth
+  // The legal branch's disposition viewer needs live prosecutor bureaus so
+  // bureau-awareness rows are recognised (and never shown as assigned work).
+  const prosecutorBureaus = useMyProsecutorBureaus()
   const fetchProfiles = useProfilesStore((s) => s.fetch)
   const [built, setBuilt] = useState<{ items: ActionItem[]; suppressedCount: number } | null>(null)
   const [error, setError] = useState<unknown>(null)
@@ -205,6 +213,7 @@ export function useActionItems(): ActionItemsResult {
         accessRequests,
         membershipPending,
         legal,
+        legalViewer: buildLegalViewer(auth, prosecutorBureaus),
         blockers,
         notifications,
         documents,
@@ -218,7 +227,7 @@ export function useActionItems(): ActionItemsResult {
     } finally {
       setRefreshing(false)
     }
-  }, [state, profile, isCommand, isOwner, justiceRole, fetchProfiles])
+  }, [state, profile, isCommand, isOwner, justiceRole, fetchProfiles, auth, prosecutorBureaus])
 
   useEffect(() => {
     const id = window.setTimeout(() => { void refresh() }, 0)

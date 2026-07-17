@@ -4,7 +4,10 @@
  * FK-preserving create/edit modal, linked gang/case/narcotic chips, attach-to-
  * case, and undo-backed deletes. Drug labs surface a non-actionable "suspected
  * production site" summary that deep-links the canonical substance dossier —
- * no production recipe or step-by-step workflow is generated or rendered. */
+ * no production recipe or step-by-step workflow is generated or rendered.
+ * Each card also shows its structured Legal references (legal_request_exhibits
+ * 'place' targets, batched in one RLS-trimmed fetch — sealed or out-of-scope
+ * requests simply never appear). */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Database, Json, Tables } from '@/lib/database.types'
 import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
@@ -21,6 +24,7 @@ import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { EntityLink } from '@/components/ui/EntityLink'
+import { EntityLegalLine, fetchEntityLegalRefs, type EntityLegalRef } from '@/components/justice/EntityLegalSection'
 
 type PlaceRow = Tables<'places'>
 type GangRow = Tables<'gangs'>
@@ -65,6 +69,7 @@ export function PlacesView() {
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [photos, setPhotos] = useState<PlacePhoto[]>([])
+  const [legalRefs, setLegalRefs] = useState<ReadonlyMap<string, EntityLegalRef[]>>(new Map())
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [editor, setEditor] = useState<PlaceRow | 'new' | null>(null)
   const [attach, setAttach] = useState<PlaceRow | null>(null)
@@ -76,6 +81,7 @@ export function PlacesView() {
   const vCases = useTableVersion('cases')
   const vNarcotics = useTableVersion('narcotics')
   const vMedia = useTableVersion('media')
+  const vLegal = useTableVersion('legal_requests')
 
   const refresh = useCallback(async () => {
     if (state !== 'in') return
@@ -83,7 +89,7 @@ export function PlacesView() {
     setLoading(true)
     setErr(null)
     try {
-      const [pl, g, c, n, prec, hot, ph] = await Promise.all([
+      const [pl, g, c, n, prec, hot, ph, lg] = await Promise.all([
         withRetry(() => list('places', { order: 'updated_at', ascending: false })),
         list('gangs', { order: 'name' }).catch(() => [] as GangRow[]),
         list('cases', { select: 'id,case_number,title', order: 'updated_at', ascending: false })
@@ -95,11 +101,16 @@ export function PlacesView() {
         list('media', { select: 'id,title,type,external_url,storage_path,place_id', order: 'created_at' })
           .then((rows) => (rows as unknown as PlacePhoto[]).filter((m) => m.place_id))
           .catch(() => [] as PlacePhoto[]),
+        // Structured legal references, batched once for the whole grid. A
+        // degraded read hides the section (no false "no legal activity" claim
+        // is ever rendered — the cards simply omit it).
+        fetchEntityLegalRefs('place').catch(() => new Map<string, EntityLegalRef[]>()),
       ])
       setPlaces(pl)
       setGangs(g)
       setCases(c)
       setPhotos(ph)
+      setLegalRefs(lg)
       setDrugs(n.map((row) => ({
         row,
         precursors: prec.filter((p) => p.narcotic_id === row.id),
@@ -116,7 +127,7 @@ export function PlacesView() {
   useEffect(() => {
     const t = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(t)
-  }, [refresh, vPlaces, vGangs, vCases, vNarcotics, vMedia])
+  }, [refresh, vPlaces, vGangs, vCases, vNarcotics, vMedia, vLegal])
 
   const gangName = (id: string | null) => (id && gangs.find((g) => g.id === id)?.name) || null
   const caseNum = (id: string | null) => (id && cases.find((c) => c.id === id)?.case_number) || null
@@ -210,6 +221,7 @@ export function PlacesView() {
               caseNumber={caseNum(place.case_id)}
               drug={drugById(place.narcotic_id)}
               photos={photosByPlace.get(place.id) ?? []}
+              legal={legalRefs.get(place.id) ?? []}
               onOpenPhoto={setLightbox}
               onAddPhoto={() => setAddPhoto(place)}
               canEdit={canEdit}
@@ -337,12 +349,13 @@ function PhotoLightbox({ photo, onClose }: { photo: PlacePhoto; onClose: () => v
   )
 }
 
-function PlaceCard({ place, gang, caseNumber, drug, photos, onOpenPhoto, onAddPhoto, canEdit, canDelete, selected, onSelect, onEdit, onDelete, onAttach }: {
+function PlaceCard({ place, gang, caseNumber, drug, photos, legal, onOpenPhoto, onAddPhoto, canEdit, canDelete, selected, onSelect, onEdit, onDelete, onAttach }: {
   place: PlaceRow
   gang: string | null
   caseNumber: string | null
   drug: DrugBundle | null
   photos: PlacePhoto[]
+  legal: EntityLegalRef[]
   onOpenPhoto: (p: PlacePhoto) => void
   onAddPhoto: () => void
   canEdit: boolean
@@ -379,6 +392,17 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, onOpenPhoto, onAddPh
         {drug && <EntityLink kind="narcotic" id={drug.row.id} label={drug.row.name} title={`Open ${drug.row.name} dossier`} />}
       </div>
       {place.notes && <p className="mt-3 text-xs text-slate-400">{place.notes}</p>}
+      {/* Structured legal references (RLS-trimmed): requests naming this place
+          as a search-warrant target, with the per-target rationale. Absence of
+          the section never claims "none exist" — only none are visible. */}
+      {legal.length > 0 && (
+        <div className="mt-3">
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-blue-300/70">Legal</p>
+          <div className="space-y-1.5">
+            {legal.map((r) => <EntityLegalLine key={r.exhibitId} r={r} />)}
+          </div>
+        </div>
+      )}
       {photos.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {photos.map((p) => {
