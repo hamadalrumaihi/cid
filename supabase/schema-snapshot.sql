@@ -421,6 +421,9 @@ alter table public.custody_chain add constraint custody_chain_pkey PRIMARY KEY (
 alter table public.custody_chain add constraint custody_chain_evidence_id_fkey FOREIGN KEY (evidence_id) REFERENCES public.evidence(id) ON DELETE CASCADE;
 alter table public.custody_chain add constraint custody_chain_transferred_by_fkey FOREIGN KEY (transferred_by) REFERENCES public.profiles(id);
 alter table public.custody_chain enable row level security;
+-- Read-only legacy since 20260807010000_case_media_canonical: INSERT/UPDATE/
+-- DELETE/TRUNCATE revoked from anon+authenticated (custody_ins remains but is
+-- unreachable). Table was never written in production (0 rows ever).
 
 create table public.deleted_member_ledger (
   id uuid not null default gen_random_uuid(),
@@ -718,6 +721,9 @@ alter table public.evidence add constraint evidence_case_id_fkey FOREIGN KEY (ca
 alter table public.evidence add constraint evidence_collected_by_fkey FOREIGN KEY (collected_by) REFERENCES public.profiles(id);
 alter table public.evidence add constraint evidence_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
 alter table public.evidence enable row level security;
+-- Read-only legacy since 20260807010000_case_media_canonical: INSERT/UPDATE/
+-- DELETE/TRUNCATE revoked from anon+authenticated (evidence_ins/upd/del
+-- policies remain but are unreachable). Case media lives in public.media.
 
 create table public.feedback (
   id uuid not null default gen_random_uuid(),
@@ -1169,7 +1175,12 @@ create table public.media (
   uploaded_by uuid default auth.uid(),
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
-  restricted boolean not null default false
+  restricted boolean not null default false,
+  report_id uuid,
+  vehicle_id uuid,
+  category text,
+  featured boolean not null default false,
+  archived_at timestamp with time zone
 );
 alter table public.media add constraint media_pkey PRIMARY KEY (id);
 alter table public.media add constraint media_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
@@ -1177,8 +1188,13 @@ alter table public.media add constraint media_gang_id_fkey FOREIGN KEY (gang_id)
 alter table public.media add constraint media_narcotic_id_fkey FOREIGN KEY (narcotic_id) REFERENCES public.narcotics(id) ON DELETE SET NULL;
 alter table public.media add constraint media_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE SET NULL;
 alter table public.media add constraint media_place_id_fkey FOREIGN KEY (place_id) REFERENCES public.places(id) ON DELETE SET NULL;
+alter table public.media add constraint media_report_id_fkey FOREIGN KEY (report_id) REFERENCES public.reports(id) ON DELETE SET NULL;
 alter table public.media add constraint media_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.profiles(id);
+alter table public.media add constraint media_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id) ON DELETE SET NULL;
+alter table public.media add constraint media_category_check CHECK (((category IS NULL) OR (category = ANY (ARRAY['scene'::text, 'people'::text, 'vehicles'::text, 'places'::text, 'surveillance'::text, 'documents'::text, 'report_media'::text, 'other'::text]))));
 alter table public.media enable row level security;
+-- archived_at = soft archive (hidden from default gallery views, restorable);
+-- the row, its URL and its RLS audience are unchanged — archive never deletes.
 
 create table public.mo_profiles (
   id uuid not null default gen_random_uuid(),
@@ -2222,12 +2238,16 @@ CREATE INDEX gangs_name_trgm ON public.gangs USING gin (name extensions.gin_trgm
 CREATE INDEX indicators_case_idx ON public.indicators USING btree (case_id);
 CREATE INDEX indicators_created_by_fkey_idx ON public.indicators USING btree (created_by);
 CREATE INDEX indicators_value_idx ON public.indicators USING btree (lower(btrim(value)));
+CREATE INDEX media_case_id_archived_at_idx ON public.media USING btree (case_id, archived_at);
 CREATE INDEX media_case_id_idx ON public.media USING btree (case_id);
 CREATE INDEX media_gang_id_fkey_idx ON public.media USING btree (gang_id);
 CREATE INDEX media_narcotic_id_fkey_idx ON public.media USING btree (narcotic_id);
 CREATE INDEX media_person_id_fkey_idx ON public.media USING btree (person_id);
 CREATE INDEX media_place_id_fkey_idx ON public.media USING btree (place_id);
+CREATE INDEX media_report_id_fkey_idx ON public.media USING btree (report_id);
+CREATE INDEX media_restricted_idx ON public.media USING btree (restricted) WHERE restricted;
 CREATE INDEX media_uploaded_by_fkey_idx ON public.media USING btree (uploaded_by);
+CREATE INDEX media_vehicle_id_fkey_idx ON public.media USING btree (vehicle_id);
 CREATE INDEX mo_profiles_case_id_fkey_idx ON public.mo_profiles USING btree (case_id);
 CREATE INDEX narcotic_aliases_created_by_fkey_idx ON public.narcotic_aliases USING btree (created_by);
 CREATE UNIQUE INDEX narcotic_aliases_narcotic_alias_key ON public.narcotic_aliases USING btree (narcotic_id, lower(alias));
@@ -5838,8 +5858,8 @@ create policy wl_sel on public.watchlist
 --   client_errors -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   commendations -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   commendations -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   custody_chain -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   custody_chain -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   custody_chain -> anon: REFERENCES, SELECT, TRIGGER (writes revoked — read-only legacy)
+--   custody_chain -> authenticated: REFERENCES, SELECT, TRIGGER (writes revoked — read-only legacy)
 --   deleted_member_ledger -> anon: REFERENCES, SELECT, TRIGGER (writes revoked)
 --   deleted_member_ledger -> authenticated: REFERENCES, SELECT, TRIGGER (writes revoked)
 --   deletion_tokens -> anon: (all revoked)
@@ -5854,8 +5874,8 @@ create policy wl_sel on public.watchlist
 --   documents -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   documents_versions -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   documents_versions -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   evidence -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   evidence -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   evidence -> anon: REFERENCES, SELECT, TRIGGER (writes revoked — read-only legacy)
+--   evidence -> authenticated: REFERENCES, SELECT, TRIGGER (writes revoked — read-only legacy)
 --   feedback -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   feedback -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   feedback_meta -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
@@ -6257,3 +6277,35 @@ create policy wl_sel on public.watchlist
 -- changed; sealed keeps its explicit-assignment audience everywhere else.
 -- Definitive SQL in
 -- supabase/migrations/20260806040000_legal_cid_reviewer_visibility.sql.
+-- 20260807010000_case_media_canonical (additive; Photos & Media phase 1):
+-- public.media becomes THE canonical home for case media. media gained typed
+-- FKs report_id → public.reports / vehicle_id → public.vehicles (both ON
+-- DELETE SET NULL, both FK-indexed) and gallery metadata: nullable category
+-- text (media_category_check: scene/people/vehicles/places/surveillance/
+-- documents/report_media/other; null = uncategorized), featured boolean not
+-- null default false, and archived_at timestamptz (soft archive — hidden from
+-- default views, restorable, never deletes the file/URL) + the
+-- media_case_id_archived_at_idx composite index (all mirrored above; the
+-- 20260804 media_restricted_idx partial index, previously notes-only, is now
+-- also mirrored in the index section). ZERO policy changes: no media policy
+-- references an FK column, so the new FKs cannot broaden the
+-- is_active()+restricted-gated audience; media writes stay direct-under-RLS
+-- (media_upd remains deliberately broad — any active member may edit any
+-- non-restricted row, now including category/featured/archived_at). Data
+-- migration (guarded, idempotent, no-op on fresh rebuilds): the 2 production
+-- evidence rows whose medal.tv clips existed ONLY in evidence.notes
+-- (45ce4c71-…f301 Ev-003 / 31803cfd-…6610 Ev-004, both SAB-9000018) each got
+-- one media row (type video, category scene, url extracted verbatim from
+-- notes and pinned to the classified clip id, uploaded_by = collected_by,
+-- created_at preserved, full provenance in tags.legacy_evidence) with a
+-- NOT EXISTS (case_id, external_url) guard; evidence d805ad95-…c2cd's clip
+-- already existed as media ff5f809e (SAB-9000011) — categorized 'scene' if
+-- null, no insert. The 3 evidence rows themselves are untouched. evidence +
+-- custody_chain are now READ-ONLY LEGACY: INSERT/UPDATE/DELETE/TRUNCATE
+-- revoked from anon+authenticated (grants matrix above); SELECT policies,
+-- realtime and service_role unchanged; the write policies remain but are
+-- unreachable (privilege check precedes RLS). No function writes either table
+-- (rls_test_cleanup's DELETEs are SECURITY DEFINER owner-privileged; case
+-- CASCADE deletes are internal referential triggers — both unaffected).
+-- Definitive SQL in
+-- supabase/migrations/20260807010000_case_media_canonical.sql.
