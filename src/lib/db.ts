@@ -37,13 +37,27 @@ export interface ListOptions<T extends TableName> {
   nullsFirst?: boolean
   eq?: Partial<Record<keyof Tables<T> & string, unknown>>
   in?: Partial<Record<keyof Tables<T> & string, readonly unknown[]>>
+  /** PostgREST or-disjunction for bounded typed pickers — build it with
+   *  ilikeAny() so user input can never inject extra conditions. */
+  or?: string
   limit?: number
+}
+
+/** Build a PostgREST `or()` disjunction of contains-matches over `cols`
+ *  (`col.ilike.*term*`). PostgREST syntax characters are stripped from the
+ *  term so it can never add conditions or wildcards of its own. Returns null
+ *  for a blank term (callers then list the most recent rows instead). */
+export function ilikeAny(cols: readonly string[], term: string): string | null {
+  const safe = term.replace(/[,()%_\\*]/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!safe) return null
+  return cols.map((c) => `${c}.ilike.*${safe}*`).join(',')
 }
 
 export async function list<T extends TableName>(table: T, opts: ListOptions<T> = {}): Promise<Tables<T>[]> {
   let q = raw().from(table).select(opts.select ?? '*')
   if (opts.eq) for (const [k, v] of Object.entries(opts.eq)) q = q.eq(k, v)
   if (opts.in) for (const [k, v] of Object.entries(opts.in)) q = q.in(k, (v ?? []) as unknown[])
+  if (opts.or) q = q.or(opts.or)
   if (opts.order) {
     const o: { ascending: boolean; nullsFirst?: boolean } = { ascending: opts.ascending ?? true }
     if (opts.nullsFirst !== undefined) o.nullsFirst = opts.nullsFirst

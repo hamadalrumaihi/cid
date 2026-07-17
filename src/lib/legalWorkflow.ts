@@ -17,7 +17,10 @@
  *   - sealed requests keep their explicit-assignment audience (no open pickup). */
 
 import type { Tables } from './database.types'
-import { REVIEW_STATUS_LABEL, reviewStatusLabel } from './justice'
+import {
+  REVIEW_STATUS_LABEL, SUBPOENA_FIELDS, WARRANT_FIELDS, reviewStatusLabel,
+  type SubpoenaType, type WarrantType,
+} from './justice'
 
 /* ── Viewer context (authority mirror — server re-checks everything) ───────── */
 export interface LegalViewer {
@@ -540,6 +543,132 @@ export function subtypeRequiresPerson(requestType: string, subtype: string | nul
 }
 export function subtypeSupportsStructuredTargets(requestType: string, subtype: string | null): boolean {
   return requestType === 'warrant' && subtype === 'search_warrant'
+}
+
+/* ── Guided create wizard (spec §15 — pure step model) ────────────────────────
+ * The wizard component owns the UI; this owns the DERIVATION: which steps
+ * exist, what each step still needs, and the exact client mirror of the
+ * server-side validation in create_legal_request / submit_legal_request_to_cid.
+ * The server revalidates everything — this only keeps the UI honest. */
+export type LegalWizardStepId = 'type' | 'case_target' | 'details' | 'narrative' | 'review'
+
+export const LEGAL_WIZARD_STEPS: readonly { id: LegalWizardStepId; label: string }[] = [
+  { id: 'type', label: 'Type' },
+  { id: 'case_target', label: 'Case & target' },
+  { id: 'details', label: 'Details' },
+  { id: 'narrative', label: 'Narrative' },
+  { id: 'review', label: 'Review & submit' },
+]
+
+/** Everything the wizard's validation reads — a plain value object so the
+ *  derivation stays pure and unit-testable. */
+export interface LegalWizardInput {
+  requestType: 'warrant' | 'subpoena'
+  subtype: string | null
+  caseId: string
+  personId: string
+  recipientType: 'player' | 'entity'
+  recipientName: string
+  title: string
+  priority: string
+  narrative: string
+  form: Record<string, string>
+}
+
+/** Outstanding issues for one wizard step. `review` is the union of every
+ *  earlier step — empty means the request would pass the server's submission
+ *  checks (submit_legal_request_to_cid). */
+export function legalWizardIssues(step: LegalWizardStepId, w: LegalWizardInput): string[] {
+  const issues: string[] = []
+  const warrant = w.requestType === 'warrant'
+  if (step === 'type') {
+    if (!w.subtype) issues.push('Choose a request type.')
+    return issues
+  }
+  if (step === 'case_target') {
+    if (!w.caseId) issues.push('Select a case.')
+    if (subtypeRequiresPerson(w.requestType, w.subtype) && !w.personId) {
+      issues.push('An arrest warrant requires a suspect from the Persons registry.')
+    }
+    if (!warrant) {
+      if (w.recipientType === 'player' && !w.personId) issues.push('A player subpoena requires a Persons-registry recipient.')
+      if (w.recipientType === 'entity' && !w.recipientName.trim()) issues.push('An entity subpoena requires a recipient name.')
+    }
+    return issues
+  }
+  if (step === 'details') {
+    const spec = warrant
+      ? WARRANT_FIELDS[w.subtype as WarrantType] ?? []
+      : SUBPOENA_FIELDS[w.subtype as SubpoenaType] ?? []
+    for (const f of spec) {
+      // search_targets is governed by the server's subject-OR-target rule
+      // below, not a blanket "required" (a subject alone satisfies the server).
+      if (!f.req || f.key === 'search_targets') continue
+      if (!String(w.form[f.key] ?? '').trim()) issues.push(`${f.label} is required.`)
+    }
+    // EXACT mirror of create_legal_request / submit_legal_request_to_cid: a
+    // search warrant needs a subject OR non-blank search_targets text.
+    // Structured targets mirror a line into that text, so they satisfy it.
+    if (subtypeSupportsStructuredTargets(w.requestType, w.subtype)
+        && !w.personId && !String(w.form.search_targets ?? '').trim()) {
+      issues.push('A search warrant requires a subject or at least one search target.')
+    }
+    return issues
+  }
+  if (step === 'narrative') {
+    if (!w.title.trim()) issues.push('A title is required.')
+    if (!w.narrative.trim()) issues.push(warrant ? 'A description / justification is required.' : 'A reason for the subpoena is required.')
+    if (warrant && !w.priority) issues.push('A warrant requires a priority.')
+    return issues
+  }
+  // review — the union of every earlier step.
+  return (['type', 'case_target', 'details', 'narrative'] as const)
+    .flatMap((s) => legalWizardIssues(s, w))
+}
+
+/** What "Save as draft" needs — the exact client mirror of create_legal_request
+ *  (a draft needs a case, a title and the target rules, but NOT the narrative,
+ *  priority or type-specific detail fields the submission check adds). */
+export function legalWizardDraftIssues(w: LegalWizardInput): string[] {
+  const issues: string[] = []
+  issues.push(...legalWizardIssues('type', w))
+  issues.push(...legalWizardIssues('case_target', w))
+  if (!w.title.trim()) issues.push('A title is required.')
+  if (subtypeSupportsStructuredTargets(w.requestType, w.subtype)
+      && !w.personId && !String(w.form.search_targets ?? '').trim()) {
+    issues.push('A search warrant requires a subject or at least one search target.')
+  }
+  return issues
+}
+
+/* ── Structured search-warrant targets (spec §15 — typed exhibit rows) ─────── */
+export type StructuredTargetKind = 'person_record' | 'vehicle' | 'place' | 'prior_legal_request'
+
+export const STRUCTURED_TARGET_KINDS: readonly StructuredTargetKind[] =
+  ['person_record', 'vehicle', 'place', 'prior_legal_request']
+
+export const STRUCTURED_TARGET_KIND_LABEL: Record<StructuredTargetKind, string> = {
+  person_record: 'Person',
+  vehicle: 'Vehicle',
+  place: 'Place',
+  prior_legal_request: 'Prior legal request',
+}
+
+/** The one-line mirror of a structured target for the legacy free-text
+ *  search_targets field (the server's subject-OR-target check and the court
+ *  packet both read that text, so structured targets are always reflected). */
+export function structuredTargetLine(t: { kind: StructuredTargetKind; label: string }): string {
+  return `${STRUCTURED_TARGET_KIND_LABEL[t.kind]}: ${t.label}`
+}
+
+/** Append a mirror line to the search_targets text. Idempotent: an existing
+ *  identical line (user-kept or previously mirrored) is never duplicated. */
+export function appendSearchTargetLine(existing: string, line: string): string {
+  const wanted = line.trim()
+  if (!wanted) return existing
+  if (existing.split('\n').some((l) => l.trim() === wanted)) return existing
+  const base = existing.replace(/\s+$/, '')
+  return base ? `${base}\n${wanted}` : wanted
 }
 
 /* ── util ─────────────────────────────────────────────────────────────────── */

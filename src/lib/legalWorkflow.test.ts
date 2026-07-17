@@ -5,7 +5,9 @@ import {
   routingExplanation, canReviewJusticeRole, canAssignAsJudge, canAssignAsProsecutor,
   issuedStateFor, issuedActionLabel, urgencyFor, activeDeadline, formatTarget,
   subtypeRequiresPerson, subtypeSupportsStructuredTargets, fulfilmentEvents,
-  type LegalFulfilmentLike, type LegalReqLike, type LegalViewer,
+  LEGAL_WIZARD_STEPS, legalWizardIssues, legalWizardDraftIssues,
+  structuredTargetLine, appendSearchTargetLine,
+  type LegalFulfilmentLike, type LegalReqLike, type LegalViewer, type LegalWizardInput,
 } from './legalWorkflow'
 
 const NOW = Date.parse('2026-07-17T00:00:00Z')
@@ -256,6 +258,92 @@ describe('fulfilment event derivation (service/return event cards)', () => {
     expect(expired[0].label).toBe('Marked expired')
     const closed = fulfilmentEvents(ful({ fulfilment_status: 'closed', closed_at: '2026-07-06T00:00:00Z', close_note: 'Done' }))
     expect(closed[0]).toMatchObject({ label: 'Closed', detail: [{ label: 'Note', value: 'Done' }] })
+  })
+})
+
+describe('guided create wizard (pure step model)', () => {
+  // Minimal wizard-input factory — a valid search-warrant draft by default.
+  function wiz(over: Partial<LegalWizardInput> = {}): LegalWizardInput {
+    return {
+      requestType: 'warrant', subtype: 'search_warrant', caseId: 'c-1', personId: '',
+      recipientType: 'player', recipientName: '', title: 'Search Warrant — stash house',
+      priority: 'High', narrative: 'Probable cause narrative.',
+      form: { search_targets: 'Place: The stash house', items_sought: 'Contraband' },
+      ...over,
+    }
+  }
+
+  it('publishes the canonical step order', () => {
+    expect(LEGAL_WIZARD_STEPS.map((s) => s.id)).toEqual(['type', 'case_target', 'details', 'narrative', 'review'])
+  })
+
+  it('type step requires a chosen subtype', () => {
+    expect(legalWizardIssues('type', wiz({ subtype: null }))).toHaveLength(1)
+    expect(legalWizardIssues('type', wiz())).toEqual([])
+  })
+
+  it('case & target: case always, person per subtype/recipient rules', () => {
+    expect(legalWizardIssues('case_target', wiz({ caseId: '' }))).toHaveLength(1)
+    expect(legalWizardIssues('case_target', wiz({ subtype: 'arrest_warrant', personId: '' }))).toHaveLength(1)
+    expect(legalWizardIssues('case_target', wiz({ subtype: 'arrest_warrant', personId: 'p-1' }))).toEqual([])
+    // search warrants: subject optional at this step (the target rule lives on details)
+    expect(legalWizardIssues('case_target', wiz({ personId: '' }))).toEqual([])
+    const sub = wiz({ requestType: 'subpoena', subtype: 'testimony', form: { testimony_subject: 'x' } })
+    expect(legalWizardIssues('case_target', { ...sub, recipientType: 'player', personId: '' })).toHaveLength(1)
+    expect(legalWizardIssues('case_target', { ...sub, recipientType: 'entity', recipientName: '' })).toHaveLength(1)
+    expect(legalWizardIssues('case_target', { ...sub, recipientType: 'entity', recipientName: 'Maze Bank' })).toEqual([])
+  })
+
+  it('details: required type-specific fields are enforced', () => {
+    const sub = wiz({ requestType: 'subpoena', subtype: 'testimony', personId: 'p-1', form: {} })
+    expect(legalWizardIssues('details', sub)).toEqual(['Testimony Subject is required.'])
+    expect(legalWizardIssues('details', { ...sub, form: { testimony_subject: 'What they saw' } })).toEqual([])
+  })
+
+  it('details mirrors the server search-warrant rule EXACTLY: subject OR search_targets text', () => {
+    // neither → blocked (same error the server raises)
+    expect(legalWizardIssues('details', wiz({ personId: '', form: { items_sought: 'x' } })))
+      .toContain('A search warrant requires a subject or at least one search target.')
+    // subject only, no search_targets text → allowed (server allows it)
+    expect(legalWizardIssues('details', wiz({ personId: 'p-1', form: { items_sought: 'x' } }))).toEqual([])
+    // search_targets text only (typed or mirrored from structured targets) → allowed
+    expect(legalWizardIssues('details', wiz({ personId: '', form: { items_sought: 'x', search_targets: 'Vehicle: ABC123' } }))).toEqual([])
+  })
+
+  it('narrative: title + narrative always, priority for warrants only', () => {
+    expect(legalWizardIssues('narrative', wiz({ title: ' ' }))).toHaveLength(1)
+    expect(legalWizardIssues('narrative', wiz({ narrative: '' }))).toHaveLength(1)
+    expect(legalWizardIssues('narrative', wiz({ priority: '' }))).toHaveLength(1)
+    expect(legalWizardIssues('narrative', wiz({ requestType: 'subpoena', subtype: 'testimony', priority: '' }))).toEqual([])
+  })
+
+  it('review unions every earlier step', () => {
+    const broken = wiz({ caseId: '', title: '', form: {} , personId: '' })
+    const issues = legalWizardIssues('review', broken)
+    expect(issues).toContain('Select a case.')
+    expect(issues).toContain('A title is required.')
+    expect(issues).toContain('A search warrant requires a subject or at least one search target.')
+    expect(legalWizardIssues('review', wiz())).toEqual([])
+  })
+
+  it('draft issues mirror create_legal_request (no narrative/priority/detail requirements)', () => {
+    // A titled search warrant with a target can be saved without narrative or details.
+    expect(legalWizardDraftIssues(wiz({ narrative: '', priority: '', form: { search_targets: 'Place: X' } }))).toEqual([])
+    expect(legalWizardDraftIssues(wiz({ title: '' }))).toContain('A title is required.')
+    expect(legalWizardDraftIssues(wiz({ personId: '', form: {} })))
+      .toContain('A search warrant requires a subject or at least one search target.')
+    expect(legalWizardDraftIssues(wiz({ subtype: 'arrest_warrant', personId: '' })))
+      .toContain('An arrest warrant requires a suspect from the Persons registry.')
+  })
+
+  it('structured targets mirror deterministic lines into search_targets', () => {
+    expect(structuredTargetLine({ kind: 'vehicle', label: 'ABC123 — Sultan' })).toBe('Vehicle: ABC123 — Sultan')
+    expect(structuredTargetLine({ kind: 'prior_legal_request', label: 'LR-0042' })).toBe('Prior legal request: LR-0042')
+    expect(appendSearchTargetLine('', 'Vehicle: ABC123')).toBe('Vehicle: ABC123')
+    expect(appendSearchTargetLine('Person: John Doe', 'Vehicle: ABC123')).toBe('Person: John Doe\nVehicle: ABC123')
+    // idempotent — re-adding an existing line never duplicates it
+    expect(appendSearchTargetLine('Vehicle: ABC123', 'Vehicle: ABC123')).toBe('Vehicle: ABC123')
+    expect(appendSearchTargetLine('kept text', '')).toBe('kept text')
   })
 })
 
