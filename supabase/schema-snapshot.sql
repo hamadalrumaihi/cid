@@ -5,7 +5,9 @@
 -- (jhxuflzmqspidkvjckox) via Postgres catalog queries
 -- (pg_attribute / pg_constraint / pg_get_indexdef /
 --  pg_get_functiondef / pg_get_triggerdef / pg_policies /
---  pg_publication_tables).
+--  pg_publication_tables), and maintained inline since: each later
+-- migration's objects are folded in by hand (gates:
+-- npm run check:freshness / check:schema).
 --
 -- This file is documentation, not a migration:
 --   * `supabase db reset` does NOT replay it (it lives outside
@@ -16,9 +18,9 @@
 --   * The grants / ACL / realtime sections are informational
 --     comments, not executable statements.
 --
--- Contents: 13 enum types, 50 tables (public + private),
--- 105 standalone indexes, 41 functions, 57 triggers,
--- 172 RLS policies, realtime publication members, grants.
+-- Contents: enum types, tables (public + private), standalone
+-- indexes, functions, triggers, RLS policies, realtime publication
+-- members, and grants — the body is the count authority.
 -- ============================================================
 -- Enum types
 -- ============================================================

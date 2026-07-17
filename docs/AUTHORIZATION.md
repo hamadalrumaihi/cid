@@ -1,6 +1,6 @@
 # Authorization Model
 
-Who may do what in the CID Portal, and which server-side rule enforces it. The portal is a human-directed system: every approval, denial, and assignment is made by a named human actor whose authority is validated in the database — the client never decides access. Deterministic, rule-based SQL (RLS policies, guard triggers, `SECURITY DEFINER` RPCs) enforces the decisions humans make. Companion docs: [RLS.md](RLS.md) (mechanics), [SECURITY-REVIEW.md](SECURITY-REVIEW.md) (reviewer checklist), [handbook ch. 09](handbook/09-auth.md) (auth flow), [handbook ch. 08](handbook/08-database.md) (per-table detail).
+Who may do what in the CID Portal, and which server-side rule enforces it. Every approval, denial, and assignment is recorded with the acting member, and the actor's authority is validated in the database — the client never decides access. RLS policies, guard triggers, and `SECURITY DEFINER` RPCs enforce the rules. Companion docs: [RLS.md](RLS.md) (mechanics), [SECURITY-REVIEW.md](SECURITY-REVIEW.md) (reviewer checklist), [handbook ch. 09](handbook/09-auth.md) (auth flow), [handbook ch. 08](handbook/08-database.md) (per-table detail).
 
 ## 1. CID role hierarchy
 

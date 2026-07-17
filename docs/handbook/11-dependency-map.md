@@ -6,7 +6,7 @@
 
 ```
         ┌────────────────────────── Browser ──────────────────────────┐
-        │  app/(app)/[tab]/page.tsx ── 29 feature views                │
+        │  app/(app)/[tab]/page.tsx ── the feature views               │
         │        │                        │                            │
         │   shell/* (chrome)          ui/* (Modal, DataTable, …)       │
         │        └────────┬───────────────┘                            │

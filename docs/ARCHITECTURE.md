@@ -4,16 +4,11 @@ How the application is put together: routing, components, data flow, security
 boundaries, and external integrations. For file-by-file depth, follow the
 links into the [Developer Handbook](handbook/README.md).
 
-The CID Portal is a human-designed case-management and legal-review platform
-for a GTA V roleplay Criminal Investigation Division. It organizes cases,
-evidence, reports, intelligence, operations, warrants, subpoenas, approvals,
-and audit history through role-based workflows enforced by the database.
-
-The project's requirements, workflows, security model, and final
-implementation decisions are human-directed and human-reviewed. Development
-tools may assist with drafting or implementation, but no tool independently
-defines policy, approves changes, or operates investigative and legal
-decisions.
+The CID Portal is a case-management, intelligence, and legal-review
+platform for a GTA V roleplay Criminal Investigation Division. It organizes
+cases, evidence, reports, intelligence, operations, warrants, subpoenas,
+approvals, and audit history through role-based workflows enforced by the
+database.
 
 ---
 

@@ -2,7 +2,7 @@
 
 How the CID Portal is tested, what each suite proves, and what "green" must mean before a release — consolidating [`docs/TEST-ENVIRONMENT.md`](TEST-ENVIRONMENT.md) (the dedicated E2E/visual project) and [`tests/rls/README.md`](../tests/rls/README.md) (the live security-wall suite) by reference.
 
-The suites verify **human-designed, server-enforced rules**: every RLS policy, RPC caller check, and approval-matrix decision under test is deterministic, database-driven logic — the tests assert that the security wall holds for named human actors, not model behavior.
+The suites verify **server-enforced rules**: every RLS policy, RPC caller check, and approval-matrix decision under test is deterministic, database-driven logic — the tests assert that the security wall holds for every actor.
 
 ## Suite overview
 
@@ -15,7 +15,9 @@ The suites verify **human-designed, server-enforced rules**: every RLS policy, R
 
 ## Unit tests (vitest)
 
-Seven offline files covering the security-critical pure functions:
+Offline unit files (`src/**/*.test.{ts,tsx}`) cover the security-critical
+pure functions and the client mirrors of server workflow logic. Highlights
+(not exhaustive — new domains add their own files alongside the code):
 
 | File | Covers |
 | --- | --- |
@@ -31,7 +33,9 @@ Seven offline files covering the security-critical pure functions:
 
 Integration tests that sign in to the **live Supabase project** as dedicated low-privilege `rls-test-*@cidportal.test` accounts and assert the security wall holds — account roster, per-fixture purpose, credentials, and safety design are in [`tests/rls/README.md`](../tests/rls/README.md) (read it before touching these suites).
 
-Current full-suite size: **144 tests across 5 files**:
+The suite is the whole of `tests/rls/`: two core-wall files plus a
+per-release `v1xx.test.ts` file for each new security surface. Key files
+(the later `v1xx` files follow the same pattern):
 
 | File | Surface |
 | --- | --- |
@@ -41,7 +45,7 @@ Current full-suite size: **144 tests across 5 files**:
 | `tests/rls/v115.test.ts` | search-warrant subtype rules, owner-only warrant import + idempotent rollback |
 | `tests/rls/v116.test.ts` | unified role/department matrix: requestable roles, approval authority per rank, frozen privileged profile columns, justice-identity separation from CID rank |
 
-Non-negotiable conventions (all five files):
+Non-negotiable conventions (every file in the suite):
 
 - **Never a service key.** Fixtures authenticate with the anon key + GoTrue password grant only; no fixture holds a command role (the owner fixture carries only `is_owner`).
 - **Sequential sign-ins with backoff** — `tests/rls/auth.ts` (`signInWithRetry`) plus `fileParallelism: false`, so ~20 fixture sign-ins per run don't trip GoTrue's per-IP burst limit and shared fixtures aren't mutated concurrently.
@@ -56,7 +60,7 @@ Run the live RLS suite **after every change that touches RLS policies, definer R
 
 Two backing environments (spec headers document each spec's exact scope):
 
-- **Live-fixture specs** — `smoke.spec.ts`, `features-joint-announce.spec.ts`, `justice.spec.ts`, `v114.spec.ts` run against the live project with the same `rls-test-*` fixtures and `rls_test_cleanup()` as the RLS suite (sign-in helper: `tests/e2e/liveAuth.ts`). The app's UI is OAuth-only; tests mint a session via the password grant and seed supabase-js's localStorage key. Side-effect safety is engineered in (e.g. a `page.route` guard hard-aborts any `publish_announcement` whose audience isn't `specific_members`).
+- **Live-fixture specs** — most of `tests/e2e/` (smoke, feature flows, justice/legal, accessibility, per-domain specs — see the directory) runs against the live project with the same `rls-test-*` fixtures and `rls_test_cleanup()` as the RLS suite (sign-in helper: `tests/e2e/liveAuth.ts`). The app's UI is OAuth-only; tests mint a session via the password grant and seed supabase-js's localStorage key. Side-effect safety is engineered in (e.g. a `page.route` guard hard-aborts any `publish_announcement` whose audience isn't `specific_members`).
 - **Dedicated-test-project specs** — `roles.spec.ts` (per-role navigation contract) and the visual suite run against the seeded non-production project; setup, seeding (`npm run test:seed`), and prod-guards are in [TEST-ENVIRONMENT.md](TEST-ENVIRONMENT.md).
 
 Environment knobs:
@@ -106,8 +110,8 @@ The vitest RLS config and Playwright config both auto-load a git-ignored `.env.r
 ## What a passing release requires
 
 1. **All gates green**: `typecheck`, `lint` (`--max-warnings 0`), `npm test`, `npm run build`, `check:schema`, plus the doc-gen drift checks.
-2. **Live RLS suite green after every RLS-touching change** (policies, definer RPCs, grants, triggers) — 144/144 or explicitly-documented environment skips only.
+2. **Live RLS suite green after every RLS-touching change** (policies, definer RPCs, grants, triggers) — every test passing, or explicitly-documented environment skips only.
 3. **E2E green, with any failure documented via the isolation procedure above**: a spec that fails in the full run but passes in isolation is recorded as a known flake with its isolation re-run result; a spec that fails in isolation blocks the release.
 4. New security surface ships with matching live-RLS assertions (the `v11x.test.ts` pattern) and, where a UI flow exists, an E2E spec.
 
-Historical verification results per release: [`docs/RELEASE-READINESS.md`](RELEASE-READINESS.md).
+Historical verification results for the v1.0.0 release: [`docs/archive/RELEASE-READINESS.md`](archive/RELEASE-READINESS.md).

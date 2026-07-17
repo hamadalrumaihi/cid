@@ -55,7 +55,7 @@ bureau_lead → deputy_director → director.
 `admin_member_emails/remove/restore` ·
 `create_notification` · `mo_crossref` ([Ch. 7](07-api.md)).
 
-## Database tables (47), by RLS pattern
+## Database tables, by RLS pattern
 
 - **Case-scoped**: cases, case_assignments, evidence, custody_chain,
   reports, case_tasks, case_messages, case_intel_links, case_files,

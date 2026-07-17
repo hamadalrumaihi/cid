@@ -6,6 +6,31 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
+## [Unreleased] — DOJ / Justice Portal operational redesign
+
+Interface/workflow-clarity redesign of every legal surface (PR #178); no
+authority rule was weakened. Durable design notes:
+[`docs/DOJ-INTEGRATION.md`](docs/DOJ-INTEGRATION.md) § Operational redesign;
+full verification record:
+[`docs/archive/DOJ-REDESIGN-REPORT.md`](docs/archive/DOJ-REDESIGN-REPORT.md).
+
+- One deterministic workflow model (`src/lib/legalWorkflow.ts`) now drives
+  every legal surface: the rebuilt `/legal` investigator landing + guided
+  create wizard (structured search-warrant targets, bounded record pickers),
+  the unified `LegalRequestDetail` dossier shared by CID and every Justice
+  seat (deep-linkable sections, role decision panel, court-packet print),
+  the Justice Portal sub-views (overview, requests, judge docket with the
+  parallel claim lane, issued/service boards, roster & coverage), and the
+  Action Center legal branch (awareness-only rows never count as action).
+- Migration `20260806010000_legal_structured_targets` — additive: exhibit
+  kinds vehicle/place/prior-request, per-target rationale, resubmission
+  change summaries; three RPCs extended with defaulted params.
+- Migration `20260806040000_legal_cid_reviewer_visibility` — fixes a
+  pre-existing stall (the notified CID supervisor could not see a
+  classified/restricted submission): visibility follows review authority
+  only during `cid_supervisor_review`; sealed audiences unchanged. New live
+  RLS suites v136/v137.
+
 ## [Unreleased] — Usability roadmap, Phase 2
 
 ### Added — Action Center
@@ -523,7 +548,7 @@ Theme: the portal tells members what changed, what matters, and what to do next.
   allowed). Suspect-type fields across all report forms now capture the
   **canonical person record id** alongside the display name whenever the
   typed name matches the Persons registry, and saved reports link them.
-- No DOJ functionality was implemented; `docs/DOJ-INTEGRATION-DRAFT.md`
+- No DOJ functionality was implemented; `docs/archive/DOJ-INTEGRATION-DRAFT.md`
   (proposal-only) covers roles, warrant/subpoena lifecycles, court
   packets, classified requests, versioning and MDT projection.
 
@@ -745,7 +770,7 @@ owner-gating unchanged.
 - Dedicated-test-project harness scaffold (Playwright functional + visual,
   seed/reset, self-skipping CI) — dormant until a test DB + secrets are
   configured; see `docs/TEST-ENVIRONMENT.md`.
-- Curated project subagents in `.claude/agents/`.
+- Added development-tooling configuration under `.claude/agents/`.
 
 ## [1.6.0] — 2026-07-09
 
@@ -1076,6 +1101,17 @@ is the source of truth (mirrored in `src/lib/database.types.ts`).
 
 # Pre-1.0 development log (vanilla era)
 
+## Deep audit & verification fix pass (2026-07-02 → 2026-07-05)
+- A full-codebase security/correctness audit of the vanilla SPA (against the
+  deployed database security surface) confirmed 45 findings — 1 critical
+  stored XSS via notification payloads and 8 high, including a second stored
+  XSS and a tracker dual-authorization enforced only client-side — all fixed.
+- A follow-up verification pass caught and closed 7 further defects
+  (stale-cache data-loss sinks, remaining unguarded `src`/`safeUrl()` sinks,
+  CSV formula-injection). Full records:
+  [`docs/archive/AUDIT-REPORT.md`](docs/archive/AUDIT-REPORT.md) +
+  [`docs/archive/AUDIT-VERIFY.md`](docs/archive/AUDIT-VERIFY.md).
+
 ## Link intel directly to a case (2026-06-22)
 - New **Intel tab** on the case detail view: link a **person, gang, or place**
   directly to a case as a "person/gang/place of interest", with an optional role
@@ -1207,7 +1243,7 @@ supervisor cockpit:
   backfills existing closed cases, and auto-stamps/clears it via a status trigger.
 
 ## Phase 7 — Announcements depth, encouragement, KPIs, richer timeline
-Continuation of the master prompt (features #15 full spec, #16–18):
+Continuation of the planned feature list (features #15 full spec, #16–18):
 
 - **#15 Announcements (completed):** posts now carry **record links** (cases) and
   **@mentions** of individuals *or* rank groups ("@All Detectives", "@All Officers").
@@ -1228,8 +1264,8 @@ Continuation of the master prompt (features #15 full spec, #16–18):
   **tracker logged/authorized**, **sign-off history**, and **chat messages** in
   addition to evidence collection, reports, custody transfers and case-opened.
 
-## Phase 6 — Collaboration, access control & export (master prompt)
-Checked each master-prompt feature against the build; #1–7 already shipped in
+## Phase 6 — Collaboration, access control & export
+Checked each planned feature against the build; #1–7 already shipped in
 Phase 5 and were skipped. Added the rest:
 
 - **#8 In-case chat** (`collab.js`, `case_messages`): per-case channel with
@@ -1350,7 +1386,7 @@ Also caught and fixed pre-existing split bugs found while wiring this in.
 
 ---
 
-## Phase 1 — Backend foundation (this change)
+## Phase 1 — Backend foundation
 Goal: stand up the Supabase backend that every module will migrate onto, with
 real RBAC. No working front-end logic was rewritten in this phase.
 
@@ -1395,7 +1431,7 @@ real RBAC. No working front-end logic was rewritten in this phase.
   policy (policy expressions run as the caller); now grants USAGE + EXECUTE on
   the helpers to `authenticated`.
 
-## Pending phases (not in this change)
+## Pending phases (planned, not yet built)
 - **Phase 2 — Front-end:** multi-file split (`index.html` + `styles` + feature
   JS modules + `supabase.js`/`auth.js`); **login gate** (Google + Discord),
   logged-out users see only the login screen; migrate every module's data layer
@@ -1413,7 +1449,7 @@ The current single-file app stores everything under `localStorage` key
 caseCounters). Phase 2 ships a one-time importer to load any existing browser
 data into the new tables via the UI; nothing is baked into source.
 
-## Phase 2 — Front-end foundation (this change)
+## Phase 2 — Front-end foundation
 Target project corrected to **`cid`** (`jhxuflzmqspidkvjckox`, active); `sahp-rbac` was the wrong project.
 
 ### Added / changed
@@ -1444,7 +1480,7 @@ hidden when logged out; `app.js` still initializes; records nav intact.
 - Then: per-module localStorage→Supabase data layer, Case Detail + Evidence UI,
   RBAC-aware edit affordances, notifications, analytics, PDF, seed removal.
 
-### Applied to the live `cid` project (this turn)
+### Applied to the live `cid` project
 - Applied `20260616090000_platform.sql` to project `cid` (jhxuflzmqspidkvjckox):
   27 platform tables created with RLS, alongside the pre-existing `cid_records`
   (2 rows) + `case_files` — no collisions, no data loss.
@@ -1463,7 +1499,7 @@ hidden when logged out; `app.js` still initializes; records nav intact.
 2. Authentication → URL Configuration: set Site URL + Redirect URLs to your Pages URL.
 3. Sign in once, then SQL editor: `select public.bootstrap_command('<your-login-email>');`
 
-## Phase 2 — Module migration #1: Case Files (this change)
+## Phase 2 — Module migration #1: Case Files
 First module migrated off localStorage onto the live Supabase schema (project `cid`).
 
 ### Added
@@ -1492,7 +1528,7 @@ links, reports (finalize + e-sign + PDF), trackers (server-side + notify), RICO 
 predicates from evidence), audit-log feed + analytics on Central Command, seed removal +
 CSV/JSON import, full case-packet export.
 
-## Phase 2 — Module migration #2: Persons + Gangs (this change)
+## Phase 2 — Module migration #2: Persons + Gangs
 - Added `gang_turf` table + free-text `gang_members.rank` (migration
   `20260616093000_gang_turf_member_rank.sql`; applied to project `cid`).
 - **Persons** (new tab, Supabase): suspects/POI CRUD with gang link, CCW/VCH/
@@ -1509,7 +1545,7 @@ CSV/JSON import, full case-packet export.
   no errors); live MCP round-trip on `cid` (gang→person→member(person+case)→turf
   insert with full FK chain; cascade-clean delete).
 
-## Phase 2 — Module migration #3: Narcotics (this change)
+## Phase 2 — Module migration #3: Narcotics
 - **Narcotics** migrated off localStorage onto Supabase (narcotics + precursors +
   hotspots). `DRUGS` is now a normalized read cache; the expandable registry,
   purity-slider→adjusted-value calc, pricing/popularity bars and case-linked
@@ -1522,7 +1558,7 @@ CSV/JSON import, full case-packet export.
 - Verified: node --check; clean jsdom load (sign-in notice, no errors); live MCP
   round-trip on `cid` (narcotic→precursor→hotspot insert; cascade-clean delete).
 
-## Phase 2 — Module migration #4: Criminal Places (this change)
+## Phase 2 — Module migration #4: Criminal Places
 - **Places** migrated off localStorage onto Supabase (`places`). FK links to live
   gangs (controlling_gang_id), cases (case_id), and **narcotics** (narcotic_id).
 - Drug-lab locations show an auto production process derived from the linked
@@ -1533,7 +1569,7 @@ CSV/JSON import, full case-packet export.
 - Verified: node --check; clean jsdom load; live MCP round-trip on `cid`
   (place linked to gang+case+narcotic) with cleanup.
 
-## Phase 2 — Module migration #5: Ballistics (this change)
+## Phase 2 — Module migration #5: Ballistics
 - **Ballistics** migrated off localStorage onto Supabase: `ballistics_benches`
   (street/organized toggle, tier, heat, outputs[]/components[] text arrays,
   case link) and `ballistic_footprints` (signature, weapon, gang link, case link).
@@ -1542,7 +1578,7 @@ CSV/JSON import, full case-packet export.
 - Verified: node --check; clean jsdom load; live MCP round-trip on `cid`
   (bench with text[] arrays + footprint linked to gang+case) with cleanup.
 
-## Phase 2 — Module migration #6: Reports (this change)
+## Phase 2 — Module migration #6: Reports
 - **Reports** migrated off localStorage onto Supabase (`reports`): per-case
   chains (Initial → Supplemental #N → Follow-up #N), server-persisted with
   jsonb fields; seq computed server-side; case dropdown + RICO select now source
@@ -1557,7 +1593,7 @@ CSV/JSON import, full case-packet export.
   errors); live MCP round-trip on `cid` (report insert with jsonb fields +
   finalize/signature update) with cascade-clean delete.
 
-## Phase 2 — Module migration #7: Trackers (this change)
+## Phase 2 — Module migration #7: Trackers
 - **Trackers** migrated off localStorage onto Supabase (`trackers`): deploy
   (command/director signs as Director → status pending), **co-sign** by a second
   command officer (sets deputy_sig + status authorized + expires_at = now +
@@ -1571,7 +1607,7 @@ CSV/JSON import, full case-packet export.
   (sign-in notice, no errors); live MCP round-trip on `cid` (deploy pending →
   authorize + 18h expiry window) with cleanup.
 
-## Phase 2 — Module migration #8: RICO (this change)
+## Phase 2 — Module migration #8: RICO
 - **RICO** migrated off localStorage onto Supabase (`rico_cases` + `predicate_acts`,
   one rico_case per case, created lazily on first action).
 - Predicates can **link to a case's evidence row** (`evidence_id` dropdown of the
@@ -1584,7 +1620,7 @@ CSV/JSON import, full case-packet export.
   (rico_case + enterprise + 2 predicates: one evidence-linked, one ref) with
   cascade-clean delete.
 
-## Phase 2 — Central Command live + Admin + Notifications + Packet + Search (this change)
+## Phase 2 — Central Command live + Admin + Notifications + Packet + Search
 - **CRITICAL FIX:** `index.html` was still running the **stale pre-split monolith
   inline** and never loaded the external modules — so all prior Phase 2 work was
   orphaned. Replaced the inline `<script>` with `<script src>` for
@@ -1613,7 +1649,7 @@ Personnel roster/commendations, the media/evidence vault, the M.O. detector, and
 the CID General documents are still client-side; plus a per-module CSV/JSON
 importer and their seed removal. These are the last items to migrate.
 
-## Phase 2 — Module migration #9: Personnel, Commendations, Media, M.O. (this change)
+## Phase 2 — Module migration #9: Personnel, Commendations, Media, M.O.
 - **Personnel roster** now renders from `profiles` (live), not a seed array.
 - **Commendations** → Supabase `commendations` table (new migration) with full
   CRUD, edit/delete gating, and realtime.
@@ -1622,13 +1658,13 @@ importer and their seed removal. These are the last items to migrate.
 - **M.O. detector** cross-references live `mo_profiles` (per-case indicators);
   "Save as Case Profile" persists a scan; matching jumps off real cases.
 
-## Phase 2 — Module migration #10: CID General "Drive" (this change)
+## Phase 2 — Module migration #10: CID General "Drive"
 - Folders are now presentation config (`FOLDER_META`); every file is a row in the
   `documents` table. Docs/sheets are editable & shared (realtime); pdf/zip
   read-only; CI Risk Matrix stays a live computed read-only view.
 - Editors get "+ New Document" and per-folder import; command/director can delete.
 
-## Phase 3 — Seed removal, bulk import, file split, auth fixes (this change)
+## Phase 3 — Seed removal, bulk import, file split, auth fixes
 ### Removed
 - **All baked-in demo content.** Domain tables ship empty with "create first" CTAs.
   The CID Drive's 26 seeded templates were deleted (live) and the seed migration
@@ -1648,7 +1684,7 @@ importer and their seed removal. These are the last items to migrate.
   casefiles, app`) — classic scripts sharing one global lexical scope, no build
   step. Byte-for-byte contiguous slice of the former monolith (verified), loaded
   in order before `auth.js`.
-- Added `AGENTS.md` — architecture + audit guide for future agents.
+- Added `AGENTS.md` — codebase orientation and audit notes.
 ### Fixed
 - **Login blocker:** users created before the profiles trigger existed had no
   `profiles` row (stuck on "pending approval"). Backfilled profiles for all

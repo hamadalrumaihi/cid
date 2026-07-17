@@ -11,7 +11,7 @@
 ## 1. SheetJS — true self-host (vendor the file into the repo)
 - **Now:** version-pinned CDN reference — `cdn.sheetjs.com/xlsx-0.20.3/...` in `index.html`. The security CVEs (CVE-2023-30533 + ReDoS) are **already resolved** by the 0.20.3 bump, so this is hardening, not urgent.
 - **Why deferred / blocked:** this environment's network policy blocks `cdn.sheetjs.com` (and jsDelivr/unpkg/git.sheetjs.com); GitHub's mirror is frozen at the vulnerable 0.18.12, so the file can't be fetched here.
-- **Unblocks when:** `cdn.sheetjs.com` is allow-listed in the environment network policy **and a fresh session is started** (this is a network-policy change, *not* a Pro upgrade).
+- **Unblocks when:** `cdn.sheetjs.com` is allow-listed in the development environment's network policy (this is a network-policy change, *not* a Pro upgrade).
 - **How:** `curl` `xlsx-0.20.3/package/dist/xlsx.full.min.js` → `vendor/xlsx.full.min.js`; verify embedded version ≥ 0.20.2 + `node --check`; repoint the `<script>` in `index.html` to the local copy; commit. Removes the external runtime dependency entirely.
 
 ## 2. Server-side filtering + pagination (case list)

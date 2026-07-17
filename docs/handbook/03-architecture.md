@@ -87,8 +87,9 @@ not hypotheticals.
   `app/layout.tsx`; never add another).
 
 ## Block 9 — The Database (lives in Supabase, not this repo)
-47 tables, 22 `private.*` helpers/trigger functions, 15 public RPCs, RLS
-everywhere, realtime publication on most tables.
+RLS on every table, `private.*` helper predicates and trigger functions,
+all workflow writes through SECURITY DEFINER RPCs, realtime publication on
+most tables (live counts: `npm run check:schema` / the schema snapshot).
 - **Risk: HIGHEST.** Deployed bundles and open tabs keep querying the old
   shape — migrations must be **additive only**.
 - **Common mistakes**: forgetting to hand-update `database.types.ts`;

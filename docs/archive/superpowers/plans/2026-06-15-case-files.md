@@ -1,7 +1,5 @@
 # Case Files (Google Drive per case) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Add a standalone "Case Files" tab where signed-in members attach Google Drive files to a case (one folder per case number), backed by a new Supabase table with live sync.
 
 **Architecture:** All UI/logic lives in the single `index.html`. A new `public.case_files` table (authenticated-only read) stores Drive file *metadata* (link + name), never the file itself. Files are chosen via the Google Picker using least-privilege `drive.file` scope; the existing Supabase client/auth session is reused. Realtime keeps all clients in sync.

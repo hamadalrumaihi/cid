@@ -58,7 +58,7 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | `app/layout.tsx` | Root HTML, fonts, pre-hydration theme applier (the one sanctioned innerHTML) |
 | `app/page.tsx` | ⚠ `/` redirect shim + OAuth-callback wait |
 | `app/(app)/layout.tsx` | AuthProvider → Gate/AppShell boundary |
-| `app/(app)/[tab]/page.tsx` | ⚠ The 29-way switch |
+| `app/(app)/[tab]/page.tsx` | ⚠ The per-tab switch |
 | `app/globals.css` | ⚠ Theme tokens, accent remap, collapse contract, editor styles |
 | `app/error/global-error/not-found.tsx` | Crash and 404 screens |
 | `shell/AppShell.tsx` | Chrome composition + tab persistence |

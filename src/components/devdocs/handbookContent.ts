@@ -9,7 +9,7 @@ export interface HandbookPage {
   body: string
 }
 
-export const HANDBOOK_UPDATED = '2026-07-14'
+export const HANDBOOK_UPDATED = '2026-07-16'
 
 export const HANDBOOK_PAGES: HandbookPage[] = [
   {
@@ -78,7 +78,7 @@ There are only two moving parts (plus a file host):
 
 | Technology | Why this project uses it |
 |---|---|
-| **Next.js 16** (App Router) | One dynamic \`[tab]\` route renders all 29 screens; everything pre-renders to static HTML for instant loads; zero-config Vercel deploys. |
+| **Next.js 16** (App Router) | One dynamic \`[tab]\` route renders every screen; everything pre-renders to static HTML for instant loads; zero-config Vercel deploys. |
 | **React 19** | Highly interactive dashboard; state → UI model fits exactly. |
 | **TypeScript (strict)** | \`src/lib/database.types.ts\` types every table — a column typo is a build error. |
 | **Tailwind CSS v4** | One dark "investigative" design system as theme tokens; no per-component CSS files. |
@@ -168,7 +168,7 @@ cid/
 Next.js requires this folder: files here map to URLs. \`layout.tsx\` is the
 HTML shell (fonts, the pre-hydration theme applier); \`page.tsx\` redirects
 \`/\` to the last-visited tab; \`(app)/[tab]/page.tsx\` is the single route
-that renders all 29 screens; \`error/global-error/not-found.tsx\` are the
+that renders every screen; \`error/global-error/not-found.tsx\` are the
 crash/404 screens; \`globals.css\` holds the entire design system.
 **Connected to**: everything renders inside it; reads \`lib/nav\` for valid
 tabs. Details: [Ch. 5](05-pages.md).
@@ -178,7 +178,7 @@ The persistent frame around every screen: \`Sidebar\`, \`Header\` (global
 keyboard shortcuts), \`BottomNav\` (mobile), \`Subtabs\`, \`SearchPalette\`
 (⌘K), \`NotificationsBell\`, \`ConnBanner\` (offline pill), appearance/profile
 modals, and the \`useNav\`/\`useNavBadges\` hooks. **Why it exists**: one
-navigation implementation instead of 29. Details: [Ch. 6](06-components.md).
+navigation implementation instead of one per screen. Details: [Ch. 6](06-components.md).
 
 ### \`src/components/ui/\` — generic widgets
 \`Modal\` (focus trap + dirty guard), \`dialog\` (confirm/prompt), \`Toaster\`,
@@ -189,10 +189,10 @@ vocabulary). Feature-agnostic — every feature folder builds on these.
 from the DOJ build (\`RelatedRecordPicker\`, \`VersionViewer\`,
 \`SignatureViewer\`) — see [Ch. 6](06-components.md).
 
-### \`src/components/<feature>/\` — 27 feature folders
+### \`src/components/<feature>/\` — the feature folders
 One folder per screen (\`cases/\`, \`gangs/\`, \`heatmap/\`, …). Each is
 self-contained: fetches its own data, owns its modals. Only the \`[tab]\`
-router imports them. \`cases/\` (10 files) and \`command/\` (10 files) are the
+router imports them. \`cases/\` and \`command/\` are the
 big ones. Details: [Ch. 4](04-features.md).
 
 ### \`src/lib/\` — the shared foundation ⭐
@@ -204,18 +204,18 @@ notifications), and utilities (toast, format, safeUrl, markdown, store).
 [File Index](appendix-file-index.md).
 
 ### \`supabase/\` — the backend's paper trail
-\`migrations/\` (78 SQL files replayed by \`supabase db reset\`; note that
+\`migrations/\` (the migration lineage, replayed in filename order by \`supabase db reset\`; note that
 later changes were applied directly to the live project — the live schema
-is the source of truth), \`functions/\` (the \`discord-notify\` edge
-function), and backend READMEs. Details: [Ch. 8](08-database.md).
+is the source of truth), \`functions/\` (the Deno edge
+functions — discord-announce, discord-notify, sops-sync), and backend READMEs. Details: [Ch. 8](08-database.md).
 
 ### \`docs/\` — documentation
 This handbook (\`handbook/\`), \`USER-GUIDE.md\` (canonical text of the in-app
 guide — the in-app copy \`src/components/guide/guideContent.ts\` is
 **generated from it**), \`HARDENING.md\` (security checklist status),
-\`DEFERRED.md\` (parked work with triggers), \`RELEASE-READINESS.md\` (v1.0.0
-verification). Historical build-era notes (HANDOFF, ROADMAP, REACT-PARITY,
-BACKLOG…) are parked in \`archive/\` — see \`archive/README.md\`.
+\`DEFERRED.md\` (parked work with triggers). Historical build-era notes and
+dated reports (HANDOFF, ROADMAP, REACT-PARITY, BACKLOG, RELEASE-READINESS,
+the audit reports…) are parked in \`archive/\` — see \`archive/README.md\`.
 
 ### \`.github/\` — quality gates
 \`workflows/ci.yml\` (typecheck → lint → test → build on every push/PR) and
@@ -317,8 +317,9 @@ not hypotheticals.
   \`app/layout.tsx\`; never add another).
 
 ## Block 9 — The Database (lives in Supabase, not this repo)
-47 tables, 22 \`private.*\` helpers/trigger functions, 15 public RPCs, RLS
-everywhere, realtime publication on most tables.
+RLS on every table, \`private.*\` helper predicates and trigger functions,
+all workflow writes through SECURITY DEFINER RPCs, realtime publication on
+most tables (live counts: \`npm run check:schema\` / the schema snapshot).
 - **Risk: HIGHEST.** Deployed bundles and open tabs keep querying the old
   shape — migrations must be **additive only**.
 - **Common mistakes**: forgetting to hand-update \`database.types.ts\`;
@@ -477,7 +478,7 @@ leaf nodes, safe to study, intricate to edit.`,
 | \`app/layout.tsx\` | Root HTML, fonts, pre-hydration theme applier (the one sanctioned innerHTML) |
 | \`app/page.tsx\` | ⚠ \`/\` redirect shim + OAuth-callback wait |
 | \`app/(app)/layout.tsx\` | AuthProvider → Gate/AppShell boundary |
-| \`app/(app)/[tab]/page.tsx\` | ⚠ The 29-way switch |
+| \`app/(app)/[tab]/page.tsx\` | ⚠ The per-tab switch |
 | \`app/globals.css\` | ⚠ Theme tokens, accent remap, collapse contract, editor styles |
 | \`app/error/global-error/not-found.tsx\` | Crash and 404 screens |
 | \`shell/AppShell.tsx\` | Chrome composition + tab persistence |
@@ -651,11 +652,11 @@ user-facing routes:
 | URL | File | Renders |
 |---|---|---|
 | \`/\` | \`app/page.tsx\` | Redirect shim: legacy \`#deep-links\`, else last-visited tab, else \`/command\`. Also the OAuth landing spot — it **waits** for the auth event before redirecting. |
-| \`/<tab>\` | \`app/(app)/[tab]/page.tsx\` | One of 29 screens. Invalid slugs → \`/command\`; legacy \`reports\` → \`/cases\`. |
+| \`/<tab>\` | \`app/(app)/[tab]/page.tsx\` | One of the screens in \`PAGE_META\`. Invalid slugs → \`/command\`; legacy \`reports\` → \`/cases\`. |
 | anything else | \`app/not-found.tsx\` | Styled 404. |
 
 \`(app)/layout.tsx\` wraps every tab in \`AuthProvider\` → \`Gate\` (sign-in
-screens when not authenticated) → \`AppShell\` (chrome). All 29 routes are
+screens when not authenticated) → \`AppShell\` (chrome). All tab routes are
 **statically pre-rendered** — safe because pages embed no data; everything
 fetches after mount behind RLS.
 
@@ -667,7 +668,9 @@ registry filter), \`?new=1\` (open New Case), \`?op=\` (operation),
 "Could not load: reason" on failure (reads throw), an ALL-CAPS themed
 empty state, and a sign-in notice when unauthenticated.
 
-## The 29 screens
+## The screens
+
+One row per leaf tab in \`PAGE_META\` (\`src/lib/nav.ts\` — the routing truth).
 
 | Slug | Screen (component) | Data highlights | Extra permissions |
 |---|---|---|---|
@@ -680,6 +683,8 @@ empty state, and a sign-in notice when unauthenticated.
 | \`operations\` | Task Forces | operations, cases | — |
 | \`case-files\` | Attachments | case_files + FiveManage | delete = command |
 | \`rico\` | RICO tracker | rico_cases, predicate_acts | — |
+| \`legal\` | Legal Requests (\`LegalView\`) | legal_requests + versions/exhibits/actions/participants | creator + participants; all workflow writes via definer RPCs |
+| \`justice\` | Justice Portal (\`JusticePortalView\`) | legal review queues, judge docket, coverage, applications | justice roles + Owner (justice-only members get it as their whole app) |
 | \`persons\` | Persons → IntelProfile | persons, gang_members, vehicles | — |
 | \`bolo\` | BOLO Board | persons(bolo), warrant reports | — |
 | \`gangs\` | Gangs | gangs, ranks, members, turf | — |
@@ -694,12 +699,17 @@ empty state, and a sign-in notice when unauthenticated.
 | \`records\` | Records | cid_records | edit = creator/command |
 | \`penal\` | Penal Code | static (no DB) | — |
 | \`sops\` | SOPs & Library | documents + versions | writes = command |
-| \`guide\` | User Guide | static visual guide | — |
-| \`inbox\` | My Desk | 8 tables, 10 panels | self-scoped |
+| \`guide\` | User Guide | static visual guide (generated from docs/USER-GUIDE.md) | — |
+| \`devdocs\` | Developer Handbook (\`DevDocsView\`) | generated handbook content | **owner-only** |
+| \`action\` | Action Center (\`ActionCenterView\`) | prioritized pending decisions across cases, command, personnel | self-scoped |
+| \`inbox\` | My Desk (\`InboxView\`) | self-scoped rollup panels (sign-offs, returned cases, follow-ups, tasks, mentions, following, drafts…) | self-scoped |
 | \`calendar\` | Calendar | cases, tasks, shift weeks | — |
 | \`shifts\` | Shift Reports | shift_reports | edit own |
 | \`audit\` | Audit Log | audit_log (DataTable + CSV) | **owner-only** |
-| \`feedback\` | Feedback (sidebar leaf) | feedback | triage = 2 owners |`,
+| \`feedback\` | Feedback (sidebar leaf) | feedback | triage = owner flag (\`profiles.is_owner\`) |
+| \`profile\` | My Profile (\`ProfileView\`) | own profile, appearance, notification settings | self |
+| \`command-center\` | Command Center (\`CommandCenterView\`) | personnel admin, approvals, promotions, transfers | command + Owner |
+| \`owner\` | Owner Portal (\`OwnerView\`) | project health, feedback triage, security testing | **owner-only** |`,
   },
   {
     slug: "api",
@@ -962,8 +972,8 @@ logic.
 
 | Family | Tables | Effect |
 |---|---|---|
-| \`private.audit()\` AFTER I/U/D | 20 tables | The app's audit logging — no client write path |
-| \`touch\` family BEFORE UPDATE | ~25 tables | Honest \`updated_at\` (drives staleness + analytics) |
+| \`private.audit()\` AFTER I/U/D | every audited table (see the schema snapshot) | The app's audit logging — no client write path |
+| \`touch\` family BEFORE UPDATE | most tables (see the schema snapshot) | Honest \`updated_at\` (drives staleness + analytics) |
 | \`stamp_author_identity\` BEFORE INSERT | case_messages, announcements | Real author enforced server-side |
 | Guard triggers | profiles, cases, reports, trackers | Block self-promotion, direct sign-off/finalize writes, self-co-sign |
 | \`set_case_closed_at\` | cases | Stamps closure time |
@@ -985,7 +995,27 @@ publication first.**
 - **Add a table** → hand-add types, add RLS (no policies = invisible),
   add to the realtime publication, add FK indexes.
 - **Change an enum** → Postgres enums only append; update the TS union +
-  any UI constant (\`CASE_STATUSES\`, indicator \`KINDS\`) together.`,
+  any UI constant (\`CASE_STATUSES\`, indicator \`KINDS\`) together.
+
+## 8.8 Later additions (post-v1.16)
+
+This chapter's inventory predates several table families added since; each
+is documented where its rules live — [\`docs/AUTHORIZATION.md\`](../AUTHORIZATION.md),
+[\`docs/WORKFLOWS.md\`](../WORKFLOWS.md), and [\`docs/DOJ-INTEGRATION.md\`](../DOJ-INTEGRATION.md) —
+and the schema snapshot is the complete table list:
+
+- **Case bureau reassignment** (\`20260725010000\`) — frozen \`cases.bureau\`,
+  \`case_reassign_bureau()\` (DD+/Owner).
+- **Permanent deletion** (\`20260726010000\`) — \`deleted_member_ledger\`,
+  \`deletion_tokens\`, the system tombstone profile, \`permanent_delete_*\` RPCs.
+- **Case blockers & priority** (\`20260727010000\`) — \`case_blockers\`,
+  \`cases.priority\`.
+- **Person intelligence** (\`20260729010000\`) — \`person_relationships\`,
+  \`person_places\`, \`person_vehicles\`, \`search_persons\`, \`person_merge\`.
+- **Document governance** (\`20260801\`–\`20260802\`) — classification,
+  acknowledgement, campaigns, suggestions on \`documents\`.
+- **Narcotics intelligence + restricted sales** (\`20260803\`–\`20260804\`).
+- **Parallel judiciary + structured legal targets** (\`20260805\`–\`20260806\`).`,
   },
   {
     slug: "state",
@@ -1040,7 +1070,7 @@ Set); sign-out removes all channels (\`auth.tsx\`) and resets the registry.
 
 \`\`\`
         ┌────────────────────────── Browser ──────────────────────────┐
-        │  app/(app)/[tab]/page.tsx ── 29 feature views                │
+        │  app/(app)/[tab]/page.tsx ── the feature views               │
         │        │                        │                            │
         │   shell/* (chrome)          ui/* (Modal, DataTable, …)       │
         │        └────────┬───────────────┘                            │
@@ -1153,7 +1183,7 @@ are a separate identity domain and grant no CID assignment authority.
 
 \`\`\`
 Layer 1  UI hints        canEdit / canDelete / isCommand   → hides buttons only
-Layer 2  RLS policies    private.* helpers on all 47 tables → the real wall
+Layer 2  RLS policies    private.* helpers on every table  → the real wall
 Layer 3  Guard triggers  column-level locks                 → even allowed writers
                                                               can't touch protected
                                                               columns directly
@@ -1200,7 +1230,7 @@ doors → guard triggers are the locks on specific columns.**
 
 ## Verified strong (July 2026 audit)
 
-- RLS on all 47 tables; deny-all \`app_secrets\`; owner-only \`audit_log\`.
+- RLS on every table; deny-all \`app_secrets\`; owner-only \`audit_log\`.
 - Anonymous EXECUTE revoked on all RPCs (ACLs verified:
   authenticated + service_role only).
 - No secrets in the repo — committed keys (Supabase anon, FiveManage) are
@@ -1317,16 +1347,17 @@ PATCH for fixes, MAJOR for breaking platform changes. A release PR bumps
 \`package.json\` and adds a \`CHANGELOG.md\` entry listing the merged PRs.
 Not every merge is a release — group related merges into one entry.
 
-The **merge checklist** lives in \`.github/PULL_REQUEST_TEMPLATE.md\` (gates,
-preview verification, permissions, the DB ritual, docs sync, secrets) and
-is the definition of done for every PR. The short contributor guide is
-\`CONTRIBUTING.md\`; the stabilization audit and readiness scores are in
-\`docs/RELEASE-READINESS.md\`.
+The **PR template** (\`.github/PULL_REQUEST_TEMPLATE.md\`) structures every
+PR (summary, security/permissions, database changes, verification);
+"What every change must include" in \`CONTRIBUTING.md\` is the definition
+of done. The short contributor guide is
+\`CONTRIBUTING.md\`; the v1.0.0 stabilization audit and readiness scores are
+in \`docs/archive/RELEASE-READINESS.md\`.
 
 > **The isolation rule**: all development happens on a branch and is
 > verified on its PR preview before merge — production tracks \`main\` and
 > deploys immediately. GitHub branch protection is a repository *setting*
-> (not verified as configured; see RELEASE-READINESS §7) — until enabled,
+> (not verified as configured; see docs/archive/RELEASE-READINESS.md §7) — until enabled,
 > discipline is the guard.
 
 ## Database changes — the ritual
@@ -1516,7 +1547,7 @@ export function FeatureView() {
 3. **Supabase Dashboard → Logs** — API, Postgres and Auth logs; the place
    to see the *server's* reason for a refusal.
 4. **\`audit_log\`** (owner account, Oversight → Audit) — every mutation on
-   20 tables with actor + payload. Great for "who changed this?".
+   the audited tables with actor + payload. Great for "who changed this?".
 5. **Vercel deployment logs** — build failures only (no runtime server).
 
 ## Common bugs and their usual causes
@@ -1595,21 +1626,20 @@ memoized heavy derivations; slim \`select\` projections on picker queries.
     slug: "improvements",
     title: "Improvement Ideas",
     section: "Working on it",
-    body: `Recommendations only — nothing here is implemented. Effort: S < 1d,
-M = days, L = week+.
+    body: `Recommendations from the July 2026 review; rows marked **done** have since
+shipped. Effort: S < 1d, M = days, L = week+.
 
 ## Quick wins (S)
 
 | Idea | Why / benefit | Risk |
 |---|---|---|
-| Drop unused deps (\`react-hook-form\`, \`zod\`*, \`@tanstack/react-query\`) | Zero imports; smaller install/audit surface | none |
+| ~~Drop unused deps (\`react-hook-form\`, \`@tanstack/react-query\`)~~ **done** — dropped; zod kept and adopted (\`src/lib/schemas.ts\`) | Zero imports; smaller install/audit surface | none |
 | Drop/verify \`bootstrap_*\` RPCs | Close a setup-era privileged path | none (verify first) |
-| Wire or delete \`lib/drafts.ts\` | It's good never-lose-work code with zero importers | none |
-| Script + CI check for \`guideContent.ts\` generation | Kills a proven drift class | none |
-| Fix the guide's hardcoded case-tab illustration | Already drifted from the real tabs | none |
+| ~~Wire or delete \`lib/drafts.ts\`~~ **done** — wired into the report/chat/legal editors | Never-lose-work code | none |
+| ~~Script + CI check for \`guideContent.ts\` generation~~ **done** — \`npm run gen:guide\` + drift check | Kills a proven drift class | none |
+| ~~Fix the guide's hardcoded case-tab illustration~~ **done** — the guide regenerates from \`docs/USER-GUIDE.md\` | Was drifting from the real tabs | none |
 | Fold \`chargeByCode\` into \`penalByCode\`; migrate off deprecated \`roles.isCommand\` | Naming hygiene | trivial |
 
-*or keep zod and use it — see below.
 
 ## Medium improvements (M)
 
@@ -1626,9 +1656,9 @@ M = days, L = week+.
 
 | Idea | Why / benefit | Risk |
 |---|---|---|
-| **RLS/RPC test suite** (pgTAP or vitest against a Supabase branch with two test users) | The security wall has zero automated coverage — highest-value testing investment | low |
+| ~~**RLS/RPC test suite**~~ **done** — the live \`tests/rls/\` suite | Highest-value testing investment | low |
 | Server-side pagination/filtering for cases & audit (from DEFERRED.md) | Removes the whole-table-refetch ceiling | medium — touches the refresh idiom |
-| Component/E2E smoke tests (sign-in → create case → sign-off) | Catches integration regressions CI can't | low |
+| ~~Component/E2E smoke tests~~ **done** — \`tests/e2e/\` (smoke + per-domain specs) | Catches integration regressions CI can't | low |
 
 ## By theme
 
@@ -1660,7 +1690,7 @@ M = days, L = week+.
 | **Context / Provider** | React's way to share a value (like "who is signed in") with every component underneath, without passing props down each level. |
 | **Store (zustand)** | A small global state container outside the component tree — needed so non-React code (the data layer) can push toasts. |
 | **\`Store\` (this repo)** | Confusingly also the name of the localStorage wrapper (\`lib/store.ts\`) for device preferences. Unrelated to zustand. |
-| **Route / Page** | A URL the app responds to. One dynamic route (\`[tab]\`) serves all 29 screens. |
+| **Route / Page** | A URL the app responds to. One dynamic route (\`[tab]\`) serves every screen. |
 | **API / Endpoint** | An HTTP URL a program calls. Here: Supabase's auto-generated \`/rest/v1/<table>\` and \`/rest/v1/rpc/<fn>\`. |
 | **SQL / Postgres** | The database language / the database engine Supabase hosts. |
 | **Query** | A request for data (SQL SELECT, or the \`list()\` helper). |
@@ -1747,7 +1777,7 @@ bureau_lead → deputy_director → director.
 \`admin_member_emails/remove/restore\` ·
 \`create_notification\` · \`mo_crossref\` ([Ch. 7](07-api.md)).
 
-## Database tables (47), by RLS pattern
+## Database tables, by RLS pattern
 
 - **Case-scoped**: cases, case_assignments, evidence, custody_chain,
   reports, case_tasks, case_messages, case_intel_links, case_files,

@@ -1,23 +1,19 @@
 # CID Portal — Criminal Investigation Division
 
-The CID Portal is a human-designed case-management and legal-review platform
-for a GTA V roleplay Criminal Investigation Division. It organizes cases,
-evidence, reports, intelligence, operations, warrants, subpoenas, approvals,
-and audit history through role-based workflows enforced by the database.
+CID Portal is a case-management, intelligence, and legal-review platform
+for a GTA V roleplay Criminal Investigation Division. Detectives, command
+staff, and DOJ/Judiciary members use it to run investigations end-to-end:
+cases, reports, persons of interest, gangs, vehicles, locations, photos
+and case media, legal requests (warrants and subpoenas), assignments,
+approvals, and audit history — all through role-based workflows enforced
+by the database.
 
 The front-end is a **Next.js single-page app** (React 19, TypeScript,
 Tailwind CSS v4) served as static pages from Vercel; all data lives in a
-**Supabase** Postgres backend behind Row-Level Security. Every screen is
-live — when one detective updates a case, everyone else's screen follows
-within seconds. There is no runtime AI anywhere in the portal: every
-approval, denial, assignment, and decision is a named human actor, validated
-server-side, and deterministic features are rule-based and database-driven.
-
-> The project's requirements, workflows, security model, and final
-> implementation decisions are human-directed and human-reviewed.
-> Development tools may assist with drafting or implementation, but no tool
-> independently defines policy, approves changes, or operates investigative
-> and legal decisions.
+**Supabase** Postgres backend where Row-Level Security is the authority —
+every read and write is validated server-side against the signed-in
+member's role and bureau. Every screen is live — when one detective
+updates a case, everyone else's screen follows within seconds.
 
 ## Tech stack
 
@@ -77,15 +73,19 @@ defaults for the live project.
 
 ## What's inside
 
-Twenty-nine screens in five sections:
+Workspaces organized into five sidebar sections — Command, Cases,
+Intelligence, Reference, and Oversight — plus the standalone Justice
+Portal, Command Center, Owner Portal, Feedback, and Profile screens
+(the routing truth is `NAV_CATEGORIES` in `src/lib/nav.ts`):
 
 | Area | Purpose |
 | --- | --- |
-| **Command** | Dashboard (KPIs, tickets, activity feed, bureau load, GPS trackers, raid-compensation calculator), division analytics charts, announcements, crime heatmap, roster & commendations |
-| **Cases** | Case board + full case detail (evidence & custody chain, template-driven reports with finalize/e-sign, tasks, penal-code charges, case chat with @mentions, investigation graph, zoomable timeline, RICO tracking, sign-off workflow, court-packet export to PDF/DOCX/Markdown), operations/task forces, file attachments |
+| **Command** | My Desk (everything waiting on you — the landing page), Action Center (prioritized queue of pending decisions), dashboard (KPIs, tickets, activity feed, bureau load, GPS trackers, raid-compensation calculator), division analytics charts, announcements, crime heatmap, roster & commendations |
+| **Cases** | Case board + full case detail (photos & case media, template-driven reports with finalize/e-sign, tasks, penal-code charges, case chat with @mentions, investigation graph, zoomable timeline, RICO tracking, sign-off workflow, court-packet export to PDF/DOCX/Markdown), operations/task forces, **legal requests** (warrant/subpoena drafting, packets, DOJ review & fulfilment), file attachments |
 | **Intelligence** | Persons (with dossier export), BOLO board, gangs (ranks/members/turf), places, vehicle registry with cross-case matching, indicators registry with automatic deconfliction, network graph, narcotics, ballistics, M.O. detector, media vault, records |
-| **Reference** | S.A. Penal Code, SOPs & document library (with version history), in-app user guide |
-| **Oversight** | My Desk (everything waiting on you), division calendar, weekly shift reports, audit log |
+| **Reference** | S.A. Penal Code, SOPs & document library (with version history), in-app user guide, developer handbook (owner-only) |
+| **Oversight** | Division calendar, weekly shift reports, audit log |
+| **Justice Portal** | The DOJ/Judiciary workspace: prosecutor and judge review queues, bureau coverage, issued warrants & service/returns, justice applications — justice-only members get this as their whole app |
 
 Plus cross-cutting tools: global typo-tolerant search + command palette
 (`/` or `Ctrl-K`), notifications (in-app + optional Discord DM), a
@@ -135,13 +135,14 @@ docs/             # developer handbook, user guide, hardening status
 public/           # static assets
 ```
 
-Start with [`docs/HANDBOOK.md`](docs/HANDBOOK.md) — the full developer
-handbook covering architecture, the database, every file, and a
-recommended learning order. End users get the in-app guide
+Start with the developer handbook,
+[`docs/handbook/`](docs/handbook/README.md) — architecture, the database,
+every file, and a recommended learning order. End users get the in-app guide
 (Reference → User Guide, canonical copy in
 [`docs/USER-GUIDE.md`](docs/USER-GUIDE.md)).
-The current roadmap and maturity assessment live in
-[`docs/CTO-REVIEW.md`](docs/CTO-REVIEW.md).
+A point-in-time engineering review (July 2026) lives in
+[`docs/CTO-REVIEW.md`](docs/CTO-REVIEW.md); deferred work is tracked in
+[`docs/DEFERRED.md`](docs/DEFERRED.md).
 Operational procedures (monitoring, backups, disaster recovery) are in
 [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
@@ -172,8 +173,9 @@ screen.*
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) — the short version: branch from
 `main`, run the four gates (`npm run typecheck && npm run lint && npm test
-&& npm run build`), open a PR (the template's checklist is the definition
-of done), verify the Vercel preview, then merge. Database migrations are
+&& npm run build`), open a PR using the template ("What every change must
+include" in CONTRIBUTING.md is the definition of done), verify the Vercel
+preview, then merge. Database migrations are
 **additive-only** and must update `src/lib/database.types.ts` in the same
 PR. Releases follow [SemVer](https://semver.org) with entries in
 [`CHANGELOG.md`](CHANGELOG.md).

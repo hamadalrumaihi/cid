@@ -1,6 +1,6 @@
 # Security Review Guide
 
-Reviewer's checklist and threat-model summary for any change touching data access. This is a human-reviewed system: the database enforces rule-based policy, and a human reviewer is the last line before a policy change ships. Drawn from [HARDENING.md](HARDENING.md) and [handbook ch. 18](handbook/18-security.md); mechanics in [RLS.md](RLS.md); who-may-do-what in [AUTHORIZATION.md](AUTHORIZATION.md).
+Reviewer's checklist and threat-model summary for any change touching data access. The database enforces rule-based policy, and the reviewer is the last line before a policy change ships. Drawn from [HARDENING.md](HARDENING.md) and [handbook ch. 18](handbook/18-security.md); mechanics in [RLS.md](RLS.md); who-may-do-what in [AUTHORIZATION.md](AUTHORIZATION.md).
 
 ## 1. Trust boundaries
 
@@ -8,7 +8,7 @@ Reviewer's checklist and threat-model summary for any change touching data acces
 - **The anon key is public by design.** It ships in the JavaScript bundle and grants nothing RLS doesn't allow. Do not treat its secrecy (or the `Origin` header) as a boundary.
 - **RLS is the wall.** Every table has RLS enabled; policies key on `auth.uid()` via the `private.*` helpers. A blocked write does not throw — it returns `{error}` or zero rows.
 - **UI gates are cosmetic.** `canEdit` / `canDelete` / `isCommand` only hide buttons. If a UI mirror drifts from the SQL, the server still refuses — but keep them synced so humans aren't shown phantom capabilities.
-- **Every privileged action is a named human actor**, validated server-side inside a definer RPC. There is no runtime automation with authority of its own; the workflow logic is deterministic SQL executing human decisions.
+- **Every privileged action is recorded with the acting member**, whose authority is validated server-side inside a definer RPC; the workflow logic is deterministic SQL executing those decisions.
 
 The one-line model ([ch. 18](handbook/18-security.md)): **anon key public → RLS is the wall → SECURITY DEFINER RPCs are the doors → guard triggers are the locks on specific columns.**
 

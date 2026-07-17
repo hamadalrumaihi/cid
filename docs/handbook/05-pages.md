@@ -10,11 +10,11 @@ user-facing routes:
 | URL | File | Renders |
 |---|---|---|
 | `/` | `app/page.tsx` | Redirect shim: legacy `#deep-links`, else last-visited tab, else `/command`. Also the OAuth landing spot — it **waits** for the auth event before redirecting. |
-| `/<tab>` | `app/(app)/[tab]/page.tsx` | One of 29 screens. Invalid slugs → `/command`; legacy `reports` → `/cases`. |
+| `/<tab>` | `app/(app)/[tab]/page.tsx` | One of the screens in `PAGE_META`. Invalid slugs → `/command`; legacy `reports` → `/cases`. |
 | anything else | `app/not-found.tsx` | Styled 404. |
 
 `(app)/layout.tsx` wraps every tab in `AuthProvider` → `Gate` (sign-in
-screens when not authenticated) → `AppShell` (chrome). All 29 routes are
+screens when not authenticated) → `AppShell` (chrome). All tab routes are
 **statically pre-rendered** — safe because pages embed no data; everything
 fetches after mount behind RLS.
 
@@ -26,7 +26,9 @@ registry filter), `?new=1` (open New Case), `?op=` (operation),
 "Could not load: reason" on failure (reads throw), an ALL-CAPS themed
 empty state, and a sign-in notice when unauthenticated.
 
-## The 29 screens
+## The screens
+
+One row per leaf tab in `PAGE_META` (`src/lib/nav.ts` — the routing truth).
 
 | Slug | Screen (component) | Data highlights | Extra permissions |
 |---|---|---|---|
@@ -39,6 +41,8 @@ empty state, and a sign-in notice when unauthenticated.
 | `operations` | Task Forces | operations, cases | — |
 | `case-files` | Attachments | case_files + FiveManage | delete = command |
 | `rico` | RICO tracker | rico_cases, predicate_acts | — |
+| `legal` | Legal Requests (`LegalView`) | legal_requests + versions/exhibits/actions/participants | creator + participants; all workflow writes via definer RPCs |
+| `justice` | Justice Portal (`JusticePortalView`) | legal review queues, judge docket, coverage, applications | justice roles + Owner (justice-only members get it as their whole app) |
 | `persons` | Persons → IntelProfile | persons, gang_members, vehicles | — |
 | `bolo` | BOLO Board | persons(bolo), warrant reports | — |
 | `gangs` | Gangs | gangs, ranks, members, turf | — |
@@ -53,9 +57,14 @@ empty state, and a sign-in notice when unauthenticated.
 | `records` | Records | cid_records | edit = creator/command |
 | `penal` | Penal Code | static (no DB) | — |
 | `sops` | SOPs & Library | documents + versions | writes = command |
-| `guide` | User Guide | static visual guide | — |
-| `inbox` | My Desk | 8 tables, 10 panels | self-scoped |
+| `guide` | User Guide | static visual guide (generated from docs/USER-GUIDE.md) | — |
+| `devdocs` | Developer Handbook (`DevDocsView`) | generated handbook content | **owner-only** |
+| `action` | Action Center (`ActionCenterView`) | prioritized pending decisions across cases, command, personnel | self-scoped |
+| `inbox` | My Desk (`InboxView`) | self-scoped rollup panels (sign-offs, returned cases, follow-ups, tasks, mentions, following, drafts…) | self-scoped |
 | `calendar` | Calendar | cases, tasks, shift weeks | — |
 | `shifts` | Shift Reports | shift_reports | edit own |
 | `audit` | Audit Log | audit_log (DataTable + CSV) | **owner-only** |
-| `feedback` | Feedback (sidebar leaf) | feedback | triage = 2 owners |
+| `feedback` | Feedback (sidebar leaf) | feedback | triage = owner flag (`profiles.is_owner`) |
+| `profile` | My Profile (`ProfileView`) | own profile, appearance, notification settings | self |
+| `command-center` | Command Center (`CommandCenterView`) | personnel admin, approvals, promotions, transfers | command + Owner |
+| `owner` | Owner Portal (`OwnerView`) | project health, feedback triage, security testing | **owner-only** |

@@ -1,14 +1,19 @@
-# CTO Review — Roadmap & Long-Term Evolution
+# CTO Review (July 2026) — point-in-time engineering assessment
 
 **Date:** 2026-07-09 · **Reviewed at:** v1.1.1 (post PRs #124/#126/#127) ·
 **Scope:** the complete platform — code, database, security, process, docs.
 
-This is a *recommendations* document: nothing in it is implemented. Rankings
-use **Impact** (what it buys) / **Effort** (S ≤ half a day, M ≤ 2 days,
-L = a week+) / **Risk** (chance of breaking something that works today).
+This is a **dated snapshot**: every count, score, and recommendation below
+describes the platform *as of v1.1.1*. Many items have since shipped (e.g.
+`gen:guide` + its drift check, the RLS suites in CI, the accessibility spec,
+Lighthouse/bundle budgets, the `useRegistry` extraction, the GangsView
+split) — treat the code and [`DEFERRED.md`](DEFERRED.md) (the live
+deferred-work register) as current, not this file. Rankings use **Impact**
+(what it buys) / **Effort** (S ≤ half a day, M ≤ 2 days, L = a week+) /
+**Risk** (chance of breaking something that works today).
 
 > Note on version numbers: the original plan called the phases v1.1 → v2.0.
-> v1.1 *shipped today* (v1.1.0 + v1.1.1), so the phases below are
+> v1.1 shipped at review time (v1.1.0 + v1.1.1), so the phases below are
 > **v1.2 → v1.3 → v1.5 → v2.0**.
 
 ---
@@ -102,7 +107,6 @@ Ranked by fit with what the division actually does in-game:
 5. **Case merge/split** — real investigations converge; today that's manual re-linking (Med, M).
 6. **Evidence QR/blockchain-style custody hash** — RP flavor + tamper story for court scenes (Med, M).
 7. **Training/certification tracker** for personnel (Low–Med, S–M).
-8. **Model-assisted drafting** was evaluated and not adopted — the portal is deliberately rule-based, database-driven, and human-operated; it would add API keys, cost, and a new failure surface without changing who decides anything (every approval is a named human actor).
 
 ---
 
@@ -180,9 +184,9 @@ of the triggers fire, **v2.0 not happening in 2027 is success, not failure.**
 
 | Dimension | Score | Honest note |
 | --- | --- | --- |
-| Stability | 9/10 | Three releases today, zero regressions; gates + drift checks catch the mechanical stuff |
+| Stability | 9/10 | Three releases on review day, zero regressions; gates + drift checks catch the mechanical stuff |
 | Security | 8.5/10 | Best-in-class model for the size; loses points for pending M1–M5, no MFA, denial-only test coverage |
-| Testing | 7/10 | Went from 0 → 36 meaningful tests this week; but suites are opt-in, not in CI, and unit coverage is thin outside lib/ |
+| Testing | 7/10 | Went from 0 → 36 meaningful tests in the week before this review; but suites are opt-in, not in CI, and unit coverage is thin outside lib/ |
 | Maintainability | 8.5/10 | CaseDetail split, docs current, patterns documented; registry duplication and GangsView remain |
 | Documentation | 9.5/10 | Genuinely unusual for a project this size; keep the drift checks honest |
 | Operations | 5/10 | **The weak leg.** No error tracking, no alerting, no staging, restore never drilled, bus factor = 1 |
@@ -196,7 +200,7 @@ The next unit of effort buys more in *operations* than anywhere else.
 | Area | Status | Blocking? | Note |
 | --- | --- | --- | --- |
 | Code quality gates | 🟢 | — | 4 gates + semgrep + Dependabot on every PR |
-| Functional testing | 🟢 | — | unit + RLS + E2E; opt-in suites verified today |
+| Functional testing | 🟢 | — | unit + RLS + E2E; opt-in suites verified at review time |
 | Security enforcement | 🟢 | — | RLS authority verified by tests against prod |
 | Dashboard hardening (M1–M5) | 🟡 | No | Owner action pending — 15 minutes |
 | Monitoring & alerting | 🔴 | No, but first to fix | Nothing pages anyone; feedback inbox is the de-facto alert channel |

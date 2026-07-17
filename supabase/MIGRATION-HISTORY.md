@@ -1,10 +1,12 @@
 # Live migration history
 
 The live Supabase project (`cid`, `jhxuflzmqspidkvjckox`) is the source of
-truth for the schema. This file records every migration in the live
-project's `supabase_migrations.schema_migrations` history (as of
-**2026-07-09**, post-v1.5) and maps each to its file in `supabase/migrations/`, where
-one exists. Entries marked *applied live only* were applied directly to the
+truth for the schema. This file is a **frozen snapshot**: it records every migration in the live
+project's `supabase_migrations.schema_migrations` history **as of
+2026-07-09 (post-v1.5)** and maps each to its file in `supabase/migrations/`,
+where one exists. Migrations applied after that date (from
+`20260713…` onward) are in-repo files applied live but are **not itemized
+here** — `ls supabase/migrations` and the live history are the current map. Entries marked *applied live only* were applied directly to the
 live project (via the dashboard/MCP) and have no standalone file — their
 effects are captured in [`schema-snapshot.sql`](schema-snapshot.sql), a
 generated reference snapshot of the full live schema.
@@ -15,7 +17,7 @@ Regenerate the snapshot after new migrations: query the Postgres catalogs
 --schema-only` if you have direct DB access — and refresh this table from
 `supabase_migrations.schema_migrations`.
 
-**82 live migrations** (54 with a repo file, 28 live-only).
+**82 live migrations at the snapshot date** (54 with a repo file, 28 live-only).
 
 | # | Version (live) | Name | Repo file |
 |---|---|---|---|

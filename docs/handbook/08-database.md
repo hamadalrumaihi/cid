@@ -131,8 +131,8 @@ logic.
 
 | Family | Tables | Effect |
 |---|---|---|
-| `private.audit()` AFTER I/U/D | 20 tables | The app's audit logging — no client write path |
-| `touch` family BEFORE UPDATE | ~25 tables | Honest `updated_at` (drives staleness + analytics) |
+| `private.audit()` AFTER I/U/D | every audited table (see the schema snapshot) | The app's audit logging — no client write path |
+| `touch` family BEFORE UPDATE | most tables (see the schema snapshot) | Honest `updated_at` (drives staleness + analytics) |
 | `stamp_author_identity` BEFORE INSERT | case_messages, announcements | Real author enforced server-side |
 | Guard triggers | profiles, cases, reports, trackers | Block self-promotion, direct sign-off/finalize writes, self-co-sign |
 | `set_case_closed_at` | cases | Stamps closure time |
@@ -155,3 +155,23 @@ publication first.**
   add to the realtime publication, add FK indexes.
 - **Change an enum** → Postgres enums only append; update the TS union +
   any UI constant (`CASE_STATUSES`, indicator `KINDS`) together.
+
+## 8.8 Later additions (post-v1.16)
+
+This chapter's inventory predates several table families added since; each
+is documented where its rules live — [`docs/AUTHORIZATION.md`](../AUTHORIZATION.md),
+[`docs/WORKFLOWS.md`](../WORKFLOWS.md), and [`docs/DOJ-INTEGRATION.md`](../DOJ-INTEGRATION.md) —
+and the schema snapshot is the complete table list:
+
+- **Case bureau reassignment** (`20260725010000`) — frozen `cases.bureau`,
+  `case_reassign_bureau()` (DD+/Owner).
+- **Permanent deletion** (`20260726010000`) — `deleted_member_ledger`,
+  `deletion_tokens`, the system tombstone profile, `permanent_delete_*` RPCs.
+- **Case blockers & priority** (`20260727010000`) — `case_blockers`,
+  `cases.priority`.
+- **Person intelligence** (`20260729010000`) — `person_relationships`,
+  `person_places`, `person_vehicles`, `search_persons`, `person_merge`.
+- **Document governance** (`20260801`–`20260802`) — classification,
+  acknowledgement, campaigns, suggestions on `documents`.
+- **Narcotics intelligence + restricted sales** (`20260803`–`20260804`).
+- **Parallel judiciary + structured legal targets** (`20260805`–`20260806`).
