@@ -116,13 +116,27 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
 
   const requestTransfer = async () => {
     if (!toBureau || !reason.trim()) { toast('Pick the destination and give a reason.', 'warn'); return }
+    // Deputy Director+/Owner initiations come back pre-approved on both
+    // sides — complete them in the same action so the move applies at once.
+    const highCommand = !!actor.is_owner || actor.role === 'deputy_director' || actor.role === 'director'
     const ok = await uiConfirm(
-      `${p.display_name}: ${roleLabel(p.role)} · ${p.division} → ${roleLabel(p.role)} · ${toBureau}\n\nReason: ${reason.trim()}\n\nCross-bureau transfers need the source and destination Bureau Leads to approve (Deputy Director+ can complete directly). The officer and both bureaus are notified.`,
-      { title: 'Confirm transfer request', confirmText: 'Request transfer' },
+      `${p.display_name}: ${roleLabel(p.role)} · ${p.division} → ${roleLabel(p.role)} · ${toBureau}\n\nReason: ${reason.trim()}\n\n${highCommand ? 'Your authority covers both departments — this transfer applies immediately.' : 'Both department leads approve before the move applies.'} The officer and both departments are notified.`,
+      { title: highCommand ? 'Confirm transfer' : 'Confirm transfer request', confirmText: highCommand ? 'Transfer' : 'Request transfer' },
     )
     if (!ok) return
     setBusy(true)
     const res = await rpc('request_transfer', { p_target: p.id, p_to_bureau: toBureau as never, p_reason: reason.trim() })
+    const row = (res.data ?? null) as { id: string; status: string } | null
+    if (!res.error && row?.status === 'approved') {
+      const fin = await rpc('complete_transfer', { p_id: row.id })
+      setBusy(false)
+      if (fin.error) {
+        toast(`Transfer approved but not applied: ${fin.error.message}. Complete it from the Command Center.`, 'warn')
+      } else {
+        toast(`${p.display_name} transferred to ${toBureau}`, 'success')
+      }
+      onChanged(); onClose(); return
+    }
     setBusy(false)
     if (res.error) { toast(`Transfer request failed: ${res.error.message}`, 'danger'); return }
     toast(`Transfer to ${toBureau} requested for ${p.display_name}`, 'success')
