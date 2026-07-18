@@ -6459,3 +6459,13 @@ create policy wl_sel on public.watchlist
 -- narcotic_sale_observations/series/stacks, prosecutor_bureau_assignments,
 -- transfer_requests). Definitive SQL in
 -- supabase/migrations/20260807150000_anon_revoke_hygiene.sql.
+-- 20260807160000_rls_cleanup_registry_purge (function only): rls_test_cleanup
+-- also purges the standalone registry entities the live suites create outside
+-- a case — fixture-authored documents (+ suggestions), narcotics
+-- (+ suggestions), gangs, places, vehicles and persons (children cascade or
+-- set-null per FK) — and returns six new counts. Paired with a run-level
+-- vitest globalSetup (tests/rls/globalSetup.ts) that calls the RPC before AND
+-- after the whole run, so a suite crashing before its afterAll can no longer
+-- leak test rows into production (the source of the 24 SOP docs / 4 narcotics
+-- / 1 place cleaned up by hand on 2026-07-18). Definitive SQL in
+-- supabase/migrations/20260807160000_rls_cleanup_registry_purge.sql.
