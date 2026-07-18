@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { deleteWithUndo, list, updateWhere, withRetry } from '@/lib/db'
+import { list, rpc, updateWhere, withRetry } from '@/lib/db'
 import { timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useOperationsStore } from '@/lib/operations'
@@ -12,6 +12,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { caseStatusTint, signoffLabel, signoffTint } from '@/lib/signoff'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
+import { uiConfirm } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Notice } from '@/components/ui/Notice'
@@ -39,10 +40,8 @@ export function CasesView() {
 function CasesViewInner() {
   const router = useRouter()
   const sp = useSearchParams()
-  const { profile, canEdit, canDelete: canDeleteRecords, isOwner } = useAuth()
-  // Interim containment: case deletion cascades children the Undo cannot
-  // restore, so it is Owner-only until the archive model replaces it.
-  const canDelete = canDeleteRecords && isOwner
+  const { profile, canEdit, canDelete } = useAuth()
+  const [showArchived, setShowArchived] = useState(false)
   const [cases, setCases] = useState<CaseRow[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
@@ -91,22 +90,30 @@ function CasesViewInner() {
   useEffect(() => { persistCaseFilters(filters) }, [filters])
 
   const filtered = useMemo(() => {
-    let rows = cases
+    let rows = cases.filter((c) => showArchived ? !!c.archived_at : !c.archived_at)
     if (scope === 'mine' && profile?.id) rows = rows.filter((c) => c.lead_detective_id === profile.id || c.created_by === profile.id)
     rows = applyCaseFilters(rows, filters, profile?.id ?? null)
     const q = query.trim().toLowerCase()
     if (q) rows = rows.filter((c) => JSON.stringify(c).toLowerCase().includes(q))
     return rows
-  }, [cases, scope, filters, profile, query])
+  }, [cases, scope, filters, profile, query, showArchived])
 
   const openCase = (id: string) => router.push(`/cases?case=${id}`)
   const closeDetail = () => router.push('/cases')
   const setAllSelected = () => setSelected(selected.length === filtered.length ? [] : filtered.map((c) => c.id))
 
-  const deleteSelected = async () => {
-    const rows = cases.filter((c) => selected.includes(c.id))
-    const ok = await deleteWithUndo('cases', rows, { label: `${rows.length} cases`, noConfirm: false })
-    if (ok) { setSelected([]); void fetchCases() }
+  const archiveSelected = async () => {
+    const verb = showArchived ? 'Restore' : 'Archive'
+    const ok = await uiConfirm(`${verb} ${selected.length} case${selected.length === 1 ? '' : 's'}? ${showArchived ? 'They return to the working views.' : 'Nothing is deleted — archived cases stay restorable under the Archived filter.'}`, { confirmText: verb })
+    if (!ok) return
+    let failed = 0
+    for (const id of selected) {
+      const res = showArchived ? await rpc('case_restore', { p_case: id }) : await rpc('case_archive', { p_case: id })
+      if (res.error) failed += 1
+    }
+    if (failed) toast(`${failed} case${failed === 1 ? '' : 's'} could not be ${showArchived ? 'restored' : 'archived'}.`, 'danger')
+    else toast(`${selected.length} case${selected.length === 1 ? '' : 's'} ${showArchived ? 'restored' : 'archived'}.`, 'success')
+    setSelected([]); void fetchCases()
   }
 
   if (caseId) return <CaseDetail id={caseId} onBack={closeDetail} onChanged={fetchCases} />
@@ -122,6 +129,11 @@ function CasesViewInner() {
             <div className="flex rounded-lg border border-white/10 bg-ink-950 p-1">
               {['mine', 'all'].map((s) => <button key={s} onClick={() => setScope(s)} className={`rounded-md px-3 py-1.5 text-sm font-bold capitalize ${scope === s ? 'bg-badge-600 text-white' : 'text-slate-400'}`}>{s}</button>)}
             </div>
+            {canDelete && (
+              <button onClick={() => { setShowArchived((v) => !v); setSelected([]) }} className={`rounded-lg border px-3 py-1.5 text-sm font-bold ${showArchived ? 'border-amber-500/40 bg-amber-500/10 text-amber-200' : 'border-white/10 bg-ink-950 text-slate-400'}`}>
+                Archived
+              </button>
+            )}
             <div className="flex rounded-lg border border-white/10 bg-ink-950 p-1">
               {['grid', 'board'].map((v) => <button key={v} onClick={() => setView(v)} className={`rounded-md px-3 py-1.5 text-sm font-bold capitalize ${view === v ? 'bg-badge-600 text-white' : 'text-slate-400'}`}>{v}</button>)}
             </div>
@@ -141,7 +153,7 @@ function CasesViewInner() {
 
       {selected.length > 0 && <div className="sticky bottom-4 z-20 flex items-center justify-between rounded-2xl border border-white/10 bg-ink-850 p-3 shadow-glow">
         <p className="text-sm font-bold text-white">{selected.length} selected</p>
-        <div className="flex gap-2"><Button onClick={() => setSelected([])}>Clear</Button><Button variant="danger" onClick={() => void deleteSelected()}>Delete selected</Button></div>
+        <div className="flex gap-2"><Button onClick={() => setSelected([])}>Clear</Button><Button variant="danger" onClick={() => void archiveSelected()}>{showArchived ? 'Restore selected' : 'Archive selected'}</Button></div>
       </div>}
 
       <CaseModal open={modalOpen} record={editRecord} onClose={() => setModalOpen(false)} onSaved={(id) => { setModalOpen(false); void fetchCases(); if (id) openCase(id) }} />

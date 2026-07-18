@@ -191,7 +191,7 @@ export function InboxView() {
       await fetchProfiles()
       void fetchJustice()
       const [cases, tasks, messages, notifications, reports, watchlist, persons, vehicles] = await Promise.all([
-        list('cases', { order: 'updated_at', ascending: false }),
+        list('cases', { order: 'updated_at', ascending: false, is: { archived_at: null } }),
         list('case_tasks', { order: 'due', nullsFirst: false }),
         list('case_messages', { order: 'created_at', ascending: false, limit: 120 }),
         list('notifications', { eq: { user_id: profile.id }, order: 'created_at', ascending: false, limit: 40 }),

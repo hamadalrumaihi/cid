@@ -9,8 +9,8 @@ import { Button } from '@/components/ui/Button'
 import { DetailSkeleton } from '@/components/ui/Skeleton'
 import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab, type SectionTabGroup } from '@/components/ui/SectionTabs'
-import { uiConfirm } from '@/components/ui/dialog'
-import { countRows, deleteWithUndo, list, update, withRetry } from '@/lib/db'
+import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
+import { countRows, list, rpc, update, withRetry } from '@/lib/db'
 import { todayISO } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useOperationsStore } from '@/lib/operations'
@@ -250,19 +250,37 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     else { toast('Status updated.', 'success'); onChanged(); void fetchCase() }
   }
 
-  const deleteCase = async () => {
-    const ok = await deleteWithUndo('cases', c, {
-      label: c.case_number,
-      children: [
-        { table: 'case_assignments', column: 'case_id' },
-        { table: 'case_tasks', column: 'case_id' },
-        { table: 'case_messages', column: 'case_id' },
-        { table: 'case_signoff_history', column: 'case_id' },
-        { table: 'reports', column: 'case_id' },
-      ],
-      setNullRefs: [{ table: 'evidence', column: 'case_id' }, { table: 'media', column: 'case_id' }],
-    })
-    if (ok) { onBack(); onChanged() }
+  const archiveCase = async () => {
+    const restoring = !!c.archived_at
+    const ok = await uiConfirm(restoring
+      ? `Restore ${c.case_number} to the working views?`
+      : `Archive ${c.case_number}? Nothing is deleted — the case leaves the working views and stays restorable under the Archived filter.`,
+      { confirmText: restoring ? 'Restore' : 'Archive' })
+    if (!ok) return
+    const res = restoring ? await rpc('case_restore', { p_case: c.id }) : await rpc('case_archive', { p_case: c.id })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast(restoring ? 'Case restored.' : 'Case archived.', 'success')
+    onChanged(); if (restoring) void fetchCase(); else onBack()
+  }
+
+  const permanentDelete = async () => {
+    const pv = await rpc('case_delete_preview', { p_case: c.id })
+    if (pv.error) { toast(pv.error.message, 'danger'); return }
+    const preview = pv.data as { items: { table: string; rows: number; on_delete: string }[]; legal_requests: number; deletable: boolean }
+    if (!preview.deletable) {
+      toast(`This case has ${preview.legal_requests} legal request${preview.legal_requests === 1 ? '' : 's'} on file and cannot be deleted.`, 'warn')
+      return
+    }
+    const lines = preview.items.map((i) => `• ${i.table.replace('public.', '')}: ${i.rows} row${i.rows === 1 ? '' : 's'} ${i.on_delete}`).join('\n')
+    const reason = await uiPrompt(
+      `Permanently delete ${c.case_number}?\n\nThis cannot be undone. It will destroy:\n${lines || '• (no linked records)'}\n\nEnter the reason (recorded in the audit log):`,
+      { title: 'Permanently delete case', placeholder: 'Reason (required)', confirmText: 'Delete forever' },
+    )
+    if (reason === null) return
+    const res = await rpc('case_permanent_delete', { p_case: c.id, p_reason: reason })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast(`${c.case_number} permanently deleted.`, 'warn')
+    onBack(); onChanged()
   }
 
   // Header/metric derivations — cheap, render-pure.
@@ -309,21 +327,28 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   return (
     <div className="space-y-4">
       <Breadcrumbs items={[{ label: 'Cases', onClick: onBack }, { label: c.case_number }]} />
+      {c.archived_at && (
+        <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">
+          This case is archived — it is hidden from the working views. Command can restore it from the header menu.
+        </p>
+      )}
       <CaseCommandHeader
         c={c}
         op={op ? { id: op.id, name: op.name } : null}
         assessment={assessment}
         pinned={pinned}
         canEdit={canEdit}
-        canDelete={canDelete && isOwner}
+        canArchive={isCommand}
+        canDelete={isOwner}
         canHandover={canHandover}
         canReassignBureau={canReassignBureau}
         onStatusChange={(s) => void quickStatus(s)}
         onPinToggle={() => { togglePinCase(c.id); setCase({ ...c }) }}
         onEdit={() => setEdit(true)}
+        onArchive={() => void archiveCase()}
         onHandover={() => setHandover(true)}
         onReassign={() => setReassign(true)}
-        onDelete={() => void deleteCase()}
+        onDelete={() => void permanentDelete()}
         onChanged={() => { onChanged(); void fetchCase() }}
         onGoTab={(t) => setTab(TABS.includes(t as TabId) ? (t as TabId) : 'overview')}
       />

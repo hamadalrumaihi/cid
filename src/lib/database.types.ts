@@ -822,6 +822,8 @@ export type Database = {
       cases: {
         Row: {
           area: string | null
+          archived_at: string | null
+          archived_by: string | null
           bureau: Database["public"]["Enums"]["bureau"]
           case_number: string
           charges: Json
@@ -853,6 +855,8 @@ export type Database = {
         }
         Insert: {
           area?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
           bureau?: Database["public"]["Enums"]["bureau"]
           case_number: string
           charges?: Json
@@ -884,6 +888,8 @@ export type Database = {
         }
         Update: {
           area?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
           bureau?: Database["public"]["Enums"]["bureau"]
           case_number?: string
           charges?: Json
@@ -6640,6 +6646,22 @@ export type Database = {
       cancel_transfer: {
         Args: { p_id: string }
         Returns: Database["public"]["Tables"]["transfer_requests"]["Row"]
+      }
+      case_archive: {
+        Args: { p_case: string; p_note?: string }
+        Returns: Database["public"]["Tables"]["cases"]["Row"]
+      }
+      case_delete_preview: {
+        Args: { p_case: string }
+        Returns: Json
+      }
+      case_permanent_delete: {
+        Args: { p_case: string; p_reason: string }
+        Returns: undefined
+      }
+      case_restore: {
+        Args: { p_case: string }
+        Returns: Database["public"]["Tables"]["cases"]["Row"]
       }
       correct_membership_organization: {
         Args: {
