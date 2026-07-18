@@ -15,7 +15,7 @@ import { rpc, updateNoSelect } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import type { RosterProfile } from '@/lib/profiles'
 import {
-  BUREAUS, ROLE_LABEL, bureauLabel, canTransfer,
+  BUREAUS, ROLE_LABEL, bureauLabel, canRemoveMember, canTransfer,
   getAssignableRoles, isCommandRole, roleLabel, type RoleParty,
 } from '@/lib/roles'
 import { justiceRoleLabel } from '@/lib/justice'
@@ -333,12 +333,16 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
               <p className="mt-1.5 text-[10px] text-slate-500">Blocks the portal with an “Access denied” screen (reason shown) and stops them submitting a membership request. Reversible.</p>
             </div>
           ))}
-          <button onClick={() => void removePermanently()} className="w-full rounded-lg border border-rose-500/30 bg-rose-500/5 py-2.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">
-            Permanently remove from CID
-          </button>
-          <p className="mt-1.5 text-[10px] text-slate-500">
-            Blocks all access, clears their sign-in email, unassigns their cases and hides them from the roster. Cases, reports and audit history they authored are kept. A director can restore them (they return inactive, pending re-approval).
-          </p>
+          {canRemoveMember(actor, p) && (
+            <>
+              <button onClick={() => void removePermanently()} className="w-full rounded-lg border border-rose-500/30 bg-rose-500/5 py-2.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">
+                Permanently remove from CID
+              </button>
+              <p className="mt-1.5 text-[10px] text-slate-500">
+                Blocks all access, clears their sign-in email, unassigns their cases and hides them from the roster. Cases, reports and audit history they authored are kept. A director can restore them (they return inactive, pending re-approval).
+              </p>
+            </>
+          )}
         </div>
       </div>
     </Modal>

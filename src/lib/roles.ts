@@ -56,6 +56,7 @@ export interface RoleParty {
   division?: string | null
   active?: boolean | null
   is_owner?: boolean | null
+  is_system?: boolean | null
 }
 
 /** Every role an applicant may REQUEST at signup. Requesting grants nothing —
@@ -140,3 +141,25 @@ export const canDecideTransferSide = (actor: RoleParty | null | undefined, burea
   !!actor && ((!!actor.is_owner && !!actor.active)
     || (!!actor.active && ((actor.role === 'bureau_lead' && actor.division === bureau)
       || actor.role === 'deputy_director' || actor.role === 'director')))
+
+/** May `actor` permanently remove `target` from CID (admin_remove_member)?
+ *  Bureau Lead: own-bureau rank-and-file only; Deputy Director: anyone below
+ *  Deputy; Director: anyone except an Owner account; Owner: anyone. Never
+ *  yourself, never system accounts. Mirrors the server matrix exactly —
+ *  the RPC is the authority, this only decides whether to show the button. */
+export const canRemoveMember = (actor: RoleParty | null | undefined, target: RoleParty): boolean => {
+  if (!actor || !actor.active || actor.id === target.id || target.is_system) return false
+  if (target.is_owner && !actor.is_owner) return false
+  if (actor.is_owner) return true
+  if (actor.role === 'director') return true
+  if (actor.role === 'deputy_director') return !isCommandRole(target.role) || target.role === 'bureau_lead'
+  if (actor.role === 'bureau_lead') {
+    return actor.division === target.division && (target.role === 'detective' || target.role === 'senior_detective')
+  }
+  return false
+}
+
+/** May `actor` restore a removed member (admin_restore_member)? Director or
+ *  Owner only — restored members return inactive pending re-approval. */
+export const canRestoreMember = (actor: RoleParty | null | undefined): boolean =>
+  !!actor && !!actor.active && (actor.role === 'director' || !!actor.is_owner)

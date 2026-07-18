@@ -8,7 +8,7 @@ import { rpc } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { notify } from '@/lib/notify'
 import type { RosterProfile } from '@/lib/profiles'
-import { ROLE_LABEL } from '@/lib/roles'
+import { ROLE_LABEL, canRestoreMember } from '@/lib/roles'
 import { AGENCY_LABEL, justiceRoleLabel } from '@/lib/justice'
 import type { JusticeIdentity } from '@/lib/justiceRoster'
 import { toast } from '@/lib/toast'
@@ -148,9 +148,11 @@ export function AdminPanel({ profiles, emails, justiceByUser = {}, requests = nu
                   <span className="text-slate-300">{p.display_name}</span> ·{' '}
                   <span className="text-[11px]">removed {p.removed_at ? fmtDate(p.removed_at) : ''}</span>
                 </span>
-                <button onClick={() => void restore(p)} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/10">
-                  Restore
-                </button>
+                {canRestoreMember(me) && (
+                  <button onClick={() => void restore(p)} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/10">
+                    Restore
+                  </button>
+                )}
               </div>
             ))}
           </div>
