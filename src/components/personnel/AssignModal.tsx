@@ -15,7 +15,7 @@ import { rpc, updateNoSelect } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import type { RosterProfile } from '@/lib/profiles'
 import {
-  PERMANENT_BUREAUS, ROLE_LABEL, bureauLabel, canTransfer,
+  BUREAUS, ROLE_LABEL, bureauLabel, canTransfer,
   getAssignableRoles, isCommandRole, roleLabel, type RoleParty,
 } from '@/lib/roles'
 import { justiceRoleLabel } from '@/lib/justice'
@@ -25,7 +25,7 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Field, Select, Textarea } from '@/components/ui/Field'
 
-type Bureau = (typeof PERMANENT_BUREAUS)[number]
+type Bureau = keyof typeof BUREAUS & string
 
 interface AssignModalProps {
   p: RosterProfile
@@ -50,9 +50,8 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
   const [busy, setBusy] = useState(false)
 
   const roleOptions = getAssignableRoles(actor, p)
-  const transferDestinations = (PERMANENT_BUREAUS as readonly Bureau[])
+  const transferDestinations = (Object.keys(BUREAUS) as Bureau[])
     .filter((b) => canTransfer(actor, p, p.division ?? '', b))
-  const hasPermanentBureau = (PERMANENT_BUREAUS as readonly string[]).includes(p.division ?? '')
 
   const openPanel = (which: 'role' | 'transfer' | 'org') => {
     setPanel(panel === which ? null : which)
@@ -200,7 +199,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
             audited actions below, never a silent dropdown save. */}
         <div className="mb-4 grid grid-cols-2 gap-x-6 gap-y-1 rounded-xl border border-white/10 bg-ink-950/50 p-3 text-xs">
           <p className="text-slate-400">Current Role <span className="block text-sm text-slate-100">{roleLabel(p.role)}</span></p>
-          <p className="text-slate-400">Current Department <span className="block text-sm text-slate-100">{hasPermanentBureau ? `${p.division} — ${bureauLabel(p.division)}` : 'Unassigned (pending approval)'}</span></p>
+          <p className="text-slate-400">Current Department <span className="block text-sm text-slate-100">{p.division ? `${p.division} — ${bureauLabel(p.division)}` : 'Unassigned (pending approval)'}</span></p>
           <p className="text-slate-400">Active <span className="block text-sm text-slate-100">{p.active ? 'Yes' : 'No'}</span></p>
           <p className="text-slate-400">On LOA <span className="block text-sm text-slate-100">{p.loa ? 'Yes' : 'No'}</span></p>
         </div>
@@ -228,7 +227,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
               Change role
             </Button>
             <Button size="sm" disabled={!transferDestinations.length} onClick={() => openPanel('transfer')}
-              title={transferDestinations.length ? undefined : hasPermanentBureau ? 'You cannot initiate a transfer for this member' : 'Member has no permanent department yet'}>
+              title={transferDestinations.length ? undefined : 'You cannot initiate a transfer for this member'}>
               Transfer department
             </Button>
             <Button size="sm" variant={p.active ? 'danger' : 'primary'} onClick={() => void setActive(!p.active)}>

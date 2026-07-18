@@ -2093,8 +2093,8 @@ alter table public.transfer_requests add constraint transfer_requests_requested_
 alter table public.transfer_requests add constraint transfer_requests_source_approved_by_fkey FOREIGN KEY (source_approved_by) REFERENCES public.profiles(id);
 alter table public.transfer_requests add constraint transfer_requests_target_approved_by_fkey FOREIGN KEY (target_approved_by) REFERENCES public.profiles(id);
 alter table public.transfer_requests add constraint transfer_requests_completed_by_fkey FOREIGN KEY (completed_by) REFERENCES public.profiles(id);
-alter table public.transfer_requests add constraint transfer_requests_from_bureau_check CHECK (from_bureau in ('LSB', 'BCB', 'SAB'));
-alter table public.transfer_requests add constraint transfer_requests_to_bureau_check CHECK (to_bureau in ('LSB', 'BCB', 'SAB'));
+alter table public.transfer_requests add constraint transfer_requests_from_bureau_check CHECK (from_bureau in ('LSB', 'BCB', 'SAB', 'JTF'));
+alter table public.transfer_requests add constraint transfer_requests_to_bureau_check CHECK (to_bureau in ('LSB', 'BCB', 'SAB', 'JTF'));
 alter table public.transfer_requests add constraint transfer_requests_status_check CHECK (status in ('pending_source', 'pending_target', 'approved', 'rejected', 'cancelled', 'completed'));
 alter table public.transfer_requests add constraint transfer_requests_check CHECK (from_bureau <> to_bureau);
 alter table public.transfer_requests enable row level security;
@@ -6309,3 +6309,12 @@ create policy wl_sel on public.watchlist
 -- CASCADE deletes are internal referential triggers — both unaffected).
 -- Definitive SQL in
 -- supabase/migrations/20260807010000_case_media_canonical.sql.
+-- 20260807020000_transfer_any_bureau (widening): transfer_requests
+-- from_bureau/to_bureau CHECKs admit 'JTF' (mirrored above) and
+-- request_transfer drops its two bureau-list guards, so the two-sided
+-- transfer workflow moves members between ALL departments — including out of
+-- the JTF default an account activates on, which previously had no path into
+-- a bureau. Initiator authority, both-sides approval (DD+/Owner can always
+-- decide a side), reason, self-transfer and one-open-transfer rules are
+-- unchanged. Definitive SQL in
+-- supabase/migrations/20260807020000_transfer_any_bureau.sql.

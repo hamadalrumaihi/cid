@@ -88,10 +88,13 @@ describe('canTransfer / canDecideTransferSide', () => {
     expect(canTransfer(lsbLead, { ...det, division: 'BCB' }, 'BCB', 'SAB')).toBe(false) // neither side
     expect(canTransfer(lsbLead, { id: 'c', role: 'bureau_lead', division: 'LSB', active: true }, 'LSB', 'BCB')).toBe(false) // command staff
   })
-  it('JTF is never a source or destination; never yourself', () => {
-    expect(canTransfer(owner, det, 'LSB', 'JTF')).toBe(false)
-    expect(canTransfer(owner, { ...det, division: 'JTF' }, 'JTF', 'LSB')).toBe(false)
-    expect(canTransfer(lsbLead, { ...det, id: 'lead' }, 'LSB', 'BCB')).toBe(false)
+  it('JTF is a valid source and destination; unknown bureaus and yourself are not', () => {
+    expect(canTransfer(owner, det, 'LSB', 'JTF')).toBe(true)
+    expect(canTransfer(owner, { ...det, division: 'JTF' }, 'JTF', 'LSB')).toBe(true)
+    expect(canTransfer(deputy, { ...det, division: 'JTF' }, 'JTF', 'BCB')).toBe(true)
+    expect(canTransfer(owner, det, 'LSB', 'LSB')).toBe(false)     // same department
+    expect(canTransfer(owner, det, 'LSB', 'DOJ')).toBe(false)     // not a CID department
+    expect(canTransfer(lsbLead, { ...det, id: 'lead' }, 'LSB', 'BCB')).toBe(false) // never yourself
   })
   it("higher command may initiate anywhere; sides are decided by that bureau's lead or DD+", () => {
     expect(canTransfer(deputy, det, 'LSB', 'BCB')).toBe(true)
