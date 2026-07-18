@@ -315,7 +315,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         assessment={assessment}
         pinned={pinned}
         canEdit={canEdit}
-        canDelete={canDelete}
+        canDelete={canDelete && isOwner}
         canHandover={canHandover}
         canReassignBureau={canReassignBureau}
         onStatusChange={(s) => void quickStatus(s)}

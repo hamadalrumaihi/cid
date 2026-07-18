@@ -39,7 +39,10 @@ export function CasesView() {
 function CasesViewInner() {
   const router = useRouter()
   const sp = useSearchParams()
-  const { profile, canEdit, canDelete } = useAuth()
+  const { profile, canEdit, canDelete: canDeleteRecords, isOwner } = useAuth()
+  // Interim containment: case deletion cascades children the Undo cannot
+  // restore, so it is Owner-only until the archive model replaces it.
+  const canDelete = canDeleteRecords && isOwner
   const [cases, setCases] = useState<CaseRow[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
