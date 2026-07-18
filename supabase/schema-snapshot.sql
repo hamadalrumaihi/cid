@@ -323,6 +323,8 @@ create table public.cases (
   lead_detective_id uuid,
   summary text,
   created_by uuid default auth.uid(),
+  archived_at timestamptz,
+  archived_by uuid,
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
   signoff_status text not null default 'none'::text,
@@ -6390,3 +6392,19 @@ create policy wl_sel on public.watchlist
 -- status); reviewer authority and self-review blocking unchanged.
 -- Definitive SQL in
 -- supabase/migrations/20260807120000_membership_rereview_terminal.sql.
+-- 20260807130000_case_archive_owner_delete (columns + functions):
+-- cases.archived_at/archived_by (guarded against direct client writes by
+-- cases_block_archive_cols, the profiles_block_privileged revert pattern).
+-- case_archive/case_restore are command actions (audited, nothing
+-- destroyed); case_delete_preview enumerates every referencing table from
+-- pg_constraint at call time (the destroyed-list can never drift), and
+-- case_permanent_delete is Owner-only, requires a reason, refuses cases
+-- with legal requests, and records the destroyed-row counts in audit_log
+-- before deleting. Client deleteWithUndo for cases is removed. Definitive
+-- SQL in supabase/migrations/20260807130000_case_archive_owner_delete.sql.
+-- 20260807140000_merge_rpc_extensions (functions only): person_merge also
+-- repoints narcotic_persons (deduped on UNIQUE(narcotic_id, person_id,
+-- role)); merge_narcotics also repoints narcotic_sale_series and
+-- narcotic_sale_observations. Zero stranded rows existed live — purely
+-- preventive. Definitive SQL in
+-- supabase/migrations/20260807140000_merge_rpc_extensions.sql.

@@ -50,12 +50,14 @@ export function CaseCommandHeader({
   assessment,
   pinned,
   canEdit,
+  canArchive,
   canDelete,
   canHandover,
   canReassignBureau,
   onStatusChange,
   onPinToggle,
   onEdit,
+  onArchive,
   onHandover,
   onReassign,
   onDelete,
@@ -67,12 +69,14 @@ export function CaseCommandHeader({
   assessment: CaseAssessment | null
   pinned: boolean
   canEdit: boolean
+  canArchive: boolean
   canDelete: boolean
   canHandover: boolean
   canReassignBureau: boolean
   onStatusChange: (s: CaseRow['status']) => void
   onPinToggle: () => void
   onEdit: () => void
+  onArchive: () => void
   onHandover: () => void
   onReassign: () => void
   onDelete: () => void
@@ -138,7 +142,8 @@ export function CaseCommandHeader({
   if (canHandover) admin.push({ label: 'Hand over case…', onClick: onHandover })
   if (canReassignBureau) admin.push({ label: 'Reassign bureau…', onClick: onReassign })
   if (admin.length) { admin[0].separatorBefore = true; items.push(...admin) }
-  if (canDelete) items.push({ label: 'Delete case', onClick: onDelete, danger: true, separatorBefore: true })
+  if (canArchive) items.push({ label: c.archived_at ? 'Restore case' : 'Archive case', onClick: onArchive, separatorBefore: !admin.length })
+  if (canDelete) items.push({ label: 'Permanently delete case…', onClick: onDelete, danger: true, separatorBefore: true })
 
   // Primary action: the top assessCase recommendation. Tab-bearing actions
   // navigate; the tab-less "follow-up is due" opens the follow-up editor.

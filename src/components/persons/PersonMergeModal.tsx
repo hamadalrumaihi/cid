@@ -27,7 +27,7 @@ async function countRepoints(victimIds: string[]): Promise<Record<string, Record
   const c = (p: Promise<number>) => p.catch(() => 0)
   const out: Record<string, Record<string, number>> = {}
   await Promise.all(victimIds.map(async (id) => {
-    const [gm, media, legal, mdt, veh, cil, pp, pv, relA, relB, wl] = await Promise.all([
+    const [gm, media, legal, mdt, veh, cil, pp, pv, relA, relB, np, wl] = await Promise.all([
       c(countRows('gang_members', { eq: { person_id: id } })),
       c(countRows('media', { eq: { person_id: id } })),
       c(countRows('legal_requests', { eq: { person_id: id } })),
@@ -38,11 +38,12 @@ async function countRepoints(victimIds: string[]): Promise<Record<string, Record
       c(countRows('person_vehicles', { eq: { person_id: id } })),
       c(countRows('person_relationships', { eq: { person_a: id } })),
       c(countRows('person_relationships', { eq: { person_b: id } })),
+      c(countRows('narcotic_persons', { eq: { person_id: id } })),
       c(countRows('watchlist', { eq: { target_type: 'person', target_id: id } })),
     ])
     out[id] = {
       gang_members: gm, media, legal_requests: legal, mdt_wanted_projections: mdt, vehicles: veh,
-      case_intel_links: cil, person_places: pp, person_vehicles: pv, person_relationships: relA + relB, watchlist: wl,
+      case_intel_links: cil, person_places: pp, person_vehicles: pv, person_relationships: relA + relB, narcotic_persons: np, watchlist: wl,
     }
   }))
   return out
@@ -58,6 +59,7 @@ const TABLE_LABEL: Record<(typeof MERGE_REPOINT_TABLES)[number], string> = {
   person_places: 'Place links',
   person_vehicles: 'Vehicle links',
   person_relationships: 'Relationships',
+  narcotic_persons: 'Narcotics links',
   watchlist: 'Watchlist follows',
 }
 

@@ -346,7 +346,7 @@ export const MERGE_COMPARE_FIELDS = [
 /** The child/link tables person_merge repoints, in the RPC's order. */
 export const MERGE_REPOINT_TABLES = [
   'gang_members', 'media', 'legal_requests', 'mdt_wanted_projections', 'vehicles',
-  'case_intel_links', 'person_places', 'person_vehicles', 'person_relationships', 'watchlist',
+  'case_intel_links', 'person_places', 'person_vehicles', 'person_relationships', 'narcotic_persons', 'watchlist',
 ] as const
 
 export interface PersonMergePlan {

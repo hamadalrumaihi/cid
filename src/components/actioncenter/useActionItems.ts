@@ -111,7 +111,7 @@ export function useActionItems(): ActionItemsResult {
       const me = profile.id
       const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks, suggestionRows] =
         await Promise.all([
-          list('cases', { select: CASE_COLS }),
+          list('cases', { select: CASE_COLS, is: { archived_at: null } }),
           list('case_tasks', { select: TASK_COLS, eq: { assignee: me, done: false } }),
           list('transfer_requests', { select: TRANSFER_COLS, in: { status: TRANSFER_PENDING } }),
           list('case_access_requests', { select: ACCESS_COLS, eq: { status: 'pending' } }),

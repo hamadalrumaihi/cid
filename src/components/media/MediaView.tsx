@@ -71,6 +71,10 @@ export function MediaView() {
   const gangName = useCallback((id: string | null) => gangs.find((g) => g.id === id)?.name ?? null, [gangs])
 
   const items = useMemo(() => media.filter((m) => {
+    // Archived media is hidden from every vault view except the explicit
+    // Archived chip — same contract as the case Photos & Media tab.
+    if (filter === 'archived') return !!m.archived_at
+    if (m.archived_at) return false
     if (filter === 'all') return true
     if (filter === 'case') return !!m.case_id
     if (filter === 'gang') return !!m.gang_id
@@ -85,7 +89,7 @@ export function MediaView() {
 
   if (state !== 'in') return <Notice text="Sign in to view the evidence vault." />
 
-  const chips: [string, string][] = [['all', 'All'], ['case', 'By Case'], ['gang', 'By Gang'], ...PRESET_TAGS.map((t) => [`tag:${t}`, `🏷️ ${t}`] as [string, string])]
+  const chips: [string, string][] = [['all', 'All'], ['case', 'By Case'], ['gang', 'By Gang'], ...PRESET_TAGS.map((t) => [`tag:${t}`, `🏷️ ${t}`] as [string, string]), ['archived', 'Archived']]
 
   return (
     <div>
