@@ -27,6 +27,10 @@ interface DialogState {
   finish: (v: boolean | string | null) => void
 }
 
+/** Same focusable selector as Modal — the Tab trap below mirrors its cycling. */
+const FOCUSABLE =
+  'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
+
 let dlgId = 1
 const useDialogStore = create<DialogState>((set, get) => ({
   current: null,
@@ -72,6 +76,7 @@ function DialogCard({ dialog, finish }: { dialog: PendingDialog; finish: (v: boo
   const okRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
 
   const isPrompt = !!dialog.input
   const cancelVal = isPrompt ? null : false
@@ -89,6 +94,17 @@ function DialogCard({ dialog, finish }: { dialog: PendingDialog; finish: (v: boo
         e.preventDefault(); e.stopImmediatePropagation()
         if (document.activeElement === cancelRef.current) finish(cancelVal)
         else finish(isPrompt ? (inputRef.current?.value.trim() ?? '') : true)
+      } else if (e.key === 'Tab') {
+        // Tab trap mirroring Modal's cycling — focus must not escape into the
+        // underlying modal/page while the dialog is up.
+        const card = cardRef.current
+        if (!card) return
+        const f = Array.from(card.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((n) => n.offsetParent !== null)
+        if (!f.length) return
+        const firstEl = f[0], lastEl = f[f.length - 1]
+        if (!card.contains(document.activeElement)) { e.preventDefault(); e.stopImmediatePropagation(); firstEl.focus() }
+        else if (e.shiftKey && document.activeElement === firstEl) { e.preventDefault(); e.stopImmediatePropagation(); lastEl.focus() }
+        else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); e.stopImmediatePropagation(); firstEl.focus() }
       }
     }
     document.addEventListener('keydown', onKey, true)
@@ -105,15 +121,23 @@ function DialogCard({ dialog, finish }: { dialog: PendingDialog; finish: (v: boo
       className="fixed inset-0 z-[70] flex items-center justify-center bg-ink-950/70 p-4 backdrop-blur-sm"
       onMouseDown={(e) => { if (e.target === e.currentTarget) finish(cancelVal) }}
     >
-      <div className="w-full max-w-[26rem] rounded-2xl border border-white/10 bg-ink-850 p-6 shadow-glow" role="dialog" aria-modal="true">
-        {dialog.title && <h3 className="text-base font-bold text-white">{dialog.title}</h3>}
-        {dialog.message && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-300">{dialog.message}</p>}
+      <div
+        ref={cardRef}
+        className="w-full max-w-[26rem] rounded-2xl border border-white/10 bg-ink-850 p-6 shadow-glow"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={dialog.title ? 'cid-dialog-title' : undefined}
+        aria-describedby={dialog.message ? 'cid-dialog-message' : undefined}
+      >
+        {dialog.title && <h3 id="cid-dialog-title" className="text-base font-bold text-white">{dialog.title}</h3>}
+        {dialog.message && <p id="cid-dialog-message" className="mt-1 whitespace-pre-wrap text-sm text-slate-300">{dialog.message}</p>}
         {isPrompt && (
           <input
             ref={inputRef}
             value={val}
             onChange={(e) => setVal(e.target.value)}
             placeholder={dialog.input?.placeholder}
+            aria-label={dialog.input?.placeholder || dialog.title || 'Response'}
             className="mt-3 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
           />
         )}

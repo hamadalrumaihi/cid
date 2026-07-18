@@ -127,8 +127,10 @@ function OperationModal({ open, record, onClose, onSaved }: { open: boolean; rec
     if (res.error) toast(res.error.message, 'danger')
     else { toast('Operation saved.', 'success'); onSaved() }
   }
+  const dirty = () =>
+    name !== (record?.name ?? '') || status !== (record?.status ?? 'active') || description !== (record?.description ?? '')
   return (
-    <Modal open={open} onClose={onClose}>
+    <Modal open={open} onClose={onClose} dirty={dirty}>
       <div className="p-5">
         <ModalHeader title={record ? 'Edit operation' : 'New operation'} onClose={onClose} />
         <div className="space-y-3">
@@ -136,7 +138,7 @@ function OperationModal({ open, record, onClose, onSaved }: { open: boolean; rec
           <label className="block text-sm text-slate-300">Status<select value={status} onChange={(e) => setStatus(e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white"><option value="active">Active</option><option value="closed">Closed</option></select></label>
           <label className="block text-sm text-slate-300">Description<textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={5} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white" /></label>
         </div>
-        <div className="mt-5 flex justify-end gap-2"><Button onClick={onClose}>Cancel</Button><Button variant="primary" onClick={save}>Save</Button></div>
+        <div className="mt-5 flex justify-end gap-2"><Button onClick={onClose}>Cancel</Button><Button variant="primary" onAction={save}>Save</Button></div>
       </div>
     </Modal>
   )

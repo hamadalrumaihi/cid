@@ -16,9 +16,11 @@ import { useTableVersion } from '@/lib/realtime'
 import { ROLE_LABEL, canDecideTransferSide, roleLabel, type RoleParty } from '@/lib/roles'
 import { timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
+import { useAction } from '@/lib/useAction'
 import { uiPrompt, uiConfirm } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { ErrorNotice } from '@/components/ui/Notice'
 import { AssignModal } from '@/components/personnel/AssignModal'
 
 type RoleEvent = Tables<'role_events'>
@@ -39,6 +41,10 @@ export function PromotionsTransfers() {
   const [target, setTarget] = useState<RosterProfile | null>(null)
   const [events, setEvents] = useState<RoleEvent[]>([])
   const [transfers, setTransfers] = useState<TransferRow[]>([])
+  // Transfer-queue load state: a FAILED load must render an error notice,
+  // never the green "✓ No open transfers" all-clear (BUG-027).
+  const [transfersLoading, setTransfersLoading] = useState(true)
+  const [transfersError, setTransfersError] = useState(false)
   const [q, setQ] = useState('')
   const v = useTableVersion('profiles')
   const vE = useTableVersion('role_events')
@@ -47,7 +53,9 @@ export function PromotionsTransfers() {
   const refresh = useCallback(async () => {
     void fetchProfiles()
     try { setEvents(await list('role_events', { order: 'created_at', ascending: false })) } catch { setEvents([]) }
-    try { setTransfers(await list('transfer_requests', { order: 'created_at', ascending: false })) } catch { setTransfers([]) }
+    try { setTransfers(await list('transfer_requests', { order: 'created_at', ascending: false })); setTransfersError(false) }
+    catch { setTransfersError(true) }
+    finally { setTransfersLoading(false) }
   }, [fetchProfiles])
   useEffect(() => { const t = window.setTimeout(() => { void refresh() }, 0); return () => window.clearTimeout(t) }, [refresh, v, vE, vT])
 
@@ -59,7 +67,9 @@ export function PromotionsTransfers() {
 
   const open = useMemo(() => transfers.filter((t) => t.status in TRANSFER_BADGE), [transfers])
 
-  const act = async (t: TransferRow, action: 'approve_source' | 'approve_target' | 'complete' | 'reject' | 'cancel') => {
+  // Busy-guarded (useAction): the queue's buttons disable while a decision RPC
+  // is in flight, so a double-click can't record it twice.
+  const { run: act, busy: actBusy } = useAction(async (t: TransferRow, action: 'approve_source' | 'approve_target' | 'complete' | 'reject' | 'cancel') => {
     if (action === 'reject') {
       const note = await uiPrompt(`Reject the transfer of ${officerName(t.target_id) || 'this officer'} to ${t.to_bureau}?`, {
         title: 'Reject transfer', placeholder: 'Reason (recorded)', confirmText: 'Reject',
@@ -89,7 +99,7 @@ export function PromotionsTransfers() {
     if (r.error) { toast(`Action failed: ${r.error.message}`, 'danger'); return }
     toast(action === 'approve_source' ? 'Source approval recorded' : 'Transfer completed', 'success')
     void refresh()
-  }
+  })
 
   const SOURCE_LABEL: Record<string, string> = {
     membership_approval: 'membership approval',
@@ -155,16 +165,20 @@ export function PromotionsTransfers() {
                   </div>
                   <p className="mt-2 text-sm text-slate-300"><span className="text-xs font-semibold text-slate-400">Reason:</span> {t.reason}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {canSource && <Button size="sm" variant="primary" onClick={() => void act(t, 'approve_source')}>Approve (source)</Button>}
-                    {canTarget && <Button size="sm" variant="primary" onClick={() => void act(t, 'approve_target')}>Approve (destination)</Button>}
-                    {canComplete && <Button size="sm" onClick={() => void act(t, 'complete')}>Complete now</Button>}
-                    {canReject && <Button size="sm" variant="danger" onClick={() => void act(t, 'reject')}>Reject</Button>}
-                    {canCancel && <Button size="sm" onClick={() => void act(t, 'cancel')}>Cancel</Button>}
+                    {canSource && <Button size="sm" variant="primary" disabled={actBusy} onClick={() => void act(t, 'approve_source')}>Approve (source)</Button>}
+                    {canTarget && <Button size="sm" variant="primary" disabled={actBusy} onClick={() => void act(t, 'approve_target')}>Approve (destination)</Button>}
+                    {canComplete && <Button size="sm" disabled={actBusy} onClick={() => void act(t, 'complete')}>Complete now</Button>}
+                    {canReject && <Button size="sm" variant="danger" disabled={actBusy} onClick={() => void act(t, 'reject')}>Reject</Button>}
+                    {canCancel && <Button size="sm" disabled={actBusy} onClick={() => void act(t, 'cancel')}>Cancel</Button>}
                   </div>
                 </div>
               )
             })}
           </div>
+        ) : transfersLoading ? (
+          <p className="text-sm text-slate-400">Loading transfers…</p>
+        ) : transfersError ? (
+          <ErrorNotice message="Could not load the transfer queue." onRetry={() => { void refresh() }} />
         ) : <p className="text-sm text-emerald-300">✓ No open transfers.</p>}
       </section>
 

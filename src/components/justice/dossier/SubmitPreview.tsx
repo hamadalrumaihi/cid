@@ -8,6 +8,7 @@
 import type { LegalExhibit, LegalRequest } from '@/lib/justice'
 import { humanize } from '@/lib/legalWorkflow'
 import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { ClassificationBadge } from '../legalShared'
 import { exhibitFlag, type CaseRecords, type DraftShape } from './dossierShared'
 
@@ -25,10 +26,12 @@ export function SubmitPreview({ r, draft, exhibits, records, checklist, busy, on
   const flagged = exhibits.map((e) => ({ e, flag: exhibitFlag(e, records) }))
   const brokenCount = flagged.filter((x) => x.flag).length
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="Packet preview before submission">
-      <div className="max-h-[85vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl border border-white/10 bg-ink-950 p-5">
+    // Shared Modal engine: focus trap, Escape + backdrop close (→ onCancel),
+    // focus restore and dialog aria come from the primitive (audit a11y).
+    <Modal open onClose={onCancel} wide>
+      <div className="space-y-4 p-5">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-sm font-bold text-white">Packet preview — submit for CID review</h3>
+          <h3 id="cid-modal-title" className="text-sm font-bold text-white">Packet preview — submit for CID review</h3>
           <span className="font-mono text-xs text-blue-300">{r.request_number}</span>
           <ClassificationBadge value={draft.classification || r.classification} />
         </div>
@@ -87,6 +90,6 @@ export function SubmitPreview({ r, draft, exhibits, records, checklist, busy, on
           <Button variant="primary" disabled={busy || blocked} onClick={onConfirm}>Confirm &amp; submit to CID</Button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }

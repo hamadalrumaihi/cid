@@ -255,7 +255,7 @@ function FollowUpModal({ open, c, onClose, onChanged }: { open: boolean; c: Case
     else { toast(clear ? 'Follow-up cleared.' : 'Follow-up saved.', 'success'); onClose(); onChanged() }
   }
   return (
-    <Modal open={open} onClose={onClose}>
+    <Modal open={open} onClose={onClose} dirty={() => date !== (c.follow_up_at?.slice(0, 10) ?? '')}>
       <div className="p-5">
         <ModalHeader title="Follow-up" onClose={onClose} />
         <input type="date" aria-label="Follow-up date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white" />

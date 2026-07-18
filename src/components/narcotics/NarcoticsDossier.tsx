@@ -40,6 +40,7 @@ import {
   type ActivityData, type CasesData, type IntelligenceData, type MediaRow, type NarcoticCore,
   type NarcoticCounts, type PeopleData, type PlacesData, type SalesData, type SeizuresData,
 } from './narcoticsLoad'
+import { PROVISIONAL_STATUSES } from './narcoticsRegistry'
 import { NarcoticOverview, IdentificationSection, PackagingSection, IntelligenceSection } from './NarcoticsSections'
 import { ActivitySection, CasesSection, MediaSection, PeopleSection, PlacesSection, SeizuresSection } from './NarcoticsRelations'
 import { SalesSection } from './NarcoticsSalesSection'
@@ -185,7 +186,7 @@ export function NarcoticsDossier({ drugId, onClose }: { drugId: string; onClose:
   const aliases = core?.aliases ?? []
   const merged = !!n?.merged_into
   const mayEdit = canEdit && !merged
-  const provisional = (n?.status ?? '').toLowerCase() === 'provisional'
+  const provisional = !!n && PROVISIONAL_STATUSES.has(n.status)
 
   const setRepresentative = useCallback(async (m: MediaRow) => {
     if (!n) return

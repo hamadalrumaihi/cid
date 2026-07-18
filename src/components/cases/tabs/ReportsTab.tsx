@@ -115,7 +115,7 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
         <div className="p-5">
           <ModalHeader title={editing ? FORM_SCHEMAS[editing.template]?.title || 'Report' : 'Report'} onClose={() => setEditing(null)} />
           {editing && <FormEditor template={editing.template} caseId={c.id} reportId={editing.report?.id} values={editing.values} onChange={(values) => { setEditing({ ...editing, values }); Drafts.save(draftKey(editing.template, editing.report), values) }} />}
-          <div className="mt-5 flex justify-end gap-2"><Button onClick={() => setEditing(null)}>Cancel</Button><Button variant="primary" onClick={save}>Save</Button></div>
+          <div className="mt-5 flex justify-end gap-2"><Button onClick={() => setEditing(null)}>Cancel</Button><Button variant="primary" onAction={save}>Save</Button></div>
         </div>
       </Modal>
       <Modal open={!!confirm} onClose={() => setConfirm(null)}>

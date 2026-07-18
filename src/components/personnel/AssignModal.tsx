@@ -93,7 +93,9 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
     if (bd !== (p.badge_number || '')) changes.badge_number = bd || null
     if (loa !== !!p.loa) { changes.loa = loa; changes.loa_since = loa ? new Date().toISOString() : null }
     if (!Object.keys(changes).length) { toast('No profile changes to save.', 'info'); return }
+    setBusy(true)
     const res = await updateNoSelect('profiles', p.id, changes)
+    setBusy(false)
     if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
     toast('Profile details saved', 'success')
     onChanged()
@@ -137,7 +139,9 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
       { confirmText: next ? 'Activate' : 'Deactivate', danger: !next },
     )
     if (!ok) return
+    setBusy(true)
     const res = await rpc('assign_member', { target: p.id, set_active: next })
+    setBusy(false)
     if (res.error) { toast(`Update failed: ${res.error.message}`, 'danger'); return }
     toast(next ? `${p.display_name} activated` : `${p.display_name} deactivated`, next ? 'success' : 'warn')
     onChanged(); onClose()
@@ -154,7 +158,9 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
       { title: 'Deny login access', placeholder: 'Reason shown to the member (optional)', confirmText: 'Deny access' },
     )
     if (reasonTxt === null) return
+    setBusy(true)
     const res = await rpc('deny_member_login', { p_target: p.id, p_reason: reasonTxt })
+    setBusy(false)
     if (res.error) { toast(`Deny failed: ${res.error.message}`, 'danger'); return }
     toast(`${p.display_name || 'Member'} denied access`, 'warn')
     onChanged(); onClose()
@@ -166,7 +172,9 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
       { confirmText: 'Restore access' },
     )
     if (!ok) return
+    setBusy(true)
     const res = await rpc('restore_member_login', { p_target: p.id })
+    setBusy(false)
     if (res.error) { toast(`Restore failed: ${res.error.message}`, 'danger'); return }
     toast(`${p.display_name || 'Member'} access restored`, 'success')
     onChanged(); onClose()
@@ -179,7 +187,9 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
       { confirmText: 'Remove permanently', danger: true },
     )
     if (!ok) return
+    setBusy(true)
     const res = await rpc('admin_remove_member', { p_target: p.id, ...(reason.trim() ? { p_reason: reason.trim() } : {}) })
+    setBusy(false)
     if (res.error) { toast(`Remove failed: ${res.error.message}`, 'danger'); return }
     toast(`${p.display_name || 'Member'} permanently removed`, 'warn')
     onChanged(); onClose()
@@ -217,7 +227,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
         <label className="flex items-center gap-2 text-sm text-slate-200">
           <input type="checkbox" checked={loa} onChange={(e) => setLoa(e.target.checked)} className="accent-amber-500" /> On LOA (Leave of Absence) — informational; auto-routes sign-offs around this officer
         </label>
-        <Button className="mt-3 w-full" onClick={() => void saveProfile()}>Save profile details</Button>
+        <Button className="mt-3 w-full" disabled={busy} onClick={() => void saveProfile()}>Save profile details</Button>
 
         <div className="mt-4 border-t border-white/5 pt-3">
           <p className="mb-2 text-[11px] uppercase tracking-wider text-slate-400">Administrative actions</p>
@@ -230,7 +240,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
               title={transferDestinations.length ? undefined : 'You cannot initiate a transfer for this member'}>
               Transfer department
             </Button>
-            <Button size="sm" variant={p.active ? 'danger' : 'primary'} onClick={() => void setActive(!p.active)}>
+            <Button size="sm" variant={p.active ? 'danger' : 'primary'} disabled={busy} onClick={() => void setActive(!p.active)}>
               {p.active ? 'Deactivate' : 'Activate'}
             </Button>
             {actor.is_owner && p.active && me?.id !== p.id && (
@@ -320,14 +330,14 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
           <p className="mb-2 text-[10px] text-slate-500">Two different actions: <b className="text-slate-400">Deny login</b> blocks the door but keeps the account; <b className="text-slate-400">Permanently remove</b> erases the membership (history preserved).</p>
           {canDenyThis && (p.login_denied ? (
             <div className="mb-2">
-              <button onClick={() => void restoreLogin()} className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 py-2.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/10">
+              <button onClick={() => void restoreLogin()} disabled={busy} className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 py-2.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/10 disabled:opacity-60">
                 Restore login access
               </button>
               <p className="mt-1.5 text-[10px] text-slate-500">This member is currently <b className="text-rose-300">denied access</b>. Restoring returns them to inactive so they can request access again.</p>
             </div>
           ) : (
             <div className="mb-2">
-              <button onClick={() => void denyLogin()} className="w-full rounded-lg border border-rose-500/30 bg-rose-500/5 py-2.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">
+              <button onClick={() => void denyLogin()} disabled={busy} className="w-full rounded-lg border border-rose-500/30 bg-rose-500/5 py-2.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-60">
                 Deny login access
               </button>
               <p className="mt-1.5 text-[10px] text-slate-500">Blocks the portal with an “Access denied” screen (reason shown) and stops them submitting a membership request. Reversible.</p>
@@ -335,7 +345,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
           ))}
           {canRemoveMember(actor, p) && (
             <>
-              <button onClick={() => void removePermanently()} className="w-full rounded-lg border border-rose-500/30 bg-rose-500/5 py-2.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">
+              <button onClick={() => void removePermanently()} disabled={busy} className="w-full rounded-lg border border-rose-500/30 bg-rose-500/5 py-2.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-60">
                 Permanently remove from CID
               </button>
               <p className="mt-1.5 text-[10px] text-slate-500">

@@ -554,7 +554,7 @@ export function AddPersonMediaModal({ person, onClose, onSaved }: { person: Pers
   }
 
   return (
-    <Modal open onClose={onClose}>
+    <Modal open onClose={onClose} dirty={() => !!(title.trim() || url.trim())}>
       <div className="p-6">
         <ModalHeader title={`Add media — ${person.name}`} onClose={onClose} />
         <div className="space-y-3">

@@ -11,7 +11,6 @@ import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab, type SectionTabGroup } from '@/components/ui/SectionTabs'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { countRows, list, rpc, update, withRetry } from '@/lib/db'
-import { todayISO } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useOperationsStore } from '@/lib/operations'
 import { assessCase, ricoTabVisible } from '@/lib/caseWorkflow'
@@ -26,7 +25,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { useNow } from '@/lib/useNow'
 import { LEGAL_LIST_COLS, buildLegalViewer, useMyProsecutorBureaus } from '@/components/justice/legalShared'
-import { enableRicoSession, isPinnedCase, pushRecentCase, ricoSessionEnabled, togglePinCase } from './caseUtils'
+import { confirmCaseClose, enableRicoSession, isPinnedCase, pushRecentCase, ricoSessionEnabled, togglePinCase } from './caseUtils'
 import { CaseModal } from './CaseModal'
 import { CaseCommandHeader } from './CaseCommandHeader'
 import { ReassignBureauModal } from './ReassignBureauModal'
@@ -97,6 +96,10 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const { profile, canEdit, canDelete, isCommand, isOwner } = auth
   const operations = useOperationsStore((s) => s.operations)
   const [c, setCase] = useState<CaseRow | null>(null)
+  // The id this view successfully loaded at least once — distinguishes a case
+  // that vanished on refetch (access ended: joint expiry, RLS change) from one
+  // that never resolved at all.
+  const [everLoadedId, setEverLoadedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [edit, setEdit] = useState(false)
   const [handover, setHandover] = useState(false)
@@ -125,7 +128,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     try {
       const rows = await withRetry(() => list('cases', { eq: { id } }))
       setCase(rows[0] ?? null)
-      if (rows[0]) pushRecentCase(rows[0].id)
+      if (rows[0]) { setEverLoadedId(id); pushRecentCase(rows[0].id) }
     } catch (e) {
       toast(e instanceof Error ? e.message : e, 'danger')
     } finally {
@@ -205,7 +208,15 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const ricoOn = ricoTabVisible({ hasData: (wf?.rico ?? 0) > 0, sessionEnabled: ricoSessionEnabled(id), activeTab: tab })
 
   if (loading) return <DetailSkeleton />
-  if (!c) return <p className="rounded-2xl border border-white/10 bg-ink-900/50 p-6 text-slate-300">Case not found.</p>
+  if (!c) {
+    return (
+      <p className="rounded-2xl border border-white/10 bg-ink-900/50 p-6 text-slate-300">
+        {everLoadedId === id
+          ? 'This case is no longer available to you — your access may have ended.'
+          : 'Case not found.'}
+      </p>
+    )
+  }
 
   const op = operations.find((x) => x.id === c.operation_id)
   const pinned = isPinnedCase(c.id)
@@ -223,26 +234,9 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const quickStatus = async (status: CaseRow['status']) => {
     // Closing stamps closed_at and takes the case off the active board — worth
     // a beat of confirmation. It stays reversible (set it back to reopen).
+    // The pre-close checklist confirm is shared with the board (caseUtils).
     if (status === 'closed' && c.status !== 'closed') {
-      // Pre-close checklist: surface unresolved work via the shared evaluator
-      // so a case isn't closed over open sign-off / tasks / legal / drafts. This
-      // is advisory — command can still close over it (reason lives in history).
-      let blockerLines = ''
-      try {
-        const [tasks, reports, legal, liveMedia, persisted] = await Promise.all([
-          list('case_tasks', { eq: { case_id: c.id } }),
-          list('reports', { eq: { case_id: c.id } }),
-          list('legal_requests', { eq: { case_id: c.id } }).catch(() => []),
-          countRows('media', { eq: { case_id: c.id }, is: { archived_at: null } }),
-          list('case_blockers', { eq: { case_id: c.id, status: 'open' } }).catch(() => [] as BlockerRow[]),
-        ])
-        const { blockers } = assessCase({ c, tasks, reports, legal, mediaCount: liveMedia, persistedBlockers: persisted, meId: profile?.id ?? null, todayISO: todayISO() })
-        if (blockers.length) blockerLines = '\n\nStill open on this case:\n' + blockers.map((b) => `• ${b.label}`).join('\n') + '\n\nClose anyway?'
-      } catch { /* checklist is best-effort; fall back to the plain confirm */ }
-      const ok = await uiConfirm(
-        `Close ${c.case_number}? It will leave the active case board. You can reopen it later.${blockerLines}`,
-        { title: 'Close case', confirmText: blockerLines ? 'Close anyway' : 'Close case', danger: !!blockerLines },
-      )
+      const ok = await confirmCaseClose(c, profile?.id ?? null)
       if (!ok) { void fetchCase(); return }
     }
     const res = await update('cases', c.id, { status, closed_at: status === 'closed' && !c.closed_at ? new Date().toISOString() : c.closed_at })

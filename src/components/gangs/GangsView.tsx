@@ -112,9 +112,9 @@ export function GangsView() {
     for (const gp of gangPlaces) { const s = map.get(gp.gang_id); if (s) { s.places++; push(gp.gang_id, placeName.get(gp.place_id)) } }
     for (const l of intelLinks) {
       const s = map.get(l.ref_id); if (!s) continue
-      const st = caseStatus.get(l.ref_id)
+      const st = caseStatus.get(l.case_id)
       if (st && !['closed', 'archived'].includes(st)) s.openCases++
-      push(l.ref_id, caseOptions.find((c) => c.id === l.ref_id)?.case_number)
+      push(l.ref_id, caseOptions.find((c) => c.id === l.case_id)?.case_number)
     }
     for (const [id, parts] of searchParts) { const s = map.get(id); if (s) s.search = normalizeName(parts.join(' ')) }
     return map

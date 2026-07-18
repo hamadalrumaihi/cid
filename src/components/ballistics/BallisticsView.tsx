@@ -242,8 +242,14 @@ function BenchModal({ record, cases, canDelete, onClose, onSaved }: {
     onSaved()
   }
 
+  const dirty = () =>
+    name !== (record?.name ?? '') || type !== (record?.bench_type ?? 'street') ||
+    tier !== (record?.tier ?? (record ? '' : 'Low')) || heat !== (record?.heat ?? '') ||
+    caseId !== (record?.case_id ?? '') || outputs !== (record?.outputs ?? []).join('\n') ||
+    components !== (record?.components ?? []).join('\n')
+
   return (
-    <Modal open onClose={onClose} wide>
+    <Modal open onClose={onClose} wide dirty={dirty}>
       <ModalHeader title={record ? 'Edit Weapon Bench' : 'New Weapon Bench'} onClose={onClose} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="sm:col-span-2"><label htmlFor="bench-name" className={labelCls}>Name *</label><input id="bench-name" value={name} onChange={(e) => setName(e.target.value)} className={inputCls} /></div>
@@ -326,8 +332,12 @@ function FootprintModal({ record, cases, gangs, canDelete, onClose, onSaved }: {
     onSaved()
   }
 
+  const dirty = () =>
+    signature !== (record?.signature ?? '') || weapon !== (record?.weapon ?? '') ||
+    gangId !== (record?.gang_id ?? '') || caseId !== (record?.case_id ?? '')
+
   return (
-    <Modal open onClose={onClose}>
+    <Modal open onClose={onClose} dirty={dirty}>
       <ModalHeader title={record ? 'Edit Ballistic Footprint' : 'New Ballistic Footprint'} onClose={onClose} />
       <div className="space-y-3">
         <div>

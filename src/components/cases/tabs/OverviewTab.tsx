@@ -5,12 +5,13 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
-import { Field, Textarea } from '@/components/ui/Field'
+import { Field, Input, Textarea } from '@/components/ui/Field'
 import { insert, list, deleteWithUndo, rpc } from '@/lib/db'
 import { caseLink } from '@/lib/caseLinks'
 import { fmtDate, timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
-import { officerName, activeProfiles, useProfilesStore } from '@/lib/profiles'
+import { officerName, useProfilesStore } from '@/lib/profiles'
+import { useAction } from '@/lib/useAction'
 import { bureauLabel, roleLabel } from '@/lib/roles'
 import { useTableVersion } from '@/lib/realtime'
 import type { CaseAssessment, ClosureChecklistItem, NextAction } from '@/lib/caseWorkflow'
@@ -67,24 +68,16 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
     }
   }, [wf, seenAt])
 
-  const [assignBusy, setAssignBusy] = useState(false)
-  const addAssignment = async () => {
-    if (assignBusy) return
-    const officer = activeProfiles()[0]?.id
-    if (!officer) { toast('No active officers found.', 'warn'); return }
-    setAssignBusy(true)
-    const res = await insert('case_assignments', { case_id: c.id, officer_id: officer, role: 'support' })
-    setAssignBusy(false)
-    if (res.error) toast(res.error.message, 'danger')
-    else { toast('Officer assigned.', 'success'); void refresh() }
-  }
+  const [addSupportOpen, setAddSupportOpen] = useState(false)
 
   // Joint rows render in their own panel below; the standard panel keeps its
   // existing behavior for 'standard'/'manual_access' rows only.
   const standardRows = assignments.filter((a) => a.assignment_source !== 'joint_case')
   const jointRows = assignments.filter((a) => a.assignment_source === 'joint_case')
-  const activeJoint = jointRows.filter((a) => !a.removed_at)
-  const removedJoint = jointRows.filter((a) => a.removed_at)
+  // Active = not removed AND not expired — mirrors the server's access rule, so
+  // an expired member never renders as if they still had access.
+  const activeJoint = jointRows.filter((a) => isActiveAssignment(a))
+  const removedJoint = jointRows.filter((a) => !isActiveAssignment(a))
   const showJointPanel = c.is_joint_case || jointRows.length > 0
   // Client mirror of the server authority: command, case lead/creator, or an
   // own ACTIVE joint-lead assignment. RLS + the RPCs enforce the real rule.
@@ -119,7 +112,7 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
           <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-bold text-white">Assigned Officers</h3>
-              {canEdit && <Button onClick={() => void addAssignment()} disabled={assignBusy}>Add support</Button>}
+              {canEdit && <Button onClick={() => setAddSupportOpen(true)}>Add support</Button>}
             </div>
             <div className="flex flex-wrap gap-2">
               {standardRows.map((a) => (
@@ -130,6 +123,14 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
               ))}
               {!standardRows.length && <p className="text-sm text-slate-500">No support assignments recorded.</p>}
             </div>
+            {addSupportOpen && (
+              <AddSupportModal
+                caseId={c.id}
+                assignments={assignments}
+                onClose={() => setAddSupportOpen(false)}
+                onAdded={() => { setAddSupportOpen(false); void refresh() }}
+              />
+            )}
           </div>
           {/* The full legal panel moved to the Legal tab; Overview keeps a
               one-line pointer (count = the same shell-fetched, RLS-scoped
@@ -168,6 +169,92 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
         </div>
       </div>
     </div>
+  )
+}
+
+/* ── Add support officer ────────────────────────────────────────────────────
+ * Roster-search picker (the JointCaseModal idiom, compact): type to filter the
+ * active roster, click an officer to assign them with role 'support'. Officers
+ * with an ACTIVE assignment are excluded; a unique-violation from a stale list
+ * surfaces as a friendly "already on this case" instead of the raw constraint. */
+function AddSupportModal({ caseId, assignments, onClose, onAdded }: {
+  caseId: string
+  assignments: AssignmentRow[]
+  onClose: () => void
+  onAdded: () => void
+}) {
+  const profiles = useProfilesStore((s) => s.profiles)
+  const rosterLoaded = useProfilesStore((s) => s.loaded)
+  const fetchProfiles = useProfilesStore((s) => s.fetch)
+  const [query, setQuery] = useState('')
+  useEffect(() => { if (!rosterLoaded) void fetchProfiles() }, [rosterLoaded, fetchProfiles])
+
+  const assignedIds = useMemo(
+    () => new Set(assignments.filter(isActiveAssignment).map((a) => a.officer_id)),
+    [assignments],
+  )
+  const options = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return profiles
+      .filter((p) => p.active && !p.is_system && !assignedIds.has(p.id))
+      .filter((p) => !q
+        || (p.display_name ?? '').toLowerCase().includes(q)
+        || (p.badge_number ?? '').toLowerCase().includes(q))
+      .sort((a, b) => (a.display_name || '').localeCompare(b.display_name || ''))
+  }, [profiles, assignedIds, query])
+
+  const add = useAction(async (officerId: string) => {
+    const res = await insert('case_assignments', { case_id: caseId, officer_id: officerId, role: 'support' })
+    if (res.error) {
+      if (res.error.code === '23505') toast(`${officerName(officerId) || 'That officer'} is already on this case.`, 'warn')
+      else toast(res.error.message, 'danger')
+      return
+    }
+    toast(`${officerName(officerId) || 'Officer'} assigned as support.`, 'success')
+    onAdded()
+  })
+
+  return (
+    <Modal open onClose={onClose}>
+      <div className="p-5">
+        <ModalHeader title="Add support officer" onClose={onClose} />
+        <Field label="Search officers" hint="Click an officer to assign them to this case as support.">
+          {(id) => (
+            <Input
+              id={id}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Name or badge number…"
+              autoComplete="off"
+            />
+          )}
+        </Field>
+        <ul aria-label="Active officers" className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-white/10 bg-ink-950/70">
+          {options.map((p) => (
+            <li key={p.id}>
+              <button
+                onClick={() => void add.run(p.id)}
+                disabled={add.busy}
+                className="flex min-h-[44px] w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-white">{p.display_name || 'Officer'}</span>
+                  <span className="block truncate text-xs text-slate-400">
+                    {[p.badge_number ? `Badge ${p.badge_number}` : null, bureauLabel(p.division), roleLabel(p.role)].filter(Boolean).join(' · ')}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+          {!options.length && (
+            <li className="px-3 py-3 text-sm text-slate-400">
+              {rosterLoaded ? 'No eligible officers match.' : 'Loading roster…'}
+            </li>
+          )}
+        </ul>
+      </div>
+    </Modal>
   )
 }
 
@@ -391,7 +478,7 @@ function JointMembersPanel({ c, assignments, activeJoint, removedJoint, manages,
               <li key={a.id} className="text-xs text-slate-400">
                 <span className="text-slate-300">{officerName(a.officer_id) || 'Officer'}</span>
                 {a.joint_role ? ` · ${a.joint_role}` : ''}
-                {a.removed_at ? ` — removed ${fmtDate(a.removed_at)}` : ''}
+                {a.removed_at ? ` — removed ${fmtDate(a.removed_at)}` : a.expires_at ? ` — access expired ${fmtDate(a.expires_at)}` : ''}
                 {a.removal_reason ? ` · ${a.removal_reason}` : ''}
               </li>
             ))}

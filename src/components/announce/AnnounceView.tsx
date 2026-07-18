@@ -19,7 +19,7 @@ import { fmtDateTime } from '@/lib/format'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
-import { EmptyState } from '@/components/ui/Notice'
+import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { AnnouncementModal } from './AnnouncementModal'
 import {
@@ -38,6 +38,10 @@ export function AnnounceView() {
   /** null = closed · 'new' = post · row = edit. */
   const [editing, setEditing] = useState<AnnouncementRow | 'new' | null>(null)
   const [viewing, setViewing] = useState<AnnouncementRow | null>(null)
+  // First-load gate: never flash "No announcements yet" (or dress a failed
+  // load up as it) before the initial fetch resolves (BUG-027).
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const v = useTableVersion('announcements')
 
   const refresh = useCallback(async () => {
@@ -56,7 +60,9 @@ export function AnnounceView() {
       ])
       setRows(anns)
       setCaseOptions(cases)
-    } catch { setRows([]); toast("Couldn't load announcements — check your connection.", 'danger') }
+      setLoadError(false)
+    } catch { setLoadError(true); toast("Couldn't load announcements — check your connection.", 'danger') }
+    finally { setLoading(false) }
   }, [state, fetchProfiles])
 
   useEffect(() => {
@@ -113,8 +119,12 @@ export function AnnounceView() {
       <div className="space-y-4">
         {state !== 'in' ? (
           <p className="text-sm text-slate-400">Sign in to view announcements.</p>
+        ) : loading ? (
+          <Notice text="Loading announcements…" />
         ) : !items.length ? (
-          dismissedCount ? (
+          loadError ? (
+            <ErrorNotice message="Couldn't load announcements." onRetry={() => { void refresh() }} />
+          ) : dismissedCount ? (
             <EmptyState
               icon="📣"
               title="All announcements dismissed"

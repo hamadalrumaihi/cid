@@ -183,8 +183,14 @@ export function MemberModal({ gangId, member, people, cases, canDelete, onClose,
     onSaved()
   }
 
+  const dirty = () =>
+    name !== (member?.name || '') || rank !== (member?.rank || 'Soldier') || callsign !== (member?.callsign || '') ||
+    status !== (member?.status || 'At Large') || personId !== (member?.person_id || '') || caseId !== (member?.case_id || '') ||
+    ccw !== !!member?.ccw || vch !== String(member?.vch ?? 0) || felonies !== String(member?.felony_count ?? 0) ||
+    mugshot !== (member?.mugshot_url || '') || provenance !== (member?.provenance || '')
+
   return (
-    <Modal open wide onClose={onClose}>
+    <Modal open wide onClose={onClose} dirty={dirty}>
       <div className="max-h-[85vh] overflow-y-auto p-6">
         <ModalHeader title={`${member ? 'Edit' : 'Add'} Member`} onClose={onClose} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -263,8 +269,11 @@ export function TurfModal({ gangId, onClose, onSaved }: { gangId: string; onClos
     onSaved()
   }
 
+  const dirty = () =>
+    !!(block || hotspot || status || confidence || firstObs || lastConf || notes) || density !== 'low'
+
   return (
-    <Modal open wide onClose={onClose}>
+    <Modal open wide onClose={onClose} dirty={dirty}>
       <div className="p-6">
         <ModalHeader title="Add Turf Block" onClose={onClose} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -454,7 +463,7 @@ export function AddGangPhotoModal({ gang, onClose, onSaved }: { gang: GangRow; o
   }
 
   return (
-    <Modal open onClose={onClose}>
+    <Modal open onClose={onClose} dirty={() => !!(title.trim() || url.trim())}>
       <div className="p-6">
         <ModalHeader title={`Add photo — ${gang.name}`} onClose={onClose} />
         <div className="space-y-3">

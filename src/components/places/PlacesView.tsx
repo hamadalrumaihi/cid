@@ -9,6 +9,7 @@
  * 'place' targets, batched in one RLS-trimmed fetch — sealed or out-of-scope
  * requests simply never appear). */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import type { Database, Json, Tables } from '@/lib/database.types'
 import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
@@ -62,6 +63,10 @@ const PRODUCTION_STAGES = ['Cultivation', 'Processing', 'Packaging', 'Distributi
 
 export function PlacesView() {
   const { state, canEdit, canDelete } = useAuth()
+  const sp = useSearchParams()
+  // `?q=` seeds the filter — how entity chips / global search land here
+  // prefiltered (the VehiclesView idiom; Suspense comes from the route).
+  const [query, setQuery] = useState(() => sp.get('q') ?? '')
   const [places, setPlaces] = useState<PlaceRow[]>([])
   const [gangs, setGangs] = useState<GangRow[]>([])
   const [cases, setCases] = useState<CaseOption[]>([])
@@ -138,6 +143,12 @@ export function PlacesView() {
     return m
   }, [photos])
 
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return places
+    return places.filter((p) => [p.name, p.area].some((s) => (s || '').toLowerCase().includes(q)))
+  }, [places, query])
+
   const toggleSelect = (id: string, on: boolean) =>
     setSelected((sel) => { const next = new Set(sel); if (on) next.add(id); else next.delete(id); return next })
 
@@ -177,6 +188,16 @@ export function PlacesView() {
                   <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
                 </span>
               )}
+              {places.length > 0 && (
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Filter name or area…"
+                  aria-label="Filter places"
+                  className="w-56 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500"
+                />
+              )}
               {canEdit && (
                 <Button variant="primary" onClick={() => setEditor('new')}>
                   + New Location
@@ -212,8 +233,10 @@ export function PlacesView() {
             hint={canEdit ? 'Add a drug lab, stash house, dead drop or front with the New Location button.' : undefined}
             className="lg:col-span-2"
           />
+        ) : !rows.length ? (
+          <Notice text="No locations match your search." className="lg:col-span-2" />
         ) : (
-          places.map((place) => (
+          rows.map((place) => (
             <PlaceCard
               key={place.id}
               place={place}
@@ -409,16 +432,22 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, onOpenPhoto, 
             const safe = safeUrl(p.external_url || p.storage_path || '')
             if (!safe) return null
             return (
-              // eslint-disable-next-line @next/next/no-img-element -- external evidence URL
-              <img
+              <button
                 key={p.id}
-                src={safe}
-                alt={p.title}
-                title={p.title}
-                loading="lazy"
+                type="button"
                 onClick={() => onOpenPhoto(p)}
-                className="h-20 w-28 cursor-zoom-in rounded-lg border border-white/10 object-cover transition hover:brightness-110"
-              />
+                aria-label={`Preview ${p.title}`}
+                title={p.title}
+                className="cursor-zoom-in rounded-lg transition hover:brightness-110"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- external evidence URL */}
+                <img
+                  src={safe}
+                  alt=""
+                  loading="lazy"
+                  className="h-20 w-28 rounded-lg border border-white/10 object-cover"
+                />
+              </button>
             )
           })}
         </div>
@@ -554,16 +583,25 @@ function AttachPlaceModal({ place, caseOptions, onClose }: { place: PlaceRow; ca
 
   const go = async () => {
     if (!caseId) return
-    const res = await insert('case_messages', {
+    // The durable record first (the RegistryAttachModal contract): a
+    // case_intel_links row the case Intel tab and search read. The chat post
+    // below is only a courtesy breadcrumb.
+    const link = await insert('case_intel_links', { case_id: caseId, kind: 'place', ref_id: place.id })
+    if (link.error) {
+      if (link.error.code === '23505') toast(`"${place.name}" is already linked to that case.`, 'warn')
+      else toast(`Attach failed: ${link.error.message}`, 'danger')
+      return
+    }
+    const num = sorted.find((c) => c.id === caseId)?.case_number || 'case'
+    const chat = await insert('case_messages', {
       case_id: caseId,
       author_name: profile?.display_name || 'CID',
       body: `Intel reference - ${label}`,
       mentions: [],
       links: [],
     })
-    if (res.error) { toast(`Attach failed: ${res.error.message}`, 'danger'); return }
-    const num = sorted.find((c) => c.id === caseId)?.case_number || 'case'
-    toast(`Reference posted to ${num} channel`, 'success')
+    if (chat.error) toast(`Linked to ${num}, but the channel note could not be posted.`, 'warn')
+    else toast(`"${place.name}" linked to ${num}`, 'success')
     onClose()
   }
 
@@ -571,14 +609,14 @@ function AttachPlaceModal({ place, caseOptions, onClose }: { place: PlaceRow; ca
     <Modal open onClose={onClose}>
       <div className="p-6">
         <ModalHeader title="Attach to case" onClose={onClose} />
-        <p className="mb-3 text-sm text-slate-400">Posts a reference to <span className="text-white">{label}</span> into the case channel.</p>
+        <p className="mb-3 text-sm text-slate-400">Links <span className="text-white">{label}</span> to the case record and posts a reference into the case channel.</p>
         {sorted.length ? (
           <>
             <select value={caseId} onChange={(e) => setCaseId(e.target.value)} aria-label="Case to attach the reference to" className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm text-white outline-none focus:border-badge-500">
               {sorted.map((c) => <option key={c.id} value={c.id}>{c.case_number} · {c.title || ''}</option>)}
             </select>
-            <Button variant="primary" className="mt-4 w-full" onClick={() => void go()}>
-              Attach reference
+            <Button variant="primary" className="mt-4 w-full" onAction={go}>
+              Attach to case
             </Button>
           </>
         ) : (

@@ -87,7 +87,7 @@ export function RegistryAttachModal({ person, onClose }: { person: RegistryPerso
   }
 
   return (
-    <Modal open onClose={onClose}>
+    <Modal open onClose={onClose} dirty={() => !linkedCaseId && !!(caseId || role || note.trim())}>
       <div className="p-6">
         <ModalHeader title="Attach to case" onClose={onClose} />
         {linkedCaseId ? (

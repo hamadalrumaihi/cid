@@ -4,9 +4,9 @@ import { update } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { officerName } from '@/lib/profiles'
 import { caseStatusTint } from '@/lib/signoff'
-import { uiConfirm } from '@/components/ui/dialog'
 import { toast } from '@/lib/toast'
-import { isStaleCase } from './caseUtils'
+import { useAction } from '@/lib/useAction'
+import { confirmCaseClose, isStaleCase } from './caseUtils'
 import { StaleBadge } from './StaleBadge'
 
 type CaseRow = Tables<'cases'>
@@ -20,21 +20,26 @@ const BOARD_COLS = [
 const STATUS_LABEL: Record<string, string> = { open: 'Open', active: 'Active', cold: 'Cold', closed: 'Closed' }
 
 export function CaseBoard({ items, canEdit, onOpen, onMoved }: { items: CaseRow[]; canEdit: boolean; onOpen: (id: string) => void; onMoved: () => void }) {
-  const move = async (id: string, status: CaseRow['status']) => {
+  const { run: move } = useAction(async (id: string, status: CaseRow['status']) => {
     const row = items.find((c) => c.id === id)
     if (!row || row.status === status) return
-    // Dropping a card on Closed stamps closed_at — confirm before it leaves
-    // the active board. Reversible: drag it back out to reopen.
+    // Dropping a card on Closed stamps closed_at — the same pre-close
+    // checklist confirm as the detail screen (caseUtils.confirmCaseClose).
+    // Reversible: drag it back out to reopen.
     if (status === 'closed') {
-      const ok = await uiConfirm(`Close ${row.case_number}? Drag it back out to reopen.`, { title: 'Close case', confirmText: 'Close case', danger: false })
+      const ok = await confirmCaseClose(row)
       if (!ok) { onMoved(); return }
     }
-    row.status = status
     const res = await update('cases', id, { status, closed_at: status === 'closed' ? new Date().toISOString() : row.closed_at })
     if (res.error) toast(res.error.message, 'danger')
-    else toast(`Case marked ${STATUS_LABEL[status] ?? status}.`, 'success')
+    else {
+      // Only reflect the move locally once the write landed — a rejected
+      // update must not leave the card claiming the new column.
+      row.status = status
+      toast(`Case marked ${STATUS_LABEL[status] ?? status}.`, 'success')
+    }
     onMoved()
-  }
+  })
 
   return (
     <div className="grid gap-4 xl:grid-cols-4">

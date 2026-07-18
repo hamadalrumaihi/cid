@@ -18,7 +18,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
-import { Notice, EmptyState } from '@/components/ui/Notice'
+import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { labelCls } from '@/components/ui/Field'
 import { parseFormValues, parseStringArray } from '@/lib/jsonShapes'
 
@@ -45,6 +45,10 @@ export function MediaView() {
   const [tagEdit, setTagEdit] = useState<MediaRow | null>(null)
   const [forward, setForward] = useState<MediaRow | null>(null)
   const [ingest, setIngest] = useState(false)
+  // First-load gate: never flash "No media yet" (or hide a failure behind it)
+  // before the initial fetch resolves (BUG-027).
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const version = useTableVersion('media')
 
   const refresh = useCallback(async () => {
@@ -59,7 +63,9 @@ export function MediaView() {
       setMedia(m)
       setCases(cs as unknown as CaseOption[])
       setGangs(gs as unknown as GangOption[])
-    } catch { toast('Could not load the media vault — check your connection.', 'danger') }
+      setLoadError(false)
+    } catch { setLoadError(true); toast('Could not load the media vault — check your connection.', 'danger') }
+    finally { setLoading(false) }
   }, [state])
 
   useEffect(() => {
@@ -108,9 +114,13 @@ export function MediaView() {
         )}
       </div>
 
-      {!items.length ? (
+      {loading ? (
+        <Notice text="Loading the media vault…" />
+      ) : !items.length ? (
         media.length ? (
           <Notice text="No assets match this filter." />
+        ) : loadError ? (
+          <ErrorNotice message="Could not load the media vault." onRetry={() => { void refresh() }} />
         ) : (
           <EmptyState
             icon="🖼️"
@@ -194,8 +204,10 @@ function MediaCard({ m, canEdit, caseNum, gangName, onOpen, onCase, onForward, o
   return (
     <Card pad="none" className="overflow-hidden">
       {m.type === 'image' && safe && !imgFailed ? (
-        // eslint-disable-next-line @next/next/no-img-element -- external evidence URL
-        <img src={safe} alt={m.title} onError={() => setImgFailed(true)} onClick={onOpen} className="h-40 w-full cursor-zoom-in object-cover" />
+        <button onClick={onOpen} className="block h-40 w-full cursor-zoom-in" aria-label={`Preview ${m.title}`}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- external evidence URL */}
+          <img src={safe} alt="" onError={() => setImgFailed(true)} className="h-40 w-full object-cover" />
+        </button>
       ) : m.type === 'video' ? (
         <button onClick={onOpen} className="flex h-40 w-full items-center justify-center bg-ink-800 text-4xl" aria-label={`Preview ${m.title}`}>🎬</button>
       ) : (
@@ -287,7 +299,7 @@ function TagsModal({ m, onClose, onSaved }: { m: MediaRow; onClose: () => void; 
     onSaved()
   }
   return (
-    <Modal open onClose={onClose}>
+    <Modal open onClose={onClose} dirty={() => value !== labelsOf(m).join(', ')}>
       <ModalHeader title="Edit Tags" onClose={onClose} />
       <p className="mb-3 truncate text-xs text-slate-400">{m.title || 'Untitled'}</p>
       <TagsField value={value} onChange={setValue} />
