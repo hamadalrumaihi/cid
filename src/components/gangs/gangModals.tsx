@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { insert, list, update } from '@/lib/db'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { insert, list, rpc, update } from '@/lib/db'
 import type { TablesInsert } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/lib/toast'
@@ -9,10 +10,13 @@ import { safeUrl } from '@/lib/safeUrl'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { parseIntelSummary } from '@/lib/jsonShapes'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
+import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
 import {
   CONFIDENCE_LEVELS, GANG_CLASSIFICATIONS, GANG_STATUSES, PROVENANCE_KINDS, SUMMARY_SECTIONS, TURF_STATUSES, humanize,
 } from './gangIntel'
-import { RANK_SUGGEST, type CaseOption, type Density, type GangPlaceRow, type GangRow, type MemberRow, type PersonRow, type PlaceRow, type ThreatLevel } from './gangShared'
+import { MEMBER_CONFIDENCE, MEMBER_STATUSES, RANK_SUGGEST, type CaseOption, type Density, type GangPlaceRow, type GangRow, type MemberRow, type PersonRow, type PlaceRow, type ThreatLevel } from './gangShared'
 
 const input = 'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500'
 const label = 'mb-1 block text-xs font-semibold text-slate-400'
@@ -141,103 +145,185 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
   )
 }
 
-export function MemberModal({ gangId, member, people, cases, canDelete, onClose, onSaved, onDelete }: {
+const MEMBER_PICK_COLS = 'id,name,alias,lifecycle,gang_id'
+type PersonPick = Pick<PersonRow, 'id' | 'name' | 'alias' | 'lifecycle' | 'gang_id'>
+
+/** Person-first roster editor. ADD picks an existing Person (bounded server
+ *  search) and calls the gang_member_add RPC — the name snapshot, merge guard,
+ *  and duplicate-membership guard all live server-side. EDIT keeps the linked
+ *  person fixed (identity is immutable once linked) and only writes the
+ *  relationship fields via update(); it never touches name/person_id. */
+export function MemberModal({ gangId, member, roster, cases, canDelete, onClose, onSaved, onDelete }: {
   gangId: string
   member: MemberRow | null
-  people: PersonRow[]
+  /** Current roster rows for this gang — used only for the client-side
+   *  duplicate-membership hint (the RPC enforces it authoritatively). */
+  roster: MemberRow[]
   cases: CaseOption[]
   canDelete: boolean
   onClose: () => void
   onSaved: () => void
   onDelete: (member: MemberRow) => void
 }) {
-  const [name, setName] = useState(member?.name || '')
+  const router = useRouter()
+  const editing = !!member
+  const [picked, setPicked] = useState<PickedRecord | null>(null)
   const [rank, setRank] = useState(member?.rank || 'Soldier')
   const [callsign, setCallsign] = useState(member?.callsign || '')
-  const [status, setStatus] = useState(member?.status || 'At Large')
-  const [personId, setPersonId] = useState(member?.person_id || '')
+  const [status, setStatus] = useState(member?.status || 'Under review')
+  const [confidence, setConfidence] = useState(member?.confidence || '')
   const [caseId, setCaseId] = useState(member?.case_id || '')
-  const [ccw, setCcw] = useState(!!member?.ccw)
-  const [vch, setVch] = useState(String(member?.vch ?? 0))
-  const [felonies, setFelonies] = useState(String(member?.felony_count ?? 0))
-  const [mugshot, setMugshot] = useState(member?.mugshot_url || '')
-  const [provenance, setProvenance] = useState(member?.provenance || '')
-
-  const personKnown = !personId || people.some((p) => p.id === personId)
+  const [note, setNote] = useState(member?.note || '')
   const caseKnown = !caseId || cases.some((c) => c.id === caseId)
   const [busy, setBusy] = useState(false)
 
-  const save = async () => {
-    if (!name.trim()) { toast('Name is required.', 'warn'); return }
-    setBusy(true)
-    const payload = {
-      gang_id: gangId, name: name.trim(), rank: rank.trim() || null, callsign: callsign.trim() || null,
-      status: status.trim() || null, person_id: personId || null, case_id: caseId || null, ccw,
-      vch: Number(vch) || 0, felony_count: Number(felonies) || 0, mugshot_url: mugshot.trim() || null,
-      provenance: provenance || null,
+  // Bounded, RLS-scoped person search — same two-step pattern as
+  // LinkAssociateModal: indexed search_persons RPC → hydrate names via a
+  // single in:{id} fetch. '' returns the most recent people so the picker is
+  // useful before typing. Merged persons are filtered out.
+  const searchPersons = useCallback(async (q: string): Promise<PickedRecord[]> => {
+    const query = q.trim()
+    const toPicks = (rows: PersonPick[]) => rows
+      .filter((r) => r.lifecycle !== 'merged')
+      .map<PickedRecord>((r) => ({ id: r.id, label: r.name || 'Unknown', sublabel: r.alias || undefined }))
+    if (!query) {
+      const rows = await list('persons', { select: MEMBER_PICK_COLS, order: 'created_at', ascending: false, limit: 12 })
+        .then((r) => r as unknown as PersonPick[]).catch(() => [] as PersonPick[])
+      return toPicks(rows)
     }
-    const res = member ? await update('gang_members', member.id, payload) : await insert('gang_members', payload)
+    const res = await rpc('search_persons', { p_q: query, p_limit: 12 })
+    const hits = (res.data ?? []).map((h) => h.id)
+    if (!hits.length) return []
+    const rows = await list('persons', { select: MEMBER_PICK_COLS, in: { id: hits } })
+      .then((r) => r as unknown as PersonPick[]).catch(() => [] as PersonPick[])
+    const order = new Map(hits.map((hid, i) => [hid, i]))
+    return toPicks(rows).sort((x, y) => (order.get(x.id) ?? 99) - (order.get(y.id) ?? 99))
+  }, [])
+
+  // Client-side hint only — an active (not-yet-left) roster row for this person.
+  const activeDup = useMemo(
+    () => (picked ? roster.find((m) => m.person_id === picked.id && !m.left_at && m.id !== member?.id) : undefined),
+    [picked, roster, member?.id],
+  )
+
+  const save = async () => {
+    setBusy(true)
+    if (editing) {
+      const res = await update('gang_members', member.id, {
+        rank: rank.trim() || null, callsign: callsign.trim() || null, status: status || null,
+        confidence: confidence || null, note: note.trim() || null, case_id: caseId || null,
+      })
+      setBusy(false)
+      if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
+      toast('Member updated', 'success')
+      onSaved()
+      return
+    }
+    if (!picked) { toast('Pick a person first.', 'warn'); setBusy(false); return }
+    const res = await rpc('gang_member_add', {
+      p_gang: gangId, p_person: picked.id, p_rank: rank.trim() || null, p_callsign: callsign.trim() || null,
+      p_status: status || null, p_confidence: confidence || null, p_note: note.trim() || null, p_case: caseId || null,
+    })
     setBusy(false)
-    if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
-    toast('Member saved', 'success')
+    if (res.error) { toast(res.error.message || 'Could not add member.', 'danger'); return }
+    toast('Member added', 'success')
     onSaved()
   }
 
-  const dirty = () =>
-    name !== (member?.name || '') || rank !== (member?.rank || 'Soldier') || callsign !== (member?.callsign || '') ||
-    status !== (member?.status || 'At Large') || personId !== (member?.person_id || '') || caseId !== (member?.case_id || '') ||
-    ccw !== !!member?.ccw || vch !== String(member?.vch ?? 0) || felonies !== String(member?.felony_count ?? 0) ||
-    mugshot !== (member?.mugshot_url || '') || provenance !== (member?.provenance || '')
+  const dirty = () => editing
+    ? rank !== (member.rank || 'Soldier') || callsign !== (member.callsign || '') || status !== (member.status || 'Under review')
+      || confidence !== (member.confidence || '') || note !== (member.note || '') || caseId !== (member.case_id || '')
+    : !!picked || !!callsign.trim() || !!note.trim()
 
   return (
     <Modal open wide onClose={onClose} dirty={dirty}>
       <div className="max-h-[85vh] overflow-y-auto p-6">
-        <ModalHeader title={`${member ? 'Edit' : 'Add'} Member`} onClose={onClose} />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div><label htmlFor="member-name" className={label}>Name *</label><input id="member-name" value={name} onChange={(e) => setName(e.target.value)} className={input} /></div>
-          <div><label htmlFor="member-rank" className={label}>Rank</label><input id="member-rank" list="gang-rank-list" value={rank} onChange={(e) => setRank(e.target.value)} className={input} /><datalist id="gang-rank-list">{RANK_SUGGEST.map((r) => <option key={r} value={r} />)}</datalist></div>
-          <div><label htmlFor="member-callsign" className={label}>Callsign</label><input id="member-callsign" value={callsign} onChange={(e) => setCallsign(e.target.value)} className={input} /></div>
-          <div><label htmlFor="member-status" className={label}>Status</label><input id="member-status" value={status} onChange={(e) => setStatus(e.target.value)} className={input} /></div>
-          <div>
-            <label htmlFor="member-person" className={label}>Link Person</label>
-            <select id="member-person" value={personId} onChange={(e) => setPersonId(e.target.value)} className={input}>
-              <option value="">- link person (optional) -</option>
-              {!personKnown && <option value={personId}>(linked person - loading...)</option>}
-              {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+        <ModalHeader title={editing ? 'Edit member' : 'Add member'} onClose={onClose} />
+
+        {/* Identity — a picked/linked Person, never free text. */}
+        {editing ? (
+          <div className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5">
+            <p className={label}>Person</p>
+            <div className="flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-sm text-white">{member.name || 'Linked person'}</span>
+              {member.person_id && (
+                <Button size="sm" onClick={() => router.push(`/persons?person=${encodeURIComponent(member.person_id!)}`)}>View profile</Button>
+              )}
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">Identity is fixed once linked — edit the relationship fields below.</p>
           </div>
-          <div>
-            <label htmlFor="member-case" className={label}>Link Case</label>
-            <select id="member-case" value={caseId} onChange={(e) => setCaseId(e.target.value)} className={input}>
-              <option value="">- link case (optional) -</option>
-              {!caseKnown && <option value={caseId}>(linked case - other bureau)</option>}
-              {cases.map((c) => <option key={c.id} value={c.id}>{c.case_number}</option>)}
-            </select>
+        ) : (
+          <div className="space-y-1.5">
+            <RecordSearchPicker
+              label="Person"
+              required
+              placeholder="Search name, alias, phone, plate…"
+              value={picked}
+              onChange={setPicked}
+              search={searchPersons}
+              emptyState={
+                <span>
+                  No matching person found. Create the person in the{' '}
+                  <button type="button" onClick={() => router.push('/persons')} className="font-semibold text-blue-300 underline hover:text-blue-200">Persons registry</button>{' '}
+                  first.
+                </span>
+              }
+            />
+            {activeDup && (
+              <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-200">
+                {picked?.label} is already an active member of this gang.
+              </p>
+            )}
           </div>
-          <div>
-            <label htmlFor="member-ccw" className={label}>CCW</label>
-            <select id="member-ccw" value={ccw ? 'true' : 'false'} onChange={(e) => setCcw(e.target.value === 'true')} className={input}>
-              <option value="false">No</option><option value="true">Yes</option>
-            </select>
-          </div>
-          <div>
-            <label htmlFor="member-prov" className={label}>Membership source</label>
-            <select id="member-prov" value={provenance} onChange={(e) => setProvenance(e.target.value)} className={input}>
-              <option value="">—</option>
-              {PROVENANCE_KINDS.map((p) => <option key={p} value={p}>{humanize(p)}</option>)}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label htmlFor="member-vch" className={label}>VCH</label><input id="member-vch" type="number" value={vch} onChange={(e) => setVch(e.target.value)} className={input} /></div>
-            <div><label htmlFor="member-felonies" className={label}>Felonies</label><input id="member-felonies" type="number" value={felonies} onChange={(e) => setFelonies(e.target.value)} className={input} /></div>
-          </div>
-          <div className="sm:col-span-2"><label htmlFor="member-mugshot" className={label}>Mugshot URL</label><input id="member-mugshot" value={mugshot} onChange={(e) => setMugshot(e.target.value)} className={input} /></div>
+        )}
+
+        {/* Relationship fields (not identity). */}
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Rank">
+            {(id) => (
+              <>
+                <Input id={id} list="gang-rank-list" value={rank} onChange={(e) => setRank(e.target.value)} />
+                <datalist id="gang-rank-list">{RANK_SUGGEST.map((r) => <option key={r} value={r} />)}</datalist>
+              </>
+            )}
+          </Field>
+          <Field label="Callsign">{(id) => <Input id={id} value={callsign} onChange={(e) => setCallsign(e.target.value)} />}</Field>
+          <Field label="Status">
+            {(id) => (
+              <Select id={id} value={status} onChange={(e) => setStatus(e.target.value)}>
+                {MEMBER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </Select>
+            )}
+          </Field>
+          <Field label="Confidence">
+            {(id) => (
+              <Select id={id} value={confidence} onChange={(e) => setConfidence(e.target.value)}>
+                <option value="">—</option>
+                {MEMBER_CONFIDENCE.map((c) => <option key={c} value={c}>{c}</option>)}
+              </Select>
+            )}
+          </Field>
+          <Field label="Source case">
+            {(id) => (
+              <Select id={id} value={caseId} onChange={(e) => setCaseId(e.target.value)}>
+                <option value="">— none —</option>
+                {!caseKnown && <option value={caseId}>(linked case — other bureau)</option>}
+                {cases.map((c) => <option key={c.id} value={c.id}>{c.case_number}</option>)}
+              </Select>
+            )}
+          </Field>
+          <Field label="Supporting note" className="sm:col-span-2">
+            {(id) => <Textarea id={id} rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="How is this membership known?" />}
+          </Field>
         </div>
+
         <div className="mt-5 flex gap-2">
-          <button onClick={() => void save()} disabled={busy} className="flex-1 rounded-lg bg-gradient-to-r from-badge-500 to-blue-700 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110 disabled:opacity-60">
-            {busy ? 'Saving…' : member ? 'Save' : 'Add member'}
-          </button>
-          {member && canDelete && <button onClick={() => onDelete(member)} className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10">Delete</button>}
+          <Button variant="primary" className="flex-1" loading={busy} disabled={!editing && !picked} onClick={() => void save()}>
+            {editing ? 'Save changes' : 'Add member'}
+          </Button>
+          {editing && canDelete && (
+            <Button variant="secondary" className="text-rose-300 hover:bg-rose-500/10" onClick={() => onDelete(member)}>Delete</Button>
+          )}
         </div>
       </div>
     </Modal>

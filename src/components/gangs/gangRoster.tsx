@@ -21,6 +21,11 @@ import type { MemberRow } from './gangShared'
 
 const felonyFlag = (n: number | null) => (n ?? 0) >= 8
 
+/** Live person name when linked, falling back to the historical name snapshot
+ *  stored on the membership row. */
+const displayName = (m: MemberRow, names?: Map<string, string>) =>
+  (m.person_id && names?.get(m.person_id)) || m.name || 'Unknown'
+
 function Mug({ url, size = 'h-10 w-10' }: { url: string | null; size?: string }) {
   const [broken, setBroken] = useState(false)
   const src = safeUrl(url ?? '')
@@ -30,10 +35,10 @@ function Mug({ url, size = 'h-10 w-10' }: { url: string | null; size?: string })
   return <div className={`${size} grid flex-shrink-0 place-items-center rounded-md bg-ink-700 text-[10px] font-semibold text-slate-400`} aria-hidden="true">POI</div>
 }
 
-function MemberName({ m, dup, router }: { m: MemberRow; dup: boolean; router: ReturnType<typeof useRouter> }) {
+function MemberName({ m, name, dup, router }: { m: MemberRow; name: string; dup: boolean; router: ReturnType<typeof useRouter> }) {
   const inner = (
     <>
-      {m.name}
+      {name}
       {felonyFlag(m.felony_count) && <span title="8 or more violent felonies" className="ml-1 text-rose-400">⚑</span>}
       {dup && <span title="Possible duplicate — see the duplicate review banner" className="ml-1 text-amber-400">⧉</span>}
     </>
@@ -62,17 +67,18 @@ function RankCell({ m }: { m: MemberRow }) {
   )
 }
 
-function MemberLine({ m, dup, router, canEdit, onEdit }: {
-  m: MemberRow; dup: boolean; router: ReturnType<typeof useRouter>; canEdit: boolean; onEdit: () => void
+function MemberLine({ m, name, dup, router, canEdit, onEdit }: {
+  m: MemberRow; name: string; dup: boolean; router: ReturnType<typeof useRouter>; canEdit: boolean; onEdit: () => void
 }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-white/5 bg-ink-850 p-2.5">
       <Mug url={m.mugshot_url} />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm"><MemberName m={m} dup={dup} router={router} /></div>
+        <div className="truncate text-sm"><MemberName m={m} name={name} dup={dup} router={router} /></div>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-400">
           {m.callsign && <span>“{m.callsign}”</span>}
           <span>{m.status || 'Status unknown'}</span>
+          {m.confidence && <span title="Membership confidence">Confidence: {m.confidence}</span>}
           <span title="Carrying a concealed weapon">CCW {m.ccw ? 'Yes' : 'No'}</span>
           <span title="Violent crime history count">VCH {m.vch ?? 0}</span>
           <span>{m.felony_count ?? 0} felonies</span>
@@ -93,8 +99,10 @@ type Sort = 'hierarchy' | 'name' | 'updated' | 'felony'
 const selCls = 'rounded-lg border border-white/10 bg-ink-850 px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-badge-500'
 const activeSelCls = 'border-badge-500 text-white'
 
-export function RosterSection({ members, canEdit, canDelete, onAddMember, onEditMember, onRefresh }: {
+export function RosterSection({ members, personNames, canEdit, canDelete, onAddMember, onEditMember, onRefresh }: {
   members: MemberRow[]
+  /** Live person names by person_id, resolved by the dossier loader. */
+  personNames?: Map<string, string>
   canEdit: boolean
   /** Merging deletes duplicate rows — command-tier, gated separately from edit. */
   canDelete: boolean
@@ -141,12 +149,12 @@ export function RosterSection({ members, canEdit, canDelete, onAddMember, onEdit
       if (noPhoto && m.mugshot_url) return false
       if (dupOnly && !dupIds.has(m.id)) return false
       if (needle) {
-        const hay = normalizeName([m.name, m.callsign].filter(Boolean).join(' '))
+        const hay = normalizeName([displayName(m, personNames), m.callsign].filter(Boolean).join(' '))
         if (!hay.includes(needle)) return false
       }
       return true
     })
-  }, [members, tier, status, poi, ccw, felony, noPhoto, dupOnly, dupIds, q])
+  }, [members, personNames, tier, status, poi, ccw, felony, noPhoto, dupOnly, dupIds, q])
 
   const sorted = useMemo(() => {
     if (sort === 'hierarchy') return filtered
@@ -289,13 +297,13 @@ export function RosterSection({ members, canEdit, canDelete, onAddMember, onEdit
                     <div className="flex items-center gap-2">
                       <Mug url={m.mugshot_url} size="h-8 w-8" />
                       <div className="min-w-0">
-                        <div className="truncate"><MemberName m={m} dup={dupIds.has(m.id)} router={router} /></div>
+                        <div className="truncate"><MemberName m={m} name={displayName(m, personNames)} dup={dupIds.has(m.id)} router={router} /></div>
                         {m.callsign && <p className="truncate text-[11px] text-slate-500">“{m.callsign}”</p>}
                       </div>
                     </div>
                   </td>
                   <td className="px-3 py-2"><RankCell m={m} /></td>
-                  <td className="px-3 py-2 text-slate-300">{m.status || '—'}</td>
+                  <td className="px-3 py-2 text-slate-300">{m.status || '—'}{m.confidence && <span className="ml-1.5 text-[11px] text-slate-500">· {m.confidence}</span>}</td>
                   <td className="px-3 py-2 text-slate-300">{m.ccw ? 'Yes' : 'No'}</td>
                   <td className="px-3 py-2 tabular-nums text-slate-300">{m.vch ?? 0}</td>
                   <td className="px-3 py-2 tabular-nums text-slate-300">{m.felony_count ?? 0}</td>
@@ -315,7 +323,7 @@ export function RosterSection({ members, canEdit, canDelete, onAddMember, onEdit
               </p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {rows.map((m) => (
-                  <MemberLine key={m.id} m={m} dup={dupIds.has(m.id)} router={router} canEdit={canEdit} onEdit={() => onEditMember(m)} />
+                  <MemberLine key={m.id} m={m} name={displayName(m, personNames)} dup={dupIds.has(m.id)} router={router} canEdit={canEdit} onEdit={() => onEditMember(m)} />
                 ))}
               </div>
             </div>

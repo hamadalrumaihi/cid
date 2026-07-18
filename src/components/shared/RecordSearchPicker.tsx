@@ -20,7 +20,7 @@ export interface PickedRecord {
 }
 
 export function RecordSearchPicker<T extends PickedRecord>({
-  label, required, hint, placeholder, value, onChange, search, disabled,
+  label, required, hint, placeholder, value, onChange, search, disabled, emptyState,
 }: {
   label: string
   required?: boolean
@@ -31,6 +31,9 @@ export function RecordSearchPicker<T extends PickedRecord>({
   /** RLS-scoped bounded loader. '' should return the most recent ~20 rows. */
   search: (q: string) => Promise<T[]>
   disabled?: boolean
+  /** Custom node shown when a non-empty query returns no matches (e.g. a
+   *  "create the record first" call to action). Falls back to a plain hint. */
+  emptyState?: React.ReactNode
 }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<T[]>([])
@@ -95,7 +98,7 @@ export function RecordSearchPicker<T extends PickedRecord>({
                 ))}
                 {!loading && results.length === 0 && (
                   <li className="px-3 py-2 text-xs text-slate-400">
-                    {query.trim() ? 'No matches — refine the search.' : 'No records available.'}
+                    {query.trim() ? (emptyState ?? 'No matches — refine the search.') : 'No records available.'}
                   </li>
                 )}
                 {loading && results.length === 0 && (

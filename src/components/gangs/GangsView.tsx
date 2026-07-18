@@ -20,7 +20,7 @@ import { IntelProfile, type IntelTarget } from '@/components/persons/IntelProfil
 import { GangCard, GangDetail, type GangCardStats } from './gangCards'
 import { GangModal } from './gangModals'
 import { GANG_CLASSIFICATIONS, GANG_STATUSES, humanize, isGangStale, normalizeName, rankTier } from './gangIntel'
-import { GANG_DELETE_CHILDREN, GANG_NULL_REFS, PAGE, type CaseOption, type GangPlaceRow, type GangRow, type IntelLinkRow, type MemberRow, type PersonRow, type PlaceRow, type TurfRow } from './gangShared'
+import { GANG_DELETE_CHILDREN, GANG_NULL_REFS, PAGE, type CaseOption, type GangPlaceRow, type GangRow, type IntelLinkRow, type MemberRow, type PlaceRow, type TurfRow } from './gangShared'
 
 interface CaseLite { id: string; case_number: string; title: string | null; status: string | null }
 
@@ -29,7 +29,6 @@ export function GangsView() {
   const router = useRouter()
   const sp = useSearchParams()
   const now = useNow()
-  const [people, setPeople] = useState<PersonRow[]>([])
   const [caseOptions, setCaseOptions] = useState<CaseOption[]>([])
   // Aggregate source tables — small (a few hundred rows total), fetched once
   // and rolled up client-side rather than one query per card.
@@ -69,9 +68,8 @@ export function GangsView() {
     table: 'gangs',
     watch: [vMembers, vTurf, vPersons, vCases, vGangPlaces, vLinks],
     load: async () => {
-      const [g, p, c, m, t, pl, gp, il] = await Promise.all([
+      const [g, c, m, t, pl, gp, il] = await Promise.all([
         withRetry(() => list('gangs', { order: 'name', ascending: true })),
-        list('persons', { order: 'name' }).catch(() => [] as PersonRow[]),
         list('cases', { select: 'id,case_number,title,status', order: 'updated_at', ascending: false }).then((r) => r as unknown as CaseLite[]).catch(() => [] as CaseLite[]),
         list('gang_members').catch(() => [] as MemberRow[]),
         list('gang_turf').catch(() => [] as TurfRow[]),
@@ -79,7 +77,6 @@ export function GangsView() {
         list('gang_places').catch(() => [] as GangPlaceRow[]),
         list('case_intel_links', { eq: { kind: 'gang' } }).catch(() => [] as IntelLinkRow[]),
       ])
-      setPeople(p)
       setCaseOptions(c.map((x) => ({ id: x.id, case_number: x.case_number, title: x.title })))
       setCaseStatus(new Map(c.map((x) => [x.id, x.status])))
       setMembers(m); setTurf(t); setPlaces(pl); setGangPlaces(gp); setIntelLinks(il)
@@ -103,7 +100,7 @@ export function GangsView() {
     for (const m of members) {
       const s = map.get(m.gang_id); if (!s) continue
       s.members++
-      if (['leader', 'command'].includes(rankTier(m.rank))) s.leaders.push(m.name)
+      if (m.name && ['leader', 'command'].includes(rankTier(m.rank))) s.leaders.push(m.name)
       push(m.gang_id, m.name, m.callsign)
     }
     for (const t of turf) { const s = map.get(t.gang_id); if (s) { s.turf++; push(t.gang_id, t.block, t.hotspot_area) } }
@@ -181,7 +178,6 @@ export function GangsView() {
     return (
       <GangDetail
         gang={detail}
-        people={people}
         caseOptions={caseOptions}
         canEdit={canEdit}
         canDelete={canDelete}

@@ -33,7 +33,7 @@ import { MemberModal, TurfModal, LinkPlaceModal, AddGangPhotoModal, GangPhotoLig
 import {
   DEFAULT_REVIEW_DAYS, SUMMARY_SECTIONS, humanize, isGangStale, parseColors, rankTier, turfLastKnown,
 } from './gangIntel'
-import { densityTint, cap, type CaseOption, type CaseRow, type GangPlaceRow, type GangRow, type IntelLinkRow, type LinkedPlace, type MediaRow, type MemberRow, type PersonRow, type PlaceRow, type TurfRow, type VehicleRow } from './gangShared'
+import { densityTint, cap, type CaseOption, type CaseRow, type GangPlaceRow, type GangRow, type IntelLinkRow, type LinkedPlace, type MediaRow, type MemberRow, type PlaceRow, type TurfRow, type VehicleRow } from './gangShared'
 
 type SectionId = 'overview' | 'members' | 'territory' | 'places' | 'vehicles' | 'cases' | 'media' | 'activity'
 const SECTION_IDS: SectionId[] = ['overview', 'members', 'territory', 'places', 'vehicles', 'cases', 'media', 'activity']
@@ -370,9 +370,8 @@ function MediaSection({ media, canEdit, onAdd, onOpen }: { media: MediaRow[]; ca
 }
 
 // ── Dossier shell ────────────────────────────────────────────────────────────
-export function GangDossier({ gang, people, caseOptions, canEdit, canDelete, onBack, onRefresh, onEdit, onDelete, onProfile, children }: {
+export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onRefresh, onEdit, onDelete, onProfile, children }: {
   gang: GangRow
-  people: PersonRow[]
   caseOptions: CaseOption[]
   canEdit: boolean
   canDelete: boolean
@@ -388,6 +387,9 @@ export function GangDossier({ gang, people, caseOptions, canEdit, canDelete, onB
   const now = useNow()
 
   const [members, setMembers] = useState<MemberRow[]>([])
+  // Current person names by person_id — resolved so the roster shows the live
+  // identity, not just the historical name snapshot on the membership row.
+  const [personNames, setPersonNames] = useState<Map<string, string>>(new Map())
   const [turf, setTurf] = useState<TurfRow[]>([])
   const [places, setPlaces] = useState<PlaceRow[]>([])
   const [gangPlaces, setGangPlaces] = useState<GangPlaceRow[]>([])
@@ -425,6 +427,12 @@ export function GangDossier({ gang, people, caseOptions, canEdit, canDelete, onB
         list('case_intel_links', { eq: { kind: 'gang', ref_id: gang.id } }).catch(() => [] as IntelLinkRow[]),
       ])
       setMembers(m); setTurf(t); setPlaces(allPlaces); setGangPlaces(gp); setVehicles(veh); setMedia(med); setIntelLinks(links)
+      const personIds = [...new Set(m.map((row) => row.person_id).filter((x): x is string => !!x))]
+      if (personIds.length) {
+        const persons = await list('persons', { select: 'id,name', in: { id: personIds } })
+          .then((r) => r as unknown as { id: string; name: string | null }[]).catch(() => [] as { id: string; name: string | null }[])
+        setPersonNames(new Map(persons.map((p) => [p.id, p.name || ''])))
+      } else setPersonNames(new Map())
       const caseIds = [...new Set(links.map((l) => l.case_id))]
       if (caseIds.length) {
         const rows = (await list('cases', { in: { id: caseIds } }).catch(() => [] as CaseRow[]))
@@ -593,7 +601,7 @@ export function GangDossier({ gang, people, caseOptions, canEdit, canDelete, onB
             </div>
           </div>
         )}
-        {section === 'members' && <RosterSection members={members} canEdit={canEdit} canDelete={canDelete} onAddMember={() => setMemberEditor('new')} onEditMember={(m) => setMemberEditor(m)} onRefresh={() => void load()} />}
+        {section === 'members' && <RosterSection members={members} personNames={personNames} canEdit={canEdit} canDelete={canDelete} onAddMember={() => setMemberEditor('new')} onEditMember={(m) => setMemberEditor(m)} onRefresh={() => void load()} />}
         {section === 'territory' && <TerritorySection gangId={gang.id} turf={turf} canEdit={canEdit} canDelete={canDelete} onAdd={() => setTurfOpen(true)} onDelete={(t) => void deleteTurf(t)} now={now} />}
         {section === 'places' && <PlacesSection linked={linkedPlaces} media={media} canEdit={canEdit} canDelete={canDelete} onLink={() => setLinkPlaceOpen(true)} onUnlink={(l) => void unlinkPlace(l)} />}
         {section === 'vehicles' && <VehiclesSection vehicles={vehicles} />}
@@ -612,7 +620,7 @@ export function GangDossier({ gang, people, caseOptions, canEdit, canDelete, onB
         <MemberModal
           gangId={gang.id}
           member={memberEditor === 'new' ? null : memberEditor}
-          people={people}
+          roster={members}
           cases={caseOptions}
           canDelete={canDelete}
           onClose={() => setMemberEditor(null)}

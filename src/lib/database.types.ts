@@ -2100,16 +2100,23 @@ export type Database = {
           callsign: string | null
           case_id: string | null
           ccw: boolean | null
+          confidence: string | null
           created_at: string
+          created_by: string | null
           felony_count: number | null
           gang_id: string
           id: string
+          joined_at: string | null
+          left_at: string | null
           mugshot_url: string | null
-          name: string
+          name: string | null
+          note: string | null
           person_id: string | null
           provenance: string | null
           rank: string | null
           rank_id: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
           status: string | null
           updated_at: string
           vch: number | null
@@ -2118,16 +2125,23 @@ export type Database = {
           callsign?: string | null
           case_id?: string | null
           ccw?: boolean | null
+          confidence?: string | null
           created_at?: string
+          created_by?: string | null
           felony_count?: number | null
           gang_id: string
           id?: string
+          joined_at?: string | null
+          left_at?: string | null
           mugshot_url?: string | null
-          name: string
+          name?: string | null
+          note?: string | null
           person_id?: string | null
           provenance?: string | null
           rank?: string | null
           rank_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           status?: string | null
           updated_at?: string
           vch?: number | null
@@ -2136,16 +2150,23 @@ export type Database = {
           callsign?: string | null
           case_id?: string | null
           ccw?: boolean | null
+          confidence?: string | null
           created_at?: string
+          created_by?: string | null
           felony_count?: number | null
           gang_id?: string
           id?: string
+          joined_at?: string | null
+          left_at?: string | null
           mugshot_url?: string | null
-          name?: string
+          name?: string | null
+          note?: string | null
           person_id?: string | null
           provenance?: string | null
           rank?: string | null
           rank_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           status?: string | null
           updated_at?: string
           vch?: number | null
@@ -6306,6 +6327,19 @@ export type Database = {
       justice_membership_request_withdraw: {
         Args: { p_request: string }
         Returns: Database["public"]["Tables"]["justice_membership_requests"]["Row"]
+      }
+      gang_member_add: {
+        Args: {
+          p_gang: string
+          p_person: string
+          p_rank?: string | null
+          p_callsign?: string | null
+          p_status?: string | null
+          p_confidence?: string | null
+          p_note?: string | null
+          p_case?: string | null
+        }
+        Returns: string
       }
       justice_directory: {
         Args: never
