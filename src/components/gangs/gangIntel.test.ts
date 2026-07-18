@@ -11,6 +11,8 @@ const member = (over: Partial<MemberRow>): MemberRow => ({
   name: 'X', callsign: null, ccw: false, vch: 0, felony_count: 0,
   status: null, mugshot_url: null, created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z', rank: null, provenance: null,
+  confidence: null, joined_at: null, left_at: null, note: null,
+  created_by: null, reviewed_by: null, reviewed_at: null,
   ...over,
 })
 

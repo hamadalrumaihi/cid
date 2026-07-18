@@ -29,6 +29,13 @@ export interface LinkedPlace {
 export const PAGE = 24
 export const RANK_SUGGEST = ['Shot Caller', 'OG', 'Lieutenant', 'Enforcer', 'Soldier', 'Associate', 'Prospect']
 
+/** Fixed membership-status vocabulary (mirrors gang_member_add's allowed set). */
+export const MEMBER_STATUSES = [
+  'Confirmed member', 'Probable member', 'Associate', 'Former member', 'Leadership', 'Under review', 'Disputed',
+] as const
+/** Membership-confidence scale for a single roster link (optional). */
+export const MEMBER_CONFIDENCE = ['Low', 'Medium', 'High'] as const
+
 export const cap = (s: string | null | undefined) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Medium')
 
 export const densityTint = (d: string | null | undefined) => {

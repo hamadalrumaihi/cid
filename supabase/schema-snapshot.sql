@@ -772,7 +772,7 @@ create table public.gang_members (
   rank_id uuid,
   person_id uuid,
   case_id uuid,
-  name text not null,
+  name text,
   callsign text,
   ccw boolean default false,
   vch integer default 0,
@@ -782,14 +782,24 @@ create table public.gang_members (
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
   rank text,
-  provenance text
+  provenance text,
+  confidence text,
+  joined_at date,
+  left_at date,
+  note text,
+  created_by uuid,
+  reviewed_by uuid,
+  reviewed_at timestamp with time zone
 );
 alter table public.gang_members add constraint gang_members_pkey PRIMARY KEY (id);
 alter table public.gang_members add constraint gang_members_provenance_check CHECK (((provenance IS NULL) OR (provenance = ANY (ARRAY['imported'::text, 'reported'::text, 'manually_confirmed'::text, 'inferred'::text, 'historical'::text, 'disputed'::text]))));
+alter table public.gang_members add constraint gang_members_status_vocab CHECK (((status IS NULL) OR (status = ANY (ARRAY['Confirmed member'::text, 'Probable member'::text, 'Associate'::text, 'Former member'::text, 'Leadership'::text, 'Under review'::text, 'Disputed'::text]))));
 alter table public.gang_members add constraint gang_members_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
 alter table public.gang_members add constraint gang_members_gang_id_fkey FOREIGN KEY (gang_id) REFERENCES public.gangs(id) ON DELETE CASCADE;
 alter table public.gang_members add constraint gang_members_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE SET NULL;
 alter table public.gang_members add constraint gang_members_rank_id_fkey FOREIGN KEY (rank_id) REFERENCES public.gang_ranks(id) ON DELETE SET NULL;
+alter table public.gang_members add constraint gang_members_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.gang_members add constraint gang_members_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
 alter table public.gang_members enable row level security;
 
 create table public.gang_ranks (
@@ -2228,6 +2238,7 @@ CREATE INDEX gang_members_case_id_fkey_idx ON public.gang_members USING btree (c
 CREATE INDEX gang_members_gang_id_fkey_idx ON public.gang_members USING btree (gang_id);
 CREATE INDEX gang_members_person_id_fkey_idx ON public.gang_members USING btree (person_id);
 CREATE INDEX gang_members_rank_id_fkey_idx ON public.gang_members USING btree (rank_id);
+CREATE UNIQUE INDEX gang_members_one_active_per_person ON public.gang_members USING btree (gang_id, person_id) WHERE ((person_id IS NOT NULL) AND (status IS DISTINCT FROM 'Former member'::text));
 CREATE INDEX gang_ranks_gang_id_fkey_idx ON public.gang_ranks USING btree (gang_id);
 CREATE INDEX gang_turf_gang_id_fkey_idx ON public.gang_turf USING btree (gang_id);
 CREATE INDEX gang_places_gang_id_fkey_idx ON public.gang_places USING btree (gang_id);
@@ -6469,3 +6480,21 @@ create policy wl_sel on public.watchlist
 -- leak test rows into production (the source of the 24 SOP docs / 4 narcotics
 -- / 1 place cleaned up by hand on 2026-07-18). Definitive SQL in
 -- supabase/migrations/20260807160000_rls_cleanup_registry_purge.sql.
+-- 20260807170000_gang_roster_person_first (columns + constraint + index +
+-- function): the gang roster becomes person-first. gang_members.name is now
+-- NULLABLE (identity comes from the linked Person; name is kept only as a
+-- historical snapshot); new relationship columns confidence / joined_at /
+-- left_at / note / created_by / reviewed_by / reviewed_at; status adopts the
+-- fixed relationship vocabulary (gang_members_status_vocab CHECK — Confirmed
+-- member / Probable member / Associate / Former member / Leadership / Under
+-- review / Disputed) with the legacy placeholder 'At Large' normalized to
+-- 'Under review'; a partial unique index (gang_members_one_active_per_person)
+-- enforces one active membership per person per gang ('Former member' exempt).
+-- New RPC gang_member_add(p_gang, p_person, p_rank, p_callsign, p_status,
+-- p_confidence, p_note, p_case) is the person-first entry point — active-member
+-- gated, resolves the name snapshot from the Person, refuses a merged person
+-- and a duplicate active membership, stamps created_by. A one-time data
+-- reconciliation (not in the migration) merged 2 duplicate Persons, created 2
+-- missing Persons, and linked all 245 previously free-text roster rows to their
+-- Person. Definitive SQL in
+-- supabase/migrations/20260807170000_gang_roster_person_first.sql.
