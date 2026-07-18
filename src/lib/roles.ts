@@ -120,13 +120,14 @@ export const getAssignableRoles = (actor: RoleParty | null | undefined, target: 
 /** May `actor` INITIATE a transfer of `target` from `source` to `destination`?
  *  A Bureau Lead may only initiate for rank-and-file members when one side is
  *  their own bureau (the other bureau still approves); DD+ and Owner may
- *  initiate any move between permanent bureaus. Never yourself. */
+ *  initiate any move between departments, JTF included. Never yourself. */
 export const canTransfer = (
   actor: RoleParty | null | undefined, target: RoleParty, source: string, destination: string,
 ): boolean => {
   if (!actor || !actor.active || actor.id === target.id) return false
-  const perm = PERMANENT_BUREAUS as readonly string[]
-  if (!perm.includes(source) || !perm.includes(destination) || source === destination) return false
+  // Any department may be either side of a move, JTF included — the pair just
+  // has to be two real, different departments.
+  if (!(source in BUREAUS) || !(destination in BUREAUS) || source === destination) return false
   if (actor.is_owner || actor.role === 'deputy_director' || actor.role === 'director') return true
   if (actor.role !== 'bureau_lead') return false
   if (isCommandRole(target.role)) return false

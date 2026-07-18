@@ -18,8 +18,8 @@ import { useNav } from './useNav'
 
 /** Access summary per role — vanilla auth.js:62-68. */
 const ROLE_CAPS: Record<string, string> = {
-  detective: 'View & edit records, log evidence, author reports, submit cases for sign-off.',
-  senior_detective: 'View & edit records, log evidence, author reports, submit cases for sign-off.',
+  detective: 'View & edit records, add case photos, author reports, submit cases for sign-off.',
+  senior_detective: 'View & edit records, add case photos, author reports, submit cases for sign-off.',
   bureau_lead: 'All detective actions + review/approve sign-offs, delete records, manage announcements (your bureau).',
   deputy_director: 'Bureau-lead actions + cross-bureau oversight and command tools.',
   director: 'Full command: cross-bureau oversight, sign-offs, deletes, roster & announcements.',

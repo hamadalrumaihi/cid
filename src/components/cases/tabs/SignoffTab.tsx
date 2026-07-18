@@ -35,17 +35,17 @@ type OverrideAction = (typeof OVERRIDE_ACTIONS)[number]['value']
 
 /** Command override form — first client surface for signoff_command_override
  *  (20260721040000; previously SQL-only). Reason is mandatory (the RPC rejects
- *  a blank one) and the confirm spells out the audit consequence: the history
- *  row is stamped source='command_override' and renders "via command override". */
+ *  a blank one) and the confirm states the audit consequence: the history row
+ *  is stamped source='command_override' and renders "via command override". */
 function CommandOverrideControl({ caseId, onDone }: { caseId: string; onDone: () => void }) {
   const [action, setAction] = useState<OverrideAction>('complete')
   const [reason, setReason] = useState('')
   const run = async () => {
     const trimmed = reason.trim()
     if (!trimmed) { toast('A reason is required for a command override.', 'warn'); return }
-    const verb = action === 'complete' ? 'mark this case Approved & Complete' : 'escalate this case to the Director'
+    const verb = action === 'complete' ? 'Mark this case Approved & Complete' : 'Escalate this case to the Director'
     const ok = await uiConfirm(
-      `Override the owner's stop-point decision and ${verb}? This is audited — the sign-off history will permanently show your name and reason, marked "via command override".`,
+      `${verb}, overriding the stop-point? Your name and reason are permanently recorded.`,
       { title: 'Command override', confirmText: 'Record override' },
     )
     if (!ok) return

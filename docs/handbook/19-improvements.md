@@ -2,21 +2,20 @@
 
 [← Handbook index](README.md)
 
-Recommendations only — nothing here is implemented. Effort: S < 1d,
-M = days, L = week+.
+Recommendations from the July 2026 review; rows marked **done** have since
+shipped. Effort: S < 1d, M = days, L = week+.
 
 ## Quick wins (S)
 
 | Idea | Why / benefit | Risk |
 |---|---|---|
-| Drop unused deps (`react-hook-form`, `zod`*, `@tanstack/react-query`) | Zero imports; smaller install/audit surface | none |
+| ~~Drop unused deps (`react-hook-form`, `@tanstack/react-query`)~~ **done** — dropped; zod kept and adopted (`src/lib/schemas.ts`) | Zero imports; smaller install/audit surface | none |
 | Drop/verify `bootstrap_*` RPCs | Close a setup-era privileged path | none (verify first) |
-| Wire or delete `lib/drafts.ts` | It's good never-lose-work code with zero importers | none |
-| Script + CI check for `guideContent.ts` generation | Kills a proven drift class | none |
-| Fix the guide's hardcoded case-tab illustration | Already drifted from the real tabs | none |
+| ~~Wire or delete `lib/drafts.ts`~~ **done** — wired into the report/chat/legal editors | Never-lose-work code | none |
+| ~~Script + CI check for `guideContent.ts` generation~~ **done** — `npm run gen:guide` + drift check | Kills a proven drift class | none |
+| ~~Fix the guide's hardcoded case-tab illustration~~ **done** — the guide regenerates from `docs/USER-GUIDE.md` | Was drifting from the real tabs | none |
 | Fold `chargeByCode` into `penalByCode`; migrate off deprecated `roles.isCommand` | Naming hygiene | trivial |
 
-*or keep zod and use it — see below.
 
 ## Medium improvements (M)
 
@@ -33,9 +32,9 @@ M = days, L = week+.
 
 | Idea | Why / benefit | Risk |
 |---|---|---|
-| **RLS/RPC test suite** (pgTAP or vitest against a Supabase branch with two test users) | The security wall has zero automated coverage — highest-value testing investment | low |
+| ~~**RLS/RPC test suite**~~ **done** — the live `tests/rls/` suite | Highest-value testing investment | low |
 | Server-side pagination/filtering for cases & audit (from DEFERRED.md) | Removes the whole-table-refetch ceiling | medium — touches the refresh idiom |
-| Component/E2E smoke tests (sign-in → create case → sign-off) | Catches integration regressions CI can't | low |
+| ~~Component/E2E smoke tests~~ **done** — `tests/e2e/` (smoke + per-domain specs) | Catches integration regressions CI can't | low |
 
 ## By theme
 

@@ -1,6 +1,6 @@
 /** DOJ / Judiciary functional E2E against the LIVE project (rls-test-*
- *  fixtures, PW_SUPABASE_SHIM-compatible — see liveAuth.ts). Covers the §56
- *  surface that the shim can reach deterministically:
+ *  fixtures, PW_SUPABASE_SHIM-compatible — see liveAuth.ts). Covers the
+ *  justice-portal surface that the shim can reach deterministically:
  *   - adaptive first-login Gate: domain selector (CID / DOJ / Judiciary),
  *     agency-scoped role menus, CID bureau selector only for CID, the
  *     Badge/Bar/Court identifier for justice applicants, request-only copy

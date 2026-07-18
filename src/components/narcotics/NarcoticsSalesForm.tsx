@@ -1,7 +1,7 @@
 'use client'
 
 /** Add / future-sale entry form for the restricted Street-Value Observations
- *  section (spec §17). A self-contained modal that LIVE-derives totals, $/unit
+ *  section. A self-contained modal that LIVE-derives totals, $/unit
  *  and converted weight through the pure model (narcoticsSales) as the analyst
  *  types, surfaces validateObservationDraft messages (blocking vs. warning),
  *  and submits via the definer RPC. Original recorded units are preserved —

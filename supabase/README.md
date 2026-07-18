@@ -11,7 +11,7 @@ Supabase Storage.
 > to the live project, so **the live schema is the source of truth** — captured
 > in [`schema-snapshot.sql`](schema-snapshot.sql) (generated reference snapshot),
 > itemized in [`MIGRATION-HISTORY.md`](MIGRATION-HISTORY.md), mirrored in
-> `src/lib/database.types.ts`, and documented in `docs/HANDBOOK.md` §8.
+> `src/lib/database.types.ts`, and documented in `docs/handbook/08-database.md`.
 
 ## RBAC model
 Two axes enforced in the database via RLS, off the caller's `profiles` row:
@@ -75,8 +75,9 @@ were never applied to this project — they are parked in `migrations/archive/`
 `20260615120300_reconcile_retired_init.sql`.
 
 **Live-only migrations & schema snapshot.** The live project's migration
-history has grown past this folder — 21 later migrations were applied directly
-(dashboard/MCP) and have no standalone file here. Two companion documents keep
+history has grown past this folder — some earlier migrations were applied
+directly (dashboard/MCP) and have no standalone file here (the itemized map
+is [`MIGRATION-HISTORY.md`](MIGRATION-HISTORY.md)). Two companion documents keep
 the repo honest about that gap:
 
 - [`schema-snapshot.sql`](schema-snapshot.sql) — a **generated, reference-only**

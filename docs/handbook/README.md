@@ -24,8 +24,8 @@ chapter stands alone and cross-links the rest.
 | 4 | [Feature Guide](04-features.md) | How each feature works end-to-end (data flow included) |
 | 5 | [Page Guide](05-pages.md) | Every URL/screen: components, data, permissions |
 | 6 | [Components Guide](06-components.md) | The reusable building blocks and when to reuse them |
-| 7 | [API Guide](07-api.md) | Every "endpoint" (Supabase REST + the 15 RPCs) |
-| 8 | [Database Guide](08-database.md) | All 47 tables, policies, functions, triggers |
+| 7 | [API Guide](07-api.md) | Every "endpoint" (Supabase REST + every RPC) |
+| 8 | [Database Guide](08-database.md) | Every table, policy, function, trigger |
 | 9 | [Authentication & Permissions](09-auth.md) | Sign-in flow, roles, the three permission layers |
 | 10 | [State Management](10-state.md) | Where data lives and how it moves |
 | 11 | [Dependency Map](11-dependency-map.md) | How the systems connect (diagrams) |
@@ -36,7 +36,7 @@ chapter stands alone and cross-links the rest.
 | 16 | [Best Practices](16-best-practices.md) | Always do / never do, with real examples |
 | 17 | [Performance Notes](17-performance.md) | Bottlenecks, current and future |
 | 18 | [Security Notes](18-security.md) | The security model and residual risks |
-| 19 | [Improvement Ideas](19-improvements.md) | Ranked suggestions (nothing implemented) |
+| 19 | [Improvement Ideas](19-improvements.md) | Ranked suggestions (shipped rows marked done) |
 | 20 | [Learning Path](20-learning-path.md) | The order to learn all of this |
 
 ## Appendices

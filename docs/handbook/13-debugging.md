@@ -13,7 +13,7 @@
 3. **Supabase Dashboard → Logs** — API, Postgres and Auth logs; the place
    to see the *server's* reason for a refusal.
 4. **`audit_log`** (owner account, Oversight → Audit) — every mutation on
-   20 tables with actor + payload. Great for "who changed this?".
+   the audited tables with actor + payload. Great for "who changed this?".
 5. **Vercel deployment logs** — build failures only (no runtime server).
 
 ## Common bugs and their usual causes

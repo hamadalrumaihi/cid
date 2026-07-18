@@ -1,7 +1,7 @@
 'use client'
 
 /** Bounded, debounced, server-backed record picker — the replacement for the
- *  load-the-whole-registry pickers flagged in the DOJ audit (§11). The caller
+ *  load-the-whole-registry pickers flagged in the DOJ audit. The caller
  *  supplies the loader (an RLS-scoped `list()` with ilikeAny + limit ~20), so
  *  this component can never widen anyone's access; an empty query should
  *  return the most recent records so the picker is useful before typing.

@@ -65,7 +65,8 @@ type C = SupabaseClient
 const STAMP = Date.now()
 const N = (s: string) => `[rls-test] v134 ${s} ${STAMP}`
 
-/** Live prod seed (migration §10) — never mutated, read-only assertions. */
+/** Live prod seed rows created by the v1.34 migration — never mutated,
+ *  read-only assertions. */
 const SEED = {
   series: '6132197e-b53a-45fc-9772-3172ea43f7c9',
   narcotic: '951825a7-e1f3-4a79-b3e2-e8c63a4599a4', // canonical Cannabis (media narcotic_id too)

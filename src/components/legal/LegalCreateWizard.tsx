@@ -1,7 +1,7 @@
 'use client'
 
-/** Guided legal-request wizard (DOJ redesign §15, phase 3) — the investigator
- *  landing's creation path, replacing the long linear create form. Steps:
+/** Guided legal-request wizard — the investigator landing's creation path,
+ *  replacing the long linear create form. Steps:
  *  type cards → case & target → type-specific details (+ structured
  *  search-warrant targets) → narrative & justification → review & submit.
  *
@@ -547,7 +547,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
         title={isEdit ? 'Revise legal request' : 'File legal request'}
         subtitle={isEdit && row
           ? `${row.request_number} — ${row.title}`
-          : 'A guided draft. Every requirement is revalidated by the server on submission.'}
+          : 'A guided draft — requirements are checked before submission.'}
         actions={<Button onClick={onCancel}>Cancel</Button>}
       />
 
@@ -682,7 +682,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
                 placeholder="Search by name or alias…"
                 hint={isEdit && row?.person_id
                   ? 'The linked person can be replaced, not removed, while revising.'
-                  : 'Chosen from the canonical Persons registry.'}
+                  : 'Chosen from the Persons registry.'}
               />
             )}
             {requestType === 'subpoena' && recipientType === 'entity' && (
@@ -840,7 +840,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
               <Card pad="sm">
                 <Field
                   label="What changed since the last version? (optional)"
-                  hint="Stored on the new immutable version so reviewers see the delta at a glance."
+                  hint="Saved with the new version so reviewers can see what changed at a glance."
                 >
                   {(id) => <Textarea id={id} rows={3} value={changeSummary} onChange={(e) => setChangeSummary(e.target.value)} />}
                 </Field>
@@ -848,7 +848,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
             )}
             {reviewIssues.length > 0 && (
               <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
-                <p className="font-semibold">Before submission the server will require:</p>
+                <p className="font-semibold">Still needed before you can submit:</p>
                 <ul className="mt-1 list-disc space-y-0.5 pl-4">
                   {reviewIssues.map((x) => <li key={x}>{x}</li>)}
                 </ul>

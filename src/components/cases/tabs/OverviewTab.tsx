@@ -1,8 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
@@ -14,58 +13,44 @@ import { useAuth } from '@/lib/auth'
 import { officerName, activeProfiles, useProfilesStore } from '@/lib/profiles'
 import { bureauLabel, roleLabel } from '@/lib/roles'
 import { useTableVersion } from '@/lib/realtime'
-import { assessCase, type ClosureChecklistItem, type NextAction } from '@/lib/caseWorkflow'
-import type { LegalRequest } from '@/lib/justice'
-import { LegalRequestRow } from '@/components/justice/legalShared'
+import type { CaseAssessment, ClosureChecklistItem, NextAction } from '@/lib/caseWorkflow'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
+import type { WorkflowRows } from '../CaseDetail'
 import { JointCaseModal, isActiveAssignment } from '../JointCaseModal'
-import { CaseBlockersPanel, type BlockerRow } from './CaseBlockersPanel'
-import { Stat, type AssignmentRow, type CaseRow, type ReportRow, type TaskRow } from './shared'
+import { CaseBlockersPanel } from './CaseBlockersPanel'
+import { Stat, type AssignmentRow, type CaseRow } from './shared'
 
-export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; canDelete: boolean }) {
+export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowChanged, showEnableRico, onEnableRico }: {
+  c: CaseRow
+  canEdit: boolean
+  canDelete: boolean
+  /** Shell-fetched workflow snapshot (tasks/reports/legal/media/blockers) —
+   *  Overview renders it instead of re-running the same five queries. */
+  wf: WorkflowRows | null
+  assessment: CaseAssessment | null
+  onWorkflowChanged: () => void
+  /** The RICO tab is conditional — this offers the explicit reveal when it is
+   *  hidden and the viewer may edit the case (lib/caseWorkflow.ricoTabVisible). */
+  showEnableRico: boolean
+  onEnableRico: () => void
+}) {
   const { profile, isCommand } = useAuth()
   const [assignments, setAssignments] = useState<AssignmentRow[]>([])
-  const [evidence, setEvidence] = useState(0)
-  const [reports, setReports] = useState<ReportRow[]>([])
-  const [tasks, setTasks] = useState<TaskRow[]>([])
-  const [legal, setLegal] = useState<LegalRequest[]>([])
-  const [blockers, setBlockers] = useState<BlockerRow[]>([])
-  const router = useRouter()
   // "Now" is snapshotted per refresh (render must stay pure) — expiry lines
   // re-evaluate whenever the assignments themselves are refetched.
   const [now, setNow] = useState(0)
   // "Since your last visit" recap: the marker for THIS case is captured once on
   // open (so the recap stays visible through the visit) and re-stamped on leave.
-  const seenRef = useRef<string>(Store.get<string>(`caseSeen:${c.id}`, ''))
-  const [recap, setRecap] = useState<{ evidence: number; reports: number; tasks: number; legal: number } | null>(null)
+  const [seenAt] = useState<string>(() => Store.get<string>(`caseSeen:${c.id}`, ''))
   const vA = useTableVersion('case_assignments')
-  const vE = useTableVersion('evidence')
-  const vR = useTableVersion('reports')
-  const vT = useTableVersion('case_tasks')
-  const vL = useTableVersion('legal_requests')
-  const vB = useTableVersion('case_blockers')
   const refresh = useCallback(async () => {
     try {
-      const [a, e, r, t, l, b] = await Promise.all([
-        list('case_assignments', { eq: { case_id: c.id } }),
-        list('evidence', { eq: { case_id: c.id } }),
-        list('reports', { eq: { case_id: c.id } }),
-        list('case_tasks', { eq: { case_id: c.id } }),
-        // Legal is read-scoped by RLS; a failure must not sink the Overview.
-        list('legal_requests', { eq: { case_id: c.id }, order: 'created_at', ascending: false }).catch(() => [] as LegalRequest[]),
-        list('case_blockers', { eq: { case_id: c.id }, order: 'created_at', ascending: false }).catch(() => [] as BlockerRow[]),
-      ])
-      setAssignments(a); setEvidence(e.length); setReports(r); setTasks(t); setLegal(l as LegalRequest[]); setBlockers(b); setNow(Date.now())
-      const seen = seenRef.current
-      const newer = (rows: { created_at?: string | null }[]) => seen ? rows.filter((x) => (x.created_at || '') > seen).length : 0
-      setRecap(seen ? {
-        evidence: newer(e), reports: newer(r), tasks: newer(t),
-        legal: l.filter((x) => (x.updated_at || '') > seen).length,
-      } : null)
+      const a = await list('case_assignments', { eq: { case_id: c.id } })
+      setAssignments(a); setNow(Date.now())
     } catch { /* tab can render stale */ }
   }, [c.id])
-  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vA, vE, vR, vT, vL, vB])
+  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vA])
   // Re-stamp the marker when leaving the case, so the next visit's recap covers
   // what changed while away. new Date() runs only in this browser effect.
   useEffect(() => {
@@ -73,16 +58,14 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
     return () => { Store.set(`caseSeen:${id}`, new Date().toISOString()) }
   }, [c.id])
 
-  const standardCount = assignments.filter((a) => a.assignment_source !== 'joint_case' && !a.removed_at).length
-  const assessment = useMemo(() => assessCase({
-    c,
-    tasks, reports, legal,
-    evidenceCount: evidence,
-    supportCount: standardCount,
-    meId: profile?.id ?? null,
-    assigneeName: officerName(c.signoff_assignee_id),
-    persistedBlockers: blockers,
-  }), [c, tasks, reports, legal, evidence, standardCount, profile?.id, blockers])
+  const recap = useMemo(() => {
+    if (!seenAt || !wf) return null
+    const newer = (rows: { created_at?: string | null }[]) => rows.filter((x) => (x.created_at || '') > seenAt).length
+    return {
+      photos: newer(wf.media), reports: newer(wf.reports), tasks: newer(wf.tasks),
+      legal: wf.legal.filter((x) => (x.updated_at || '') > seenAt).length,
+    }
+  }, [wf, seenAt])
 
   const [assignBusy, setAssignBusy] = useState(false)
   const addAssignment = async () => {
@@ -119,9 +102,9 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         {/* Left — operational state: what to do next, what stands in the way. */}
         <div className="min-w-0 space-y-4">
-          <GuidedNextAction caseId={c.id} stageLabel={assessment.stageLabel} actions={assessment.nextActions} />
-          <CaseBlockersPanel caseId={c.id} blockers={blockers} tasks={tasks} reports={reports} canEdit={canEdit} now={now} onChanged={refresh} />
-          <ClosureReadinessPanel caseId={c.id} checklist={assessment.closureChecklist} ready={assessment.closureReady} closed={assessment.stage === 'closed'} />
+          {assessment && <GuidedNextAction caseId={c.id} stageLabel={assessment.stageLabel} actions={assessment.nextActions} />}
+          <CaseBlockersPanel caseId={c.id} blockers={wf?.blockers ?? []} tasks={wf?.tasks ?? []} reports={wf?.reports ?? []} canEdit={canEdit} now={now} onChanged={onWorkflowChanged} />
+          {assessment && <ClosureReadinessPanel caseId={c.id} checklist={assessment.closureChecklist} ready={assessment.closureReady} closed={assessment.stage === 'closed'} />}
         </div>
         {/* Right — context: case facts, people, linked legal work. */}
         <div className="min-w-0 space-y-4">
@@ -148,7 +131,29 @@ export function OverviewTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: bo
               {!standardRows.length && <p className="text-sm text-slate-500">No support assignments recorded.</p>}
             </div>
           </div>
-          <CaseLegalPanel rows={legal} onOpen={(id) => router.push(`/legal?request=${encodeURIComponent(id)}`)} />
+          {/* The full legal panel moved to the Legal tab; Overview keeps a
+              one-line pointer (count = the same shell-fetched, RLS-scoped
+              rows the tab renders — never a wider query). */}
+          <Link
+            href={caseLink(c.id, 'legal')}
+            className="flex min-h-[44px] items-center justify-between gap-2 rounded-xl border border-white/10 bg-ink-950/50 px-4 py-3 transition hover:bg-white/5"
+          >
+            <span className="text-sm font-bold text-white">
+              Legal requests <span className="font-normal text-slate-400">({wf ? wf.legal.length : '—'})</span>
+            </span>
+            <span aria-hidden className="text-xs font-semibold text-blue-300">→</span>
+          </Link>
+          {showEnableRico && (
+            <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="font-bold text-white">RICO tracking</h3>
+                  <p className="text-xs text-slate-400">Not enabled — no enterprise or predicate acts recorded.</p>
+                </div>
+                <Button className="min-h-[44px] sm:min-h-0" onClick={onEnableRico}>Enable RICO tracking</Button>
+              </div>
+            </div>
+          )}
           {showJointPanel && (
             <JointMembersPanel
               c={c}
@@ -215,53 +220,14 @@ function ClosureReadinessPanel({ caseId, checklist, ready, closed }: {
   )
 }
 
-/* ── Case legal panel ───────────────────────────────────────────────────────
- * Read-only view of the case's warrants/subpoenas on the Overview, so a
- * detective never has to leave the case to see whether their search warrant
- * was approved. Rows reuse the shared LegalRequestRow (same look as the Legal
- * and Justice queues) and deep-link into /legal?request=<id>. Creating and
- * advancing requests stays in the Legal view / its RPCs. (Audit P1-7.) */
-function CaseLegalPanel({ rows, onOpen }: { rows: LegalRequest[]; onOpen: (id: string) => void }) {
-  const TERMINAL = new Set(['denied', 'withdrawn', 'closed'])
-  const active = rows.filter((r) => !TERMINAL.has(r.review_status))
-  const resolved = rows.filter((r) => TERMINAL.has(r.review_status))
-  return (
-    <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="font-bold text-white">Legal requests <span className="text-slate-500">({rows.length})</span></h3>
-        <Link href="/legal" className="text-xs font-semibold text-blue-300 hover:text-blue-200">Open Legal ↗</Link>
-      </div>
-      {rows.length === 0 ? (
-        <p className="text-sm text-slate-500">No warrants or subpoenas are linked to this case yet. Draft one from the <Link href="/legal" className="text-blue-300 hover:text-blue-200">Legal Requests</Link> view.</p>
-      ) : (
-        <div className="space-y-3">
-          {active.length > 0 && (
-            <div className="space-y-1.5">
-              {active.map((r) => <LegalRequestRow key={r.id} r={r} onOpen={onOpen} />)}
-            </div>
-          )}
-          {resolved.length > 0 && (
-            <details>
-              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 hover:text-slate-300">Resolved ({resolved.length})</summary>
-              <div className="mt-2 space-y-1.5 opacity-80">
-                {resolved.map((r) => <LegalRequestRow key={r.id} r={r} onOpen={onOpen} />)}
-              </div>
-            </details>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
 /* ── Since your last visit ──────────────────────────────────────────────────
  * A compact recap of what changed on this case since the viewer last opened it
  * (per-case localStorage marker, re-stamped on leave). Purely informational —
  * it never suppresses a notification; it just orients a returning detective. */
-function CaseRecap({ recap }: { recap: { evidence: number; reports: number; tasks: number; legal: number } | null }) {
+function CaseRecap({ recap }: { recap: { photos: number; reports: number; tasks: number; legal: number } | null }) {
   if (!recap) return null
   const parts: string[] = []
-  if (recap.evidence) parts.push(`${recap.evidence} evidence item${recap.evidence === 1 ? '' : 's'} added`)
+  if (recap.photos) parts.push(`${recap.photos} photo${recap.photos === 1 ? '' : 's'} added`)
   if (recap.reports) parts.push(`${recap.reports} report${recap.reports === 1 ? '' : 's'} added`)
   if (recap.tasks) parts.push(`${recap.tasks} task${recap.tasks === 1 ? '' : 's'} added`)
   if (recap.legal) parts.push(`${recap.legal} legal update${recap.legal === 1 ? '' : 's'}`)

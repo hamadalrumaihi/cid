@@ -98,7 +98,7 @@ export function PlacesView() {
         list('narcotics', { order: 'name' }).catch(() => [] as NarcoticRow[]),
         list('narcotic_precursors', {}).catch(() => [] as PrecursorRow[]),
         list('narcotic_hotspots', {}).catch(() => [] as HotspotRow[]),
-        list('media', { select: 'id,title,type,external_url,storage_path,place_id', order: 'created_at' })
+        list('media', { select: 'id,title,type,external_url,storage_path,place_id', is: { archived_at: null }, order: 'created_at' })
           .then((rows) => (rows as unknown as PlacePhoto[]).filter((m) => m.place_id))
           .catch(() => [] as PlacePhoto[]),
         // Structured legal references, batched once for the whole grid. A

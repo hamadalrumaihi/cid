@@ -1,6 +1,6 @@
 'use client'
 
-/** Oversight → document-governance warnings. Read-only surface (spec §33):
+/** Oversight → document-governance warnings. Read-only surface:
  *  each row is a WARNING for a human to chase, never an automatic incident.
  *  Derived from the same RLS-scoped shelf projection + pure docModel rules
  *  the library itself uses, so Oversight and the shelf can never disagree.

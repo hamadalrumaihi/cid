@@ -9,7 +9,7 @@ type TableName = keyof Database['public']['Tables']
 export type DbError = { message: string; code?: string }
 export type MutationResult<T> = { data: T | null; error: DbError | null }
 
-/** Contract carried over from the vanilla data layer (spec §3.2):
+/** Contract carried over from the vanilla data layer:
  *  - list() THROWS on error → callers try/catch (or use the query hooks).
  *  - insert/update/remove RETURN { error } → callers check res.error.
  *  Server-authoritative flows (finalize, sign-off, roster) go through rpc()
@@ -36,6 +36,9 @@ export interface ListOptions<T extends TableName> {
   /** Postgres NULLS FIRST on the order column (case_tasks due-date sort). */
   nullsFirst?: boolean
   eq?: Partial<Record<keyof Tables<T> & string, unknown>>
+  /** SQL IS match (null / boolean) — e.g. hide archived media rows with
+   *  `is: { archived_at: null }` (PostgREST `eq.null` never matches NULL). */
+  is?: Partial<Record<keyof Tables<T> & string, null | boolean>>
   in?: Partial<Record<keyof Tables<T> & string, readonly unknown[]>>
   /** PostgREST or-disjunction for bounded typed pickers — build it with
    *  ilikeAny() so user input can never inject extra conditions. */
@@ -56,6 +59,7 @@ export function ilikeAny(cols: readonly string[], term: string): string | null {
 export async function list<T extends TableName>(table: T, opts: ListOptions<T> = {}): Promise<Tables<T>[]> {
   let q = raw().from(table).select(opts.select ?? '*')
   if (opts.eq) for (const [k, v] of Object.entries(opts.eq)) q = q.eq(k, v)
+  if (opts.is) for (const [k, v] of Object.entries(opts.is)) q = q.is(k, v as null)
   if (opts.in) for (const [k, v] of Object.entries(opts.in)) q = q.in(k, (v ?? []) as unknown[])
   if (opts.or) q = q.or(opts.or)
   if (opts.order) {
@@ -76,10 +80,15 @@ export async function list<T extends TableName>(table: T, opts: ListOptions<T> =
  *  counts (e.g. open case_blockers for one case) never fetch rows. */
 export async function countRows<T extends TableName>(
   table: T,
-  filters?: { eq?: Partial<Record<keyof Tables<T> & string, unknown>> },
+  filters?: {
+    eq?: Partial<Record<keyof Tables<T> & string, unknown>>
+    /** SQL IS match — e.g. `is: { archived_at: null }` for live-only counts. */
+    is?: Partial<Record<keyof Tables<T> & string, null | boolean>>
+  },
 ): Promise<number> {
   let q = raw().from(table).select('*', { count: 'exact', head: true })
   if (filters?.eq) for (const [k, v] of Object.entries(filters.eq)) q = q.eq(k, v)
+  if (filters?.is) for (const [k, v] of Object.entries(filters.is)) q = q.is(k, v as null)
   const { count, error } = await q
   if (error) throw Object.assign(new Error(error.message), { code: error.code })
   return count ?? 0

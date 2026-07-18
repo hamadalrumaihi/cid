@@ -84,7 +84,7 @@ export async function loadCounts(id: string): Promise<NarcoticCounts> {
     c(countRows('narcotic_places', { eq: { narcotic_id: id } })),
     c(countRows('narcotic_persons', { eq: { narcotic_id: id } })),
     c(countRows('narcotic_gangs', { eq: { narcotic_id: id } })),
-    c(countRows('media', { eq: { narcotic_id: id } })),
+    c(countRows('media', { eq: { narcotic_id: id }, is: { archived_at: null } })),
     c(countRows('narcotic_sale_observations', { eq: { narcotic_id: id } })),
   ])
   return { caseLinks: links, seizures, places, people: persons + gangs, media, sales }
@@ -205,7 +205,7 @@ export async function loadIntelligence(id: string): Promise<IntelligenceData> {
 
 // ── Media ────────────────────────────────────────────────────────────────────
 export async function loadMedia(id: string): Promise<MediaRow[]> {
-  return opt(list('media', { eq: { narcotic_id: id }, order: 'created_at', ascending: false }))
+  return opt(list('media', { eq: { narcotic_id: id }, is: { archived_at: null }, order: 'created_at', ascending: false }))
 }
 
 // ── Activity — slim created_at projections across every child table ─────────

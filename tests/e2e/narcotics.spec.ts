@@ -1,4 +1,4 @@
-/** Narcotics Intelligence workspace (spec §33) — functional E2E against the
+/** Narcotics Intelligence workspace — functional E2E against the
  *  LIVE project. Primary actor is the bureau-lead fixture (a narcotics catalog
  *  MANAGER: creates confirmed rows, edits, resolves provisionals, merges). A
  *  plain detective (lsb) proves the provisional-guard path, and the owner

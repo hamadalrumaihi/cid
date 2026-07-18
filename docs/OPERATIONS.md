@@ -2,8 +2,9 @@
 
 Practical procedures for keeping the live project healthy: monitoring,
 routine maintenance, incident response, audit-log handling, and backups.
-Companion to [DEPLOYMENT.md](DEPLOYMENT.md) (shipping changes) and
-[`docs/CTO-REVIEW.md`](CTO-REVIEW.md) (why these matter).
+Companion to [DEPLOYMENT.md](DEPLOYMENT.md) (shipping changes); the July
+2026 review that motivated several of these procedures is
+[`docs/CTO-REVIEW.md`](CTO-REVIEW.md).
 
 ---
 
@@ -185,3 +186,33 @@ drill is the single highest-value operational task open.
 - When investigating an incident (including fixture drift, §4), the audit
   log is the primary forensic record — export the relevant window to CSV
   before drawing conclusions.
+
+## 7. SOP sync from Google Drive
+
+One-way sync of Google Docs into Reference → SOPs & Library, via the
+`supabase/functions/sops-sync` edge function (deploy with "Verify JWT"
+**off**), fired every 15 minutes by a pg_cron job (`sops-sync`) through
+pg_net. Docs are upserted by `content.sync.file_id` and skipped when
+`modifiedTime` is unchanged. Configuration lives in the deny-all
+`app_secrets` table: `GOOGLE_SA_EMAIL`, `GOOGLE_SA_KEY`, `SYNC_SECRET`,
+and optional `SOPS_FOLDER_ID` (unset = every Google Doc shared with the
+service account syncs).
+
+- **Service account**:
+  `service-account@centering-brook-496510-a6.iam.gserviceaccount.com`
+  (Google Cloud project `628249261704`). The Drive API must be enabled on
+  that project, and the SOP folder (or individual Docs) shared with the
+  account as Viewer.
+- **Manual test**:
+  `curl -X POST https://jhxuflzmqspidkvjckox.supabase.co/functions/v1/sops-sync -H "x-sync-secret: <SYNC_SECRET from app_secrets>"`
+  — expect `{"ok":true,"drive_files":N,...}`; synced docs appear within
+  15 minutes of any Drive edit.
+- **Open one-time items (owner, Google side)**:
+  1. **Rotate the service-account key** — the original JSON key should be
+     treated as exposed. Create a new key, update `GOOGLE_SA_KEY` in
+     `app_secrets`, verify one sync run, then delete the old key in
+     Google Cloud IAM.
+  2. **Narrow the Drive share** from the "1. CID General" root to the
+     SOP/Training folder only.
+  3. **Move the remaining reference docs** (Gang Fact Sheet, CID Roster,
+     Case Building Playbook) into SOP/Training so they auto-publish.

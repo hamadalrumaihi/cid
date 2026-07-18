@@ -69,7 +69,7 @@ export const SUBPOENA_TYPES = [
 ] as const
 export type SubpoenaType = (typeof SUBPOENA_TYPES)[number][0]
 
-/** Type-specific subpoena fields (§35) — rendered conditionally and stored in
+/** Type-specific subpoena fields — rendered conditionally and stored in
  *  legal_requests.form_data. `req` marks the fields the form must fill. */
 export const SUBPOENA_FIELDS: Record<SubpoenaType, { key: string; label: string; req?: boolean; kind?: 'textarea' | 'datetime' }[]> = {
   testimony: [
@@ -125,7 +125,7 @@ export const SUBPOENA_FIELDS: Record<SubpoenaType, { key: string; label: string;
     { key: 'items_requested', label: 'Items / Records Requested', kind: 'textarea' },
   ],
 }
-/** In-RP platforms only — real-world platforms are out of scope (§35). */
+/** In-RP platforms only — real-world platforms are out of scope. */
 export const SOCIAL_PLATFORMS = ['Birdy', 'InstaPic'] as const
 
 export const WARRANT_TYPES = [
@@ -208,7 +208,7 @@ export const isEditableDraft = (r: Pick<LegalRequest, 'document_status' | 'revie
   (r.document_status === 'draft' || r.document_status === 'reopened') &&
   EDITABLE_REVIEW_STATES.has(r.review_status)
 
-/** Deadline helper — server timestamps in, human warning out (§49). Thin
+/** Deadline helper — server timestamps in, human warning out. Thin
  *  delegation to the shared engine (lib/deadlines): same labels
  *  ('Expires'/'Expired', 'Response due'/'Response overdue'), same
  *  {text, urgent} | null shape for legalShared callers. */

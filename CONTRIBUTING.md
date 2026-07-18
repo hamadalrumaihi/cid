@@ -11,7 +11,8 @@ preview deployment before it reaches production.** Production tracks
 `main`; a broken merge deploys immediately. Never push to `main` directly.
 
 > Note: GitHub branch protection is a repository *setting*, not code — see
-> "Manual configuration" in [`docs/RELEASE-READINESS.md`](docs/RELEASE-READINESS.md).
+> "Manual configuration" in
+> [`docs/archive/RELEASE-READINESS.md`](docs/archive/RELEASE-READINESS.md).
 > Until it is enabled, this rule is enforced by discipline.
 
 ## Workflow
@@ -27,8 +28,9 @@ preview deployment before it reaches production.** Production tracks
    with dedicated test accounts: `npm run test:rls` — the RLS/RPC
    security-wall tests — and `npm run test:e2e` — the Playwright smoke test.
    See `tests/rls/README.md`.)
-4. **PR** — the template's merge checklist is the definition of done.
-   CI runs the same gates plus the handbook drift check.
+4. **PR** — fill in the template; "What every change must include" below
+   is the definition of done. CI runs the same gates plus the handbook
+   drift check.
 5. **Verify the preview** (the Vercel bot comments the URL): sign in,
    exercise the change, use two browsers for realtime, test as a
    non-privileged account when permissions are involved.
@@ -61,8 +63,8 @@ versioned entry when they ship together.
 
 ## What every change must include
 
-1. **Explain the user-facing purpose** — the PR's "What & why" says what a
-   member/reviewer gains, not just what the code does.
+1. **Explain the user-facing purpose** — the PR's Summary and Why say what
+   a member/reviewer gains, not just what the code does.
 2. **Identify the affected roles** — who can now see or do something they
    couldn't (or no longer can).
 3. **Identify the affected tables and policies** — name them in the PR.
@@ -75,8 +77,8 @@ versioned entry when they ship together.
 6. **Add positive AND negative permission tests** — every new permission
    needs an allow test and a deny test in the live RLS suite
    (`tests/rls/`); see [`docs/TESTING.md`](docs/TESTING.md).
-7. **Run all required checks** (see the gate in Workflow step 3 and the PR
-   checklist below).
+7. **Run all required checks** (the gate in Workflow step 3), and record
+   them in the PR's Verification section.
 8. **Update the relevant documentation** — handbook/user guide plus the
    reviewer docs (`docs/ARCHITECTURE.md`, `AUTHORIZATION.md`, `RLS.md`,
    `WORKFLOWS.md`, `REVIEW-MAP.md`) when contracts, permissions, or
@@ -99,12 +101,3 @@ function carries a header comment covering **Purpose / Caller /
 Authorization / Side effects / Audit behavior / Security notes**; SECURITY
 DEFINER functions additionally justify definer privileges and pin
 `search_path` (see [`docs/RLS.md`](docs/RLS.md)).
-
-## Development statement
-
-The project's requirements, workflows, security model, and final
-implementation decisions are human-directed and human-reviewed. Development
-tools may assist with drafting or implementation, but no tool independently
-defines policy, approves changes, or operates investigative and legal
-decisions. The portal itself contains no runtime AI — describe
-deterministic features as rule-based, database-driven, or workflow-based.

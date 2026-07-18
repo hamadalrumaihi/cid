@@ -1,4 +1,4 @@
-/** Pure model for the Narcotics substance DOSSIER (spec §8-20).
+/** Pure model for the Narcotics substance DOSSIER.
  *
  *  Intentionally PURE — no React, no db, no I/O. It owns the section
  *  whitelist + URL guard, the display vocabulary (categories, roles, link
@@ -70,8 +70,8 @@ export function isProductionRole(role: string | null | undefined): boolean {
   return (PRODUCTION_ROLES as readonly string[]).includes(role ?? '')
 }
 
-/** Generalized, non-actionable production stages (spec §Intelligence) — plain
- *  labels, no ingredients/ratios/temps/steps. */
+/** Generalized, non-actionable production stages — plain labels, no
+ *  ingredients/ratios/temps/steps. */
 export const PRODUCTION_STAGES = ['Cultivation', 'Processing', 'Packaging', 'Distribution'] as const
 
 export const placeRoleLabel = (role: string | null | undefined): string => humanize(role) || 'Associated'
@@ -96,7 +96,7 @@ export function seizureStateTintKey(state: string | null | undefined): string {
 }
 
 /** People/gangs links flagged `possible_mention` must read distinctly from a
- *  confirmed association (spec §People & Gangs). */
+ *  confirmed association. */
 export function isPossibleMention(linkStatus: string | null | undefined): boolean {
   return (linkStatus ?? '').toLowerCase() === 'possible_mention'
 }
@@ -105,8 +105,8 @@ export function linkStatusLabel(linkStatus: string | null | undefined): string {
   return humanize(linkStatus) || 'Linked'
 }
 
-/** How a case is related to the substance (spec §Cases — confirmed vs suspected
- *  vs mention). Durable intel links are confirmed; seizures inherit their own
+/** How a case is related to the substance (confirmed vs suspected vs
+ *  mention). Durable intel links are confirmed; seizures inherit their own
  *  state; a place's source case is a mention. */
 export type CaseRelation = 'linked' | 'seizure' | 'mention'
 export const CASE_RELATION_LABEL: Record<CaseRelation, string> = {
@@ -115,7 +115,7 @@ export const CASE_RELATION_LABEL: Record<CaseRelation, string> = {
   mention: 'Mentioned via place',
 }
 
-/* ── Charges (§13) — resolve code strings against PENAL_CODE (no FK) ──────── */
+/* ── Charges — resolve code strings against PENAL_CODE (no FK) ────────────── */
 const PENAL_BY_CODE: Map<string, PenalCharge> = new Map(PENAL_CODE.map((c) => [c.code, c]))
 
 /** charge_codes is a JSON array of penal-code strings. Returns the trimmed,

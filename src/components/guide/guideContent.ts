@@ -7,11 +7,11 @@ export const USER_GUIDE_MD = `Welcome to the **CID Portal**, the live case-manag
 
 The CID Portal is a private, real-time investigation workspace. Everything in it is **live and shared**: when another detective updates a case, adds a suspect, or posts an announcement, your screen updates within seconds — no refresh needed. The portal covers the full life of an investigation:
 
-- **Cases** — the central record: evidence, reports, tasks, charges, sign-off and court packets.
+- **Cases** — the central record: evidence, reports, tasks, charges, legal requests, sign-off and court packets.
 - **Intelligence** — the people, gangs, vehicles, places and networks behind those cases.
-- **Command** — dashboards, announcements, roster, heatmaps and approvals for leadership.
+- **Command** — your personal desk and Action Center, plus dashboards, announcements, roster, heatmaps and approvals for leadership.
 - **Reference** — the Penal Code, division SOPs, and this guide (Reference → User Guide).
-- **Oversight** — your personal desk, the division calendar, weekly shift reports and the audit log.
+- **Oversight** — the division calendar, weekly shift reports and the audit log.
 
 What you can see and change depends on your **role and bureau** — the server enforces this, so you'll simply never see records that aren't yours to see.
 
@@ -28,7 +28,7 @@ What you can see and change depends on your **role and bureau** — the server e
 
 3. First time here? After signing in you'll be asked **which role you're applying for** — **CID**, **DOJ**, or **Judiciary**. Your choice only decides which application form you see; it never grants access. Pick **CID** for detective work, **DOJ** for prosecutor roles (Assistant District Attorney, District Attorney, Attorney General), or **Judiciary** for Judge.
    - **CID applicants** fill in display name, badge number, your **one permanent department** (Los Santos, Blaine County or State Bureau — JTF is a temporary joint-case designation, assigned per case, never a permanent department), the CID role you're requesting (any normal role, **Detective through Director** — requesting grants nothing, and higher roles need higher approvers, up to the Owner for Director), and a short reason — then **Submit Request**. Command reviews it. Once approved, your assigned role and department stay in effect until an authorized promotion, demotion, or transfer is completed — another request or a profile edit can't change them, and a department move needs both the source and destination Bureau Leads (or Deputy Director+) to approve.
-   - **DOJ / Judiciary applicants** fill in display name, an optional **Badge / Bar / Court identifier**, the justice role, and a reason — then **Submit Request**. A District Attorney, Attorney General, or the project owner reviews it (a Judge or Attorney General request needs owner approval). There is no CID bureau to choose.
+   - **DOJ / Judiciary applicants** fill in display name, an optional **Badge / Bar / Court identifier**, the justice role, and a reason — then **Submit Request**. A District Attorney, Attorney General, or the project owner reviews it (an Attorney General request needs the owner's approval; a Judge request needs the Attorney General or the owner). There is no CID bureau to choose.
    In every case the reviewer can approve as-is, approve with a different role, send it back for a correction (you'll see their note, edit, and resubmit), or reject it. You stay locked out until a request is approved; once it is, reload and you're in. Justice-only members land in the **Justice portal**; CID members get the full CID portal.
 
 ### Legal requests — warrants and subpoenas
@@ -51,21 +51,21 @@ DOJ and Judge members work their queues in the **Justice portal**: prosecutors r
 
 - Click your **name card** at the bottom of the left sidebar (or your name in the top bar) to open **My Profile** — set your display name, badge number and avatar, link Discord for DMs, and review your account. Your work is attributed by your display name and badge.
 - The **Appearance** control opens the same page's Appearance tab — pick your accent color and compact/comfortable density (saved on this device).
-- Open **My Desk** (Oversight section) — this is your personal to-do view and the best page to start every session on.
+- Open **My Desk** (Command section — your landing page) — this is your personal to-do view and the best page to start every session on.
 
 ## Main Interface Navigation
 
 ### The left sidebar (desktop)
 
-The sidebar groups all 29 screens into **5 categories**:
+The sidebar groups the portal's screens into **5 categories**:
 
 | Category | What's inside |
 |---|---|
-| **Command** | Dashboard, Analytics, Announcements, Heatmap, Roster & Commendations |
-| **Cases** | Case Files, Operations, Attachments, RICO |
+| **Command** | My Desk (your landing page), Action Center, Dashboard, Analytics, Announcements, Heatmap, Roster & Commendations |
+| **Cases** | Case Files, Operations, Legal Requests, Attachments, RICO |
 | **Intelligence** | Persons, BOLO Board, Gangs, Places, Vehicles, Indicators, Network, Narcotics, Ballistics, M.O. Detector, Media Vault, Records |
-| **Reference** | Penal Code, SOPs & Library, User Guide |
-| **Oversight** | My Desk, Calendar, Shift Reports, Audit Log (sortable, filterable, exports to CSV) |
+| **Reference** | Penal Code, SOPs & Library, User Guide (and, for the portal owner, the Developer Handbook) |
+| **Oversight** | Calendar, Shift Reports, Audit Log (sortable, filterable, exports to CSV) |
 
 Click a **category** to jump to its first screen; a **sub-tab strip** appears under the header to switch between the screens inside that category (the crowded Intelligence strip labels its tools **Registries · Analysis · Archive** so the right one is easier to spot). Colored dots on the Command button are live counters (pending member approvals, unread announcements, items waiting on you).
 
@@ -87,7 +87,7 @@ The sidebar becomes a **bottom navigation bar** with the same 5 categories; a do
 
 1. Go to **Cases → Case Files**.
 2. Use the search box or status filters to find the case, then **click its card**.
-3. Inside, work through the tabs: **Overview** (assignments & stats), **Graph** (the investigation link chart), **Evidence**, **Reports**, **Tasks**, **Charges**, **Chat** (case room with @mentions), **Timeline**, **Files**, **Intel** (linked people/gangs/places), **RICO**, and **Sign-off**. When you write an investigative report, the **Evidence / Property** section has **Add from case evidence** and **Add from case attachments** pickers — they list only what's already logged on this case's Evidence tab or attachments, and added entries show as removable chips. Click a saved report to open it **right in the tab**: referenced evidence expands to its logged details, attachments open their file link, and matching names jump to that person's profile. **Finalize** asks for confirmation and seals the report (contents lock); bureau leads and above can **Reopen** a sealed report to make it editable again. Nothing sealed is ever lost: a sealed report shows its **Signatures** (including earlier seals from before a reopen, marked as superseded), and the **Versions** button lists every sealed version — open one to read exactly what the report said when it was signed. Warrant reports get a status selector (draft → signed → executed → returned) that feeds the BOLO board and person profiles.
+3. Inside, work through the tabs: **Overview** (assignments & stats), **Graph** (the investigation link chart), **Photos & Media**, **Intel & Notes** (the case's working notes plus linked people/gangs/places/narcotics), **Charges**, **RICO** (appears once you enable tracking from the Overview, or when the case already has RICO data — saved links always work), **Reports**, **Tasks**, **Legal** (the case's warrants & subpoenas, grouped by who acts next), **Sign-off**, **Chat** (case room with @mentions), and **Timeline**. When you write an investigative report, the **Evidence / Property** section has **Add from case evidence** and **Add from case attachments** pickers — they list only what's already logged on this case's Photos & Media tab or attachments, and added entries show as removable chips. Click a saved report to open it **right in the tab**: referenced evidence expands to its logged details, attachments open their file link, and matching names jump to that person's profile. **Finalize** asks for confirmation and seals the report (contents lock); bureau leads and above can **Reopen** a sealed report to make it editable again. Nothing sealed is ever lost: a sealed report shows its **Signatures** (including earlier seals from before a reopen, marked as superseded), and the **Versions** button lists every sealed version — open one to read exactly what the report said when it was signed. Warrant reports get a status selector (draft → signed → executed → returned) that feeds the BOLO board and person profiles.
 4. The **Timeline** tab opens with a zoomable chronology band — every event on its own lane (evidence, reports, tasks, sign-off). **Scroll to zoom** in on a busy day, **drag to pan**, and hover any dot for the details.
 
 ### Create a case
@@ -112,17 +112,17 @@ When a case involves more than one department, the case lead (or Command) can cl
 - **A vehicle:** Intelligence → Vehicles → **+ New Vehicle** — plate, model, owner. Click a vehicle's **Profile** for its full page — details, owner (linked to their person profile), gang tie, notes, and every case the plate or owner appears in. The registry also flags plates that appear across multiple cases.
 - **A gang:** Intelligence → Gangs → pick or create a gang, then use **Add member** and **Add Turf** inside it.
 - **A hard identifier:** Intelligence → Indicators → **+ New Indicator** — log a burner phone, bank account, weapon serial, alias or address against its case. The registry deconflicts automatically: if the same value is already logged on another case, both cases get a ⚡ **Deconfliction alert** naming each other (a case you can't access shows as 🔒 restricted — coordinate through its bureau lead).
-- **Link intel to a case:** open the case → **Intel** tab → link persons/gangs/places so everything cross-references.
+- **Link intel to a case:** open the case → **Intel & Notes** tab → link persons/gangs/places/narcotics (with an optional role and note) so everything cross-references.
 
 ### See the case as a link chart
 
 Open a case → **Graph** tab. The case sits at the center; suspects, witnesses, gangs, places, evidence, vehicles, reports and warrants orbit it, connected by labeled relationships (**owns**, **seen at**, **member of**, **mentioned in**…). Drag nodes to arrange, scroll to zoom, and **click any node** for its details and a jump link. The chart builds itself from the case's Intel links, evidence and reports — nothing extra to maintain.
 
-You can also work the case from the chart itself: **🔗 Link intel** (top-left) connects a person, gang or place without leaving the graph, and a linked node's panel has **Unlink from case**. Click a person and **Show their other cases** to see where else they surface. Your dragged arrangement is remembered per case on this device — **↺ Reset layout** brings back the automatic ring.
+The chart is a read-only view of the case's links — **Manage links** (top-left) jumps to the **Intel & Notes** tab, the one place links are added or removed. Dashed lines mark inferred connections (a plate or name spotted in evidence text) as opposed to recorded links. Click a person and **Show their other cases** to see where else they surface. Your dragged arrangement is remembered per case on this device — **↺ Reset layout** brings back the automatic ring.
 
 ### Attach photos, videos and files
 
-1. Go to **Cases → Attachments** (or a case's **Files** tab).
+1. Go to **Cases → Attachments**.
 2. Type or pick the **case number**, click **📎 Attach file**, and choose one or more files (images, video, audio, PDF).
 3. Click any attachment to preview it in place. Files are hosted externally; only the link is stored with the case.
 
@@ -133,7 +133,7 @@ You can also work the case from the chart itself: **🔗 Link intel** (top-left)
 
 ### Work your desk
 
-**My Desk** (Oversight) shows, in one screen: sign-offs waiting on **you**, your returned cases, due follow-ups, stale cases, your open tasks, recent @mentions, your followed items, notifications and draft reports. If the Command dot in the nav is lit, this is where the work is.
+**My Desk** (Command) shows, in one screen: sign-offs waiting on **you**, your returned cases, due follow-ups, stale cases, your open tasks, recent @mentions, your followed items, notifications and draft reports. If the Command dot in the nav is lit, this is where the work is.
 
 ### Announce to the division (command staff)
 

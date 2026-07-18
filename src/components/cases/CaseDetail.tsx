@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Button } from '@/components/ui/Button'
@@ -14,22 +14,29 @@ import { countRows, deleteWithUndo, list, update, withRetry } from '@/lib/db'
 import { todayISO } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useOperationsStore } from '@/lib/operations'
-import { assessCase, type PersistedBlocker, type WfLegal, type WfReport, type WfTask } from '@/lib/caseWorkflow'
+import { assessCase, ricoTabVisible } from '@/lib/caseWorkflow'
+import { normalizeCaseTab } from '@/lib/caseLinks'
+import type { Tables } from '@/lib/database.types'
+import type { LegalRequest } from '@/lib/justice'
+import { countViewerActionable } from '@/lib/legalWorkflow'
 import { parseCharges } from '@/lib/jsonShapes'
 import { officerName, activeProfiles } from '@/lib/profiles'
 import { notify } from '@/lib/notify'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
-import { isPinnedCase, pushRecentCase, togglePinCase } from './caseUtils'
+import { useNow } from '@/lib/useNow'
+import { LEGAL_LIST_COLS, buildLegalViewer, useMyProsecutorBureaus } from '@/components/justice/legalShared'
+import { enableRicoSession, isPinnedCase, pushRecentCase, ricoSessionEnabled, togglePinCase } from './caseUtils'
 import { CaseModal } from './CaseModal'
 import { CaseCommandHeader } from './CaseCommandHeader'
 import { ReassignBureauModal } from './ReassignBureauModal'
 import { OverviewTab } from './tabs/OverviewTab'
-import { NotesTab } from './tabs/NotesTab'
-import { EvidenceTab } from './tabs/EvidenceTab'
+import { MediaTab } from './tabs/MediaTab'
+import type { BlockerRow } from './tabs/CaseBlockersPanel'
 import { ChargesTab } from './tabs/ChargesTab'
 import { RicoTab } from './tabs/RicoTab'
 import { IntelTab } from './tabs/IntelTab'
+import { LegalTab } from './tabs/LegalTab'
 import { ReportsTab } from './tabs/ReportsTab'
 import { TasksTab } from './tabs/TasksTab'
 import { SignoffTab } from './tabs/SignoffTab'
@@ -46,35 +53,48 @@ const CaseGraphTab = dynamic(() => import('./CaseGraphTab').then((m) => m.CaseGr
   loading: () => <p className="py-10 text-center text-sm text-slate-500">Building the link chart…</p>,
 })
 
-const TABS = ['overview', 'graph', 'evidence', 'notes', 'charges', 'rico', 'intel', 'reports', 'tasks', 'signoff', 'chat', 'timeline'] as const
+const TABS = ['overview', 'graph', 'media', 'intel', 'charges', 'rico', 'reports', 'tasks', 'legal', 'signoff', 'chat', 'timeline'] as const
 type TabId = (typeof TABS)[number]
 
 const TAB_LABELS: Record<TabId, string> = {
-  overview: 'Overview', graph: 'Graph', evidence: 'Evidence', notes: 'Notes',
-  charges: 'Charges', rico: 'RICO', intel: 'Intel', reports: 'Reports',
-  tasks: 'Tasks', signoff: 'Sign-off', chat: 'Chat', timeline: 'Timeline',
+  overview: 'Overview', graph: 'Graph', media: 'Photos & Media', intel: 'Intel & Notes',
+  charges: 'Charges', rico: 'RICO', reports: 'Reports', tasks: 'Tasks',
+  legal: 'Legal', signoff: 'Sign-off', chat: 'Chat', timeline: 'Timeline',
 }
 
-// Visual grouping only — the tab ids and ?tab= URL values are unchanged.
+// Visual grouping only — `?tab=` URL values match the ids (legacy
+// `tab=evidence`/`tab=notes` links resolve via normalizeCaseTab). RICO is
+// conditional (ricoTabVisible): the group simply skips it when hidden.
 const TAB_GROUPS: ReadonlyArray<SectionTabGroup<TabId>> = [
-  { label: 'Command', tabs: ['overview', 'signoff', 'timeline'] },
-  { label: 'Investigation', tabs: ['graph', 'evidence', 'notes', 'charges', 'rico', 'intel'] },
-  { label: 'Documentation', tabs: ['reports'] },
-  { label: 'Collaboration', tabs: ['tasks', 'chat'] },
+  { label: 'Command', tabs: ['overview'] },
+  { label: 'Investigation', tabs: ['graph', 'media', 'intel', 'charges', 'rico'] },
+  { label: 'Casework', tabs: ['reports', 'tasks', 'legal'] },
+  { label: 'Oversight', tabs: ['signoff', 'chat', 'timeline'] },
 ]
 
-interface WorkflowRows {
-  tasks: WfTask[]
-  reports: WfReport[]
-  legal: WfLegal[]
-  evidence: number
-  blockers: PersistedBlocker[]
+/** Slim media projection — enough for the metric count + Overview recap. */
+type WfMediaRow = Pick<Tables<'media'>, 'id' | 'created_at' | 'archived_at'>
+
+/** The case-scoped workflow snapshot — fetched ONCE here and shared with the
+ *  command header, metric strip AND OverviewTab (which used to run the same
+ *  five queries again in parallel — the audit's triple-fetch). */
+export interface WorkflowRows {
+  tasks: Tables<'case_tasks'>[]
+  reports: Tables<'reports'>[]
+  /** Narrow LEGAL_LIST_COLS projection — everything the cards, the workflow
+   *  model and the Legal tab read; RLS scopes the rows, unchanged. */
+  legal: LegalRequest[]
+  media: WfMediaRow[]
+  blockers: BlockerRow[]
+  /** rico_cases rows for this case (0/1 — UNIQUE case_id). HEAD count only;
+   *  drives the conditional RICO tab. */
+  rico: number
 }
 
 export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () => void; onChanged: () => void }) {
-  const router = useRouter()
   const sp = useSearchParams()
-  const { profile, canEdit, canDelete, isCommand, isOwner } = useAuth()
+  const auth = useAuth()
+  const { profile, canEdit, canDelete, isCommand, isOwner } = auth
   const operations = useOperationsStore((s) => s.operations)
   const [c, setCase] = useState<CaseRow | null>(null)
   const [loading, setLoading] = useState(true)
@@ -82,7 +102,23 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const [handover, setHandover] = useState(false)
   const [reassign, setReassign] = useState(false)
   const casesV = useTableVersion('cases')
-  const tab = (sp.get('tab') && TABS.includes(sp.get('tab') as TabId) ? sp.get('tab') : 'overview') as TabId
+  // Legacy ?tab=evidence (old links/notifications/search hits) maps to media.
+  const requestedTab = normalizeCaseTab(sp.get('tab'))
+  const urlTab = (requestedTab && TABS.includes(requestedTab as TabId) ? requestedTab : 'overview') as TabId
+  // Same-page section switching is local state synced to the URL through the
+  // native history API (Next keeps useSearchParams in step with it). A router
+  // round-trip is avoided deliberately: query-only router navigation reverts
+  // in some serving environments. Real navigations (deep links, notification
+  // clicks) still win — the effect below adopts any URL-driven tab change.
+  const [tabOverride, setTabOverride] = useState<TabId | null>(null)
+  const [adoptedKey, setAdoptedKey] = useState(`${id}:${urlTab}`)
+  if (adoptedKey !== `${id}:${urlTab}`) {
+    // Render-phase adjustment (not an effect): a URL-driven change means a
+    // real navigation landed — it supersedes any local override.
+    setAdoptedKey(`${id}:${urlTab}`)
+    setTabOverride(null)
+  }
+  const tab = tabOverride ?? urlTab
 
   const fetchCase = useCallback(async () => {
     setLoading(true)
@@ -100,47 +136,73 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   useEffect(() => { queueMicrotask(() => { void fetchCase() }) }, [fetchCase, casesV])
 
   const setTab = (next: TabId) => {
+    setTabOverride(next)
     const params = new URLSearchParams(sp.toString())
     params.set('case', id)
     params.set('tab', next)
-    router.replace(`/cases?${params.toString()}`)
+    window.history.replaceState(window.history.state, '', `/cases?${params.toString()}`)
   }
 
-  // ── Workflow snapshot for the command header + metric strip. Row fetches are
-  //    the same case-scoped queries the tabs run; evidence uses a HEAD count so
-  //    no rows move. Open blockers come over as rows (not a count) so the same
-  //    fetch feeds assessCase's persistedBlockers — header, metric strip and
-  //    Overview all gate on identical data. Best-effort: the header renders
+  // ── Workflow snapshot — the ONE case-scoped fetch behind the command
+  //    header, metric strip and OverviewTab (passed down as props; Overview
+  //    no longer re-runs these queries). Media comes over as slim rows so
+  //    the same fetch feeds the Photos metric AND the Overview recap; blockers
+  //    come over whole (open + resolved) for the blockers panel history —
+  //    assessCase filters open rows itself. Best-effort: the header renders
   //    without it. ──
   const [wf, setWf] = useState<WorkflowRows | null>(null)
-  const vE = useTableVersion('evidence')
+  const vM = useTableVersion('media')
   const vR = useTableVersion('reports')
   const vT = useTableVersion('case_tasks')
   const vL = useTableVersion('legal_requests')
   const vB = useTableVersion('case_blockers')
+  const vRi = useTableVersion('rico_cases')
   const fetchWorkflow = useCallback(async () => {
     try {
-      const [tasks, reports, legal, evidence, blockers] = await Promise.all([
+      const [tasks, reports, legal, media, blockers, rico] = await Promise.all([
         list('case_tasks', { eq: { case_id: id } }),
         list('reports', { eq: { case_id: id } }),
         // Legal is read-scoped by RLS; a failure must not sink the header.
-        list('legal_requests', { eq: { case_id: id } }).catch(() => [] as WfLegal[]),
-        countRows('evidence', { eq: { case_id: id } }),
-        list('case_blockers', { eq: { case_id: id, status: 'open' } }).catch(() => [] as PersistedBlocker[]),
+        // Narrow projection — the Legal tab + cards read the same columns.
+        list('legal_requests', { select: LEGAL_LIST_COLS, eq: { case_id: id }, order: 'created_at', ascending: false }).catch(() => [] as LegalRequest[]),
+        list('media', { select: 'id,created_at,archived_at', eq: { case_id: id } })
+          .then((r) => r as unknown as WfMediaRow[]),
+        list('case_blockers', { eq: { case_id: id }, order: 'created_at', ascending: false }).catch(() => [] as BlockerRow[]),
+        // Cheap HEAD count — has this case ever grown a RICO tracker?
+        countRows('rico_cases', { eq: { case_id: id } }).catch(() => 0),
       ])
-      setWf({ tasks, reports, legal, evidence, blockers })
+      setWf({ tasks, reports, legal: legal as LegalRequest[], media, blockers, rico })
     } catch { /* header/metrics render with em-dashes until a fetch lands */ }
   }, [id])
-  useEffect(() => { queueMicrotask(() => { void fetchWorkflow() }) }, [fetchWorkflow, casesV, vE, vR, vT, vL, vB])
+  useEffect(() => { queueMicrotask(() => { void fetchWorkflow() }) }, [fetchWorkflow, casesV, vM, vR, vT, vL, vB, vRi])
+
+  // Photos = non-archived case media (archived rows stay out of every count).
+  const mediaCount = useMemo(() => (wf ? wf.media.filter((m) => !m.archived_at).length : null), [wf])
 
   const assessment = useMemo(() => (c && wf ? assessCase({
     c,
     tasks: wf.tasks, reports: wf.reports, legal: wf.legal,
-    evidenceCount: wf.evidence,
+    mediaCount: mediaCount ?? 0,
     persistedBlockers: wf.blockers,
     meId: profile?.id ?? null,
     assigneeName: officerName(c.signoff_assignee_id),
-  }) : null), [c, wf, profile?.id])
+  }) : null), [c, wf, mediaCount, profile?.id])
+
+  // Legal-tab attention marker: how many of THIS viewer's case legal rows need
+  // their own action (dispositionFor — awareness excluded). Same fetched rows
+  // as the tab; sealed rows outside the viewer's RLS never reach this.
+  const prosecutorBureaus = useMyProsecutorBureaus()
+  const legalNow = useNow()
+  const legalNeedsAction = useMemo(
+    () => (wf ? countViewerActionable(wf.legal, buildLegalViewer(auth, prosecutorBureaus), legalNow) : 0),
+    [wf, auth, prosecutorBureaus, legalNow],
+  )
+
+  // Conditional RICO tab: visible with data, after an explicit session enable,
+  // or under a direct ?tab=rico deep link (saved links never break). A deep
+  // link also stamps the session flag so the tab survives switching away.
+  useEffect(() => { if (tab === 'rico') enableRicoSession(id) }, [tab, id])
+  const ricoOn = ricoTabVisible({ hasData: (wf?.rico ?? 0) > 0, sessionEnabled: ricoSessionEnabled(id), activeTab: tab })
 
   if (loading) return <DetailSkeleton />
   if (!c) return <p className="rounded-2xl border border-white/10 bg-ink-900/50 p-6 text-slate-300">Case not found.</p>
@@ -167,18 +229,18 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       // is advisory — command can still close over it (reason lives in history).
       let blockerLines = ''
       try {
-        const [tasks, reports, legal, evidence, persisted] = await Promise.all([
+        const [tasks, reports, legal, liveMedia, persisted] = await Promise.all([
           list('case_tasks', { eq: { case_id: c.id } }),
           list('reports', { eq: { case_id: c.id } }),
           list('legal_requests', { eq: { case_id: c.id } }).catch(() => []),
-          list('evidence', { eq: { case_id: c.id } }),
-          list('case_blockers', { eq: { case_id: c.id, status: 'open' } }).catch(() => [] as PersistedBlocker[]),
+          countRows('media', { eq: { case_id: c.id }, is: { archived_at: null } }),
+          list('case_blockers', { eq: { case_id: c.id, status: 'open' } }).catch(() => [] as BlockerRow[]),
         ])
-        const { blockers } = assessCase({ c, tasks, reports, legal, evidenceCount: evidence.length, persistedBlockers: persisted, meId: profile?.id ?? null, todayISO: todayISO() })
+        const { blockers } = assessCase({ c, tasks, reports, legal, mediaCount: liveMedia, persistedBlockers: persisted, meId: profile?.id ?? null, todayISO: todayISO() })
         if (blockers.length) blockerLines = '\n\nStill open on this case:\n' + blockers.map((b) => `• ${b.label}`).join('\n') + '\n\nClose anyway?'
       } catch { /* checklist is best-effort; fall back to the plain confirm */ }
       const ok = await uiConfirm(
-        `Close ${c.case_number}? It moves to the Closed column and drops off active dashboards. You can reopen it by changing the status back.${blockerLines}`,
+        `Close ${c.case_number}? It will leave the active case board. You can reopen it later.${blockerLines}`,
         { title: 'Close case', confirmText: blockerLines ? 'Close anyway' : 'Close case', danger: !!blockerLines },
       )
       if (!ok) { void fetchCase(); return }
@@ -206,10 +268,11 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   // Header/metric derivations — cheap, render-pure.
   const chargesCount = parseCharges(c.charges).reduce((n, x) => n + Math.max(1, x.count || 1), 0)
   const openTasks = wf ? wf.tasks.filter((t) => !t.done).length : null
+  const openBlockers = wf ? wf.blockers.filter((b) => b.status === 'open').length : null
   const counts = assessment?.counts ?? null
 
   const metrics: Metric[] = [
-    { label: 'Evidence', value: wf ? wf.evidence : '—', onClick: () => setTab('evidence') },
+    { label: 'Photos', value: mediaCount ?? '—', onClick: () => setTab('media') },
     {
       label: 'Open tasks', value: openTasks ?? '—', onClick: () => setTab('tasks'),
       hint: counts && counts.overdueTasks > 0 ? `${counts.overdueTasks} overdue` : undefined,
@@ -220,23 +283,27 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       hint: counts && counts.draftReports > 0 ? `${counts.draftReports} draft` : undefined,
     },
     {
-      label: 'Open blockers', value: wf ? wf.blockers.length : '—', onClick: () => setTab('overview'),
-      tint: wf && wf.blockers.length > 0 ? 'bg-amber-500/15 text-amber-300' : undefined,
+      label: 'Open blockers', value: openBlockers ?? '—', onClick: () => setTab('overview'),
+      tint: openBlockers ? 'bg-amber-500/15 text-amber-300' : undefined,
     },
     { label: 'Charges', value: chargesCount, onClick: () => setTab('charges') },
   ]
 
-  const tabDefs: Array<SectionTab<TabId>> = TABS.map((t) => ({
+  const tabDefs: Array<SectionTab<TabId>> = TABS.filter((t) => t !== 'rico' || ricoOn).map((t) => ({
     id: t,
     label: TAB_LABELS[t],
     count:
-      t === 'evidence' ? wf?.evidence
+      t === 'media' ? mediaCount ?? undefined
       : t === 'reports' ? wf?.reports.length
       : t === 'tasks' ? openTasks ?? undefined
       : t === 'charges' ? chargesCount
+      : t === 'legal' ? wf?.legal.length
       : undefined,
-    marker: t === 'signoff' && awaitingSignoff,
-    markerLabel: t === 'signoff' ? 'Sign-off requires attention' : undefined,
+    marker: t === 'signoff' ? awaitingSignoff : t === 'legal' && legalNeedsAction > 0,
+    markerLabel:
+      t === 'signoff' ? 'Sign-off requires attention'
+      : t === 'legal' ? 'Legal requests need your action'
+      : undefined,
   }))
 
   return (
@@ -278,15 +345,24 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         />
       </div>
       <section role="tabpanel" id={panelDomId('case', tab)} aria-labelledby={tabDomId('case', tab)} tabIndex={0} className="rounded-2xl border border-white/10 bg-ink-900/45 p-4">
-        {tab === 'overview' && <OverviewTab c={c} canEdit={canEdit} canDelete={canDelete} />}
+        {tab === 'overview' && (
+          <OverviewTab
+            c={c} canEdit={canEdit} canDelete={canDelete} wf={wf} assessment={assessment}
+            onWorkflowChanged={() => void fetchWorkflow()}
+            /* !!wf: only offer the enable once the rico count is known, so the
+               action never flashes on a case that already has tracker data. */
+            showEnableRico={canEdit && !!wf && !ricoOn}
+            onEnableRico={() => { enableRicoSession(c.id); setTab('rico') }}
+          />
+        )}
         {tab === 'graph' && <CaseGraphTab c={c} />}
-        {tab === 'evidence' && <EvidenceTab c={c} canEdit={canEdit} canDelete={canDelete} />}
-        {tab === 'notes' && <NotesTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
+        {tab === 'media' && <MediaTab c={c} canEdit={canEdit} canDelete={canDelete} />}
+        {tab === 'intel' && <IntelTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
         {tab === 'charges' && <ChargesTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
         {tab === 'rico' && <RicoTab c={c} canEdit={canEdit} canDelete={canDelete} />}
-        {tab === 'intel' && <IntelTab c={c} canEdit={canEdit} canDelete={canDelete} />}
         {tab === 'reports' && <ReportsTab c={c} canEdit={canEdit} canDelete={canDelete} />}
         {tab === 'tasks' && <TasksTab c={c} canEdit={canEdit} canDelete={canDelete} />}
+        {tab === 'legal' && <LegalTab rows={wf?.legal ?? null} />}
         {tab === 'signoff' && <SignoffTab c={c} />}
         {tab === 'chat' && <ChatTab c={c} />}
         {tab === 'timeline' && <TimelineTab c={c} />}

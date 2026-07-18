@@ -16,8 +16,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { useAuth } from '@/lib/auth'
 import type { LegalViewer } from '@/lib/legalWorkflow'
 import {
-  CLASSIFICATION_STYLE, deadlineInfo, fulfilmentLabel,
-  reviewStatusLabel, type Classification, type LegalRequest,
+  CLASSIFICATION_STYLE, deadlineInfo, type Classification, type LegalRequest,
 } from '@/lib/justice'
 import { LegalRequestCard } from './LegalRequestCard'
 
@@ -96,8 +95,9 @@ export function useJusticeDirectory(): { entries: JusticeDirEntry[]; reload: () 
 /** Narrow projection for the queue/card lists — only the columns the cards and
  *  the workflow model read. Trims the wire payload versus SELECT * (the wide
  *  row carries body markdown, exhibit blobs, audit fields); RLS still scopes
- *  which rows come back, unchanged. */
-const LEGAL_LIST_COLS =
+ *  which rows come back, unchanged. Exported for case-scoped fetches (the
+ *  case shell's Legal tab) so every card list reads the same columns. */
+export const LEGAL_LIST_COLS =
   'id,request_number,request_type,subtype,title,review_status,document_status,' +
   'fulfilment_status,service_status,compliance_status,approval_route,classification,' +
   'responsible_bureau,assigned_ada_id,assigned_judge_id,person_name_snapshot,' +
@@ -188,39 +188,10 @@ export function buildLegalViewer(
   }
 }
 
-export function LegalRequestRow({ r, onOpen, people }: {
-  r: LegalRequest
-  onOpen: (id: string) => void
-  people?: Record<string, string>
-}) {
-  return (
-    <button
-      onClick={() => onOpen(r.id)}
-      className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-ink-900/60 px-3 py-2.5 text-left transition hover:border-badge-500/40 hover:bg-white/5"
-    >
-      <span className="font-mono text-xs text-blue-300">{r.request_number}</span>
-      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{r.request_type}</span>
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{r.title}</span>
-      <ClassificationBadge value={r.classification} />
-      <StatusChip label={reviewStatusLabel(r.review_status)} tone={reviewTone(r.review_status)} />
-      {r.review_status === 'approved' && r.fulfilment_status !== 'unissued' && (
-        <StatusChip label={fulfilmentLabel(r.fulfilment_status)} tone="blue" />
-      )}
-      <DeadlineChip request={r} />
-      <span className="text-xs text-slate-500">{r.responsible_bureau}</span>
-      {r.case_number_snapshot && <span className="font-mono text-xs text-slate-500">{r.case_number_snapshot}</span>}
-      {people && r.assigned_ada_id && people[r.assigned_ada_id] && (
-        <span className="text-xs text-slate-400">ADA {people[r.assigned_ada_id]}</span>
-      )}
-    </button>
-  )
-}
-
 /** Card-based queue section — the newer surfaces render requests as accessible
  *  LegalRequestCards (one per row on mobile) instead of the flat chip row.
- *  LegalRequestRow is kept for existing callers (case overview). `hint`
- *  renders an explanatory line under the heading (e.g. the judge parallel
- *  pickup lane, the bureau awareness lane). */
+ *  `hint` renders an explanatory line under the heading (e.g. the judge
+ *  parallel pickup lane, the bureau awareness lane). */
 export function CardQueueSection({ title, rows, viewer, now, onOpen, empty, hint }: {
   title: string
   rows: LegalRequest[]

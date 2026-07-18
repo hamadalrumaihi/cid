@@ -1,7 +1,7 @@
 'use client'
 
 /** Street-Value Observations — the RESTRICTED intelligence section of the
- *  Narcotics substance dossier (spec §15–17 + the Reliability Correction).
+ *  Narcotics substance dossier.
  *
  *  Investigator-conducted controlled cannabis sales, grouped into an ongoing
  *  series, are shown as a preliminary OBSERVED range — never a market value or
@@ -532,7 +532,7 @@ function MediaGrid({ media, onOpenMedia, showRole = false, showCaption = false }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
- * Suggest correction — reuses the Feedback table (spec §22)
+ * Suggest correction — reuses the Feedback table
  * ════════════════════════════════════════════════════════════════════════ */
 function CorrectionModal({ subjectPrefix, observation, onClose }: {
   subjectPrefix: string

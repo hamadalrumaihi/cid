@@ -471,7 +471,7 @@ describe.skipIf(!enabled)('DOJ legal review — RLS/RPC security wall (live)', (
   it('judicial approval signs the exact reviewed version and sets expiration', async () => {
     const before = await judge.from('legal_requests').select('current_version_id').eq('id', warrantId)
     const reviewedVersion = before.data![0].current_version_id
-    const past = new Date(Date.now() - 60_000).toISOString() // already expired → proves §55.60 below
+    const past = new Date(Date.now() - 60_000).toISOString() // already expired → proves the expiry contract below
     const ok = await judge.rpc('decide_legal_request_as_judge', {
       p_request: warrantId, p_decision: 'approve', p_note: 'Approved for the RLS wall test',
       p_conditions: 'Daylight service only', p_expires_at: past, p_signature: 'RLS Judge',

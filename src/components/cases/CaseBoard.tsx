@@ -26,7 +26,7 @@ export function CaseBoard({ items, canEdit, onOpen, onMoved }: { items: CaseRow[
     // Dropping a card on Closed stamps closed_at — confirm before it leaves
     // the active board. Reversible: drag it back out to reopen.
     if (status === 'closed') {
-      const ok = await uiConfirm(`Close ${row.case_number}? It moves to the Closed column and drops off active dashboards. Drag it back out to reopen.`, { title: 'Close case', confirmText: 'Close case', danger: false })
+      const ok = await uiConfirm(`Close ${row.case_number}? Drag it back out to reopen.`, { title: 'Close case', confirmText: 'Close case', danger: false })
       if (!ok) { onMoved(); return }
     }
     row.status = status

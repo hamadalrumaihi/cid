@@ -43,10 +43,10 @@ test.describe('smoke', () => {
   test('a member can sign in, load the shell, and create a case in the UI', async ({ page }) => {
     const { ctx, session } = await signIn()
     try {
-      // Sandboxes whose egress proxy Chromium cannot traverse (e.g. Claude
-      // Code remote containers) set PW_SUPABASE_SHIM=1: Supabase HTTP calls
-      // are then relayed through Node, which does honor the proxy. Realtime
-      // websockets stay unshimmed — the app degrades gracefully without them.
+      // In containerized CI environments without websocket egress set
+      // PW_SUPABASE_SHIM=1: Supabase HTTP calls are then relayed through
+      // Node, which does honor the proxy. Realtime websockets stay
+      // unshimmed — the app degrades gracefully without them.
       if (process.env.PW_SUPABASE_SHIM) {
         await page.route('**://*.supabase.co/**', async (route) => {
           try {

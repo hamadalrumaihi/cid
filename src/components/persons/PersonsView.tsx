@@ -1,7 +1,7 @@
 'use client'
 
 /** Persons of Interest registry — the intelligence-workspace rebuild of the
- *  old §11A card grid. What changed and why:
+ *  old card grid. What changed and why:
  *   - Browse fetch is PROJECTED (PERSON_LIST_COLS) and search goes through the
  *     indexed `search_persons` RPC (name/alias/phone/identity/gang/plate/
  *     place/case number) instead of JSON.stringify over full rows.

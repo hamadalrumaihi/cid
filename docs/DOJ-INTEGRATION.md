@@ -1,7 +1,7 @@
 # DOJ Legal Review System
 
-Shipped in **v1.13.0**. This supersedes `docs/DOJ-INTEGRATION-DRAFT.md` (the
-v1.11 proposal) — the draft is kept only as a historical record.
+Shipped in **v1.13.0**. This supersedes the original proposal (kept as a
+historical record in `docs/archive/DOJ-INTEGRATION-DRAFT.md`).
 
 The DOJ system is a **limited legal-review workflow** bolted onto the existing
 CID Portal. It processes exactly two kinds of legal request connected to CID
@@ -18,8 +18,8 @@ court-management, prosecution-management, or DOJ-investigation platform.
   Director; a DA is not a CID Director; an ADA is not a Bureau Lead. Justice
   permissions are evaluated independently of CID permissions.
 - `profiles.division` is **never** consulted for DOJ or Judge access.
-- No AI anywhere: every approve / deny / return / assignment is a named human
-  actor, validated server-side.
+- Every approve / deny / return / assignment is recorded with the acting
+  member, whose authority is validated server-side.
 
 ## Identity model
 
@@ -50,7 +50,7 @@ a role grants nothing — activation happens only inside the review RPC.
 | Assistant District Attorney | District Attorney, Attorney General, or Owner |
 | District Attorney | Attorney General or Owner |
 | Attorney General | Owner |
-| Judge | Owner |
+| Judge | Attorney General or Owner (Owner-only before [`20260731010000`](../supabase/migrations/20260731010000_justice_request_visibility.sql)) |
 
 No self-approval; no ADA-approves-ADA / DA-approves-DA; a Judge cannot approve
 DOJ memberships; CID Bureau Leads cannot approve justice memberships. Approval
@@ -302,10 +302,47 @@ each with two or more non-DOJ consumers:
 | `justice_directory()` / `legal_request_people()` name resolution | justice-only name lookup (no roster access) | any cross-domain name display | none |
 | Immutable-version display — extracted to `shared/VersionViewer.tsx` | frozen submitted versions (Form tab) | **Adopted v1.14:** finalized report versions (new `report_versions` table, snapshotted by `report_finalize()`, ReportsTab "Versions" toggle), SOP history modal (SopsView) | none — shipped (the reports version model now exists) |
 
-## Verification & known gaps
+## Operational redesign (PR #178)
+
+A later presentation/workflow-clarity redesign rebuilt every legal surface
+around one deterministic client model — no authority rule was weakened
+(full record: [`archive/DOJ-REDESIGN-REPORT.md`](archive/DOJ-REDESIGN-REPORT.md)).
+The durable facts:
+
+- **One workflow model.** Every surface — the `/legal` investigator landing,
+  the Justice Portal, the unified `LegalRequestDetail` dossier (one shared
+  component for CID and every Justice seat), the Action Center legal branch,
+  search sublabels, and the vehicle/place Legal sections — reads
+  stage/disposition/urgency/next-action from `src/lib/legalWorkflow.ts`
+  alone. No component hand-rolls status strings; the model is pure (no I/O)
+  and never decides access — RLS does.
+- **Action vs awareness.** `dispositionFor` assigns each request exactly one
+  group. Bureau-awareness rows ("notified, not a gate" — the parallel
+  judiciary lane) render in quiet "For your awareness" lanes and are
+  excluded from action metrics and the Action Center; judge-claimable parked
+  requests are a separate, visually distinct lane.
+- **Two migrations.**
+  [`20260806010000_legal_structured_targets`](../supabase/migrations/20260806010000_legal_structured_targets.sql)
+  — additive: exhibit kinds `vehicle`/`place`/`prior_legal_request`,
+  per-target `rationale`, version `change_summary` + server-derived
+  `returned_from`; three definer RPCs extended with defaulted params (legacy
+  call shapes unchanged).
+  [`20260806040000_legal_cid_reviewer_visibility`](../supabase/migrations/20260806040000_legal_cid_reviewer_visibility.sql)
+  — see the rule below.
+- **CID-reviewer visibility rule.** Warrants default to `classified`, but
+  `can_view_legal_request` originally gave CID case-members only a
+  `standard` branch — so the supervisor whom the workflow notifies (and whom
+  `review_legal_request_as_cid` accepts) could select zero rows. The fix:
+  visibility follows review authority (reusing `can_review_as_cid`) **only**
+  while `review_status = 'cid_supervisor_review'`; sealed requests keep
+  their explicit-assignment audience at every other stage. A supervisor who
+  approves stays visible afterwards as a recorded participant (pinned by the
+  v136/v137 RLS suites).
+
+## Verification & known gaps (as of v1.13.0)
 
 - Four gates green (typecheck, eslint `--max-warnings 0`, vitest, `npm run
-  build`), `check:schema` (63 tables in sync), doc-gen drift checks.
+  build`), `check:schema` in sync, doc-gen drift checks.
 - Live RLS suite: **99/99** (37 new DOJ assertions in `tests/rls/legal.test.ts`).
 - E2E (shim): the 5 `tests/e2e/justice.spec.ts` specs pass; the pre-existing
   joint-case lifecycle spec is flaky under full-suite ordering but green in

@@ -1,6 +1,6 @@
 'use client'
 
-/** Central Command dashboard — port of vanilla command.js (§5). Everything
+/** Central Command dashboard — port of vanilla command.js. Everything
  *  derives from RLS-scoped reads; the transient command filters scope the
  *  KPIs/caseload/drill, while the scorecards and attention widget stay
  *  standing views over the unfiltered cache. */

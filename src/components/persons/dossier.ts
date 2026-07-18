@@ -48,7 +48,7 @@ const legalType = (r: LegalLite): string => {
 export async function gatherPersonDossier(person: PersonRow, gangName: string | null): Promise<PersonDossier> {
   const [members, media, direct, legal, vehicles] = await Promise.all([
     list('gang_members', { eq: { person_id: person.id } }).catch(() => [] as GangMemberRow[]),
-    list('media', { eq: { person_id: person.id } }).catch(() => [] as MediaRow[]),
+    list('media', { eq: { person_id: person.id }, is: { archived_at: null } }).catch(() => [] as MediaRow[]),
     list('case_intel_links', { select: 'case_id', eq: { kind: 'person', ref_id: person.id } })
       .then((r) => r as unknown as { case_id: string }[])
       .catch(() => [] as { case_id: string }[]),

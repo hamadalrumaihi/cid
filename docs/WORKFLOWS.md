@@ -2,7 +2,7 @@
 
 Every state machine in the CID Portal, with who may trigger each transition and which server-side RPC enforces it — the reviewer's companion to [`docs/handbook/04-features.md`](handbook/04-features.md) and [`docs/DOJ-INTEGRATION.md`](DOJ-INTEGRATION.md).
 
-All workflows below are human-designed and human-operated: the portal has no runtime AI, and every approve / deny / return / assignment is a **named human actor validated server-side**. Transitions run through SECURITY DEFINER RPCs (pinned `search_path`, row locking, explicit state validation) or RLS-checked writes; deterministic routing (sign-off assignee selection, ADA routing, default classification) is rule-based, database-driven logic in `private.*` helper functions. Direct client writes to workflow columns are frozen by triggers or missing grants throughout.
+Every approve / deny / return / assignment below is **recorded with the acting member, whose authority is validated server-side**. Transitions run through SECURITY DEFINER RPCs (pinned `search_path`, row locking, explicit state validation) or RLS-checked writes; routing (sign-off assignee selection, ADA routing, default classification) is rule-based, database-driven logic in `private.*` helper functions. Direct client writes to workflow columns are frozen by triggers or missing grants throughout.
 
 Roles: **Det** = Detective, **SrDet** = Senior Detective, **BL** = Bureau Lead, **DD** = Deputy Director, **Dir** = Director, **Owner** = `profiles.is_owner` flag (never an `app_role`). Justice roles (**ADA/DA/AG/Judge**) live in `justice_memberships`, a separate identity domain.
 
@@ -59,7 +59,7 @@ Migration [`20260714010000_justice_identity.sql`](../supabase/migrations/2026071
 | Assistant District Attorney | DA, AG, or Owner |
 | District Attorney | AG or Owner |
 | Attorney General | Owner only |
-| Judge | Owner only |
+| Judge | AG or Owner (Owner-only before [`20260731010000`](../supabase/migrations/20260731010000_justice_request_visibility.sql)) |
 
 Decision RPC: `review_justice_membership_request()` (no self-review; authority checked against the requested role, and again against the final role on approval). Deactivation/reactivation of an existing membership: `set_justice_membership_active()` under the same matrix. Reviewers (DA/AG/Owner) read internal notes via `admin_justice_membership_requests()`. CID Bureau Leads cannot approve justice requests; a Judge cannot approve DOJ requests.
 
@@ -69,7 +69,7 @@ Two independent dimensions on `public.cases` (see [handbook ch. 4.1](handbook/04
 
 **Status board** — `status ∈ open / active / cold / closed` (`CASE_STATUSES`, `src/lib/signoff.ts`). Moved by a direct RLS-checked `update('cases', {status})` from anyone with case access (`private.can_access_case`: own bureau, lead, creator, command, access grant, or active joint assignment); a trigger stamps `closed_at`.
 
-**Sign-off chain** — a separate `signoff_status`/`signoff_stage` dimension, movable **only** through three RPCs ([`20260617190100_signoff_server_side_rpcs.sql`](../supabase/migrations/20260617190100_signoff_server_side_rpcs.sql) as hardened by [`20260702170000`](../supabase/migrations/20260702170000_signoff_owner_only_submit.sql) and [`20260706140000`](../supabase/migrations/20260706140000_signoff_decide_assignee_access.sql)); direct column writes are trigger-blocked.
+**Sign-off chain** — a separate `signoff_status`/`signoff_stage` dimension, movable **only** through the sign-off RPCs ([`20260617190100_signoff_server_side_rpcs.sql`](../supabase/migrations/20260617190100_signoff_server_side_rpcs.sql) as hardened by [`20260702170000`](../supabase/migrations/20260702170000_signoff_owner_only_submit.sql), [`20260706140000`](../supabase/migrations/20260706140000_signoff_decide_assignee_access.sql), and [`20260721040000_signoff_integrity.sql`](../supabase/migrations/20260721040000_signoff_integrity.sql), which adds the command-override lane); direct column writes are trigger-blocked. (A case's *bureau* is likewise frozen — moving one is `case_reassign_bureau()`, DD/Dir/Owner only; see [AUTHORIZATION.md §4](AUTHORIZATION.md).)
 
 ```mermaid
 stateDiagram-v2
@@ -95,6 +95,7 @@ stateDiagram-v2
 | `signoff_submit(case)` | the **case owner** — lead detective, or creator when no lead is set | LOA-aware routing: `private.signoff_route(step, bureau)` picks the stage + a non-LOA assignee; fails if no active reviewer exists |
 | `signoff_decide(case, approve\|deny\|changes, note)` | active holder of the stage role (BL/DD/Dir) **with case access**, and the assigned reviewer — a Director may override the assignee | deny/changes require a note; every action appends to the append-only `case_signoff_history` |
 | `signoff_owner_action(case, complete\|escalate)` | the case owner, only at the `approved_deputy` stop-point | escalate re-routes to an active Director |
+| `signoff_command_override(case, complete\|escalate, reason)` | Deputy Director / Director / Owner (never Bureau Lead) | acts in the owner's place at the `approved_deputy` stop-point when the owner is unavailable; reason required, recorded in history with `source='command_override'` ([`20260721040000`](../supabase/migrations/20260721040000_signoff_integrity.sql)) |
 
 ## 4. Reports
 
@@ -121,17 +122,19 @@ stateDiagram-v2
     returned --> cid_supervisor_review: resubmit after edits
     cid_supervisor_review --> submitted_to_doj: review_legal_request_as_cid(approve) → submit_legal_request_to_doj()
     submitted_to_doj --> ada_review: auto-routed to the bureau ADA (or parked unassigned)
+    submitted_to_doj --> judicial_review: claim_legal_request_as_judge() — any active Judge (parallel lane)
     ada_review --> submitted_to_da: ADA forwards — DA route (subpoena)
     ada_review --> submitted_to_ag: ADA forwards — AG route (subpoena)
     ada_review --> submitted_to_judge: ADA forwards — judge route (all warrants)
     submitted_to_da --> approved: review_legal_request_as_da()
     submitted_to_ag --> approved: review_legal_request_as_ag()
-    submitted_to_judge --> approved: decide_legal_request_as_judge()
+    submitted_to_judge --> judicial_review: assign_judge() — or any Judge claims it
+    judicial_review --> approved: decide_legal_request_as_judge()
     submitted_to_da --> denied
     submitted_to_ag --> denied
-    submitted_to_judge --> denied
+    judicial_review --> denied
     ada_review --> returned: returned_by_ada
-    submitted_to_judge --> returned: returned_by_judge
+    judicial_review --> returned: returned_by_judge
     approved --> [*]: fulfilment takes over (issue → execute/serve → return → close)
     denied --> [*]
 ```
@@ -145,6 +148,7 @@ Key rules (all server-enforced):
 | DOJ intake & routing | `submit_legal_request_to_doj`; auto-assign via `get_routing_ada_for_bureau` (active acting → active primary ADA; missing coverage parks the request — DA/AG/Owner assign via `reassign_legal_ada`) |
 | Prosecutor review | `review_legal_request_as_ada` / `_as_da` / `_as_ag`; route per `private.legal_default_route` — **every warrant routes `judge`**; DA/AG/Owner may change a *subpoena's* route with a reason (`set_legal_approval_route`) |
 | Judicial decision | `assign_judge` + `decide_legal_request_as_judge` — **warrants are approved only by a Judge**; conflict-of-role checks (`private.legal_is_prosecution_side`) keep prosecution and bench separate; signatures are version-bound |
+| Parallel judiciary lane | `claim_legal_request_as_judge` ([`20260805010000`](../supabase/migrations/20260805010000_legal_parallel_judiciary.sql)) — any active Judge may take a judge-routed request straight into judicial review from `submitted_to_doj` or `submitted_to_judge` (no ADA hand-off required); same conflict guards as formal assignment; sealed requests are excluded and keep the explicit-assignment audience |
 | Fulfilment (CID side) | `issue_legal_request`, `record_warrant_execution`, `record_warrant_return`, `record_subpoena_service`, `record_subpoena_compliance`, `close_legal_request`, `withdraw_legal_request` (gated by `private.can_fulfil_legal`) |
 
 Every submission freezes an immutable `legal_request_versions` snapshot; reviewers act on the exact `current_version_id`. Classification `standard / restricted / classified / sealed` — warrants default `classified`; **sealed** requests are undiscoverable outside their participant set (SECURITY INVOKER search, generic notifications). Approved+issued **arrest** warrants project an MDT wanted row (`private.mdt_project`; search warrants never do). Historical imports: owner-only `import_legal_warrant()` / `import_rollback_by_key()`.
@@ -200,9 +204,9 @@ stateDiagram-v2
 | Complete directly | `complete_transfer()` — DD/Dir/Owner only; recorded as `override: true` when approvals were still missing |
 | Reject / cancel | `reject_transfer()` (either side's authority) / `cancel_transfer()` (the requester, or DD+/Owner) |
 
-## 10. Account lifecycle (deactivation, login denial, permanent removal)
+## 10. Account lifecycle (deactivation, login denial, permanent removal, permanent deletion)
 
-Four escalating, reversible-by-design states on `profiles`, each with its own RPC; privileged columns (`role/division/active/is_owner/removed_at`) are trigger-frozen against all direct client writes ([`20260718010000`](../supabase/migrations/20260718010000_unified_role_policy.sql)), and deny columns likewise ([`20260713090000_login_denial.sql`](../supabase/migrations/20260713090000_login_denial.sql)).
+Four escalating, reversible-by-design states on `profiles` (plus one irreversible owner-only exception path, below), each with its own RPC; privileged columns (`role/division/active/is_owner/removed_at`) are trigger-frozen against all direct client writes ([`20260718010000`](../supabase/migrations/20260718010000_unified_role_policy.sql)), and deny columns likewise ([`20260713090000_login_denial.sql`](../supabase/migrations/20260713090000_login_denial.sql)).
 
 ```mermaid
 stateDiagram-v2
@@ -221,6 +225,7 @@ stateDiagram-v2
 | **Deactivated** (`active=false`) | Loses every `private.is_active()`-gated capability; profile intact | `assign_member(target, set_active)` — since v1.16 activation/deactivation **only** (the legacy role/division arguments were dropped); BL scoped to own-bureau, non-command targets; Owner bypasses |
 | **Login-denied** (`login_denied=true`, `active=false`) | Can still authenticate but the app shows an Access-denied screen with the recorded reason, and RLS + `membership_request_submit()` block filing or advancing a membership request — a removed/rejected person cannot simply re-apply | `deny_member_login(target, reason)` — BL (own bureau, non-command) / DD / Dir / Owner; the Owner account can never be denied. Reverse: `restore_member_login()` (clears the block only; member stays inactive) |
 | **Removed** (`removed_at` set, `email` nulled) | Permanent removal without deleting rows: access blocked, sign-in email (PII) scrubbed, hidden from the roster, watchlist + case assignments cleared — **authored history and attribution preserved** (reports, evidence, audit rows keep their author) | `admin_remove_member(target)` — command only ([`20260708150000`](../supabase/migrations/20260708150000_permanent_member_removal.sql)); no self-removal; the last active Director cannot be removed. Restore: `admin_restore_member()` — returns **inactive**, must be re-approved |
+| **Permanently deleted** (profile + auth row erased; historical FKs repointed to the system tombstone) | The irreversible exception path when a member must be **erased**, not just deactivated — soft remove stays the default. Members referenced by immutable records (legal paper, sign-off history, tracker signatures, report authorship, custody transfers, evidence collection, justice identity, prosecutor assignments) are **hard-blocked** and can only be deactivated; active-work pointers must be reassigned first. An owner-only `deleted_member_ledger` row snapshots identity, reason, the full reference map, and the member's `role_events` history | `permanent_delete_preview()` → `permanent_delete_arm(target, reason)` → `permanent_delete_execute(token, confirm)` — Owner only, each step requiring a **fresh sign-in** (< 5-minute session), a 5-minute single-use token, and a typed `DELETE <display name>` confirmation ([`20260726010000`](../supabase/migrations/20260726010000_phase_b_permanent_deletion.sql); details in [AUTHORIZATION.md §4](AUTHORIZATION.md)) |
 
 Every transition writes `role_events` and/or `audit_log` plus a notification to the affected member.
 

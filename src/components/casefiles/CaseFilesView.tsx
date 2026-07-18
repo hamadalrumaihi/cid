@@ -1,6 +1,6 @@
 'use client'
 
-/** Case Files — Attachments — port of vanilla casefiles.js §ATTACHMENTS.
+/** Case Files — Attachments — port of the vanilla casefiles.js attachments area.
  *  Files upload to FiveManage; their URL + metadata live in `case_files`
  *  keyed by case_number (RLS: read = case bureau via can_access_case_number,
  *  insert stamps added_by, delete = command). Grouped by case, inline
@@ -68,6 +68,12 @@ export function CaseFilesView() {
     return () => window.clearTimeout(t)
   }, [refresh, version])
 
+  // The env-var detail stays out of the UI (detectives can't act on it);
+  // surface it for whoever operates the deployment via the console instead.
+  useEffect(() => {
+    if (!fmReady) console.error('CID Portal: set NEXT_PUBLIC_FIVEMANAGE_API_KEY to enable file uploads.')
+  }, [fmReady])
+
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase()
     const rows = files.filter((r) => !q || r.case_number.toLowerCase().includes(q) || r.name.toLowerCase().includes(q))
@@ -78,7 +84,7 @@ export function CaseFilesView() {
 
   const attach = () => {
     if (!caseNo.trim()) { toast('Enter or pick a case number first.', 'warn'); return }
-    if (!fmReady) { toast('FiveManage upload is not configured.', 'warn'); return }
+    if (!fmReady) { toast('File upload isn’t available right now — contact the portal owner.', 'warn'); return }
     fileRef.current?.click()
   }
 
@@ -119,7 +125,7 @@ export function CaseFilesView() {
     <div>
       {!fmReady && (
         <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-          File upload not configured — set <code>NEXT_PUBLIC_FIVEMANAGE_API_KEY</code> to upload files. Existing attachments are still listed below.
+          File upload isn’t available right now — contact the portal owner. Existing attachments are still listed below.
         </div>
       )}
       <div className="mb-4 flex flex-wrap items-center gap-2">

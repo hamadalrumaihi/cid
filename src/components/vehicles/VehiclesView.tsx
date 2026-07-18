@@ -1,7 +1,7 @@
 'use client'
 
-/** Vehicle Registry + cross-reference engine — port of vanilla vehicles.js
- *  §1–2. Plates as first-class intel records (owner/gang links, notes,
+/** Vehicle Registry + cross-reference engine — port of vanilla vehicles.js.
+ *  Plates as first-class intel records (owner/gang links, notes,
  *  follow), plus the deconfliction scanner that flags phones, registered
  *  plates and linked persons appearing in two or more cases the viewer can
  *  see (all inputs RLS-scoped, so alerts never leak inaccessible cases). */

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  countViewerActionable,
   currentStage, stageForReviewStatus, stagesForRequest, laneThatAdvanced,
   judgeClaimEligible, responsibleRole, dispositionFor, isBureauAwareness,
   routingExplanation, canReviewJusticeRole, canAssignAsJudge, canAssignAsProsecutor,
@@ -103,7 +104,7 @@ describe('responsible role', () => {
   })
 })
 
-describe('action vs awareness distinction (spec §5/§9)', () => {
+describe('action vs awareness distinction', () => {
   it('a bureau prosecutor sees a parked bureau request as awareness-only, not assigned', () => {
     const prosecutor = viewer({ myId: 'p-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['SAB'] })
     const r = req({ review_status: 'submitted_to_doj', responsible_bureau: 'SAB', assigned_ada_id: null })
@@ -158,7 +159,29 @@ describe('next-action derivation + grouping', () => {
   })
 })
 
-describe('issued / service-return mapping (spec §15/§29-30)', () => {
+describe('countViewerActionable (case Legal tab marker)', () => {
+  it('counts only rows the viewer can act on — claimable and awareness excluded', () => {
+    const rows = [
+      req({ review_status: 'ada_review', assigned_ada_id: 'a-1' }),          // actionable for the ADA
+      req({ review_status: 'submitted_to_doj', responsible_bureau: 'SAB' }), // awareness for a SAB prosecutor
+      req({ review_status: 'ada_review', assigned_ada_id: 'a-9' }),          // someone else's review
+    ]
+    const ada = viewer({ myId: 'a-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['SAB'] })
+    expect(countViewerActionable(rows, ada, NOW)).toBe(1)
+    // A judge could CLAIM the parked request, but claimable is not "needs your action".
+    const judge = viewer({ myId: 'j-1', justiceRole: 'judge' })
+    expect(countViewerActionable(rows, judge, NOW)).toBe(0)
+    expect(countViewerActionable([], ada, NOW)).toBe(0)
+  })
+
+  it('returned requests count for their creator', () => {
+    const inv = viewer({ myId: 'inv-1', cidActive: true, cidRole: 'detective' })
+    expect(countViewerActionable([req({ review_status: 'returned_by_ada', created_by: 'inv-1' })], inv, NOW)).toBe(1)
+    expect(countViewerActionable([req({ review_status: 'returned_by_ada', created_by: 'other' })], inv, NOW)).toBe(0)
+  })
+})
+
+describe('issued / service-return mapping', () => {
   it('issued-state', () => {
     expect(issuedStateFor(req({ review_status: 'approved', fulfilment_status: 'issued' }))).toBe('active')
     expect(issuedStateFor(req({ review_status: 'approved', fulfilment_status: 'executed' }))).toBe('executed')
@@ -203,7 +226,7 @@ describe('deadlines + urgency', () => {
   })
 })
 
-describe('routing explanation (deterministic, no runtime AI)', () => {
+describe('routing explanation', () => {
   it('parallel-lane explanation for a non-sealed judge-routed DOJ request', () => {
     expect(routingExplanation(req())).toContain('Judge may claim it directly')
   })

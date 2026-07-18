@@ -218,12 +218,18 @@ function ErrorBody() {
   )
 }
 
+// The env-var detail stays out of the UI (visitors can't act on it); surface
+// it for whoever operates the deployment via the console instead.
+if (typeof window !== 'undefined' && !isConfigured) {
+  console.error('CID Portal: set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to this project’s publishable values — sign-in is disabled until then.')
+}
+
 function SetupBody() {
   return (
     <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200">
       {isConfigured
         ? 'The authentication service could not load (offline?). Reconnect to sign in.'
-        : 'Live access is not configured — set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to this project’s publishable values.'}
+        : 'The portal isn’t fully set up yet — contact the portal owner.'}
     </div>
   )
 }

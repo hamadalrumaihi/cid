@@ -2,7 +2,7 @@
 
 /** Descriptive (non-actionable) sections of the Narcotics dossier: Overview,
  *  Identification, Packaging and Intelligence, plus the shared display atoms
- *  (KV / DescBlock) and the Charges card (§13). These read the narcotic row +
+ *  (KV / DescBlock) and the Charges card. These read the narcotic row +
  *  its lazily-loaded slices; they never mutate. The Intelligence section is
  *  deliberately limited to broad category + generalized stage names + scene
  *  indicators + linked entities — NO ingredients/ratios/temps/steps. */
@@ -44,7 +44,7 @@ export function DescBlock({ label, value }: { label: string; value: string | nul
   )
 }
 
-/* ── Charges (§13) ─────────────────────────────────────────────────────────── */
+/* ── Charges ───────────────────────────────────────────────────────────────── */
 export function ChargesCard({ narcotic, canEditCharges, onEdit }: {
   narcotic: NarcoticRow; canEditCharges: boolean; onEdit: () => void
 }) {

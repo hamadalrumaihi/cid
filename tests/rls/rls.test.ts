@@ -376,9 +376,15 @@ describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority
     expect(self.error).not.toBeNull()
   })
 
-  it('JTF is never a transfer destination', async () => {
-    const tr = await director.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'JTF', p_reason: '[rls-test] must fail' })
-    expect(tr.error).not.toBeNull()
+  it('JTF is a valid transfer destination (any-department moves, 20260807020000)', async () => {
+    const tr = await director.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'JTF', p_reason: '[rls-test] JTF destination' })
+    expect(tr.error).toBeNull()
+    const row = tr.data as { id: string; status: string }
+    // Director initiation covers both sides — pre-approved on creation.
+    expect(row.status).toBe('approved')
+    // Cancel so the one-open-transfer rule doesn't trip the following tests.
+    const cancel = await director.rpc('cancel_transfer', { p_id: row.id })
+    expect(cancel.error).toBeNull()
   })
 
   it('two-lead flow: source approval then destination approval applies the move (live role travels)', async () => {

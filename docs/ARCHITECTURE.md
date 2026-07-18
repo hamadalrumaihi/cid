@@ -4,16 +4,11 @@ How the application is put together: routing, components, data flow, security
 boundaries, and external integrations. For file-by-file depth, follow the
 links into the [Developer Handbook](handbook/README.md).
 
-The CID Portal is a human-designed case-management and legal-review platform
-for a GTA V roleplay Criminal Investigation Division. It organizes cases,
-evidence, reports, intelligence, operations, warrants, subpoenas, approvals,
-and audit history through role-based workflows enforced by the database.
-
-The project's requirements, workflows, security model, and final
-implementation decisions are human-directed and human-reviewed. Development
-tools may assist with drafting or implementation, but no tool independently
-defines policy, approves changes, or operates investigative and legal
-decisions.
+The CID Portal is a case-management, intelligence, and legal-review
+platform for a GTA V roleplay Criminal Investigation Division. It organizes
+cases, evidence, reports, intelligence, operations, warrants, subpoenas,
+approvals, and audit history through role-based workflows enforced by the
+database.
 
 ---
 
@@ -134,6 +129,32 @@ interactive is client-side:
   domain from the CID `app_role` enum.
 - **No Supabase Storage** — media is stored as external (FiveManage) URLs in
   Postgres; there are no buckets or storage policies.
+
+### Case data ownership
+
+One owner per concept — every case-workspace surface reads/writes exactly one
+of these homes (per the case-ecosystem audit):
+
+- **Identity** (number, title, status, bureau, lead) → `cases`.
+- **Assignments** → `case_assignments` (lead pointer stays on `cases`).
+- **Narrative** (investigative reports, warrant reports) → `reports`.
+- **Visual** (photos, clips, documents) → `media`.
+- **Working notes** (informal scratchpad, no history) → `cases.notes` —
+  edited on the Intel & Notes tab.
+- **Structured intel** (person/gang/place/narcotic links with role + note) →
+  `case_intel_links` — the Intel & Notes tab is the ONE editor; the Graph tab
+  is a read-only view of the same rows.
+- **Chat** → `case_messages`.
+- **Charges** → `cases.charges` jsonb (static penal catalog in `lib/penal`).
+- **Tasks** → `case_tasks`.
+- **Legal** (warrants/subpoenas) → `legal_requests` (RPC-only writes) — the
+  case Legal tab renders only the viewer's own RLS-scoped rows.
+- **Approvals** → `case_signoff_history` (+ RPC-owned pointers on `cases`).
+- **Blockers** → `case_blockers`.
+- **Timeline** → derived (re-reads evidence/reports/tasks/history; owns
+  nothing).
+- **Graph** → derived (reads the canonical links + case rows; persists only a
+  per-device layout).
 
 ## 7. Authentication lifecycle
 

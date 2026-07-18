@@ -1,5 +1,5 @@
 /** v1.31 — Document governance (SOPs & Library) — migration 20260801010000.
- *  Pins, per spec §30/§35:
+ *  Pins:
  *   - classification visibility matrix: internal → active member; restricted
  *     → senior+ (detective denied); command → command; justice → justice
  *     members only (CID command DENIED — separate domains); owner → Owner;

@@ -64,7 +64,7 @@ There are only two moving parts (plus a file host):
 
 | Technology | Why this project uses it |
 |---|---|
-| **Next.js 16** (App Router) | One dynamic `[tab]` route renders all 29 screens; everything pre-renders to static HTML for instant loads; zero-config Vercel deploys. |
+| **Next.js 16** (App Router) | One dynamic `[tab]` route renders every screen; everything pre-renders to static HTML for instant loads; zero-config Vercel deploys. |
 | **React 19** | Highly interactive dashboard; state → UI model fits exactly. |
 | **TypeScript (strict)** | `src/lib/database.types.ts` types every table — a column typo is a build error. |
 | **Tailwind CSS v4** | One dark "investigative" design system as theme tokens; no per-component CSS files. |

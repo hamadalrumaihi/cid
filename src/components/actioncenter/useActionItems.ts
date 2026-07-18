@@ -47,7 +47,7 @@ const SUGGESTION_COLS = 'id,title,status,document_id,created_by,assigned_editor,
 const TRANSFER_PENDING = ['pending_source', 'pending_target']
 
 /** Only open-work statuses can produce an action item (see buildActionItems
- *  §9c); terminal/waiting rows never need a fetch-side row. */
+ *  section 9c); terminal/waiting rows never need a fetch-side row. */
 const SUGGESTION_OPEN = ['submitted', 'needs_more_information', 'accepted', 'partially_accepted']
 
 interface SuggestionRow {

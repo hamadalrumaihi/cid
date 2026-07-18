@@ -64,7 +64,7 @@ are a separate identity domain and grant no CID assignment authority.
 
 ```
 Layer 1  UI hints        canEdit / canDelete / isCommand   → hides buttons only
-Layer 2  RLS policies    private.* helpers on all 47 tables → the real wall
+Layer 2  RLS policies    private.* helpers on every table  → the real wall
 Layer 3  Guard triggers  column-level locks                 → even allowed writers
                                                               can't touch protected
                                                               columns directly

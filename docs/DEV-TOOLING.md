@@ -1,10 +1,7 @@
 # Developer Tooling & MCP — Setup & Governance
 
-> Development tooling only. These files are not runtime dependencies and do
-> not provide AI features inside the CID Portal. The project's requirements,
-> workflows, security model, and final implementation decisions are
-> human-directed and human-reviewed — no tool independently defines policy,
-> approves changes, or operates investigative and legal decisions.
+> Development tooling only. Nothing configured here is a runtime dependency
+> or a feature of the CID Portal itself.
 
 Optional, developer-facing tooling that speeds up building and operating the
 CID Portal. **None of it is a runtime dependency.** The app builds, deploys,

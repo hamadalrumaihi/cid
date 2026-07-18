@@ -143,7 +143,8 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
     // for those kinds, so open the case on the matching tab.
     if (hit.kind === 'case') router.push(caseLink(hit.id))
     else if (hit.kind === 'report') router.push(caseLink(hit.id, 'reports'))
-    else if (hit.kind === 'evidence') router.push(caseLink(hit.id, 'evidence'))
+    // Legacy evidence hits land on the Photos & Media tab (its new home).
+    else if (hit.kind === 'evidence') router.push(caseLink(hit.id, 'media'))
     else if (hit.kind === 'legal') router.push(`/legal?request=${encodeURIComponent(hit.id)}`)
     // Documents deep-link straight into the reader (SopsView reads ?doc=).
     else if (hit.kind === 'document') router.push(`/sops?doc=${encodeURIComponent(hit.id)}`)

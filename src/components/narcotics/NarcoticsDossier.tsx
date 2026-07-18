@@ -1,6 +1,6 @@
 'use client'
 
-/** Narcotics substance DOSSIER (spec §8-20) — the deep-linkable intelligence
+/** Narcotics substance DOSSIER — the deep-linkable intelligence
  *  detail view (`/narcotics?drug=<id>&section=<id>`). Mirrors the persons/gangs
  *  dossier template: an identity header off ONE narcotics fetch (+ aliases +
  *  the representative media row), a click-through MetricStrip, sticky

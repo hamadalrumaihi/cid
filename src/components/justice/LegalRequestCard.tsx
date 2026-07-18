@@ -1,11 +1,11 @@
 'use client'
 
-/** A legal-request CARD (spec §4/§8) — the card-based replacement for the flat
- *  chip row. Everything shown here is derived from the deterministic model
+/** A legal-request CARD — the card-based replacement for the flat chip row.
+ *  Everything shown here is derived from the rule-based model
  *  (dispositionFor): the human stage (never a raw review_status), who owns the
  *  next action, what that action is called, and whether the viewer may act /
  *  claim / is merely aware. Awareness-only is always visually de-emphasised so
- *  bureau visibility never masquerades as assigned work (spec §9).
+ *  bureau visibility never masquerades as assigned work.
  *
  *  Reuses the Card surface + DeadlineChip; matches the NarcoticsRegistryCard
  *  idiom (one focusable, keyboard-accessible ≥44px target per record). */
@@ -52,7 +52,9 @@ function Meta({ label, value, mono = false }: { label: string; value: string; mo
  *  state; claimable reads as an outlined "available"; awareness/waiting stay
  *  muted and never look like urgent work. */
 function actionTone(d: { viewerCanAct: boolean; viewerCanClaim: boolean }): string {
-  if (d.viewerCanAct) return 'bg-badge-500 text-white'
+  // Dark ink on the accent (the SectionTabs active-tab treatment) — white on
+  // the user-selectable accent fails the 4.5:1 contrast floor for small text.
+  if (d.viewerCanAct) return 'bg-badge-500 text-ink-950'
   if (d.viewerCanClaim) return 'border border-badge-500/40 bg-badge-500/10 text-blue-200'
   return 'bg-white/5 text-slate-400'
 }

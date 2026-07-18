@@ -38,8 +38,9 @@
  *   - state guard: a routed request in 'ada_review' is not claimable;
  *   - claim also works from 'submitted_to_judge' (ADA handed off, no judge
  *     assigned yet) — judge2 takes that one;
- *   - §3 fan-out: on submit-to-DOJ the supporting LSB prosecutor (distinct
- *     from the routed primary) receives the bureau-prosecutor notification.
+ *   - bureau-prosecutor fan-out: on submit-to-DOJ the supporting LSB
+ *     prosecutor (distinct from the routed primary) receives the
+ *     bureau-prosecutor notification.
  *
  *  Fixtures (tests/rls/README.md): lsb/bcb detectives, lead (LSB bureau_lead),
  *  owner, ADA LSB/BCB/SAB, DA, Judge, Judge 2. All requests are [rls-test] v135
@@ -234,7 +235,7 @@ describe.skipIf(!enabled)('v1.35 — parallel judiciary track (live)', () => {
     //     20260805010000) ───────────────────────────────────────────────────
     // A non-creator, non-judge CID member (bcb — a detective from an unrelated
     // bureau) MUST be rejected: only an active Judge may take a request for
-    // judicial review (migration §2). Instead the claim SUCCEEDS, because the
+    // judicial review. Instead the claim SUCCEEDS, because the
     // role guard `if private.justice_role_of(v_uid) <> 'judge'` compares NULL
     // (CID members have no justice membership) to 'judge' → NULL, so the IF is
     // skipped and CID members slip past the only role check. bcb then passes
@@ -355,7 +356,7 @@ describe.skipIf(!enabled)('v1.35 — parallel judiciary track (live)', () => {
     expect(decide.error).not.toBeNull()
   })
 
-  /* ── 8. state guard + §3 bureau-prosecutor fan-out ── */
+  /* ── 8. state guard + bureau-prosecutor fan-out ── */
 
   it('a routed request in ada_review is not claimable; the supporting bureau prosecutor got the submit-to-DOJ notification', async () => {
     routedId = await draftAndSubmit('routed')
@@ -370,8 +371,8 @@ describe.skipIf(!enabled)('v1.35 — parallel judiciary track (live)', () => {
     expect(grab.error).not.toBeNull()
     expect(grab.error!.message).toMatch(/not awaiting judicial pickup/i)
 
-    // §3: the supporting LSB prosecutor (distinct from the routed primary) was
-    // looped in on submit — notification only, no gating. Both actor (lead)
+    // Fan-out: the supporting LSB prosecutor (distinct from the routed primary)
+    // was looped in on submit — notification only, no gating. Both actor (lead)
     // and target (adaSab) are rls-test accounts, so fan-out is not suppressed.
     const notif = await adaSab.from('notifications')
       .select('type, payload').eq('type', 'legal_request')

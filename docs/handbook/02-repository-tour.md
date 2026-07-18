@@ -25,7 +25,7 @@ cid/
 Next.js requires this folder: files here map to URLs. `layout.tsx` is the
 HTML shell (fonts, the pre-hydration theme applier); `page.tsx` redirects
 `/` to the last-visited tab; `(app)/[tab]/page.tsx` is the single route
-that renders all 29 screens; `error/global-error/not-found.tsx` are the
+that renders every screen; `error/global-error/not-found.tsx` are the
 crash/404 screens; `globals.css` holds the entire design system.
 **Connected to**: everything renders inside it; reads `lib/nav` for valid
 tabs. Details: [Ch. 5](05-pages.md).
@@ -35,7 +35,7 @@ The persistent frame around every screen: `Sidebar`, `Header` (global
 keyboard shortcuts), `BottomNav` (mobile), `Subtabs`, `SearchPalette`
 (⌘K), `NotificationsBell`, `ConnBanner` (offline pill), appearance/profile
 modals, and the `useNav`/`useNavBadges` hooks. **Why it exists**: one
-navigation implementation instead of 29. Details: [Ch. 6](06-components.md).
+navigation implementation instead of one per screen. Details: [Ch. 6](06-components.md).
 
 ### `src/components/ui/` — generic widgets
 `Modal` (focus trap + dirty guard), `dialog` (confirm/prompt), `Toaster`,
@@ -46,10 +46,10 @@ vocabulary). Feature-agnostic — every feature folder builds on these.
 from the DOJ build (`RelatedRecordPicker`, `VersionViewer`,
 `SignatureViewer`) — see [Ch. 6](06-components.md).
 
-### `src/components/<feature>/` — 27 feature folders
+### `src/components/<feature>/` — the feature folders
 One folder per screen (`cases/`, `gangs/`, `heatmap/`, …). Each is
 self-contained: fetches its own data, owns its modals. Only the `[tab]`
-router imports them. `cases/` (10 files) and `command/` (10 files) are the
+router imports them. `cases/` and `command/` are the
 big ones. Details: [Ch. 4](04-features.md).
 
 ### `src/lib/` — the shared foundation ⭐
@@ -61,18 +61,18 @@ notifications), and utilities (toast, format, safeUrl, markdown, store).
 [File Index](appendix-file-index.md).
 
 ### `supabase/` — the backend's paper trail
-`migrations/` (78 SQL files replayed by `supabase db reset`; note that
+`migrations/` (the migration lineage, replayed in filename order by `supabase db reset`; note that
 later changes were applied directly to the live project — the live schema
-is the source of truth), `functions/` (the `discord-notify` edge
-function), and backend READMEs. Details: [Ch. 8](08-database.md).
+is the source of truth), `functions/` (the Deno edge
+functions — discord-announce, discord-notify, sops-sync), and backend READMEs. Details: [Ch. 8](08-database.md).
 
 ### `docs/` — documentation
 This handbook (`handbook/`), `USER-GUIDE.md` (canonical text of the in-app
 guide — the in-app copy `src/components/guide/guideContent.ts` is
 **generated from it**), `HARDENING.md` (security checklist status),
-`DEFERRED.md` (parked work with triggers), `RELEASE-READINESS.md` (v1.0.0
-verification). Historical build-era notes (HANDOFF, ROADMAP, REACT-PARITY,
-BACKLOG…) are parked in `archive/` — see `archive/README.md`.
+`DEFERRED.md` (parked work with triggers). Historical build-era notes and
+dated reports (HANDOFF, ROADMAP, REACT-PARITY, BACKLOG, RELEASE-READINESS,
+the audit reports…) are parked in `archive/` — see `archive/README.md`.
 
 ### `.github/` — quality gates
 `workflows/ci.yml` (typecheck → lint → test → build on every push/PR) and

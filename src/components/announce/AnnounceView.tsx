@@ -1,6 +1,6 @@
 'use client'
 
-/** Announcements — vanilla collab.js §15. Division-wide notices; posting/
+/** Announcements — port of vanilla collab.js. Division-wide notices; posting/
  *  editing/deleting is gated to LEAD_ROLES (bureau lead and above). Dismissal
  *  is per-user and local-only (same `annDismissed`/`annSeen` Store keys as
  *  vanilla, so state carries over); pinned posts sort to the top; audience

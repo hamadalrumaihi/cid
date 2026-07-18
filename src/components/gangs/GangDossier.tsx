@@ -421,7 +421,7 @@ export function GangDossier({ gang, people, caseOptions, canEdit, canDelete, onB
         list('places').catch(() => [] as PlaceRow[]),
         list('gang_places', { eq: { gang_id: gang.id } }).catch(() => [] as GangPlaceRow[]),
         list('vehicles', { eq: { gang_id: gang.id } }).catch(() => [] as VehicleRow[]),
-        list('media', { eq: { gang_id: gang.id } }).catch(() => [] as MediaRow[]),
+        list('media', { eq: { gang_id: gang.id }, is: { archived_at: null } }).catch(() => [] as MediaRow[]),
         list('case_intel_links', { eq: { kind: 'gang', ref_id: gang.id } }).catch(() => [] as IntelLinkRow[]),
       ])
       setMembers(m); setTurf(t); setPlaces(allPlaces); setGangPlaces(gp); setVehicles(veh); setMedia(med); setIntelLinks(links)

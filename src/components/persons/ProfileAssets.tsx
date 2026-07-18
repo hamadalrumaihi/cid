@@ -83,7 +83,7 @@ export function PersonVehiclesSection({ data, canEdit, onLink, onRefresh }: {
                 {plateChip(v)}
                 <span className="min-w-0 truncate text-sm text-slate-200">{[v.model, v.color].filter(Boolean).join(' · ') || 'Vehicle'}</span>
               </div>
-              <Badge tone="accent" title="vehicles.owner_id — the canonical registration">Registered owner</Badge>
+              <Badge tone="accent" title="Registered owner on record in the Vehicle Registry">Registered owner</Badge>
             </Card>
           ))}
           {data.links.map((l) => {
@@ -297,12 +297,12 @@ export function PersonPlacesSection({ person, data, canEdit, onLink, onRefresh }
         </div>
       )}
 
-      {/* Legacy jsonb addresses — human-reviewed migration only. Rows are never
-          auto-converted and never deleted by linking; they stay until someone
-          edits the person record. */}
+      {/* Older free-text addresses — migrated only through explicit reviewer
+          action in the UI, never automatically. Rows are never deleted by
+          linking; they stay until someone edits the person record. */}
       {legacy.length > 0 && (
         <div>
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Legacy addresses (unlinked) — {legacy.length}</p>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Other addresses on file — {legacy.length}</p>
           <div className="space-y-1.5">
             {legacy.map((pr, i) => (
               <Card key={i} pad="sm" className="flex flex-wrap items-center justify-between gap-2">
@@ -311,7 +311,7 @@ export function PersonPlacesSection({ person, data, canEdit, onLink, onRefresh }
                   {pr.notes && <p className="mt-0.5 text-[11px] text-slate-400">{pr.notes}</p>}
                 </div>
                 {canEdit && (
-                  <Button size="sm" onClick={() => onLink(pr)} title="Review and link this legacy address to a structured Place (the legacy row stays)">
+                  <Button size="sm" onClick={() => onLink(pr)} title="Review and link this address to a structured Place (the original entry stays)">
                     Link to Place…
                   </Button>
                 )}

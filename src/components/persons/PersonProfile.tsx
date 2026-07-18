@@ -7,7 +7,7 @@
  *  sections for identity, associates, cases, legal, vehicles, locations,
  *  media and activity.
  *
- *  Perf contract (§27): the header renders off ONE persons fetch (+ the
+ *  Perf contract: the header renders off ONE persons fetch (+ the
  *  linked gang by id and a slim legal projection for the header badge); each
  *  section lazy-loads its own slice on first open via profileLoad.ts. There
  *  is no full reports/cases/gangs table load anywhere on this screen —

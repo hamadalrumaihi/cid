@@ -1,7 +1,7 @@
 'use client'
 
-/** CID Legal Requests — the investigator side of the DOJ legal-review system
- *  (DOJ redesign §15, phase 3). Two deep-linkable sub-views (`?view=`):
+/** CID Legal Requests — the investigator side of the DOJ legal-review system.
+ *  Two deep-linkable sub-views (`?view=`):
  *   - Overview — a MetricStrip over the SAME loaded request set (every count
  *     comes through dispositionFor; no extra queries), a "Needs your
  *     attention" list (returns to fix + approaching/blown deadlines, never
@@ -34,7 +34,7 @@ import { CardQueueSection, buildLegalViewer, useLegalRequests, useMyProsecutorBu
 import { LegalCreateWizard, type LegalWizardEntry } from './LegalCreateWizard'
 
 /** Canonical operational groups in the order the investigator should triage
- *  them (spec §7). Each request lands in exactly ONE group via dispositionFor,
+ *  them. Each request lands in exactly ONE group via dispositionFor,
  *  so a request never double-appears (e.g. "My Warrants" + "Submitted to DOJ"). */
 const GROUP_ORDER: OpGroup[] = [
   'needs_action', 'returned_to_you', 'available_to_claim', 'assigned_to_you',
@@ -105,7 +105,7 @@ function LegalViewInner() {
   }, [entries])
 
   // Returns to fix + expiring/expired instruments + approaching response
-  // deadlines. Awareness-only items NEVER appear here (spec §9).
+  // deadlines. Awareness-only items NEVER appear here.
   const attention = useMemo(() => {
     const rank = (d: LegalDisposition) => (d.urgency === 'overdue' ? 0 : d.urgency === 'soon' ? 1 : 2)
     return entries

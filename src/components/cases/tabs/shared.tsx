@@ -10,14 +10,12 @@ export type HistoryRow = Tables<'case_signoff_history'>
 export type EvidenceRow = Tables<'evidence'>
 export type ReportRow = Tables<'reports'>
 export type AssignmentRow = Tables<'case_assignments'>
-export type CustodyRow = Tables<'custody_chain'>
 export type MediaRow = Tables<'media'>
 export type RicoRow = Tables<'rico_cases'>
 export type PredicateRow = Tables<'predicate_acts'>
 export type GangRow = Tables<'gangs'>
 export type IntelRow = Tables<'case_intel_links'>
 export type PersonRow = Tables<'persons'>
-export type PlaceRow = Tables<'places'>
 
 /** One-click row mutations (delete chips, detach) previously discarded the
  *  returned {error}, so an RLS-denied or failed write looked like a silent

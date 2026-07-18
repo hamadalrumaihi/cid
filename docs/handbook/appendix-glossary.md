@@ -14,7 +14,7 @@ Plain-English definitions of every technical term the handbook uses.
 | **Context / Provider** | React's way to share a value (like "who is signed in") with every component underneath, without passing props down each level. |
 | **Store (zustand)** | A small global state container outside the component tree — needed so non-React code (the data layer) can push toasts. |
 | **`Store` (this repo)** | Confusingly also the name of the localStorage wrapper (`lib/store.ts`) for device preferences. Unrelated to zustand. |
-| **Route / Page** | A URL the app responds to. One dynamic route (`[tab]`) serves all 29 screens. |
+| **Route / Page** | A URL the app responds to. One dynamic route (`[tab]`) serves every screen. |
 | **API / Endpoint** | An HTTP URL a program calls. Here: Supabase's auto-generated `/rest/v1/<table>` and `/rest/v1/rpc/<fn>`. |
 | **SQL / Postgres** | The database language / the database engine Supabase hosts. |
 | **Query** | A request for data (SQL SELECT, or the `list()` helper). |

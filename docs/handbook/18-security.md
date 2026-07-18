@@ -9,7 +9,7 @@ doors → guard triggers are the locks on specific columns.**
 
 ## Verified strong (July 2026 audit)
 
-- RLS on all 47 tables; deny-all `app_secrets`; owner-only `audit_log`.
+- RLS on every table; deny-all `app_secrets`; owner-only `audit_log`.
 - Anonymous EXECUTE revoked on all RPCs (ACLs verified:
   authenticated + service_role only).
 - No secrets in the repo — committed keys (Supabase anon, FiveManage) are

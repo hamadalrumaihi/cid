@@ -11,7 +11,7 @@ export interface PageMeta {
 export const PAGE_META: Record<string, PageMeta> = {
   command:    { title: 'Central Command', sub: 'Case assignment & operational hub' },
   analytics:  { title: 'Division Analytics', sub: 'Caseload, clearance & activity trends' },
-  cases:      { title: 'Case Files', sub: 'Live case records, evidence & chain-of-custody' },
+  cases:      { title: 'Case Files', sub: 'Live case records, photos & reports' },
   legal:      { title: 'Legal Requests', sub: 'Warrants & subpoenas — drafting, DOJ review & fulfilment' },
   justice:    { title: 'Justice Portal', sub: 'DOJ & Judiciary — legal review queues, coverage & decisions' },
   operations: { title: 'Operations', sub: 'Task forces — related cases grouped under one umbrella' },

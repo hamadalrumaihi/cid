@@ -336,7 +336,7 @@ describe('legal requests (disposition-driven — lib/legalWorkflow)', () => {
     })
   })
 
-  it('bureau-awareness visibility NEVER surfaces as work (spec §9)', () => {
+  it('bureau-awareness visibility NEVER surfaces as work', () => {
     const q = buildActionItems(src({
       legalViewer: {
         myId: ME, cidActive: true, cidRole: 'detective',

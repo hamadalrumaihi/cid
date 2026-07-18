@@ -2,7 +2,7 @@
 
 The reviewer's index: where each portal feature lives in the code (UI entry → component → tables → RPCs → RLS helpers → tests) and who can do what — a navigation aid over [`docs/WORKFLOWS.md`](WORKFLOWS.md), [`docs/TESTING.md`](TESTING.md), the [handbook](handbook/README.md), and [`docs/DOJ-INTEGRATION.md`](DOJ-INTEGRATION.md).
 
-Design note for reviewers: every capability below is a human-designed, human-reviewed rule enforced server-side (RLS + SECURITY DEFINER RPCs). The portal contains no runtime AI — every approve/deny/return/assignment is a named human actor validated by the database; client-side role helpers (`src/lib/roles.ts`) only shape UI options and are pinned to the server matrix by table-tests.
+Design note for reviewers: every capability below is a rule enforced server-side (RLS + SECURITY DEFINER RPCs) — every approve/deny/return/assignment is recorded with the acting member and validated by the database. Client-side role helpers (`src/lib/roles.ts`) only shape UI options and are pinned to the server matrix by table-tests.
 
 **Navigation model**: one dynamic route, `src/app/(app)/[tab]/page.tsx`, statically prerendered per leaf tab from `PAGE_META` in `src/lib/nav.ts` — so "UI entry" below is a real `/{tab}` path. `src/app/(app)/layout.tsx` gates everything: signed-out → `Gate`; justice-only identity → the standalone `JusticeShell` (no CID nav); otherwise `AppShell` + `Sidebar` (Command Center leaf for command/Owner, Justice leaf for justice roles/Owner, Owner leaf Owner-only).
 

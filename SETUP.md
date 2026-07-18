@@ -96,12 +96,12 @@ If `anonKey` is unset or Supabase is unreachable, the app shows a clear setup
 notice instead of failing.
 
 ## 7. Tables
-The live schema has grown to **47 tables** (the original 27 plus case chat,
-tasks, templates, intel links, sign-off history, access grants/requests,
-watchlist, operations, indicators, shift reports, calendar/feedback support,
-and more). The authoritative list — with each table's RLS pattern — is in
-[`docs/HANDBOOK.md`](docs/HANDBOOK.md) §8; the TypeScript mirror is
-`src/lib/database.types.ts`.
+The live schema is the source of truth — captured in
+[`supabase/schema-snapshot.sql`](supabase/schema-snapshot.sql) and kept in
+sync with the TypeScript mirror `src/lib/database.types.ts` by
+`npm run check:schema`. The authoritative per-table detail — with each
+table's RLS pattern — is in
+[`docs/handbook/08-database.md`](docs/handbook/08-database.md).
 
 No seed/demo data is inserted — every module starts empty with "Create first…"
 CTAs.

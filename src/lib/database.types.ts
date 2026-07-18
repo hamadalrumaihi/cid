@@ -3327,15 +3327,19 @@ export type Database = {
       }
       media: {
         Row: {
+          archived_at: string | null
           case_id: string | null
+          category: string | null
           created_at: string
           external_url: string | null
+          featured: boolean
           gang_id: string | null
           id: string
           kind: string | null
           narcotic_id: string | null
           person_id: string | null
           place_id: string | null
+          report_id: string | null
           restricted: boolean
           storage_path: string | null
           tags: Json | null
@@ -3343,17 +3347,22 @@ export type Database = {
           type: Database["public"]["Enums"]["media_type"]
           updated_at: string
           uploaded_by: string | null
+          vehicle_id: string | null
         }
         Insert: {
+          archived_at?: string | null
           case_id?: string | null
+          category?: string | null
           created_at?: string
           external_url?: string | null
+          featured?: boolean
           gang_id?: string | null
           id?: string
           kind?: string | null
           narcotic_id?: string | null
           person_id?: string | null
           place_id?: string | null
+          report_id?: string | null
           restricted?: boolean
           storage_path?: string | null
           tags?: Json | null
@@ -3361,17 +3370,22 @@ export type Database = {
           type: Database["public"]["Enums"]["media_type"]
           updated_at?: string
           uploaded_by?: string | null
+          vehicle_id?: string | null
         }
         Update: {
+          archived_at?: string | null
           case_id?: string | null
+          category?: string | null
           created_at?: string
           external_url?: string | null
+          featured?: boolean
           gang_id?: string | null
           id?: string
           kind?: string | null
           narcotic_id?: string | null
           person_id?: string | null
           place_id?: string | null
+          report_id?: string | null
           restricted?: boolean
           storage_path?: string | null
           tags?: Json | null
@@ -3379,6 +3393,7 @@ export type Database = {
           type?: Database["public"]["Enums"]["media_type"]
           updated_at?: string
           uploaded_by?: string | null
+          vehicle_id?: string | null
         }
         Relationships: [
           {
@@ -3417,10 +3432,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "media_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "media_uploaded_by_fkey"
             columns: ["uploaded_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
             referencedColumns: ["id"]
           },
         ]
