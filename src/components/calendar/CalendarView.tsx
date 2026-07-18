@@ -27,7 +27,7 @@ type LegalRow = Tables<'legal_requests'>
 const LEGAL_COLS = 'id,request_number,title,review_status,fulfilment_status,response_deadline,expires_at'
 /** States whose deadlines no longer bind — mirrors legalShared's DeadlineChip
  *  (live requests warn; resolved records keep a quiet history). */
-const LEGAL_DONE_FULFILMENT = new Set(['closed', 'returned', 'return_recorded', 'revoked'])
+const LEGAL_DONE_FULFILMENT = new Set(['closed', 'returned', 'return_recorded', 'revoked', 'expired', 'records_received', 'testimony_completed', 'non_compliance'])
 const LEGAL_DONE_REVIEW = new Set(['denied', 'withdrawn', 'closed'])
 
 interface DayItem {

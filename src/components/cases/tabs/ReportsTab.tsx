@@ -180,9 +180,10 @@ function ReportDetail({ r, c, canEdit, canDelete, onBack, onEdit, onFinalize, on
     })
     if (res.error || !res.data) { setLegalBusy(false); toast(res.error?.message || 'Could not create the legal request.', 'danger'); return }
     // The source report is always the packet's first exhibit.
-    await rpc('add_legal_exhibit', { p_request: res.data.id, p_type: 'finalized_report', p_source_id: r.id })
+    const ex = await rpc('add_legal_exhibit', { p_request: res.data.id, p_type: 'finalized_report', p_source_id: r.id })
     setLegalBusy(false)
-    toast('Legal request created — build the packet, then submit for CID review.', 'success')
+    if (ex.error) toast(`Request created, but the report could not be attached (${ex.error.message}) — open the request and attach it manually.`, 'warn')
+    else toast('Legal request created — build the packet, then submit for CID review.', 'success')
     router.push(`/legal?request=${encodeURIComponent(res.data.id)}`)
   }
   const [pools, setPools] = useState<{ evidence: EvidenceRow[]; media: MediaRow[]; linked: MediaRow[]; persons: PersonRow[] }>({ evidence: [], media: [], linked: [], persons: [] })
