@@ -89,7 +89,8 @@ Portal, Command Center, Owner Portal, Feedback, and Profile screens
 
 Plus cross-cutting tools: global typo-tolerant search + command palette
 (`/` or `Ctrl-K`), notifications (in-app + optional Discord DM), a
-follow/watchlist for any record, and undo on every delete.
+follow/watchlist for any record, and a 6-second Undo on registry deletes
+(cases are archived instead of deleted — see the access rules below).
 
 A few surfaces are **local-only previews** (computed client-side, not
 persisted) and are labelled "*local preview — not saved*" — e.g. the
@@ -121,7 +122,11 @@ Access rules:
   finalize/e-sign** run through SECURITY DEFINER RPCs. The client calls
   the RPCs; it never writes those columns directly, and database triggers
   reject any attempt to.
-- **Delete:** command staff only (every delete offers a 6-second Undo).
+- **Delete:** registry deletes are command staff only (every one offers a
+  6-second Undo). Cases are different: command **archives** a case
+  (restorable at any time, nothing destroyed), and only the portal owner
+  can permanently delete an archived case — after a preview of everything
+  that would be destroyed, with a recorded reason.
 
 ## Repository layout
 

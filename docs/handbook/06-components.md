@@ -48,7 +48,7 @@ don't re-inline the pattern.
 
 - **`ui/WorkflowTimeline.tsx`** — the vertical actor/action/note history
   render. Used by: legal request History tab, case sign-off history
-  (SignoffTab), evidence custody chain (EvidenceTab expandable), the
+  (SignoffTab), evidence custody chain (Photos & Media tab, MediaTab.tsx), the
   Command Center approval-queue history, and the CID + Justice
   membership-request applicant history panels. **Reuse when**: any
   append-only history needs displaying.

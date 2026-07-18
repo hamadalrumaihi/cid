@@ -8,6 +8,8 @@ Static pre-rendering (instant first paint); React Flow and @react-pdf are
 dynamic-imported (out of the main bundle); 68 FK covering indexes +
 pg_trgm search indexes server-side; one realtime channel per table;
 memoized heavy derivations; slim `select` projections on picker queries.
+Realtime events are debounced per table (~300 ms, leading+trailing), so a
+bulk write triggers one refresh instead of one per row.
 
 ## Known considerations, in priority order
 
