@@ -2,11 +2,11 @@
 
 /** Command Center → Promotions & Transfers. Three panels: (1) officer picker
  *  opening Manage Officer (role changes via change_member_role, transfers via
- *  request_transfer); (2) the open transfer queue — cross-bureau moves need
- *  the source and destination Bureau Leads to approve (Deputy Director+ may
- *  complete or reject directly), mirrored client-side from the server matrix;
- *  (3) role/assignment history from role_events (reason + source recorded
- *  since v1.16). All decisions are RPC-enforced; buttons are UX only. */
+ *  request_transfer — transfers apply immediately on initiation); (2) the
+ *  open transfer queue, kept for any pre-existing open requests, which can
+ *  still be completed or rejected here; (3) role/assignment history from
+ *  role_events (reason + source recorded since v1.16). All decisions are
+ *  RPC-enforced; buttons are UX only. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { list, rpc } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
@@ -122,7 +122,7 @@ export function PromotionsTransfers() {
           ))}
           {!filtered.length && <p className="text-sm text-slate-500">No matching officers.</p>}
         </div>
-        <p className="mt-3 text-[11px] text-slate-500">Promotions and demotions go through <b>Change role</b> (audited, reason required); bureau moves go through <b>Transfer department</b> (both bureaus approve). Every change is recorded with who, why, and when.</p>
+        <p className="mt-3 text-[11px] text-slate-500">Promotions and demotions go through <b>Change role</b> (audited, reason required); department moves go through <b>Transfer department</b> and apply immediately. Every change is recorded with who, why, and when.</p>
       </section>
 
       <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">

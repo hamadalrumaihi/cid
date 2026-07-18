@@ -117,15 +117,15 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
   const requestTransfer = async () => {
     if (!toBureau || !reason.trim()) { toast('Pick the destination and give a reason.', 'warn'); return }
     const ok = await uiConfirm(
-      `${p.display_name}: ${roleLabel(p.role)} · ${p.division} → ${roleLabel(p.role)} · ${toBureau}\n\nReason: ${reason.trim()}\n\nCross-bureau transfers need the source and destination Bureau Leads to approve (Deputy Director+ can complete directly). The officer and both bureaus are notified.`,
-      { title: 'Confirm transfer request', confirmText: 'Request transfer' },
+      `${p.display_name}: ${roleLabel(p.role)} · ${p.division} → ${roleLabel(p.role)} · ${toBureau}\n\nReason: ${reason.trim()}\n\nThe transfer applies immediately. The officer and both departments are notified, and the move is recorded in the role history.`,
+      { title: 'Confirm transfer', confirmText: 'Transfer' },
     )
     if (!ok) return
     setBusy(true)
     const res = await rpc('request_transfer', { p_target: p.id, p_to_bureau: toBureau as never, p_reason: reason.trim() })
     setBusy(false)
-    if (res.error) { toast(`Transfer request failed: ${res.error.message}`, 'danger'); return }
-    toast(`Transfer to ${toBureau} requested for ${p.display_name}`, 'success')
+    if (res.error) { toast(`Transfer failed: ${res.error.message}`, 'danger'); return }
+    toast(`${p.display_name} transferred to ${toBureau}`, 'success')
     onChanged(); onClose()
   }
 

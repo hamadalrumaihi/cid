@@ -6325,3 +6325,12 @@ create policy wl_sel on public.watchlist
 -- restored; this migration lands the freeze together with the frontend
 -- deploy. End state matches the grants matrix above (writes revoked,
 -- read-only legacy).
+-- 20260807040000_transfer_single_step (function only): request_transfer now
+-- applies the move in the same call — the row is created approved on both
+-- sides by the initiator and immediately run through private.transfer_apply
+-- (role_events + audit + notifications unchanged). WHO may move WHOM is
+-- untouched: leads for rank-and-file touching their own bureau, DD+/owner
+-- anywhere, reason required, no self-transfer, matrix authority for riding
+-- role changes. The approve/reject/cancel/complete RPCs remain for any
+-- pre-existing open rows; nothing creates pending rows anymore. Definitive
+-- SQL in supabase/migrations/20260807040000_transfer_single_step.sql.
