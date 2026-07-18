@@ -87,6 +87,17 @@ leftovers via `rls_test_cleanup()` at **both** start and teardown, so re-runs
 are deterministic; a NULL-guard gap it caught became migration
 `20260714070000_legal_null_guards`.
 
+**Run-level cleanup guard (no production pollution).** Beyond each suite's own
+`afterAll`, a vitest `globalSetup` (`tests/rls/globalSetup.ts`) calls
+`rls_test_cleanup()` once **before** any suite starts and once **after** the
+whole run finishes. An `afterAll` is skipped when a file throws in `beforeAll`
+or times out — which is how test rows accumulated in the live project (24 SOP
+docs / 4 narcotics / 1 place, removed by hand 2026-07-18). The run-level hook
+plus the widened `rls_test_cleanup` (migration `20260807160000`, which now also
+purges fixture-authored documents / narcotics / gangs / places / vehicles /
+persons) means a crash can no longer leak into production. `v144` is the
+regression pin.
+
 The 13 justice fixture passwords (`RLS_TEST_PASSWORD_ADA_LSB/…/JUSTICE`) enable
 this suite; without them it skips. `tests/rls/auth.ts` adds a sign-in backoff so
 authenticating ~20 fixtures per run doesn't trip GoTrue's per-IP burst limit.

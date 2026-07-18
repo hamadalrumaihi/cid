@@ -23,6 +23,10 @@ export default defineConfig({
     environment: 'node',
     testTimeout: 30_000,
     hookTimeout: 60_000,
+    // Run-level cleanup: purge fixture data before AND after the whole run, so
+    // a suite that crashes before its afterAll can't leak rows into the live
+    // project (tests/rls/globalSetup.ts + rls_test_cleanup migration 20260807160000).
+    globalSetup: ['./tests/rls/globalSetup.ts'],
     // The tests mutate shared fixtures (one case per run) — keep them serial.
     fileParallelism: false,
     // Feeds the Owner Portal's Security Testing dashboard (sanitized,

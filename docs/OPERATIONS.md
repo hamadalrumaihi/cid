@@ -219,6 +219,16 @@ service account syncs).
 
 ## 8. Test-fixture hygiene & pending ops actions
 
+- **Production pollution from the suites — fixed.** The live RLS suites
+  create registry rows (SOP documents, narcotics, places) outside any case,
+  which the old `rls_test_cleanup` never removed; a crashed run left them
+  published in the live library/registries. As of migration
+  `20260807160000` the cleanup RPC purges every fixture-authored registry
+  entity, and a run-level vitest `globalSetup` runs it before **and** after
+  the whole run, so a skipped `afterAll` can no longer leak (`v144` pins it).
+  If you ever see `[rls-test]` / `RLS Test` rows in production again, it
+  means a run hit the DB with an *older* cleanup deployed — re-run the
+  suite (or call `rls_test_cleanup()` as any `rls-test-*` account) to purge.
 - **Fixture password rotation — put it on a cadence.** This runbook
   previously said to rotate the `rls-test-*` passwords "whenever you like";
   rotate them **quarterly** instead (Supabase → Auth → Users, then update
