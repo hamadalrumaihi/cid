@@ -123,12 +123,9 @@ describe.skipIf(!enabled)('v1.39 — transfers between ALL departments, JTF incl
       p_target: targetId, p_to_bureau: 'LSB', p_reason: '[rls-test] v139 JTF source',
     })
     expect(tr.error).toBeNull() // pre-migration: 'member has no permanent department yet'
+    // Single-step (20260807040000): the initiation applies the move at once.
     const row = tr.data as Transfer
-    expect(row).toMatchObject({ from_bureau: 'JTF', to_bureau: 'LSB', status: 'approved' })
-
-    const done = await director.rpc('complete_transfer', { p_id: row.id })
-    expect(done.error).toBeNull()
-    expect((done.data as Transfer).status).toBe('completed')
+    expect(row).toMatchObject({ from_bureau: 'JTF', to_bureau: 'LSB', status: 'completed' })
     expect(await targetProfile()).toMatchObject({ role: 'detective', division: 'LSB', active: true })
   })
 
@@ -140,11 +137,7 @@ describe.skipIf(!enabled)('v1.39 — transfers between ALL departments, JTF incl
     })
     expect(tr.error).toBeNull() // pre-migration: 'JTF is … not a transfer destination'
     const row = tr.data as Transfer
-    expect(row).toMatchObject({ from_bureau: 'LSB', to_bureau: 'JTF', status: 'approved' })
-
-    const done = await director.rpc('complete_transfer', { p_id: row.id })
-    expect(done.error).toBeNull()
-    expect((done.data as Transfer).status).toBe('completed')
+    expect(row).toMatchObject({ from_bureau: 'LSB', to_bureau: 'JTF', status: 'completed' })
     expect((await targetProfile()).division).toBe('JTF')
 
     const back = await resetTarget('detective', 'LSB')
@@ -187,7 +180,7 @@ describe.skipIf(!enabled)('v1.39 — transfers between ALL departments, JTF incl
   /* ── 6. a lead-initiated JTF pull: pending at the (leaderless) source,
    *      decidable by DD+, applied by the destination lead ── */
 
-  it('LSB lead initiates JTF -> LSB: starts pending_source; Director approves the JTF side; lead\'s target approval applies the move', async () => {
+  it('LSB lead initiates JTF -> LSB: single step — the initiation applies the move', async () => {
     const park = await resetTarget('detective', 'JTF')
     expect(park.error).toBeNull()
 
@@ -195,28 +188,17 @@ describe.skipIf(!enabled)('v1.39 — transfers between ALL departments, JTF incl
       p_target: targetId, p_to_bureau: 'LSB', p_reason: '[rls-test] v139 inbound JTF pull',
     })
     expect(tr.error).toBeNull()
+    // Single-step (20260807040000): the lead's authority over the destination
+    // side is enough — the row is stamped approved by the initiator and
+    // applied in the same call.
     const row = tr.data as Transfer
-    // destination is the lead's bureau, source (JTF) is not — the request
-    // starts at the source side with NO source approval recorded yet
-    expect(row).toMatchObject({ from_bureau: 'JTF', to_bureau: 'LSB', status: 'pending_source' })
-    expect(row.source_approved_by).toBeNull()
-    // nothing has moved yet
-    expect((await targetProfile()).division).toBe('JTF')
-
-    // a leaderless JTF side never deadlocks: DD+ can decide any side
-    const src = await director.rpc('approve_transfer_source', {
-      p_id: row.id, p_note: '[rls-test] v139 JTF side (DD+)',
-    })
-    expect(src.error).toBeNull()
-    expect((src.data as Transfer).status).toBe('pending_target')
-
-    // the destination lead's approval applies the move in the same transaction
-    const tgt = await lead.rpc('approve_transfer_target', {
-      p_id: row.id, p_note: '[rls-test] v139 accepted',
-    })
-    expect(tgt.error).toBeNull()
-    expect((tgt.data as Transfer).status).toBe('completed')
+    expect(row).toMatchObject({ from_bureau: 'JTF', to_bureau: 'LSB', status: 'completed' })
     expect(await targetProfile()).toMatchObject({ role: 'detective', division: 'LSB', active: true })
+
+    // The approval RPCs remain only for pre-existing open rows: a completed
+    // row is no longer decidable.
+    const late = await director.rpc('approve_transfer_source', { p_id: row.id })
+    expect(late.error).not.toBeNull()
   })
 
   /* ── 7. anon stays out ── */

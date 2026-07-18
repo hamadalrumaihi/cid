@@ -332,15 +332,17 @@ describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority
     expect(error).not.toBeNull()
   })
 
-  it('Bureau Lead cannot take a member from another bureau unilaterally (inbound request stays pending at the source)', async () => {
-    const tr = await lead.rpc('request_transfer', { p_target: bcbId, p_to_bureau: 'LSB', p_reason: '[rls-test] inbound pull' })
+  it('Bureau Lead CAN pull a rank-and-file member from another bureau in a single step (no source consent stage)', async () => {
+    // Stage the throwaway target in BCB, then have the LSB lead pull it in.
+    // Single-step (20260807040000): destination-side authority is enough —
+    // the source bureau no longer has a veto, and the move applies at once.
+    const park = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'BCB', p_active: true })
+    expect(park.error).toBeNull()
+    const tr = await lead.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'LSB', p_reason: '[rls-test] inbound pull' })
     expect(tr.error).toBeNull()
-    const row = tr.data as { id: string; status: string }
-    expect(row.status).toBe('pending_source') // BCB has not consented — nothing moved
-    const prof = await director.from('profiles').select('division').eq('id', bcbId)
-    expect(prof.data![0].division).toBe('BCB')
-    const cancel = await lead.rpc('cancel_transfer', { p_id: row.id })
-    expect(cancel.error).toBeNull()
+    expect((tr.data as { status: string }).status).toBe('completed')
+    const prof = await director.from('profiles').select('division').eq('id', targetId)
+    expect(prof.data![0].division).toBe('LSB') // already back at the suite baseline (detective/LSB)
   })
 
   it('Bureau Lead may promote to senior detective within their bureau (reason recorded)', async () => {
@@ -355,15 +357,13 @@ describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority
     expect(back.error).toBeNull()
   })
 
-  it('Director can promote to command roles and complete cross-bureau transfers directly', async () => {
+  it('Director can promote to command roles; transfers apply in a single step', async () => {
     const up = await director.rpc('change_member_role', { p_target: targetId, p_new_role: 'bureau_lead', p_reason: '[rls-test] promotion to command' })
     expect(up.error).toBeNull()
     const tr = await director.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'BCB', p_reason: '[rls-test] higher-command move' })
     expect(tr.error).toBeNull()
-    expect((tr.data as { status: string }).status).toBe('approved') // DD+ authority covers both sides
-    const done = await director.rpc('complete_transfer', { p_id: (tr.data as { id: string }).id })
-    expect(done.error).toBeNull()
-    expect((done.data as { status: string }).status).toBe('completed')
+    // Single-step (20260807040000): the initiation applies the move at once.
+    expect((tr.data as { status: string }).status).toBe('completed')
     const prof = await director.from('profiles').select('role,division').eq('id', targetId)
     expect(prof.data![0]).toMatchObject({ role: 'bureau_lead', division: 'BCB' })
     // restore baseline for the rest of the suite
@@ -376,46 +376,33 @@ describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority
     expect(self.error).not.toBeNull()
   })
 
-  it('JTF is a valid transfer destination (any-department moves, 20260807020000)', async () => {
+  it('JTF is a valid transfer destination (any-department moves, single step)', async () => {
     const tr = await director.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'JTF', p_reason: '[rls-test] JTF destination' })
     expect(tr.error).toBeNull()
-    const row = tr.data as { id: string; status: string }
-    // Director initiation covers both sides — pre-approved on creation.
-    expect(row.status).toBe('approved')
-    // Cancel so the one-open-transfer rule doesn't trip the following tests.
-    const cancel = await director.rpc('cancel_transfer', { p_id: row.id })
-    expect(cancel.error).toBeNull()
+    expect((tr.data as { status: string }).status).toBe('completed')
+    const prof = await director.from('profiles').select('division').eq('id', targetId)
+    expect(prof.data![0].division).toBe('JTF')
+    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
+    expect(reset.error).toBeNull()
   })
 
-  it('two-lead flow: source approval then destination approval applies the move (live role travels)', async () => {
-    // lead (LSB) initiates outbound — initiation IS the source approval
-    const tr = await lead.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'BCB', p_reason: '[rls-test] two-lead flow' })
+  it('lead-initiated transfer applies in a single step (live role travels; audit trail written)', async () => {
+    // lead (LSB) initiates outbound — the initiation applies the move at once
+    const tr = await lead.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'BCB', p_reason: '[rls-test] single-step lead move' })
     expect(tr.error).toBeNull()
     const row = tr.data as { id: string; status: string }
-    expect(row.status).toBe('pending_target')
-    // the same (source) lead cannot also give the destination approval
-    const wrongSide = await lead.rpc('approve_transfer_target', { p_id: row.id })
-    expect(wrongSide.error).not.toBeNull()
-    // a plain detective can approve nothing
+    expect(row.status).toBe('completed')
+    // a plain detective still cannot touch the workflow RPCs
     const det = await plainDet.rpc('approve_transfer_target', { p_id: row.id })
     expect(det.error).not.toBeNull()
-    // interleaved promotion while the transfer is pending — a plain transfer
-    // (no role change on the request) must carry the LIVE role, never revert
-    // it to the role captured at request time
-    const promo = await director.rpc('change_member_role', { p_target: targetId, p_new_role: 'senior_detective', p_reason: '[rls-test] interleaved promotion' })
-    expect(promo.error).toBeNull()
-    // director (DD+ counts for the destination side) — approval applies the move
-    const ok = await director.rpc('approve_transfer_target', { p_id: row.id, p_note: '[rls-test] accepted' })
-    expect(ok.error).toBeNull()
-    expect((ok.data as { status: string }).status).toBe('completed')
     const prof = await director.from('profiles').select('role,division').eq('id', targetId)
-    expect(prof.data![0]).toMatchObject({ role: 'senior_detective', division: 'BCB' })
+    expect(prof.data![0]).toMatchObject({ role: 'detective', division: 'BCB' })
     const ev = await director.from('role_events')
       .select('source,old_division,new_division,old_role,new_role').eq('target_id', targetId)
       .order('created_at', { ascending: false }).limit(1)
     expect(ev.data![0]).toMatchObject({
       source: 'transfer', old_division: 'LSB', new_division: 'BCB',
-      old_role: 'senior_detective', new_role: 'senior_detective',
+      old_role: 'detective', new_role: 'detective',
     })
     const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
     expect(reset.error).toBeNull()
@@ -445,8 +432,9 @@ describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority
     expect(asDet.data ?? []).toHaveLength(0)
     const detCount = await plainDet.from('transfer_requests').select('id', { count: 'exact', head: true }).eq('id', id)
     expect(detCount.count ?? 0).toBe(0)
-    const cancel = await lead.rpc('cancel_transfer', { p_id: id })
-    expect(cancel.error).toBeNull()
+    // single step applied the move — restore the baseline
+    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
+    expect(reset.error).toBeNull()
   })
 
   it('an unrelated Bureau Lead cannot view or infer a transfer between two other bureaus', async () => {
@@ -469,8 +457,6 @@ describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority
     // deciding is equally out of reach for the unrelated lead
     const decide = await lead.rpc('approve_transfer_source', { p_id: id })
     expect(decide.error).not.toBeNull()
-    const cancel = await director.rpc('cancel_transfer', { p_id: id })
-    expect(cancel.error).toBeNull()
     const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
     expect(reset.error).toBeNull()
   })
@@ -488,8 +474,6 @@ describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority
     expect(asLead.error).toBeNull()
     expect(asLead.data).toHaveLength(1)
     expect(asLead.data![0]).toMatchObject({ reason: '[rls-test] inbound visibility', from_bureau: 'BCB', to_bureau: 'LSB' })
-    const cancel = await director.rpc('cancel_transfer', { p_id: id })
-    expect(cancel.error).toBeNull()
     const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
     expect(reset.error).toBeNull()
   })
