@@ -9,7 +9,8 @@ in the [File Index](appendix-file-index.md); table/RPC details in
 ## 4.1 The case lifecycle (flagship)
 
 **Purpose**: the central investigation record. **Permissions**: bureau-
-scoped (`can_access_case`); deletes command-only.
+scoped (`can_access_case`); archival command-only, permanent deletion
+Owner-only.
 
 1. **Create** — `CasesView` "+ New Case" (or ⌘K "new case", or the ticket
    wizard) → `CaseModal`: template chips prefill fields + a task
@@ -27,14 +28,20 @@ scoped (`can_access_case`); deletes command-only.
    (`updateWhere … last_stale_notified_at is null`) and notifies
    lead/bureau-leads/deputy. The CAS prevents two open tabs double-firing.
 5. **Sign-off** — `rpc('signoff_submit')` → SQL picks the stage + a
-   non-LOA assignee → reviewer `rpc('signoff_decide')`, owner
+   non-LOA assignee (never the submitter/lead) → the routed assignee
+   decides via `rpc('signoff_decide')` (a Director may override; the
+   submitter can never decide their own case), owner
    `rpc('signoff_owner_action')`. History rows + notifications are written
    inside the RPCs. Direct column writes are trigger-blocked.
 6. **Export** — the packet button gathers everything
    (`lib/packet.gatherCasePacket`, partial-tolerant) and renders PDF
    (dynamic-imported `lib/pdf`), DOCX (`lib/docx`), or Markdown.
-7. **Delete** — `deleteWithUndo` with cascade config; Undo restores
-   parents + children with original ids.
+7. **Archive / delete** — command archives (`rpc('case_archive')`:
+   restorable, audited; archived cases leave working views and live under
+   the command-only Archived filter). Only the Owner permanently deletes,
+   via a catalog-derived preview + reasoned confirm
+   (`case_delete_preview` → `case_permanent_delete`); cases with legal
+   requests refuse deletion. There is no undo-based case delete anymore.
 
 **Data flow**: user action → `db.ts` helper → PostgREST → RLS check →
 row change → realtime event → version bump → every subscribed view
@@ -92,8 +99,10 @@ required) / request-correction / reject — under the unified authority
 matrix ([Ch. 9](09-auth.md)), activating the profile only on approval; the
 legacy one-click `assign_member` approve remains for requestless profiles
 (activation-only). Promotions/demotions run through `change_member_role`
-and department moves through the two-sided `transfer_requests` workflow
-— both audited with reasons). Joint cases:
+and department moves through the single-step `transfer_requests` move —
+an authorized initiator (a Bureau Lead when one side is their own bureau,
+or Deputy Director+) picks a destination and reason and the move applies
+immediately, JTF included — both audited with reasons). Joint cases:
 `convert_case_to_joint()` tags a case JTF while preserving its
 originating bureau and grants selected members temporary case-scoped
 access (joint roles, optional expiry, removable, endable) — access model

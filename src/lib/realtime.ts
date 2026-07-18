@@ -25,6 +25,30 @@ export const useRealtimeStore = create<RtState>((set) => ({
 
 const registered = new Set<string>()
 
+/** Per-table leading+trailing debounce for the version bumps. Contract: the
+ *  FIRST event of a burst bumps immediately (a lone change stays prompt); any
+ *  further events within `waitMs` collapse into ONE trailing bump after the
+ *  burst goes quiet — so a bulk insert of N rows costs every subscribed view
+ *  O(1) refetch cycles, not N. Exported for the unit test. */
+export function createDebouncedBump(bump: (table: string) => void, waitMs = 300): (table: string) => void {
+  const pending = new Map<string, { timer: ReturnType<typeof setTimeout>; again: boolean }>()
+  return (table) => {
+    const prev = pending.get(table)
+    if (prev) clearTimeout(prev.timer) // mid-burst: fold into the trailing bump
+    else bump(table) // leading edge — the first event of a burst is prompt
+    const entry = {
+      again: !!prev,
+      timer: setTimeout(() => {
+        pending.delete(table)
+        if (entry.again) bump(table)
+      }, waitMs),
+    }
+    pending.set(table, entry)
+  }
+}
+
+const debouncedBump = createDebouncedBump((table) => useRealtimeStore.getState().bump(table))
+
 /** Subscribe (once per session) to postgres_changes for a table. Safe to call
  *  from every mount — repeat calls are no-ops. */
 export function subscribeTable(table: string): void {
@@ -34,7 +58,7 @@ export function subscribeTable(table: string): void {
     supabase()
       .channel(`rt_${table}`)
       .on('postgres_changes', { event: '*', schema: 'public', table }, () => {
-        useRealtimeStore.getState().bump(table)
+        debouncedBump(table)
       })
       .subscribe()
   } catch {

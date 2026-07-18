@@ -119,9 +119,11 @@ export const getAssignableRoles = (actor: RoleParty | null | undefined, target: 
   ROLE_ORDER.filter((r) => canChangeRole(actor, target, r))
 
 /** May `actor` INITIATE a transfer of `target` from `source` to `destination`?
- *  A Bureau Lead may only initiate for rank-and-file members when one side is
- *  their own bureau (the other bureau still approves); DD+ and Owner may
- *  initiate any move between departments, JTF included. Never yourself. */
+ *  Single-step since 20260807040000: an authorized initiation applies the move
+ *  immediately — no approval stage, and the source bureau has no veto. A
+ *  Bureau Lead may only initiate for rank-and-file members when one side is
+ *  their own bureau; DD+ and Owner may initiate any move between departments,
+ *  JTF included. Never yourself. */
 export const canTransfer = (
   actor: RoleParty | null | undefined, target: RoleParty, source: string, destination: string,
 ): boolean => {
@@ -136,7 +138,9 @@ export const canTransfer = (
 }
 
 /** May `actor` decide (approve/reject) the given SIDE of a pending transfer?
- *  Bureau Lead of that bureau, or Deputy Director or higher, or Owner. */
+ *  Bureau Lead of that bureau, or Deputy Director or higher, or Owner.
+ *  Legacy: transfers are single-step since 20260807040000, so this only
+ *  serves pre-existing open rows — nothing creates pending rows anymore. */
 export const canDecideTransferSide = (actor: RoleParty | null | undefined, bureau: string): boolean =>
   !!actor && ((!!actor.is_owner && !!actor.active)
     || (!!actor.active && ((actor.role === 'bureau_lead' && actor.division === bureau)

@@ -38,8 +38,8 @@ then the client-errors panel, then Vercel runtime logs.
   intentional. Their required roles, bureaus, and active flags are the
   **documented baseline** in [`tests/rls/README.md`](../tests/rls/README.md);
   keep them exactly as listed (see §4 for what happens if they drift).
-  Rotate their passwords whenever you like (Supabase → Auth → Users) and
-  update the CI secrets to match.
+  Rotate their passwords on the recorded quarterly cadence (§8; Supabase →
+  Auth → Users) and update the CI secrets to match.
 - **Supabase advisors** — skim after migrations and monthly.
 - **Dependencies** — Dependabot opens weekly PRs; merge after the gates pass.
 - **After any migration** — the schema-artifact ritual in
@@ -216,3 +216,22 @@ service account syncs).
      SOP/Training folder only.
   3. **Move the remaining reference docs** (Gang Fact Sheet, CID Roster,
      Case Building Playbook) into SOP/Training so they auto-publish.
+
+## 8. Test-fixture hygiene & pending ops actions
+
+- **Fixture password rotation — put it on a cadence.** This runbook
+  previously said to rotate the `rls-test-*` passwords "whenever you like";
+  rotate them **quarterly** instead (Supabase → Auth → Users, then update
+  the CI secrets), and log the rotation date — alongside the restore-drill
+  log is fine — so the last rotation is a recorded fact, not a guess.
+- **Backup restore drill — still pending.** The §5 drill log has no
+  entries. Run the drill once and record the date, backup timestamp,
+  target, and result in that table.
+- **External uptime monitoring — none exists.** Add an external pinger for
+  the site URL and the Supabase health endpoint so an outage is noticed
+  before a member reports it.
+- **FiveManage upload key — move to a secret and rotate.** The
+  `NEXT_PUBLIC_FIVEMANAGE_API_KEY` value is committed in `vercel.json` and
+  `.github/workflows/ci.yml`. Move it to a Vercel environment variable and
+  a GitHub Actions secret, then rotate the key. This needs FiveManage +
+  Vercel/GitHub dashboard access.

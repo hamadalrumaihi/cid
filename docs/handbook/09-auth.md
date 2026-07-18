@@ -55,9 +55,11 @@ approval-with-changes, promotion, demotion, and transfer records a reason.
 `profiles.role/division/active/is_owner/removed_at` are frozen against ALL
 direct client writes (non-definer trigger) — the audited RPCs are the only
 mutation path, and each writes `role_events` (+`reason`/`source`/`source_id`).
-Department moves are a two-sided workflow: source Bureau Lead → target
-Bureau Lead → completed, with Deputy Director+ able to complete directly
-(`transfer_requests`, [Ch. 7](07-api.md)). Justice roles (ADA/DA/AG/Judge)
+Department moves are single-step (`transfer_requests`,
+[Ch. 7](07-api.md)): an authorized initiator — a Bureau Lead for
+rank-and-file members when one side of the move is their own bureau, or
+Deputy Director+/Owner for anyone — picks a destination and reason and
+the move applies immediately; JTF is a valid source and destination. Justice roles (ADA/DA/AG/Judge)
 are a separate identity domain and grant no CID assignment authority.
 
 ## Permissions (what may you do?) — three layers

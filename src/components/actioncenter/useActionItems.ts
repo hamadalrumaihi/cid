@@ -230,8 +230,22 @@ export function useActionItems(): ActionItemsResult {
   }, [state, profile, isCommand, isOwner, justiceRole, fetchProfiles, auth, prosecutorBureaus])
 
   useEffect(() => {
-    const id = window.setTimeout(() => { void refresh() }, 0)
-    return () => window.clearTimeout(id)
+    // A version-driven refetch fans out ~13 queries — pointless while the tab
+    // is hidden. Skip it and run ONE catch-up refetch when the tab returns to
+    // visible (the effect re-arms per bump, so `missed` covers this cycle).
+    let missed = false
+    const id = window.setTimeout(() => {
+      if (document.visibilityState === 'hidden') { missed = true; return }
+      void refresh()
+    }, 0)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && missed) { missed = false; void refresh() }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.clearTimeout(id)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs, vDocuments, vSuggestions])
 
   return {

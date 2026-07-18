@@ -2240,6 +2240,13 @@ CREATE INDEX gangs_name_trgm ON public.gangs USING gin (name extensions.gin_trgm
 CREATE INDEX indicators_case_idx ON public.indicators USING btree (case_id);
 CREATE INDEX indicators_created_by_fkey_idx ON public.indicators USING btree (created_by);
 CREATE INDEX indicators_value_idx ON public.indicators USING btree (lower(btrim(value)));
+CREATE INDEX legal_requests_ada_idx ON public.legal_requests USING btree (assigned_ada_id) WHERE (assigned_ada_id IS NOT NULL);
+CREATE INDEX legal_requests_bureau_idx ON public.legal_requests USING btree (responsible_bureau);
+CREATE INDEX legal_requests_case_idx ON public.legal_requests USING btree (case_id);
+CREATE INDEX legal_requests_creator_idx ON public.legal_requests USING btree (created_by);
+CREATE UNIQUE INDEX legal_requests_import_key_key ON public.legal_requests USING btree (import_key) WHERE (import_key IS NOT NULL);
+CREATE INDEX legal_requests_judge_idx ON public.legal_requests USING btree (assigned_judge_id) WHERE (assigned_judge_id IS NOT NULL);
+CREATE INDEX legal_requests_review_idx ON public.legal_requests USING btree (review_status);
 CREATE INDEX media_case_id_archived_at_idx ON public.media USING btree (case_id, archived_at);
 CREATE INDEX media_case_id_idx ON public.media USING btree (case_id);
 CREATE INDEX media_gang_id_fkey_idx ON public.media USING btree (gang_id);
@@ -2349,6 +2356,10 @@ CREATE INDEX places_name_trgm ON public.places USING gin (name extensions.gin_tr
 CREATE INDEX places_narcotic_fk_idx ON public.places USING btree (narcotic_id);
 CREATE INDEX predicate_acts_evidence_id_fkey_idx ON public.predicate_acts USING btree (evidence_id);
 CREATE INDEX predicate_acts_rico_case_id_fkey_idx ON public.predicate_acts USING btree (rico_case_id);
+CREATE UNIQUE INDEX one_active_acting_ada_per_bureau ON public.prosecutor_bureau_assignments USING btree (bureau) WHERE ((assignment_type = 'acting'::text) AND (ends_at IS NULL));
+CREATE UNIQUE INDEX one_active_primary_ada_per_bureau ON public.prosecutor_bureau_assignments USING btree (bureau) WHERE ((assignment_type = 'primary'::text) AND (ends_at IS NULL));
+CREATE INDEX pba_bureau_active_idx ON public.prosecutor_bureau_assignments USING btree (bureau) WHERE (ends_at IS NULL);
+CREATE INDEX pba_prosecutor_idx ON public.prosecutor_bureau_assignments USING btree (prosecutor_id);
 CREATE INDEX raid_compensations_case_id_fkey_idx ON public.raid_compensations USING btree (case_id);
 CREATE INDEX raid_compensations_created_by_fkey_idx ON public.raid_compensations USING btree (created_by);
 CREATE INDEX reports_author_id_fkey_idx ON public.reports USING btree (author_id);
@@ -2362,6 +2373,12 @@ CREATE INDEX trackers_case_id_fkey_idx ON public.trackers USING btree (case_id);
 CREATE INDEX trackers_created_by_fkey_idx ON public.trackers USING btree (created_by);
 CREATE INDEX trackers_deputy_sig_fkey_idx ON public.trackers USING btree (deputy_sig);
 CREATE INDEX trackers_director_sig_fkey_idx ON public.trackers USING btree (director_sig);
+CREATE INDEX transfer_requests_completed_by_idx ON public.transfer_requests USING btree (completed_by);
+CREATE UNIQUE INDEX transfer_requests_one_open ON public.transfer_requests USING btree (target_id) WHERE (status = ANY (ARRAY['pending_source'::text, 'pending_target'::text, 'approved'::text]));
+CREATE INDEX transfer_requests_requested_by_idx ON public.transfer_requests USING btree (requested_by);
+CREATE INDEX transfer_requests_source_approved_by_idx ON public.transfer_requests USING btree (source_approved_by);
+CREATE INDEX transfer_requests_target_approved_by_idx ON public.transfer_requests USING btree (target_approved_by);
+CREATE INDEX transfer_requests_target_idx ON public.transfer_requests USING btree (target_id);
 CREATE INDEX vehicles_created_by_idx ON public.vehicles USING btree (created_by);
 CREATE INDEX vehicles_gang_idx ON public.vehicles USING btree (gang_id);
 CREATE INDEX vehicles_owner_idx ON public.vehicles USING btree (owner_id);
@@ -4476,6 +4493,7 @@ CREATE TRIGGER cases_touch BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FU
 CREATE TRIGGER trg_block_direct_signoff BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_signoff();
 CREATE TRIGGER trg_block_direct_case_bureau BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_bureau();
 CREATE TRIGGER trg_case_closed_at BEFORE UPDATE OF status ON public.cases FOR EACH ROW EXECUTE FUNCTION public.set_case_closed_at();
+CREATE TRIGGER cases_block_archive_cols BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_archive();
 CREATE TRIGGER cid_records_touch BEFORE UPDATE ON public.cid_records FOR EACH ROW EXECUTE FUNCTION public.cid_touch_updated_at();
 CREATE TRIGGER client_errors_notify AFTER INSERT ON public.client_errors FOR EACH ROW EXECUTE FUNCTION private.notify_owners_client_error();
 CREATE TRIGGER commendations_touch BEFORE UPDATE ON public.commendations FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -4499,6 +4517,7 @@ CREATE TRIGGER gang_turf_audit AFTER INSERT OR DELETE OR UPDATE ON public.gang_t
 CREATE TRIGGER gang_turf_touch BEFORE UPDATE ON public.gang_turf FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER gangs_audit AFTER INSERT OR DELETE OR UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER gangs_touch BEFORE UPDATE ON public.gangs FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER trg_touch_legal_requests BEFORE UPDATE ON public.legal_requests FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER media_audit AFTER INSERT OR DELETE OR UPDATE ON public.media FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER media_touch BEFORE UPDATE ON public.media FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER mo_profiles_touch BEFORE UPDATE ON public.mo_profiles FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -4532,6 +4551,7 @@ CREATE TRIGGER predicate_acts_audit AFTER INSERT OR DELETE OR UPDATE ON public.p
 CREATE TRIGGER predicate_acts_touch BEFORE UPDATE ON public.predicate_acts FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER profiles_guard BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.guard_profile();
 CREATE TRIGGER profiles_block_login_denied BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.block_direct_login_denied();
+CREATE TRIGGER profiles_block_privileged BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.block_direct_privileged_profile();
 CREATE TRIGGER profiles_touch BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER raid_compensations_audit AFTER INSERT OR DELETE OR UPDATE ON public.raid_compensations FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER raid_compensations_touch BEFORE UPDATE ON public.raid_compensations FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -4546,6 +4566,7 @@ CREATE TRIGGER tickets_touch BEFORE UPDATE ON public.tickets FOR EACH ROW EXECUT
 CREATE TRIGGER trackers_audit AFTER INSERT OR DELETE OR UPDATE ON public.trackers FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER trackers_touch BEFORE UPDATE ON public.trackers FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_block_tracker_self_cosign BEFORE INSERT OR UPDATE ON public.trackers FOR EACH ROW EXECUTE FUNCTION private.block_tracker_self_cosign();
+CREATE TRIGGER trg_touch_transfer_requests BEFORE UPDATE ON public.transfer_requests FOR EACH ROW EXECUTE FUNCTION public.cid_touch_updated_at();
 CREATE TRIGGER vehicles_audit AFTER INSERT OR DELETE OR UPDATE ON public.vehicles FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER vehicles_touch BEFORE UPDATE ON public.vehicles FOR EACH ROW EXECUTE FUNCTION private.touch();
 
@@ -4575,7 +4596,7 @@ create policy ann_sel on public.announcements
     OR private.is_command() OR private.is_owner())));
 
 create policy audit_sel on public.audit_log
-  as permissive for select to public
+  as permissive for select to authenticated
   using (private.is_owner());
 
 create policy ballistic_footprints_del on public.ballistic_footprints
@@ -4979,7 +5000,7 @@ create policy feedback_insert_own on public.feedback
   with check ((( SELECT auth.uid() AS uid) = created_by));
 
 create policy feedback_owner_manage on public.feedback
-  as permissive for all to public
+  as permissive for all to authenticated
   using (private.is_owner())
   with check (private.is_owner());
 
@@ -4988,7 +5009,7 @@ create policy feedback_select_own on public.feedback
   using ((( SELECT auth.uid() AS uid) = created_by));
 
 create policy feedback_meta_all on public.feedback_meta
-  as permissive for all to public
+  as permissive for all to authenticated
   using (private.is_owner())
   with check (private.is_owner());
 
@@ -5078,19 +5099,19 @@ create policy gangs_upd on public.gangs
   with check (private.is_active());
 
 create policy indicators_del on public.indicators
-  as permissive for delete to public
+  as permissive for delete to authenticated
   using (private.can_delete());
 
 create policy indicators_ins on public.indicators
-  as permissive for insert to public
+  as permissive for insert to authenticated
   with check (private.is_active());
 
 create policy indicators_sel on public.indicators
-  as permissive for select to public
+  as permissive for select to authenticated
   using (private.is_active());
 
 create policy indicators_upd on public.indicators
-  as permissive for update to public
+  as permissive for update to authenticated
   using (private.is_active())
   with check (private.is_active());
 
@@ -5443,19 +5464,19 @@ create policy notif_upd on public.notifications
   with check ((user_id = ( SELECT auth.uid() AS uid)));
 
 create policy operations_del on public.operations
-  as permissive for delete to public
+  as permissive for delete to authenticated
   using (private.can_delete());
 
 create policy operations_ins on public.operations
-  as permissive for insert to public
+  as permissive for insert to authenticated
   with check (private.is_active());
 
 create policy operations_sel on public.operations
-  as permissive for select to public
+  as permissive for select to authenticated
   using (private.is_active());
 
 create policy operations_upd on public.operations
-  as permissive for update to public
+  as permissive for update to authenticated
   using (private.is_active())
   with check (private.is_active());
 
@@ -5742,15 +5763,15 @@ create policy vehicles_upd on public.vehicles
   with check (private.is_active());
 
 create policy wl_del on public.watchlist
-  as permissive for delete to public
+  as permissive for delete to authenticated
   using ((user_id = ( SELECT auth.uid() AS uid)));
 
 create policy wl_ins on public.watchlist
-  as permissive for insert to public
+  as permissive for insert to authenticated
   with check (((user_id = ( SELECT auth.uid() AS uid)) AND private.is_active()));
 
 create policy wl_sel on public.watchlist
-  as permissive for select to public
+  as permissive for select to authenticated
   using ((user_id = ( SELECT auth.uid() AS uid)));
 
 -- ============================================================
@@ -5787,7 +5808,11 @@ create policy wl_sel on public.watchlist
 --   public.gang_turf
 --   public.gangs
 --   public.indicators
+--   public.justice_membership_requests
+--   public.justice_memberships
+--   public.legal_requests
 --   public.media
+--   public.membership_requests
 --   public.mo_profiles
 --   public.narcotic_aliases
 --   public.narcotic_gangs
@@ -5795,6 +5820,9 @@ create policy wl_sel on public.watchlist
 --   public.narcotic_persons
 --   public.narcotic_places
 --   public.narcotic_precursors
+--   public.narcotic_sale_observations
+--   public.narcotic_sale_series
+--   public.narcotic_sale_stacks
 --   public.narcotic_seizures
 --   public.narcotic_suggestion_events
 --   public.narcotic_suggestions
@@ -5809,6 +5837,7 @@ create policy wl_sel on public.watchlist
 --   public.places
 --   public.predicate_acts
 --   public.profiles
+--   public.prosecutor_bureau_assignments
 --   public.raid_compensations
 --   public.reports
 --   public.rico_cases
@@ -5816,6 +5845,7 @@ create policy wl_sel on public.watchlist
 --   public.shift_reports
 --   public.tickets
 --   public.trackers
+--   public.transfer_requests
 --   public.vehicles
 --
 -- Deliberately NOT published: public.deleted_member_ledger and
@@ -5825,136 +5855,140 @@ create policy wl_sel on public.watchlist
 -- Table grants (anon / authenticated)
 -- ============================================================
 --
---   announcements -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+-- As of 20260807150000_anon_revoke_hygiene, `anon` holds NO privileges on any
+-- table or sequence in public (blanket revoke) — every `-> anon` line below is
+-- therefore "(none)". The per-table `authenticated` grants are unchanged.
+--
+--   announcements -> anon: (none — global anon revoke, 20260807150000)
 --   announcements -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   audit_log -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   audit_log -> anon: (none — global anon revoke, 20260807150000)
 --   audit_log -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   ballistic_footprints -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   ballistic_footprints -> anon: (none — global anon revoke, 20260807150000)
 --   ballistic_footprints -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   ballistics_benches -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   ballistics_benches -> anon: (none — global anon revoke, 20260807150000)
 --   ballistics_benches -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_access_grants -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_access_grants -> anon: (none — global anon revoke, 20260807150000)
 --   case_access_grants -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_access_requests -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_access_requests -> anon: (none — global anon revoke, 20260807150000)
 --   case_access_requests -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_assignments -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_assignments -> anon: (none — global anon revoke, 20260807150000)
 --   case_assignments -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_blockers -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_blockers -> anon: (none — global anon revoke, 20260807150000)
 --   case_blockers -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_files -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_files -> anon: (none — global anon revoke, 20260807150000)
 --   case_files -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_intel_links -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_intel_links -> anon: (none — global anon revoke, 20260807150000)
 --   case_intel_links -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_messages -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_messages -> anon: (none — global anon revoke, 20260807150000)
 --   case_messages -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   case_signoff_history -> authenticated: REFERENCES, SELECT, TRIGGER
---   case_tasks -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_tasks -> anon: (none — global anon revoke, 20260807150000)
 --   case_tasks -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_templates -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   case_templates -> anon: (none — global anon revoke, 20260807150000)
 --   case_templates -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   cases -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   cases -> anon: (none — global anon revoke, 20260807150000)
 --   cases -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   cid_records -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   cid_records -> anon: (none — global anon revoke, 20260807150000)
 --   cid_records -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   client_errors -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   client_errors -> anon: (none — global anon revoke, 20260807150000)
 --   client_errors -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   commendations -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   commendations -> anon: (none — global anon revoke, 20260807150000)
 --   commendations -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   custody_chain -> anon: REFERENCES, SELECT, TRIGGER (writes revoked — read-only legacy)
+--   custody_chain -> anon: (none — global anon revoke, 20260807150000)
 --   custody_chain -> authenticated: REFERENCES, SELECT, TRIGGER (writes revoked — read-only legacy)
---   deleted_member_ledger -> anon: REFERENCES, SELECT, TRIGGER (writes revoked)
+--   deleted_member_ledger -> anon: (none — global anon revoke, 20260807150000)
 --   deleted_member_ledger -> authenticated: REFERENCES, SELECT, TRIGGER (writes revoked)
---   deletion_tokens -> anon: (all revoked)
+--   deletion_tokens -> anon: (none — global anon revoke, 20260807150000)
 --   deletion_tokens -> authenticated: (all revoked)
---   document_suggestion_comments -> anon: (none — RPC-only writes; realtime SELECT via authenticated)
+--   document_suggestion_comments -> anon: (none — global anon revoke, 20260807150000)
 --   document_suggestion_comments -> authenticated: SELECT (RLS-scoped; writes are RPC-only)
---   document_suggestion_events -> anon: (none — RPC-only writes; realtime SELECT via authenticated)
+--   document_suggestion_events -> anon: (none — global anon revoke, 20260807150000)
 --   document_suggestion_events -> authenticated: SELECT (RLS-scoped; writes are RPC-only)
---   document_suggestions -> anon: (none — RPC-only writes; realtime SELECT via authenticated)
+--   document_suggestions -> anon: (none — global anon revoke, 20260807150000)
 --   document_suggestions -> authenticated: SELECT (RLS-scoped; writes are RPC-only)
---   documents -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   documents -> anon: (none — global anon revoke, 20260807150000)
 --   documents -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   documents_versions -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   documents_versions -> anon: (none — global anon revoke, 20260807150000)
 --   documents_versions -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   evidence -> anon: REFERENCES, SELECT, TRIGGER (writes revoked — read-only legacy)
+--   evidence -> anon: (none — global anon revoke, 20260807150000)
 --   evidence -> authenticated: REFERENCES, SELECT, TRIGGER (writes revoked — read-only legacy)
---   feedback -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   feedback -> anon: (none — global anon revoke, 20260807150000)
 --   feedback -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   feedback_meta -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   feedback_meta -> anon: (none — global anon revoke, 20260807150000)
 --   feedback_meta -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   gang_members -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   gang_members -> anon: (none — global anon revoke, 20260807150000)
 --   gang_members -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   gang_ranks -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   gang_ranks -> anon: (none — global anon revoke, 20260807150000)
 --   gang_ranks -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   gang_turf -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   gang_turf -> anon: (none — global anon revoke, 20260807150000)
 --   gang_turf -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   gangs -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   gangs -> anon: (none — global anon revoke, 20260807150000)
 --   gangs -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   indicators -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   indicators -> anon: (none — global anon revoke, 20260807150000)
 --   indicators -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   media -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   media -> anon: (none — global anon revoke, 20260807150000)
 --   media -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   mo_profiles -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   mo_profiles -> anon: (none — global anon revoke, 20260807150000)
 --   mo_profiles -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotic_aliases -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_aliases -> anon: (none — global anon revoke, 20260807150000)
 --   narcotic_aliases -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotic_gangs -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_gangs -> anon: (none — global anon revoke, 20260807150000)
 --   narcotic_gangs -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotic_hotspots -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_hotspots -> anon: (none — global anon revoke, 20260807150000)
 --   narcotic_hotspots -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotic_persons -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_persons -> anon: (none — global anon revoke, 20260807150000)
 --   narcotic_persons -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotic_places -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_places -> anon: (none — global anon revoke, 20260807150000)
 --   narcotic_places -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotic_precursors -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_precursors -> anon: (none — global anon revoke, 20260807150000)
 --   narcotic_precursors -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotic_seizures -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_seizures -> anon: (none — global anon revoke, 20260807150000)
 --   narcotic_seizures -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotic_suggestion_events -> anon: (none — RPC-only writes; realtime SELECT via authenticated)
+--   narcotic_suggestion_events -> anon: (none — global anon revoke, 20260807150000)
 --   narcotic_suggestion_events -> authenticated: SELECT (RLS-scoped; writes are RPC-only)
---   narcotic_suggestions -> anon: (none — RPC-only writes; realtime SELECT via authenticated)
+--   narcotic_suggestions -> anon: (none — global anon revoke, 20260807150000)
 --   narcotic_suggestions -> authenticated: SELECT (RLS-scoped; writes are RPC-only)
---   narcotic_vehicles -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotic_vehicles -> anon: (none — global anon revoke, 20260807150000)
 --   narcotic_vehicles -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotics -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   narcotics -> anon: (none — global anon revoke, 20260807150000)
 --   narcotics -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   notifications -> anon: DELETE, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   notifications -> anon: (none — global anon revoke, 20260807150000)
 --   notifications -> authenticated: DELETE, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   operations -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   operations -> anon: (none — global anon revoke, 20260807150000)
 --   operations -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   person_places -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   person_places -> anon: (none — global anon revoke, 20260807150000)
 --   person_places -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   person_relationships -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   person_relationships -> anon: (none — global anon revoke, 20260807150000)
 --   person_relationships -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   person_vehicles -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   person_vehicles -> anon: (none — global anon revoke, 20260807150000)
 --   person_vehicles -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   persons -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   persons -> anon: (none — global anon revoke, 20260807150000)
 --   persons -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   place_process_steps -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   place_process_steps -> anon: (none — global anon revoke, 20260807150000)
 --   place_process_steps -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   places -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   places -> anon: (none — global anon revoke, 20260807150000)
 --   places -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   predicate_acts -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   predicate_acts -> anon: (none — global anon revoke, 20260807150000)
 --   predicate_acts -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   profiles -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   profiles -> anon: (none — global anon revoke, 20260807150000)
 --   profiles -> authenticated: DELETE, INSERT, REFERENCES, TRIGGER, TRUNCATE, UPDATE
---   raid_compensations -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   raid_compensations -> anon: (none — global anon revoke, 20260807150000)
 --   raid_compensations -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   reports -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   reports -> anon: (none — global anon revoke, 20260807150000)
 --   reports -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   rico_cases -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   rico_cases -> anon: (none — global anon revoke, 20260807150000)
 --   rico_cases -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   role_events -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   role_events -> anon: (none — global anon revoke, 20260807150000)
 --   role_events -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   shift_reports -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   shift_reports -> anon: (none — global anon revoke, 20260807150000)
 --   shift_reports -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   tickets -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   tickets -> anon: (none — global anon revoke, 20260807150000)
 --   tickets -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   trackers -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   trackers -> anon: (none — global anon revoke, 20260807150000)
 --   trackers -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   vehicles -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   vehicles -> anon: (none — global anon revoke, 20260807150000)
 --   vehicles -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   watchlist -> anon: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   watchlist -> anon: (none — global anon revoke, 20260807150000)
 --   watchlist -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 
 -- ============================================================
@@ -6408,3 +6442,20 @@ create policy wl_sel on public.watchlist
 -- narcotic_sale_observations. Zero stranded rows existed live — purely
 -- preventive. Definitive SQL in
 -- supabase/migrations/20260807140000_merge_rpc_extensions.sql.
+-- 20260807150000_anon_revoke_hygiene (grants + policy scopes only): anon
+-- loses every table and sequence privilege in public (blanket revoke), and
+-- the fourteen policies still scoped `to public` (audit_sel, feedback_owner_manage,
+-- feedback_meta_all, indicators_del/ins/sel/upd, operations_del/ins/sel/upd,
+-- wl_del/ins/sel) are re-scoped `to authenticated`. Pure defense-in-depth:
+-- every predicate already denied anon. Grants/policy sections above updated
+-- in place. This revision also backfills snapshot mirror entries that were
+-- found missing during the audit (all verified against the live catalogs):
+-- indexes for legal_requests / prosecutor_bureau_assignments /
+-- transfer_requests (incl. transfer_requests_one_open), triggers
+-- cases_block_archive_cols, trg_touch_legal_requests,
+-- profiles_block_privileged and trg_touch_transfer_requests, and nine
+-- realtime-publication members (justice_membership_requests,
+-- justice_memberships, legal_requests, membership_requests,
+-- narcotic_sale_observations/series/stacks, prosecutor_bureau_assignments,
+-- transfer_requests). Definitive SQL in
+-- supabase/migrations/20260807150000_anon_revoke_hygiene.sql.
