@@ -321,6 +321,9 @@ function MediaDetailModal({ m, c, canEdit, canDelete, names, vehicles, reports, 
 }) {
   const [title, setTitle] = useState(m.title)
   const [cat, setCat] = useState(m.category ?? '')
+  // Dirty-tracking baseline: advances on save so a successful save doesn't
+  // keep the discard-confirm armed while the parent list refetches.
+  const [saved, setSaved] = useState<{ title: string; category: string | null }>({ title: m.title, category: m.category })
   const src = mediaSrc(m)
   const safe = safeUrl(src)
   const isVid = m.type === 'video' || /\.(mp4|webm|mov|m4v)($|\?)/i.test(src)
@@ -328,12 +331,13 @@ function MediaDetailModal({ m, c, canEdit, canDelete, names, vehicles, reports, 
   const legacy = legacyEvidenceRef(m.tags)
   const capturedAt = tagStr(m, 'captured_at')
   const sourceName = tagStr(m, 'source_filename') || m.kind
-  const dirty = title.trim() !== m.title || (cat || null) !== m.category
+  const dirty = title.trim() !== saved.title || (cat || null) !== saved.category
 
   const saveDetails = async () => {
     if (!title.trim()) { toast('A title is required.', 'warn'); return }
     const res = await update('media', m.id, { title: title.trim(), category: cat || null })
     if (res.error) { toast(res.error.message, 'danger'); return }
+    setSaved({ title: title.trim(), category: cat || null })
     toast('Details saved.', 'success')
     onChanged()
   }

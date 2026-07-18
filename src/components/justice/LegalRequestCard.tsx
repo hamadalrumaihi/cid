@@ -52,7 +52,9 @@ function Meta({ label, value, mono = false }: { label: string; value: string; mo
  *  state; claimable reads as an outlined "available"; awareness/waiting stay
  *  muted and never look like urgent work. */
 function actionTone(d: { viewerCanAct: boolean; viewerCanClaim: boolean }): string {
-  if (d.viewerCanAct) return 'bg-badge-500 text-white'
+  // Dark ink on the accent (the SectionTabs active-tab treatment) — white on
+  // the user-selectable accent fails the 4.5:1 contrast floor for small text.
+  if (d.viewerCanAct) return 'bg-badge-500 text-ink-950'
   if (d.viewerCanClaim) return 'border border-badge-500/40 bg-badge-500/10 text-blue-200'
   return 'bg-white/5 text-slate-400'
 }

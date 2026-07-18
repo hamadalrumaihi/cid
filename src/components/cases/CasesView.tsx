@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { deleteWithUndo, list, updateWhere, withRetry } from '@/lib/db'
 import { timeAgo } from '@/lib/format'
@@ -27,6 +27,16 @@ import { WatchButton } from './WatchButton'
 let staleEscalationStarted = false
 
 export function CasesView() {
+  // useSearchParams (deep links: ?case= / ?tab=) needs a client-side Suspense
+  // boundary in this host — same idiom as LegalView / JusticePortalView.
+  return (
+    <Suspense fallback={<p className="text-sm text-slate-400">Loading cases…</p>}>
+      <CasesViewInner />
+    </Suspense>
+  )
+}
+
+function CasesViewInner() {
   const router = useRouter()
   const sp = useSearchParams()
   const { profile, canEdit, canDelete } = useAuth()

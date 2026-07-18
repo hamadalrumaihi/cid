@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Button } from '@/components/ui/Button'
@@ -92,7 +92,6 @@ export interface WorkflowRows {
 }
 
 export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () => void; onChanged: () => void }) {
-  const router = useRouter()
   const sp = useSearchParams()
   const auth = useAuth()
   const { profile, canEdit, canDelete, isCommand, isOwner } = auth
@@ -105,7 +104,21 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const casesV = useTableVersion('cases')
   // Legacy ?tab=evidence (old links/notifications/search hits) maps to media.
   const requestedTab = normalizeCaseTab(sp.get('tab'))
-  const tab = (requestedTab && TABS.includes(requestedTab as TabId) ? requestedTab : 'overview') as TabId
+  const urlTab = (requestedTab && TABS.includes(requestedTab as TabId) ? requestedTab : 'overview') as TabId
+  // Same-page section switching is local state synced to the URL through the
+  // native history API (Next keeps useSearchParams in step with it). A router
+  // round-trip is avoided deliberately: query-only router navigation reverts
+  // in some serving environments. Real navigations (deep links, notification
+  // clicks) still win — the effect below adopts any URL-driven tab change.
+  const [tabOverride, setTabOverride] = useState<TabId | null>(null)
+  const [adoptedKey, setAdoptedKey] = useState(`${id}:${urlTab}`)
+  if (adoptedKey !== `${id}:${urlTab}`) {
+    // Render-phase adjustment (not an effect): a URL-driven change means a
+    // real navigation landed — it supersedes any local override.
+    setAdoptedKey(`${id}:${urlTab}`)
+    setTabOverride(null)
+  }
+  const tab = tabOverride ?? urlTab
 
   const fetchCase = useCallback(async () => {
     setLoading(true)
@@ -123,10 +136,11 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   useEffect(() => { queueMicrotask(() => { void fetchCase() }) }, [fetchCase, casesV])
 
   const setTab = (next: TabId) => {
+    setTabOverride(next)
     const params = new URLSearchParams(sp.toString())
     params.set('case', id)
     params.set('tab', next)
-    router.replace(`/cases?${params.toString()}`)
+    window.history.replaceState(window.history.state, '', `/cases?${params.toString()}`)
   }
 
   // ── Workflow snapshot — the ONE case-scoped fetch behind the command
