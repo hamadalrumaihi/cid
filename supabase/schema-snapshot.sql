@@ -6345,3 +6345,32 @@ create policy wl_sel on public.watchlist
 -- replaces terminating the real SAB primary assignment three times in
 -- production (2026-07-14..17). Definitive SQL in
 -- supabase/migrations/20260807050000_pba_fixture_guard.sql.
+-- 20260807060000_signoff_authority_restore (functions only): re-emits the
+-- sign-off family with the guards the 20260721 rewrite dropped, centralized
+-- in private.signoff_assert_decider — case access required, only the routed
+-- assignee decides (a Director may override), and never the submitter or
+-- lead detective. private.signoff_pick/route gained an exclusion list
+-- (old 2/3-arg signatures dropped) so routing skips the case owner.
+-- signoff_submit/decide/owner_action/command_override now notify via
+-- private.signoff_notify (signoff_waiting to the routed assignee,
+-- signoff_approved/denied/changes to the owner; suppressed when either side
+-- is a test fixture). rls_test_set_signoff gained a fixture-only p_assignee
+-- (old 3-arg dropped). Definitive SQL in
+-- supabase/migrations/20260807060000_signoff_authority_restore.sql.
+-- 20260807070000_member_removal_matrix (functions only): admin_remove_member
+-- joins the unified authority matrix (BL: own-bureau rank-and-file; DD:
+-- below deputy; Director: anyone but owner accounts; Owner: anyone; system
+-- accounts refused; self/last-director guards kept) and
+-- admin_restore_member is Director/Owner-only, matching the Manage Officer
+-- copy. Definitive SQL in
+-- supabase/migrations/20260807070000_member_removal_matrix.sql.
+-- 20260807080000_mdt_sealed_skip (function only): private.mdt_project skips
+-- sealed arrest warrants until executed, so sealing hides the wanted-list
+-- projection the same way it hides the request everywhere else. Verified
+-- zero sealed rows had ever projected before the change. Definitive SQL in
+-- supabase/migrations/20260807080000_mdt_sealed_skip.sql.
+-- 20260807090000_reset_member_email_resync (function only):
+-- rls_test_reset_member also re-syncs the fixture target's profiles.email
+-- from auth.users, so a removal round-trip in the suites leaves the durable
+-- fixture exactly at baseline. Definitive SQL in
+-- supabase/migrations/20260807090000_reset_member_email_resync.sql.

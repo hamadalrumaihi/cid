@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   PERMANENT_BUREAUS, ROLE_ORDER, canApproveRequestedRole, canAssignCidRole,
-  canChangeRole, canDecideTransferSide, canTransfer, getAssignableRoles,
+  canChangeRole, canDecideTransferSide, canRemoveMember, canRestoreMember, canTransfer, getAssignableRoles,
   getRequestableRoles, getValidDepartments, type RoleParty,
 } from './roles'
 
@@ -102,5 +102,29 @@ describe('canTransfer / canDecideTransferSide', () => {
     expect(canDecideTransferSide(lsbLead, 'BCB')).toBe(false)
     expect(canDecideTransferSide(director, 'BCB')).toBe(true)
     expect(canDecideTransferSide(detective, 'LSB')).toBe(false)
+  })
+})
+
+describe('canRemoveMember / canRestoreMember — the admin_remove/restore matrix', () => {
+  const bcbDet: RoleParty = { id: 'bdet', role: 'detective', division: 'BCB', active: true }
+  it('Bureau Lead: own-bureau rank-and-file only; never restore', () => {
+    expect(canRemoveMember(lsbLead, detective)).toBe(true)
+    expect(canRemoveMember(lsbLead, bcbDet)).toBe(false)                                   // other bureau
+    expect(canRemoveMember(lsbLead, { ...detective, role: 'bureau_lead' })).toBe(false)    // command target
+    expect(canRestoreMember(lsbLead)).toBe(false)
+  })
+  it('Deputy Director: anyone below Deputy; Director: anyone but owners', () => {
+    expect(canRemoveMember(deputy, { ...bcbDet, role: 'bureau_lead' })).toBe(true)
+    expect(canRemoveMember(deputy, { id: 'x', role: 'director', division: 'SAB', active: true })).toBe(false)
+    expect(canRemoveMember(director, { id: 'x', role: 'deputy_director', division: 'LSB', active: true })).toBe(true)
+    expect(canRemoveMember(director, owner)).toBe(false)                                   // owner target
+    expect(canRemoveMember(owner, director)).toBe(true)
+  })
+  it('never yourself, never system accounts; restore is Director+', () => {
+    expect(canRemoveMember(director, director)).toBe(false)
+    expect(canRemoveMember(owner, { id: 'sys', role: 'detective', active: true, is_system: true })).toBe(false)
+    expect(canRestoreMember(director)).toBe(true)
+    expect(canRestoreMember(owner)).toBe(true)
+    expect(canRestoreMember(deputy)).toBe(false)
   })
 })

@@ -78,7 +78,11 @@ export function SignoffTab({ c }: { c: CaseRow }) {
   const refresh = useCallback(async () => { try { setHistory(await list('case_signoff_history', { eq: { case_id: c.id }, order: 'created_at', ascending: false })) } catch { /* stale */ } }, [c.id])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, v])
   const owner = profile?.id && (profile.id === c.lead_detective_id || profile.id === c.signoff_submitted_by)
-  const reviewer = profile?.id && profile.id === c.signoff_assignee_id
+  // Mirror of private.signoff_assert_decider: the routed assignee, or any
+  // Director (the explicit override) — never the case owner deciding their
+  // own submission.
+  const reviewer = profile?.id && !owner && !!c.signoff_stage
+    && (profile.id === c.signoff_assignee_id || profile.role === 'director')
   // Cosmetic mirror of the RPC's own gate (signoff_command_override): active
   // AND (Deputy Director / Director role OR the owner flag). Bureau Leads are
   // command but are NOT accepted — do not widen this to isCommand.
@@ -87,7 +91,7 @@ export function SignoffTab({ c }: { c: CaseRow }) {
   const callRpc = async (kind: 'submit' | 'approve' | 'deny' | 'changes' | 'complete' | 'escalate') => {
     const res = kind === 'submit' ? await rpc('signoff_submit', { p_case: c.id })
       : kind === 'complete' || kind === 'escalate' ? await rpc('signoff_owner_action', { p_case: c.id, p_action: kind })
-      : await rpc('signoff_decide', { p_case: c.id, p_decision: kind === 'changes' ? 'changes_requested' : kind, p_note: note || undefined })
+      : await rpc('signoff_decide', { p_case: c.id, p_decision: kind, p_note: note || undefined })
     if (res.error) toast(res.error.message, 'danger')
     else { setNote(''); toast('Sign-off updated.', 'success'); void refresh() }
   }
