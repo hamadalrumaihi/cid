@@ -32,8 +32,10 @@ import { SearchIcon } from '@/components/shell/icons'
 import { DepExplorer } from '@/components/devdocs/DevDocsView'
 import {
   ENV_VARS, FB_PRIORITIES, FB_PRIORITY_TINT, FB_STATUSES, FB_STATUS_TINT, FB_TYPES,
-  LEARNING, MATRIX_NOTE, PERMISSIONS_MATRIX, REALTIME_DOC, ROUTES, SUGGESTIONS, WORKFLOW, fbLabel,
+  LEARNING, MANUAL_ACTIONS, MATRIX_NOTE, PERMISSIONS_MATRIX, REALTIME_DOC, RECOVERY_NOTES,
+  ROUTES, SUGGESTIONS, WORKFLOW, fbLabel,
 } from './ownerData'
+import { PERMANENT_BUREAUS, bureauLabel } from '@/lib/roles'
 import { useOwnerVitals } from './ownerVitals'
 import { SecurityTestingSection } from './SecurityTestingSection'
 import { PermanentDeletionSection } from './PermanentDeletionSection'
@@ -47,6 +49,7 @@ const SECTIONS: { id: string; icon: string; label: string; sub: string }[] = [
   { id: 'home', icon: '🏠', label: 'Overview', sub: 'What this portal is and where everything lives' },
   { id: 'health', icon: '🩺', label: 'Health & statistics', sub: 'Service checks, safety warnings & live counts' },
   { id: 'security', icon: '🛡️', label: 'Security Testing', sub: 'Live RLS suite results, fixture health & the access matrix' },
+  { id: 'ops', icon: '📋', label: 'Production status', sub: 'Workflow health, Justice coverage, manual actions & recovery' },
   { id: 'feedback', icon: '📨', label: 'Feedback & Bugs', sub: 'The owner inbox — triage, catalog, resolve' },
   { id: 'suggestions', icon: '💡', label: 'Suggestions', sub: 'The improvement roadmap from the repo analysis' },
   { id: 'impact', icon: '🎯', label: 'Change Impact', sub: '"If I change this, what else must I check?"' },
@@ -62,7 +65,7 @@ const SECTIONS: { id: string; icon: string; label: string; sub: string }[] = [
 /** Desktop rail grouping — same section ids + deep-links, grouped by purpose. */
 const NAV_GROUPS: { label: string; ids: string[] }[] = [
   { label: 'Overview', ids: ['home'] },
-  { label: 'Monitor', ids: ['health', 'security', 'realtime'] },
+  { label: 'Monitor', ids: ['health', 'security', 'ops', 'realtime'] },
   { label: 'Improve', ids: ['feedback', 'suggestions', 'impact'] },
   { label: 'Understand', ids: ['architecture', 'routes', 'env'] },
   { label: 'Operate', ids: ['workflow', 'learning', 'deletion'] },
@@ -189,6 +192,7 @@ export function OwnerView() {
           {active.id === 'home' && <HomeSection onGo={go} />}
           {active.id === 'health' && <HealthSection />}
           {active.id === 'security' && <SecurityTestingSection />}
+          {active.id === 'ops' && <OpsSection />}
           {active.id === 'feedback' && <FeedbackInbox />}
           {active.id === 'suggestions' && <SuggestionsSection />}
           {active.id === 'impact' && <ImpactSection />}
@@ -463,6 +467,202 @@ function SafetyLine({ ok, text, bad, warnOnly }: { ok: boolean; text: string; ba
     <li className={ok ? 'text-emerald-300' : warnOnly ? 'text-amber-300' : 'text-rose-300'}>
       {ok ? '✓' : warnOnly ? '⚠' : '✗'} {ok ? text : bad}
     </li>
+  )
+}
+
+/* ---- production status -------------------------------------------------------- */
+
+/** Live checks read ordinary RLS-scoped tables the owner can already see —
+ *  no privileged fetch, no server data invented here. The manual-actions
+ *  checklist is static configuration (ownerData.ts) and is labeled as such:
+ *  the app cannot verify dashboard-side work, so it never claims to. */
+
+type OpsStatus = 'healthy' | 'warning' | 'action' | 'unknown' | 'not_configured'
+
+const OPS_CHIP: Record<OpsStatus, { label: string; cls: string }> = {
+  healthy: { label: 'Healthy', cls: 'bg-emerald-500/15 text-emerald-300' },
+  warning: { label: 'Warning', cls: 'bg-amber-500/15 text-amber-300' },
+  action: { label: 'Action required', cls: 'bg-rose-500/15 text-rose-300' },
+  unknown: { label: 'Unknown', cls: 'bg-slate-500/20 text-slate-300' },
+  not_configured: { label: 'Not configured', cls: 'bg-slate-500/20 text-slate-400' },
+}
+
+function OpsChip({ status }: { status: OpsStatus }) {
+  const c = OPS_CHIP[status]
+  return <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${c.cls}`}>{c.label}</span>
+}
+
+interface OpsState {
+  /** Active prosecutor assignment per bureau (null = the fetch failed). */
+  coverage: { bureau: string; primaryId: string | null; actingId: string | null }[] | null
+  pendingCid: number | null
+  pendingJustice: number | null
+  legacyTransfers: number | null
+  archivedCases: number | null
+  at: number
+}
+
+function OpsSection() {
+  const [ops, setOps] = useState<OpsState | null>(null)
+  const [loading, setLoading] = useState(true)
+  // Subscribe to the roster so prosecutor names resolve as soon as it loads —
+  // and so an UNRESOLVABLE assignee (test fixtures are hidden from profile
+  // reads by RLS) can be surfaced as a warning instead of a blank.
+  const roster = useProfilesStore((s) => s.profiles)
+
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    useProfilesStore.getState().fetch()
+    // Each check fails independently to null → its card shows Unknown, never
+    // a false green.
+    const [pba, pendingCid, pendingJustice, legacy, totalCases, liveCases] = await Promise.all([
+      list('prosecutor_bureau_assignments', { is: { ends_at: null } }).catch(() => null),
+      countRows('membership_requests', { eq: { status: 'pending' } }).catch(() => null),
+      countRows('justice_membership_requests', { eq: { status: 'pending' } }).catch(() => null),
+      list('transfer_requests', { in: { status: ['pending_source', 'pending_target', 'approved'] }, select: 'id' }).catch(() => null),
+      countRows('cases').catch(() => null),
+      countRows('cases', { is: { archived_at: null } }).catch(() => null),
+    ])
+    const coverage = pba === null ? null : PERMANENT_BUREAUS.map((b) => ({
+      bureau: b,
+      primaryId: pba.find((r) => r.bureau === b && r.assignment_type === 'primary')?.prosecutor_id ?? null,
+      actingId: pba.find((r) => r.bureau === b && r.assignment_type === 'acting')?.prosecutor_id ?? null,
+    }))
+    setOps({
+      coverage,
+      pendingCid,
+      pendingJustice,
+      legacyTransfers: legacy === null ? null : legacy.length,
+      archivedCases: totalCases === null || liveCases === null ? null : totalCases - liveCases,
+      at: Date.now(),
+    })
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    const t = window.setTimeout(() => { void refresh() }, 0)
+    return () => window.clearTimeout(t)
+  }, [refresh])
+
+  const router = useRouter()
+  const openActions = MANUAL_ACTIONS.filter((a) => !a.done)
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-400">
+          {ops ? <>Live checks ran {timeAgo(new Date(ops.at).toISOString())} — RLS-scoped reads, nothing privileged.</> : 'Running checks…'}
+        </p>
+        <Button size="sm" disabled={loading} onClick={() => void refresh()}>{loading ? 'Checking…' : '↻ Re-check'}</Button>
+      </div>
+
+      <Panel title="Justice coverage" sub="Each bureau needs an active prosecutor (primary or acting) or its classified legal requests go unseen at the DOJ — exactly the failure repaired in July 2026.">
+        {ops?.coverage === null && <p className="text-sm text-slate-400"><OpsChip status="unknown" /> The assignment table could not be read — retry, and check Supabase if it persists.</p>}
+        {ops?.coverage && (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {ops.coverage.map((c) => {
+              const covererId = c.primaryId ?? c.actingId
+              // A held slot whose holder is invisible on the roster is a real
+              // signal: test fixtures and removed accounts are hidden from
+              // profile reads, so "held by someone you can't see" warrants a
+              // look — never a green light. (Direct roster lookup, NOT
+              // officerName(): that helper returns an 'Officer' placeholder
+              // for unknown ids, which would mask exactly this case.)
+              const holder = covererId ? roster.find((p) => p.id === covererId) : undefined
+              const name = holder?.display_name ?? null
+              const unresolvable = !!covererId && roster.length > 0 && !holder
+              const status: OpsStatus = !covererId ? 'action' : unresolvable ? 'warning' : name ? 'healthy' : 'unknown'
+              return (
+                <div key={c.bureau} className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-bold text-white">{bureauLabel(c.bureau)}</p>
+                    <OpsChip status={status} />
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">
+                    {covererId
+                      ? <>{c.primaryId ? 'Primary' : 'Acting'}: {name || 'not on the visible roster — likely a test fixture or removed account; verify in Justice Portal → Coverage'}</>
+                      : 'No active prosecutor — classified requests from this bureau are invisible at the DOJ until one is assigned (Justice Portal → Coverage).'}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Panel>
+
+      <Panel title="Workflow health" sub="Queues that should trend to zero. Counts are live and RLS-scoped.">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <OpsCountCard
+            label="CID applications" value={ops?.pendingCid ?? null}
+            status={ops?.pendingCid === null || !ops ? 'unknown' : ops.pendingCid > 0 ? 'warning' : 'healthy'}
+            detail={ops?.pendingCid ? 'awaiting review — Command Center → Approvals' : 'no pending membership requests'}
+            onClick={() => router.push('/command-center?s=approvals')}
+          />
+          <OpsCountCard
+            label="Justice applications" value={ops?.pendingJustice ?? null}
+            status={ops?.pendingJustice === null || !ops ? 'unknown' : ops.pendingJustice > 0 ? 'warning' : 'healthy'}
+            detail={ops?.pendingJustice ? 'awaiting review — Justice Portal → Applications' : 'no pending justice requests'}
+            onClick={() => router.push('/justice')}
+          />
+          <OpsCountCard
+            label="Legacy open transfers" value={ops?.legacyTransfers ?? null}
+            status={ops?.legacyTransfers === null || !ops ? 'unknown' : ops.legacyTransfers > 0 ? 'action' : 'healthy'}
+            detail={ops?.legacyTransfers ? 'transfers now apply instantly — these old two-sided rows need approving or cancelling' : 'none expected — transfers apply instantly'}
+            onClick={() => router.push('/command-center?s=promotions')}
+          />
+          <OpsCountCard
+            label="Archived cases" value={ops?.archivedCases ?? null}
+            status={ops?.archivedCases === null || !ops ? 'unknown' : 'healthy'}
+            detail="hidden from boards, restorable by command; only you can permanently delete one (Cases → Archived)"
+            onClick={() => router.push('/cases')}
+          />
+        </div>
+      </Panel>
+
+      <Panel title="Manual actions" sub="Work only a person with dashboard access can do — the app cannot verify these, so this checklist is maintained by hand (recorded 2026-07-18; update ownerData.ts when an item is completed).">
+        {openActions.length === 0 && <p className="text-sm text-emerald-300">✓ Nothing outstanding.</p>}
+        <div className="space-y-2">
+          {MANUAL_ACTIONS.map((a) => (
+            <div key={a.title} className={`rounded-xl border p-3 ${a.done ? 'border-white/10 bg-ink-950/40' : 'border-amber-500/20 bg-amber-500/5'}`}>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="min-w-0 flex-1 text-sm font-bold text-white">{a.title}</p>
+                {a.done
+                  ? <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-300">Done {a.done}</span>
+                  : <OpsChip status={a.status === 'not_configured' ? 'not_configured' : a.status === 'recurring' ? 'warning' : 'action'} />}
+              </div>
+              <p className="mt-1 text-sm text-slate-400">{a.detail}</p>
+              <p className="mt-1 text-xs text-slate-500">Where: {a.where}</p>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel title="Backups & recovery" sub="Honest status: this app cannot see Supabase backups, so it will never show them green.">
+        <ul className="space-y-2 text-sm text-slate-300">
+          <li><OpsChip status="unknown" /> <span className="ml-1">{RECOVERY_NOTES.backups}</span></li>
+          <li><OpsChip status="action" /> <span className="ml-1">{RECOVERY_NOTES.restore}</span></li>
+        </ul>
+      </Panel>
+    </div>
+  )
+}
+
+function OpsCountCard({ label, value, status, detail, onClick }: {
+  label: string
+  value: number | null
+  status: OpsStatus
+  detail: string
+  onClick: () => void
+}) {
+  return (
+    <button onClick={onClick} className="rounded-xl border border-white/10 bg-ink-950/50 p-3 text-left transition hover:border-blue-400/30">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
+        <OpsChip status={status} />
+      </div>
+      <p className="mt-1 font-mono text-2xl font-black text-white">{value === null ? '—' : value}</p>
+      <p className="mt-0.5 text-xs text-slate-400">{detail}</p>
+    </button>
   )
 }
 
@@ -779,15 +979,15 @@ function ArchitectureSection() {
     <div className="space-y-4">
       <Panel title="The system at a glance">
         <pre className="overflow-x-auto rounded-xl border border-white/10 bg-ink-950 p-4 font-mono text-[11px] leading-relaxed text-slate-300">{`Browser (Next.js SPA, static)          Supabase (the backend)
-  29 screens ── shell ── ui             Auth ─ profiles trigger
-       │                                PostgREST ─ RLS ─ 47 tables
-   lib/auth ─ lib/nav ─ lib/toast       15 RPCs ─ private.* helpers
+  36 screens ── shell ── ui             Auth ─ profiles trigger
+       │                                PostgREST ─ RLS ─ 91 tables
+   lib/auth ─ lib/nav ─ lib/toast       114 RPCs ─ private.* helpers
        │                                Realtime publication
    lib/db ◄── domain libs               audit/touch/guard triggers
        │            │
    lib/supabase ─ lib/realtime (wss)    FiveManage (media URLs only)
                                         Discord (OAuth + DM edge fn)
-   Vercel (hosting/previews/rollback) · GitHub Actions (4 gates + drift check)`}</pre>
+   Vercel (hosting/previews/rollback) · GitHub Actions (gates + drift checks)`}</pre>
         <p className="mt-2 text-sm text-slate-400">
           Flows in depth: {link('architecture', 'Architecture Blocks')} (nine blocks, risk levels, common mistakes) ·{' '}
           {link('auth', 'Auth flow')} · {link('api', 'API flow')} · {link('database', 'Database')} ·{' '}
@@ -801,7 +1001,7 @@ function ArchitectureSection() {
           <li><b className="text-white">Auth & identity</b> — state machine + capability booleans (~40 consumers).</li>
           <li><b className="text-white">Data access</b> — db.ts, the only path to Postgres (throw-vs-return contract).</li>
           <li><b className="text-white">Realtime</b> — one channel per table → version counters.</li>
-          <li><b className="text-white">Feature views</b> — 29 screens, one uniform skeleton.</li>
+          <li><b className="text-white">Feature views</b> — 36 screens, one uniform skeleton.</li>
           <li><b className="text-white">Domain libs</b> — sign-off vocabulary, forms, penal, exports, search, notify.</li>
           <li><b className="text-white">UI primitives</b> — Modal/dialog/DataTable/editor + safeUrl/markdown (XSS surfaces).</li>
           <li><b className="text-white">The database</b> — where every rule that matters lives (HIGHEST risk).</li>

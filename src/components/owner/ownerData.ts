@@ -23,7 +23,9 @@ export const ENV_VARS: EnvVarDoc[] = [
 
 export const PERMISSIONS_MATRIX: { area: string; owner: string; command: string; member: string; inactive: string }[] = [
   { area: 'Work cases / registries (own bureau)', owner: '✓', command: '✓', member: '✓', inactive: '✗' },
-  { area: 'Delete records (with Undo)', owner: '✓*', command: '✓', member: '✗', inactive: '✗' },
+  { area: 'Delete registry records (with Undo)', owner: '✓*', command: '✓', member: '✗', inactive: '✗' },
+  { area: 'Archive / restore a case', owner: '✓*', command: '✓', member: '✗', inactive: '✗' },
+  { area: 'Permanently delete an archived case', owner: '✓ (reason + preview required)', command: '✗', member: '✗', inactive: '✗' },
   { area: 'Approve members / assign roles', owner: '✓*', command: '✓', member: '✗', inactive: '✗' },
   { area: 'Post announcements', owner: '✓*', command: '✓', member: '✗', inactive: '✗' },
   { area: 'Submit feedback', owner: '✓', command: '✓', member: '✓', inactive: '✗' },
@@ -94,30 +96,43 @@ export const SUGGESTIONS: Suggestion[] = [
 export interface RouteDoc { path: string; component: string; access: string; data: string; risk: 'low' | 'medium' | 'high' }
 
 export const ROUTES: RouteDoc[] = [
-  { path: '/', component: 'app/page.tsx (redirect shim)', access: 'public (auth callback)', data: 'none', risk: 'high' },
-  { path: '/command', component: 'CommandView + 8 widgets', access: 'active member (filter bar command-only)', data: 'cases, evidence, tickets, trackers, raid comp', risk: 'high' },
+  { path: '/', component: 'app/page.tsx (redirect shim)', access: 'public (auth callback → /inbox)', data: 'none', risk: 'high' },
+  { path: '/inbox', component: 'InboxView (My Desk)', access: 'active member — landing page', data: 'own work queues', risk: 'medium' },
+  { path: '/action', component: 'ActionCenterView', access: 'active member', data: 'cross-table action items', risk: 'medium' },
+  { path: '/command', component: 'CommandView + widgets', access: 'active member (filter bar command-only)', data: 'cases, evidence, tickets, trackers, raid comp', risk: 'high' },
   { path: '/analytics', component: 'AnalyticsView', access: 'active member', data: 'cases, evidence, persons', risk: 'medium' },
   { path: '/announce', component: 'AnnounceView', access: 'active member (post = command)', data: 'announcements', risk: 'medium' },
   { path: '/heatmap', component: 'HeatmapView', access: 'active member', data: 'cases, turf, places, raids', risk: 'high' },
-  { path: '/personnel', component: 'PersonnelView', access: 'active member (admin = command)', data: 'profiles, commendations + RPCs', risk: 'medium' },
-  { path: '/cases', component: 'CasesView / CaseDetail', access: 'bureau-scoped', data: 'the case constellation', risk: 'high' },
+  { path: '/personnel', component: 'PersonnelView', access: 'active member (read-only roster)', data: 'profiles, commendations', risk: 'medium' },
+  { path: '/cases', component: 'CasesView / CaseDetail (12 tabs)', access: 'bureau-scoped; archive = command; permanent delete = owner', data: 'the case constellation', risk: 'high' },
   { path: '/operations', component: 'OperationsView', access: 'active member', data: 'operations, cases', risk: 'medium' },
+  { path: '/legal', component: 'LegalView + request dossier', access: 'active member (own/participant scope)', data: 'legal_requests + sub-tables', risk: 'high' },
   { path: '/case-files', component: 'CaseFilesView', access: 'case-number-scoped', data: 'case_files + FiveManage', risk: 'medium' },
   { path: '/rico', component: 'RicoView', access: 'case-scoped', data: 'rico_cases, predicate_acts', risk: 'medium' },
-  { path: '/persons /bolo /gangs /places /vehicles /indicators /network /narcotics /ballistics /modus /media /records', component: 'intel registries', access: 'active member (delete = command)', data: 'shared intel tables', risk: 'medium' },
+  { path: '/persons /bolo /gangs /places /vehicles /indicators /network /narcotics /ballistics /modus /media /records', component: 'intel registries + dossiers', access: 'active member (delete = command)', data: 'shared intel tables', risk: 'medium' },
   { path: '/penal /sops /guide', component: 'reference views', access: 'active member (SOP writes = command)', data: 'static / documents', risk: 'low' },
-  { path: '/inbox /calendar /shifts', component: 'oversight views', access: 'self-scoped', data: 'own work queues', risk: 'medium' },
+  { path: '/calendar /shifts', component: 'oversight views', access: 'active member / self-scoped', data: 'deadlines, shift reports', risk: 'medium' },
+  { path: '/justice', component: 'JusticePortalView', access: 'active justice member or owner (manage = DA/AG/owner)', data: 'legal requests, memberships, coverage', risk: 'high' },
+  { path: '/command-center', component: 'CommandCenterView', access: 'command or owner', data: 'profiles, requests, transfers + admin RPCs', risk: 'high' },
+  { path: '/profile', component: 'ProfileView', access: 'active member (self)', data: 'own profile, appearance', risk: 'low' },
   { path: '/audit', component: 'AuditView', access: 'OWNER ONLY (RLS)', data: 'audit_log', risk: 'medium' },
   { path: '/feedback', component: 'FeedbackView', access: 'active member (triage = owner)', data: 'feedback', risk: 'low' },
   { path: '/devdocs', component: 'DevDocsView', access: 'OWNER ONLY', data: 'generated handbook (static)', risk: 'low' },
-  { path: '/owner', component: 'OwnerView', access: 'OWNER ONLY (+ RLS on feedback_meta/audit)', data: 'feedback + meta, counts, static docs', risk: 'medium' },
+  { path: '/owner', component: 'OwnerView', access: 'OWNER ONLY (+ RLS on feedback_meta/audit)', data: 'feedback + meta, counts, status checks', risk: 'medium' },
 ]
 
 /* ---- realtime documentation ------------------------------------------------ */
 
 export const REALTIME_DOC = {
-  how: 'One websocket channel per table (rt_<table>, postgres_changes, schema public), opened once per session by lib/realtime.ts. Events only bump a version counter — views refetch; payloads are not consumed. Channels are torn down on sign-out (auth.tsx) and the registry reset.',
-  notPublished: ['app_secrets (deny-all anyway)', 'feedback', 'feedback_meta', 'watchlist', 'operations'],
+  how: 'One websocket channel per table (rt_<table>, postgres_changes, schema public), opened once per session by lib/realtime.ts. Events only bump a version counter — views refetch (debounced per table, so bulk writes cost one refresh); payloads are not consumed. Channels are torn down on sign-out (auth.tsx) and the registry reset.',
+  notPublished: [
+    'app_secrets + deletion_tokens + deleted_member_ledger (owner/definer-only)',
+    'feedback + feedback_meta', 'watchlist', 'operations', 'security_test_runs',
+    'mdt_wanted_projections (external MDT feed)',
+    'document sub-tables (versions, relations, acknowledgements, campaigns, user state)',
+    'legal request sub-tables (actions, exhibits, participants, signatures, versions)',
+    'history side-tables (membership_request_history, justice_membership_request_history, report_versions)',
+  ],
   failures: [
     'Screen stale until remount → table missing from the supabase_realtime publication',
     'No live updates at all → websocket blocked (check CSP connect-src wss) or channels torn down after an auth error',
@@ -130,13 +145,67 @@ export const REALTIME_DOC = {
 
 export const WORKFLOW = {
   branch: 'Feature branches off main → PR → review → merge. Production tracks main on Vercel; every PR gets an immutable preview URL (this is the safe development version — never test risky changes on production).',
-  gates: 'npm run typecheck && npm run lint && npm test && npm run build — the same four gates CI enforces on every push/PR, plus the handbook drift check.',
+  gates: 'npm run typecheck && npm run lint && npm test && npm run build — the four core gates, plus CI-enforced drift checks: knip (dead code), bundle budget, schema-sync (types vs snapshot), snapshot freshness (migrations mirrored), handbook + user-guide generation drift, axe accessibility, Lighthouse budget, and the live RLS security-suites job (reports into Security Testing).',
   db: 'Database changes are ADDITIVE-ONLY migrations applied to the live project (open browser tabs keep running the old bundle). Update src/lib/database.types.ts in the same PR. Re-run the Supabase security/performance advisors after.',
   deploy: 'Merge to main → Vercel builds and atomically flips the production alias. Verify the preview BEFORE merging: sign in, exercise the changed feature, test realtime with two browsers.',
   rollback: 'Vercel → Deployments → ⋯ → Instant Rollback (deployments are immutable; seconds, zero downtime). Because migrations are additive, an app rollback never needs a schema rollback.',
   versioning: 'SemVer as of v1.0.0 — release PRs bump package.json and add a CHANGELOG.md entry listing the merged PRs. The merge checklist (.github/PULL_REQUEST_TEMPLATE.md) is the definition of done; CONTRIBUTING.md is the short guide; docs/archive/RELEASE-READINESS.md holds the v1.0.0 stabilization audit.',
   emergency: 'Roll back first, diagnose second. If the DB is implicated: check Supabase logs + advisors; never hot-edit policies without writing the migration down.',
   notVerified: 'GitHub branch protection (require PR + green CI before merge) is NOT verified as configured — it is a repository setting outside this codebase. Recommended: protect main, require the CI check, disallow force-push. Until then, discipline is the guard: never push directly to main.',
+}
+
+/* ---- production status: manual actions + recovery ------------------------------ */
+
+/** Hand-maintained checklist of actions that can only be done by a person with
+ *  dashboard access — the app cannot verify these itself, so each entry is
+ *  STATIC CONFIGURATION, not a live check. When one is completed, update it
+ *  here (set done + a date) in the same PR that documents the action.
+ *  Recorded 2026-07-18 (remediation close-out, OPERATIONS.md §8). */
+export interface ManualAction {
+  title: string
+  detail: string
+  where: string
+  status: 'action_required' | 'not_configured' | 'recurring'
+  /** Date completed, once done — flips the row green. */
+  done?: string
+}
+
+export const MANUAL_ACTIONS: ManualAction[] = [
+  {
+    title: 'Deploy the updated discord-notify function',
+    detail: 'The hardened version (DM text always comes from the verified notification row, never the request) is merged in the repo but the live function still runs the previous build.',
+    where: 'Supabase dashboard → Edge Functions, or `supabase functions deploy discord-notify`',
+    status: 'action_required',
+  },
+  {
+    title: 'Move the FiveManage key to platform settings and rotate it',
+    detail: 'NEXT_PUBLIC_FIVEMANAGE_API_KEY is committed in vercel.json and ci.yml. It is referrer-bound, but it belongs in Vercel/GitHub environment settings — move it, rotate the key, then delete the committed copies.',
+    where: 'Vercel project settings + GitHub Actions secrets',
+    status: 'action_required',
+  },
+  {
+    title: 'Run and log a backup restore drill',
+    detail: 'Backups run inside Supabase, but a backup is only proven when a restore has been rehearsed once. No drill has been logged yet.',
+    where: 'Supabase dashboard → Database → Backups (restore to a branch/new project)',
+    status: 'action_required',
+  },
+  {
+    title: 'Set up an external uptime monitor',
+    detail: 'Nothing outside the app currently notices if the site or database goes down while nobody is signed in.',
+    where: 'Any uptime service pinging the production URL',
+    status: 'not_configured',
+  },
+  {
+    title: 'Rotate the rls-test fixture passwords quarterly',
+    detail: 'The 16 test accounts are real sign-in-capable users. Rotation cadence starts from 2026-07 — next due 2026-10. Rotate in Supabase Auth, then update the CI secrets.',
+    where: 'Supabase Auth + GitHub Actions secrets (see docs/OPERATIONS.md §8)',
+    status: 'recurring',
+  },
+]
+
+export const RECOVERY_NOTES = {
+  backups: 'Backups are managed by Supabase and are not visible to this app — their status here is Unknown by design. Check the Supabase dashboard (Database → Backups) for the schedule and latest snapshot.',
+  restore: 'App rollback is instant and independent of the database (Vercel → Instant Rollback; migrations are additive). Database recovery = Supabase restore — which is why the drill above matters.',
 }
 
 /* ---- learning center ----------------------------------------------------------- */
