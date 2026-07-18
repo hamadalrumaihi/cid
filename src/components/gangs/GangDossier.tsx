@@ -304,11 +304,11 @@ function CasesSection({ links, cases, indirect, canEdit, onAttach, onUnlink }: {
       ) : (
         <div className="space-y-2">
           {links.map((l) => {
-            const c = cases.get(l.ref_id)
+            const c = cases.get(l.case_id)
             return (
               <Card key={l.id} pad="sm" className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <button onClick={() => router.push(`/cases?case=${encodeURIComponent(l.ref_id)}`)} className="text-left text-sm font-semibold text-white hover:text-blue-200">
+                  <button onClick={() => router.push(`/cases?case=${encodeURIComponent(l.case_id)}`)} className="text-left text-sm font-semibold text-white hover:text-blue-200">
                     {c?.case_number ?? 'Case'} {c?.title ? <span className="font-normal text-slate-400">· {c.title}</span> : null}
                   </button>
                   <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
@@ -425,7 +425,7 @@ export function GangDossier({ gang, people, caseOptions, canEdit, canDelete, onB
         list('case_intel_links', { eq: { kind: 'gang', ref_id: gang.id } }).catch(() => [] as IntelLinkRow[]),
       ])
       setMembers(m); setTurf(t); setPlaces(allPlaces); setGangPlaces(gp); setVehicles(veh); setMedia(med); setIntelLinks(links)
-      const caseIds = [...new Set(links.map((l) => l.ref_id))]
+      const caseIds = [...new Set(links.map((l) => l.case_id))]
       if (caseIds.length) {
         const rows = (await list('cases', { in: { id: caseIds } }).catch(() => [] as CaseRow[]))
         setLinkedCases(new Map(rows.map((c) => [c.id, c])))
@@ -450,7 +450,7 @@ export function GangDossier({ gang, people, caseOptions, canEdit, canDelete, onB
 
   // Indirect case references (member.case_id / place.case_id) not already durable.
   const indirectCases = useMemo(() => {
-    const durable = new Set(intelLinks.map((l) => l.ref_id))
+    const durable = new Set(intelLinks.map((l) => l.case_id))
     const out = new Map<string, { id: string; label: string; via: string }>()
     for (const m of members) if (m.case_id && !durable.has(m.case_id)) out.set(m.case_id, { id: m.case_id, label: caseOptions.find((c) => c.id === m.case_id)?.case_number ?? 'Case', via: 'member' })
     for (const lp of linkedPlaces) if (lp.place.case_id && !durable.has(lp.place.case_id)) out.set(lp.place.case_id, { id: lp.place.case_id, label: caseOptions.find((c) => c.id === lp.place.case_id)?.case_number ?? 'Case', via: 'place' })

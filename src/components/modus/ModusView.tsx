@@ -244,7 +244,7 @@ function SaveProfileModal({ indicators, narrative, cases, onClose, onSaved }: {
   }
 
   return (
-    <Modal open onClose={onClose}>
+    <Modal open onClose={onClose} dirty={() => caseId !== (cases[0]?.id ?? '')}>
       <ModalHeader title="Save M.O. Profile" onClose={onClose} />
       <p className="mb-3 text-xs text-slate-400">Link these {tags.length} indicators to a case so future scans cross-reference against it.</p>
       <div className="mb-3 flex flex-wrap gap-2">

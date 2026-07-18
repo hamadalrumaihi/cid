@@ -26,7 +26,7 @@ export function CasesSection({ data }: { data: CasesData }) {
   const relation = new Map<string, CaseRelation>()
   for (const id of data.placeCaseIds) relation.set(id, 'mention')
   for (const id of data.seizureCaseIds) relation.set(id, 'seizure')
-  for (const l of data.links) relation.set(l.ref_id, 'linked')
+  for (const l of data.links) relation.set(l.case_id, 'linked')
   const entries = [...relation.entries()]
   return (
     <div className="space-y-3">

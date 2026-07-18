@@ -14,19 +14,22 @@ import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { parseChargeCodes, type NarcoticRow } from './narcoticsDossier'
 import { loadOtherNarcotics } from './narcoticsLoad'
+import { NARCOTIC_CATEGORIES, NARCOTIC_STATUSES, categoryLabel, statusLabel } from './narcoticsRegistry'
 
 type MergeArgs = Database['public']['Functions']['merge_narcotics']['Args']
 type ResolveArgs = Database['public']['Functions']['resolve_provisional_narcotic']['Args']
 
-const CATEGORY_OPTIONS = ['stimulant', 'depressant', 'opioid', 'cannabinoid', 'hallucinogen', 'dissociative', 'inhalant', 'other']
-const STATUS_OPTIONS = ['provisional', 'confirmed', 'disproven', 'retired']
+/** 'merged' is set by the merge RPC only — never offered as a manual status. */
+const EDITABLE_STATUSES = NARCOTIC_STATUSES.filter((s) => s !== 'merged')
 const CONFIDENCE_OPTIONS = ['unverified', 'possible', 'probable', 'confirmed', 'disproven']
 const PROVENANCE_OPTIONS = ['imported', 'reported', 'manually_confirmed', 'inferred', 'historical', 'disputed']
 
 /* ── Edit descriptive fields ───────────────────────────────────────────────── */
 export function NarcoticEditModal({ narcotic, canEditCharges, focusCharges, onClose, onSaved }: {
   narcotic: NarcoticRow
-  /** Managers may edit charge_codes; regular editors edit descriptive fields. */
+  /** Managers may edit the guard-frozen authority columns (status, category,
+   *  classification, restricted, charge_codes); regular editors only edit the
+   *  descriptive fields — the server guard silently reverts anything else. */
   canEditCharges: boolean
   /** Open scrolled/anchored to charge editing (from the Charges card). */
   focusCharges?: boolean
@@ -35,8 +38,8 @@ export function NarcoticEditModal({ narcotic, canEditCharges, focusCharges, onCl
 }) {
   const n = narcotic
   const [name, setName] = useState(n.name ?? '')
-  const [category, setCategory] = useState(n.category ?? 'other')
-  const [status, setStatus] = useState(n.status ?? 'provisional')
+  const [category, setCategory] = useState(n.category ?? 'unknown')
+  const [status, setStatus] = useState(n.status ?? 'unidentified')
   const [classification, setClassification] = useState(n.classification ?? '')
   const [confidence, setConfidence] = useState(n.confidence ?? '')
   const [provenance, setProvenance] = useState(n.provenance ?? '')
@@ -54,7 +57,7 @@ export function NarcoticEditModal({ narcotic, canEditCharges, focusCharges, onCl
 
   // Discard-guard only when something actually changed from the opened values.
   const isDirty = () =>
-    name !== (n.name ?? '') || category !== (n.category ?? 'other') || status !== (n.status ?? 'provisional')
+    name !== (n.name ?? '') || category !== (n.category ?? 'unknown') || status !== (n.status ?? 'unidentified')
     || classification !== (n.classification ?? '') || confidence !== (n.confidence ?? '') || provenance !== (n.provenance ?? '')
     || restricted !== !!n.restricted || serverSpecific !== !!n.server_specific
     || summary !== (n.summary ?? '') || significance !== (n.in_city_significance ?? '') || appearance !== (n.appearance ?? '')
@@ -66,12 +69,8 @@ export function NarcoticEditModal({ narcotic, canEditCharges, focusCharges, onCl
     setBusy(true)
     const patch: Database['public']['Tables']['narcotics']['Update'] = {
       name: name.trim(),
-      category,
-      status,
-      classification: classification.trim() || null,
       confidence: confidence.trim() || null,
       provenance: provenance.trim() || null,
-      restricted,
       server_specific: serverSpecific,
       summary: summary.trim() || null,
       in_city_significance: significance.trim() || null,
@@ -81,7 +80,13 @@ export function NarcoticEditModal({ narcotic, canEditCharges, focusCharges, onCl
       officer_safety: officerSafety.trim() || null,
       intelligence_gaps: intelGaps.trim() || null,
     }
+    // Authority columns are guard-frozen server-side for non-managers — only
+    // send them when the caller can actually change them.
     if (canEditCharges) {
+      patch.category = category
+      patch.status = status
+      patch.classification = classification.trim() || null
+      patch.restricted = restricted
       const codes = charges.split(/[,\n]/).map((c) => c.trim()).filter(Boolean)
       patch.charge_codes = codes as unknown as Json
     }
@@ -99,15 +104,15 @@ export function NarcoticEditModal({ narcotic, canEditCharges, focusCharges, onCl
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Name" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} />}</Field>
-            <Field label="Category">{(id) => <Select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>{CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}</Select>}</Field>
-            <Field label="Status">{(id) => <Select id={id} value={status} onChange={(e) => setStatus(e.target.value)}>{STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>)}</Select>}</Field>
-            <Field label="Classification">{(id) => <Input id={id} value={classification} onChange={(e) => setClassification(e.target.value)} placeholder="e.g. Schedule II" />}</Field>
+            {canEditCharges && <Field label="Category">{(id) => <Select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>{NARCOTIC_CATEGORIES.map((c) => <option key={c} value={c}>{categoryLabel(c)}</option>)}</Select>}</Field>}
+            {canEditCharges && <Field label="Status">{(id) => <Select id={id} value={status} onChange={(e) => setStatus(e.target.value)}>{EDITABLE_STATUSES.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}</Select>}</Field>}
+            {canEditCharges && <Field label="Classification">{(id) => <Input id={id} value={classification} onChange={(e) => setClassification(e.target.value)} placeholder="e.g. Schedule II" />}</Field>}
             <Field label="Confidence">{(id) => <Select id={id} value={confidence} onChange={(e) => setConfidence(e.target.value)}><option value="">—</option>{CONFIDENCE_OPTIONS.map((c) => <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>)}</Select>}</Field>
             <Field label="Provenance">{(id) => <Select id={id} value={provenance} onChange={(e) => setProvenance(e.target.value)}><option value="">—</option>{PROVENANCE_OPTIONS.map((p) => <option key={p} value={p}>{p.replace(/_/g, ' ')}</option>)}</Select>}</Field>
           </div>
 
           <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm text-slate-200"><input type="checkbox" checked={restricted} onChange={(e) => setRestricted(e.target.checked)} /> Restricted</label>
+            {canEditCharges && <label className="flex items-center gap-2 text-sm text-slate-200"><input type="checkbox" checked={restricted} onChange={(e) => setRestricted(e.target.checked)} /> Restricted</label>}
             <label className="flex items-center gap-2 text-sm text-slate-200"><input type="checkbox" checked={serverSpecific} onChange={(e) => setServerSpecific(e.target.checked)} /> Server-specific</label>
           </div>
 
@@ -202,7 +207,7 @@ export function NarcoticResolveModal({ narcotic, onClose, onResolved }: {
   onClose: () => void
   onResolved: () => void
 }) {
-  const [action, setAction] = useState<'confirm' | 'reject'>('confirm')
+  const [action, setAction] = useState<'confirm' | 'reject' | 'archive'>('confirm')
   const [canonicalId, setCanonicalId] = useState('')
   const [note, setNote] = useState('')
   const [options, setOptions] = useState<Array<{ id: string; name: string }>>([])
@@ -214,12 +219,16 @@ export function NarcoticResolveModal({ narcotic, onClose, onResolved }: {
     return () => { on = false }
   }, [narcotic.id])
 
+  // The RPC vocabulary is confirm | merge_into | disprove | archive — a reject
+  // that points at an established record is a merge; without one it's disproven.
+  const rpcAction = action === 'reject' ? (canonicalId ? 'merge_into' : 'disprove') : action
+
   const resolve = async () => {
     setBusy(true)
     const args: ResolveArgs = {
       p_provisional: narcotic.id,
-      p_action: action,
-      ...(canonicalId ? { p_canonical: canonicalId } : {}),
+      p_action: rpcAction,
+      ...(rpcAction === 'merge_into' ? { p_canonical: canonicalId } : {}),
       ...(note.trim() ? { p_note: note.trim() } : {}),
     }
     const res = await rpc('resolve_provisional_narcotic', args)
@@ -234,25 +243,28 @@ export function NarcoticResolveModal({ narcotic, onClose, onResolved }: {
       <div className="p-5 sm:p-6">
         <ModalHeader title="Resolve provisional record" onClose={onClose} />
         <p className="mb-4 text-sm text-slate-400">
-          Confirm <span className="font-semibold text-white">{narcotic.name}</span> as an established substance, or reject it — optionally pointing to the established record it duplicates.
+          Confirm <span className="font-semibold text-white">{narcotic.name}</span> as an established substance, reject it — optionally merging it into the established record it duplicates — or archive it.
         </p>
         <div className="space-y-4">
           <Field label="Action">
             {(id) => (
-              <Select id={id} value={action} onChange={(e) => setAction(e.target.value as 'confirm' | 'reject')}>
+              <Select id={id} value={action} onChange={(e) => setAction(e.target.value as 'confirm' | 'reject' | 'archive')}>
                 <option value="confirm">Confirm as established</option>
                 <option value="reject">Reject provisional</option>
+                <option value="archive">Archive</option>
               </Select>
             )}
           </Field>
-          <Field label="Established record" hint="Optional — the established record this one should defer to.">
-            {(id) => (
-              <Select id={id} value={canonicalId} onChange={(e) => setCanonicalId(e.target.value)}>
-                <option value="">None</option>
-                {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-              </Select>
-            )}
-          </Field>
+          {action === 'reject' && (
+            <Field label="Established record" hint="Optional — pick the record this one duplicates to merge into it; leave empty to mark it disproven.">
+              {(id) => (
+                <Select id={id} value={canonicalId} onChange={(e) => setCanonicalId(e.target.value)}>
+                  <option value="">None</option>
+                  {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </Select>
+              )}
+            </Field>
+          )}
           <Field label="Note" hint="Optional — recorded with the decision.">
             {(id) => <Textarea id={id} value={note} onChange={(e) => setNote(e.target.value)} rows={2} />}
           </Field>

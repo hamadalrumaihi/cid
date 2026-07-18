@@ -13,6 +13,7 @@
  *  whole-registry load. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { insert, list, deleteWithUndo, ilikeAny, update } from '@/lib/db'
+import { Drafts } from '@/lib/drafts'
 import { copyText, downloadTextFile } from '@/lib/format'
 import { renderMarkdown } from '@/lib/markdown'
 import { useTableVersion } from '@/lib/realtime'
@@ -110,11 +111,23 @@ export function IntelTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boole
 function WorkingNotes({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boolean; onChanged: () => void }) {
   const [editing, setEditing] = useState(false)
   const [text, setText] = useState(c.notes ?? '')
-  useEffect(() => { queueMicrotask(() => setText(c.notes ?? '')) }, [c.notes])
+  // Sync from the row only while the editor is CLOSED — a realtime refresh
+  // mid-edit must not clobber the buffer (BUG-020).
+  useEffect(() => { if (!editing) queueMicrotask(() => setText(c.notes ?? '')) }, [c.notes, editing])
+  // Never-lose-work: the buffer is stashed per case while typing (same Drafts
+  // idiom as ChatTab/ReportsTab), restored when the editor reopens, and
+  // cleared on a successful save.
+  const draftKey = `notes:${c.id}`
+  const openEditor = () => {
+    const d = Drafts.load<string>(draftKey)
+    if (d?.data && d.data !== (c.notes ?? '')) { setText(d.data); toast('Unsaved draft restored.', 'info') }
+    setEditing(true)
+  }
+  const edit = (next: string) => { setText(next); if (next.trim()) Drafts.save(draftKey, next); else Drafts.clear(draftKey) }
   const save = async () => {
     const res = await update('cases', c.id, { notes: text || null })
     if (res.error) toast(res.error.message, 'danger')
-    else { toast('Notes saved.', 'success'); setEditing(false); onChanged() }
+    else { Drafts.clear(draftKey); toast('Notes saved.', 'success'); setEditing(false); onChanged() }
   }
   return (
     <Card pad="sm">
@@ -124,13 +137,13 @@ function WorkingNotes({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boolean;
           <div className="flex gap-2">
             <Button onClick={() => copyText(c.notes ?? '', 'Notes')}>Copy</Button>
             <Button onClick={() => downloadTextFile(`${c.case_number}-notes.md`, c.notes ?? '')}>.md</Button>
-            {canEdit && <Button onClick={() => setEditing(true)}>Edit</Button>}
+            {canEdit && <Button onClick={openEditor}>Edit</Button>}
           </div>
         )}
       </div>
       {editing ? (
         <div className="space-y-3">
-          <RichEditor value={text} onChange={setText} />
+          <RichEditor value={text} onChange={edit} />
           <div className="flex justify-end gap-2">
             <Button onClick={() => setEditing(false)}>Cancel</Button>
             <Button variant="primary" onClick={save}>Save</Button>

@@ -154,7 +154,7 @@ function NewTicketModal({ defaultCode, onClose, onSaved }: { defaultCode: string
             <textarea rows={3} value={desc} onChange={(e) => setDesc(e.target.value)} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
           </div>
         </div>
-        <Button variant="primary" className="mt-5 w-full" onClick={() => void save()}>
+        <Button variant="primary" className="mt-5 w-full" onAction={save}>
           Add to Queue
         </Button>
       </div>
@@ -258,7 +258,7 @@ function TicketWizard({ ticket, onClose, onDone }: { ticket: TicketRow; onClose:
             <p className="mb-5 text-[11px] text-slate-500">LSB→1xxxxx · BCB→2xxxxx · SAB/JTF→9xxxxx. Must be unique.</p>
             <div className="flex gap-3">
               <Button onClick={() => setStep(1)}>← Back</Button>
-              <Button variant="primary" className="flex-1" onClick={() => void createCase()}>Create Case File →</Button>
+              <Button variant="primary" className="flex-1" onAction={createCase}>Create Case File →</Button>
             </div>
           </>
         )}

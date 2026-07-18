@@ -12,6 +12,7 @@ import { officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { signoffLabel, signoffTint, SIGNOFF_ACTION_VERB, SIGNOFF_STAGE_LABEL } from '@/lib/signoff'
 import { toast } from '@/lib/toast'
+import { useAction } from '@/lib/useAction'
 import type { CaseRow, HistoryRow } from './shared'
 
 /** How each history row came to be — the RPCs stamp `source` alongside the
@@ -88,13 +89,15 @@ export function SignoffTab({ c }: { c: CaseRow }) {
   // command but are NOT accepted — do not widen this to isCommand.
   const canOverride = !!profile?.active
     && (profile.role === 'deputy_director' || profile.role === 'director' || !!profile.is_owner)
-  const callRpc = async (kind: 'submit' | 'approve' | 'deny' | 'changes' | 'complete' | 'escalate') => {
+  // Busy-guarded (useAction): a double-click can't fire the RPC twice, and
+  // every sign-off button disables while one is in flight.
+  const { run: callRpc, busy } = useAction(async (kind: 'submit' | 'approve' | 'deny' | 'changes' | 'complete' | 'escalate') => {
     const res = kind === 'submit' ? await rpc('signoff_submit', { p_case: c.id })
       : kind === 'complete' || kind === 'escalate' ? await rpc('signoff_owner_action', { p_case: c.id, p_action: kind })
       : await rpc('signoff_decide', { p_case: c.id, p_decision: kind, p_note: note || undefined })
     if (res.error) toast(res.error.message, 'danger')
     else { setNote(''); toast('Sign-off updated.', 'success'); void refresh() }
-  }
+  })
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
@@ -102,9 +105,9 @@ export function SignoffTab({ c }: { c: CaseRow }) {
         <p className={`mt-2 inline-flex rounded-full px-3 py-1 text-sm font-bold ${signoffTint(c.signoff_status)}`}>{signoffLabel(c.signoff_status)}</p>
         <p className="mt-2 text-sm text-slate-400">Assignee: {officerName(c.signoff_assignee_id) || 'None'}</p>
         <div className="mt-4 flex flex-wrap gap-2">
-          {owner && <button onClick={() => void callRpc('submit')} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white">Submit / Resubmit</button>}
-          {owner && c.signoff_status === 'approved_deputy' && <><Button variant="success" onClick={() => void callRpc('complete')}>Complete at Deputy</Button><Button variant="warn" onClick={() => void callRpc('escalate')}>Escalate</Button></>}
-          {reviewer && <><Button variant="success" onClick={() => void callRpc('approve')}>Approve</Button><button onClick={() => void callRpc('changes')} className="rounded-lg bg-orange-600 px-3 py-2 text-sm font-bold text-white">Changes</button><button onClick={() => void callRpc('deny')} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white">Deny</button></>}
+          {owner && <button onClick={() => void callRpc('submit')} disabled={busy} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-60">Submit / Resubmit</button>}
+          {owner && c.signoff_status === 'approved_deputy' && <><Button variant="success" disabled={busy} onClick={() => void callRpc('complete')}>Complete at Deputy</Button><Button variant="warn" disabled={busy} onClick={() => void callRpc('escalate')}>Escalate</Button></>}
+          {reviewer && <><Button variant="success" disabled={busy} onClick={() => void callRpc('approve')}>Approve</Button><button onClick={() => void callRpc('changes')} disabled={busy} className="rounded-lg bg-orange-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-60">Changes</button><button onClick={() => void callRpc('deny')} disabled={busy} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-60">Deny</button></>}
         </div>
         {(reviewer || owner) && <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Decision note" className="mt-3 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />}
         {canOverride && (

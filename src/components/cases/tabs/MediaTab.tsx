@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
-import { EmptyState } from '@/components/ui/Notice'
+import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
 import { deleteWithUndo, insert, list, update } from '@/lib/db'
 import { caseLink } from '@/lib/caseLinks'
 import { CASE_MEDIA_CATEGORIES, caseMediaCategoryLabel, filterCaseMedia, legacyEvidenceRef } from '@/lib/caseMedia'
@@ -62,6 +62,10 @@ export function MediaTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boole
   const [fetchLimit, setFetchLimit] = useState(FETCH_STEP)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  // First-load gate: the gallery must not flash "No case photos yet" before
+  // the initial fetch resolves, and a failed load must say so (BUG-027).
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const vM = useTableVersion('media')
 
   const refresh = useCallback(async () => {
@@ -79,7 +83,9 @@ export function MediaTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boole
       setEvidence(ev)
       setReports(rp)
       setVehicles(vh)
-    } catch { /* stale render is fine */ }
+      setLoadError(false)
+    } catch { setLoadError(true) /* loaded rows keep rendering stale */ }
+    finally { setLoading(false) }
   }, [c.id, fetchLimit])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vM])
 
@@ -163,7 +169,11 @@ export function MediaTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boole
       </div>
 
       {/* Gallery grid — cards are buttons (keyboard-navigable), lazy images. */}
-      {visible.length ? (
+      {loading ? (
+        <Notice text="Loading case media…" />
+      ) : !rows.length && loadError ? (
+        <ErrorNotice message="Could not load case media." onRetry={() => { void refresh() }} />
+      ) : visible.length ? (
         <>
           <ul className="grid list-none grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
             {visible.map((m) => (
@@ -543,7 +553,7 @@ function AddPhotosModal({ c, uploaderId, reports, vehicles, onClose }: {
   }
 
   return (
-    <Modal open onClose={onClose} wide dirty={() => pending > 0}>
+    <Modal open onClose={onClose} wide dirty={() => pending > 0 || items.some((x) => !x.saved)}>
       <div className="p-5">
         <ModalHeader title="Add photos" onClose={onClose} />
         {fmConfigured() ? (
@@ -572,7 +582,7 @@ function AddPhotosModal({ c, uploaderId, reports, vehicles, onClose }: {
           <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
             <Field label="Title">{(id) => <Input id={id} value={linkTitle} onChange={(e) => setLinkTitle(e.target.value)} placeholder="e.g. Dashcam still" />}</Field>
             <Field label="URL">{(id) => <Input id={id} value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://…" className="font-mono text-xs" />}</Field>
-            <div className="flex items-end"><Button onClick={() => void addLink()}>Add</Button></div>
+            <div className="flex items-end"><Button onAction={addLink}>Add</Button></div>
           </div>
         </details>
 

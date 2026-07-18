@@ -328,7 +328,7 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
           </div>
         </div>
         <div className="mt-5 flex gap-2">
-          <Button variant="primary" className="flex-1" onClick={() => void save()}>
+          <Button variant="primary" className="flex-1" onAction={save}>
             {record ? 'Save changes' : 'Create person'}
           </Button>
           {record && canDelete && (

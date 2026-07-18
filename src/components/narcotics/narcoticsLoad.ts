@@ -185,7 +185,7 @@ export async function loadCasesData(id: string): Promise<CasesData> {
   links.sort(byCreatedDesc)
   const seizureCaseIds = uniq(seizures.map((s) => s.case_id).filter(notNull))
   const placeCaseIds = uniq(places.map((p) => p.source_case_id).filter(notNull))
-  const caseIds = uniq([...links.map((l) => l.ref_id), ...seizureCaseIds, ...placeCaseIds])
+  const caseIds = uniq([...links.map((l) => l.case_id), ...seizureCaseIds, ...placeCaseIds])
   const cases = caseIds.length
     ? await list('cases', { select: CASE_COLS, in: { id: caseIds } }).then((r) => r as unknown as CaseLite[]).catch(() => [])
     : []

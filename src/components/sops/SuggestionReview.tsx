@@ -198,8 +198,12 @@ function SuggestionDrawer({ suggestion, docName, allSuggestions, canManage, onOp
 
   const dupCandidates = allSuggestions.filter((x) => x.id !== s.id)
 
+  // Unrecorded review input (comment, decision, duplicate/implementation
+  // pickers) gates close with the shared unsaved-changes prompt.
+  const dirty = () => !!(comment.trim() || decision || note.trim() || editor || dupOf || dupNote.trim() || versionId)
+
   return (
-    <Modal open slide onClose={onClose}>
+    <Modal open slide onClose={onClose} dirty={dirty}>
       <div className="p-5 sm:p-6">
         <ModalHeader title={s.title} onClose={onClose} />
 

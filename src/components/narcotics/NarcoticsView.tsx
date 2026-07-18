@@ -463,8 +463,12 @@ function NarcoticCreateModal({ onClose, onCreated }: { onClose: () => void; onCr
     onCreated(id)
   }
 
+  const dirty = () =>
+    !!(name.trim() || classification.trim() || summary.trim()) ||
+    category !== 'unknown' || status !== 'reported' || restricted || serverSpecific
+
   return (
-    <Modal open onClose={onClose}>
+    <Modal open onClose={onClose} dirty={dirty}>
       <ModalHeader title="Add substance" onClose={onClose} />
       <div className="space-y-3">
         <Field label="Name" required>
@@ -554,8 +558,10 @@ function NarcoticSuggestionModal({ substances, onClose }: { substances: Registry
     onClose()
   }
 
+  const dirty = () => !!(title.trim() || explanation.trim() || proposed.trim())
+
   return (
-    <Modal open onClose={onClose}>
+    <Modal open onClose={onClose} dirty={dirty}>
       <ModalHeader title="Suggest a correction" onClose={onClose} />
       <p className="mb-3 text-xs text-slate-400">
         Report a missing substance or flag something to correct. A catalog manager reviews every suggestion.

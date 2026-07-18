@@ -5,7 +5,11 @@
  *  (casesScope/casesView/caseFilters/caseViews/recentCases/pinnedCases) so
  *  personal presets carry over between the legacy site and this app. */
 import type { Tables } from '@/lib/database.types'
+import { countRows, list } from '@/lib/db'
+import { assessCase } from '@/lib/caseWorkflow'
+import { todayISO } from '@/lib/format'
 import { Store } from '@/lib/store'
+import { uiConfirm } from '@/components/ui/dialog'
 
 export type CaseRow = Tables<'cases'>
 
@@ -18,6 +22,30 @@ export const caseStaleDays = (c: CaseRow): number =>
 /** Open/active case gone quiet ≥14d (closed/cold never count). */
 export const isStaleCase = (c: CaseRow): boolean =>
   c.status !== 'closed' && c.status !== 'cold' && caseStaleDays(c) >= 14
+
+/* ---- Pre-close advisory ---------------------------------------------------
+ * The shared "Still open on this case" checklist confirm behind EVERY close
+ * path (detail quick-status + board drag/select). Fetches the case's workflow
+ * rows, runs the shared evaluator, and confirms. Advisory only — command can
+ * still close over open work (the reason lives in history). */
+export async function confirmCaseClose(c: CaseRow, meId: string | null = null): Promise<boolean> {
+  let blockerLines = ''
+  try {
+    const [tasks, reports, legal, liveMedia, persisted] = await Promise.all([
+      list('case_tasks', { eq: { case_id: c.id } }),
+      list('reports', { eq: { case_id: c.id } }),
+      list('legal_requests', { eq: { case_id: c.id } }).catch(() => []),
+      countRows('media', { eq: { case_id: c.id }, is: { archived_at: null } }),
+      list('case_blockers', { eq: { case_id: c.id, status: 'open' } }).catch(() => [] as Tables<'case_blockers'>[]),
+    ])
+    const { blockers } = assessCase({ c, tasks, reports, legal, mediaCount: liveMedia, persistedBlockers: persisted, meId, todayISO: todayISO() })
+    if (blockers.length) blockerLines = '\n\nStill open on this case:\n' + blockers.map((b) => `• ${b.label}`).join('\n') + '\n\nClose anyway?'
+  } catch { /* checklist is best-effort; fall back to the plain confirm */ }
+  return uiConfirm(
+    `Close ${c.case_number}? It will leave the active case board. You can reopen it later.${blockerLines}`,
+    { title: 'Close case', confirmText: blockerLines ? 'Close anyway' : 'Close case', danger: !!blockerLines },
+  )
+}
 
 /* ---- Pins + recents (Jump-back data; the strip renders on Command) ------- */
 export const recentCaseIds = (): string[] => Store.get<string[]>('recentCases', [])
