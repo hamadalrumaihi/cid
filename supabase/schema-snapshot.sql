@@ -6334,3 +6334,14 @@ create policy wl_sel on public.watchlist
 -- role changes. The approve/reject/cancel/complete RPCs remain for any
 -- pre-existing open rows; nothing creates pending rows anymore. Definitive
 -- SQL in supabase/migrations/20260807040000_transfer_single_step.sql.
+-- 20260807050000_pba_fixture_guard (functions + data alignment):
+-- assign_ada_to_bureau / end_ada_bureau_assignment now refuse a test-fixture
+-- caller (profiles.is_test) that would end or replace a live assignment held
+-- by a REAL prosecutor — fixture-vs-fixture stays legal so routing suites
+-- keep working. The replace path, previously silent, now writes an
+-- ADA_ASSIGNMENT_ENDED audit row (detail carries replaced_by) and notifies
+-- the displaced prosecutor. Includes a defensive is_test alignment for all
+-- rls-test accounts (verified already true). Motivated by fixture-initiated
+-- replaces terminating the real SAB primary assignment three times in
+-- production (2026-07-14..17). Definitive SQL in
+-- supabase/migrations/20260807050000_pba_fixture_guard.sql.

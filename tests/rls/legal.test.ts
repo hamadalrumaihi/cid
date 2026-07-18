@@ -53,7 +53,23 @@ describe.skipIf(!enabled)('DOJ legal review — RLS/RPC security wall (live)', (
   let sealedId = ''     // sealed subpoena
   let daRouteId = ''    // document_production subpoena (da route)
   let agRouteId = ''    // financial_records subpoena (ag route)
+  let realCoverage: string[] = []  // live NON-fixture assignments — must survive the suite untouched
   const tag = Math.random().toString(36).slice(2, 8).toUpperCase()
+
+  // Live prosecutor assignments held by real (non-fixture) prosecutors. The
+  // server guard (20260807050000) makes fixture actors unable to end or
+  // replace them; this snapshot is the tripwire that turns any regression
+  // into a loud failure instead of silent production damage.
+  const nonFixtureCoverage = async () => {
+    const fixtures = new Set([ids.adaLsb, ids.adaBcb, ids.adaSab, ids.da, ids.ag])
+    const cov = await da.from('prosecutor_bureau_assignments')
+      .select('id,prosecutor_id,bureau,assignment_type').is('ends_at', null)
+    if (cov.error) throw new Error(`coverage snapshot failed: ${cov.error.message}`)
+    return (cov.data ?? [])
+      .filter((r) => !fixtures.has(r.prosecutor_id))
+      .map((r) => JSON.stringify(r))
+      .sort()
+  }
 
   beforeAll(async () => {
     lsb = mk(); bcb = mk(); lead = mk(); director = mk(); owner = mk()
@@ -91,6 +107,7 @@ describe.skipIf(!enabled)('DOJ legal review — RLS/RPC security wall (live)', (
     const p = await lsb.from('persons').insert({ name: `RLS Test Suspect ${tag}` }).select('id')
     if (p.error) throw new Error(p.error.message)
     personId = p.data![0].id
+    realCoverage = await nonFixtureCoverage()
   })
 
   afterAll(async () => {
@@ -101,6 +118,12 @@ describe.skipIf(!enabled)('DOJ legal review — RLS/RPC security wall (live)', (
     const { data, error } = await lsb.rpc('rls_test_cleanup')
     if (error) throw new Error(`rls_test_cleanup failed: ${error.message}`)
     console.info('[rls:legal] cleanup:', JSON.stringify(data))
+    // Production-state invariant: real coverage must be byte-identical.
+    const after = await nonFixtureCoverage()
+    if (JSON.stringify(after) !== JSON.stringify(realCoverage)) {
+      throw new Error('REAL PROSECUTOR COVERAGE CHANGED DURING THE SUITE — '
+        + `before: ${JSON.stringify(realCoverage)} after: ${JSON.stringify(after)}`)
+    }
     if (personId) {
       const del = await director.from('persons').delete().eq('id', personId)
       if (del.error) console.warn('[rls:legal] person cleanup failed:', del.error.message)
@@ -220,11 +243,21 @@ describe.skipIf(!enabled)('DOJ legal review — RLS/RPC security wall (live)', (
 
   /* ================= ADA bureau assignments ================= */
 
-  it('DA assigns the three primary ADAs; assignment never changes profiles.division', async () => {
+  it('DA assigns the three routing ADAs; assignment never changes profiles.division', async () => {
+    // Where a REAL prosecutor already holds a bureau's primary slot, the
+    // fixture takes the ACTING slot instead — acting outranks primary for
+    // routing, so every routing test behaves identically, and the fixture
+    // guard (20260807050000) never has to displace real coverage.
+    const realPrimaries = new Set(realCoverage
+      .map((s) => JSON.parse(s) as { bureau: string; assignment_type: string })
+      .filter((a) => a.assignment_type === 'primary').map((a) => a.bureau))
     for (const [pid, bureau] of [[ids.adaLsb, 'LSB'], [ids.adaBcb, 'BCB'], [ids.adaSab, 'SAB']] as const) {
-      const r = await da.rpc('set_primary_ada', { p_prosecutor: pid, p_bureau: bureau })
+      const type = realPrimaries.has(bureau) ? 'acting' : 'primary'
+      const r = type === 'acting'
+        ? await da.rpc('set_acting_ada', { p_prosecutor: pid, p_bureau: bureau })
+        : await da.rpc('set_primary_ada', { p_prosecutor: pid, p_bureau: bureau })
       expect(r.error).toBeNull()
-      expect(r.data).toMatchObject({ bureau, assignment_type: 'primary' })
+      expect(r.data).toMatchObject({ bureau, assignment_type: type })
     }
     const prof = await adaLsb.from('profiles').select('division,active').eq('id', ids.adaLsb)
     expect(prof.data?.[0]).toMatchObject({ division: 'JTF', active: false }) // untouched default
@@ -343,7 +376,7 @@ describe.skipIf(!enabled)('DOJ legal review — RLS/RPC security wall (live)', (
     expect(ap1.error).toBeNull()
     expect(ap1.data).toMatchObject({ assigned_ada_id: ids.adaSab }) // acting wins
 
-    const end = await da.from('prosecutor_bureau_assignments').select('id').eq('prosecutor_id', ids.adaSab).eq('assignment_type', 'acting').is('ends_at', null)
+    const end = await da.from('prosecutor_bureau_assignments').select('id').eq('prosecutor_id', ids.adaSab).eq('bureau', 'BCB').eq('assignment_type', 'acting').is('ends_at', null)
     expect(end.data).toHaveLength(1)
     const ended = await da.rpc('end_ada_bureau_assignment', { p_assignment: end.data![0].id })
     expect(ended.error).toBeNull()
