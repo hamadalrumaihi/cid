@@ -142,20 +142,50 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [links, persons, gangs, places, vehicles, evidence, reports, media] = await Promise.all([
+      // Case-scoped rows first — their ids bound the registry lookups below.
+      // Vehicles stay unbounded: the plate-substring inference scans EVERY
+      // plate against the evidence/case text, so no id list exists up front.
+      const [links, vehicles, evidence, reports, media] = await Promise.all([
         list('case_intel_links', { eq: { case_id: c.id } }),
-        list('persons', {}).catch(() => [] as PersonRow[]),
-        list('gangs', {}).catch(() => [] as GangRow[]),
-        list('places', {}).catch(() => [] as PlaceRow[]),
         list('vehicles', {}).catch(() => [] as VehicleRow[]),
         list('evidence', { eq: { case_id: c.id } }).catch(() => [] as EvidenceRow[]),
         list('reports', { eq: { case_id: c.id } }).catch(() => [] as ReportRow[]),
         list('media', { select: 'id,report_id,vehicle_id,archived_at', eq: { case_id: c.id } })
           .then((r) => r as unknown as MediaLite[]).catch(() => [] as MediaLite[]),
       ])
+      const linkIds = (kind: LinkRow['kind']) => [...new Set(links.filter((l) => l.kind === kind).map((l) => l.ref_id))]
+      const personLinkIds = linkIds('person')
+      // Which vehicles can reach the chart (ownership join / plate substring —
+      // mirrors the second-ring derivation below): their owner/gang ids join
+      // the bounded lookups so the detail fields still resolve names.
+      const texts = [...evidence.map((e) => norm([e.description, e.notes, e.location].filter(Boolean).join(' '))), norm(c.summary)]
+      const charted = vehicles.filter((v) => {
+        if (v.owner_id && personLinkIds.includes(v.owner_id)) return true
+        const plate = norm(v.plate)
+        return !!plate && texts.some((t) => t.includes(plate))
+      })
+      const personIds = [...new Set([...personLinkIds, ...charted.map((v) => v.owner_id).filter((x): x is string => !!x)])]
+      const placeIds = linkIds('place')
+      // Bounded `in` lookups over just the referenced ids (never the whole
+      // registries) — best-effort, same as before. Gangs go last so the
+      // persons'/places' own gang references (membership, controlled-by)
+      // still resolve to names in the details panel.
+      const [persons, places] = await Promise.all([
+        personIds.length ? list('persons', { in: { id: personIds } }).catch(() => [] as PersonRow[]) : Promise.resolve([] as PersonRow[]),
+        placeIds.length ? list('places', { in: { id: placeIds } }).catch(() => [] as PlaceRow[]) : Promise.resolve([] as PlaceRow[]),
+      ])
+      const gangIds = [...new Set([
+        ...linkIds('gang'),
+        ...charted.map((v) => v.gang_id).filter((x): x is string => !!x),
+        ...persons.map((p) => p.gang_id).filter((x): x is string => !!x),
+        ...places.map((p) => p.controlling_gang_id).filter((x): x is string => !!x),
+      ])]
+      const gangs = gangIds.length
+        ? await list('gangs', { in: { id: gangIds } }).catch(() => [] as GangRow[])
+        : ([] as GangRow[])
       setData({ links, persons, gangs, places, vehicles, evidence, reports, media })
     } catch { setData({ links: [], persons: [], gangs: [], places: [], vehicles: [], evidence: [], reports: [], media: [] }) }
-  }, [c.id])
+  }, [c.id, c.summary])
 
   useEffect(() => {
     const t = window.setTimeout(() => { void refresh() }, 0)

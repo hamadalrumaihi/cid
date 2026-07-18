@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
     // no created_by column on notifications — the old filter matched nothing
     // and silently blocked every DM).
     let q = supa.from('notifications')
-      .select('id')
+      .select('id,payload')
       .eq('user_id', user_id)
       .eq('type', type)
       .eq('payload->>actor_id', callerId)
@@ -76,6 +76,10 @@ Deno.serve(async (req) => {
     if (payload?.case_id) q = q.eq('payload->>case_id', String(payload.case_id));
     const { data: notif } = await q.maybeSingle();
     if (!notif?.id) return json({ error: 'matching notification not found' }, 403);
+    // The DM text comes from the VERIFIED notification row, never from the
+    // request body — a caller who legitimately triggered a notification must
+    // not be able to put arbitrary words in the official bot's mouth.
+    const verified = (notif.payload ?? {}) as Record<string, unknown>;
 
     const { data: prof } = await supa.from('profiles').select('active,discord_id').eq('id', user_id).maybeSingle();
     if (!prof?.active) return json({ skipped: 'recipient inactive' });
@@ -88,7 +92,7 @@ Deno.serve(async (req) => {
     });
     if (!dmRes.ok) return json({ error: 'dm_open_failed', status: dmRes.status, detail: await dmRes.text() }, 502);
     const dm = await dmRes.json();
-    const body = dmBody(type, payload || {});
+    const body = dmBody(type, verified);
     const content = `**${titles[type]}**${body ? `\n${body}` : ''}`.slice(0, 1900);
     const msgRes = await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
       method: 'POST', headers: h, body: JSON.stringify({ content }),

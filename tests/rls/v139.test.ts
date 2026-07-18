@@ -1,41 +1,47 @@
 /** v1.39 — transfers between ALL departments, JTF included
- *  (migration 20260807020000_transfer_any_bureau).
+ *  (migration 20260807020000_transfer_any_bureau), pinned against the
+ *  SINGLE-STEP model (migration 20260807040000_transfer_single_step).
  *
- *  The two-sided transfer workflow (20260718020000) previously rejected JTF
- *  as a source ("member has no permanent department yet") and as a
- *  destination. The migration widens the SAME workflow to every department
- *  pair: the transfer_requests from_bureau/to_bureau CHECKs admit 'JTF' and
- *  request_transfer dropped its two bureau-list guards. Everything else is
- *  unchanged: initiator authority, both-sides approval, reason required, no
- *  self-transfer, one open transfer per member.
+ *  20260807020000 widened transfers to every department pair: the
+ *  transfer_requests from_bureau/to_bureau CHECKs admit 'JTF' and
+ *  request_transfer dropped its two bureau-list guards. 20260807040000 then
+ *  removed the approval stage entirely: an authorized request_transfer call
+ *  stamps both sides approved and applies the move in the SAME call — no
+ *  pending states, no source-bureau veto. Initiator authority is unchanged
+ *  (Bureau Lead: rank-and-file with one side of the move their own bureau;
+ *  DD+/Owner: anyone, anywhere), reason required, no self-transfer, one
+ *  open transfer per member. The approve/reject/cancel/complete RPCs
+ *  survive only to resolve pre-existing open rows.
  *
  *  Pins:
- *   - JTF as SOURCE: the Director moves the throwaway target JTF -> LSB
- *     end-to-end (Director initiation starts 'approved'; complete_transfer
- *     applies it) — profiles.division becomes LSB;
- *   - JTF as DESTINATION: the Director moves the target LSB -> JTF the same
- *     way — the old "JTF is a temporary joint-case designation" rejection is
- *     gone; the target is then restored to the detective/LSB baseline;
+ *   - JTF as SOURCE: the Director's request_transfer JTF -> LSB returns a
+ *     'completed' row and profiles.division is already LSB — single-step,
+ *     no complete_transfer needed;
+ *   - JTF as DESTINATION: the Director's LSB -> JTF request completes the
+ *     same way — the old "JTF is a temporary joint-case designation"
+ *     rejection is gone; the target is then restored to the detective/LSB
+ *     baseline;
  *   - the from <> to rule survives the dropped guards: a same-department
  *     request fails with 'member is already in …';
  *   - a plain detective still cannot call request_transfer at all;
  *   - Bureau Lead scoping still holds: the LSB lead cannot initiate BCB ->
  *     SAB (neither side is their bureau);
- *   - the LSB lead CAN initiate an inbound JTF -> LSB pull — it starts
- *     'pending_source' (JTF, no lead there), the Director (DD+ decides any
- *     side, so a leaderless JTF never deadlocks) approves the source side,
- *     and the destination lead's target approval applies the move;
+ *   - the LSB lead's inbound JTF -> LSB pull is SINGLE-STEP: authority over
+ *     the destination side is enough — the row lands 'completed' in the
+ *     initiating call, and a late approve_transfer_source on the completed
+ *     row errors (the approval RPCs only serve pre-existing open rows);
  *   - anon cannot execute request_transfer (EXECUTE revoked).
  *
  *  Fixtures (tests/rls/README.md): lsb (plain detective — negative), lead
- *  (LSB bureau_lead), director (initiates + approves + completes), target
- *  (throwaway — parked in JTF/BCB via rls_test_reset_member and RESTORED to
- *  detective/LSB). Every request this suite creates is completed in-test, so
- *  no open transfer_requests rows remain; the final test proves the target
- *  is back at baseline with zero open transfers. rls_test_cleanup() runs at
- *  start AND teardown (it purges the completed transfer/role_events history).
- *  transfer_notify suppresses command fan-out for rls-test actors, so no real
- *  member is ever pinged. Requires migration 20260807020000 applied. */
+ *  (LSB bureau_lead), director (initiates + completes), target (throwaway —
+ *  parked in JTF/BCB via rls_test_reset_member and RESTORED to
+ *  detective/LSB). Every request this suite creates completes in its own
+ *  call, so no open transfer_requests rows remain; the final test proves the
+ *  target is back at baseline with zero open transfers. rls_test_cleanup()
+ *  runs at start AND teardown (it purges the completed transfer/role_events
+ *  history). transfer_notify suppresses command fan-out for rls-test actors,
+ *  so no real member is ever pinged. Requires migrations 20260807020000 +
+ *  20260807040000 applied. */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'

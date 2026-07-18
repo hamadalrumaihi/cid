@@ -24,10 +24,10 @@ stateDiagram-v2
     draft --> withdrawn: membership_request_withdraw()
     pending --> withdrawn: membership_request_withdraw()
     correction_requested --> withdrawn: membership_request_withdraw()
+    rejected --> pending: re-review — review_membership_request() accepts terminal rows (20260807120000)
+    withdrawn --> pending: re-review (20260807120000)
     approved --> [*]
     approved_with_changes --> [*]
-    rejected --> [*]
-    withdrawn --> [*]
 ```
 
 | Transition | Who | Enforced by |
@@ -49,6 +49,8 @@ stateDiagram-v2
 | Director | Owner only |
 
 Approval is atomic: request decided + `profiles.role/division/active` flipped + `role_events` (with reason/source) + history + audit + one applicant notification, in one transaction. `approved_with_changes` requires an applicant-visible reason. Command reads the grant-revoked `internal_decision_note` only via `admin_membership_requests()`.
+
+`rejected` and `withdrawn` are **not** dead ends: since [`20260807120000_membership_rereview_terminal.sql`](../supabase/migrations/20260807120000_membership_rereview_terminal.sql), `review_membership_request()` also accepts a terminal row and decides it again (the supersession is recorded in `membership_request_history` with the real prior status) — the applicant's only path back in, since the unique constraint blocks re-applying. `approved` / `approved_with_changes` decisions remain final.
 
 ## 2. Justice membership (DOJ / Judiciary)
 
@@ -92,8 +94,8 @@ stateDiagram-v2
 
 | RPC | Who | Notes |
 | --- | --- | --- |
-| `signoff_submit(case)` | the **case owner** — lead detective, or creator when no lead is set | LOA-aware routing: `private.signoff_route(step, bureau)` picks the stage + a non-LOA assignee; fails if no active reviewer exists |
-| `signoff_decide(case, approve\|deny\|changes, note)` | active holder of the stage role (BL/DD/Dir) **with case access**, and the assigned reviewer — a Director may override the assignee | deny/changes require a note; every action appends to the append-only `case_signoff_history` |
+| `signoff_submit(case)` | the **case owner** — lead detective, or creator when no lead is set | LOA-aware routing: `private.signoff_route(step, bureau)` picks the stage + a non-LOA assignee, **excluding the submitter and lead detective** (a lead's own case escalates rather than routing back to its author); fails if no active reviewer exists. Submit/escalate notify the routed assignee |
+| `signoff_decide(case, approve\|deny\|changes, note)` | the **routed assignee** (a Director may override the assignee) **with case access** — the submitter/lead can never decide their own case (`private.signoff_assert_decider`, [`20260807060000`](../supabase/migrations/20260807060000_signoff_authority_restore.sql)) | deny/changes require a note; every action appends to the append-only `case_signoff_history` and notifies the case owner |
 | `signoff_owner_action(case, complete\|escalate)` | the case owner, only at the `approved_deputy` stop-point | escalate re-routes to an active Director |
 | `signoff_command_override(case, complete\|escalate, reason)` | Deputy Director / Director / Owner (never Bureau Lead) | acts in the owner's place at the `approved_deputy` stop-point when the owner is unavailable; reason required, recorded in history with `source='command_override'` ([`20260721040000`](../supabase/migrations/20260721040000_signoff_integrity.sql)) |
 
@@ -148,10 +150,10 @@ Key rules (all server-enforced):
 | DOJ intake & routing | `submit_legal_request_to_doj`; auto-assign via `get_routing_ada_for_bureau` (active acting → active primary ADA; missing coverage parks the request — DA/AG/Owner assign via `reassign_legal_ada`) |
 | Prosecutor review | `review_legal_request_as_ada` / `_as_da` / `_as_ag`; route per `private.legal_default_route` — **every warrant routes `judge`**; DA/AG/Owner may change a *subpoena's* route with a reason (`set_legal_approval_route`) |
 | Judicial decision | `assign_judge` + `decide_legal_request_as_judge` — **warrants are approved only by a Judge**; conflict-of-role checks (`private.legal_is_prosecution_side`) keep prosecution and bench separate; signatures are version-bound |
-| Parallel judiciary lane | `claim_legal_request_as_judge` ([`20260805010000`](../supabase/migrations/20260805010000_legal_parallel_judiciary.sql)) — any active Judge may take a judge-routed request straight into judicial review from `submitted_to_doj` or `submitted_to_judge` (no ADA hand-off required); same conflict guards as formal assignment; sealed requests are excluded and keep the explicit-assignment audience |
+| Parallel judiciary lane | `claim_legal_request_as_judge` ([`20260805010000`](../supabase/migrations/20260805010000_legal_parallel_judiciary.sql)) — any active Judge may take a judge-routed request straight into judicial review from `submitted_to_doj` or `submitted_to_judge` (no ADA hand-off required); same conflict guards as formal assignment; sealed requests are excluded and keep the explicit-assignment audience. A judge-returned request clears its judge assignment on resubmission and re-enters this open claim lane ([`20260807100000_legal_resubmit_clears_judge.sql`](../supabase/migrations/20260807100000_legal_resubmit_clears_judge.sql)) |
 | Fulfilment (CID side) | `issue_legal_request`, `record_warrant_execution`, `record_warrant_return`, `record_subpoena_service`, `record_subpoena_compliance`, `close_legal_request`, `withdraw_legal_request` (gated by `private.can_fulfil_legal`) |
 
-Every submission freezes an immutable `legal_request_versions` snapshot; reviewers act on the exact `current_version_id`. Classification `standard / restricted / classified / sealed` — warrants default `classified`; **sealed** requests are undiscoverable outside their participant set (SECURITY INVOKER search, generic notifications). Approved+issued **arrest** warrants project an MDT wanted row (`private.mdt_project`; search warrants never do). Historical imports: owner-only `import_legal_warrant()` / `import_rollback_by_key()`.
+Every submission freezes an immutable `legal_request_versions` snapshot; reviewers act on the exact `current_version_id`. Classification `standard / restricted / classified / sealed` — warrants default `classified`; **sealed** requests are undiscoverable outside their participant set (SECURITY INVOKER search, generic notifications). Approved+issued **arrest** warrants project an MDT wanted row (`private.mdt_project`; search warrants never do) — except **sealed** arrest warrants, which stay off the MDT wanted list until executed ([`20260807080000_mdt_sealed_skip.sql`](../supabase/migrations/20260807080000_mdt_sealed_skip.sql)). Historical imports: owner-only `import_legal_warrant()` / `import_rollback_by_key()`.
 
 ## 6. Evidence custody
 
@@ -174,35 +176,21 @@ Access is exactly one case: `private.has_joint_access` requires an active, un-re
 
 `public.operations` groups cases (`cases.operation_id`) under a named operation with `status ∈ open / active / cold / closed` (`OP_STATUSES`, `src/lib/operations.ts`). No dedicated state RPC: standard intel-registry RLS — any active member creates/updates (`private.is_active()`), command deletes (`private.can_delete()`), with delete unlinking cases (`deleteWithUndo` sets `cases.operation_id` null). UI: `src/components/operations/OperationsView.tsx`.
 
-## 9. Officer transfers (v1.16)
+## 9. Officer transfers (single-step since v1.40)
 
-Migration [`20260718020000_officer_transfers.sql`](../supabase/migrations/20260718020000_officer_transfers.sql). A deliberate two-sided workflow between permanent bureaus (JTF never a source or destination); one open transfer per member (partial unique index); every write is a definer RPC — the table has no client write policies, and visibility is bureau-scoped (target, requester, the two involved bureaus' leads, DD+/Owner).
+Migration [`20260718020000_officer_transfers.sql`](../supabase/migrations/20260718020000_officer_transfers.sql), widened to every department pair — **JTF is a valid source and destination** — by [`20260807020000_transfer_any_bureau.sql`](../supabase/migrations/20260807020000_transfer_any_bureau.sql), then collapsed to a **single-step move** by [`20260807040000_transfer_single_step.sql`](../supabase/migrations/20260807040000_transfer_single_step.sql): an authorized initiation applies the move immediately — no request/approval workflow, no pending states, and the source bureau has no veto. One open transfer per member (partial unique index); every write is a definer RPC — the table has no client write policies, and visibility is bureau-scoped (target, requester, the two involved bureaus' leads, DD+/Owner).
 
 ```mermaid
 stateDiagram-v2
-    [*] --> pending_source: request_transfer() — e.g. an inbound pull by the destination Bureau Lead
-    [*] --> pending_target: request_transfer() by the SOURCE Bureau Lead (initiation = source approval)
-    [*] --> approved: request_transfer() by DD / Dir / Owner (both approvals recorded)
-    pending_source --> pending_target: approve_transfer_source() — source-side authority
-    pending_target --> completed: approve_transfer_target() — target-side authority (applies the move)
-    approved --> completed: complete_transfer() — DD / Dir / Owner
-    pending_source --> completed: complete_transfer() — DD+ (recorded as override)
-    pending_target --> completed: complete_transfer() — DD+ (recorded as override)
-    pending_source --> rejected: reject_transfer() — either side's authority
-    pending_target --> rejected: reject_transfer()
-    approved --> rejected: reject_transfer()
-    pending_source --> cancelled: cancel_transfer() — requester or DD+/Owner
-    pending_target --> cancelled: cancel_transfer()
-    approved --> cancelled: cancel_transfer()
+    [*] --> completed: request_transfer() — authorized initiator picks destination + reason; the move is applied in the same call
 ```
 
 | Rule | Enforcement |
 | --- | --- |
-| Initiate | `request_transfer(target, to_bureau, reason, to_role?)` — BL (rank-and-file members only, and only when one side is their own bureau: outbound *or* inbound pull), or DD/Dir/Owner. **Source lead initiation counts as source approval** (starts `pending_target`); **DD+/Owner initiation starts `approved`**; an inbound pull by the destination lead starts `pending_source` — no lead can unilaterally take another bureau's member |
-| Decide a side | `private.can_decide_transfer_side(bureau)`: that bureau's BL, or DD+/Owner. No self-approval at any step |
-| Apply the move | `private.transfer_apply` (inside `approve_transfer_target` / `complete_transfer`): re-validates the member is still active, un-removed, login-allowed, and still in `from_bureau`; a riding role change needs matrix authority over the new role in the destination and fails stale if the live role moved; a plain transfer carries the member's **live** role. Writes `role_events` (source `transfer`) + audit + notifications |
-| Complete directly | `complete_transfer()` — DD/Dir/Owner only; recorded as `override: true` when approvals were still missing |
-| Reject / cancel | `reject_transfer()` (either side's authority) / `cancel_transfer()` (the requester, or DD+/Owner) |
+| Initiate = apply | `request_transfer(target, to_bureau, reason, to_role?)` — BL (rank-and-file members only, and only when one side of the move is their own bureau: outbound *or* inbound pull), or DD/Dir/Owner (anyone, anywhere). The row is stamped approved on both sides by the initiator and applied via `private.transfer_apply` in the same call — a lead **can** unilaterally pull a rank-and-file member from another bureau |
+| Apply the move | `private.transfer_apply`: re-validates the member is still active, un-removed, login-allowed, and still in `from_bureau`; a riding role change needs matrix authority over the new role in the destination and fails stale if the live role moved; a plain transfer carries the member's **live** role. Writes `role_events` (source `transfer`) + audit + notifications |
+| Guardrails | reason required; no self-transfer; owner accounts movable only by another owner; `from <> to`; one open transfer per member |
+| Legacy open rows | `approve_transfer_source/_target`, `complete_transfer`, `reject_transfer`, `cancel_transfer` remain **only** to resolve pre-existing open rows (`private.can_decide_transfer_side(bureau)`: that side's BL, or DD+/Owner) — nothing creates pending rows anymore |
 
 ## 10. Account lifecycle (deactivation, login denial, permanent removal, permanent deletion)
 
@@ -215,16 +203,16 @@ stateDiagram-v2
     active --> login_denied: deny_member_login(target, reason) — also sets active=false
     inactive --> login_denied: deny_member_login()
     login_denied --> inactive: restore_member_login() — stays inactive, re-enters the request flow
-    active --> removed: admin_remove_member() — command only
+    active --> removed: admin_remove_member() — authority matrix (20260807070000)
     inactive --> removed: admin_remove_member()
-    removed --> inactive: admin_restore_member() — must be re-approved
+    removed --> inactive: admin_restore_member() — Director/Owner only; must be re-approved
 ```
 
 | State | What it means | RPC & authority |
 | --- | --- | --- |
 | **Deactivated** (`active=false`) | Loses every `private.is_active()`-gated capability; profile intact | `assign_member(target, set_active)` — since v1.16 activation/deactivation **only** (the legacy role/division arguments were dropped); BL scoped to own-bureau, non-command targets; Owner bypasses |
 | **Login-denied** (`login_denied=true`, `active=false`) | Can still authenticate but the app shows an Access-denied screen with the recorded reason, and RLS + `membership_request_submit()` block filing or advancing a membership request — a removed/rejected person cannot simply re-apply | `deny_member_login(target, reason)` — BL (own bureau, non-command) / DD / Dir / Owner; the Owner account can never be denied. Reverse: `restore_member_login()` (clears the block only; member stays inactive) |
-| **Removed** (`removed_at` set, `email` nulled) | Permanent removal without deleting rows: access blocked, sign-in email (PII) scrubbed, hidden from the roster, watchlist + case assignments cleared — **authored history and attribution preserved** (reports, evidence, audit rows keep their author) | `admin_remove_member(target)` — command only ([`20260708150000`](../supabase/migrations/20260708150000_permanent_member_removal.sql)); no self-removal; the last active Director cannot be removed. Restore: `admin_restore_member()` — returns **inactive**, must be re-approved |
+| **Removed** (`removed_at` set, `email` nulled) | Permanent removal without deleting rows: access blocked, sign-in email (PII) scrubbed, hidden from the roster, watchlist + case assignments cleared — **authored history and attribution preserved** (reports, evidence, audit rows keep their author) | `admin_remove_member(target)` — the unified authority matrix ([`20260807070000_member_removal_matrix.sql`](../supabase/migrations/20260807070000_member_removal_matrix.sql), originally command-wide in [`20260708150000`](../supabase/migrations/20260708150000_permanent_member_removal.sql)): BL removes own-bureau rank-and-file only; DD anyone below deputy; Dir anyone except an Owner account; Owner anyone. No self-removal; system accounts refused; the last active Director cannot be removed. Restore: `admin_restore_member()` — **Director/Owner only**; returns **inactive**, must be re-approved |
 | **Permanently deleted** (profile + auth row erased; historical FKs repointed to the system tombstone) | The irreversible exception path when a member must be **erased**, not just deactivated — soft remove stays the default. Members referenced by immutable records (legal paper, sign-off history, tracker signatures, report authorship, custody transfers, evidence collection, justice identity, prosecutor assignments) are **hard-blocked** and can only be deactivated; active-work pointers must be reassigned first. An owner-only `deleted_member_ledger` row snapshots identity, reason, the full reference map, and the member's `role_events` history | `permanent_delete_preview()` → `permanent_delete_arm(target, reason)` → `permanent_delete_execute(token, confirm)` — Owner only, each step requiring a **fresh sign-in** (< 5-minute session), a 5-minute single-use token, and a typed `DELETE <display name>` confirmation ([`20260726010000`](../supabase/migrations/20260726010000_phase_b_permanent_deletion.sql); details in [AUTHORIZATION.md §4](AUTHORIZATION.md)) |
 
 Every transition writes `role_events` and/or `audit_log` plus a notification to the affected member.

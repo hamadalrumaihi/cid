@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -123,11 +123,18 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   }
   const tab = tabOverride ?? urlTab
 
+  // Stale-while-revalidate (the useRegistry idiom): once THIS id has loaded,
+  // realtime-bump refetches must not blank the screen back to the skeleton —
+  // that unmounts every tab and loses scroll + tab-local state. The skeleton
+  // shows only on first load or when `id` changes. A ref (not state) so
+  // back-to-back refetches in one tick see it flip.
+  const loadedIdRef = useRef<string | null>(null)
   const fetchCase = useCallback(async () => {
-    setLoading(true)
+    if (loadedIdRef.current !== id) setLoading(true)
     try {
       const rows = await withRetry(() => list('cases', { eq: { id } }))
       setCase(rows[0] ?? null)
+      loadedIdRef.current = id
       if (rows[0]) { setEverLoadedId(id); pushRecentCase(rows[0].id) }
     } catch (e) {
       toast(e instanceof Error ? e.message : e, 'danger')
@@ -154,6 +161,15 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   //    assessCase filters open rows itself. Best-effort: the header renders
   //    without it. ──
   const [wf, setWf] = useState<WorkflowRows | null>(null)
+  const [wfForId, setWfForId] = useState(id)
+  if (wfForId !== id) {
+    // Render-phase adjustment (same idiom as adoptedKey above): navigating to
+    // a different case drops the previous case's snapshot — the header and
+    // metrics render em-dashes for wf === null until the fresh fetch lands,
+    // never the old case's counts.
+    setWfForId(id)
+    setWf(null)
+  }
   const vM = useTableVersion('media')
   const vR = useTableVersion('reports')
   const vT = useTableVersion('case_tasks')

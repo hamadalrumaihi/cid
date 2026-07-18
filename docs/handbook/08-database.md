@@ -79,9 +79,12 @@ command reads via `admin_membership_requests()`) + append-only
 `source` — membership_approval / role_change / transfer / activation — and
 `source_id` linking back to the request/transfer, making the latest event
 the member's assignment-provenance record; SELECT command/owner only),
-`transfer_requests` (v1.16 two-sided department-move workflow:
-`pending_source → pending_target → approved → completed` plus
-rejected/cancelled; one open transfer per member via a partial unique
+`transfer_requests` (the department-move ledger — **single-step since
+`20260807040000`**: an authorized `request_transfer` stamps both sides
+approved and applies the move in the same call; JTF is a valid source and
+destination since `20260807020000`; the `pending_*`/`approved` states and
+approve/reject/cancel/complete RPCs survive only to resolve pre-existing
+open rows; one open transfer per member via a partial unique
 index; SELECT is **bureau-scoped**, not command-wide — the target officer,
 the requester, Bureau Leads of the source/destination bureaus, and Deputy
 Director+/Owner; an unrelated bureau's Lead sees no rows, counts, or
@@ -175,3 +178,10 @@ and the schema snapshot is the complete table list:
   acknowledgement, campaigns, suggestions on `documents`.
 - **Narcotics intelligence + restricted sales** (`20260803`–`20260804`).
 - **Parallel judiciary + structured legal targets** (`20260805`–`20260806`).
+- **Single-step transfers, every department** (`20260807020000`–`20260807040000`)
+  — JTF valid as source/destination; an authorized `request_transfer`
+  applies the move immediately.
+- **Case archival + Owner-only permanent deletion** (`20260807130000`) —
+  `cases.archived_at/by` (trigger-guarded), `case_archive`/`case_restore`
+  (command, restorable), `case_delete_preview`/`case_permanent_delete`
+  (Owner only; refuses cases with legal requests).

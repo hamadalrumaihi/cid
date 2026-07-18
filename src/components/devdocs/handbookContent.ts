@@ -537,7 +537,8 @@ in the [File Index](appendix-file-index.md); table/RPC details in
 ## 4.1 The case lifecycle (flagship)
 
 **Purpose**: the central investigation record. **Permissions**: bureau-
-scoped (\`can_access_case\`); deletes command-only.
+scoped (\`can_access_case\`); archival command-only, permanent deletion
+Owner-only.
 
 1. **Create** — \`CasesView\` "+ New Case" (or ⌘K "new case", or the ticket
    wizard) → \`CaseModal\`: template chips prefill fields + a task
@@ -555,14 +556,20 @@ scoped (\`can_access_case\`); deletes command-only.
    (\`updateWhere … last_stale_notified_at is null\`) and notifies
    lead/bureau-leads/deputy. The CAS prevents two open tabs double-firing.
 5. **Sign-off** — \`rpc('signoff_submit')\` → SQL picks the stage + a
-   non-LOA assignee → reviewer \`rpc('signoff_decide')\`, owner
+   non-LOA assignee (never the submitter/lead) → the routed assignee
+   decides via \`rpc('signoff_decide')\` (a Director may override; the
+   submitter can never decide their own case), owner
    \`rpc('signoff_owner_action')\`. History rows + notifications are written
    inside the RPCs. Direct column writes are trigger-blocked.
 6. **Export** — the packet button gathers everything
    (\`lib/packet.gatherCasePacket\`, partial-tolerant) and renders PDF
    (dynamic-imported \`lib/pdf\`), DOCX (\`lib/docx\`), or Markdown.
-7. **Delete** — \`deleteWithUndo\` with cascade config; Undo restores
-   parents + children with original ids.
+7. **Archive / delete** — command archives (\`rpc('case_archive')\`:
+   restorable, audited; archived cases leave working views and live under
+   the command-only Archived filter). Only the Owner permanently deletes,
+   via a catalog-derived preview + reasoned confirm
+   (\`case_delete_preview\` → \`case_permanent_delete\`); cases with legal
+   requests refuse deletion. There is no undo-based case delete anymore.
 
 **Data flow**: user action → \`db.ts\` helper → PostgREST → RLS check →
 row change → realtime event → version bump → every subscribed view
@@ -620,8 +627,10 @@ required) / request-correction / reject — under the unified authority
 matrix ([Ch. 9](09-auth.md)), activating the profile only on approval; the
 legacy one-click \`assign_member\` approve remains for requestless profiles
 (activation-only). Promotions/demotions run through \`change_member_role\`
-and department moves through the two-sided \`transfer_requests\` workflow
-— both audited with reasons). Joint cases:
+and department moves through the single-step \`transfer_requests\` move —
+an authorized initiator (a Bureau Lead when one side is their own bureau,
+or Deputy Director+) picks a destination and reason and the move applies
+immediately, JTF included — both audited with reasons). Joint cases:
 \`convert_case_to_joint()\` tags a case JTF while preserving its
 originating bureau and grants selected members temporary case-scoped
 access (joint roles, optional expiry, removable, endable) — access model
@@ -921,9 +930,12 @@ command reads via \`admin_membership_requests()\`) + append-only
 \`source\` — membership_approval / role_change / transfer / activation — and
 \`source_id\` linking back to the request/transfer, making the latest event
 the member's assignment-provenance record; SELECT command/owner only),
-\`transfer_requests\` (v1.16 two-sided department-move workflow:
-\`pending_source → pending_target → approved → completed\` plus
-rejected/cancelled; one open transfer per member via a partial unique
+\`transfer_requests\` (the department-move ledger — **single-step since
+\`20260807040000\`**: an authorized \`request_transfer\` stamps both sides
+approved and applies the move in the same call; JTF is a valid source and
+destination since \`20260807020000\`; the \`pending_*\`/\`approved\` states and
+approve/reject/cancel/complete RPCs survive only to resolve pre-existing
+open rows; one open transfer per member via a partial unique
 index; SELECT is **bureau-scoped**, not command-wide — the target officer,
 the requester, Bureau Leads of the source/destination bureaus, and Deputy
 Director+/Owner; an unrelated bureau's Lead sees no rows, counts, or
@@ -1016,7 +1028,14 @@ and the schema snapshot is the complete table list:
 - **Document governance** (\`20260801\`–\`20260802\`) — classification,
   acknowledgement, campaigns, suggestions on \`documents\`.
 - **Narcotics intelligence + restricted sales** (\`20260803\`–\`20260804\`).
-- **Parallel judiciary + structured legal targets** (\`20260805\`–\`20260806\`).`,
+- **Parallel judiciary + structured legal targets** (\`20260805\`–\`20260806\`).
+- **Single-step transfers, every department** (\`20260807020000\`–\`20260807040000\`)
+  — JTF valid as source/destination; an authorized \`request_transfer\`
+  applies the move immediately.
+- **Case archival + Owner-only permanent deletion** (\`20260807130000\`) —
+  \`cases.archived_at/by\` (trigger-guarded), \`case_archive\`/\`case_restore\`
+  (command, restorable), \`case_delete_preview\`/\`case_permanent_delete\`
+  (Owner only; refuses cases with legal requests).`,
   },
   {
     slug: "state",
@@ -1175,9 +1194,11 @@ approval-with-changes, promotion, demotion, and transfer records a reason.
 \`profiles.role/division/active/is_owner/removed_at\` are frozen against ALL
 direct client writes (non-definer trigger) — the audited RPCs are the only
 mutation path, and each writes \`role_events\` (+\`reason\`/\`source\`/\`source_id\`).
-Department moves are a two-sided workflow: source Bureau Lead → target
-Bureau Lead → completed, with Deputy Director+ able to complete directly
-(\`transfer_requests\`, [Ch. 7](07-api.md)). Justice roles (ADA/DA/AG/Judge)
+Department moves are single-step (\`transfer_requests\`,
+[Ch. 7](07-api.md)): an authorized initiator — a Bureau Lead for
+rank-and-file members when one side of the move is their own bureau, or
+Deputy Director+/Owner for anyone — picks a destination and reason and
+the move applies immediately; JTF is a valid source and destination. Justice roles (ADA/DA/AG/Judge)
 are a separate identity domain and grant no CID assignment authority.
 
 ## Permissions (what may you do?) — three layers
