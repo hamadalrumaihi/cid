@@ -6374,3 +6374,19 @@ create policy wl_sel on public.watchlist
 -- from auth.users, so a removal round-trip in the suites leaves the durable
 -- fixture exactly at baseline. Definitive SQL in
 -- supabase/migrations/20260807090000_reset_member_email_resync.sql.
+-- 20260807100000_legal_resubmit_clears_judge (function only):
+-- submit_legal_request_to_cid clears assigned_judge_id (and ends the
+-- judicial_reviewer participant) when resubmitting from a returned state, so
+-- a judge-returned request re-enters the open claim lane instead of
+-- stranding behind "a judge is already assigned". Definitive SQL in
+-- supabase/migrations/20260807100000_legal_resubmit_clears_judge.sql.
+-- 20260807110000_search_exclude_merged_persons (functions only): the person
+-- branches of search_all and search_persons exclude lifecycle='merged'
+-- tombstones, matching the narcotics branch. Definitive SQL in
+-- supabase/migrations/20260807110000_search_exclude_merged_persons.sql.
+-- 20260807120000_membership_rereview_terminal (function only):
+-- review_membership_request also accepts rejected/withdrawn rows so a
+-- recorded refusal can be superseded (history rows carry the real prior
+-- status); reviewer authority and self-review blocking unchanged.
+-- Definitive SQL in
+-- supabase/migrations/20260807120000_membership_rereview_terminal.sql.

@@ -421,3 +421,35 @@ describe('assignment eligibility + target/subtype helpers', () => {
     expect(subtypeSupportsStructuredTargets('warrant', 'arrest_warrant')).toBe(false)
   })
 })
+
+describe('remediation pins — executed grouping, parked ownership, AG judge review', () => {
+  it('an executed warrant is outstanding return work, not completed', () => {
+    const r = req({ review_status: 'approved', fulfilment_status: 'executed' })
+    expect(dispositionFor(r, viewer({ myId: 'inv-1', cidActive: true, cidRole: 'detective' }), NOW).group).toBe('service_return_pending')
+  })
+  it('a parked coverage-gap request is DOJ management\'s action', () => {
+    const parked = req({ review_status: 'submitted_to_doj', assigned_ada_id: null })
+    expect(dispositionFor(parked, viewer({ justiceRole: 'district_attorney' }), NOW).viewerCanAct).toBe(true)
+    expect(dispositionFor(parked, viewer({ justiceRole: 'attorney_general' }), NOW).viewerCanAct).toBe(true)
+    expect(dispositionFor(parked, viewer({ justiceRole: 'assistant_district_attorney' }), NOW).viewerCanAct).toBe(false)
+    const routed = req({ review_status: 'submitted_to_doj', assigned_ada_id: 'a-1' })
+    expect(dispositionFor(routed, viewer({ justiceRole: 'district_attorney' }), NOW).viewerCanAct).toBe(false)
+  })
+  it('the AG reviews judge applications (server matrix 20260731010000)', () => {
+    expect(canReviewJusticeRole('attorney_general', false, 'judge')).toBe(true)
+    expect(canReviewJusticeRole('district_attorney', false, 'judge')).toBe(false)
+    expect(canReviewJusticeRole('attorney_general', false, 'attorney_general')).toBe(false)
+  })
+  it('every fulfilment status lands in a coherent group (no completed-with-pending-return)', () => {
+    const owed = ['issued', 'compliance_pending', 'non_compliance', 'executed']
+    const done = ['served', 'returned', 'return_recorded', 'records_received', 'testimony_completed']
+    const inv = viewer({ myId: 'inv-1', cidActive: true, cidRole: 'detective' })
+    for (const f of owed) {
+      const g = dispositionFor(req({ review_status: 'approved', fulfilment_status: f }), inv, NOW).group
+      expect(['issued_active', 'service_return_pending'], f).toContain(g)
+    }
+    for (const f of done) {
+      expect(dispositionFor(req({ review_status: 'approved', fulfilment_status: f }), inv, NOW).group, f).toBe('completed')
+    }
+  })
+})

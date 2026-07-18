@@ -262,7 +262,7 @@ function JusticePortalInner() {
       onClick: () => setView('assigned'),
     }] : []),
     ...(showAssigned ? [{ label: 'Assigned to me', value: assignedInFlight, onClick: () => setView('assigned') }] : []),
-    { label: 'Waiting at DOJ', value: entries.filter(({ r }) => r.review_status === 'submitted_to_doj').length, onClick: () => gotoGroup('waiting_doj') },
+    { label: 'Waiting at DOJ', value: entries.filter(({ d }) => d.group === 'waiting_doj').length, onClick: () => gotoGroup('waiting_doj') },
     {
       label: 'Issued & active',
       value: entries.filter(({ d }) => d.group === 'issued_active' || d.group === 'service_return_pending').length,

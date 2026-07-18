@@ -246,6 +246,14 @@ function viewerOwnsAction(r: LegalReqLike, v: LegalViewer): boolean {
   if (s === 'da_review') return v.justiceRole === 'district_attorney'
   if (s === 'ag_review') return v.justiceRole === 'attorney_general'
   if (s === 'judicial_review') return mine && r.assigned_judge_id === v.myId
+  // Parked at DOJ with no routing prosecutor: assigning one IS the next
+  // action, and it belongs to DOJ management — without this branch a
+  // coverage-gap request was nobody's action item (which is exactly how
+  // seven warrants sat unnoticed for two weeks).
+  if (s === 'submitted_to_doj') {
+    return !r.assigned_ada_id
+      && (v.justiceRole === 'district_attorney' || v.justiceRole === 'attorney_general' || v.isOwner)
+  }
   return false
 }
 
@@ -314,8 +322,12 @@ function waitingLane(r: LegalReqLike): 'cid' | 'doj' | 'prosecution' | 'judge' {
 function issuedGroup(r: LegalReqLike): OpGroup {
   const f = r.fulfilment_status ?? 'unissued'
   if (['closed', 'expired', 'revoked'].includes(f)) return 'closed'
-  if (['executed', 'served', 'returned', 'return_recorded', 'records_received', 'testimony_completed'].includes(f)) return 'completed'
-  if (['issued', 'compliance_pending', 'non_compliance'].includes(f)) return f === 'issued' ? 'issued_active' : 'service_return_pending'
+  if (['served', 'returned', 'return_recorded', 'records_received', 'testimony_completed'].includes(f)) return 'completed'
+  // An executed warrant still owes its court return — it is outstanding
+  // service work, not a completed instrument (issuedActionLabel agrees:
+  // "File return"). Grouping it completed dropped the pending return from
+  // the Action Center and the card registries.
+  if (['issued', 'compliance_pending', 'non_compliance', 'executed'].includes(f)) return f === 'issued' ? 'issued_active' : 'service_return_pending'
   return 'issued_active'
 }
 
@@ -404,7 +416,7 @@ export function issuedStateFor(r: LegalReqLike, now?: number): IssuedState {
   if (f === 'expired') return 'expired'
   if (['returned', 'return_recorded'].includes(f)) return 'returned'
   if (['records_received', 'testimony_completed'].includes(f)) return 'returned'
-  if (f === 'served') return 'served'
+  if (f === 'served' || f === 'non_compliance') return 'served'
   if (f === 'executed') return 'executed'
   if (now != null && r.expires_at && Date.parse(r.expires_at) < now) return 'expired'
   return 'active'
@@ -544,7 +556,9 @@ export function canReviewJusticeRole(
   if (isOwner) return true
   if (requestedRole === 'assistant_district_attorney') return reviewerRole === 'district_attorney' || reviewerRole === 'attorney_general'
   if (requestedRole === 'district_attorney') return reviewerRole === 'attorney_general'
-  // AG and Judge memberships are Owner-only.
+  // Judges are reviewed by the AG (server: 20260731010000). AG memberships
+  // stay Owner-only.
+  if (requestedRole === 'judge') return reviewerRole === 'attorney_general'
   return false
 }
 
