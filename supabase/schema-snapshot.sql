@@ -6318,3 +6318,10 @@ create policy wl_sel on public.watchlist
 -- decide a side), reason, self-transfer and one-open-transfer rules are
 -- unchanged. Definitive SQL in
 -- supabase/migrations/20260807020000_transfer_any_bureau.sql.
+-- 20260807030000_evidence_freeze_on_deploy (grants only): re-applies the
+-- evidence/custody_chain client-write revokes from 20260807010000. The
+-- original freeze ran ahead of the Photos & Media UI deploy and broke live
+-- evidence logging on the old Evidence tab, so the grants were temporarily
+-- restored; this migration lands the freeze together with the frontend
+-- deploy. End state matches the grants matrix above (writes revoked,
+-- read-only legacy).
