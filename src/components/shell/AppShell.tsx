@@ -11,6 +11,7 @@ import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 import { Subtabs } from './Subtabs'
 import { useNav } from './useNav'
+import { PortalAssistant } from '@/components/assistant/PortalAssistant'
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -57,6 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </main>
       <BottomNav />
       <ConnBanner />
+      <PortalAssistant />
     </div>
   )
 }

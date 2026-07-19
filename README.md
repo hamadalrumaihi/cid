@@ -67,6 +67,17 @@ defaults for the live project.
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Publishable client key | Yes |
 | `NEXT_PUBLIC_FIVEMANAGE_API_KEY` | Media upload key (referrer-bound) | No — uploads disabled without it |
 | `NEXT_PUBLIC_FIVEMANAGE_BASE_URL` | FiveManage API host | No |
+| `NEXT_PUBLIC_PAGE_AGENT_MODEL` / `_BASE_URL` / `_API_KEY` | Portal Assistant (owner-only pilot) LLM — model, endpoint, key | No — assistant is inert (owner sees a "not configured" note) unless all three are set |
+
+> **Portal Assistant (owner-only pilot).** An opt-in natural-language copilot
+> ([`page-agent`](https://github.com/alibaba/page-agent)) that drives the UI for
+> the **owner only**. It is **inert by default** — no library load, no network —
+> until the three `NEXT_PUBLIC_PAGE_AGENT_*` vars are set. It is scoped to
+> **read / navigate / prepare**: a capture-phase DOM guard blocks destructive
+> controls (delete, finalize, sign-off, warrant issue, …), on top of RLS and the
+> app's own confirmation dialogs. The key is browser-exposed — use a restricted /
+> proxy key — and the model sees on-screen content, so don't run it on
+> restricted/sealed records. Details in [`docs/DEV-TOOLING.md`](docs/DEV-TOOLING.md).
 
 > ⚠️ The Supabase **anon / publishable** key is public by design and safe to
 > commit — RLS protects the data. **Never** commit the `service_role` key.
