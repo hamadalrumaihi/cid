@@ -8,6 +8,8 @@
  *  when one is linked. */
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { rpc } from '@/lib/db'
+import { toast } from '@/lib/toast'
 import { safeUrl } from '@/lib/safeUrl'
 import { Badge } from '@/components/ui/Badge'
 import { ProvenanceBadge } from '@/components/ui/IntelBadges'
@@ -67,8 +69,17 @@ function RankCell({ m }: { m: MemberRow }) {
   )
 }
 
-function MemberLine({ m, name, dup, router, canEdit, onEdit }: {
-  m: MemberRow; name: string; dup: boolean; router: ReturnType<typeof useRouter>; canEdit: boolean; onEdit: () => void
+/** Green tick for a triaged (reviewed) membership; amber dot for one still
+ *  needing review. Identity-safe: pairs the colour with a label/title. */
+function ReviewDot({ m }: { m: MemberRow }) {
+  return m.reviewed_at
+    ? <span title={`Reviewed ${new Date(m.reviewed_at).toLocaleDateString()}`} className="text-emerald-400">✓</span>
+    : <span title="Not yet reviewed" className="text-amber-400">●</span>
+}
+
+function MemberLine({ m, name, dup, router, canEdit, onEdit, onReview, reviewing }: {
+  m: MemberRow; name: string; dup: boolean; router: ReturnType<typeof useRouter>
+  canEdit: boolean; onEdit: () => void; onReview: () => void; reviewing: boolean
 }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-white/5 bg-ink-850 p-2.5">
@@ -77,7 +88,7 @@ function MemberLine({ m, name, dup, router, canEdit, onEdit }: {
         <div className="truncate text-sm"><MemberName m={m} name={name} dup={dup} router={router} /></div>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-400">
           {m.callsign && <span>“{m.callsign}”</span>}
-          <span>{m.status || 'Status unknown'}</span>
+          <span className="inline-flex items-center gap-1"><ReviewDot m={m} />{m.status || 'Status unknown'}</span>
           {m.confidence && <span title="Membership confidence">Confidence: {m.confidence}</span>}
           <span title="Carrying a concealed weapon">CCW {m.ccw ? 'Yes' : 'No'}</span>
           <span title="Violent crime history count">VCH {m.vch ?? 0}</span>
@@ -86,7 +97,13 @@ function MemberLine({ m, name, dup, router, canEdit, onEdit }: {
         </p>
       </div>
       {canEdit && (
-        <button onClick={onEdit} className="-my-1 flex-shrink-0 rounded border border-white/10 bg-white/5 px-2 py-2 text-[11px] text-slate-200 hover:bg-white/10">Edit</button>
+        <div className="flex flex-shrink-0 items-center gap-1.5">
+          {!m.reviewed_at && (
+            <button onClick={onReview} disabled={reviewing} title="Stamp this membership reviewed"
+              className="-my-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-2 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-50">Review</button>
+          )}
+          <button onClick={onEdit} className="-my-1 rounded border border-white/10 bg-white/5 px-2 py-2 text-[11px] text-slate-200 hover:bg-white/10">Edit</button>
+        </div>
       )}
     </div>
   )
@@ -116,12 +133,24 @@ export function RosterSection({ members, personNames, canEdit, canDelete, onAddM
   const [q, setQ] = useState('')
   const [tier, setTier] = useState<TierId | 'any'>('any')
   const [status, setStatus] = useState('any')
+  const [review, setReview] = useState<'any' | 'reviewed' | 'pending'>('any')
+  const [conf, setConf] = useState('any')
   const [poi, setPoi] = useState<'any' | 'linked' | 'unlinked'>('any')
   const [ccw, setCcw] = useState<Tri>('any')
   const [felony, setFelony] = useState<FelonyBand>('any')
   const [noPhoto, setNoPhoto] = useState(false)
   const [dupOnly, setDupOnly] = useState(false)
   const [sort, setSort] = useState<Sort>('hierarchy')
+  const [reviewing, setReviewing] = useState<Set<string>>(new Set())
+
+  const reviewMember = async (m: MemberRow) => {
+    setReviewing((s) => new Set(s).add(m.id))
+    const res = await rpc('gang_member_review', { p_member: m.id })
+    setReviewing((s) => { const n = new Set(s); n.delete(m.id); return n })
+    if (res.error) { toast(res.error.message || 'Could not mark reviewed', 'danger'); return }
+    toast('Marked reviewed', 'success')
+    onRefresh()
+  }
   const [showDups, setShowDups] = useState(false)
   // False-positive dismissals are session-local review state only — nothing is
   // written to the schema, so a reload resurfaces the cluster.
@@ -134,6 +163,8 @@ export function RosterSection({ members, personNames, canEdit, canDelete, onAddM
   )
   const dupIds = useMemo(() => new Set(dupClusters.flatMap((c) => c.members.map((m) => m.id))), [dupClusters])
   const statuses = useMemo(() => [...new Set(members.map((m) => m.status).filter(Boolean))] as string[], [members])
+  const confidences = useMemo(() => [...new Set(members.map((m) => m.confidence).filter(Boolean))] as string[], [members])
+  const pendingCount = useMemo(() => members.filter((m) => !m.reviewed_at).length, [members])
 
   const filtered = useMemo(() => {
     const needle = normalizeName(q)
@@ -141,6 +172,9 @@ export function RosterSection({ members, personNames, canEdit, canDelete, onAddM
     return members.filter((m) => {
       if (tier !== 'any' && rankTier(m.rank) !== tier) return false
       if (status !== 'any' && m.status !== status) return false
+      if (review === 'reviewed' && !m.reviewed_at) return false
+      if (review === 'pending' && m.reviewed_at) return false
+      if (conf !== 'any' && m.confidence !== conf) return false
       if (poi === 'linked' && !m.person_id) return false
       if (poi === 'unlinked' && m.person_id) return false
       if (ccw === 'yes' && !m.ccw) return false
@@ -154,7 +188,7 @@ export function RosterSection({ members, personNames, canEdit, canDelete, onAddM
       }
       return true
     })
-  }, [members, personNames, tier, status, poi, ccw, felony, noPhoto, dupOnly, dupIds, q])
+  }, [members, personNames, tier, status, review, conf, poi, ccw, felony, noPhoto, dupOnly, dupIds, q])
 
   const sorted = useMemo(() => {
     if (sort === 'hierarchy') return filtered
@@ -166,9 +200,9 @@ export function RosterSection({ members, personNames, canEdit, canDelete, onAddM
   }, [filtered, sort])
 
   const tiers = useMemo(() => groupByTier(sorted), [sorted])
-  const activeFilters = tier !== 'any' || status !== 'any' || poi !== 'any' || ccw !== 'any' || felony !== 'any' || noPhoto || dupOnly || !!q.trim()
+  const activeFilters = tier !== 'any' || status !== 'any' || review !== 'any' || conf !== 'any' || poi !== 'any' || ccw !== 'any' || felony !== 'any' || noPhoto || dupOnly || !!q.trim()
 
-  const resetFilters = () => { setTier('any'); setStatus('any'); setPoi('any'); setCcw('any'); setFelony('any'); setNoPhoto(false); setDupOnly(false); setQ('') }
+  const resetFilters = () => { setTier('any'); setStatus('any'); setReview('any'); setConf('any'); setPoi('any'); setCcw('any'); setFelony('any'); setNoPhoto(false); setDupOnly(false); setQ('') }
 
   return (
     <div className="space-y-3">
@@ -176,6 +210,15 @@ export function RosterSection({ members, personNames, canEdit, canDelete, onAddM
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-bold text-white">Roster</h3>
           <Badge tone="neutral">{members.length}</Badge>
+          {pendingCount > 0 && (
+            <button
+              onClick={() => setReview((r) => (r === 'pending' ? 'any' : 'pending'))}
+              title="Show memberships still needing review"
+              className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${review === 'pending' ? 'border-amber-400 bg-amber-500/20 text-amber-100' : 'border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20'}`}
+            >
+              {pendingCount} need review
+            </button>
+          )}
           <div role="tablist" aria-label="Roster view" className="inline-flex rounded-lg border border-white/10 bg-ink-850 p-0.5">
             {(['hierarchy', 'table'] as const).map((v) => (
               <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}
@@ -244,6 +287,17 @@ export function RosterSection({ members, personNames, canEdit, canDelete, onAddM
           <option value="any">Any status</option>
           {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
+        <select aria-label="Review state" value={review} onChange={(e) => setReview(e.target.value as 'any' | 'reviewed' | 'pending')} className={`${selCls} ${review !== 'any' ? activeSelCls : ''}`}>
+          <option value="any">Review: any</option>
+          <option value="pending">Needs review</option>
+          <option value="reviewed">Reviewed</option>
+        </select>
+        {confidences.length > 0 && (
+          <select aria-label="Confidence" value={conf} onChange={(e) => setConf(e.target.value)} className={`${selCls} ${conf !== 'any' ? activeSelCls : ''}`}>
+            <option value="any">Confidence: any</option>
+            {confidences.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        )}
         <select aria-label="Linked person" value={poi} onChange={(e) => setPoi(e.target.value as 'any' | 'linked' | 'unlinked')} className={`${selCls} ${poi !== 'any' ? activeSelCls : ''}`}>
           <option value="any">POI: any</option>
           <option value="linked">POI linked</option>
@@ -303,12 +357,22 @@ export function RosterSection({ members, personNames, canEdit, canDelete, onAddM
                     </div>
                   </td>
                   <td className="px-3 py-2"><RankCell m={m} /></td>
-                  <td className="px-3 py-2 text-slate-300">{m.status || '—'}{m.confidence && <span className="ml-1.5 text-[11px] text-slate-500">· {m.confidence}</span>}</td>
+                  <td className="px-3 py-2 text-slate-300"><span className="inline-flex items-center gap-1"><ReviewDot m={m} />{m.status || '—'}</span>{m.confidence && <span className="ml-1.5 text-[11px] text-slate-500">· {m.confidence}</span>}</td>
                   <td className="px-3 py-2 text-slate-300">{m.ccw ? 'Yes' : 'No'}</td>
                   <td className="px-3 py-2 tabular-nums text-slate-300">{m.vch ?? 0}</td>
                   <td className="px-3 py-2 tabular-nums text-slate-300">{m.felony_count ?? 0}</td>
                   <td className="px-3 py-2">{m.provenance ? <ProvenanceBadge provenance={m.provenance} /> : <span className="text-slate-600">—</span>}</td>
-                  {canEdit && <td className="px-3 py-2 text-right"><button onClick={() => onEditMember(m)} className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10">Edit</button></td>}
+                  {canEdit && (
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {!m.reviewed_at && (
+                          <button onClick={() => void reviewMember(m)} disabled={reviewing.has(m.id)} title="Stamp this membership reviewed"
+                            className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-50">Review</button>
+                        )}
+                        <button onClick={() => onEditMember(m)} className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-slate-200 hover:bg-white/10">Edit</button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -323,7 +387,8 @@ export function RosterSection({ members, personNames, canEdit, canDelete, onAddM
               </p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {rows.map((m) => (
-                  <MemberLine key={m.id} m={m} name={displayName(m, personNames)} dup={dupIds.has(m.id)} router={router} canEdit={canEdit} onEdit={() => onEditMember(m)} />
+                  <MemberLine key={m.id} m={m} name={displayName(m, personNames)} dup={dupIds.has(m.id)} router={router}
+                    canEdit={canEdit} onEdit={() => onEditMember(m)} onReview={() => void reviewMember(m)} reviewing={reviewing.has(m.id)} />
                 ))}
               </div>
             </div>

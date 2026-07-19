@@ -6341,6 +6341,29 @@ export type Database = {
         }
         Returns: string
       }
+      gang_member_update: {
+        Args: {
+          p_member: string
+          p_rank?: string | null
+          p_callsign?: string | null
+          p_status?: string | null
+          p_confidence?: string | null
+          p_note?: string | null
+          p_case?: string | null
+          p_joined_at?: string | null
+          p_left_at?: string | null
+          p_mark_reviewed?: boolean
+        }
+        Returns: undefined
+      }
+      gang_member_review: {
+        Args: {
+          p_member: string
+          p_status?: string | null
+          p_confidence?: string | null
+        }
+        Returns: undefined
+      }
       justice_directory: {
         Args: never
         Returns: {
