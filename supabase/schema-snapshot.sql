@@ -777,7 +777,7 @@ create table public.gang_members (
   ccw boolean default false,
   vch integer default 0,
   felony_count integer default 0,
-  status text default 'At Large'::text,
+  status text default 'Under review'::text,
   mugshot_url text,
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
@@ -6498,3 +6498,18 @@ create policy wl_sel on public.watchlist
 -- missing Persons, and linked all 245 previously free-text roster rows to their
 -- Person. Definitive SQL in
 -- supabase/migrations/20260807170000_gang_roster_person_first.sql.
+-- 20260807180000_gang_roster_lifecycle (default + 2 functions): roster edit /
+-- review / retire move to RPCs. gang_members.status column default is repointed
+-- from the stale 'At Large' (which failed the vocabulary CHECK) to a valid
+-- 'Under review'. New RPC gang_member_update(p_member, p_rank, p_callsign,
+-- p_status, p_confidence, p_note, p_case, p_joined_at, p_left_at,
+-- p_mark_reviewed) is the modal's Save — active-member gated, overwrites the
+-- editable relationship fields (identity stays on the Person), stamps left_at on
+-- a 'Former member' departure and clears it on return, raises a readable error
+-- on a rejoin collision (instead of a bare 23505), and stamps reviewed_by /
+-- reviewed_at when p_mark_reviewed. New RPC gang_member_review(p_member,
+-- p_status, p_confidence) is the roster's one-click triage — stamps the review
+-- and optionally confirms status/confidence without disturbing the other
+-- fields; it refuses to retire a member (that path is gang_member_update).
+-- Definitive SQL in
+-- supabase/migrations/20260807180000_gang_roster_lifecycle.sql.

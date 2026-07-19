@@ -148,6 +148,63 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
 const MEMBER_PICK_COLS = 'id,name,alias,lifecycle,gang_id'
 type PersonPick = Pick<PersonRow, 'id' | 'name' | 'alias' | 'lifecycle' | 'gang_id'>
 
+type HistoryRow = Pick<MemberRow, 'id' | 'gang_id' | 'status' | 'rank' | 'joined_at' | 'left_at'>
+const isFormerStatus = (s: string | null) => s === 'Former member'
+
+/** Every gang membership this Person holds, past and present, as a compact
+ *  timeline. Derived from gang_members rows (no separate history table) so
+ *  joined/left dates and status changes read as one chronology. The membership
+ *  being edited is marked so the reviewer knows where they are. */
+function MembershipHistory({ personId, currentId }: { personId: string; currentId: string }) {
+  const [rows, setRows] = useState<HistoryRow[] | null>(null)
+  const [gangNames, setGangNames] = useState<Map<string, string>>(new Map())
+
+  useEffect(() => {
+    let live = true
+    void (async () => {
+      const m = await list('gang_members', {
+        select: 'id,gang_id,status,rank,joined_at,left_at', eq: { person_id: personId },
+      }).then((r) => r as unknown as HistoryRow[]).catch(() => [] as HistoryRow[])
+      if (!live) return
+      const gangIds = [...new Set(m.map((r) => r.gang_id))]
+      const gangs = gangIds.length
+        ? await list('gangs', { select: 'id,name', in: { id: gangIds } })
+            .then((r) => r as unknown as { id: string; name: string }[]).catch(() => [])
+        : []
+      if (!live) return
+      setGangNames(new Map(gangs.map((g) => [g.id, g.name])))
+      // Active first, then most-recent leave date; a stable read for triage.
+      setRows(m.sort((a, b) => Number(isFormerStatus(a.status)) - Number(isFormerStatus(b.status))
+        || (b.left_at || b.joined_at || '').localeCompare(a.left_at || a.joined_at || '')))
+    })()
+    return () => { live = false }
+  }, [personId])
+
+  if (!rows || rows.length <= 1) return null // nothing but the row being edited
+  return (
+    <div className="mt-4">
+      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Membership history</p>
+      <ul className="space-y-1">
+        {rows.map((r) => {
+          const former = isFormerStatus(r.status)
+          const span = [r.joined_at, r.left_at].some(Boolean)
+            ? `${r.joined_at || '?'} → ${r.left_at || 'present'}`
+            : null
+          return (
+            <li key={r.id} className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg border px-2.5 py-1.5 text-[11px] ${r.id === currentId ? 'border-badge-500/40 bg-badge-500/5' : 'border-white/5 bg-ink-850'}`}>
+              <span className="font-semibold text-slate-200">{gangNames.get(r.gang_id) || 'Unknown gang'}</span>
+              <span className={former ? 'text-slate-500' : 'text-emerald-300'}>{r.status || 'Status unknown'}</span>
+              {r.rank && <span className="text-slate-400">· {r.rank}</span>}
+              {span && <span className="ml-auto tabular-nums text-slate-500">{span}</span>}
+              {r.id === currentId && <span className="rounded bg-badge-500/20 px-1.5 text-[10px] font-semibold text-badge-200">this record</span>}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
 /** Person-first roster editor. ADD picks an existing Person (bounded server
  *  search) and calls the gang_member_add RPC — the name snapshot, merge guard,
  *  and duplicate-membership guard all live server-side. EDIT keeps the linked
@@ -174,8 +231,11 @@ export function MemberModal({ gangId, member, roster, cases, canDelete, onClose,
   const [confidence, setConfidence] = useState(member?.confidence || '')
   const [caseId, setCaseId] = useState(member?.case_id || '')
   const [note, setNote] = useState(member?.note || '')
+  const [joinedAt, setJoinedAt] = useState(member?.joined_at || '')
+  const [leftAt, setLeftAt] = useState(member?.left_at || '')
   const caseKnown = !caseId || cases.some((c) => c.id === caseId)
   const [busy, setBusy] = useState(false)
+  const isFormer = status === 'Former member'
 
   // Bounded, RLS-scoped person search — same two-step pattern as
   // LinkAssociateModal: indexed search_persons RPC → hydrate names via a
@@ -206,16 +266,21 @@ export function MemberModal({ gangId, member, roster, cases, canDelete, onClose,
     [picked, roster, member?.id],
   )
 
-  const save = async () => {
+  const save = async (markReviewed = false) => {
     setBusy(true)
     if (editing) {
-      const res = await update('gang_members', member.id, {
-        rank: rank.trim() || null, callsign: callsign.trim() || null, status: status || null,
-        confidence: confidence || null, note: note.trim() || null, case_id: caseId || null,
+      // Edit routes through the RPC so the lifecycle is server-enforced: it
+      // manages left_at on the Former-member transition, raises a readable
+      // rejoin-collision error, and stamps the review when asked.
+      const res = await rpc('gang_member_update', {
+        p_member: member.id, p_rank: rank.trim() || null, p_callsign: callsign.trim() || null,
+        p_status: status || null, p_confidence: confidence || null, p_note: note.trim() || null,
+        p_case: caseId || null, p_joined_at: joinedAt || null, p_left_at: leftAt || null,
+        p_mark_reviewed: markReviewed,
       })
       setBusy(false)
-      if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
-      toast('Member updated', 'success')
+      if (res.error) { toast(res.error.message || 'Save failed', 'danger'); return }
+      toast(markReviewed ? 'Member updated & reviewed' : 'Member updated', 'success')
       onSaved()
       return
     }
@@ -233,6 +298,7 @@ export function MemberModal({ gangId, member, roster, cases, canDelete, onClose,
   const dirty = () => editing
     ? rank !== (member.rank || 'Soldier') || callsign !== (member.callsign || '') || status !== (member.status || 'Under review')
       || confidence !== (member.confidence || '') || note !== (member.note || '') || caseId !== (member.case_id || '')
+      || joinedAt !== (member.joined_at || '') || leftAt !== (member.left_at || '')
     : !!picked || !!callsign.trim() || !!note.trim()
 
   return (
@@ -250,7 +316,12 @@ export function MemberModal({ gangId, member, roster, cases, canDelete, onClose,
                 <Button size="sm" onClick={() => router.push(`/persons?person=${encodeURIComponent(member.person_id!)}`)}>View profile</Button>
               )}
             </div>
-            <p className="mt-1 text-[11px] text-slate-400">Identity is fixed once linked — edit the relationship fields below.</p>
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-400">
+              <span>Identity is fixed once linked — edit the relationship fields below.</span>
+              {member.reviewed_at
+                ? <span className="text-emerald-300">· Reviewed {new Date(member.reviewed_at).toLocaleDateString()}</span>
+                : <span className="text-amber-300">· Not yet reviewed</span>}
+            </p>
           </div>
         ) : (
           <div className="space-y-1.5">
@@ -312,15 +383,37 @@ export function MemberModal({ gangId, member, roster, cases, canDelete, onClose,
               </Select>
             )}
           </Field>
+          <Field label="Joined (optional)">
+            {(id) => <Input id={id} type="date" value={joinedAt} onChange={(e) => setJoinedAt(e.target.value)} />}
+          </Field>
+          {isFormer && (
+            <Field label="Left">
+              {(id) => <Input id={id} type="date" value={leftAt} onChange={(e) => setLeftAt(e.target.value)} />}
+            </Field>
+          )}
           <Field label="Supporting note" className="sm:col-span-2">
             {(id) => <Textarea id={id} rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="How is this membership known?" />}
           </Field>
         </div>
 
-        <div className="mt-5 flex gap-2">
-          <Button variant="primary" className="flex-1" loading={busy} disabled={!editing && !picked} onClick={() => void save()}>
+        {isFormer && (
+          <p className="mt-2 rounded-lg border border-white/10 bg-ink-900 px-3 py-1.5 text-[11px] text-slate-400">
+            Marked a former member — the leave date defaults to today if left blank, and this row no longer counts as an active membership.
+          </p>
+        )}
+
+        {editing && member.person_id && <MembershipHistory personId={member.person_id} currentId={member.id} />}
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button variant="primary" className="flex-1" loading={busy} disabled={!editing && !picked} onClick={() => void save(false)}>
             {editing ? 'Save changes' : 'Add member'}
           </Button>
+          {editing && (
+            <Button variant="secondary" className="text-emerald-200 hover:bg-emerald-500/10" loading={busy}
+              title="Save and stamp this membership reviewed now" onClick={() => void save(true)}>
+              Save &amp; mark reviewed
+            </Button>
+          )}
           {editing && canDelete && (
             <Button variant="secondary" className="text-rose-300 hover:bg-rose-500/10" onClick={() => onDelete(member)}>Delete</Button>
           )}
