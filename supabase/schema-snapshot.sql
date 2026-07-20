@@ -55,6 +55,58 @@ create type public.tracker_status as enum ('pending', 'authorized', 'expired');
 -- Tables (public + private), columns, constraints, RLS flags
 -- ============================================================
 
+create table public.account_handles (
+  id uuid not null default gen_random_uuid(),
+  account_id uuid not null,
+  handle text not null,
+  handle_normalized text generated always as (lower(btrim(handle))) stored,
+  is_current boolean not null default true,
+  observed_at timestamp with time zone not null default now(),
+  source text
+);
+alter table public.account_handles add constraint account_handles_pkey PRIMARY KEY (id);
+alter table public.account_handles add constraint account_handles_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
+alter table public.account_handles enable row level security;
+
+create table public.account_links (
+  id uuid not null default gen_random_uuid(),
+  account_id uuid not null,
+  person_id uuid not null,
+  ownership_confidence text not null default 'suspected'::text,
+  source text,
+  notes text,
+  confirmed_by uuid,
+  confirmed_at timestamp with time zone,
+  created_by uuid,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.account_links add constraint account_links_pkey PRIMARY KEY (id);
+alter table public.account_links add constraint account_links_unique UNIQUE (account_id, person_id);
+alter table public.account_links add constraint account_links_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
+alter table public.account_links add constraint account_links_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE CASCADE;
+alter table public.account_links add constraint account_links_confirmed_by_fkey FOREIGN KEY (confirmed_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.account_links add constraint account_links_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.account_links add constraint account_links_confidence_check CHECK ((ownership_confidence = ANY (ARRAY['suspected'::text, 'probable'::text, 'confirmed'::text])));
+alter table public.account_links enable row level security;
+
+create table public.accounts (
+  id uuid not null default gen_random_uuid(),
+  platform text not null,
+  external_id text,
+  handle text not null,
+  handle_normalized text generated always as (lower(btrim(handle))) stored,
+  profile_url text,
+  display_name text,
+  summary text,
+  restricted boolean not null default false,
+  created_by uuid,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.accounts add constraint accounts_pkey PRIMARY KEY (id);
+alter table public.accounts add constraint accounts_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.accounts enable row level security;
+
 create table public.announcements (
   id uuid not null default gen_random_uuid(),
   author_id uuid default auth.uid(),
@@ -2225,6 +2277,13 @@ alter table public.watchlist enable row level security;
 -- Indexes (excluding those backing PK/unique constraints)
 -- ============================================================
 
+CREATE INDEX account_handles_account_idx ON public.account_handles USING btree (account_id);
+CREATE UNIQUE INDEX account_handles_current_uidx ON public.account_handles USING btree (account_id) WHERE is_current;
+CREATE INDEX account_links_account_idx ON public.account_links USING btree (account_id);
+CREATE INDEX account_links_person_idx ON public.account_links USING btree (person_id);
+CREATE UNIQUE INDEX accounts_platform_extid_uidx ON public.accounts USING btree (platform, external_id) WHERE (external_id IS NOT NULL);
+CREATE INDEX accounts_platform_handle_idx ON public.accounts USING btree (platform, handle_normalized);
+CREATE INDEX accounts_handle_norm_idx ON public.accounts USING btree (handle_normalized);
 CREATE INDEX announcements_author_id_fkey_idx ON public.announcements USING btree (author_id);
 CREATE INDEX audit_log_actor_id_fkey_idx ON public.audit_log USING btree (actor_id);
 CREATE INDEX audit_log_created_at_idx ON public.audit_log USING btree (created_at DESC);
@@ -4575,6 +4634,8 @@ end $function$
 -- Triggers (non-internal)
 -- ============================================================
 
+CREATE TRIGGER account_links_stamp BEFORE INSERT OR UPDATE ON public.account_links FOR EACH ROW EXECUTE FUNCTION private.account_link_stamp();
+CREATE TRIGGER accounts_track_handle AFTER INSERT OR UPDATE ON public.accounts FOR EACH ROW EXECUTE FUNCTION private.account_track_handle();
 CREATE TRIGGER touch_announcements BEFORE UPDATE ON public.announcements FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_stamp_author_ann BEFORE INSERT ON public.announcements FOR EACH ROW EXECUTE FUNCTION public.stamp_author_identity();
 CREATE TRIGGER ballistic_footprints_touch BEFORE UPDATE ON public.ballistic_footprints FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -4673,6 +4734,44 @@ CREATE TRIGGER vehicles_touch BEFORE UPDATE ON public.vehicles FOR EACH ROW EXEC
 -- ============================================================
 -- Row-Level Security policies
 -- ============================================================
+
+create policy account_handles_sel on public.account_handles
+  as permissive for select to authenticated
+  using (private.is_active());
+
+create policy account_links_del on public.account_links
+  as permissive for delete to authenticated
+  using (private.is_active());
+
+create policy account_links_ins on public.account_links
+  as permissive for insert to authenticated
+  with check (private.is_active());
+
+create policy account_links_sel on public.account_links
+  as permissive for select to authenticated
+  using (private.is_active());
+
+create policy account_links_upd on public.account_links
+  as permissive for update to authenticated
+  using (private.is_active())
+  with check (private.is_active());
+
+create policy accounts_del on public.accounts
+  as permissive for delete to authenticated
+  using (private.can_delete());
+
+create policy accounts_ins on public.accounts
+  as permissive for insert to authenticated
+  with check (private.is_active());
+
+create policy accounts_sel on public.accounts
+  as permissive for select to authenticated
+  using (private.is_active());
+
+create policy accounts_upd on public.accounts
+  as permissive for update to authenticated
+  using (private.is_active())
+  with check (private.is_active());
 
 create policy ann_del on public.announcements
   as permissive for delete to authenticated
@@ -6711,3 +6810,43 @@ create policy wl_sel on public.watchlist
 -- SECURITY DEFINER, set search_path = '', schema-qualified, revoked from
 -- public/anon, granted to authenticated + service_role. Definitive SQL in
 -- supabase/migrations/20260807210000_mdt_exports.sql.
+-- 20260807220000_accounts_registry (spec D1; 3 tables + 2 indexes-bearing
+-- registry entities + 2 trigger functions + registry-style RLS): social-media /
+-- online accounts become first-class, person-linked CID intel entities. Three
+-- new tables (all mirrored above). public.accounts — the account itself
+-- (platform free text so the in-RP set Birdy/InstaPic can grow, immutable
+-- external_id, handle, the GENERATED STORED handle_normalized =
+-- lower(btrim(handle)) case-insensitive match key [8.6], profile_url,
+-- display_name, summary, restricted, created_by → profiles ON DELETE SET NULL,
+-- timestamps); its unique accounts_platform_extid_uidx (platform, external_id)
+-- WHERE external_id IS NOT NULL [one account per platform+immutable-id when
+-- known] plus accounts_platform_handle_idx / accounts_handle_norm_idx.
+-- public.account_handles — the username-history trail [8.6] (account_id →
+-- accounts ON DELETE CASCADE, handle, GENERATED STORED handle_normalized,
+-- is_current, observed_at, source); one-current-per-account partial unique
+-- account_handles_current_uidx (account_id) WHERE is_current + the FK index.
+-- public.account_links — ownership links to persons with a confidence ladder
+-- [8.4] (account_id → accounts / person_id → persons both ON DELETE CASCADE,
+-- ownership_confidence CHECK suspected/probable/confirmed default 'suspected',
+-- source, notes, confirmed_by → profiles ON DELETE SET NULL, confirmed_at,
+-- created_by → profiles ON DELETE SET NULL, created_at; UNIQUE(account_id,
+-- person_id)); FK indexes account_links_account_idx / _person_idx. RLS is
+-- registry-style mirroring persons: accounts sel/ins/upd gate on
+-- private.is_active() and accounts_del on private.can_delete() (command);
+-- account_links sel/ins/upd/del all gate on private.is_active();
+-- account_handles is SELECT-only (private.is_active()) — there is NO client
+-- write policy, the history table is written by the trigger only. Two new
+-- SECURITY DEFINER trigger functions (set search_path = '', schema-qualified,
+-- like the other private.* trigger bodies they are NOT rendered as DDL above —
+-- only their CREATE TRIGGER statements are): private.account_track_handle()
+-- (accounts_track_handle AFTER INSERT OR UPDATE — on INSERT appends the initial
+-- current account_handles row; on a normalized-handle rename flips the old
+-- current to is_current=false and inserts the new current 'renamed' row; definer
+-- so it can write the RLS-guarded history) and private.account_link_stamp()
+-- (account_links_stamp BEFORE INSERT OR UPDATE — stamps confirmed_by [coalesce
+-- auth.uid()] / confirmed_at [coalesce now()] when a link first reaches
+-- 'confirmed', and clears both when it drops below 'confirmed'; auto-confirm
+-- from a return, D2, sets the confidence and this stamps who/when). No RPCs, no
+-- grant-audience change (accounts/account_links writes are direct-under-RLS;
+-- account_handles has no write path but the trigger). Definitive SQL in
+-- supabase/migrations/20260807220000_accounts_registry.sql.

@@ -14,6 +14,161 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_handles: {
+        Row: {
+          account_id: string
+          handle: string
+          handle_normalized: string | null
+          id: string
+          is_current: boolean
+          observed_at: string
+          source: string | null
+        }
+        Insert: {
+          account_id: string
+          handle: string
+          id?: string
+          is_current?: boolean
+          observed_at?: string
+          source?: string | null
+        }
+        Update: {
+          account_id?: string
+          handle?: string
+          id?: string
+          is_current?: boolean
+          observed_at?: string
+          source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_handles_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      account_links: {
+        Row: {
+          account_id: string
+          confirmed_at: string | null
+          confirmed_by: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          ownership_confidence: string
+          person_id: string
+          source: string | null
+        }
+        Insert: {
+          account_id: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          ownership_confidence?: string
+          person_id: string
+          source?: string | null
+        }
+        Update: {
+          account_id?: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          ownership_confidence?: string
+          person_id?: string
+          source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_links_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_links_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_links_confirmed_by_fkey"
+            columns: ["confirmed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      accounts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          display_name: string | null
+          external_id: string | null
+          handle: string
+          handle_normalized: string | null
+          id: string
+          platform: string
+          profile_url: string | null
+          restricted: boolean
+          summary: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          display_name?: string | null
+          external_id?: string | null
+          handle: string
+          id?: string
+          platform: string
+          profile_url?: string | null
+          restricted?: boolean
+          summary?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          display_name?: string | null
+          external_id?: string | null
+          handle?: string
+          id?: string
+          platform?: string
+          profile_url?: string | null
+          restricted?: boolean
+          summary?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accounts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       announcements: {
         Row: {
           audience: string
