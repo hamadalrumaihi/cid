@@ -43,6 +43,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   vehicles:   { title: 'Vehicle Registry', sub: 'Plates, owners & cross-case matches' },
   indicators: { title: 'Indicators Registry', sub: 'Phones, accounts, serials, aliases & addresses — deconflicted across cases' },
   bolo:       { title: 'BOLO Board', sub: 'At-large subjects — be on the lookout' },
+  accounts:   { title: 'Account Registry', sub: 'Social-media & online accounts, handle history & ownership' },
   guide:      { title: 'User Guide', sub: 'How to sign in, navigate & work a case — new member orientation' },
   calendar:   { title: 'Division Calendar', sub: 'Follow-ups, task deadlines & shift weeks at a glance' },
 }
@@ -62,7 +63,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
   // there. Central Command (the shared dashboard) follows it.
   { id: 'command',   label: 'Command',      tabs: ['inbox', 'action', 'command', 'analytics', 'announce', 'heatmap', 'personnel'] },
   { id: 'cases',     label: 'Cases',        tabs: ['cases', 'operations', 'legal', 'case-files', 'rico'] },
-  { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'indicators', 'network', 'narcotics', 'ballistics', 'modus', 'media', 'records'] },
+  { id: 'intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'accounts', 'indicators', 'network', 'narcotics', 'ballistics', 'modus', 'media', 'records'] },
   { id: 'reference', label: 'Reference',    tabs: ['penal', 'sops', 'guide', 'devdocs'] },
   { id: 'oversight', label: 'Oversight',    tabs: ['calendar', 'shifts', 'audit'] },
 ]
@@ -71,7 +72,7 @@ export const TAB_LABEL: Record<string, string> = {
   command: 'Dashboard', analytics: 'Analytics', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
   cases: 'Case Files', operations: 'Operations', legal: 'Legal Requests', 'case-files': 'Attachments', rico: 'RICO',
   justice: 'Justice Portal',
-  persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', indicators: 'Indicators',
+  persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', accounts: 'Accounts', indicators: 'Indicators',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
   media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide', devdocs: 'Developer Handbook',
   inbox: 'My Desk', action: 'Action Center', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', owner: 'Owner Portal', profile: 'My Profile', 'command-center': 'Command Center',
@@ -82,7 +83,7 @@ export const TAB_LABEL: Record<string, string> = {
  *  (vanilla parity untouched); the strip just draws labels/dividers. */
 export const SUBTAB_GROUPS: Record<string, { label: string; tabs: string[] }[]> = {
   intel: [
-    { label: 'Registries', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'indicators'] },
+    { label: 'Registries', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'accounts', 'indicators'] },
     { label: 'Analysis', tabs: ['network', 'narcotics', 'ballistics', 'modus'] },
     { label: 'Archive', tabs: ['media', 'records'] },
   ],
