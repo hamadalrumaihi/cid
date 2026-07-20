@@ -6690,8 +6690,8 @@ export type Database = {
       mdt_export_propose: {
         Args: {
           p_kind: string
-          p_person: string
-          p_vehicle: string
+          p_person: string | null
+          p_vehicle: string | null
           p_snapshot: string
           p_wanted_status?: string | null
           p_risk?: string | null
