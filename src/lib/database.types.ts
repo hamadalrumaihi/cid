@@ -3375,6 +3375,118 @@ export type Database = {
           },
         ]
       }
+      mdt_exports: {
+        Row: {
+          clear_reason: string | null
+          cleared_at: string | null
+          cleared_by: string | null
+          exported_at: string | null
+          exported_by: string | null
+          id: string
+          instructions: string | null
+          kind: string
+          person_id: string | null
+          proposed_at: string
+          proposed_by: string | null
+          reason: string | null
+          risk_level: string | null
+          source_case_id: string | null
+          status: string
+          subject_snapshot: string
+          sync_status: string
+          updated_at: string
+          vehicle_id: string | null
+          wanted_status: string | null
+        }
+        Insert: {
+          clear_reason?: string | null
+          cleared_at?: string | null
+          cleared_by?: string | null
+          exported_at?: string | null
+          exported_by?: string | null
+          id?: string
+          instructions?: string | null
+          kind: string
+          person_id?: string | null
+          proposed_at?: string
+          proposed_by?: string | null
+          reason?: string | null
+          risk_level?: string | null
+          source_case_id?: string | null
+          status?: string
+          subject_snapshot: string
+          sync_status?: string
+          updated_at?: string
+          vehicle_id?: string | null
+          wanted_status?: string | null
+        }
+        Update: {
+          clear_reason?: string | null
+          cleared_at?: string | null
+          cleared_by?: string | null
+          exported_at?: string | null
+          exported_by?: string | null
+          id?: string
+          instructions?: string | null
+          kind?: string
+          person_id?: string | null
+          proposed_at?: string
+          proposed_by?: string | null
+          reason?: string | null
+          risk_level?: string | null
+          source_case_id?: string | null
+          status?: string
+          subject_snapshot?: string
+          sync_status?: string
+          updated_at?: string
+          vehicle_id?: string | null
+          wanted_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mdt_exports_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mdt_exports_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mdt_exports_source_case_id_fkey"
+            columns: ["source_case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mdt_exports_proposed_by_fkey"
+            columns: ["proposed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mdt_exports_exported_by_fkey"
+            columns: ["exported_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mdt_exports_cleared_by_fkey"
+            columns: ["cleared_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mdt_wanted_projections: {
         Row: {
           classification_safe_warning: string | null
@@ -6566,6 +6678,28 @@ export type Database = {
       legal_seized_item_remove: {
         Args: { p_item: string }
         Returns: undefined
+      }
+      mdt_export_approve: {
+        Args: { p_export: string }
+        Returns: Database["public"]["Tables"]["mdt_exports"]["Row"]
+      }
+      mdt_export_clear: {
+        Args: { p_export: string; p_reason?: string | null }
+        Returns: Database["public"]["Tables"]["mdt_exports"]["Row"]
+      }
+      mdt_export_propose: {
+        Args: {
+          p_kind: string
+          p_person: string
+          p_vehicle: string
+          p_snapshot: string
+          p_wanted_status?: string | null
+          p_risk?: string | null
+          p_instructions?: string | null
+          p_reason?: string | null
+          p_case?: string | null
+        }
+        Returns: Database["public"]["Tables"]["mdt_exports"]["Row"]
       }
       mdt_wanted_current: {
         Args: never

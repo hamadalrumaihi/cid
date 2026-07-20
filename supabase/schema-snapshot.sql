@@ -1199,6 +1199,41 @@ alter table public.mdt_wanted_projections add constraint mdt_wanted_projections_
 alter table public.mdt_wanted_projections add constraint mdt_wanted_projections_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id);
 alter table public.mdt_wanted_projections enable row level security;
 
+create table public.mdt_exports (
+  id uuid not null default gen_random_uuid(),
+  kind text not null,
+  person_id uuid,
+  vehicle_id uuid,
+  subject_snapshot text not null,
+  wanted_status text,
+  risk_level text,
+  instructions text,
+  reason text,
+  source_case_id uuid,
+  status text not null default 'proposed'::text,
+  proposed_by uuid,
+  proposed_at timestamp with time zone not null default now(),
+  exported_by uuid,
+  exported_at timestamp with time zone,
+  cleared_by uuid,
+  cleared_at timestamp with time zone,
+  clear_reason text,
+  sync_status text not null default 'pending'::text,
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.mdt_exports add constraint mdt_exports_pkey PRIMARY KEY (id);
+alter table public.mdt_exports add constraint mdt_exports_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE CASCADE;
+alter table public.mdt_exports add constraint mdt_exports_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id) ON DELETE CASCADE;
+alter table public.mdt_exports add constraint mdt_exports_source_case_id_fkey FOREIGN KEY (source_case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.mdt_exports add constraint mdt_exports_proposed_by_fkey FOREIGN KEY (proposed_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.mdt_exports add constraint mdt_exports_exported_by_fkey FOREIGN KEY (exported_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.mdt_exports add constraint mdt_exports_cleared_by_fkey FOREIGN KEY (cleared_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.mdt_exports add constraint mdt_exports_kind_check CHECK ((kind = ANY (ARRAY['person_bolo'::text, 'vehicle_bolo'::text, 'caution'::text])));
+alter table public.mdt_exports add constraint mdt_exports_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'exported'::text, 'cleared'::text])));
+alter table public.mdt_exports add constraint mdt_exports_risk_check CHECK ((risk_level IS NULL OR (risk_level = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
+alter table public.mdt_exports add constraint mdt_exports_target_check CHECK (((kind = ANY (ARRAY['person_bolo'::text, 'caution'::text])) AND person_id IS NOT NULL AND vehicle_id IS NULL) OR (kind = 'vehicle_bolo'::text AND vehicle_id IS NOT NULL AND person_id IS NULL));
+alter table public.mdt_exports enable row level security;
+
 create table public.prosecutor_bureau_assignments (
   id uuid not null default gen_random_uuid(),
   prosecutor_id uuid not null,
@@ -2307,6 +2342,11 @@ CREATE INDEX legal_requests_creator_idx ON public.legal_requests USING btree (cr
 CREATE UNIQUE INDEX legal_requests_import_key_key ON public.legal_requests USING btree (import_key) WHERE (import_key IS NOT NULL);
 CREATE INDEX legal_requests_judge_idx ON public.legal_requests USING btree (assigned_judge_id) WHERE (assigned_judge_id IS NOT NULL);
 CREATE INDEX legal_requests_review_idx ON public.legal_requests USING btree (review_status);
+CREATE INDEX mdt_exports_status_idx ON public.mdt_exports USING btree (status);
+CREATE INDEX mdt_exports_person_idx ON public.mdt_exports USING btree (person_id) WHERE (person_id IS NOT NULL);
+CREATE INDEX mdt_exports_vehicle_idx ON public.mdt_exports USING btree (vehicle_id) WHERE (vehicle_id IS NOT NULL);
+CREATE UNIQUE INDEX mdt_exports_live_person_uidx ON public.mdt_exports USING btree (person_id, kind) WHERE ((status <> 'cleared'::text) AND (person_id IS NOT NULL));
+CREATE UNIQUE INDEX mdt_exports_live_vehicle_uidx ON public.mdt_exports USING btree (vehicle_id) WHERE ((status <> 'cleared'::text) AND (vehicle_id IS NOT NULL));
 CREATE INDEX media_case_id_archived_at_idx ON public.media USING btree (case_id, archived_at);
 CREATE INDEX media_case_id_idx ON public.media USING btree (case_id);
 CREATE INDEX media_gang_id_fkey_idx ON public.media USING btree (gang_id);
@@ -5240,6 +5280,10 @@ create policy mdt_sel on public.mdt_wanted_projections
   as permissive for select to authenticated
   using ((private.is_active() OR (private.justice_role() IS NOT NULL) OR private.owner_flag(( SELECT auth.uid() AS uid))));
 
+create policy mdt_exports_sel on public.mdt_exports
+  as permissive for select to authenticated
+  using ((private.is_active() OR (private.justice_role() IS NOT NULL) OR private.owner_flag(( SELECT auth.uid() AS uid))));
+
 create policy media_del on public.media
   as permissive for delete to authenticated
   using (private.can_delete());
@@ -6630,3 +6674,40 @@ create policy wl_sel on public.watchlist
 -- schema-qualified, revoked from public/anon, granted to authenticated +
 -- service_role. Definitive SQL in
 -- supabase/migrations/20260807200000_legal_execution_inventory.sql.
+-- 20260807210000_mdt_exports (spec D4; table + indexes + policy + 3 RPCs):
+-- Lead+-gated push of BOLOs / officer-safety caution flags to the in-city
+-- (patrol) MDT — never case details. The mdt_exports table (id, kind
+-- [mdt_exports_kind_check: person_bolo/vehicle_bolo/caution], person_id /
+-- vehicle_id FKs ON DELETE SET NULL, subject_snapshot, wanted_status,
+-- risk_level [mdt_exports_risk_check: null / low / medium / high / critical],
+-- instructions, reason, source_case_id → cases ON DELETE SET NULL [INTERNAL
+-- linkage only — never part of the synced patrol payload, 11.7], status
+-- [mdt_exports_status_check: proposed/exported/cleared, default 'proposed'],
+-- proposed_by/exported_by/cleared_by → profiles ON DELETE SET NULL with their
+-- *_at stamps + clear_reason, sync_status default 'pending', updated_at, and
+-- mdt_exports_target_check [a person_bolo/caution names a person and no
+-- vehicle; a vehicle_bolo names a vehicle and no person]), its five indexes
+-- (mdt_exports_status_idx; partial mdt_exports_person_idx / _vehicle_idx; and
+-- the "one live row per target" partial-unique mdt_exports_live_person_uidx
+-- [person_id, kind WHERE status <> 'cleared'] / _live_vehicle_uidx), RLS, and
+-- the mdt_exports_sel SELECT policy (active member / justice / owner, mirroring
+-- mdt_wanted_projections' mdt_sel) are all mirrored above. Writes are RPC-only
+-- — there is NO client write policy. New SECURITY DEFINER RPCs:
+-- public.mdt_export_propose(text p_kind, uuid p_person, uuid p_vehicle, text
+-- p_snapshot, text p_wanted_status default null, text p_risk default null, text
+-- p_instructions default null, text p_reason default null, uuid p_case default
+-- null) returning public.mdt_exports [active-CID-gated (private.is_active());
+-- validates kind/risk/snapshot; forces the target shape (a vehicle_bolo nulls
+-- person_id, else nulls vehicle_id) and verifies the referenced person/vehicle
+-- exists; inserts as 'proposed'; audits MDT_EXPORT_PROPOSED; maps the
+-- unique-violation to "this subject already has a live MDT export"];
+-- public.mdt_export_approve(uuid p_export) returning public.mdt_exports
+-- [command-gated (private.is_command()); only a 'proposed' row advances to
+-- 'exported' stamping exported_by/exported_at + resetting sync_status;
+-- audits MDT_EXPORT_APPROVED]; and public.mdt_export_clear(uuid p_export, text
+-- p_reason default null) returning public.mdt_exports [command-gated; refuses
+-- an already-'cleared' row; sets status='cleared' + cleared_by/cleared_at/
+-- clear_reason; audits MDT_EXPORT_CLEARED — manual, no auto-expiry]. All three
+-- SECURITY DEFINER, set search_path = '', schema-qualified, revoked from
+-- public/anon, granted to authenticated + service_role. Definitive SQL in
+-- supabase/migrations/20260807210000_mdt_exports.sql.

@@ -22,8 +22,11 @@
 create table if not exists public.mdt_exports (
   id uuid primary key default gen_random_uuid(),
   kind text not null,
-  person_id uuid references public.persons(id) on delete set null,
-  vehicle_id uuid references public.vehicles(id) on delete set null,
+  -- CASCADE (not SET NULL): the target CHECK requires the FK non-null for its
+  -- kind, so nulling it on delete would abort the parent delete. A BOLO export
+  -- is meaningless without its subject, so it goes when the subject does.
+  person_id uuid references public.persons(id) on delete cascade,
+  vehicle_id uuid references public.vehicles(id) on delete cascade,
   subject_snapshot text not null,
   wanted_status text,
   risk_level text,
@@ -82,12 +85,12 @@ begin
   if btrim(coalesce(p_snapshot, '')) = '' then raise exception 'a subject label is required'; end if;
   if p_kind = 'vehicle_bolo' then
     if p_vehicle is null then raise exception 'a vehicle BOLO needs a vehicle'; end if;
+    if p_person is not null then raise exception 'a vehicle BOLO targets a vehicle, not a person'; end if;
     if not exists (select 1 from public.vehicles where id = p_vehicle) then raise exception 'vehicle not found'; end if;
-    p_person := null;
   else
     if p_person is null then raise exception 'a person BOLO / caution needs a person'; end if;
+    if p_vehicle is not null then raise exception 'a person BOLO / caution targets a person, not a vehicle'; end if;
     if not exists (select 1 from public.persons where id = p_person) then raise exception 'person not found'; end if;
-    p_vehicle := null;
   end if;
   insert into public.mdt_exports
     (kind, person_id, vehicle_id, subject_snapshot, wanted_status, risk_level, instructions, reason,
