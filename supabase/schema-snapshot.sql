@@ -1012,6 +1012,28 @@ alter table public.legal_request_exhibits add constraint legal_request_exhibits_
 alter table public.legal_request_exhibits add constraint legal_request_exhibits_exhibit_type_check CHECK ((exhibit_type = ANY (ARRAY['evidence'::text, 'attachment'::text, 'finalized_report'::text, 'case_media'::text, 'related_case'::text, 'external_link'::text, 'person_record'::text, 'vehicle'::text, 'place'::text, 'prior_legal_request'::text])));
 alter table public.legal_request_exhibits enable row level security;
 
+create table public.legal_seized_items (
+  id uuid not null default gen_random_uuid(),
+  legal_request_id uuid not null,
+  item text not null,
+  quantity text,
+  category text,
+  evidence_id uuid,
+  person_id uuid,
+  vehicle_id uuid,
+  notes text,
+  added_by uuid,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.legal_seized_items add constraint legal_seized_items_pkey PRIMARY KEY (id);
+alter table public.legal_seized_items add constraint legal_seized_items_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id) ON DELETE CASCADE;
+alter table public.legal_seized_items add constraint legal_seized_items_evidence_id_fkey FOREIGN KEY (evidence_id) REFERENCES public.evidence(id) ON DELETE SET NULL;
+alter table public.legal_seized_items add constraint legal_seized_items_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE SET NULL;
+alter table public.legal_seized_items add constraint legal_seized_items_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id) ON DELETE SET NULL;
+alter table public.legal_seized_items add constraint legal_seized_items_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.legal_seized_items add constraint legal_seized_items_category_check CHECK ((category IS NULL OR (category = ANY (ARRAY['weapon'::text, 'narcotics'::text, 'currency'::text, 'electronics'::text, 'document'::text, 'vehicle'::text, 'other'::text]))));
+alter table public.legal_seized_items enable row level security;
+
 create table public.legal_request_participants (
   legal_request_id uuid not null,
   user_id uuid not null,
@@ -1109,6 +1131,7 @@ create table public.legal_requests (
   executed_by uuid,
   execution_outcome text,
   execution_notes text,
+  execution_result text,
   return_narrative text,
   returned_at timestamp with time zone,
   return_filed_by uuid,
@@ -1149,6 +1172,7 @@ alter table public.legal_requests add constraint legal_requests_assigned_ada_id_
 alter table public.legal_requests add constraint legal_requests_assigned_judge_id_fkey FOREIGN KEY (assigned_judge_id) REFERENCES public.profiles(id);
 alter table public.legal_requests add constraint legal_requests_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id);
 alter table public.legal_requests add constraint legal_requests_current_version_fkey FOREIGN KEY (current_version_id) REFERENCES public.legal_request_versions(id);
+alter table public.legal_requests add constraint legal_requests_execution_result_check CHECK ((execution_result IS NULL OR (execution_result = ANY (ARRAY['full'::text, 'partial'::text, 'unable'::text]))));
 alter table public.legal_requests enable row level security;
 
 create table public.mdt_wanted_projections (
@@ -2275,6 +2299,7 @@ CREATE UNIQUE INDEX legal_holds_active_case_uidx ON public.legal_holds USING btr
 CREATE UNIQUE INDEX legal_holds_active_request_uidx ON public.legal_holds USING btree (legal_request_id) WHERE ((lifted_at IS NULL) AND (legal_request_id IS NOT NULL));
 CREATE INDEX legal_holds_case_idx ON public.legal_holds USING btree (case_id) WHERE (case_id IS NOT NULL);
 CREATE INDEX legal_holds_request_idx ON public.legal_holds USING btree (legal_request_id) WHERE (legal_request_id IS NOT NULL);
+CREATE INDEX legal_seized_items_request_idx ON public.legal_seized_items USING btree (legal_request_id);
 CREATE INDEX legal_requests_ada_idx ON public.legal_requests USING btree (assigned_ada_id) WHERE (assigned_ada_id IS NOT NULL);
 CREATE INDEX legal_requests_bureau_idx ON public.legal_requests USING btree (responsible_bureau);
 CREATE INDEX legal_requests_case_idx ON public.legal_requests USING btree (case_id);
@@ -5191,6 +5216,10 @@ create policy lre_sel on public.legal_request_exhibits
   as permissive for select to authenticated
   using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
 
+create policy lsi_sel on public.legal_seized_items
+  as permissive for select to authenticated
+  using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
+
 create policy lrp_sel on public.legal_request_participants
   as permissive for select to authenticated
   using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
@@ -6567,3 +6596,37 @@ create policy wl_sel on public.watchlist
 -- public.case_permanent_delete(uuid, text) now refuses a held case before the
 -- legal-requests check — the Owner-cannot-override teeth. Definitive SQL in
 -- supabase/migrations/20260807190000_legal_hold.sql.
+-- 20260807200000_legal_execution_inventory (spec D3; column + table + index +
+-- policy + signature-bumped RPC + 2 write-only RPCs): warrant execution gains a
+-- typed result and a structured seized-items inventory. legal_requests gained a
+-- nullable execution_result text (legal_requests_execution_result_check:
+-- null / 'full' / 'partial' / 'unable') — all mirrored above. The
+-- legal_seized_items table (id, legal_request_id → legal_requests ON DELETE
+-- CASCADE, item, quantity, category [legal_seized_items_category_check:
+-- weapon/narcotics/currency/electronics/document/vehicle/other, nullable],
+-- nullable evidence_id/person_id/vehicle_id FKs ON DELETE SET NULL, notes,
+-- added_by → profiles ON DELETE SET NULL, created_at), its
+-- legal_seized_items_request_idx index, RLS, and the lsi_sel SELECT policy
+-- (read follows the request wall via private.can_view_legal_request, same as
+-- exhibits) are all mirrored above. There is NO client write policy — the two
+-- RPCs are the only write path. public.record_warrant_execution had its OLD
+-- 4-arg signature (uuid, text, text, timestamptz) DROPPED and was recreated as
+-- (uuid p_request, text p_outcome, text p_notes default null, text p_result
+-- default 'full', timestamptz p_executed_at default now()) returning
+-- public.legal_requests — a defaulted param is a new signature, so keeping both
+-- would be ambiguous; existing named-arg call-sites are unaffected. 'unable'
+-- requires a reason (p_outcome) and does NOT execute the warrant (it stays
+-- 'issued', recording execution_result='unable' + the reason and a
+-- LEGAL_EXECUTION_UNABLE audit / execution_attempt log); 'full'/'partial'
+-- advance to 'executed' exactly as before and stamp execution_result. New
+-- write-only RPCs public.legal_seized_item_add(uuid p_request, text p_item,
+-- text p_quantity default null, text p_category default null, uuid p_evidence
+-- default null, uuid p_person default null, uuid p_vehicle default null, text
+-- p_notes default null) returning public.legal_seized_items [warrant-only,
+-- private.can_fulfil_legal-gated, validates item + category, audits
+-- LEGAL_SEIZED_ITEM_ADDED] and public.legal_seized_item_remove(uuid p_item)
+-- returning void [private.can_fulfil_legal-gated on the row's request, audits
+-- LEGAL_SEIZED_ITEM_REMOVED]. All three SECURITY DEFINER, set search_path = '',
+-- schema-qualified, revoked from public/anon, granted to authenticated +
+-- service_role. Definitive SQL in
+-- supabase/migrations/20260807200000_legal_execution_inventory.sql.

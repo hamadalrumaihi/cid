@@ -3046,6 +3046,7 @@ export type Database = {
           executed_by: string | null
           execution_notes: string | null
           execution_outcome: string | null
+          execution_result: string | null
           expires_at: string | null
           form_data: Json
           fulfilment_status: string
@@ -3121,6 +3122,7 @@ export type Database = {
           executed_by?: string | null
           execution_notes?: string | null
           execution_outcome?: string | null
+          execution_result?: string | null
           expires_at?: string | null
           form_data?: Json
           fulfilment_status?: string
@@ -3196,6 +3198,7 @@ export type Database = {
           executed_by?: string | null
           execution_notes?: string | null
           execution_outcome?: string | null
+          execution_result?: string | null
           expires_at?: string | null
           form_data?: Json
           fulfilment_status?: string
@@ -3290,6 +3293,84 @@ export type Database = {
             columns: ["current_version_id"]
             isOneToOne: false
             referencedRelation: "legal_request_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      legal_seized_items: {
+        Row: {
+          added_by: string | null
+          category: string | null
+          created_at: string
+          evidence_id: string | null
+          id: string
+          item: string
+          legal_request_id: string
+          notes: string | null
+          person_id: string | null
+          quantity: string | null
+          vehicle_id: string | null
+        }
+        Insert: {
+          added_by?: string | null
+          category?: string | null
+          created_at?: string
+          evidence_id?: string | null
+          id?: string
+          item: string
+          legal_request_id: string
+          notes?: string | null
+          person_id?: string | null
+          quantity?: string | null
+          vehicle_id?: string | null
+        }
+        Update: {
+          added_by?: string | null
+          category?: string | null
+          created_at?: string
+          evidence_id?: string | null
+          id?: string
+          item?: string
+          legal_request_id?: string
+          notes?: string | null
+          person_id?: string | null
+          quantity?: string | null
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_seized_items_legal_request_id_fkey"
+            columns: ["legal_request_id"]
+            isOneToOne: false
+            referencedRelation: "legal_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_seized_items_evidence_id_fkey"
+            columns: ["evidence_id"]
+            isOneToOne: false
+            referencedRelation: "evidence"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_seized_items_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_seized_items_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_seized_items_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -6469,6 +6550,23 @@ export type Database = {
         Args: { q: string }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"][]
       }
+      legal_seized_item_add: {
+        Args: {
+          p_request: string
+          p_item: string
+          p_quantity?: string | null
+          p_category?: string | null
+          p_evidence?: string | null
+          p_person?: string | null
+          p_vehicle?: string | null
+          p_notes?: string | null
+        }
+        Returns: Database["public"]["Tables"]["legal_seized_items"]["Row"]
+      }
+      legal_seized_item_remove: {
+        Args: { p_item: string }
+        Returns: undefined
+      }
       mdt_wanted_current: {
         Args: never
         Returns: {
@@ -6512,10 +6610,11 @@ export type Database = {
       }
       record_warrant_execution: {
         Args: {
-          p_executed_at?: string
-          p_notes?: string
-          p_outcome: string
           p_request: string
+          p_outcome: string
+          p_notes?: string | null
+          p_result?: string | null
+          p_executed_at?: string | null
         }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
       }
