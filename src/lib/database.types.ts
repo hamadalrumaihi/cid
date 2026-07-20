@@ -6441,11 +6441,11 @@ export type Database = {
         }[]
       }
       legal_hold_lift: {
-        Args: { p_hold: string; p_reason?: string }
+        Args: { p_hold: string; p_reason?: string | null }
         Returns: Database["public"]["Tables"]["legal_holds"]["Row"]
       }
       legal_hold_place: {
-        Args: { p_case: string; p_legal_request: string; p_reason: string }
+        Args: { p_case?: string | null; p_legal_request?: string | null; p_reason: string }
         Returns: Database["public"]["Tables"]["legal_holds"]["Row"]
       }
       legal_request_people: {
