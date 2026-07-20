@@ -955,6 +955,26 @@ alter table public.justice_memberships add constraint justice_memberships_user_i
 alter table public.justice_memberships add constraint justice_memberships_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES public.profiles(id);
 alter table public.justice_memberships enable row level security;
 
+create table public.legal_holds (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid,
+  legal_request_id uuid,
+  reason text not null,
+  placed_by uuid,
+  placed_at timestamp with time zone not null default now(),
+  lifted_at timestamp with time zone,
+  lifted_by uuid,
+  lift_reason text
+);
+alter table public.legal_holds add constraint legal_holds_pkey PRIMARY KEY (id);
+alter table public.legal_holds add constraint legal_holds_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.legal_holds add constraint legal_holds_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id) ON DELETE CASCADE;
+alter table public.legal_holds add constraint legal_holds_placed_by_fkey FOREIGN KEY (placed_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.legal_holds add constraint legal_holds_lifted_by_fkey FOREIGN KEY (lifted_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.legal_holds add constraint legal_holds_one_target CHECK ((num_nonnulls(case_id, legal_request_id) = 1));
+alter table public.legal_holds add constraint legal_holds_lift_pair CHECK (((lifted_at IS NULL) = (lifted_by IS NULL)));
+alter table public.legal_holds enable row level security;
+
 create table public.legal_request_actions (
   id uuid not null default gen_random_uuid(),
   legal_request_id uuid not null,
@@ -2251,6 +2271,10 @@ CREATE INDEX gangs_name_trgm ON public.gangs USING gin (name extensions.gin_trgm
 CREATE INDEX indicators_case_idx ON public.indicators USING btree (case_id);
 CREATE INDEX indicators_created_by_fkey_idx ON public.indicators USING btree (created_by);
 CREATE INDEX indicators_value_idx ON public.indicators USING btree (lower(btrim(value)));
+CREATE UNIQUE INDEX legal_holds_active_case_uidx ON public.legal_holds USING btree (case_id) WHERE ((lifted_at IS NULL) AND (case_id IS NOT NULL));
+CREATE UNIQUE INDEX legal_holds_active_request_uidx ON public.legal_holds USING btree (legal_request_id) WHERE ((lifted_at IS NULL) AND (legal_request_id IS NOT NULL));
+CREATE INDEX legal_holds_case_idx ON public.legal_holds USING btree (case_id) WHERE (case_id IS NOT NULL);
+CREATE INDEX legal_holds_request_idx ON public.legal_holds USING btree (legal_request_id) WHERE (legal_request_id IS NOT NULL);
 CREATE INDEX legal_requests_ada_idx ON public.legal_requests USING btree (assigned_ada_id) WHERE (assigned_ada_id IS NOT NULL);
 CREATE INDEX legal_requests_bureau_idx ON public.legal_requests USING btree (responsible_bureau);
 CREATE INDEX legal_requests_case_idx ON public.legal_requests USING btree (case_id);
@@ -5153,6 +5177,12 @@ create policy jm_sel on public.justice_memberships
   as permissive for select to authenticated
   using (((user_id = ( SELECT auth.uid() AS uid)) OR (private.justice_role() IS NOT NULL) OR private.is_command() OR private.is_owner()));
 
+create policy legal_holds_select on public.legal_holds
+  as permissive for select to authenticated
+  using ((private.is_command() OR ((case_id IS NOT NULL) AND private.can_access_case(case_id)) OR ((legal_request_id IS NOT NULL) AND (EXISTS ( SELECT 1
+   FROM public.legal_requests lr
+  WHERE ((lr.id = legal_holds.legal_request_id) AND private.can_access_case(lr.case_id)))))));
+
 create policy lra_sel on public.legal_request_actions
   as permissive for select to authenticated
   using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
@@ -6513,3 +6543,27 @@ create policy wl_sel on public.watchlist
 -- fields; it refuses to retire a member (that path is gang_member_update).
 -- Definitive SQL in
 -- supabase/migrations/20260807180000_gang_roster_lifecycle.sql.
+-- 20260807190000_legal_hold (table + helper + 2 RPCs + 2 re-declared purge
+-- functions): the legal_holds table, its indexes, its legal_holds_select
+-- policy and RLS are mirrored above. A Lead+ (command) may place a legal hold
+-- on a case OR a legal request (exactly one target — legal_holds_one_target;
+-- a reason is required); while any hold is active the case cannot be
+-- permanently deleted, and — uniquely among command actions — the Owner cannot
+-- override it (the hold must be LIFTED first). One active hold per target
+-- (partial unique indexes legal_holds_active_case_uidx /
+-- legal_holds_active_request_uidx; a lifted hold keeps its history row).
+-- Reads follow the case wall (command, or anyone who can access the linked
+-- case / the linked request's case); there is NO client write policy — the two
+-- SECURITY DEFINER RPCs are the only write path. New helper
+-- private.case_has_active_hold(uuid) (true if a case is held directly or via
+-- any of its legal requests). New RPCs public.legal_hold_place(uuid, uuid,
+-- text) (command-gated; validates target/reason; audits LEGAL_HOLD_PLACED;
+-- maps the unique-violation to a readable "already under an active legal hold")
+-- and public.legal_hold_lift(uuid, text default null) (command-gated; stamps
+-- lifted_at/lifted_by/lift_reason; audits LEGAL_HOLD_LIFTED) — both revoked
+-- from public/anon, granted to authenticated + service_role.
+-- public.case_delete_preview(uuid) now also reports `active_hold` and folds it
+-- into `deletable` (deletable = no legal_requests AND not held), and
+-- public.case_permanent_delete(uuid, text) now refuses a held case before the
+-- legal-requests check — the Owner-cannot-override teeth. Definitive SQL in
+-- supabase/migrations/20260807190000_legal_hold.sql.

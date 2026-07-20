@@ -2652,6 +2652,71 @@ export type Database = {
           },
         ]
       }
+      legal_holds: {
+        Row: {
+          case_id: string | null
+          id: string
+          legal_request_id: string | null
+          lift_reason: string | null
+          lifted_at: string | null
+          lifted_by: string | null
+          placed_at: string
+          placed_by: string | null
+          reason: string
+        }
+        Insert: {
+          case_id?: string | null
+          id?: string
+          legal_request_id?: string | null
+          lift_reason?: string | null
+          lifted_at?: string | null
+          lifted_by?: string | null
+          placed_at?: string
+          placed_by?: string | null
+          reason: string
+        }
+        Update: {
+          case_id?: string | null
+          id?: string
+          legal_request_id?: string | null
+          lift_reason?: string | null
+          lifted_at?: string | null
+          lifted_by?: string | null
+          placed_at?: string
+          placed_by?: string | null
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_holds_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_holds_legal_request_id_fkey"
+            columns: ["legal_request_id"]
+            isOneToOne: false
+            referencedRelation: "legal_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_holds_placed_by_fkey"
+            columns: ["placed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_holds_lifted_by_fkey"
+            columns: ["lifted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       legal_request_actions: {
         Row: {
           action: string
@@ -6374,6 +6439,14 @@ export type Database = {
           justice_role: string
           user_id: string
         }[]
+      }
+      legal_hold_lift: {
+        Args: { p_hold: string; p_reason?: string }
+        Returns: Database["public"]["Tables"]["legal_holds"]["Row"]
+      }
+      legal_hold_place: {
+        Args: { p_case: string; p_legal_request: string; p_reason: string }
+        Returns: Database["public"]["Tables"]["legal_holds"]["Row"]
       }
       legal_request_people: {
         Args: { p_request: string }
