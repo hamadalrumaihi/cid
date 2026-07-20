@@ -17,6 +17,7 @@ import { EntityLink } from '@/components/ui/EntityLink'
 import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTimeline'
 import { StatusChip } from '../legalShared'
 import { Row, type ActionRow } from './dossierShared'
+import { SeizedItemsPanel } from './SeizedItems'
 
 type NameFn = (id: string | null | undefined) => string
 
@@ -160,7 +161,7 @@ export function DecisionSection({ r, name }: { r: LegalRequest; name: NameFn }) 
 }
 
 /* ── Service & Return ─────────────────────────────────────────────────────── */
-export function ServiceSection({ r, name }: { r: LegalRequest; name: NameFn }) {
+export function ServiceSection({ r, name, canFulfil = false }: { r: LegalRequest; name: NameFn; canFulfil?: boolean }) {
   const warrant = r.request_type === 'warrant'
   const events = fulfilmentEvents(r)
   return (
@@ -169,12 +170,14 @@ export function ServiceSection({ r, name }: { r: LegalRequest; name: NameFn }) {
         <h3 className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Fulfilment status</h3>
         <div className="flex flex-wrap items-center gap-2 py-1">
           <StatusChip label={fulfilmentLabel(r.fulfilment_status)} tone="blue" />
+          {warrant && r.execution_result && <StatusChip label={`Execution: ${humanize(r.execution_result)}`} tone={r.execution_result === 'unable' ? 'amber' : 'slate'} />}
           {!warrant && <StatusChip label={`Service: ${humanize(r.service_status)}`} tone="slate" />}
           {!warrant && <StatusChip label={`Compliance: ${humanize(r.compliance_status)}`} tone="slate" />}
         </div>
         <Row label="Expires">{fmtDateTime(r.expires_at)}</Row>
         {!warrant && <Row label="Response deadline">{fmtDateTime(r.response_deadline)}</Row>}
       </Card>
+      {warrant && <SeizedItemsPanel requestId={r.id} canFulfil={canFulfil} />}
       {events.length === 0 ? (
         <Card pad="sm">
           <p className="text-sm text-slate-400">
