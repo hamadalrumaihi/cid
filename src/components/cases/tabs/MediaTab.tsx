@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/Button'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
-import { deleteWithUndo, insert, list, update } from '@/lib/db'
+import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
 import { caseLink } from '@/lib/caseLinks'
 import { CASE_MEDIA_CATEGORIES, caseMediaCategoryLabel, filterCaseMedia, legacyEvidenceRef } from '@/lib/caseMedia'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
@@ -66,6 +66,11 @@ export function MediaTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boole
   // the initial fetch resolves, and a failed load must say so (BUG-027).
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
+  // Restricted-media break-glass (spec D6): the total restricted count in this
+  // case (server-computed, gated on can_access_case) tells us whether there are
+  // restricted items the current viewer can't see — the delta drives the offer.
+  const [restrictedCount, setRestrictedCount] = useState(0)
+  const [breakGlassOpen, setBreakGlassOpen] = useState(false)
   const vM = useTableVersion('media')
 
   const refresh = useCallback(async () => {
@@ -84,6 +89,11 @@ export function MediaTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boole
       setReports(rp)
       setVehicles(vh)
       setLoadError(false)
+      // Best-effort: how many restricted items exist here vs. how many the
+      // viewer can actually load. A positive delta means some are hidden.
+      void rpc('restricted_media_count', { p_case: c.id })
+        .then((r) => setRestrictedCount(typeof r.data === 'number' ? r.data : 0))
+        .catch(() => setRestrictedCount(0))
     } catch { setLoadError(true) /* loaded rows keep rendering stale */ }
     finally { setLoading(false) }
   }, [c.id, fetchLimit])
@@ -123,6 +133,10 @@ export function MediaTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boole
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     el.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' })
   }, [evParam, evidence])
+
+  // Restricted items the viewer can't load → offer break-glass (D6).
+  const visibleRestricted = rows.filter((m) => m.restricted).length
+  const hiddenRestricted = Math.max(0, restrictedCount - visibleRestricted)
 
   const filtered = filterCaseMedia(rows, { category, showArchived })
   const visible = filtered.slice(0, PAGE * page)
@@ -167,6 +181,22 @@ export function MediaTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boole
           {canEdit && <Button variant="primary" onClick={() => setAddOpen(true)}>＋ Add photos</Button>}
         </div>
       </div>
+
+      {/* Restricted break-glass (D6): only when items are actually hidden. */}
+      {hiddenRestricted > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-rose-400/30 bg-rose-500/[0.07] px-4 py-3">
+          <span aria-hidden className="text-lg">🔒</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-rose-100">
+              {hiddenRestricted} restricted {hiddenRestricted === 1 ? 'item is' : 'items are'} hidden
+            </p>
+            <p className="text-xs text-rose-200/70">
+              Restricted media is narcotics-command only. Break-glass grants you 24-hour view access — command is notified and the access is logged.
+            </p>
+          </div>
+          <Button size="sm" variant="warn" onClick={() => setBreakGlassOpen(true)}>Break-glass access</Button>
+        </div>
+      )}
 
       {/* Gallery grid — cards are buttons (keyboard-navigable), lazy images. */}
       {loading ? (
@@ -250,7 +280,74 @@ export function MediaTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boole
           onClose={() => { setAddOpen(false); void refresh() }}
         />
       )}
+      {breakGlassOpen && (
+        <BreakGlassModal
+          c={c}
+          hiddenCount={hiddenRestricted}
+          onClose={() => setBreakGlassOpen(false)}
+          onGranted={() => { setBreakGlassOpen(false); void refresh() }}
+        />
+      )}
     </div>
+  )
+}
+
+/* ── Restricted break-glass (spec D6) ────────────────────────────────────────
+ * Emergency, accountable view-access to a case's restricted media for a member
+ * without narcotics clearance: a mandatory reason, a 24h server-side grant,
+ * command notified, and the event audited. Never edit — read-only widening. */
+
+function BreakGlassModal({ c, hiddenCount, onClose, onGranted }: {
+  c: CaseRow
+  hiddenCount: number
+  onClose: () => void
+  onGranted: () => void
+}) {
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const submit = async () => {
+    const trimmed = reason.trim()
+    if (!trimmed) { toast('A reason is required to break-glass.', 'warn'); return }
+    setBusy(true)
+    const res = await rpc('restricted_media_break_glass', { p_case: c.id, p_reason: trimmed })
+    setBusy(false)
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Break-glass granted — command notified. Access expires in 24 hours.', 'success')
+    onGranted()
+  }
+
+  return (
+    <Modal open onClose={onClose} dirty={() => reason.trim().length > 0}>
+      <div className="p-5">
+        <ModalHeader title="Break-glass: restricted media" onClose={onClose} />
+        <div className="mt-1 space-y-3">
+          <p className="rounded-lg border border-rose-400/30 bg-rose-500/[0.07] p-3 text-sm text-rose-100">
+            This case has {hiddenCount} restricted {hiddenCount === 1 ? 'item' : 'items'} you aren&apos;t cleared to view.
+            Breaking glass grants you <strong>24-hour</strong> read-only access. Narcotics command is notified immediately
+            and your reason is permanently logged.
+          </p>
+          <Field label="Reason for access" hint="Required — this is recorded in the restricted-access audit trail.">
+            {(id) => (
+              <textarea
+                id={id}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                className="w-full rounded-lg border border-white/10 bg-ink-950/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-badge-400 focus:outline-none"
+                placeholder="e.g. Urgent lead review — surveillance stills needed to identify a suspect before an imminent operation."
+              />
+            )}
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button onClick={onClose}>Cancel</Button>
+            <Button variant="danger" onClick={() => void submit()} disabled={busy || !reason.trim()}>
+              {busy ? 'Granting…' : 'Break-glass'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -334,6 +431,11 @@ function MediaDetailModal({ m, c, canEdit, canDelete, names, vehicles, reports, 
   // Dirty-tracking baseline: advances on save so a successful save doesn't
   // keep the discard-confirm armed while the parent list refetches.
   const [saved, setSaved] = useState<{ title: string; category: string | null }>({ title: m.title, category: m.category })
+  // Audit every view of a restricted item (D6). Server de-dups per viewer/hour
+  // and quietly ignores non-restricted ids, so this is safe to fire on open.
+  useEffect(() => {
+    if (m.restricted) void rpc('log_restricted_view', { p_entity_type: 'media', p_entity: m.id })
+  }, [m.id, m.restricted])
   const src = mediaSrc(m)
   const safe = safeUrl(src)
   const isVid = m.type === 'video' || /\.(mp4|webm|mov|m4v)($|\?)/i.test(src)

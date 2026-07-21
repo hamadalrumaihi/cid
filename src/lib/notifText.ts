@@ -53,6 +53,7 @@ export const NOTIF_LABEL: Record<string, string> = {
   case_stale: 'Case going stale',
   stale_case: 'Case going stale',
   document_suggestion: 'Document suggestion update',
+  restricted_break_glass: '🔓 Restricted media break-glass',
 }
 
 // Payload parsing is zod-validated (v1.14): malformed payloads degrade to {}
