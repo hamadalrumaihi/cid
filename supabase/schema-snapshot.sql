@@ -2098,6 +2098,37 @@ alter table public.report_versions add constraint report_versions_report_id_fkey
 alter table public.report_versions add constraint report_versions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
 alter table public.report_versions enable row level security;
 
+create table public.restricted_access_grants (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  user_id uuid not null,
+  reason text not null,
+  granted_at timestamp with time zone not null default now(),
+  expires_at timestamp with time zone not null default (now() + '24:00:00'::interval)
+);
+alter table public.restricted_access_grants add constraint restricted_access_grants_pkey PRIMARY KEY (id);
+alter table public.restricted_access_grants add constraint restricted_access_grants_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.restricted_access_grants add constraint restricted_access_grants_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+create index restricted_access_grants_lookup ON public.restricted_access_grants USING btree (case_id, user_id, expires_at);
+alter table public.restricted_access_grants enable row level security;
+
+create table public.restricted_access_log (
+  id uuid not null default gen_random_uuid(),
+  entity_type text not null,
+  entity_id uuid not null,
+  actor_id uuid,
+  action text not null,
+  reason text,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.restricted_access_log add constraint restricted_access_log_pkey PRIMARY KEY (id);
+alter table public.restricted_access_log add constraint restricted_access_log_entity_check CHECK ((entity_type = 'media'::text));
+alter table public.restricted_access_log add constraint restricted_access_log_action_check CHECK ((action = ANY (ARRAY['view'::text, 'break_glass'::text])));
+alter table public.restricted_access_log add constraint restricted_access_log_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+create index restricted_access_log_entity_idx ON public.restricted_access_log USING btree (entity_type, entity_id);
+create index restricted_access_log_actor_idx ON public.restricted_access_log USING btree (actor_id);
+alter table public.restricted_access_log enable row level security;
+
 create table public.rico_cases (
   id uuid not null default gen_random_uuid(),
   case_id uuid not null,
@@ -5393,7 +5424,7 @@ create policy media_ins on public.media
 
 create policy media_sel on public.media
   as permissive for select to authenticated
-  using ((private.is_active() AND ((NOT restricted) OR private.can_edit_narcotics_intel())));
+  using ((private.is_active() AND ((NOT restricted) OR private.can_edit_narcotics_intel() OR private.has_media_break_glass(case_id, ( SELECT auth.uid() AS uid)))));
 
 create policy media_upd on public.media
   as permissive for update to authenticated
@@ -5837,6 +5868,14 @@ create policy profiles_upd_self on public.profiles
 create policy pba_sel on public.prosecutor_bureau_assignments
   as permissive for select to authenticated
   using (((private.justice_role() IS NOT NULL) OR private.is_active() OR (prosecutor_id = ( SELECT auth.uid() AS uid))));
+
+create policy rag_sel on public.restricted_access_grants
+  as permissive for select to authenticated
+  using ((private.is_command() OR (user_id = ( SELECT auth.uid() AS uid))));
+
+create policy ral_sel on public.restricted_access_log
+  as permissive for select to authenticated
+  using (private.is_command());
 
 create policy raid_compensations_del on public.raid_compensations
   as permissive for delete to authenticated
@@ -6861,3 +6900,41 @@ create policy wl_sel on public.watchlist
 -- signature/return (kind,id,label,sublabel,term,rank) is unchanged, so
 -- database.types.ts needs no edit. Definitive SQL in
 -- supabase/migrations/20260807230000_search_include_accounts.sql.
+-- 20260807240000_restricted_access (spec D6; 2 tables + 3 indexes + 1 predicate
+-- + 3 RPCs + a 1-clause media_sel widen): view-audit + break-glass for
+-- restricted media (Batch-13.4 / 13.8). Two new tables (both mirrored above).
+-- public.restricted_access_log — append-only audit of restricted-item views +
+-- break-glass events (entity_type CHECK 'media', entity_id, actor_id → profiles
+-- ON DELETE SET NULL, action CHECK 'view'/'break_glass', reason, created_at);
+-- indexes restricted_access_log_entity_idx (entity_type, entity_id) +
+-- restricted_access_log_actor_idx (actor_id). public.restricted_access_grants —
+-- a time-boxed (24h) case-scoped emergency VIEW grant (case_id → cases /
+-- user_id → profiles both ON DELETE CASCADE, reason NOT NULL, granted_at,
+-- expires_at default now()+24h); index restricted_access_grants_lookup (case_id,
+-- user_id, expires_at). RLS: writes on BOTH tables are RPC-only (NO client write
+-- policy). ral_sel (restricted_access_log SELECT) = private.is_command() only —
+-- command/owner read the trail. rag_sel (restricted_access_grants SELECT) =
+-- private.is_command() OR user_id = auth.uid() — command see all, a member sees
+-- only their own grants. One new SECURITY DEFINER predicate (set search_path =
+-- '', schema-qualified): private.has_media_break_glass(p_case uuid, p_user uuid)
+-- returns boolean — true when the user holds a live (expires_at > now()) grant
+-- for the case; definer so media_sel can call it without exposing the grants
+-- table or recursing RLS. media_sel is re-emitted above with ONE additive
+-- clause (OR private.has_media_break_glass(case_id, auth.uid())) so an active
+-- grant WIDENS view access only — media_upd is deliberately untouched, emergency
+-- access is read-only. Three new SECURITY DEFINER RPCs (set search_path = '',
+-- schema-qualified, revoked from public/anon, granted to authenticated +
+-- service_role): public.log_restricted_view(p_entity_type text, p_entity uuid)
+-- returns void — audits a genuine restricted-media view, de-duped per
+-- viewer/item within the hour, ignores non-restricted/other entities quietly,
+-- requires is_active(); public.restricted_media_count(p_case uuid) returns
+-- integer — count of a case's restricted media when private.can_access_case(),
+-- else 0, so the UI can offer break-glass without exposing the rows;
+-- public.restricted_media_break_glass(p_case uuid, p_reason text) returns
+-- public.restricted_access_grants — requires is_active() + can_access_case(),
+-- a non-blank reason, and that the caller is NOT already narcotics-cleared;
+-- inserts the 24h grant + a 'break_glass' audit row and notifies every active
+-- command member (bureau_lead/deputy_director/director) via a definer
+-- notifications insert (bypasses the create_notification allow-list, matching
+-- legal_notify's server path). Definitive SQL in
+-- supabase/migrations/20260807240000_restricted_access.sql.

@@ -6098,6 +6098,86 @@ export type Database = {
           },
         ]
       }
+      restricted_access_grants: {
+        Row: {
+          case_id: string
+          expires_at: string
+          granted_at: string
+          id: string
+          reason: string
+          user_id: string
+        }
+        Insert: {
+          case_id: string
+          expires_at?: string
+          granted_at?: string
+          id?: string
+          reason: string
+          user_id: string
+        }
+        Update: {
+          case_id?: string
+          expires_at?: string
+          granted_at?: string
+          id?: string
+          reason?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "restricted_access_grants_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "restricted_access_grants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      restricted_access_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "restricted_access_log_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rico_cases: {
         Row: {
           case_id: string
@@ -7633,6 +7713,18 @@ export type Database = {
       confirm_narcotic_sale_observation: {
         Args: { p_id: string; p_reason?: string }
         Returns: undefined
+      }
+      log_restricted_view: {
+        Args: { p_entity: string; p_entity_type: string }
+        Returns: undefined
+      }
+      restricted_media_count: {
+        Args: { p_case: string }
+        Returns: number
+      }
+      restricted_media_break_glass: {
+        Args: { p_case: string; p_reason: string }
+        Returns: Database["public"]["Tables"]["restricted_access_grants"]["Row"]
       }
     }
     Enums: {
