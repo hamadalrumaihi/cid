@@ -30,6 +30,7 @@ export const SEARCH_KINDS: Record<string, { title: string; icon: string; tab: st
   gang:      { title: 'Gangs',      icon: '🚩', tab: 'gangs' },
   place:     { title: 'Places',     icon: '📍', tab: 'places' },
   vehicle:   { title: 'Vehicles',   icon: '🚗', tab: 'vehicles' },
+  account:   { title: 'Accounts',   icon: '🌐', tab: 'accounts' },
   narcotic:  { title: 'Narcotics',  icon: '💊', tab: 'narcotics' },
   bench:     { title: 'Ballistics', icon: '🔫', tab: 'ballistics' },
   footprint: { title: 'Ballistics', icon: '🧬', tab: 'ballistics' },
@@ -37,7 +38,7 @@ export const SEARCH_KINDS: Record<string, { title: string; icon: string; tab: st
   charge:    { title: 'Charges',    icon: '⚖️', tab: 'penal' },
 }
 
-export const SEARCH_SECTION_ORDER = ['case', 'report', 'evidence', 'operation', 'legal', 'person', 'gang', 'place', 'vehicle', 'narcotic', 'bench', 'document', 'charge'] as const
+export const SEARCH_SECTION_ORDER = ['case', 'report', 'evidence', 'operation', 'legal', 'person', 'gang', 'place', 'vehicle', 'account', 'narcotic', 'bench', 'document', 'charge'] as const
 
 /** Charges matched client-side from the in-memory penal catalog (vanilla
  *  app.js:330) — they are static reference data, not RLS-scoped rows. */

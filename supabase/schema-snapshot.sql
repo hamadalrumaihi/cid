@@ -6850,3 +6850,14 @@ create policy wl_sel on public.watchlist
 -- grant-audience change (accounts/account_links writes are direct-under-RLS;
 -- account_handles has no write path but the trigger). Definitive SQL in
 -- supabase/migrations/20260807220000_accounts_registry.sql.
+-- 20260807230000_search_include_accounts (function only): search_all gains one
+-- 'account' branch (spec D2 cross-registry dup-check) modeled on the 'vehicle'
+-- branch — label 'platform · @handle', sublabel display_name, seed term the
+-- handle; ranked (ilike + word_similarity) over handle / display_name /
+-- external_id. SECURITY INVOKER is unchanged, so accounts pass through the
+-- caller's own RLS (accounts_sel = private.is_active()) and restricted rows
+-- fail closed. The search_all body rendered above (a pre-20260807110000
+-- generation) is not re-rendered per branch; each change is tracked here — the
+-- signature/return (kind,id,label,sublabel,term,rank) is unchanged, so
+-- database.types.ts needs no edit. Definitive SQL in
+-- supabase/migrations/20260807230000_search_include_accounts.sql.
