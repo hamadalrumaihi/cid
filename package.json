@@ -16,6 +16,7 @@
     "sast": "semgrep scan --config p/typescript --config p/react --config p/nextjs --config p/secrets --error --metrics=off",
     "perf": "lhci autorun --config=lighthouserc.json",
     "typecheck": "tsc --noEmit",
+    "assistant:proxy": "node scripts/page-agent-proxy.mjs",
     "gen:handbook": "node scripts/generate-handbook.mjs",
     "gen:guide": "node scripts/generate-guide.mjs",
     "check:schema": "node scripts/check-schema-sync.mjs",
