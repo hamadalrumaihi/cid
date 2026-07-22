@@ -6938,3 +6938,14 @@ create policy wl_sel on public.watchlist
 -- notifications insert (bypasses the create_notification allow-list, matching
 -- legal_notify's server path). Definitive SQL in
 -- supabase/migrations/20260807240000_restricted_access.sql.
+
+-- Function added by the 20260808120000 case-number series migration:
+-- public.next_case_number(p_bureau text) returns text (STABLE SECURITY DEFINER,
+-- search_path='', revoked from public/anon, granted to authenticated +
+-- service_role) — continues a bureau's established block (LSB 1,000,000 / BCB
+-- 2,000,000 / JTF 3,000,000 / SAB 9,000,000 via private.case_number_base): the
+-- greatest same-bureau number within [base, base+999999] + 1, else base + 1;
+-- stray sub-base timestamp numbers are ignored. The client pre-fills the case
+-- number from this and falls back to it on save, replacing the old timestamp
+-- fallback that produced numbers like SAB-69179. Definitive SQL in
+-- supabase/migrations/20260808120000_case_number_series.sql.
