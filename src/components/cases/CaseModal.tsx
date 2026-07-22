@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
-import { insert, list, update, deleteWithUndo } from '@/lib/db'
+import { insert, list, rpc, update, deleteWithUndo } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { useOperationsStore } from '@/lib/operations'
@@ -59,6 +59,25 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
     } catch { setTemplates([]) }
   }
   useEffect(() => { if (open) queueMicrotask(() => { setForm(initial); setChecklist([]); setFollowupDays(null); void fetchOps(); void fetchTemplates() }) }, [open, initial, fetchOps, templatesVersion])
+  // Auto-continue the bureau's established case-number series (e.g. SAB-9000034)
+  // instead of leaving the field blank. New cases only; server-side generator so
+  // it always reflects live data. We fill only when the field is empty or still
+  // holds our previous suggestion, so a manually-typed number is never clobbered.
+  const suggestedRef = useRef('')
+  useEffect(() => {
+    if (!open || record) return
+    let alive = true
+    queueMicrotask(async () => {
+      try {
+        const res = await rpc('next_case_number', { p_bureau: form.bureau })
+        const digits = typeof res.data === 'string' ? res.data.replace(/^[A-Z]+-/, '') : ''
+        if (!alive || !digits) return
+        setForm((f) => (f.digits === '' || f.digits === suggestedRef.current ? { ...f, digits } : f))
+        suggestedRef.current = digits
+      } catch { /* save-time fallback still covers a blank field */ }
+    })
+    return () => { alive = false }
+  }, [open, record, form.bureau])
   const dirty = () => JSON.stringify(form) !== JSON.stringify(initial)
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }))
   const applyTemplate = (tpl: CaseTemplateRow | null) => {
@@ -78,7 +97,17 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
   const save = async () => {
     if (!form.title.trim()) { toast('Case title is required.', 'warn'); return }
     setSaving(true)
-    const caseNumber = `${form.bureau}-${form.digits.replace(/\D/g, '') || Date.now().toString().slice(-5)}`
+    // Established per-bureau series: use the typed number, else ask the server
+    // for the next in this bureau's block. Timestamp is only a last-ditch guard
+    // if that call fails — never the normal path (that was the SAB-69179 bug).
+    const typed = form.digits.replace(/\D/g, '')
+    let caseNumber = `${form.bureau}-${typed}`
+    if (!typed) {
+      const gen = await rpc('next_case_number', { p_bureau: form.bureau })
+      caseNumber = typeof gen.data === 'string' && gen.data
+        ? gen.data
+        : `${form.bureau}-${Date.now().toString().slice(-5)}`
+    }
     // A template's default review cadence lands on new cases only, and never
     // overwrites a follow-up an editor already set.
     const followUpAt = !record && followupDays && followupDays > 0

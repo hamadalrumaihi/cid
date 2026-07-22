@@ -6952,6 +6952,10 @@ export type Database = {
           warrant_type: string
         }[]
       }
+      next_case_number: {
+        Args: { p_bureau: string }
+        Returns: string
+      }
       reassign_legal_ada: {
         Args: { p_new_ada: string; p_reason?: string; p_request: string }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
