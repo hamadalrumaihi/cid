@@ -41,7 +41,7 @@ import { EmptyState, Notice } from '@/components/ui/Notice'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
 import {
   ClassificationBadge, DeadlineChip, StatusChip, buildLegalViewer, reviewTone,
-  useJusticeDirectory, useLegalPeople, useMyProsecutorBureaus,
+  useLegalPeople, useMyProsecutorBureaus,
 } from './legalShared'
 import { LegalStageTracker } from './LegalStageTracker'
 import { CourtPacketPrint } from './dossier/CourtPacketPrint'
@@ -68,7 +68,7 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
 
 function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack: () => void }) {
   const auth = useAuth()
-  const { profile, justiceRole } = auth
+  const { profile, justiceRole, isCommand } = auth
   const me = profile?.id ?? null
   const isOwnerFlag = !!profile?.is_owner
   const router = useRouter()
@@ -87,7 +87,6 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
   const [printPreparedAt, setPrintPreparedAt] = useState<string | null>(null)
   const people = useLegalPeople(requestId)
   const prosecutorBureaus = useMyProsecutorBureaus()
-  const { entries: directory } = useJusticeDirectory()
   const v = useTableVersion('legal_requests')
   const [tick, setTick] = useState(0)
   const reload = useCallback(() => setTick((t) => t + 1), [])
@@ -223,29 +222,18 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
   const editable = !!me && r.created_by === me && isEditableDraft(r)
   const isCreator = !!me && r.created_by === me
   const cidActive = !!profile?.active
-  const canCidReview = cidActive && !isCreator && status === 'cid_supervisor_review'
-    && (isOwnerFlag || ['senior_detective', 'bureau_lead', 'deputy_director', 'director'].includes(profile?.role ?? ''))
-  const canManage = justiceRole === 'district_attorney' || justiceRole === 'attorney_general' || isOwnerFlag
-  const adaActing = !!me && r.assigned_ada_id === me && status === 'ada_review'
-  const daActing = justiceRole === 'district_attorney' && status === 'da_review'
-  const agActing = justiceRole === 'attorney_general' && status === 'ag_review'
-  const canAssignJudge = status === 'submitted_to_judge' && (canManage || (!!me && r.assigned_ada_id === me))
-  const judgeActing = !!me && r.assigned_judge_id === me && status === 'judicial_review'
-  // Parallel judiciary lane: a judge may take a waiting judge-routed request
-  // without a prosecutor hand-off. Client mirror only — the RPC re-checks role,
-  // route, sealed, conflicts, and no-judge-yet server-side.
-  const canJudgeClaim = justiceRole === 'judge' && !isCreator && !r.assigned_judge_id
-    && (r.approval_route ?? 'judge') === 'judge' && r.classification !== 'sealed'
-    && ['submitted_to_doj', 'submitted_to_judge'].includes(status)
+  // Bureau Lead+ decision mirror: an active command member (Bureau Lead /
+  // Deputy Director / Director; Owner passes server-side) who is NOT the
+  // creator may approve/deny/return a request in supervisor review. Mirror
+  // only — review_legal_request_as_cid re-checks everything server-side.
+  const canCidReview = (isCommand || isOwnerFlag) && !isCreator && status === 'cid_supervisor_review'
   const canWithdraw = isCreator && !['approved', 'denied', 'withdrawn'].includes(status)
-  const judgeSelf = !!me && r.assigned_judge_id === me
-  // Bureau-prosecutor awareness (presentation only, mirrors the queue note in
-  // the Justice portal): an ADA sees a DOJ-parked request their RLS already
-  // scoped to them, but no action is assigned. Never action styling.
+  // Bureau-prosecutor awareness (presentation only): historically an ADA saw a
+  // DOJ-parked request scoped to them with no action assigned. Justice
+  // memberships are retired, so this is effectively always false now, but the
+  // predicate is kept so the panel's awareness copy still resolves.
   const awarenessOnly = justiceRole === 'assistant_district_attorney'
     && status === 'submitted_to_doj' && (!me || r.assigned_ada_id !== me)
-  const prosecutors = directory.filter((d) => d.active && (d.justice_role === 'assistant_district_attorney' || d.justice_role === 'district_attorney'))
-  const judges = directory.filter((d) => d.active && d.justice_role === 'judge')
   const currentVersion = versions.find((x) => x.id === r.current_version_id) ?? versions[0] ?? null
 
   const viewer = buildLegalViewer(auth, prosecutorBureaus)
@@ -451,12 +439,10 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
 
       {/* ── Role decision panel (sticky-bottom on mobile) ──────────────────── */}
       <DecisionPanel
-        r={r} status={status} busy={busy} act={act} promptSig={promptSig}
-        exhibits={exhibits} prosecutors={prosecutors} judges={judges}
-        editable={editable} canCidReview={canCidReview} canManage={canManage}
-        adaActing={adaActing} daActing={daActing} agActing={agActing}
-        canAssignJudge={canAssignJudge} judgeActing={judgeActing} canJudgeClaim={canJudgeClaim}
-        cidActive={cidActive} judgeSelf={judgeSelf} awarenessOnly={awarenessOnly}
+        r={r} busy={busy} act={act} promptSig={promptSig}
+        exhibits={exhibits}
+        editable={editable} canCidReview={canCidReview}
+        cidActive={cidActive} awarenessOnly={awarenessOnly}
         disposition={disposition} now={now} onSubmitToCid={submitToCid}
       />
 

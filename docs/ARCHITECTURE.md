@@ -179,7 +179,10 @@ Details that matter:
   never overwrites a newer one.
 - A user with an **active justice membership but no active CID profile**
   passes the gate into the Justice portal (`JusticeShell`) — never the CID
-  shell. `login_denied` blocks both identities.
+  shell. `login_denied` blocks both identities. *(Retired 2026-07-22: justice
+  memberships are deactivated and the Justice portal is removed — see
+  [DOJ-INTEGRATION.md](DOJ-INTEGRATION.md) Phase-1 banner; legal approval is now
+  Bureau Lead+.)*
 - `profiles.email` is column-granted to command only, so profile reads use
   the explicit `PROFILE_COLS` projection; a member's own email comes from
   the auth session.

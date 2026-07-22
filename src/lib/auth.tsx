@@ -153,12 +153,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(p)
     setJustice(j)
 
-    // A login-denied profile blocks BOTH identities (the deny gate screen
-    // renders in PendingBody); otherwise an active justice membership passes
-    // the gate on its own — the layout routes those users to the Justice
-    // portal, never the CID shell.
+    // A login-denied profile blocks sign-in (the deny gate renders in
+    // PendingBody). The DOJ/Judiciary workflow is retired (Phase 1): a justice
+    // membership no longer grants app access on its own — only an active CID
+    // profile passes the gate. (Historical justice identity still resolves for
+    // read-only attribution; it just isn't an admission ticket.)
     if (p?.login_denied) { settledUser.current = null; setState('pending'); return }
-    if (j?.active && !(p && p.active)) { settledUser.current = s.user.id; setState('in'); return }
     if (p && p.active) {
       settledUser.current = s.user.id
       setState('in')

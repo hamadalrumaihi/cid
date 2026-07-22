@@ -42,7 +42,7 @@ One row per leaf tab in `PAGE_META` (`src/lib/nav.ts` — the routing truth).
 | `case-files` | Attachments | case_files + FiveManage | delete = command |
 | `rico` | RICO tracker | rico_cases, predicate_acts | — |
 | `legal` | Legal Requests (`LegalView`) | legal_requests + versions/exhibits/actions/participants | creator + participants; all workflow writes via definer RPCs |
-| `justice` | Justice Portal (`JusticePortalView`) | legal review queues, judge docket, coverage, applications | justice roles + Owner (justice-only members get it as their whole app) |
+| `justice` | Justice Portal (`JusticePortalView`) — **RETIRED 2026-07-22**: route/tab removed, memberships deactivated; legal approval is now Bureau Lead+ in the CID `legal` surface (see [DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md) Phase-1 banner) | legal review queues, judge docket, coverage, applications | justice roles + Owner (justice-only members get it as their whole app) |
 | `persons` | Persons → IntelProfile | persons, gang_members, vehicles | — |
 | `bolo` | BOLO Board | persons(bolo), warrant reports | — |
 | `gangs` | Gangs | gangs, ranks, members, turf | — |

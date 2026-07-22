@@ -9,7 +9,7 @@ export interface HandbookPage {
   body: string
 }
 
-export const HANDBOOK_UPDATED = '2026-07-18'
+export const HANDBOOK_UPDATED = '2026-07-22'
 
 export const HANDBOOK_PAGES: HandbookPage[] = [
   {
@@ -694,7 +694,7 @@ One row per leaf tab in \`PAGE_META\` (\`src/lib/nav.ts\` — the routing truth)
 | \`case-files\` | Attachments | case_files + FiveManage | delete = command |
 | \`rico\` | RICO tracker | rico_cases, predicate_acts | — |
 | \`legal\` | Legal Requests (\`LegalView\`) | legal_requests + versions/exhibits/actions/participants | creator + participants; all workflow writes via definer RPCs |
-| \`justice\` | Justice Portal (\`JusticePortalView\`) | legal review queues, judge docket, coverage, applications | justice roles + Owner (justice-only members get it as their whole app) |
+| \`justice\` | Justice Portal (\`JusticePortalView\`) — **RETIRED 2026-07-22**: route/tab removed, memberships deactivated; legal approval is now Bureau Lead+ in the CID \`legal\` surface (see [DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md) Phase-1 banner) | legal review queues, judge docket, coverage, applications | justice roles + Owner (justice-only members get it as their whole app) |
 | \`persons\` | Persons → IntelProfile | persons, gang_members, vehicles | — |
 | \`bolo\` | BOLO Board | persons(bolo), warrant reports | — |
 | \`gangs\` | Gangs | gangs, ranks, members, turf | — |
@@ -780,6 +780,16 @@ SECURITY DEFINER (run privileged, then check the caller inside) except
 
 ### DOJ legal-review RPCs (v1.13.0)
 
+> **Retired — see [DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md) Phase-1 banner;
+> approval is now Bureau Lead+** (\`private.is_command()\`, via
+> \`review_legal_request_as_cid\`). As of 2026-07-22 the justice-membership, ADA/DA/AG
+> (\`review_legal_request_as_ada\`/\`_da\`/\`_ag\`), Judge (\`assign_judge\`,
+> \`decide_legal_request_as_judge\`, \`claim_legal_request_as_judge\`), DOJ-intake
+> (\`submit_legal_request_to_doj\`, \`reassign_legal_ada\`, \`set_legal_approval_route\`),
+> and prosecutor-coverage RPCs below are **EXECUTE-revoked** (retained for
+> history); \`justice_memberships\` are deactivated. The draft → CID-supervisor →
+> fulfilment RPCs remain live.
+
 Justice identity and legal review are a **separate domain** (see
 [\`docs/DOJ-INTEGRATION.md\`](../DOJ-INTEGRATION.md)). Every legal table is
 SELECT-only for clients; these definer RPCs are the only write path.
@@ -824,7 +834,9 @@ browser never runs privileged tests and never sees fixture credentials.
 \`create_legal_request\` and \`submit_legal_request_to_cid\` accept it (a
 search warrant requires a subject **or** at least one
 \`form_data.search_targets\` entry — no mandatory Persons-registry suspect),
-and it routes CID → ADA → **Judge** like every warrant.
+and it terminates at **Bureau Lead+** approval like every warrant (Retired
+2026-07-22: the old CID → ADA → Judge routing is history-only — see
+[DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md) Phase-1 banner).
 
 These two RPCs migrate historical in-city warrants into the DOJ workflow.
 Both are **owner-only** (\`private.is_owner()\`) and are not wired to any
@@ -952,6 +964,8 @@ read only through the owner-gated \`owner_security_overview()\`; newest 50
 runs kept per suite — see [Ch. 7](07-api.md)).
 
 ### Justice / legal (SELECT-only for clients; every write is a definer RPC)
+> **Retired 2026-07-22** — the justice-review/membership RPCs are EXECUTE-revoked and \`justice_memberships\` are deactivated (rows preserved read-only); legal-request approval is now **Bureau Lead+** via \`review_legal_request_as_cid\`. See [DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md) Phase-1 banner. The tables themselves are unchanged.
+
 The DOJ Legal Review System's tables (\`justice_memberships\`,
 \`justice_membership_requests\`, \`prosecutor_bureau_assignments\`,
 \`legal_requests\` + \`legal_request_versions\`/\`_actions\`/\`_exhibits\`/
@@ -1203,7 +1217,10 @@ Department moves are single-step (\`transfer_requests\`,
 rank-and-file members when one side of the move is their own bureau, or
 Deputy Director+/Owner for anyone — picks a destination and reason and
 the move applies immediately; JTF is a valid source and destination. Justice roles (ADA/DA/AG/Judge)
-are a separate identity domain and grant no CID assignment authority.
+are a separate identity domain and grant no CID assignment authority. (Retired
+2026-07-22: justice roles are deactivated and legal-request approval is now Bureau
+Lead+ (\`private.is_command()\`) — see [DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md)
+Phase-1 banner.)
 
 ## Permissions (what may you do?) — three layers
 

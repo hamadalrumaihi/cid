@@ -316,12 +316,12 @@ describe('legal requests (disposition-driven — lib/legalWorkflow)', () => {
 
   it('a CID supervisor owns the review on another investigator’s request → needs_action', () => {
     const q = buildActionItems(src({
-      role: 'senior_detective',
+      role: 'bureau_lead',
       legal: [mkLegal({ created_by: 'off-2', review_status: 'cid_supervisor_review' })],
     }))
     const item = byKey(q, 'legal:lr-1')
     expect(item).toMatchObject({
-      status: 'needs_action', reason: 'Review as CID supervisor',
+      status: 'needs_action', reason: 'Review as Bureau Lead',
       isCommandItem: true, isPersonalItem: false, isWaitingOnCurrentUser: true,
     })
   })
@@ -332,7 +332,7 @@ describe('legal requests (disposition-driven — lib/legalWorkflow)', () => {
       legal: [mkLegal({ review_status: 'cid_supervisor_review' })],
     }))
     expect(byKey(q, 'legal:lr-1')).toMatchObject({
-      status: 'waiting', isWaitingOnCurrentUser: false, reason: 'Waiting on cid supervisor.',
+      status: 'waiting', isWaitingOnCurrentUser: false, reason: 'Waiting on bureau lead.',
     })
   })
 

@@ -57,6 +57,16 @@ SECURITY DEFINER (run privileged, then check the caller inside) except
 
 ### DOJ legal-review RPCs (v1.13.0)
 
+> **Retired — see [DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md) Phase-1 banner;
+> approval is now Bureau Lead+** (`private.is_command()`, via
+> `review_legal_request_as_cid`). As of 2026-07-22 the justice-membership, ADA/DA/AG
+> (`review_legal_request_as_ada`/`_da`/`_ag`), Judge (`assign_judge`,
+> `decide_legal_request_as_judge`, `claim_legal_request_as_judge`), DOJ-intake
+> (`submit_legal_request_to_doj`, `reassign_legal_ada`, `set_legal_approval_route`),
+> and prosecutor-coverage RPCs below are **EXECUTE-revoked** (retained for
+> history); `justice_memberships` are deactivated. The draft → CID-supervisor →
+> fulfilment RPCs remain live.
+
 Justice identity and legal review are a **separate domain** (see
 [`docs/DOJ-INTEGRATION.md`](../DOJ-INTEGRATION.md)). Every legal table is
 SELECT-only for clients; these definer RPCs are the only write path.
@@ -101,7 +111,9 @@ browser never runs privileged tests and never sees fixture credentials.
 `create_legal_request` and `submit_legal_request_to_cid` accept it (a
 search warrant requires a subject **or** at least one
 `form_data.search_targets` entry — no mandatory Persons-registry suspect),
-and it routes CID → ADA → **Judge** like every warrant.
+and it terminates at **Bureau Lead+** approval like every warrant (Retired
+2026-07-22: the old CID → ADA → Judge routing is history-only — see
+[DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md) Phase-1 banner).
 
 These two RPCs migrate historical in-city warrants into the DOJ workflow.
 Both are **owner-only** (`private.is_owner()`) and are not wired to any

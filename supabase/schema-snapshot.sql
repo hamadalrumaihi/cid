@@ -6949,3 +6949,43 @@ create policy wl_sel on public.watchlist
 -- number from this and falls back to it on save, replacing the old timestamp
 -- fallback that produced numbers like SAB-69179. Definitive SQL in
 -- supabase/migrations/20260808120000_case_number_series.sql.
+
+-- 20260808140000_legal_lead_approval (predicate + function repurpose + grant
+-- revokes; NO schema/column change, so database.types.ts is unchanged): retires
+-- the DOJ/Judge/ADA legal-review workflow and moves legal-request approval to
+-- Bureau Lead+ (= private.is_command(): bureau_lead/deputy_director/director).
+-- New predicate public.private.can_approve_legal(p_request uuid, p_user uuid)
+-- returns boolean (STABLE SECURITY DEFINER, search_path='', schema-qualified) —
+-- true when the row exists, the caller (= auth.uid()) is is_active() +
+-- is_command(), can_access_case(case_id) holds, and the caller is NOT the
+-- creator; mirrors private.can_review_as_cid's shape but swaps the role gate to
+-- is_command(). public.review_legal_request_as_cid(uuid, text, text, text, text)
+-- is CREATE-OR-REPLACEd with the SAME signature (frontend call site unchanged):
+-- the 'return' branch is verbatim; 'approve' now TERMINATES at
+-- review_status='approved' + decision='approved' + decided_by/at (was
+-- submitted_to_doj), freezes the version at stage 'approved', signs
+-- 'cid_supervisor_approval' (CHECK reused, not changed), adds the cid_supervisor
+-- participant, logs cid_supervisor_review→approved, audits
+-- LEGAL_APPROVED_BY_COMMAND, and notifies the creator — ALL ADA auto-routing +
+-- DOJ/prosecutor/manager notification fan-out is removed; a NEW 'deny' branch
+-- (requires a note) sets decision='denied' + review_status='denied', freezes the
+-- version at stage 'denied', logs cid_supervisor_review→denied, audits
+-- LEGAL_DENIED_BY_COMMAND, notifies the creator. Approval is an authorization to
+-- apply in-city; fulfilment_status stays 'unissued' (issuance is the separate
+-- issue_legal_request step). The review_status CHECK already permits
+-- 'approved'/'denied' as terminal values, so the direct transition is legal. The
+-- retired workflow RPCs keep their bodies (history preserved) but EXECUTE is
+-- revoked from public/anon/authenticated (service_role retained), so they are
+-- uncallable from the app runtime: review_legal_request_as_ada/_as_da/_as_ag,
+-- assign_judge, claim_legal_request_as_judge, decide_legal_request_as_judge,
+-- reassign_legal_ada, submit_legal_request_to_doj, set_legal_approval_route,
+-- assign_ada_to_bureau, end_ada_bureau_assignment, set_primary_ada,
+-- set_acting_ada, review_justice_membership_request, set_justice_membership_active,
+-- justice_membership_request_submit, justice_membership_request_withdraw,
+-- admin_justice_membership_requests, owner_grant_justice_membership. Explicitly
+-- NOT revoked (still in service): correct_membership_organization, the read-only
+-- RPCs (doj_bureau_coverage / justice_directory / legal_request_people /
+-- legal_search / legal_internal_notes), and every CID fulfilment + drafting RPC.
+-- justice_memberships / participants / prosecutor assignments / decision columns
+-- / versions / signatures / actions are all UNTOUCHED — history stays readable.
+-- Definitive SQL in supabase/migrations/20260808140000_legal_lead_approval.sql.

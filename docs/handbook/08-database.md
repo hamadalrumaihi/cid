@@ -97,6 +97,8 @@ read only through the owner-gated `owner_security_overview()`; newest 50
 runs kept per suite — see [Ch. 7](07-api.md)).
 
 ### Justice / legal (SELECT-only for clients; every write is a definer RPC)
+> **Retired 2026-07-22** — the justice-review/membership RPCs are EXECUTE-revoked and `justice_memberships` are deactivated (rows preserved read-only); legal-request approval is now **Bureau Lead+** via `review_legal_request_as_cid`. See [DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md) Phase-1 banner. The tables themselves are unchanged.
+
 The DOJ Legal Review System's tables (`justice_memberships`,
 `justice_membership_requests`, `prosecutor_bureau_assignments`,
 `legal_requests` + `legal_request_versions`/`_actions`/`_exhibits`/

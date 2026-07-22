@@ -112,7 +112,6 @@ export const ROUTES: RouteDoc[] = [
   { path: '/persons /bolo /gangs /places /vehicles /indicators /network /narcotics /ballistics /modus /media /records', component: 'intel registries + dossiers', access: 'active member (delete = command)', data: 'shared intel tables', risk: 'medium' },
   { path: '/penal /sops /guide', component: 'reference views', access: 'active member (SOP writes = command)', data: 'static / documents', risk: 'low' },
   { path: '/calendar /shifts', component: 'oversight views', access: 'active member / self-scoped', data: 'deadlines, shift reports', risk: 'medium' },
-  { path: '/justice', component: 'JusticePortalView', access: 'active justice member or owner (manage = DA/AG/owner)', data: 'legal requests, memberships, coverage', risk: 'high' },
   { path: '/command-center', component: 'CommandCenterView', access: 'command or owner', data: 'profiles, requests, transfers + admin RPCs', risk: 'high' },
   { path: '/profile', component: 'ProfileView', access: 'active member (self)', data: 'own profile, appearance', risk: 'low' },
   { path: '/audit', component: 'AuditView', access: 'OWNER ONLY (RLS)', data: 'audit_log', risk: 'medium' },

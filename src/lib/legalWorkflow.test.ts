@@ -141,7 +141,7 @@ describe('next-action derivation + grouping', () => {
     const sup = viewer({ myId: 'sup-1', cidActive: true, cidRole: 'bureau_lead' })
     const d = dispositionFor(req({ review_status: 'cid_supervisor_review', created_by: 'inv-1' }), sup, NOW)
     expect(d.viewerCanAct).toBe(true)
-    expect(d.nextAction).toBe('Review as CID supervisor')
+    expect(d.nextAction).toBe('Review as Bureau Lead')
     expect(d.group).toBe('needs_action')
   })
   it('a judge sees an eligible request as available-to-claim', () => {

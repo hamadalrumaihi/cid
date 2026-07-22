@@ -427,9 +427,9 @@ export function ApprovalQueue() {
         <section className="rounded-2xl border border-sky-500/20 bg-ink-900/45 p-5">
           <h3 className="mb-1 font-bold text-white">DOJ / Judiciary applications <span className="text-slate-500">({justicePending.length})</span></h3>
           <p className="mb-3 text-xs text-slate-400">
-            These applicants signed up for the Department of Justice or the Judiciary — not CID.
-            Their requests are decided in the <b>Justice portal</b> by the Owner and the Attorney
-            General; CID Command does not approve them, so they are listed here for awareness only.
+            Legacy applicants who signed up for the Department of Justice or the Judiciary — not CID.
+            Justice memberships have been retired and these requests are no longer actionable; they are
+            listed here for historical awareness only.
           </p>
           <div className="space-y-2">
             {justicePending.map((j) => (
@@ -441,8 +441,7 @@ export function ApprovalQueue() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone="accent">Justice portal</Badge>
-                  {isOwner && <Button size="sm" variant="primary" onClick={() => router.push('/justice')}>Review in Justice portal</Button>}
+                  <Badge tone="neutral">Legacy · retired</Badge>
                 </div>
               </div>
             ))}

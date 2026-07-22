@@ -20,27 +20,13 @@ export const JUSTICE_ROLE_LABEL: Record<JusticeRole, string> = {
   attorney_general: 'Attorney General',
   judge: 'Judge',
 }
-export const JUSTICE_ROLE_ABBR: Record<JusticeRole, string> = {
-  assistant_district_attorney: 'ADA',
-  district_attorney: 'DA',
-  attorney_general: 'AG',
-  judge: 'Judge',
-}
 export const AGENCY_LABEL: Record<JusticeAgency, string> = {
   doj: 'Department of Justice',
   judiciary: 'Judiciary',
 }
-/** Valid roles per agency — mirrors the CHECK constraints; the review RPC
- *  revalidates every combination server-side. */
-export const AGENCY_ROLES: Record<JusticeAgency, JusticeRole[]> = {
-  doj: ['assistant_district_attorney', 'district_attorney', 'attorney_general'],
-  judiciary: ['judge'],
-}
 
 export const justiceRoleLabel = (r?: string | null): string =>
   (r && JUSTICE_ROLE_LABEL[r as JusticeRole]) || r || '—'
-export const justiceRoleAbbr = (r?: string | null): string =>
-  (r && JUSTICE_ROLE_ABBR[r as JusticeRole]) || r || '—'
 
 export type LegalRequest = Tables<'legal_requests'>
 export type LegalVersion = Tables<'legal_request_versions'>
@@ -51,10 +37,6 @@ export type LegalSignature = Tables<'legal_request_signatures'>
  *  this projection, never '*'. */
 export const LEGAL_ACTION_COLS =
   'id,legal_request_id,version_id,actor_id,action,from_status,to_status,public_note,created_at' as const
-/** justice_membership_requests hides internal_decision_note the same way. */
-export const JMR_COLS =
-  'id,applicant_id,display_name,justice_identifier,requested_agency,requested_justice_role,reason,additional_notes,status,decided_agency,decided_justice_role,applicant_visible_decision_note,decided_by,decided_at,submitted_at,created_at,updated_at' as const
-
 export const SUBPOENA_TYPES = [
   ['testimony', 'Testimony'],
   ['document_production', 'Document Production'],

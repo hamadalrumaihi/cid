@@ -47,7 +47,10 @@ export type LegalReqLike = Pick<
   | 'expires_at' | 'response_deadline' | 'submitted_to_doj_at'
 >
 
-const CID_SUPERVISOR_ROLES = new Set(['senior_detective', 'bureau_lead', 'deputy_director', 'director'])
+// Legal-request approval is Bureau Lead+ (Phase 1 — mirrors private.is_command()
+// / can_approve_legal on the server). Senior detectives can author/submit but
+// no longer approve.
+const LEGAL_APPROVER_ROLES = new Set(['bureau_lead', 'deputy_director', 'director'])
 const DECIDED = new Set(['approved', 'denied', 'withdrawn'])
 const RETURNED = new Set(['returned_by_cid', 'returned_by_ada', 'returned_by_da', 'returned_by_ag', 'returned_by_judge'])
 
@@ -175,7 +178,7 @@ export function responsibleRole(r: LegalReqLike): ResponsibleRole {
 
 export const RESPONSIBLE_ROLE_LABEL: Record<ResponsibleRole, string> = {
   investigator: 'Requesting investigator',
-  cid_supervisor: 'CID supervisor',
+  cid_supervisor: 'Bureau Lead',
   assigned_ada: 'Assigned ADA',
   bureau_prosecutor: 'Bureau prosecutor',
   district_attorney: 'District Attorney',
@@ -240,7 +243,7 @@ function viewerOwnsAction(r: LegalReqLike, v: LegalViewer): boolean {
   const isCreator = mine && r.created_by === v.myId
   if (s === 'not_submitted' || RETURNED.has(s)) return isCreator
   if (s === 'cid_supervisor_review') {
-    return v.cidActive && !isCreator && (v.isOwner || CID_SUPERVISOR_ROLES.has(v.cidRole ?? ''))
+    return v.cidActive && !isCreator && (v.isOwner || LEGAL_APPROVER_ROLES.has(v.cidRole ?? ''))
   }
   if (s === 'ada_review') return mine && r.assigned_ada_id === v.myId
   if (s === 'da_review') return v.justiceRole === 'district_attorney'
@@ -355,7 +358,7 @@ function nextActionLabel(
   if (flags.canAct) {
     if (s === 'not_submitted') return 'Finish draft'
     if (RETURNED.has(s)) return 'Revise and resubmit'
-    if (s === 'cid_supervisor_review') return 'Review as CID supervisor'
+    if (s === 'cid_supervisor_review') return 'Review as Bureau Lead'
     if (s === 'ada_review') return 'Review as assigned ADA'
     if (s === 'da_review') return 'Review as DA'
     if (s === 'ag_review') return 'Review as AG'
@@ -454,7 +457,7 @@ export function routingExplanation(r: LegalReqLike, v?: LegalViewer): string {
   }
   if (s === 'not_submitted') return 'This request is a draft and has not been submitted for review.'
   if (RETURNED.has(s)) return 'This request was returned for revision and is with the requesting investigator.'
-  if (s === 'cid_supervisor_review') return 'This request is awaiting CID supervisor review before it can be submitted to DOJ.'
+  if (s === 'cid_supervisor_review') return 'This request is awaiting Bureau Lead review before it can be approved and issued.'
   if (s === 'submitted_to_doj') {
     if (sealed) return 'This sealed request is not available for open judicial pickup. It requires explicit assignment under the sealed-request access rules.'
     if (judgeRouted) return 'This request passed CID review and is waiting at DOJ. The responsible bureau prosecutor can review it, while an eligible Judge may claim it directly because the request is Judge-routed and not sealed.'

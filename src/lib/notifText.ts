@@ -107,10 +107,11 @@ export function notifHref(n: NotificationRow, opts: { command?: boolean } = {}):
   const p = asPayload(n.payload)
   const t = n.type
   if (p.case_id) return caseLink(p.case_id, NOTIF_CASE_TAB[t])
-  // ada_assignment goes to justice-side prosecutors — their queues live in
-  // the Justice Portal, not the CID Legal view.
-  if (t.startsWith('justice') || t === 'ada_assignment') return '/justice'
-  const isLegal = t.startsWith('legal')
+  // Legal review now lives entirely in the CID Legal surface. Legacy
+  // justice/ada_assignment notifications (memberships retired) route to a
+  // specific request when one is carried, else the Legal registry — never the
+  // removed Justice Portal.
+  const isLegal = t.startsWith('legal') || t.startsWith('justice') || t === 'ada_assignment'
   if (isLegal && p.request_id) return `/legal?request=${encodeURIComponent(p.request_id)}`
   if (isLegal) return '/legal'
   // Document suggestions: open the target document if there is one, else the

@@ -36,7 +36,7 @@ All are `SECURITY DEFINER` with `set search_path to ''` and key on `auth.uid()` 
 | `guard_narcotic_sale_series()` / `guard_narcotic_sale_observation()` | **NON-definer** freeze on the restricted street-value sales tables: pins `created_by`, freezes `narcotic_id`/`series_id`, forces `restricted=true` always, and keeps a non-manager (`can_edit_narcotics_intel` but not `can_manage_narcotics`) from self-confirming — `state` stays at its prior value / `draft` |
 | `is_active_ada_for_bureau / get_routing_ada_for_bureau / can_manage_prosecutors / pba_validate` | ADA bureau-coverage rules |
 | `is_legal_participant / owner_flag / can_view_legal_request / can_edit_legal_draft` | legal-request access authority ([`20260714030000_legal_core.sql`](../supabase/migrations/20260714030000_legal_core.sql)) |
-| `can_review_as_cid/_ada/_da/_ag/_judge`, `can_manage_legal_assignment`, `can_fulfil_legal` | per-stage legal workflow gates |
+| `can_review_as_cid/_ada/_da/_ag/_judge`, `can_manage_legal_assignment`, `can_fulfil_legal` | per-stage legal workflow gates. **(Retired 2026-07-22 — see [DOJ-INTEGRATION.md](DOJ-INTEGRATION.md) Phase-1 banner: approval is now Bureau Lead+ via `can_review_as_cid` + `review_legal_request_as_cid`; the `_ada`/`_da`/`_ag`/`_judge` gates and justice helpers above back only history-only, EXECUTE-revoked RPCs, and `justice_memberships` are deactivated.)** |
 | `audit()` / `touch()` / `touch_cases()` / `stamp_author_identity()` | trigger workers: audit rows, honest `updated_at`, unforgeable authorship |
 
 ## 2. Profile visibility and the freeze triggers
