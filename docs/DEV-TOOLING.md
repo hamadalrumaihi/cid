@@ -162,6 +162,32 @@ that drives the Portal UI. Source: `src/components/assistant/`. Design:
 - **Not yet verified live:** the agent execution path needs a real model/key to
   exercise end-to-end; it is inert (and therefore safe) until you configure one.
 
+### Enabling it locally against Anthropic (recommended: via the proxy)
+
+page-agent runs **in the browser**, and Anthropic's API refuses direct browser
+calls (no CORS headers) — plus any `NEXT_PUBLIC_` key would be exposed to every
+page viewer. `scripts/page-agent-proxy.mjs` solves both: it holds the real key
+**server-side** and adds the CORS headers the browser needs. It's a thin
+pass-through to Anthropic's OpenAI-compatible endpoint (`/v1/chat/completions`).
+
+1. Start the proxy with your key (never `NEXT_PUBLIC_`):
+   ```bash
+   ANTHROPIC_API_KEY=sk-ant-... npm run assistant:proxy
+   ```
+2. `.env.local` (git-ignored) points the client at the proxy with a **dummy**
+   token — the real key never reaches the browser:
+   ```
+   NEXT_PUBLIC_PAGE_AGENT_MODEL=claude-sonnet-5
+   NEXT_PUBLIC_PAGE_AGENT_BASE_URL=http://localhost:8787/v1
+   NEXT_PUBLIC_PAGE_AGENT_API_KEY=proxy
+   ```
+3. `npm run dev`, sign in as the Owner, click the ✦ button, and Run an
+   instruction. Swap the model to `claude-haiku-4-5-20251001` for cheaper/faster.
+
+For a deployed pilot (Vercel), stand the same proxy up as a serverless
+route/function with the key in a **server-side** env var and point
+`_BASE_URL` at it — do not put a real key in `NEXT_PUBLIC_`.
+
 ---
 
 ## Visual regression — end-to-end verification plan

@@ -26,9 +26,10 @@ import { PersonModal, type GangRow, type PersonRow } from '@/components/persons/
 import { boloState, legalStatusOf } from '@/components/persons/personIntel'
 import { ManageBoloModal } from '@/components/persons/ProfileLegal'
 import { LEGAL_COLS, type LegalLite } from '@/components/persons/profileLoad'
+import { MdtExportsPanel } from './MdtExports'
 
 export function BoloView() {
-  const { state, canEdit } = useAuth()
+  const { state, canEdit, isCommand } = useAuth()
   const now = useNow()
   const [today] = useState(todayISO)
   const [persons, setPersons] = useState<PersonRow[]>([])
@@ -123,6 +124,10 @@ export function BoloView() {
           }
         />
       </div>
+
+      {state === 'in' && (
+        <MdtExportsPanel persons={persons.map((p) => ({ id: p.id, name: p.name }))} canPropose={canEdit} isCommand={isCommand} />
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {state !== 'in' ? (

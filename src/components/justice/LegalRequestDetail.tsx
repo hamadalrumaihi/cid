@@ -445,7 +445,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
         )}
         {section === 'review' && <ReviewSection actions={actions} name={name} />}
         {section === 'decision' && <DecisionSection r={r} name={name} />}
-        {section === 'service' && <ServiceSection r={r} name={name} />}
+        {section === 'service' && <ServiceSection r={r} name={name} canFulfil={cidActive && r.request_type === 'warrant'} />}
         {section === 'activity' && <ActivitySection actions={actions} participants={participants} name={name} />}
       </div>
 

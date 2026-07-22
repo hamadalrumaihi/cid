@@ -55,6 +55,58 @@ create type public.tracker_status as enum ('pending', 'authorized', 'expired');
 -- Tables (public + private), columns, constraints, RLS flags
 -- ============================================================
 
+create table public.account_handles (
+  id uuid not null default gen_random_uuid(),
+  account_id uuid not null,
+  handle text not null,
+  handle_normalized text generated always as (lower(btrim(handle))) stored,
+  is_current boolean not null default true,
+  observed_at timestamp with time zone not null default now(),
+  source text
+);
+alter table public.account_handles add constraint account_handles_pkey PRIMARY KEY (id);
+alter table public.account_handles add constraint account_handles_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
+alter table public.account_handles enable row level security;
+
+create table public.account_links (
+  id uuid not null default gen_random_uuid(),
+  account_id uuid not null,
+  person_id uuid not null,
+  ownership_confidence text not null default 'suspected'::text,
+  source text,
+  notes text,
+  confirmed_by uuid,
+  confirmed_at timestamp with time zone,
+  created_by uuid,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.account_links add constraint account_links_pkey PRIMARY KEY (id);
+alter table public.account_links add constraint account_links_unique UNIQUE (account_id, person_id);
+alter table public.account_links add constraint account_links_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
+alter table public.account_links add constraint account_links_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE CASCADE;
+alter table public.account_links add constraint account_links_confirmed_by_fkey FOREIGN KEY (confirmed_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.account_links add constraint account_links_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.account_links add constraint account_links_confidence_check CHECK ((ownership_confidence = ANY (ARRAY['suspected'::text, 'probable'::text, 'confirmed'::text])));
+alter table public.account_links enable row level security;
+
+create table public.accounts (
+  id uuid not null default gen_random_uuid(),
+  platform text not null,
+  external_id text,
+  handle text not null,
+  handle_normalized text generated always as (lower(btrim(handle))) stored,
+  profile_url text,
+  display_name text,
+  summary text,
+  restricted boolean not null default false,
+  created_by uuid,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.accounts add constraint accounts_pkey PRIMARY KEY (id);
+alter table public.accounts add constraint accounts_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.accounts enable row level security;
+
 create table public.announcements (
   id uuid not null default gen_random_uuid(),
   author_id uuid default auth.uid(),
@@ -955,6 +1007,26 @@ alter table public.justice_memberships add constraint justice_memberships_user_i
 alter table public.justice_memberships add constraint justice_memberships_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES public.profiles(id);
 alter table public.justice_memberships enable row level security;
 
+create table public.legal_holds (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid,
+  legal_request_id uuid,
+  reason text not null,
+  placed_by uuid,
+  placed_at timestamp with time zone not null default now(),
+  lifted_at timestamp with time zone,
+  lifted_by uuid,
+  lift_reason text
+);
+alter table public.legal_holds add constraint legal_holds_pkey PRIMARY KEY (id);
+alter table public.legal_holds add constraint legal_holds_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.legal_holds add constraint legal_holds_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id) ON DELETE CASCADE;
+alter table public.legal_holds add constraint legal_holds_placed_by_fkey FOREIGN KEY (placed_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.legal_holds add constraint legal_holds_lifted_by_fkey FOREIGN KEY (lifted_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.legal_holds add constraint legal_holds_one_target CHECK ((num_nonnulls(case_id, legal_request_id) = 1));
+alter table public.legal_holds add constraint legal_holds_lift_pair CHECK (((lifted_at IS NULL) = (lifted_by IS NULL)));
+alter table public.legal_holds enable row level security;
+
 create table public.legal_request_actions (
   id uuid not null default gen_random_uuid(),
   legal_request_id uuid not null,
@@ -991,6 +1063,28 @@ alter table public.legal_request_exhibits add constraint legal_request_exhibits_
 alter table public.legal_request_exhibits add constraint legal_request_exhibits_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id);
 alter table public.legal_request_exhibits add constraint legal_request_exhibits_exhibit_type_check CHECK ((exhibit_type = ANY (ARRAY['evidence'::text, 'attachment'::text, 'finalized_report'::text, 'case_media'::text, 'related_case'::text, 'external_link'::text, 'person_record'::text, 'vehicle'::text, 'place'::text, 'prior_legal_request'::text])));
 alter table public.legal_request_exhibits enable row level security;
+
+create table public.legal_seized_items (
+  id uuid not null default gen_random_uuid(),
+  legal_request_id uuid not null,
+  item text not null,
+  quantity text,
+  category text,
+  evidence_id uuid,
+  person_id uuid,
+  vehicle_id uuid,
+  notes text,
+  added_by uuid,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.legal_seized_items add constraint legal_seized_items_pkey PRIMARY KEY (id);
+alter table public.legal_seized_items add constraint legal_seized_items_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id) ON DELETE CASCADE;
+alter table public.legal_seized_items add constraint legal_seized_items_evidence_id_fkey FOREIGN KEY (evidence_id) REFERENCES public.evidence(id) ON DELETE SET NULL;
+alter table public.legal_seized_items add constraint legal_seized_items_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE SET NULL;
+alter table public.legal_seized_items add constraint legal_seized_items_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id) ON DELETE SET NULL;
+alter table public.legal_seized_items add constraint legal_seized_items_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.legal_seized_items add constraint legal_seized_items_category_check CHECK ((category IS NULL OR (category = ANY (ARRAY['weapon'::text, 'narcotics'::text, 'currency'::text, 'electronics'::text, 'document'::text, 'vehicle'::text, 'other'::text]))));
+alter table public.legal_seized_items enable row level security;
 
 create table public.legal_request_participants (
   legal_request_id uuid not null,
@@ -1089,6 +1183,7 @@ create table public.legal_requests (
   executed_by uuid,
   execution_outcome text,
   execution_notes text,
+  execution_result text,
   return_narrative text,
   returned_at timestamp with time zone,
   return_filed_by uuid,
@@ -1129,6 +1224,7 @@ alter table public.legal_requests add constraint legal_requests_assigned_ada_id_
 alter table public.legal_requests add constraint legal_requests_assigned_judge_id_fkey FOREIGN KEY (assigned_judge_id) REFERENCES public.profiles(id);
 alter table public.legal_requests add constraint legal_requests_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id);
 alter table public.legal_requests add constraint legal_requests_current_version_fkey FOREIGN KEY (current_version_id) REFERENCES public.legal_request_versions(id);
+alter table public.legal_requests add constraint legal_requests_execution_result_check CHECK ((execution_result IS NULL OR (execution_result = ANY (ARRAY['full'::text, 'partial'::text, 'unable'::text]))));
 alter table public.legal_requests enable row level security;
 
 create table public.mdt_wanted_projections (
@@ -1154,6 +1250,41 @@ alter table public.mdt_wanted_projections add constraint mdt_wanted_projections_
 alter table public.mdt_wanted_projections add constraint mdt_wanted_projections_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id);
 alter table public.mdt_wanted_projections add constraint mdt_wanted_projections_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id);
 alter table public.mdt_wanted_projections enable row level security;
+
+create table public.mdt_exports (
+  id uuid not null default gen_random_uuid(),
+  kind text not null,
+  person_id uuid,
+  vehicle_id uuid,
+  subject_snapshot text not null,
+  wanted_status text,
+  risk_level text,
+  instructions text,
+  reason text,
+  source_case_id uuid,
+  status text not null default 'proposed'::text,
+  proposed_by uuid,
+  proposed_at timestamp with time zone not null default now(),
+  exported_by uuid,
+  exported_at timestamp with time zone,
+  cleared_by uuid,
+  cleared_at timestamp with time zone,
+  clear_reason text,
+  sync_status text not null default 'pending'::text,
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.mdt_exports add constraint mdt_exports_pkey PRIMARY KEY (id);
+alter table public.mdt_exports add constraint mdt_exports_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE CASCADE;
+alter table public.mdt_exports add constraint mdt_exports_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id) ON DELETE CASCADE;
+alter table public.mdt_exports add constraint mdt_exports_source_case_id_fkey FOREIGN KEY (source_case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.mdt_exports add constraint mdt_exports_proposed_by_fkey FOREIGN KEY (proposed_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.mdt_exports add constraint mdt_exports_exported_by_fkey FOREIGN KEY (exported_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.mdt_exports add constraint mdt_exports_cleared_by_fkey FOREIGN KEY (cleared_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.mdt_exports add constraint mdt_exports_kind_check CHECK ((kind = ANY (ARRAY['person_bolo'::text, 'vehicle_bolo'::text, 'caution'::text])));
+alter table public.mdt_exports add constraint mdt_exports_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'exported'::text, 'cleared'::text])));
+alter table public.mdt_exports add constraint mdt_exports_risk_check CHECK ((risk_level IS NULL OR (risk_level = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
+alter table public.mdt_exports add constraint mdt_exports_target_check CHECK (((kind = ANY (ARRAY['person_bolo'::text, 'caution'::text])) AND person_id IS NOT NULL AND vehicle_id IS NULL) OR (kind = 'vehicle_bolo'::text AND vehicle_id IS NOT NULL AND person_id IS NULL));
+alter table public.mdt_exports enable row level security;
 
 create table public.prosecutor_bureau_assignments (
   id uuid not null default gen_random_uuid(),
@@ -1967,6 +2098,37 @@ alter table public.report_versions add constraint report_versions_report_id_fkey
 alter table public.report_versions add constraint report_versions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
 alter table public.report_versions enable row level security;
 
+create table public.restricted_access_grants (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  user_id uuid not null,
+  reason text not null,
+  granted_at timestamp with time zone not null default now(),
+  expires_at timestamp with time zone not null default (now() + '24:00:00'::interval)
+);
+alter table public.restricted_access_grants add constraint restricted_access_grants_pkey PRIMARY KEY (id);
+alter table public.restricted_access_grants add constraint restricted_access_grants_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.restricted_access_grants add constraint restricted_access_grants_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+create index restricted_access_grants_lookup ON public.restricted_access_grants USING btree (case_id, user_id, expires_at);
+alter table public.restricted_access_grants enable row level security;
+
+create table public.restricted_access_log (
+  id uuid not null default gen_random_uuid(),
+  entity_type text not null,
+  entity_id uuid not null,
+  actor_id uuid,
+  action text not null,
+  reason text,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.restricted_access_log add constraint restricted_access_log_pkey PRIMARY KEY (id);
+alter table public.restricted_access_log add constraint restricted_access_log_entity_check CHECK ((entity_type = 'media'::text));
+alter table public.restricted_access_log add constraint restricted_access_log_action_check CHECK ((action = ANY (ARRAY['view'::text, 'break_glass'::text])));
+alter table public.restricted_access_log add constraint restricted_access_log_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+create index restricted_access_log_entity_idx ON public.restricted_access_log USING btree (entity_type, entity_id);
+create index restricted_access_log_actor_idx ON public.restricted_access_log USING btree (actor_id);
+alter table public.restricted_access_log enable row level security;
+
 create table public.rico_cases (
   id uuid not null default gen_random_uuid(),
   case_id uuid not null,
@@ -2146,6 +2308,13 @@ alter table public.watchlist enable row level security;
 -- Indexes (excluding those backing PK/unique constraints)
 -- ============================================================
 
+CREATE INDEX account_handles_account_idx ON public.account_handles USING btree (account_id);
+CREATE UNIQUE INDEX account_handles_current_uidx ON public.account_handles USING btree (account_id) WHERE is_current;
+CREATE INDEX account_links_account_idx ON public.account_links USING btree (account_id);
+CREATE INDEX account_links_person_idx ON public.account_links USING btree (person_id);
+CREATE UNIQUE INDEX accounts_platform_extid_uidx ON public.accounts USING btree (platform, external_id) WHERE (external_id IS NOT NULL);
+CREATE INDEX accounts_platform_handle_idx ON public.accounts USING btree (platform, handle_normalized);
+CREATE INDEX accounts_handle_norm_idx ON public.accounts USING btree (handle_normalized);
 CREATE INDEX announcements_author_id_fkey_idx ON public.announcements USING btree (author_id);
 CREATE INDEX audit_log_actor_id_fkey_idx ON public.audit_log USING btree (actor_id);
 CREATE INDEX audit_log_created_at_idx ON public.audit_log USING btree (created_at DESC);
@@ -2251,6 +2420,11 @@ CREATE INDEX gangs_name_trgm ON public.gangs USING gin (name extensions.gin_trgm
 CREATE INDEX indicators_case_idx ON public.indicators USING btree (case_id);
 CREATE INDEX indicators_created_by_fkey_idx ON public.indicators USING btree (created_by);
 CREATE INDEX indicators_value_idx ON public.indicators USING btree (lower(btrim(value)));
+CREATE UNIQUE INDEX legal_holds_active_case_uidx ON public.legal_holds USING btree (case_id) WHERE ((lifted_at IS NULL) AND (case_id IS NOT NULL));
+CREATE UNIQUE INDEX legal_holds_active_request_uidx ON public.legal_holds USING btree (legal_request_id) WHERE ((lifted_at IS NULL) AND (legal_request_id IS NOT NULL));
+CREATE INDEX legal_holds_case_idx ON public.legal_holds USING btree (case_id) WHERE (case_id IS NOT NULL);
+CREATE INDEX legal_holds_request_idx ON public.legal_holds USING btree (legal_request_id) WHERE (legal_request_id IS NOT NULL);
+CREATE INDEX legal_seized_items_request_idx ON public.legal_seized_items USING btree (legal_request_id);
 CREATE INDEX legal_requests_ada_idx ON public.legal_requests USING btree (assigned_ada_id) WHERE (assigned_ada_id IS NOT NULL);
 CREATE INDEX legal_requests_bureau_idx ON public.legal_requests USING btree (responsible_bureau);
 CREATE INDEX legal_requests_case_idx ON public.legal_requests USING btree (case_id);
@@ -2258,6 +2432,11 @@ CREATE INDEX legal_requests_creator_idx ON public.legal_requests USING btree (cr
 CREATE UNIQUE INDEX legal_requests_import_key_key ON public.legal_requests USING btree (import_key) WHERE (import_key IS NOT NULL);
 CREATE INDEX legal_requests_judge_idx ON public.legal_requests USING btree (assigned_judge_id) WHERE (assigned_judge_id IS NOT NULL);
 CREATE INDEX legal_requests_review_idx ON public.legal_requests USING btree (review_status);
+CREATE INDEX mdt_exports_status_idx ON public.mdt_exports USING btree (status);
+CREATE INDEX mdt_exports_person_idx ON public.mdt_exports USING btree (person_id) WHERE (person_id IS NOT NULL);
+CREATE INDEX mdt_exports_vehicle_idx ON public.mdt_exports USING btree (vehicle_id) WHERE (vehicle_id IS NOT NULL);
+CREATE UNIQUE INDEX mdt_exports_live_person_uidx ON public.mdt_exports USING btree (person_id, kind) WHERE ((status <> 'cleared'::text) AND (person_id IS NOT NULL));
+CREATE UNIQUE INDEX mdt_exports_live_vehicle_uidx ON public.mdt_exports USING btree (vehicle_id) WHERE ((status <> 'cleared'::text) AND (vehicle_id IS NOT NULL));
 CREATE INDEX media_case_id_archived_at_idx ON public.media USING btree (case_id, archived_at);
 CREATE INDEX media_case_id_idx ON public.media USING btree (case_id);
 CREATE INDEX media_gang_id_fkey_idx ON public.media USING btree (gang_id);
@@ -4486,6 +4665,8 @@ end $function$
 -- Triggers (non-internal)
 -- ============================================================
 
+CREATE TRIGGER account_links_stamp BEFORE INSERT OR UPDATE ON public.account_links FOR EACH ROW EXECUTE FUNCTION private.account_link_stamp();
+CREATE TRIGGER accounts_track_handle AFTER INSERT OR UPDATE ON public.accounts FOR EACH ROW EXECUTE FUNCTION private.account_track_handle();
 CREATE TRIGGER touch_announcements BEFORE UPDATE ON public.announcements FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_stamp_author_ann BEFORE INSERT ON public.announcements FOR EACH ROW EXECUTE FUNCTION public.stamp_author_identity();
 CREATE TRIGGER ballistic_footprints_touch BEFORE UPDATE ON public.ballistic_footprints FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -4584,6 +4765,44 @@ CREATE TRIGGER vehicles_touch BEFORE UPDATE ON public.vehicles FOR EACH ROW EXEC
 -- ============================================================
 -- Row-Level Security policies
 -- ============================================================
+
+create policy account_handles_sel on public.account_handles
+  as permissive for select to authenticated
+  using (private.is_active());
+
+create policy account_links_del on public.account_links
+  as permissive for delete to authenticated
+  using (private.is_active());
+
+create policy account_links_ins on public.account_links
+  as permissive for insert to authenticated
+  with check (private.is_active());
+
+create policy account_links_sel on public.account_links
+  as permissive for select to authenticated
+  using (private.is_active());
+
+create policy account_links_upd on public.account_links
+  as permissive for update to authenticated
+  using (private.is_active())
+  with check (private.is_active());
+
+create policy accounts_del on public.accounts
+  as permissive for delete to authenticated
+  using (private.can_delete());
+
+create policy accounts_ins on public.accounts
+  as permissive for insert to authenticated
+  with check (private.is_active());
+
+create policy accounts_sel on public.accounts
+  as permissive for select to authenticated
+  using (private.is_active());
+
+create policy accounts_upd on public.accounts
+  as permissive for update to authenticated
+  using (private.is_active())
+  with check (private.is_active());
 
 create policy ann_del on public.announcements
   as permissive for delete to authenticated
@@ -5153,11 +5372,21 @@ create policy jm_sel on public.justice_memberships
   as permissive for select to authenticated
   using (((user_id = ( SELECT auth.uid() AS uid)) OR (private.justice_role() IS NOT NULL) OR private.is_command() OR private.is_owner()));
 
+create policy legal_holds_select on public.legal_holds
+  as permissive for select to authenticated
+  using ((private.is_command() OR ((case_id IS NOT NULL) AND private.can_access_case(case_id)) OR ((legal_request_id IS NOT NULL) AND (EXISTS ( SELECT 1
+   FROM public.legal_requests lr
+  WHERE ((lr.id = legal_holds.legal_request_id) AND private.can_access_case(lr.case_id)))))));
+
 create policy lra_sel on public.legal_request_actions
   as permissive for select to authenticated
   using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
 
 create policy lre_sel on public.legal_request_exhibits
+  as permissive for select to authenticated
+  using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
+
+create policy lsi_sel on public.legal_seized_items
   as permissive for select to authenticated
   using (private.can_view_legal_request(legal_request_id, ( SELECT auth.uid() AS uid)));
 
@@ -5181,6 +5410,10 @@ create policy mdt_sel on public.mdt_wanted_projections
   as permissive for select to authenticated
   using ((private.is_active() OR (private.justice_role() IS NOT NULL) OR private.owner_flag(( SELECT auth.uid() AS uid))));
 
+create policy mdt_exports_sel on public.mdt_exports
+  as permissive for select to authenticated
+  using ((private.is_active() OR (private.justice_role() IS NOT NULL) OR private.owner_flag(( SELECT auth.uid() AS uid))));
+
 create policy media_del on public.media
   as permissive for delete to authenticated
   using (private.can_delete());
@@ -5191,7 +5424,7 @@ create policy media_ins on public.media
 
 create policy media_sel on public.media
   as permissive for select to authenticated
-  using ((private.is_active() AND ((NOT restricted) OR private.can_edit_narcotics_intel())));
+  using ((private.is_active() AND ((NOT restricted) OR private.can_edit_narcotics_intel() OR private.has_media_break_glass(case_id, ( SELECT auth.uid() AS uid)))));
 
 create policy media_upd on public.media
   as permissive for update to authenticated
@@ -5635,6 +5868,14 @@ create policy profiles_upd_self on public.profiles
 create policy pba_sel on public.prosecutor_bureau_assignments
   as permissive for select to authenticated
   using (((private.justice_role() IS NOT NULL) OR private.is_active() OR (prosecutor_id = ( SELECT auth.uid() AS uid))));
+
+create policy rag_sel on public.restricted_access_grants
+  as permissive for select to authenticated
+  using ((private.is_command() OR (user_id = ( SELECT auth.uid() AS uid))));
+
+create policy ral_sel on public.restricted_access_log
+  as permissive for select to authenticated
+  using (private.is_command());
 
 create policy raid_compensations_del on public.raid_compensations
   as permissive for delete to authenticated
@@ -6513,3 +6754,187 @@ create policy wl_sel on public.watchlist
 -- fields; it refuses to retire a member (that path is gang_member_update).
 -- Definitive SQL in
 -- supabase/migrations/20260807180000_gang_roster_lifecycle.sql.
+-- 20260807190000_legal_hold (table + helper + 2 RPCs + 2 re-declared purge
+-- functions): the legal_holds table, its indexes, its legal_holds_select
+-- policy and RLS are mirrored above. A Lead+ (command) may place a legal hold
+-- on a case OR a legal request (exactly one target — legal_holds_one_target;
+-- a reason is required); while any hold is active the case cannot be
+-- permanently deleted, and — uniquely among command actions — the Owner cannot
+-- override it (the hold must be LIFTED first). One active hold per target
+-- (partial unique indexes legal_holds_active_case_uidx /
+-- legal_holds_active_request_uidx; a lifted hold keeps its history row).
+-- Reads follow the case wall (command, or anyone who can access the linked
+-- case / the linked request's case); there is NO client write policy — the two
+-- SECURITY DEFINER RPCs are the only write path. New helper
+-- private.case_has_active_hold(uuid) (true if a case is held directly or via
+-- any of its legal requests). New RPCs public.legal_hold_place(uuid, uuid,
+-- text) (command-gated; validates target/reason; audits LEGAL_HOLD_PLACED;
+-- maps the unique-violation to a readable "already under an active legal hold")
+-- and public.legal_hold_lift(uuid, text default null) (command-gated; stamps
+-- lifted_at/lifted_by/lift_reason; audits LEGAL_HOLD_LIFTED) — both revoked
+-- from public/anon, granted to authenticated + service_role.
+-- public.case_delete_preview(uuid) now also reports `active_hold` and folds it
+-- into `deletable` (deletable = no legal_requests AND not held), and
+-- public.case_permanent_delete(uuid, text) now refuses a held case before the
+-- legal-requests check — the Owner-cannot-override teeth. Definitive SQL in
+-- supabase/migrations/20260807190000_legal_hold.sql.
+-- 20260807200000_legal_execution_inventory (spec D3; column + table + index +
+-- policy + signature-bumped RPC + 2 write-only RPCs): warrant execution gains a
+-- typed result and a structured seized-items inventory. legal_requests gained a
+-- nullable execution_result text (legal_requests_execution_result_check:
+-- null / 'full' / 'partial' / 'unable') — all mirrored above. The
+-- legal_seized_items table (id, legal_request_id → legal_requests ON DELETE
+-- CASCADE, item, quantity, category [legal_seized_items_category_check:
+-- weapon/narcotics/currency/electronics/document/vehicle/other, nullable],
+-- nullable evidence_id/person_id/vehicle_id FKs ON DELETE SET NULL, notes,
+-- added_by → profiles ON DELETE SET NULL, created_at), its
+-- legal_seized_items_request_idx index, RLS, and the lsi_sel SELECT policy
+-- (read follows the request wall via private.can_view_legal_request, same as
+-- exhibits) are all mirrored above. There is NO client write policy — the two
+-- RPCs are the only write path. public.record_warrant_execution had its OLD
+-- 4-arg signature (uuid, text, text, timestamptz) DROPPED and was recreated as
+-- (uuid p_request, text p_outcome, text p_notes default null, text p_result
+-- default 'full', timestamptz p_executed_at default now()) returning
+-- public.legal_requests — a defaulted param is a new signature, so keeping both
+-- would be ambiguous; existing named-arg call-sites are unaffected. 'unable'
+-- requires a reason (p_outcome) and does NOT execute the warrant (it stays
+-- 'issued', recording execution_result='unable' + the reason and a
+-- LEGAL_EXECUTION_UNABLE audit / execution_attempt log); 'full'/'partial'
+-- advance to 'executed' exactly as before and stamp execution_result. New
+-- write-only RPCs public.legal_seized_item_add(uuid p_request, text p_item,
+-- text p_quantity default null, text p_category default null, uuid p_evidence
+-- default null, uuid p_person default null, uuid p_vehicle default null, text
+-- p_notes default null) returning public.legal_seized_items [warrant-only,
+-- private.can_fulfil_legal-gated, validates item + category, audits
+-- LEGAL_SEIZED_ITEM_ADDED] and public.legal_seized_item_remove(uuid p_item)
+-- returning void [private.can_fulfil_legal-gated on the row's request, audits
+-- LEGAL_SEIZED_ITEM_REMOVED]. All three SECURITY DEFINER, set search_path = '',
+-- schema-qualified, revoked from public/anon, granted to authenticated +
+-- service_role. Definitive SQL in
+-- supabase/migrations/20260807200000_legal_execution_inventory.sql.
+-- 20260807210000_mdt_exports (spec D4; table + indexes + policy + 3 RPCs):
+-- Lead+-gated push of BOLOs / officer-safety caution flags to the in-city
+-- (patrol) MDT — never case details. The mdt_exports table (id, kind
+-- [mdt_exports_kind_check: person_bolo/vehicle_bolo/caution], person_id /
+-- vehicle_id FKs ON DELETE SET NULL, subject_snapshot, wanted_status,
+-- risk_level [mdt_exports_risk_check: null / low / medium / high / critical],
+-- instructions, reason, source_case_id → cases ON DELETE SET NULL [INTERNAL
+-- linkage only — never part of the synced patrol payload, 11.7], status
+-- [mdt_exports_status_check: proposed/exported/cleared, default 'proposed'],
+-- proposed_by/exported_by/cleared_by → profiles ON DELETE SET NULL with their
+-- *_at stamps + clear_reason, sync_status default 'pending', updated_at, and
+-- mdt_exports_target_check [a person_bolo/caution names a person and no
+-- vehicle; a vehicle_bolo names a vehicle and no person]), its five indexes
+-- (mdt_exports_status_idx; partial mdt_exports_person_idx / _vehicle_idx; and
+-- the "one live row per target" partial-unique mdt_exports_live_person_uidx
+-- [person_id, kind WHERE status <> 'cleared'] / _live_vehicle_uidx), RLS, and
+-- the mdt_exports_sel SELECT policy (active member / justice / owner, mirroring
+-- mdt_wanted_projections' mdt_sel) are all mirrored above. Writes are RPC-only
+-- — there is NO client write policy. New SECURITY DEFINER RPCs:
+-- public.mdt_export_propose(text p_kind, uuid p_person, uuid p_vehicle, text
+-- p_snapshot, text p_wanted_status default null, text p_risk default null, text
+-- p_instructions default null, text p_reason default null, uuid p_case default
+-- null) returning public.mdt_exports [active-CID-gated (private.is_active());
+-- validates kind/risk/snapshot; forces the target shape (a vehicle_bolo nulls
+-- person_id, else nulls vehicle_id) and verifies the referenced person/vehicle
+-- exists; inserts as 'proposed'; audits MDT_EXPORT_PROPOSED; maps the
+-- unique-violation to "this subject already has a live MDT export"];
+-- public.mdt_export_approve(uuid p_export) returning public.mdt_exports
+-- [command-gated (private.is_command()); only a 'proposed' row advances to
+-- 'exported' stamping exported_by/exported_at + resetting sync_status;
+-- audits MDT_EXPORT_APPROVED]; and public.mdt_export_clear(uuid p_export, text
+-- p_reason default null) returning public.mdt_exports [command-gated; refuses
+-- an already-'cleared' row; sets status='cleared' + cleared_by/cleared_at/
+-- clear_reason; audits MDT_EXPORT_CLEARED — manual, no auto-expiry]. All three
+-- SECURITY DEFINER, set search_path = '', schema-qualified, revoked from
+-- public/anon, granted to authenticated + service_role. Definitive SQL in
+-- supabase/migrations/20260807210000_mdt_exports.sql.
+-- 20260807220000_accounts_registry (spec D1; 3 tables + 2 indexes-bearing
+-- registry entities + 2 trigger functions + registry-style RLS): social-media /
+-- online accounts become first-class, person-linked CID intel entities. Three
+-- new tables (all mirrored above). public.accounts — the account itself
+-- (platform free text so the in-RP set Birdy/InstaPic can grow, immutable
+-- external_id, handle, the GENERATED STORED handle_normalized =
+-- lower(btrim(handle)) case-insensitive match key [8.6], profile_url,
+-- display_name, summary, restricted, created_by → profiles ON DELETE SET NULL,
+-- timestamps); its unique accounts_platform_extid_uidx (platform, external_id)
+-- WHERE external_id IS NOT NULL [one account per platform+immutable-id when
+-- known] plus accounts_platform_handle_idx / accounts_handle_norm_idx.
+-- public.account_handles — the username-history trail [8.6] (account_id →
+-- accounts ON DELETE CASCADE, handle, GENERATED STORED handle_normalized,
+-- is_current, observed_at, source); one-current-per-account partial unique
+-- account_handles_current_uidx (account_id) WHERE is_current + the FK index.
+-- public.account_links — ownership links to persons with a confidence ladder
+-- [8.4] (account_id → accounts / person_id → persons both ON DELETE CASCADE,
+-- ownership_confidence CHECK suspected/probable/confirmed default 'suspected',
+-- source, notes, confirmed_by → profiles ON DELETE SET NULL, confirmed_at,
+-- created_by → profiles ON DELETE SET NULL, created_at; UNIQUE(account_id,
+-- person_id)); FK indexes account_links_account_idx / _person_idx. RLS is
+-- registry-style mirroring persons: accounts sel/ins/upd gate on
+-- private.is_active() and accounts_del on private.can_delete() (command);
+-- account_links sel/ins/upd/del all gate on private.is_active();
+-- account_handles is SELECT-only (private.is_active()) — there is NO client
+-- write policy, the history table is written by the trigger only. Two new
+-- SECURITY DEFINER trigger functions (set search_path = '', schema-qualified,
+-- like the other private.* trigger bodies they are NOT rendered as DDL above —
+-- only their CREATE TRIGGER statements are): private.account_track_handle()
+-- (accounts_track_handle AFTER INSERT OR UPDATE — on INSERT appends the initial
+-- current account_handles row; on a normalized-handle rename flips the old
+-- current to is_current=false and inserts the new current 'renamed' row; definer
+-- so it can write the RLS-guarded history) and private.account_link_stamp()
+-- (account_links_stamp BEFORE INSERT OR UPDATE — stamps confirmed_by [coalesce
+-- auth.uid()] / confirmed_at [coalesce now()] when a link first reaches
+-- 'confirmed', and clears both when it drops below 'confirmed'; auto-confirm
+-- from a return, D2, sets the confidence and this stamps who/when). No RPCs, no
+-- grant-audience change (accounts/account_links writes are direct-under-RLS;
+-- account_handles has no write path but the trigger). Definitive SQL in
+-- supabase/migrations/20260807220000_accounts_registry.sql.
+-- 20260807230000_search_include_accounts (function only): search_all gains one
+-- 'account' branch (spec D2 cross-registry dup-check) modeled on the 'vehicle'
+-- branch — label 'platform · @handle', sublabel display_name, seed term the
+-- handle; ranked (ilike + word_similarity) over handle / display_name /
+-- external_id. SECURITY INVOKER is unchanged, so accounts pass through the
+-- caller's own RLS (accounts_sel = private.is_active()) and restricted rows
+-- fail closed. The search_all body rendered above (a pre-20260807110000
+-- generation) is not re-rendered per branch; each change is tracked here — the
+-- signature/return (kind,id,label,sublabel,term,rank) is unchanged, so
+-- database.types.ts needs no edit. Definitive SQL in
+-- supabase/migrations/20260807230000_search_include_accounts.sql.
+-- 20260807240000_restricted_access (spec D6; 2 tables + 3 indexes + 1 predicate
+-- + 3 RPCs + a 1-clause media_sel widen): view-audit + break-glass for
+-- restricted media (Batch-13.4 / 13.8). Two new tables (both mirrored above).
+-- public.restricted_access_log — append-only audit of restricted-item views +
+-- break-glass events (entity_type CHECK 'media', entity_id, actor_id → profiles
+-- ON DELETE SET NULL, action CHECK 'view'/'break_glass', reason, created_at);
+-- indexes restricted_access_log_entity_idx (entity_type, entity_id) +
+-- restricted_access_log_actor_idx (actor_id). public.restricted_access_grants —
+-- a time-boxed (24h) case-scoped emergency VIEW grant (case_id → cases /
+-- user_id → profiles both ON DELETE CASCADE, reason NOT NULL, granted_at,
+-- expires_at default now()+24h); index restricted_access_grants_lookup (case_id,
+-- user_id, expires_at). RLS: writes on BOTH tables are RPC-only (NO client write
+-- policy). ral_sel (restricted_access_log SELECT) = private.is_command() only —
+-- command/owner read the trail. rag_sel (restricted_access_grants SELECT) =
+-- private.is_command() OR user_id = auth.uid() — command see all, a member sees
+-- only their own grants. One new SECURITY DEFINER predicate (set search_path =
+-- '', schema-qualified): private.has_media_break_glass(p_case uuid, p_user uuid)
+-- returns boolean — true when the user holds a live (expires_at > now()) grant
+-- for the case; definer so media_sel can call it without exposing the grants
+-- table or recursing RLS. media_sel is re-emitted above with ONE additive
+-- clause (OR private.has_media_break_glass(case_id, auth.uid())) so an active
+-- grant WIDENS view access only — media_upd is deliberately untouched, emergency
+-- access is read-only. Three new SECURITY DEFINER RPCs (set search_path = '',
+-- schema-qualified, revoked from public/anon, granted to authenticated +
+-- service_role): public.log_restricted_view(p_entity_type text, p_entity uuid)
+-- returns void — audits a genuine restricted-media view, de-duped per
+-- viewer/item within the hour, ignores non-restricted/other entities quietly,
+-- requires is_active(); public.restricted_media_count(p_case uuid) returns
+-- integer — count of a case's restricted media when private.can_access_case(),
+-- else 0, so the UI can offer break-glass without exposing the rows;
+-- public.restricted_media_break_glass(p_case uuid, p_reason text) returns
+-- public.restricted_access_grants — requires is_active() + can_access_case(),
+-- a non-blank reason, and that the caller is NOT already narcotics-cleared;
+-- inserts the 24h grant + a 'break_glass' audit row and notifies every active
+-- command member (bureau_lead/deputy_director/director) via a definer
+-- notifications insert (bypasses the create_notification allow-list, matching
+-- legal_notify's server path). Definitive SQL in
+-- supabase/migrations/20260807240000_restricted_access.sql.

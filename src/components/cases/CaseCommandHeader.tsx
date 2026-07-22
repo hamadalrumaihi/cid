@@ -52,6 +52,9 @@ export function CaseCommandHeader({
   canEdit,
   canArchive,
   canDelete,
+  canHold,
+  holdActive,
+  onPlaceHold,
   canHandover,
   canReassignBureau,
   onStatusChange,
@@ -71,6 +74,11 @@ export function CaseCommandHeader({
   canEdit: boolean
   canArchive: boolean
   canDelete: boolean
+  /** Command may place a legal hold. Lifting is done from the case banner. */
+  canHold: boolean
+  /** A hold is already active — the menu offers nothing (the banner lifts it). */
+  holdActive: boolean
+  onPlaceHold: () => void
   canHandover: boolean
   canReassignBureau: boolean
   onStatusChange: (s: CaseRow['status']) => void
@@ -143,6 +151,9 @@ export function CaseCommandHeader({
   if (canReassignBureau) admin.push({ label: 'Reassign bureau…', onClick: onReassign })
   if (admin.length) { admin[0].separatorBefore = true; items.push(...admin) }
   if (canArchive) items.push({ label: c.archived_at ? 'Restore case' : 'Archive case', onClick: onArchive, separatorBefore: !admin.length })
+  // Legal hold — placing lives here; lifting is on the case banner so an active
+  // hold is always visible, not buried in a menu.
+  if (canHold && !holdActive) items.push({ label: 'Place legal hold…', onClick: onPlaceHold, separatorBefore: !canArchive && !admin.length })
   if (canDelete) items.push({ label: 'Permanently delete case…', onClick: onDelete, danger: true, separatorBefore: true })
 
   // Primary action: the top assessCase recommendation. Tab-bearing actions

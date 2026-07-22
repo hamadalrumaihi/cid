@@ -150,6 +150,8 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
     else if (hit.kind === 'document') router.push(`/sops?doc=${encodeURIComponent(hit.id)}`)
     // Narcotics drill into the dossier by id (registry reads ?drug=).
     else if (hit.kind === 'narcotic') router.push(`/narcotics?drug=${encodeURIComponent(hit.id)}`)
+    // Accounts have no per-record deep link yet — land on the registry.
+    else if (hit.kind === 'account') router.push('/accounts')
     else if (hit.term && Q_SEEDED_TABS.has(meta.tab)) router.push(`/${meta.tab}?q=${encodeURIComponent(hit.term)}`)
     else router.push(`/${meta.tab}`)
   }, [onClose, query, router])

@@ -14,6 +14,161 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_handles: {
+        Row: {
+          account_id: string
+          handle: string
+          handle_normalized: string | null
+          id: string
+          is_current: boolean
+          observed_at: string
+          source: string | null
+        }
+        Insert: {
+          account_id: string
+          handle: string
+          id?: string
+          is_current?: boolean
+          observed_at?: string
+          source?: string | null
+        }
+        Update: {
+          account_id?: string
+          handle?: string
+          id?: string
+          is_current?: boolean
+          observed_at?: string
+          source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_handles_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      account_links: {
+        Row: {
+          account_id: string
+          confirmed_at: string | null
+          confirmed_by: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          ownership_confidence: string
+          person_id: string
+          source: string | null
+        }
+        Insert: {
+          account_id: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          ownership_confidence?: string
+          person_id: string
+          source?: string | null
+        }
+        Update: {
+          account_id?: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          ownership_confidence?: string
+          person_id?: string
+          source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_links_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_links_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_links_confirmed_by_fkey"
+            columns: ["confirmed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      accounts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          display_name: string | null
+          external_id: string | null
+          handle: string
+          handle_normalized: string | null
+          id: string
+          platform: string
+          profile_url: string | null
+          restricted: boolean
+          summary: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          display_name?: string | null
+          external_id?: string | null
+          handle: string
+          id?: string
+          platform: string
+          profile_url?: string | null
+          restricted?: boolean
+          summary?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          display_name?: string | null
+          external_id?: string | null
+          handle?: string
+          id?: string
+          platform?: string
+          profile_url?: string | null
+          restricted?: boolean
+          summary?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accounts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       announcements: {
         Row: {
           audience: string
@@ -2652,6 +2807,71 @@ export type Database = {
           },
         ]
       }
+      legal_holds: {
+        Row: {
+          case_id: string | null
+          id: string
+          legal_request_id: string | null
+          lift_reason: string | null
+          lifted_at: string | null
+          lifted_by: string | null
+          placed_at: string
+          placed_by: string | null
+          reason: string
+        }
+        Insert: {
+          case_id?: string | null
+          id?: string
+          legal_request_id?: string | null
+          lift_reason?: string | null
+          lifted_at?: string | null
+          lifted_by?: string | null
+          placed_at?: string
+          placed_by?: string | null
+          reason: string
+        }
+        Update: {
+          case_id?: string | null
+          id?: string
+          legal_request_id?: string | null
+          lift_reason?: string | null
+          lifted_at?: string | null
+          lifted_by?: string | null
+          placed_at?: string
+          placed_by?: string | null
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_holds_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_holds_legal_request_id_fkey"
+            columns: ["legal_request_id"]
+            isOneToOne: false
+            referencedRelation: "legal_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_holds_placed_by_fkey"
+            columns: ["placed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_holds_lifted_by_fkey"
+            columns: ["lifted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       legal_request_actions: {
         Row: {
           action: string
@@ -2981,6 +3201,7 @@ export type Database = {
           executed_by: string | null
           execution_notes: string | null
           execution_outcome: string | null
+          execution_result: string | null
           expires_at: string | null
           form_data: Json
           fulfilment_status: string
@@ -3056,6 +3277,7 @@ export type Database = {
           executed_by?: string | null
           execution_notes?: string | null
           execution_outcome?: string | null
+          execution_result?: string | null
           expires_at?: string | null
           form_data?: Json
           fulfilment_status?: string
@@ -3131,6 +3353,7 @@ export type Database = {
           executed_by?: string | null
           execution_notes?: string | null
           execution_outcome?: string | null
+          execution_result?: string | null
           expires_at?: string | null
           form_data?: Json
           fulfilment_status?: string
@@ -3225,6 +3448,196 @@ export type Database = {
             columns: ["current_version_id"]
             isOneToOne: false
             referencedRelation: "legal_request_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      legal_seized_items: {
+        Row: {
+          added_by: string | null
+          category: string | null
+          created_at: string
+          evidence_id: string | null
+          id: string
+          item: string
+          legal_request_id: string
+          notes: string | null
+          person_id: string | null
+          quantity: string | null
+          vehicle_id: string | null
+        }
+        Insert: {
+          added_by?: string | null
+          category?: string | null
+          created_at?: string
+          evidence_id?: string | null
+          id?: string
+          item: string
+          legal_request_id: string
+          notes?: string | null
+          person_id?: string | null
+          quantity?: string | null
+          vehicle_id?: string | null
+        }
+        Update: {
+          added_by?: string | null
+          category?: string | null
+          created_at?: string
+          evidence_id?: string | null
+          id?: string
+          item?: string
+          legal_request_id?: string
+          notes?: string | null
+          person_id?: string | null
+          quantity?: string | null
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_seized_items_legal_request_id_fkey"
+            columns: ["legal_request_id"]
+            isOneToOne: false
+            referencedRelation: "legal_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_seized_items_evidence_id_fkey"
+            columns: ["evidence_id"]
+            isOneToOne: false
+            referencedRelation: "evidence"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_seized_items_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_seized_items_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_seized_items_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mdt_exports: {
+        Row: {
+          clear_reason: string | null
+          cleared_at: string | null
+          cleared_by: string | null
+          exported_at: string | null
+          exported_by: string | null
+          id: string
+          instructions: string | null
+          kind: string
+          person_id: string | null
+          proposed_at: string
+          proposed_by: string | null
+          reason: string | null
+          risk_level: string | null
+          source_case_id: string | null
+          status: string
+          subject_snapshot: string
+          sync_status: string
+          updated_at: string
+          vehicle_id: string | null
+          wanted_status: string | null
+        }
+        Insert: {
+          clear_reason?: string | null
+          cleared_at?: string | null
+          cleared_by?: string | null
+          exported_at?: string | null
+          exported_by?: string | null
+          id?: string
+          instructions?: string | null
+          kind: string
+          person_id?: string | null
+          proposed_at?: string
+          proposed_by?: string | null
+          reason?: string | null
+          risk_level?: string | null
+          source_case_id?: string | null
+          status?: string
+          subject_snapshot: string
+          sync_status?: string
+          updated_at?: string
+          vehicle_id?: string | null
+          wanted_status?: string | null
+        }
+        Update: {
+          clear_reason?: string | null
+          cleared_at?: string | null
+          cleared_by?: string | null
+          exported_at?: string | null
+          exported_by?: string | null
+          id?: string
+          instructions?: string | null
+          kind?: string
+          person_id?: string | null
+          proposed_at?: string
+          proposed_by?: string | null
+          reason?: string | null
+          risk_level?: string | null
+          source_case_id?: string | null
+          status?: string
+          subject_snapshot?: string
+          sync_status?: string
+          updated_at?: string
+          vehicle_id?: string | null
+          wanted_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mdt_exports_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mdt_exports_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mdt_exports_source_case_id_fkey"
+            columns: ["source_case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mdt_exports_proposed_by_fkey"
+            columns: ["proposed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mdt_exports_exported_by_fkey"
+            columns: ["exported_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mdt_exports_cleared_by_fkey"
+            columns: ["cleared_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -5685,6 +6098,86 @@ export type Database = {
           },
         ]
       }
+      restricted_access_grants: {
+        Row: {
+          case_id: string
+          expires_at: string
+          granted_at: string
+          id: string
+          reason: string
+          user_id: string
+        }
+        Insert: {
+          case_id: string
+          expires_at?: string
+          granted_at?: string
+          id?: string
+          reason: string
+          user_id: string
+        }
+        Update: {
+          case_id?: string
+          expires_at?: string
+          granted_at?: string
+          id?: string
+          reason?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "restricted_access_grants_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "restricted_access_grants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      restricted_access_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "restricted_access_log_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rico_cases: {
         Row: {
           case_id: string
@@ -6375,6 +6868,14 @@ export type Database = {
           user_id: string
         }[]
       }
+      legal_hold_lift: {
+        Args: { p_hold: string; p_reason?: string | null }
+        Returns: Database["public"]["Tables"]["legal_holds"]["Row"]
+      }
+      legal_hold_place: {
+        Args: { p_case?: string | null; p_legal_request?: string | null; p_reason: string }
+        Returns: Database["public"]["Tables"]["legal_holds"]["Row"]
+      }
       legal_request_people: {
         Args: { p_request: string }
         Returns: {
@@ -6395,6 +6896,45 @@ export type Database = {
       legal_search: {
         Args: { q: string }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"][]
+      }
+      legal_seized_item_add: {
+        Args: {
+          p_request: string
+          p_item: string
+          p_quantity?: string | null
+          p_category?: string | null
+          p_evidence?: string | null
+          p_person?: string | null
+          p_vehicle?: string | null
+          p_notes?: string | null
+        }
+        Returns: Database["public"]["Tables"]["legal_seized_items"]["Row"]
+      }
+      legal_seized_item_remove: {
+        Args: { p_item: string }
+        Returns: undefined
+      }
+      mdt_export_approve: {
+        Args: { p_export: string }
+        Returns: Database["public"]["Tables"]["mdt_exports"]["Row"]
+      }
+      mdt_export_clear: {
+        Args: { p_export: string; p_reason?: string | null }
+        Returns: Database["public"]["Tables"]["mdt_exports"]["Row"]
+      }
+      mdt_export_propose: {
+        Args: {
+          p_kind: string
+          p_person: string | null
+          p_vehicle: string | null
+          p_snapshot: string
+          p_wanted_status?: string | null
+          p_risk?: string | null
+          p_instructions?: string | null
+          p_reason?: string | null
+          p_case?: string | null
+        }
+        Returns: Database["public"]["Tables"]["mdt_exports"]["Row"]
       }
       mdt_wanted_current: {
         Args: never
@@ -6439,10 +6979,11 @@ export type Database = {
       }
       record_warrant_execution: {
         Args: {
-          p_executed_at?: string
-          p_notes?: string
-          p_outcome: string
           p_request: string
+          p_outcome: string
+          p_notes?: string | null
+          p_result?: string | null
+          p_executed_at?: string | null
         }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
       }
@@ -7172,6 +7713,18 @@ export type Database = {
       confirm_narcotic_sale_observation: {
         Args: { p_id: string; p_reason?: string }
         Returns: undefined
+      }
+      log_restricted_view: {
+        Args: { p_entity: string; p_entity_type: string }
+        Returns: undefined
+      }
+      restricted_media_count: {
+        Args: { p_case: string }
+        Returns: number
+      }
+      restricted_media_break_glass: {
+        Args: { p_case: string; p_reason: string }
+        Returns: Database["public"]["Tables"]["restricted_access_grants"]["Row"]
       }
     }
     Enums: {

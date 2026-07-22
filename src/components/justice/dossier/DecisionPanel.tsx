@@ -166,12 +166,21 @@ export function DecisionPanel({
     const parse = (s: string | null) => (s?.trim() ? new Date(s.trim()).toISOString() : undefined)
     await act(() => rpc('issue_legal_request', { p_request: r.id, p_expires_at: parse(exp), p_response_deadline: parse(dl) }), 'Issued.')
   }
-  const execute = async () => {
-    const outcome = await uiPrompt('Execution outcome (e.g. suspect in custody).', { title: 'Record execution' })
+  const execute = async (result: 'full' | 'partial' | 'unable') => {
+    const title = result === 'unable' ? 'Unable to execute' : result === 'partial' ? 'Partial execution' : 'Record execution'
+    const outcome = await uiPrompt(
+      result === 'unable'
+        ? 'Reason the warrant could not be executed (required).'
+        : 'Execution outcome (e.g. suspect in custody).',
+      { title },
+    )
     if (!outcome?.trim()) return
-    const notes = await uiPrompt('Execution notes (optional).', { title: 'Record execution' })
+    const notes = await uiPrompt('Notes (optional). Log seized property below as inventory.', { title })
     if (notes === null) return
-    await act(() => rpc('record_warrant_execution', { p_request: r.id, p_outcome: outcome, p_notes: notes || undefined }), 'Execution recorded.')
+    await act(
+      () => rpc('record_warrant_execution', { p_request: r.id, p_outcome: outcome, p_notes: notes || undefined, p_result: result }),
+      result === 'unable' ? 'Recorded — the warrant remains issued.' : 'Execution recorded.',
+    )
   }
   const fileReturn = async () => {
     const narrative = await uiPrompt('Return narrative (required).', { title: 'File return' })
@@ -315,7 +324,13 @@ export function DecisionPanel({
           {anyFulfilment && (
             <Block title="Service & return recording">
               {canIssue && <Button variant="primary" disabled={busy} onClick={() => void issue()}>Record issue</Button>}
-              {canExecute && <Button variant="primary" disabled={busy} onClick={() => void execute()}>Record execution</Button>}
+              {canExecute && (
+                <>
+                  <Button variant="primary" disabled={busy} onClick={() => void execute('full')}>Record execution</Button>
+                  <Button disabled={busy} onClick={() => void execute('partial')}>Partial execution</Button>
+                  <Button disabled={busy} onClick={() => void execute('unable')}>Unable to execute</Button>
+                </>
+              )}
               {canFileReturn && <Button disabled={busy} onClick={() => void fileReturn()}>File return</Button>}
               {canRecordService && (
                 <>

@@ -14,6 +14,7 @@ import { GangsView } from '@/components/gangs/GangsView'
 import { BoloView } from '@/components/bolo/BoloView'
 import { PlacesView } from '@/components/places/PlacesView'
 import { VehiclesView } from '@/components/vehicles/VehiclesView'
+import { AccountsView } from '@/components/accounts/AccountsView'
 import { PenalView } from '@/components/penal/PenalView'
 import { RecordsView } from '@/components/records/RecordsView'
 import { ShiftsView } from '@/components/shifts/ShiftsView'
@@ -129,6 +130,13 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="vehicles" />}>
         <VehiclesView />
+      </Suspense>
+    )
+  }
+  if (tab === 'accounts') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="accounts" />}>
+        <AccountsView />
       </Suspense>
     )
   }

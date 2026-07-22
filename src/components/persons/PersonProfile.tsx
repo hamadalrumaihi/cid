@@ -62,9 +62,10 @@ import {
   AddPersonMediaModal, LinkPersonPlaceModal, LinkVehicleModal, PersonMediaSection, PersonPlacesSection, PersonVehiclesSection,
 } from './ProfileAssets'
 import { BoloStateBadge, LegalSection, ManageBoloModal } from './ProfileLegal'
+import { PersonAccountsSection } from './PersonAccountsSection'
 import { PersonDuplicatesModal } from './PersonMergeModal'
 
-type SectionId = 'overview' | 'identity' | 'relationships' | 'cases' | 'legal' | 'vehicles' | 'locations' | 'media' | 'activity'
+type SectionId = 'overview' | 'identity' | 'relationships' | 'cases' | 'legal' | 'vehicles' | 'accounts' | 'locations' | 'media' | 'activity'
 const SECTION_IDS: SectionId[] = ['overview', 'identity', 'relationships', 'cases', 'legal', 'vehicles', 'locations', 'media', 'activity']
 
 /** Stable empty fallback so memo deps don't churn while the core loads. */
@@ -346,6 +347,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
     { id: 'cases', label: 'Cases', count: counts?.caseLinks ?? slices.cases?.links.length },
     { id: 'legal', label: 'Legal', count: core ? legal.length : undefined, marker: legalBuckets.activeCount > 0, markerLabel: 'Active legal instruments' },
     { id: 'vehicles', label: 'Vehicles', count: counts?.vehicles },
+    { id: 'accounts', label: 'Accounts' },
     { id: 'locations', label: 'Locations', count: counts?.places },
     { id: 'media', label: 'Media', count: counts?.media ?? slices.media?.length },
     { id: 'activity', label: 'Activity', marker: !!p && isPersonStale(p.reviewed_at, now), markerLabel: 'Intelligence overdue for review' },
@@ -466,6 +468,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
                 : <Notice text="Loading cases…" />
             )}
             {section === 'legal' && <LegalSection legal={legal} today={today} now={now} />}
+            {section === 'accounts' && <PersonAccountsSection personId={p.id} />}
             {section === 'vehicles' && (
               slices.vehicles
                 ? <PersonVehiclesSection data={slices.vehicles} canEdit={mayEdit} onLink={() => setLinkVehicle(true)} onRefresh={refresh} />

@@ -161,6 +161,9 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   //    assessCase filters open rows itself. Best-effort: the header renders
   //    without it. ──
   const [wf, setWf] = useState<WorkflowRows | null>(null)
+  // Active legal hold on this case (D7). Null = none; the banner + delete guard
+  // key off it. Command places/lifts; anyone who can see the case sees it.
+  const [hold, setHold] = useState<Tables<'legal_holds'> | null>(null)
   const [wfForId, setWfForId] = useState(id)
   if (wfForId !== id) {
     // Render-phase adjustment (same idiom as adoptedKey above): navigating to
@@ -169,6 +172,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     // never the old case's counts.
     setWfForId(id)
     setWf(null)
+    setHold(null)
   }
   const vM = useTableVersion('media')
   const vR = useTableVersion('reports')
@@ -194,6 +198,18 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     } catch { /* header/metrics render with em-dashes until a fetch lands */ }
   }, [id])
   useEffect(() => { queueMicrotask(() => { void fetchWorkflow() }) }, [fetchWorkflow, casesV, vM, vR, vT, vL, vB, vRi])
+
+  // Legal hold — its own tiny fetch (independent of the workflow snapshot).
+  // RLS lets command + anyone who can access the case read it; a denied read
+  // just leaves the banner off.
+  const vH = useTableVersion('legal_holds')
+  const fetchHold = useCallback(async () => {
+    try {
+      const rows = await list('legal_holds', { eq: { case_id: id }, order: 'placed_at', ascending: false })
+      setHold((rows as Tables<'legal_holds'>[]).find((h) => !h.lifted_at) ?? null)
+    } catch { setHold(null) }
+  }, [id])
+  useEffect(() => { queueMicrotask(() => { void fetchHold() }) }, [fetchHold, vH])
 
   // Photos = non-archived case media (archived rows stay out of every count).
   const mediaCount = useMemo(() => (wf ? wf.media.filter((m) => !m.archived_at).length : null), [wf])
@@ -273,10 +289,37 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     onChanged(); if (restoring) void fetchCase(); else onBack()
   }
 
+  const placeHold = async () => {
+    const reason = await uiPrompt(
+      `Place a legal hold on ${c.case_number}?\n\nWhile the hold is active this case cannot be permanently deleted — not even by the owner — until a command member lifts it.`,
+      { title: 'Place legal hold', placeholder: 'Reason (required)', confirmText: 'Place hold' },
+    )
+    if (reason === null) return
+    const res = await rpc('legal_hold_place', { p_case: c.id, p_legal_request: null, p_reason: reason })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Legal hold placed.', 'success'); void fetchHold()
+  }
+
+  const liftHold = async () => {
+    if (!hold) return
+    const reason = await uiPrompt(
+      `Lift the legal hold on ${c.case_number}?\n\nOnce lifted the case can be permanently deleted again.`,
+      { title: 'Lift legal hold', placeholder: 'Reason (optional)', confirmText: 'Lift hold' },
+    )
+    if (reason === null) return
+    const res = await rpc('legal_hold_lift', { p_hold: hold.id, p_reason: reason || null })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Legal hold lifted.', 'success'); void fetchHold()
+  }
+
   const permanentDelete = async () => {
     const pv = await rpc('case_delete_preview', { p_case: c.id })
     if (pv.error) { toast(pv.error.message, 'danger'); return }
-    const preview = pv.data as { items: { table: string; rows: number; on_delete: string }[]; legal_requests: number; deletable: boolean }
+    const preview = pv.data as { items: { table: string; rows: number; on_delete: string }[]; legal_requests: number; active_hold?: boolean; deletable: boolean }
+    if (preview.active_hold) {
+      toast('This case is under an active legal hold and cannot be deleted — lift the hold first.', 'warn')
+      return
+    }
     if (!preview.deletable) {
       toast(`This case has ${preview.legal_requests} legal request${preview.legal_requests === 1 ? '' : 's'} on file and cannot be deleted.`, 'warn')
       return
@@ -342,6 +385,19 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
           This case is archived — it is hidden from the working views. Command can restore it from the header menu.
         </p>
       )}
+      {hold && (
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2.5 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-semibold text-rose-200">
+              Legal hold — this case cannot be permanently deleted until a command member lifts it.
+            </p>
+            {isCommand && <Button onClick={() => void liftHold()}>Lift hold…</Button>}
+          </div>
+          <p className="mt-1 text-rose-100/80">
+            {hold.reason} · placed by {officerName(hold.placed_by) || 'command'} on {hold.placed_at.slice(0, 10)}
+          </p>
+        </div>
+      )}
       <CaseCommandHeader
         c={c}
         op={op ? { id: op.id, name: op.name } : null}
@@ -350,6 +406,9 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         canEdit={canEdit}
         canArchive={isCommand}
         canDelete={isOwner}
+        canHold={isCommand}
+        holdActive={!!hold}
+        onPlaceHold={() => void placeHold()}
         canHandover={canHandover}
         canReassignBureau={canReassignBureau}
         onStatusChange={(s) => void quickStatus(s)}

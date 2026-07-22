@@ -19,9 +19,9 @@ import { PageHeader } from '@/components/ui/PageHeader'
 
 type GangRow = Tables<'gangs'>
 
-const FILL = { gang: '#3b82f6', person: '#10b981', place: '#f59e0b', narcotic: '#a78bfa' } as const
-const RADIUS = { gang: 26, person: 16, place: 14, narcotic: 15 } as const
-const ICON = { gang: '🚩', person: '👤', place: '📍', narcotic: '💊' } as const
+const FILL = { gang: '#3b82f6', person: '#10b981', place: '#f59e0b', narcotic: '#a78bfa', account: '#38bdf8' } as const
+const RADIUS = { gang: 26, person: 16, place: 14, narcotic: 15, account: 12 } as const
+const ICON = { gang: '🚩', person: '👤', place: '📍', narcotic: '💊', account: '🌐' } as const
 const VBW = 1000
 const VBH = 640
 
@@ -53,7 +53,7 @@ export function NetworkView() {
     setErr(null)
     try {
       const safe = <T,>(p: Promise<T[]>) => p.catch(() => [] as T[])
-      const [gs, persons, places, members, narcotics, narcPlaces, narcGangs] = await Promise.all([
+      const [gs, persons, places, members, narcotics, narcPlaces, narcGangs, accountLinks, accounts] = await Promise.all([
         safe(list('gangs', {})),
         safe(list('persons', {})),
         safe(list('places', {})),
@@ -61,6 +61,8 @@ export function NetworkView() {
         safe(list('narcotics', {})),
         safe(list('narcotic_places', {})),
         safe(list('narcotic_gangs', {})),
+        safe(list('account_links', {})),
+        safe(list('accounts', {})),
       ])
       setGangs(gs)
       const nodes: Record<string, NetNode> = {}
@@ -102,6 +104,18 @@ export function NetworkView() {
         // so the Substance→Place edge has both ends.
         if (!nodes[`pl:${np.place_id}`]) { const pl = placeById.get(np.place_id); if (pl) add(`pl:${pl.id}`, 'place', pl.name || 'Place', '') }
         if (nodes[`pl:${np.place_id}`] && addNarc(np.narcotic_id)) link(`n:${np.narcotic_id}`, `pl:${np.place_id}`)
+      }
+      // Accounts (spec D1): social/online accounts enter via an ownership link to
+      // a person. Pull the linked person in even if unaffiliated, so the
+      // Account→Person edge has both ends — mirroring the Substance→Place rule.
+      const accountById = new Map(accounts.map((a) => [a.id, a]))
+      for (const al of accountLinks) {
+        if (!al.account_id || !al.person_id) continue
+        const acct = accountById.get(al.account_id); const per = personById.get(al.person_id)
+        if (!acct || !per) continue
+        add(`p:${per.id}`, 'person', per.name || 'Person', per.alias || per.status || '')
+        add(`a:${acct.id}`, 'account', `@${acct.handle}`, acct.platform || '')
+        link(`a:${acct.id}`, `p:${per.id}`)
       }
       setGraph({ nodes, adj })
     } catch (e) {
@@ -206,7 +220,7 @@ export function NetworkView() {
           actions={
             <>
               <span className="hidden items-center gap-3 text-[11px] text-slate-400 sm:flex">
-                {(['gang', 'person', 'place', 'narcotic'] as const).map((t) => (
+                {(['gang', 'person', 'place', 'narcotic', 'account'] as const).map((t) => (
                   <span key={t} className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full" style={{ background: FILL[t] }} />{cap(t)}</span>
                 ))}
               </span>
