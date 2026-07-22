@@ -54,6 +54,14 @@ Approval is atomic: request decided + `profiles.role/division/active` flipped + 
 
 ## 2. Justice membership (DOJ / Judiciary)
 
+> **RETIRED (Phase 1) — 2026-07-22.** Justice memberships are **retired and
+> deactivated** — all `justice_memberships` rows are set inactive (preserved for
+> history), the justice-membership RPCs are EXECUTE-revoked, and the DOJ/Judiciary
+> signup path is removed. No new justice memberships are created or approved.
+> Legal-request approval is now **Bureau Lead+** (`private.is_command()`) — see
+> §5 and the [DOJ-INTEGRATION.md](DOJ-INTEGRATION.md) Phase-1 banner. The workflow
+> below is historical.
+
 Migration [`20260714010000_justice_identity.sql`](../supabase/migrations/20260714010000_justice_identity.sql); overview in [DOJ-INTEGRATION.md](DOJ-INTEGRATION.md#identity-model). Same statuses and shape as §1 (draft → pending → correction_requested / approved / approved_with_changes / rejected / withdrawn; same applicant-owned RPC pair `justice_membership_request_submit()` / `justice_membership_request_withdraw()`), but a **separate identity domain**: approval upserts `justice_memberships` and never touches the CID profile.
 
 | Requested / final role | May decide (per `private.can_review_justice_role`) |
@@ -108,13 +116,53 @@ Reports belong to a case (`private.can_access_case` gates everything). Lifecycle
 - **Lockdown** — `private.block_direct_report_finalize()` rejects any direct client write to `finalized`/`signature`, and locks a finalized report's `fields` entirely.
 - **CID warrant-report tracker** (distinct from the DOJ legal workflow in §5): reports on warrant templates carry a `fields._warrant_status` of `draft → signed → executed → returned`, movable only via `warrant_set_status()` (status whitelist, warrant templates only, actor stamped server-side into `fields._warrant_log`).
 
-## 5. Warrants & subpoenas (DOJ legal review)
+## 5. Warrants & subpoenas (CID legal review)
+
+> **RETIRED (Phase 1) — 2026-07-22.** The multi-stage DOJ pipeline
+> (`not_submitted → … → ada_review → judicial_review → approved`) shown in the
+> legacy block below is **retired** (migration
+> [`20260808140000`](../supabase/migrations/20260808140000_legal_lead_approval.sql)).
+> Legal-request approval is now **Bureau Lead+** (`private.is_command()`). The
+> ADA/DA/AG/Judge review RPCs are EXECUTE-revoked and `justice_memberships` are
+> deactivated. Historical requests may still **display** the old stages
+> read-only, but nothing new moves through them.
 
 Full narrative in [DOJ-INTEGRATION.md](DOJ-INTEGRATION.md); server surface in [`20260714040000_legal_workflow.sql`](../supabase/migrations/20260714040000_legal_workflow.sql) + [`20260714045000_legal_workflow_review.sql`](../supabase/migrations/20260714045000_legal_workflow_review.sql). `legal_requests` carries three **independent** status dimensions — every legal table is SELECT-only for clients, so all transitions are definer RPCs:
 
 - `document_status`: `draft / finalized / reopened`
 - `review_status`: the review pipeline below
 - `fulfilment_status`: post-approval lifecycle (warrant: `unissued / issued / executed / returned / expired / revoked / closed`; subpoena: `served / compliance_pending / records_received / testimony_completed / non_compliance / return_recorded / closed`)
+
+**Active pipeline (both warrants and subpoenas).** Approve terminates at
+`review_status='approved'` and authorizes applying the warrant/subpoena in-city;
+it does **not** auto-activate — issuance/execution is the separate CID fulfilment
+step (`fulfilment_status` stays `unissued` until `issue_legal_request`):
+
+```mermaid
+stateDiagram-v2
+    [*] --> not_submitted: create_legal_request() — any CID author
+    not_submitted --> cid_supervisor_review: submit_legal_request_to_cid()
+    cid_supervisor_review --> returned: review_legal_request_as_cid(return) — Bureau Lead+
+    returned --> cid_supervisor_review: resubmit after edits
+    cid_supervisor_review --> approved: review_legal_request_as_cid(approve) — Bureau Lead+ (private.is_command())
+    cid_supervisor_review --> denied: review_legal_request_as_cid(deny) — Bureau Lead+
+    approved --> [*]: fulfilment takes over (issue → execute/serve → return → close)
+    denied --> [*]
+```
+
+Key rules (all server-enforced):
+
+| Stage | Who / RPC |
+| --- | --- |
+| Draft + packet | creator (any CID author): `create_legal_request`, `update_legal_draft`, `add_legal_exhibit` / `remove_legal_exhibit` — reviewers later see **only** the selected exhibits, never the whole case |
+| CID supervisor gate | `submit_legal_request_to_cid` → `review_legal_request_as_cid` (source report finalized, required fields, subject or search targets, valid responsible bureau via `private.legal_resolve_bureau`) |
+| Legal approval | `review_legal_request_as_cid(approve\|deny\|return)` — a **Bureau Lead+** (`private.is_command()`) approves, denies, or returns. **Warrants and subpoenas both terminate at Lead+ approval** — there is **no** ADA/DA/AG/Judge step. Approve lands at `review_status='approved'` (in-city authorization; `fulfilment_status` stays `unissued`) |
+| Fulfilment (CID side) | `issue_legal_request`, `record_warrant_execution`, `record_warrant_return`, `record_subpoena_service`, `record_subpoena_compliance`, `close_legal_request`, `withdraw_legal_request` (gated by `private.can_fulfil_legal`) |
+
+<details>
+<summary><strong>Legacy DOJ pipeline (retired 2026-07-22 — historical records only)</strong></summary>
+
+The multi-stage pipeline below is **retired**. Its RPCs (`review_legal_request_as_ada` / `_as_da` / `_as_ag`, `assign_judge`, `decide_legal_request_as_judge`, `claim_legal_request_as_judge`, `submit_legal_request_to_doj`, routing/coverage helpers) are EXECUTE-revoked; historical requests may still display these stages read-only.
 
 ```mermaid
 stateDiagram-v2
@@ -141,17 +189,16 @@ stateDiagram-v2
     denied --> [*]
 ```
 
-Key rules (all server-enforced):
+Legacy key rules:
 
 | Stage | Who / RPC |
 | --- | --- |
-| Draft + packet | creator: `create_legal_request`, `update_legal_draft`, `add_legal_exhibit` / `remove_legal_exhibit` — reviewers later see **only** the selected exhibits, never the whole case |
-| CID supervisor gate | `submit_legal_request_to_cid` → `review_legal_request_as_cid` (source report finalized, required fields, subject or search targets, valid responsible bureau via `private.legal_resolve_bureau`) |
 | DOJ intake & routing | `submit_legal_request_to_doj`; auto-assign via `get_routing_ada_for_bureau` (active acting → active primary ADA; missing coverage parks the request — DA/AG/Owner assign via `reassign_legal_ada`) |
-| Prosecutor review | `review_legal_request_as_ada` / `_as_da` / `_as_ag`; route per `private.legal_default_route` — **every warrant routes `judge`**; DA/AG/Owner may change a *subpoena's* route with a reason (`set_legal_approval_route`) |
-| Judicial decision | `assign_judge` + `decide_legal_request_as_judge` — **warrants are approved only by a Judge**; conflict-of-role checks (`private.legal_is_prosecution_side`) keep prosecution and bench separate; signatures are version-bound |
-| Parallel judiciary lane | `claim_legal_request_as_judge` ([`20260805010000`](../supabase/migrations/20260805010000_legal_parallel_judiciary.sql)) — any active Judge may take a judge-routed request straight into judicial review from `submitted_to_doj` or `submitted_to_judge` (no ADA hand-off required); same conflict guards as formal assignment; sealed requests are excluded and keep the explicit-assignment audience. A judge-returned request clears its judge assignment on resubmission and re-enters this open claim lane ([`20260807100000_legal_resubmit_clears_judge.sql`](../supabase/migrations/20260807100000_legal_resubmit_clears_judge.sql)) |
-| Fulfilment (CID side) | `issue_legal_request`, `record_warrant_execution`, `record_warrant_return`, `record_subpoena_service`, `record_subpoena_compliance`, `close_legal_request`, `withdraw_legal_request` (gated by `private.can_fulfil_legal`) |
+| Prosecutor review | `review_legal_request_as_ada` / `_as_da` / `_as_ag`; route per `private.legal_default_route` — **every warrant routed `judge`**; DA/AG/Owner could change a *subpoena's* route with a reason (`set_legal_approval_route`) |
+| Judicial decision | `assign_judge` + `decide_legal_request_as_judge` — warrants were approved only by a Judge; conflict-of-role checks (`private.legal_is_prosecution_side`) kept prosecution and bench separate; signatures are version-bound |
+| Parallel judiciary lane | `claim_legal_request_as_judge` ([`20260805010000`](../supabase/migrations/20260805010000_legal_parallel_judiciary.sql)) — any active Judge could take a judge-routed request straight into judicial review from `submitted_to_doj` or `submitted_to_judge` (no ADA hand-off); sealed requests excluded. A judge-returned request cleared its judge assignment on resubmission ([`20260807100000_legal_resubmit_clears_judge.sql`](../supabase/migrations/20260807100000_legal_resubmit_clears_judge.sql)) |
+
+</details>
 
 Every submission freezes an immutable `legal_request_versions` snapshot; reviewers act on the exact `current_version_id`. Classification `standard / restricted / classified / sealed` — warrants default `classified`; **sealed** requests are undiscoverable outside their participant set (SECURITY INVOKER search, generic notifications). Approved+issued **arrest** warrants project an MDT wanted row (`private.mdt_project`; search warrants never do) — except **sealed** arrest warrants, which stay off the MDT wanted list until executed ([`20260807080000_mdt_sealed_skip.sql`](../supabase/migrations/20260807080000_mdt_sealed_skip.sql)). Historical imports: owner-only `import_legal_warrant()` / `import_rollback_by_key()`.
 

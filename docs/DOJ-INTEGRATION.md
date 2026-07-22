@@ -1,5 +1,40 @@
 # DOJ Legal Review System
 
+> ## 🛑 RETIRED (Phase 1) — 2026-07-22
+>
+> **The DOJ / AG / Judge / ADA legal-review workflow described below is
+> RETIRED.** Legal-request approval now belongs to **Bureau Lead+ ("Command" =
+> `private.is_command()`: bureau_lead / deputy_director / director)**. Shipped in
+> code and the live DB by migration
+> [`20260808140000`](../supabase/migrations/20260808140000_legal_lead_approval.sql).
+>
+> **The new model (authoritative):**
+> - Any CID author drafts a legal request → `submit_legal_request_to_cid` →
+>   `cid_supervisor_review` → a **Bureau Lead+** approves / denies / returns via
+>   `review_legal_request_as_cid`.
+> - **Approve terminates at `review_status='approved'`** (`fulfilment_status`
+>   stays `unissued`). Approval authorizes applying the warrant / subpoena
+>   **in-city** but does **not** auto-activate it — issuance / execution remains
+>   the existing separate CID fulfilment step (`issue_legal_request` →
+>   `record_warrant_execution` / `_return` or `record_subpoena_service` /
+>   `_compliance` → close).
+> - **Warrants AND subpoenas both terminate at Lead+ approval.** There is **no**
+>   judge / ADA / DA / AG step anymore.
+> - The ADA/DA/AG/Judge review RPCs, prosecutor-coverage RPCs, and
+>   justice-membership RPCs are **EXECUTE-revoked** (retained for history). All
+>   `justice_memberships` are **deactivated** (rows preserved). The separate
+>   Justice Portal tab/route and the DOJ signup path are **removed**; legal work
+>   lives entirely in the CID **Legal** surface (the `legal` tab + the case Legal
+>   tab).
+> - **Historical decisions are preserved.** Judge / DA approvals, signatures, and
+>   court packets from before retirement remain **visible read-only** inside each
+>   legal-request dossier and are never rewritten.
+>
+> **Everything below the workflow sections is LEGACY / historical context** — it
+> documents the retired multi-stage DOJ pipeline exactly as it once ran, so the
+> preserved historical records stay legible. Read it as history, not as the
+> current workflow.
+
 Shipped in **v1.13.0**. This supersedes the original proposal (kept as a
 historical record in `docs/archive/DOJ-INTEGRATION-DRAFT.md`).
 
@@ -134,6 +169,19 @@ Supporting tables:
 
 ## Warrant workflow
 
+> **RETIRED (Phase 1) — 2026-07-22.** New warrants no longer route to a Judge.
+> **Active model:** CID author drafts → `submit_legal_request_to_cid` →
+> **CID Supervisor Review** → a **Bureau Lead+** (`private.is_command()`)
+> approves / denies / returns via `review_legal_request_as_cid`. **Approve
+> terminates at `review_status='approved'`** (in-city authorization only;
+> `fulfilment_status` stays `unissued`) — then the existing separate CID
+> fulfilment step (Issue → Execute / Return → Close) takes over. There is **no**
+> ADA / DA / AG / Judge step. The multi-stage routing described in the rest of
+> this section is **legacy — historical records only** (preserved read-only in
+> each dossier).
+
+**Legacy pipeline (historical records only):**
+
 CID Draft → CID Supervisor Review → (Returned | Submitted to DOJ) → auto-assigned
 to the bureau ADA → ADA Review → (Returned | Submitted to Judge) → Judicial
 Review → Approved / Denied / Returned → Issued → Executed / Expired / Revoked →
@@ -206,6 +254,18 @@ dependency order but **never** deletes `audit_log`; it appends a
 `LEGAL_IMPORT_ROLLBACK` audit row first. Neither RPC is wired to a normal UI.
 
 ## Subpoena workflow
+
+> **RETIRED (Phase 1) — 2026-07-22.** Subpoenas no longer follow a DA / AG / Judge
+> approval route. **Active model:** identical to warrants — CID author drafts →
+> `submit_legal_request_to_cid` → **CID Supervisor Review** → a **Bureau Lead+**
+> (`private.is_command()`) approves / denies / returns via
+> `review_legal_request_as_cid`, terminating at `review_status='approved'`
+> (in-city authorization only). Service / compliance tracking then runs as the
+> existing separate CID fulfilment step. The `da` / `ag` / `judge` approval
+> routes and `set_legal_approval_route()` below are **legacy — historical records
+> only**.
+
+**Legacy pipeline (historical records only):**
 
 `File Subpoena` / `My Subpoenas`. Recipient is a Persons-registry player or a
 free-text business/entity. Ten confirmed types, each with type-specific fields

@@ -60,7 +60,10 @@ Department moves are single-step (`transfer_requests`,
 rank-and-file members when one side of the move is their own bureau, or
 Deputy Director+/Owner for anyone — picks a destination and reason and
 the move applies immediately; JTF is a valid source and destination. Justice roles (ADA/DA/AG/Judge)
-are a separate identity domain and grant no CID assignment authority.
+are a separate identity domain and grant no CID assignment authority. (Retired
+2026-07-22: justice roles are deactivated and legal-request approval is now Bureau
+Lead+ (`private.is_command()`) — see [DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md)
+Phase-1 banner.)
 
 ## Permissions (what may you do?) — three layers
 
