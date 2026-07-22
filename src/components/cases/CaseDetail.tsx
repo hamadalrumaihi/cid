@@ -389,7 +389,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2.5 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="font-semibold text-rose-200">
-              Legal hold — this case cannot be permanently deleted until a command member lifts it.
+              Legal hold — this case is preserved. It can&apos;t be archived, permanently deleted, or have its media, reports, tasks, or linked-entity merges removed until a command member lifts the hold.
             </p>
             {isCommand && <Button onClick={() => void liftHold()}>Lift hold…</Button>}
           </div>
@@ -450,12 +450,12 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
           />
         )}
         {tab === 'graph' && <CaseGraphTab c={c} />}
-        {tab === 'media' && <MediaTab c={c} canEdit={canEdit} canDelete={canDelete} />}
+        {tab === 'media' && <MediaTab c={c} canEdit={canEdit} canDelete={canDelete} holdActive={!!hold} />}
         {tab === 'intel' && <IntelTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
         {tab === 'charges' && <ChargesTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
         {tab === 'rico' && <RicoTab c={c} canEdit={canEdit} canDelete={canDelete} />}
-        {tab === 'reports' && <ReportsTab c={c} canEdit={canEdit} canDelete={canDelete} />}
-        {tab === 'tasks' && <TasksTab c={c} canEdit={canEdit} canDelete={canDelete} />}
+        {tab === 'reports' && <ReportsTab c={c} canEdit={canEdit} canDelete={canDelete} holdActive={!!hold} />}
+        {tab === 'tasks' && <TasksTab c={c} canEdit={canEdit} canDelete={canDelete} holdActive={!!hold} />}
         {tab === 'legal' && <LegalTab rows={wf?.legal ?? null} />}
         {tab === 'signoff' && <SignoffTab c={c} />}
         {tab === 'chat' && <ChatTab c={c} />}

@@ -26,7 +26,7 @@ import { toast } from '@/lib/toast'
 import { WarrantPrintButton } from './WarrantPrint'
 import type { CaseRow, EvidenceRow, MediaRow, PersonRow, ReportRow } from './shared'
 
-export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; canDelete: boolean }) {
+export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: CaseRow; canEdit: boolean; canDelete: boolean; holdActive?: boolean }) {
   const router = useRouter()
   const sp = useSearchParams()
   const { profile } = useAuth()
@@ -97,7 +97,7 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
   return (
     <div className="space-y-4">
       {open ? (
-        <ReportDetail r={open} c={c} canEdit={canEdit} canDelete={canDelete}
+        <ReportDetail r={open} c={c} canEdit={canEdit} canDelete={canDelete} holdActive={holdActive}
           onBack={() => setOpenId(null)}
           onEdit={() => openEditor(open.template, open)}
           onFinalize={() => setConfirm({ kind: 'finalize', r: open })}
@@ -107,7 +107,7 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
       ) : (<>
         {canEdit && <div className="flex flex-wrap gap-2">{REPORT_TEMPLATES.map((tpl) => <Button key={tpl.id} onClick={() => openEditor(tpl.id)}>{tpl.icon} {tpl.name}</Button>)}</div>}
         <div className="space-y-2">
-          {reports.map((r) => <div key={r.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3"><button onClick={() => setOpenId(r.id)} className="min-w-0 flex-1 text-left"><p className="font-bold text-white">{reportTitle(r)}</p><p className="text-xs text-slate-500">{r.finalized ? 'Finalized' : 'Draft'} - {timeAgo(r.created_at)}</p></button>{!r.finalized && canEdit && <Button size="sm" variant="success" onClick={() => setConfirm({ kind: 'finalize', r })}>Finalize</Button>}{!r.finalized && canEdit && <button onClick={() => openEditor(r.template, r)} className="text-sm font-bold text-badge-200">Edit</button>}{canDelete && <button onClick={() => { void deleteWithUndo('reports', r, { label: reportTitle(r), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }) }} className="text-sm font-bold text-rose-300">Delete</button>}</div>)}
+          {reports.map((r) => <div key={r.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3"><button onClick={() => setOpenId(r.id)} className="min-w-0 flex-1 text-left"><p className="font-bold text-white">{reportTitle(r)}</p><p className="text-xs text-slate-500">{r.finalized ? 'Finalized' : 'Draft'} - {timeAgo(r.created_at)}</p></button>{!r.finalized && canEdit && <Button size="sm" variant="success" onClick={() => setConfirm({ kind: 'finalize', r })}>Finalize</Button>}{!r.finalized && canEdit && <button onClick={() => openEditor(r.template, r)} className="text-sm font-bold text-badge-200">Edit</button>}{canDelete && (holdActive ? <span title="A legal hold preserves this case's reports" className="text-sm font-bold text-rose-300/50">Held</span> : <button onClick={() => { void deleteWithUndo('reports', r, { label: reportTitle(r), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }) }} className="text-sm font-bold text-rose-300">Delete</button>)}</div>)}
           {!reports.length && <p className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-500">No reports yet.</p>}
         </div>
       </>)}
@@ -140,7 +140,7 @@ export function ReportsTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boo
 /** In-page read view of one report — replaces the template row + list while
  *  open. Loads case evidence/attachments + the persons registry so ReportView
  *  can make referenced items clickable; every load is best-effort. */
-function ReportDetail({ r, c, canEdit, canDelete, onBack, onEdit, onFinalize, onReopen, onChanged, onDelete }: { r: ReportRow; c: CaseRow; canEdit: boolean; canDelete: boolean; onBack: () => void; onEdit: () => void; onFinalize: () => void; onReopen: () => void; onChanged: () => void; onDelete: () => void }) {
+function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, onFinalize, onReopen, onChanged, onDelete }: { r: ReportRow; c: CaseRow; canEdit: boolean; canDelete: boolean; holdActive: boolean; onBack: () => void; onEdit: () => void; onFinalize: () => void; onReopen: () => void; onChanged: () => void; onDelete: () => void }) {
   const router = useRouter()
   const { profile } = useAuth()
   const schema = FORM_SCHEMAS[r.template]
@@ -256,7 +256,9 @@ function ReportDetail({ r, c, canEdit, canDelete, onBack, onEdit, onFinalize, on
           {!r.finalized && canEdit && <Button size="sm" variant="success" onClick={onFinalize}>Finalize</Button>}
           {r.finalized && isCommandRole(profile?.role) && <button onClick={onReopen} className="rounded-lg border border-amber-500/40 px-3 py-2 text-sm font-bold text-amber-300 hover:bg-amber-500/10">Reopen</button>}
           {!r.finalized && canEdit && <button onClick={onEdit} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-badge-200 hover:bg-white/5">Edit</button>}
-          {canDelete && <button onClick={onDelete} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-rose-300 hover:bg-rose-500/10">Delete</button>}
+          {canDelete && (holdActive
+            ? <span title="A legal hold preserves this case's reports" className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-rose-300/50">Delete — blocked by legal hold</span>
+            : <button onClick={onDelete} className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-rose-300 hover:bg-rose-500/10">Delete</button>)}
           {/* Shareable deep link straight to this report (?case&tab&report). */}
           <Button onClick={() => copyText(`${window.location.origin}${caseLink(c.id, 'reports', { report: r.id })}`, 'Report link')}>Copy link</Button>
           <Button onClick={toggleVersions} aria-expanded={showVersions}>{showVersions ? 'Hide versions' : 'Versions'}</Button>

@@ -13,7 +13,7 @@ export interface BandEvent {
   at: string
   label: string
   sub?: string
-  type: 'opened' | 'followup' | 'evidence' | 'media' | 'report' | 'task' | 'signoff'
+  type: 'opened' | 'followup' | 'evidence' | 'media' | 'report' | 'task' | 'signoff' | 'hold'
   /** Case deep link for the list row (band dots stay hover-only). */
   href?: string
   /** Grouped bulk-upload titles — the list row renders them expandable. */
@@ -28,6 +28,7 @@ const LANES: { type: BandEvent['type']; label: string; color: string }[] = [
   { type: 'report',   label: 'Reports',   color: '#8b5cf6' },
   { type: 'task',     label: 'Tasks',     color: '#22d3ee' },
   { type: 'signoff',  label: 'Sign-off',  color: '#fb7185' },
+  { type: 'hold',     label: 'Legal hold', color: '#f43f5e' },
 ]
 
 const W = 900          // fixed viewBox width — zoom never rescales the SVG

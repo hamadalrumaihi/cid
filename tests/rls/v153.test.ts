@@ -55,7 +55,7 @@ describe.skipIf(!enabled)('v1.53 — legal hold preservation lock (live)', () =>
   let taskId = ''
   let personId = ''
   let survivorId = ''
-  let caseDeleted = false
+  const caseDeleted = false
 
   beforeAll(async () => {
     lead = mk(); lsb = mk(); owner = mk(); anon = mk()

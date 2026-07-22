@@ -150,7 +150,17 @@ export function CaseCommandHeader({
   if (canHandover) admin.push({ label: 'Hand over case…', onClick: onHandover })
   if (canReassignBureau) admin.push({ label: 'Reassign bureau…', onClick: onReassign })
   if (admin.length) { admin[0].separatorBefore = true; items.push(...admin) }
-  if (canArchive) items.push({ label: c.archived_at ? 'Restore case' : 'Archive case', onClick: onArchive, separatorBefore: !admin.length })
+  // Archiving is blocked while a legal hold is active (server RLS is the real
+  // block); restoring an already-archived case is never blocked by a hold.
+  if (canArchive) {
+    const archiveHeld = holdActive && !c.archived_at
+    items.push({
+      label: c.archived_at ? 'Restore case' : archiveHeld ? 'Archive case — blocked by legal hold' : 'Archive case',
+      onClick: onArchive,
+      disabled: archiveHeld,
+      separatorBefore: !admin.length,
+    })
+  }
   // Legal hold — placing lives here; lifting is on the case banner so an active
   // hold is always visible, not buried in a menu.
   if (canHold && !holdActive) items.push({ label: 'Place legal hold…', onClick: onPlaceHold, separatorBefore: !canArchive && !admin.length })
