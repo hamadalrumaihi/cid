@@ -2665,6 +2665,28 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.block_intel_link_change_under_hold()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if tg_op = 'DELETE' then
+    if private.case_has_active_hold(old.case_id) then
+      raise exception 'case is under an active legal hold — its intelligence links are preserved and cannot be removed (including by a merge) until the hold is lifted';
+    end if;
+    return old;
+  end if;
+  if (new.ref_id is distinct from old.ref_id
+      or new.case_id is distinct from old.case_id
+      or new.kind is distinct from old.kind)
+     and private.case_has_active_hold(old.case_id) then
+    raise exception 'case is under an active legal hold — its intelligence links are preserved and cannot be re-pointed (including by a merge) until the hold is lifted';
+  end if;
+  return new;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.can_access_bureau(b public.bureau)
  RETURNS boolean
  LANGUAGE sql
@@ -3734,7 +3756,8 @@ AS $function$
     select *, row_number() over (partition by kind order by rank desc, label) as rn from (
       select 'case'::text as kind, c.id,
              c.case_number || ' · ' || coalesce(c.title, '') as label,
-             left(coalesce(c.summary, ''), 90) as sublabel, null::text as term,
+             (case when private.case_has_active_hold(c.id) then '🔒 Legal hold · ' else '' end
+              || left(coalesce(c.summary, ''), 90)) as sublabel, null::text as term,
              greatest(word_similarity(p.lq, lower(coalesce(c.title, ''))),
                       word_similarity(p.lq, lower(c.case_number)),
                       case when c.case_number ilike p.lk or c.title ilike p.lk or c.summary ilike p.lk then 0.95 else 0 end) as rank
@@ -4728,6 +4751,7 @@ CREATE TRIGGER narcotic_vehicles_touch BEFORE UPDATE ON public.narcotic_vehicles
 CREATE TRIGGER narcotics_audit AFTER INSERT OR DELETE OR UPDATE ON public.narcotics FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER narcotics_guard BEFORE INSERT OR UPDATE ON public.narcotics FOR EACH ROW EXECUTE FUNCTION private.guard_narcotic();
 CREATE TRIGGER narcotics_touch BEFORE UPDATE ON public.narcotics FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER case_intel_links_block_change_under_hold BEFORE UPDATE OR DELETE ON public.case_intel_links FOR EACH ROW EXECUTE FUNCTION private.block_intel_link_change_under_hold();
 CREATE TRIGGER operations_touch BEFORE UPDATE ON public.operations FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER person_places_audit AFTER INSERT OR DELETE OR UPDATE ON public.person_places FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER person_places_touch BEFORE UPDATE ON public.person_places FOR EACH ROW EXECUTE FUNCTION private.touch();
@@ -4986,7 +5010,7 @@ create policy csh_sel on public.case_signoff_history
 
 create policy case_tasks_del on public.case_tasks
   as permissive for delete to authenticated
-  using ((private.can_delete() OR (created_by = ( SELECT auth.uid() AS uid))));
+  using (((private.can_delete() OR (created_by = ( SELECT auth.uid() AS uid))) AND (NOT private.case_has_active_hold(case_id))));
 
 create policy case_tasks_ins on public.case_tasks
   as permissive for insert to authenticated
@@ -5416,7 +5440,7 @@ create policy mdt_exports_sel on public.mdt_exports
 
 create policy media_del on public.media
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((private.can_delete() AND ((case_id IS NULL) OR (NOT private.case_has_active_hold(case_id)))));
 
 create policy media_ins on public.media
   as permissive for insert to authenticated
@@ -5902,7 +5926,7 @@ create policy report_versions_sel on public.report_versions
 
 create policy reports_del on public.reports
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((private.can_delete() AND (NOT private.case_has_active_hold(case_id))));
 
 create policy reports_ins on public.reports
   as permissive for insert to authenticated
@@ -6989,3 +7013,27 @@ create policy wl_sel on public.watchlist
 -- justice_memberships / participants / prosecutor assignments / decision columns
 -- / versions / signatures / actions are all UNTOUCHED — history stays readable.
 -- Definitive SQL in supabase/migrations/20260808140000_legal_lead_approval.sql.
+--
+-- 20260808160000_legal_hold_preservation (functions + policies + triggers; NO
+-- schema/column change, so database.types.ts is unchanged): turns an active
+-- legal hold into a full PRESERVATION LOCK, reusing the single existing
+-- predicate private.case_has_active_hold(uuid) at every remaining destructive
+-- chokepoint. public.case_archive is CREATE-OR-REPLACEd to refuse a held case
+-- (raises '... under an active legal hold and cannot be archived ...' after the
+-- not-found check, before the already-archived check); case_restore is
+-- UNCHANGED. The three DELETE policies media_del / reports_del / case_tasks_del
+-- are DROP+CREATEd (rendered above) to AND-append the hold clause — media_del
+-- keeps case_id IS NULL rows (person/vehicle/narcotic media) deletable; reports
+-- (case_id NOT NULL) and case_tasks lock outright when their case is held. A
+-- plain trigger fn private.block_intel_link_change_under_hold() (rendered above,
+-- trigger case_intel_links_block_change_under_hold BEFORE UPDATE OR DELETE on
+-- public.case_intel_links) rejects a DELETE, or an UPDATE that re-points a link
+-- (ref_id/case_id/kind), while the link's case is held — this freezes a held
+-- case's related intel links AND aborts person_merge / merge_narcotics (which
+-- repoint/delete the victim's link) without re-emitting those large RPCs; benign
+-- role/note edits and INSERTs pass.
+-- public.search_all is re-emitted (body rendered above) with ONLY the
+-- kind='case' branch changed: its sublabel is prefixed '🔒 Legal hold · ' when
+-- private.case_has_active_hold(c.id); 6-column signature and SECURITY INVOKER
+-- unchanged. Additive only (no drops of tables/columns, no data deletes).
+-- Definitive SQL in supabase/migrations/20260808160000_legal_hold_preservation.sql.

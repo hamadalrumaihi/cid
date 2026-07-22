@@ -49,7 +49,7 @@ const tagStr = (m: MediaRow, key: string): string | null => {
   return typeof v === 'string' && v.trim() ? v.trim() : null
 }
 
-export function MediaTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolean; canDelete: boolean }) {
+export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: CaseRow; canEdit: boolean; canDelete: boolean; holdActive?: boolean }) {
   const { profile } = useAuth()
   const [rows, setRows] = useState<MediaRow[]>([])
   const [evidence, setEvidence] = useState<EvidenceRow[]>([])
@@ -263,6 +263,7 @@ export function MediaTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boole
           c={c}
           canEdit={canEdit}
           canDelete={canDelete}
+          holdActive={holdActive}
           names={names}
           vehicles={vehicles}
           reports={reports}
@@ -414,11 +415,12 @@ function MediaCard({ m, names, vehicles, reportLabel, onOpen }: {
 
 /* ── Detail lightbox ──────────────────────────────────────────────────────── */
 
-function MediaDetailModal({ m, c, canEdit, canDelete, names, vehicles, reports, onClose, onChanged, onDeleted }: {
+function MediaDetailModal({ m, c, canEdit, canDelete, holdActive, names, vehicles, reports, onClose, onChanged, onDeleted }: {
   m: MediaRow
   c: CaseRow
   canEdit: boolean
   canDelete: boolean
+  holdActive: boolean
   names: NameMaps
   vehicles: VehicleLite[]
   reports: ReportLite[]
@@ -553,14 +555,18 @@ function MediaDetailModal({ m, c, canEdit, canDelete, names, vehicles, reports, 
               {m.archived_at ? 'Restore' : 'Archive'}
             </Button>
           )}
-          {canDelete && (
+          {canDelete && (holdActive ? (
+            <span title="A legal hold preserves this case's media" className="rounded-lg border border-rose-400/20 px-3 py-2 text-sm font-bold text-rose-300/50">
+              Delete — blocked by legal hold
+            </span>
+          ) : (
             <button
               onClick={() => { void deleteWithUndo('media', m, { label: m.title, after: onDeleted }) }}
               className="rounded-lg border border-rose-400/30 px-3 py-2 text-sm font-bold text-rose-300 hover:bg-rose-500/10"
             >
               Delete
             </button>
-          )}
+          ))}
         </div>
       </div>
     </Modal>

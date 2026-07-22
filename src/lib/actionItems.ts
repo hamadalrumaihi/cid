@@ -40,6 +40,7 @@ export type ActionSourceType =
   | 'mention' | 'blocker'
   | 'document_ack' | 'document_review' | 'document_approval' | 'document_sync'
   | 'document_suggestion'
+  | 'legal_hold'
   | 'other'
 
 export type ActionPriority = 'critical' | 'high' | 'normal' | 'low'
@@ -106,6 +107,10 @@ export type AcLegal = Pick<Tables<'legal_requests'>,
 export type AcBlocker = Pick<Tables<'case_blockers'>,
   'id' | 'case_id' | 'title' | 'type' | 'status' | 'owner_id' | 'review_at'
   | 'created_at' | 'updated_at'>
+/** Active legal holds (lifted_at IS NULL). A standing command item — the case
+ *  is under a preservation lock until command lifts it. */
+export type AcHold = Pick<Tables<'legal_holds'>,
+  'id' | 'case_id' | 'reason' | 'placed_by' | 'placed_at'>
 /** All notifications columns — notifText helpers take the full row. */
 export type AcNotif = Pick<Tables<'notifications'>,
   'id' | 'user_id' | 'type' | 'payload' | 'read' | 'created_at'>
@@ -174,6 +179,9 @@ export interface ActionSources {
    *  are recognised and NEVER surface as assigned work. */
   legalViewer?: LegalViewer
   blockers: AcBlocker[]        // open case_blockers where owner_id = me
+  /** Additive (defaults []): active legal holds (lifted_at IS NULL) — command
+   *  only, surfaced as standing informational items. */
+  holds?: AcHold[]
   notifications: AcNotif[]     // my UNREAD notifications (read = false)
   /** Additive (defaults []): library governance items, pre-derived. */
   documents?: AcDoc[]
@@ -666,6 +674,30 @@ export function buildActionItems(s: ActionSources): ActionQueue {
         ownerId: s.me,
         deepLink: g.documentId ? `/sops?doc=${g.documentId}` : '/sops?view=suggestions',
         actionLabel: 'Implement', isPersonalItem: true,
+      })
+    }
+  }
+
+  /* 9d · legal holds — a case under an active preservation lock is a standing
+   *      command concern: informational (nothing is overdue), but it stays in
+   *      the queue until command lifts it. Command/owner only — the same gate
+   *      the place/lift controls use. */
+  if (s.isCommand || (s.isOwner ?? false)) {
+    for (const h of s.holds ?? []) {
+      const c = h.case_id ? caseById.get(h.case_id) : undefined
+      add({
+        id: `legal_hold:${h.id}`, sourceType: 'legal_hold', sourceId: h.id,
+        title: c ? `Legal hold — ${c.case_number} · ${c.title || 'Untitled'}` : 'Legal hold',
+        summary: 'Case preserved — archive, delete and merges are blocked',
+        reason: h.reason || 'Under a legal-hold preservation lock',
+        status: 'informational',
+        createdAt: h.placed_at, updatedAt: h.placed_at, waitingSince: h.placed_at,
+        ownerId: s.me, responsibleRole: s.role,
+        caseId: h.case_id, caseNumber: c?.case_number ?? null, bureau: c?.bureau ?? null,
+        deepLink: h.case_id ? caseLink(h.case_id) : '/cases',
+        isCommandItem: true,
+        sourceMetadata: { case_id: h.case_id, hold_id: h.id },
+        dedupeKey: `legal_hold:${h.id}`,
       })
     }
   }

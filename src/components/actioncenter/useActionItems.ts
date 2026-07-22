@@ -6,7 +6,7 @@
  *  previous items stay on screen while a realtime-triggered refresh is in
  *  flight, so the queue never flashes empty. */
 import { useCallback, useEffect, useState } from 'react'
-import { buildActionItems, type AcDoc, type AcSuggestion, type ActionItem, type ActionSources } from '@/lib/actionItems'
+import { buildActionItems, type AcDoc, type AcHold, type AcSuggestion, type ActionItem, type ActionSources } from '@/lib/actionItems'
 import {
   ackState, canApproveDoc, docTitle, reviewState,
   type MyAckVersions, type ShelfDoc,
@@ -34,6 +34,8 @@ const LEGAL_COLS =
   + 'classification,created_by,responsible_bureau,assigned_ada_id,assigned_judge_id,'
   + 'response_deadline,expires_at,submitted_to_doj_at,created_at,updated_at'
 const BLOCKER_COLS = 'id,case_id,title,type,status,owner_id,review_at,created_at,updated_at'
+/** Active legal holds — command only; the model gates the item on isCommand. */
+const HOLD_COLS = 'id,case_id,reason,placed_by,placed_at'
 const NOTIF_COLS = 'id,user_id,type,payload,read,created_at'
 /** Library governance projection — never full bodies (docModel AcDoc inputs). */
 const DOC_COLS =
@@ -92,6 +94,7 @@ export function useActionItems(): ActionItemsResult {
   const vJusticeReqs = useTableVersion('justice_membership_requests')
   const vDocuments = useTableVersion('documents')
   const vSuggestions = useTableVersion('document_suggestions')
+  const vHolds = useTableVersion('legal_holds')
 
   const refresh = useCallback(async () => {
     if (state !== 'in' || !profile) return
@@ -109,7 +112,7 @@ export function useActionItems(): ActionItemsResult {
     }
     try {
       const me = profile.id
-      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks, suggestionRows] =
+      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks, suggestionRows, holds] =
         await Promise.all([
           list('cases', { select: CASE_COLS, is: { archived_at: null } }),
           list('case_tasks', { select: TASK_COLS, eq: { assignee: me, done: false } }),
@@ -150,6 +153,12 @@ export function useActionItems(): ActionItemsResult {
           // the viewer manages — open statuses only. Fail-open to empty.
           list('document_suggestions', { select: SUGGESTION_COLS, in: { status: SUGGESTION_OPEN } })
             .then((r) => r as unknown as SuggestionRow[]).catch(() => [] as SuggestionRow[]),
+          // Active legal holds — command/owner only (the builder gates the item);
+          // lifted holds carry a lifted_at, so filter to null. Fail-open to empty.
+          canAdmin
+            ? list('legal_holds', { select: HOLD_COLS, is: { lifted_at: null } })
+                .then((r) => r as unknown as AcHold[]).catch(() => [] as AcHold[])
+            : Promise.resolve([] as AcHold[]),
         ])
       const nowMs = Date.now()
       // Command/owner: the shared awaitingCount (submitted + actionable
@@ -215,6 +224,7 @@ export function useActionItems(): ActionItemsResult {
         legal,
         legalViewer: buildLegalViewer(auth, prosecutorBureaus),
         blockers,
+        holds,
         notifications,
         documents,
         suggestions,
@@ -246,7 +256,7 @@ export function useActionItems(): ActionItemsResult {
       window.clearTimeout(id)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs, vDocuments, vSuggestions])
+  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs, vDocuments, vSuggestions, vHolds])
 
   return {
     items: built?.items ?? [],

@@ -10,7 +10,7 @@ import { officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { SIGNOFF_ACTION_VERB } from '@/lib/signoff'
 import { TimelineBand, type BandEvent } from '../TimelineBand'
-import type { CaseRow, EvidenceRow, HistoryRow, ReportRow, TaskRow } from './shared'
+import type { CaseRow, EvidenceRow, HistoryRow, HoldRow, ReportRow, TaskRow } from './shared'
 
 export function TimelineTab({ c }: { c: CaseRow }) {
   const [rows, setRows] = useState<BandEvent[]>([])
@@ -19,9 +19,10 @@ export function TimelineTab({ c }: { c: CaseRow }) {
   const vR = useTableVersion('reports')
   const vT = useTableVersion('case_tasks')
   const vS = useTableVersion('case_signoff_history')
+  const vH = useTableVersion('legal_holds')
   const refresh = useCallback(async () => {
     try {
-      const [e, m, r, t, s] = await Promise.all([
+      const [e, m, r, t, s, h] = await Promise.all([
         list('evidence', { eq: { case_id: c.id } }) as Promise<EvidenceRow[]>,
         // Media events are derived from row columns only (added/archived/
         // featured) — there is no media event table.
@@ -30,6 +31,8 @@ export function TimelineTab({ c }: { c: CaseRow }) {
         list('reports', { eq: { case_id: c.id } }) as Promise<ReportRow[]>,
         list('case_tasks', { eq: { case_id: c.id } }) as Promise<TaskRow[]>,
         list('case_signoff_history', { eq: { case_id: c.id } }) as Promise<HistoryRow[]>,
+        // Legal holds — placed/lifted both surface as their own band events.
+        (list('legal_holds', { eq: { case_id: c.id } }) as Promise<HoldRow[]>).catch(() => [] as HoldRow[]),
       ])
       setRows(([
         { at: c.created_at, label: 'Case opened', sub: c.case_number, type: 'opened' },
@@ -39,10 +42,14 @@ export function TimelineTab({ c }: { c: CaseRow }) {
         ...r.map((x) => ({ at: x.created_at, label: `${x.template} report`, sub: x.finalized ? 'Finalized' : 'Draft', type: 'report' as const, href: caseLink(c.id, 'reports', { report: x.id }) })),
         ...t.map((x) => ({ at: x.created_at, label: `Task: ${x.title}`, sub: x.done ? 'Done' : 'Open', type: 'task' as const, href: caseLink(c.id, 'tasks', { task: x.id }) })),
         ...s.map((x) => ({ at: x.created_at, label: SIGNOFF_ACTION_VERB[x.action] || x.action, sub: x.actor_name || officerName(x.actor_id) || undefined, type: 'signoff' as const })),
+        ...h.flatMap((x) => [
+          { at: x.placed_at, label: 'Legal hold placed', sub: [x.reason, officerName(x.placed_by) || 'command'].filter(Boolean).join(' · '), type: 'hold' as const },
+          ...(x.lifted_at ? [{ at: x.lifted_at, label: 'Legal hold lifted', sub: [x.lift_reason || undefined, officerName(x.lifted_by) || 'command'].filter(Boolean).join(' · '), type: 'hold' as const }] : []),
+        ]),
       ] as BandEvent[]).sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()))
     } catch { /* stale */ }
   }, [c])
-  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vE, vM, vR, vT, vS])
+  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vE, vM, vR, vT, vS, vH])
   return (
     <div>
       <TimelineBand events={rows} />
