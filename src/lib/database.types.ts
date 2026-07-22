@@ -6082,6 +6082,132 @@ export type Database = {
           },
         ]
       }
+      record_extraction_facts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          extraction_id: string
+          fact_type: string
+          id: string
+          linked_account_id: string | null
+          linked_indicator_id: string | null
+          linked_link_id: string | null
+          note: string | null
+          source_location: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          extraction_id: string
+          fact_type: string
+          id?: string
+          linked_account_id?: string | null
+          linked_indicator_id?: string | null
+          linked_link_id?: string | null
+          note?: string | null
+          source_location: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          extraction_id?: string
+          fact_type?: string
+          id?: string
+          linked_account_id?: string | null
+          linked_indicator_id?: string | null
+          linked_link_id?: string | null
+          note?: string | null
+          source_location?: string
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "record_extraction_facts_extraction_id_fkey"
+            columns: ["extraction_id"]
+            isOneToOne: false
+            referencedRelation: "record_extractions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "record_extraction_facts_linked_indicator_id_fkey"
+            columns: ["linked_indicator_id"]
+            isOneToOne: false
+            referencedRelation: "indicators"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "record_extraction_facts_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "record_extraction_facts_linked_link_id_fkey"
+            columns: ["linked_link_id"]
+            isOneToOne: false
+            referencedRelation: "account_links"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "record_extraction_facts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      record_extractions: {
+        Row: {
+          case_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          source_kind: string | null
+          source_label: string
+          source_ref: string | null
+        }
+        Insert: {
+          case_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          source_kind?: string | null
+          source_label: string
+          source_ref?: string | null
+        }
+        Update: {
+          case_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          source_kind?: string | null
+          source_label?: string
+          source_ref?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "record_extractions_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "record_extractions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       report_versions: {
         Row: {
           created_at: string
@@ -6904,6 +7030,18 @@ export type Database = {
       end_ada_bureau_assignment: {
         Args: { p_assignment: string; p_note?: string }
         Returns: Database["public"]["Tables"]["prosecutor_bureau_assignments"]["Row"]
+      }
+      extraction_add_fact: {
+        Args: {
+          p_extraction: string
+          p_fact_type: string
+          p_note?: string
+          p_owner_person?: string
+          p_platform?: string
+          p_source_location: string
+          p_value: string
+        }
+        Returns: Database["public"]["Tables"]["record_extraction_facts"]["Row"]
       }
       issue_legal_request: {
         Args: {
