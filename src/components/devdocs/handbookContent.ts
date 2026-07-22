@@ -784,6 +784,8 @@ Justice identity and legal review are a **separate domain** (see
 [\`docs/DOJ-INTEGRATION.md\`](../DOJ-INTEGRATION.md)). Every legal table is
 SELECT-only for clients; these definer RPCs are the only write path.
 
+> **Retired (Phase 1 — 2026-07-22):** the DOJ/AG/Judge/ADA workflow is retired. Legal-request approval is now Bureau Lead+ (\`private.is_command()\`) via \`review_legal_request_as_cid\` (approve/deny/return). The ADA/DA/AG/Judge/coverage/justice-membership RPCs below are EXECUTE-revoked and kept only for historical records; justice memberships are deactivated.
+
 | RPC | Purpose |
 |---|---|
 | \`justice_membership_request_submit\` / \`_withdraw(p_request)\` | applicant-side justice onboarding transitions |

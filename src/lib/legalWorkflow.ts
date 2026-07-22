@@ -47,7 +47,10 @@ export type LegalReqLike = Pick<
   | 'expires_at' | 'response_deadline' | 'submitted_to_doj_at'
 >
 
-const CID_SUPERVISOR_ROLES = new Set(['senior_detective', 'bureau_lead', 'deputy_director', 'director'])
+// Legal-request approval is Bureau Lead+ (Phase 1 — mirrors private.is_command()
+// / can_approve_legal on the server). Senior detectives can author/submit but
+// no longer approve.
+const LEGAL_APPROVER_ROLES = new Set(['bureau_lead', 'deputy_director', 'director'])
 const DECIDED = new Set(['approved', 'denied', 'withdrawn'])
 const RETURNED = new Set(['returned_by_cid', 'returned_by_ada', 'returned_by_da', 'returned_by_ag', 'returned_by_judge'])
 
@@ -240,7 +243,7 @@ function viewerOwnsAction(r: LegalReqLike, v: LegalViewer): boolean {
   const isCreator = mine && r.created_by === v.myId
   if (s === 'not_submitted' || RETURNED.has(s)) return isCreator
   if (s === 'cid_supervisor_review') {
-    return v.cidActive && !isCreator && (v.isOwner || CID_SUPERVISOR_ROLES.has(v.cidRole ?? ''))
+    return v.cidActive && !isCreator && (v.isOwner || LEGAL_APPROVER_ROLES.has(v.cidRole ?? ''))
   }
   if (s === 'ada_review') return mine && r.assigned_ada_id === v.myId
   if (s === 'da_review') return v.justiceRole === 'district_attorney'
