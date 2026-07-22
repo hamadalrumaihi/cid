@@ -962,7 +962,7 @@ create table public.indicators (
 alter table public.indicators add constraint indicators_pkey PRIMARY KEY (id);
 alter table public.indicators add constraint indicators_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
 alter table public.indicators add constraint indicators_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
-alter table public.indicators add constraint indicators_kind_check CHECK ((kind = ANY (ARRAY['phone'::text, 'account'::text, 'serial'::text, 'alias'::text, 'address'::text, 'other'::text])));
+alter table public.indicators add constraint indicators_kind_check CHECK ((kind = ANY (ARRAY['phone'::text, 'account'::text, 'serial'::text, 'alias'::text, 'address'::text, 'email'::text, 'other'::text])));
 alter table public.indicators add constraint indicators_value_check CHECK ((length(btrim(value)) > 0));
 alter table public.indicators enable row level security;
 
@@ -2096,6 +2096,47 @@ alter table public.raid_compensations add constraint raid_compensations_case_id_
 alter table public.raid_compensations add constraint raid_compensations_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
 alter table public.raid_compensations enable row level security;
 
+create table public.record_extraction_facts (
+  id uuid not null default gen_random_uuid(),
+  extraction_id uuid not null,
+  fact_type text not null,
+  value text not null,
+  source_location text not null,
+  linked_indicator_id uuid,
+  linked_account_id uuid,
+  linked_link_id uuid,
+  note text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now()
+);
+alter table public.record_extraction_facts add constraint record_extraction_facts_pkey PRIMARY KEY (id);
+alter table public.record_extraction_facts add constraint record_extraction_facts_extraction_id_fkey FOREIGN KEY (extraction_id) REFERENCES public.record_extractions(id) ON DELETE CASCADE;
+alter table public.record_extraction_facts add constraint record_extraction_facts_linked_indicator_id_fkey FOREIGN KEY (linked_indicator_id) REFERENCES public.indicators(id) ON DELETE SET NULL;
+alter table public.record_extraction_facts add constraint record_extraction_facts_linked_account_id_fkey FOREIGN KEY (linked_account_id) REFERENCES public.accounts(id) ON DELETE SET NULL;
+alter table public.record_extraction_facts add constraint record_extraction_facts_linked_link_id_fkey FOREIGN KEY (linked_link_id) REFERENCES public.account_links(id) ON DELETE SET NULL;
+alter table public.record_extraction_facts add constraint record_extraction_facts_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.record_extraction_facts add constraint record_extraction_facts_fact_type_check CHECK ((fact_type = ANY (ARRAY['account'::text, 'phone'::text, 'email'::text, 'address'::text, 'ownership'::text, 'property'::text, 'other'::text])));
+alter table public.record_extraction_facts add constraint record_extraction_facts_value_check CHECK ((length(btrim(value)) > 0));
+alter table public.record_extraction_facts add constraint record_extraction_facts_source_location_check CHECK ((length(btrim(source_location)) > 0));
+alter table public.record_extraction_facts enable row level security;
+
+create table public.record_extractions (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  source_label text not null,
+  source_kind text,
+  source_ref text,
+  notes text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now()
+);
+alter table public.record_extractions add constraint record_extractions_pkey PRIMARY KEY (id);
+alter table public.record_extractions add constraint record_extractions_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.record_extractions add constraint record_extractions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.record_extractions add constraint record_extractions_source_label_check CHECK ((length(btrim(source_label)) > 0));
+alter table public.record_extractions add constraint record_extractions_source_kind_check CHECK (((source_kind IS NULL) OR (source_kind = ANY (ARRAY['manual'::text, 'city_import'::text]))));
+alter table public.record_extractions enable row level security;
+
 create table public.reports (
   id uuid not null default gen_random_uuid(),
   case_id uuid not null,
@@ -2588,6 +2629,13 @@ CREATE INDEX pba_bureau_active_idx ON public.prosecutor_bureau_assignments USING
 CREATE INDEX pba_prosecutor_idx ON public.prosecutor_bureau_assignments USING btree (prosecutor_id);
 CREATE INDEX raid_compensations_case_id_fkey_idx ON public.raid_compensations USING btree (case_id);
 CREATE INDEX raid_compensations_created_by_fkey_idx ON public.raid_compensations USING btree (created_by);
+CREATE INDEX record_extraction_facts_account_idx ON public.record_extraction_facts USING btree (linked_account_id) WHERE (linked_account_id IS NOT NULL);
+CREATE INDEX record_extraction_facts_created_by_idx ON public.record_extraction_facts USING btree (created_by);
+CREATE INDEX record_extraction_facts_extraction_idx ON public.record_extraction_facts USING btree (extraction_id);
+CREATE INDEX record_extraction_facts_indicator_idx ON public.record_extraction_facts USING btree (linked_indicator_id) WHERE (linked_indicator_id IS NOT NULL);
+CREATE INDEX record_extraction_facts_link_idx ON public.record_extraction_facts USING btree (linked_link_id) WHERE (linked_link_id IS NOT NULL);
+CREATE INDEX record_extractions_case_idx ON public.record_extractions USING btree (case_id);
+CREATE INDEX record_extractions_created_by_idx ON public.record_extractions USING btree (created_by);
 CREATE INDEX reports_author_id_fkey_idx ON public.reports USING btree (author_id);
 CREATE INDEX reports_case_id_idx ON public.reports USING btree (case_id);
 CREATE INDEX reports_parent_id_fkey_idx ON public.reports USING btree (parent_id);
@@ -5956,6 +6004,29 @@ create policy raid_compensations_upd on public.raid_compensations
   using (private.can_access_case(case_id))
   with check (private.can_access_case(case_id));
 
+create policy record_extraction_facts_sel on public.record_extraction_facts
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM record_extractions e
+  WHERE ((e.id = record_extraction_facts.extraction_id) AND private.can_access_case(e.case_id)))));
+
+create policy record_extractions_del on public.record_extractions
+  as permissive for delete to authenticated
+  using (private.can_delete());
+
+create policy record_extractions_ins on public.record_extractions
+  as permissive for insert to authenticated
+  with check (private.can_access_case(case_id));
+
+create policy record_extractions_sel on public.record_extractions
+  as permissive for select to authenticated
+  using (private.can_access_case(case_id));
+
+create policy record_extractions_upd on public.record_extractions
+  as permissive for update to authenticated
+  using (private.can_access_case(case_id))
+  with check (private.can_access_case(case_id));
+
 create policy report_versions_sel on public.report_versions
   as permissive for select to authenticated
   using ((EXISTS ( SELECT 1
@@ -6288,6 +6359,10 @@ create policy wl_sel on public.watchlist
 --   profiles -> authenticated: DELETE, INSERT, REFERENCES, TRIGGER, TRUNCATE, UPDATE
 --   raid_compensations -> anon: (none — global anon revoke, 20260807150000)
 --   raid_compensations -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   record_extraction_facts -> anon: (none — global anon revoke, 20260807150000)
+--   record_extraction_facts -> authenticated: SELECT (RLS-scoped; writes are RPC-only via public.extraction_add_fact)
+--   record_extractions -> anon: (none — global anon revoke, 20260807150000)
+--   record_extractions -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   reports -> anon: (none — global anon revoke, 20260807150000)
 --   reports -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
 --   rico_cases -> anon: (none — global anon revoke, 20260807150000)
@@ -7174,3 +7249,54 @@ create policy wl_sel on public.watchlist
 -- body is a pre-20260807110000 generation and is not re-rendered per branch — each
 -- change is tracked here. Definitive SQL in
 -- supabase/migrations/20260808220000_accounts_expansion.sql.
+--
+-- 20260808260000_returned_record_extraction (Phase 4b; 1 CHECK widen + 2 tables +
+-- 1 RPC). ADDITIVE ONLY (no drops of tables/columns, no data deletes). The
+-- returned-record extraction workflow: an investigator captures the FACTS of a
+-- records return (manual structured entry or a known city-format import — NO
+-- runtime AI) into a case, each fact retaining its source location, identifiers
+-- routed to the Indicators registry, ownership auto-linked at 'suspected'.
+-- public.indicators_kind_check widened to admit 'email' (phone/account/serial/
+-- alias/address/email/other) — contact identifiers include email, which had no
+-- kind. Two new tables (both mirrored above). public.record_extractions — one row
+-- per ingested records-return document, a case child (case_id → cases ON DELETE
+-- CASCADE, source_label NOT NULL non-blank, source_kind CHECK null/manual/
+-- city_import, source_ref, notes, created_by → profiles ON DELETE SET NULL,
+-- created_at); indexes record_extractions_case_idx / _created_by_idx. RLS mirrors
+-- reports: sel/ins/upd on private.can_access_case(case_id), del on
+-- private.can_delete() (command). public.record_extraction_facts — one row per
+-- extracted fact (extraction_id → record_extractions ON DELETE CASCADE, fact_type
+-- CHECK account/phone/email/address/ownership/property/other, value NOT NULL
+-- non-blank, source_location text NOT NULL non-blank [the "retain source location
+-- per fact" guardrail at schema level], linked_indicator_id → indicators / 
+-- linked_account_id → accounts / linked_link_id → account_links all ON DELETE SET
+-- NULL, note, created_by → profiles ON DELETE SET NULL, created_at); FK/lookup
+-- indexes record_extraction_facts_extraction_idx + partial _indicator_idx /
+-- _account_idx / _link_idx + _created_by_idx. RLS is SELECT-ONLY, scoped to the
+-- parent extraction's case access via EXISTS (mirrors report_versions_sel) — there
+-- is NO client write policy; the definer RPC is the sole writer, so the
+-- source-location / indicator-routing / auto-link guardrails cannot be bypassed by
+-- a direct insert. Facts cascade-delete with their extraction; both cascade with
+-- the case, so rls_test_cleanup's existing case purge sweeps them (no cleanup
+-- change). New SECURITY DEFINER RPC public.extraction_add_fact(uuid p_extraction,
+-- text p_fact_type, text p_value, text p_source_location, text p_platform default
+-- null, uuid p_owner_person default null, text p_note default null) returns
+-- public.record_extraction_facts — the ingest heart. Gates on
+-- private.can_access_case(extraction.case_id); requires non-blank value +
+-- source_location; validates fact_type; validates p_owner_person exists; an
+-- 'ownership' fact requires both owner + platform. Fan-out order: (b) for
+-- account/phone/email/address inserts a public.indicators row on the case (kind =
+-- fact_type, note referencing the source label + location) → linked_indicator_id;
+-- (c) for account/ownership with a platform, find-or-creates the public.accounts
+-- row by (platform, handle_normalized=lower(btrim(value))) excluding merged
+-- tombstones → linked_account_id, and when an owner is asserted find-or-creates a
+-- public.account_links row (subject_kind='person', subject_id/person_id=owner)
+-- HARD-CODED ownership_confidence='suspected' → linked_link_id; (d) inserts the
+-- fact with all links + source_location; (e) audits EXTRACTION_FACT_ADDED. NEVER
+-- auto-confirms: 'suspected' is hard-coded, and the Phase-4a
+-- account_link_guard_confirm still evaluates the real caller (auth.uid()) from
+-- inside this definer function, so 'confirmed' is doubly unreachable via this path.
+-- set search_path = '', schema-qualified, revoked from public/anon, granted
+-- authenticated + service_role. No extraction_create RPC — record_extractions is a
+-- plain RLS insert (case-access WITH CHECK covers it). Definitive SQL in
+-- supabase/migrations/20260808260000_returned_record_extraction.sql.

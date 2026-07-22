@@ -35,6 +35,7 @@ import type { BlockerRow } from './tabs/CaseBlockersPanel'
 import { ChargesTab } from './tabs/ChargesTab'
 import { RicoTab } from './tabs/RicoTab'
 import { IntelTab } from './tabs/IntelTab'
+import { ExtractionsTab } from './tabs/ExtractionsTab'
 import { LegalTab } from './tabs/LegalTab'
 import { ReportsTab } from './tabs/ReportsTab'
 import { TasksTab } from './tabs/TasksTab'
@@ -52,12 +53,12 @@ const CaseGraphTab = dynamic(() => import('./CaseGraphTab').then((m) => m.CaseGr
   loading: () => <p className="py-10 text-center text-sm text-slate-500">Building the link chart…</p>,
 })
 
-const TABS = ['overview', 'graph', 'media', 'intel', 'charges', 'rico', 'reports', 'tasks', 'legal', 'signoff', 'chat', 'timeline'] as const
+const TABS = ['overview', 'graph', 'media', 'intel', 'extractions', 'charges', 'rico', 'reports', 'tasks', 'legal', 'signoff', 'chat', 'timeline'] as const
 type TabId = (typeof TABS)[number]
 
 const TAB_LABELS: Record<TabId, string> = {
   overview: 'Overview', graph: 'Graph', media: 'Photos & Media', intel: 'Intel & Notes',
-  charges: 'Charges', rico: 'RICO', reports: 'Reports', tasks: 'Tasks',
+  extractions: 'Extractions', charges: 'Charges', rico: 'RICO', reports: 'Reports', tasks: 'Tasks',
   legal: 'Legal', signoff: 'Sign-off', chat: 'Chat', timeline: 'Timeline',
 }
 
@@ -66,7 +67,7 @@ const TAB_LABELS: Record<TabId, string> = {
 // conditional (ricoTabVisible): the group simply skips it when hidden.
 const TAB_GROUPS: ReadonlyArray<SectionTabGroup<TabId>> = [
   { label: 'Command', tabs: ['overview'] },
-  { label: 'Investigation', tabs: ['graph', 'media', 'intel', 'charges', 'rico'] },
+  { label: 'Investigation', tabs: ['graph', 'media', 'intel', 'extractions', 'charges', 'rico'] },
   { label: 'Casework', tabs: ['reports', 'tasks', 'legal'] },
   { label: 'Oversight', tabs: ['signoff', 'chat', 'timeline'] },
 ]
@@ -452,6 +453,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         {tab === 'graph' && <CaseGraphTab c={c} />}
         {tab === 'media' && <MediaTab c={c} canEdit={canEdit} canDelete={canDelete} holdActive={!!hold} />}
         {tab === 'intel' && <IntelTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
+        {tab === 'extractions' && <ExtractionsTab c={c} canEdit={canEdit} />}
         {tab === 'charges' && <ChargesTab c={c} canEdit={canEdit} onChanged={fetchCase} />}
         {tab === 'rico' && <RicoTab c={c} canEdit={canEdit} canDelete={canDelete} />}
         {tab === 'reports' && <ReportsTab c={c} canEdit={canEdit} canDelete={canDelete} holdActive={!!hold} />}
