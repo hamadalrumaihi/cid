@@ -3,22 +3,10 @@
 /** Login gate — visual + behavioral port of vanilla auth.js showLogin/
  *  showPending/showSetup/showAuthError and the #login-gate markup
  *  (index.html:43-56). Renders the screen for every non-'in' gate state. */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAuth } from '@/lib/auth'
-import { isConfigured, supabase } from '@/lib/supabase'
+import { isConfigured } from '@/lib/supabase'
 import { MembershipRequest } from './MembershipRequest'
-import { JusticeMembershipRequest } from './JusticeMembershipRequest'
-
-/** Existence probe for a prior application. Returns the requested agency for
- *  justice requests ('doj' | 'judiciary'), 'cid' for a CID request, or null. */
-async function supabaseList(table: 'membership_requests' | 'justice_membership_requests', uid: string): Promise<string | null> {
-  const cols = table === 'membership_requests' ? 'id' : 'requested_agency'
-  const { data, error } = await supabase().from(table).select(cols).eq('applicant_id', uid).limit(1)
-  if (error) throw new Error(error.message)
-  const row = (data as Record<string, string>[] | null)?.[0]
-  if (!row) return null
-  return table === 'membership_requests' ? 'cid' : row.requested_agency
-}
 
 function ShieldLogo({ size = 'h-12 w-12' }: { size?: string }) {
   return (
@@ -124,81 +112,12 @@ function PendingBody() {
   )
 }
 
-type ApplyDomain = 'cid' | 'doj' | 'judiciary'
-
-/** Adaptive first-login application (one Gate, three domains). The domain
- *  selector only routes between the CID and justice request flows — picking a
- *  domain or role grants nothing; each flow's server-side review RPC is the
- *  only activation path, and every role/domain combination is revalidated by
- *  DB CHECKs, so edited hidden fields can't request unauthorized roles. */
+/** First-login application. Legal review folded back into CID (justice
+ *  memberships retired), so the Gate offers the single CID department request
+ *  — the DOJ/Judiciary domain options are gone. Requesting grants nothing;
+ *  the server-side review RPC is the only activation path. */
 function ApplicationBody() {
-  const { session, profile } = useAuth()
-  const uid = session?.user?.id ?? profile?.id ?? null
-  const [domain, setDomain] = useState<ApplyDomain | null>(null)
-  const [checked, setChecked] = useState(false)
-
-  // Returning applicants land straight on their existing request instead of
-  // the domain picker (best effort — a failed lookup just shows the picker).
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      if (!uid) { setChecked(true); return }
-      try {
-        const [cid, justice] = await Promise.all([
-          supabaseList('membership_requests', uid),
-          supabaseList('justice_membership_requests', uid),
-        ])
-        if (cancelled) return
-        if (justice) setDomain(justice === 'judiciary' ? 'judiciary' : 'doj')
-        else if (cid) setDomain('cid')
-      } catch { /* picker is the safe default */ }
-      if (!cancelled) setChecked(true)
-    })()
-    return () => { cancelled = true }
-  }, [uid])
-
-  if (!checked) return <p className="text-sm text-slate-400">Loading your application…</p>
-
-  if (!domain) {
-    const options: { id: ApplyDomain; title: string; sub: string }[] = [
-      { id: 'cid', title: 'CID', sub: 'Criminal Investigation Division — Detective / Senior Detective' },
-      { id: 'doj', title: 'DOJ', sub: 'Department of Justice — ADA, District Attorney, Attorney General' },
-      { id: 'judiciary', title: 'Judiciary', sub: 'The courts — Judge' },
-    ]
-    return (
-      <div className="space-y-3">
-        <p className="text-sm text-slate-400">
-          Choose the role you are applying for. Your selection does not grant access immediately —
-          an authorized reviewer must approve your request and may adjust the final role before activation.
-        </p>
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">I am applying to join:</p>
-        {options.map((o) => (
-          <button
-            key={o.id}
-            onClick={() => setDomain(o.id)}
-            className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-left transition hover:border-badge-500/50 hover:bg-white/10"
-          >
-            <span className="block text-sm font-bold text-white">{o.title}</span>
-            <span className="mt-0.5 block text-xs text-slate-400">{o.sub}</span>
-          </button>
-        ))}
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-3">
-      <button
-        onClick={() => setDomain(null)}
-        className="text-xs font-semibold text-slate-400 transition hover:text-white"
-      >
-        ← Applying to {domain === 'cid' ? 'CID' : domain === 'doj' ? 'DOJ' : 'the Judiciary'} — change
-      </button>
-      {domain === 'cid'
-        ? <MembershipRequest />
-        : <JusticeMembershipRequest initialAgency={domain} />}
-    </div>
-  )
+  return <MembershipRequest />
 }
 
 function ErrorBody() {

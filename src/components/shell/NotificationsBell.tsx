@@ -16,7 +16,6 @@ import { notifDetail, notifHref, notifSub, notifTitle, type NotificationRow } fr
 function ctaLabel(href: string): string {
   if (href.startsWith('/cases')) return 'View case'
   if (href.startsWith('/legal')) return 'View legal request'
-  if (href.startsWith('/justice')) return 'Open Justice Portal'
   if (href.startsWith('/command-center')) return 'Open Command Center'
   if (href.startsWith('/command')) return 'Open Central Command'
   if (href.startsWith('/announce')) return 'View announcement'

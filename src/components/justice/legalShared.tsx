@@ -73,25 +73,6 @@ export function useLegalPeople(requestId: string | null): Record<string, string>
   return people
 }
 
-export interface JusticeDirEntry {
-  user_id: string; display_name: string; agency: string
-  justice_role: string; active: boolean; justice_identifier: string | null
-}
-/** The justice roster (definer RPC — visible to justice + CID + Owner). */
-export function useJusticeDirectory(): { entries: JusticeDirEntry[]; reload: () => void } {
-  const [entries, setEntries] = useState<JusticeDirEntry[]>([])
-  const v = useTableVersion('justice_memberships')
-  const [tick, setTick] = useState(0)
-  useEffect(() => {
-    let cancelled = false
-    void rpc('justice_directory', {} as never).then((r) => {
-      if (!cancelled && !r.error && r.data) setEntries(r.data)
-    })
-    return () => { cancelled = true }
-  }, [v, tick])
-  return { entries, reload: useCallback(() => setTick((t) => t + 1), []) }
-}
-
 /** Narrow projection for the queue/card lists — only the columns the cards and
  *  the workflow model read. Trims the wire payload versus SELECT * (the wide
  *  row carries body markdown, exhibit blobs, audit fields); RLS still scopes

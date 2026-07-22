@@ -28,7 +28,6 @@ import { IndicatorsView } from '@/components/indicators/IndicatorsView'
 import { ProfileView } from '@/components/profile/ProfileView'
 import { CommandCenterView } from '@/components/command-center/CommandCenterView'
 import { LegalView } from '@/components/legal/LegalView'
-import { JusticePortalView } from '@/components/justice/JusticePortalView'
 // Long-tail screens are code-split (client dynamic wrappers, ssr off) so the
 // heavy/rare views — owner tooling, the handbook, chart-heavy analysis tabs —
 // stay out of the page chunk every route shares. Hot paths stay static above.
@@ -298,13 +297,6 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="legal" />}>
         <LegalView />
-      </Suspense>
-    )
-  }
-  if (tab === 'justice') {
-    return (
-      <Suspense fallback={<ViewPlaceholder tab="justice" />}>
-        <JusticePortalView />
       </Suspense>
     )
   }

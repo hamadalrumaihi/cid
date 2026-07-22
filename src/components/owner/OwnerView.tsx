@@ -599,10 +599,10 @@ function OpsSection() {
             onClick={() => router.push('/command-center?s=approvals')}
           />
           <OpsCountCard
-            label="Justice applications" value={ops?.pendingJustice ?? null}
+            label="Justice applications (legacy)" value={ops?.pendingJustice ?? null}
             status={ops?.pendingJustice === null || !ops ? 'unknown' : ops.pendingJustice > 0 ? 'warning' : 'healthy'}
-            detail={ops?.pendingJustice ? 'awaiting review — Justice Portal → Applications' : 'no pending justice requests'}
-            onClick={() => router.push('/justice')}
+            detail={ops?.pendingJustice ? 'legacy requests — justice memberships retired, no longer actionable' : 'no pending justice requests'}
+            onClick={() => router.push('/command-center?s=approvals')}
           />
           <OpsCountCard
             label="Legacy open transfers" value={ops?.legacyTransfers ?? null}

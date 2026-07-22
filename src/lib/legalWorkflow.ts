@@ -175,7 +175,7 @@ export function responsibleRole(r: LegalReqLike): ResponsibleRole {
 
 export const RESPONSIBLE_ROLE_LABEL: Record<ResponsibleRole, string> = {
   investigator: 'Requesting investigator',
-  cid_supervisor: 'CID supervisor',
+  cid_supervisor: 'Bureau Lead',
   assigned_ada: 'Assigned ADA',
   bureau_prosecutor: 'Bureau prosecutor',
   district_attorney: 'District Attorney',
@@ -355,7 +355,7 @@ function nextActionLabel(
   if (flags.canAct) {
     if (s === 'not_submitted') return 'Finish draft'
     if (RETURNED.has(s)) return 'Revise and resubmit'
-    if (s === 'cid_supervisor_review') return 'Review as CID supervisor'
+    if (s === 'cid_supervisor_review') return 'Review as Bureau Lead'
     if (s === 'ada_review') return 'Review as assigned ADA'
     if (s === 'da_review') return 'Review as DA'
     if (s === 'ag_review') return 'Review as AG'
@@ -454,7 +454,7 @@ export function routingExplanation(r: LegalReqLike, v?: LegalViewer): string {
   }
   if (s === 'not_submitted') return 'This request is a draft and has not been submitted for review.'
   if (RETURNED.has(s)) return 'This request was returned for revision and is with the requesting investigator.'
-  if (s === 'cid_supervisor_review') return 'This request is awaiting CID supervisor review before it can be submitted to DOJ.'
+  if (s === 'cid_supervisor_review') return 'This request is awaiting Bureau Lead review before it can be approved and issued.'
   if (s === 'submitted_to_doj') {
     if (sealed) return 'This sealed request is not available for open judicial pickup. It requires explicit assignment under the sealed-request access rules.'
     if (judgeRouted) return 'This request passed CID review and is waiting at DOJ. The responsible bureau prosecutor can review it, while an eligible Judge may claim it directly because the request is Judge-routed and not sealed.'
