@@ -1075,7 +1075,15 @@ create table public.legal_seized_items (
   vehicle_id uuid,
   notes text,
   added_by uuid,
-  created_at timestamp with time zone not null default now()
+  created_at timestamp with time zone not null default now(),
+  evidence_bag text,
+  storage_location text,
+  media_id uuid,
+  report_id uuid,
+  disposition text default 'held'::text,
+  removed_at timestamp with time zone,
+  removed_by uuid,
+  removal_reason text
 );
 alter table public.legal_seized_items add constraint legal_seized_items_pkey PRIMARY KEY (id);
 alter table public.legal_seized_items add constraint legal_seized_items_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id) ON DELETE CASCADE;
@@ -1083,7 +1091,11 @@ alter table public.legal_seized_items add constraint legal_seized_items_evidence
 alter table public.legal_seized_items add constraint legal_seized_items_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE SET NULL;
 alter table public.legal_seized_items add constraint legal_seized_items_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id) ON DELETE SET NULL;
 alter table public.legal_seized_items add constraint legal_seized_items_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.legal_seized_items add constraint legal_seized_items_media_id_fkey FOREIGN KEY (media_id) REFERENCES public.media(id) ON DELETE SET NULL;
+alter table public.legal_seized_items add constraint legal_seized_items_report_id_fkey FOREIGN KEY (report_id) REFERENCES public.reports(id) ON DELETE SET NULL;
+alter table public.legal_seized_items add constraint legal_seized_items_removed_by_fkey FOREIGN KEY (removed_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
 alter table public.legal_seized_items add constraint legal_seized_items_category_check CHECK ((category IS NULL OR (category = ANY (ARRAY['weapon'::text, 'narcotics'::text, 'currency'::text, 'electronics'::text, 'document'::text, 'vehicle'::text, 'other'::text]))));
+alter table public.legal_seized_items add constraint legal_seized_items_disposition_check CHECK ((disposition IS NULL OR (disposition = ANY (ARRAY['held'::text, 'returned'::text, 'destroyed'::text, 'forfeited'::text, 'other'::text]))));
 alter table public.legal_seized_items enable row level security;
 
 create table public.legal_request_participants (
@@ -1184,6 +1196,9 @@ create table public.legal_requests (
   execution_outcome text,
   execution_notes text,
   execution_result text,
+  execution_incident_number text,
+  execution_officers uuid[],
+  return_report_id uuid,
   return_narrative text,
   returned_at timestamp with time zone,
   return_filed_by uuid,
@@ -1224,6 +1239,7 @@ alter table public.legal_requests add constraint legal_requests_assigned_ada_id_
 alter table public.legal_requests add constraint legal_requests_assigned_judge_id_fkey FOREIGN KEY (assigned_judge_id) REFERENCES public.profiles(id);
 alter table public.legal_requests add constraint legal_requests_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id);
 alter table public.legal_requests add constraint legal_requests_current_version_fkey FOREIGN KEY (current_version_id) REFERENCES public.legal_request_versions(id);
+alter table public.legal_requests add constraint legal_requests_return_report_id_fkey FOREIGN KEY (return_report_id) REFERENCES public.reports(id) ON DELETE SET NULL;
 alter table public.legal_requests add constraint legal_requests_execution_result_check CHECK ((execution_result IS NULL OR (execution_result = ANY (ARRAY['full'::text, 'partial'::text, 'unable'::text]))));
 alter table public.legal_requests enable row level security;
 
@@ -7037,3 +7053,46 @@ create policy wl_sel on public.watchlist
 -- private.case_has_active_hold(c.id); 6-column signature and SECURITY INVOKER
 -- unchanged. Additive only (no drops of tables/columns, no data deletes).
 -- Definitive SQL in supabase/migrations/20260808160000_legal_hold_preservation.sql.
+--
+-- 20260808180000_warrant_execution_completion (Phase 3; 3 legal_requests cols +
+-- 8 legal_seized_items cols + 4 constraints + 5 RPCs): warrant execution and
+-- seized-items become a custody-grade record with automation. legal_requests
+-- gained nullable execution_incident_number text, execution_officers uuid[], and
+-- return_report_id uuid (legal_requests_return_report_id_fkey → public.reports ON
+-- DELETE SET NULL) — all mirrored above. legal_seized_items gained nullable
+-- evidence_bag, storage_location, media_id (→ media ON DELETE SET NULL), report_id
+-- (→ reports ON DELETE SET NULL), disposition text DEFAULT 'held'
+-- (legal_seized_items_disposition_check: held/returned/destroyed/forfeited/other),
+-- removed_at, removed_by (→ profiles ON DELETE SET NULL), removal_reason — all
+-- mirrored above. public.record_warrant_execution had its 5-arg signature (uuid,
+-- text, text, text, timestamptz) DROPPED and recreated as (uuid p_request, text
+-- p_incident_number, uuid[] p_officers, text p_outcome, text p_notes default null,
+-- text p_result default 'full', timestamptz p_executed_at default now()) returning
+-- public.legal_requests: it now REQUIRES a non-blank incident number, ≥1 executing
+-- officer each existing in public.profiles, and a non-blank result note for EVERY
+-- result (not just 'unable'), storing incident/officers on both branches. All
+-- prior gates (warrant-only, must be 'issued', can_fulfil_legal, expiry, result
+-- whitelist) and the unable→stays-issued vs full/partial→executed branching are
+-- kept. AUTOMATION: 'unable' inserts a public.case_tasks follow-up (case_id, title
+-- 'Warrant <no>: unable to execute — follow up', created_by=executor) when the
+-- request has a case_id; 'full'/'partial' insert a public.reports DRAFT
+-- (template='warrant_return', kind='supplemental', seq=next per case+template+kind,
+-- fields=execution summary jsonb, author_id=executor, finalized=false) and stamp
+-- its id into legal_requests.return_report_id. public.legal_seized_item_add had its
+-- 8-arg signature DROPPED and recreated with 5 appended defaulted params (…, text
+-- p_evidence_bag default null, text p_storage_location default null, uuid p_media
+-- default null, uuid p_report default null, text p_disposition default 'held'),
+-- storing them + validating disposition. public.legal_seized_item_remove(uuid)
+-- was DROPPED and recreated as (uuid p_item, text p_reason) returning
+-- public.legal_seized_items — now a SOFT strike (sets removed_at/removed_by/
+-- removal_reason; the row STAYS via lsi_sel) instead of a hard DELETE, requires a
+-- reason, audits LEGAL_SEIZED_ITEM_STRUCK. New public.legal_seized_item_set_disposition(uuid
+-- p_item, text p_disposition, text p_note default null) returning
+-- public.legal_seized_items updates disposition under can_fulfil_legal, audits
+-- LEGAL_SEIZED_ITEM_DISPOSITION. public.record_warrant_return(uuid, text) was
+-- DROPPED and recreated as (uuid p_request, text p_narrative, uuid p_report_id
+-- default null): p_report_id, when supplied, sets legal_requests.return_report_id;
+-- otherwise unchanged, gates kept. All RPCs SECURITY DEFINER, set search_path='',
+-- schema-qualified, revoked from public/anon, granted authenticated + service_role.
+-- Additive only (no drops of tables/columns, no data deletes). Definitive SQL in
+-- supabase/migrations/20260808180000_warrant_execution_completion.sql.
