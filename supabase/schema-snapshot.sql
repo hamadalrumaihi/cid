@@ -71,22 +71,27 @@ alter table public.account_handles enable row level security;
 create table public.account_links (
   id uuid not null default gen_random_uuid(),
   account_id uuid not null,
-  person_id uuid not null,
+  person_id uuid,
   ownership_confidence text not null default 'suspected'::text,
   source text,
   notes text,
   confirmed_by uuid,
   confirmed_at timestamp with time zone,
   created_by uuid,
-  created_at timestamp with time zone not null default now()
+  created_at timestamp with time zone not null default now(),
+  subject_kind text not null,
+  subject_id uuid not null
 );
 alter table public.account_links add constraint account_links_pkey PRIMARY KEY (id);
 alter table public.account_links add constraint account_links_unique UNIQUE (account_id, person_id);
+alter table public.account_links add constraint account_links_subject_unique UNIQUE (account_id, subject_kind, subject_id);
 alter table public.account_links add constraint account_links_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
 alter table public.account_links add constraint account_links_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE CASCADE;
 alter table public.account_links add constraint account_links_confirmed_by_fkey FOREIGN KEY (confirmed_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
 alter table public.account_links add constraint account_links_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
 alter table public.account_links add constraint account_links_confidence_check CHECK ((ownership_confidence = ANY (ARRAY['suspected'::text, 'probable'::text, 'confirmed'::text])));
+alter table public.account_links add constraint account_links_subject_kind_check CHECK ((subject_kind = ANY (ARRAY['person'::text, 'gang'::text, 'business'::text, 'case'::text, 'vehicle'::text, 'place'::text])));
+alter table public.account_links add constraint account_links_person_mirror_check CHECK (((subject_kind = 'person'::text) = (person_id IS NOT NULL)));
 alter table public.account_links enable row level security;
 
 create table public.accounts (
@@ -101,10 +106,22 @@ create table public.accounts (
   restricted boolean not null default false,
   created_by uuid,
   created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now()
+  updated_at timestamp with time zone not null default now(),
+  category text default 'person'::text,
+  state text default 'active'::text,
+  operator_unknown boolean not null default false,
+  is_impersonation boolean not null default false,
+  is_compromised boolean not null default false,
+  lifecycle text not null default 'active'::text,
+  merged_into uuid,
+  profile_url_normalized text generated always as (nullif(lower(btrim(profile_url)), ''::text)) stored
 );
 alter table public.accounts add constraint accounts_pkey PRIMARY KEY (id);
 alter table public.accounts add constraint accounts_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.accounts add constraint accounts_merged_into_fkey FOREIGN KEY (merged_into) REFERENCES public.accounts(id) ON DELETE SET NULL;
+alter table public.accounts add constraint accounts_category_check CHECK ((category = ANY (ARRAY['person'::text, 'shared'::text, 'gang'::text, 'business'::text])));
+alter table public.accounts add constraint accounts_state_check CHECK ((state = ANY (ARRAY['active'::text, 'suspended'::text, 'deleted'::text])));
+alter table public.accounts add constraint accounts_lifecycle_check CHECK ((lifecycle = ANY (ARRAY['active'::text, 'merged'::text])));
 alter table public.accounts enable row level security;
 
 create table public.announcements (
@@ -290,7 +307,7 @@ alter table public.case_intel_links add constraint case_intel_links_case_id_kind
 alter table public.case_intel_links add constraint case_intel_links_pkey PRIMARY KEY (id);
 alter table public.case_intel_links add constraint case_intel_links_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
 alter table public.case_intel_links add constraint case_intel_links_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
-alter table public.case_intel_links add constraint case_intel_links_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'gang'::text, 'place'::text, 'narcotic'::text])));
+alter table public.case_intel_links add constraint case_intel_links_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'gang'::text, 'place'::text, 'narcotic'::text, 'account'::text])));
 alter table public.case_intel_links enable row level security;
 
 create table public.case_messages (
@@ -2328,9 +2345,12 @@ CREATE INDEX account_handles_account_idx ON public.account_handles USING btree (
 CREATE UNIQUE INDEX account_handles_current_uidx ON public.account_handles USING btree (account_id) WHERE is_current;
 CREATE INDEX account_links_account_idx ON public.account_links USING btree (account_id);
 CREATE INDEX account_links_person_idx ON public.account_links USING btree (person_id);
-CREATE UNIQUE INDEX accounts_platform_extid_uidx ON public.accounts USING btree (platform, external_id) WHERE (external_id IS NOT NULL);
+CREATE INDEX account_links_subject_idx ON public.account_links USING btree (subject_kind, subject_id);
+CREATE UNIQUE INDEX accounts_platform_extid_uidx ON public.accounts USING btree (platform, external_id) WHERE ((external_id IS NOT NULL) AND (lifecycle <> 'merged'::text));
 CREATE INDEX accounts_platform_handle_idx ON public.accounts USING btree (platform, handle_normalized);
 CREATE INDEX accounts_handle_norm_idx ON public.accounts USING btree (handle_normalized);
+CREATE INDEX accounts_lifecycle_idx ON public.accounts USING btree (lifecycle);
+CREATE INDEX accounts_merged_into_idx ON public.accounts USING btree (merged_into) WHERE (merged_into IS NOT NULL);
 CREATE INDEX announcements_author_id_fkey_idx ON public.announcements USING btree (author_id);
 CREATE INDEX audit_log_actor_id_fkey_idx ON public.audit_log USING btree (actor_id);
 CREATE INDEX audit_log_created_at_idx ON public.audit_log USING btree (created_at DESC);
@@ -4704,7 +4724,9 @@ end $function$
 -- Triggers (non-internal)
 -- ============================================================
 
+CREATE TRIGGER account_links_guard_confirm BEFORE INSERT OR UPDATE ON public.account_links FOR EACH ROW EXECUTE FUNCTION private.account_link_guard_confirm();
 CREATE TRIGGER account_links_stamp BEFORE INSERT OR UPDATE ON public.account_links FOR EACH ROW EXECUTE FUNCTION private.account_link_stamp();
+CREATE TRIGGER accounts_freeze_identity BEFORE UPDATE ON public.accounts FOR EACH ROW EXECUTE FUNCTION private.account_freeze_identity();
 CREATE TRIGGER accounts_track_handle AFTER INSERT OR UPDATE ON public.accounts FOR EACH ROW EXECUTE FUNCTION private.account_track_handle();
 CREATE TRIGGER touch_announcements BEFORE UPDATE ON public.announcements FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER trg_stamp_author_ann BEFORE INSERT ON public.announcements FOR EACH ROW EXECUTE FUNCTION public.stamp_author_identity();
@@ -7096,3 +7118,59 @@ create policy wl_sel on public.watchlist
 -- schema-qualified, revoked from public/anon, granted authenticated + service_role.
 -- Additive only (no drops of tables/columns, no data deletes). Definitive SQL in
 -- supabase/migrations/20260808180000_warrant_execution_completion.sql.
+-- 20260808220000_accounts_expansion (Phase 4a; accounts + account_links columns +
+-- constraints + indexes + 2 trigger fns + 1 RPC + case_intel_links CHECK widen +
+-- search_all guard). ADDITIVE ONLY (no drops of tables/columns, no data deletes).
+-- public.accounts gained (all mirrored above): category text DEFAULT 'person'
+-- (accounts_category_check person/shared/gang/business), state text DEFAULT
+-- 'active' (accounts_state_check active/suspended/deleted — the platform account
+-- status, distinct from the merge tombstone), operator_unknown / is_impersonation
+-- / is_compromised boolean NOT NULL DEFAULT false (independent descriptors that
+-- may co-occur), lifecycle text NOT NULL DEFAULT 'active' (accounts_lifecycle_check
+-- active/merged — the merge tombstone), merged_into uuid (accounts_merged_into_fkey
+-- → accounts ON DELETE SET NULL), and profile_url_normalized text GENERATED ALWAYS
+-- AS (nullif(lower(btrim(profile_url)),'')) STORED; existing rows backfilled to the
+-- category/state defaults. Indexes accounts_lifecycle_idx (lifecycle) +
+-- accounts_merged_into_idx (merged_into) WHERE merged_into IS NOT NULL. New plain
+-- (invoker) trigger fn private.account_freeze_identity() (accounts_freeze_identity
+-- BEFORE UPDATE) freezes external_id once non-null — the immutable platform id;
+-- profile_url stays editable (its normalized form is the generated column). NOT
+-- rendered as DDL above (like the other private.* trigger bodies) — only the
+-- CREATE TRIGGER is. public.account_links became POLYMORPHIC: person_id is now
+-- NULLABLE (a denormalized mirror kept for person-kind links so existing person
+-- flows work), new subject_kind text NOT NULL (account_links_subject_kind_check
+-- person/gang/business/case/vehicle/place) + subject_id uuid NOT NULL; existing
+-- rows backfilled subject_kind='person', subject_id=person_id (subject_kind is NOT
+-- NULL to stop a NULL from making the kind/mirror CHECKs evaluate UNKNOWN and
+-- pass). account_links_person_mirror_check
+-- CHECK ((subject_kind='person') = (person_id IS NOT NULL)) enforces the mirror.
+-- New account_links_subject_unique UNIQUE(account_id, subject_kind, subject_id);
+-- the legacy account_links_unique UNIQUE(account_id, person_id) is KEPT (harmless
+-- under nulls-distinct, exact for person rows). Index account_links_subject_idx
+-- (subject_kind, subject_id). New plain (invoker) trigger fn
+-- private.account_link_guard_confirm() (account_links_guard_confirm BEFORE INSERT
+-- OR UPDATE) raises unless private.is_command() when a link first reaches
+-- ownership_confidence='confirmed' — suspected/probable stay open to any active
+-- member. Named to fire BEFORE account_links_stamp (alphabetical g<s), so a
+-- rejected confirm aborts before the stamp runs. public.case_intel_links_kind_check
+-- widened to admit 'account' (person/gang/place/narcotic/account). New SECURITY
+-- DEFINER RPC public.account_merge(uuid p_survivor, uuid[] p_victims, text p_reason)
+-- returns void (Bureau Lead+ via private.is_command()/can_delete(), non-blank
+-- reason, survivor∉victims, FOR UPDATE survivor+victims, rejects already-merged):
+-- delete-then-repoints account_links on UNIQUE(account_id,subject_kind,subject_id)
+-- (only account_id moves, so the person_id mirror stays consistent), copies victim
+-- account_handles onto the survivor as is_current=false history, and delete-then-
+-- repoints case_intel_links kind='account' on UNIQUE(case_id,kind,ref_id) — this
+-- UPDATE passes through private.block_intel_link_change_under_hold, so a held linked
+-- case ABORTS the merge (not bypassed). Conservative scalar merge (survivor keeps
+-- its own; fills blank display_name/summary; ORs the three descriptors; adopts
+-- external_id only if the survivor lacks one). Tombstones each victim (lifecycle=
+-- 'merged', merged_into=survivor), writes one ACCOUNT_MERGED audit_log row per
+-- victim with per-table repoint counts (GET DIAGNOSTICS). Revoked from public/anon,
+-- granted authenticated + service_role. public.search_all's 'account' branch gained
+-- an `a.lifecycle IS DISTINCT FROM 'merged'` guard so merged tombstones leave the
+-- palette (mirrors the persons/narcotics branches); signature/return unchanged, so
+-- database.types.ts needs no search_all edit. The snapshot's rendered search_all
+-- body is a pre-20260807110000 generation and is not re-rendered per branch — each
+-- change is tracked here. Definitive SQL in
+-- supabase/migrations/20260808220000_accounts_expansion.sql.

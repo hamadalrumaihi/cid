@@ -60,8 +60,10 @@ export type Database = {
           id: string
           notes: string | null
           ownership_confidence: string
-          person_id: string
+          person_id: string | null
           source: string | null
+          subject_id: string
+          subject_kind: string
         }
         Insert: {
           account_id: string
@@ -72,8 +74,10 @@ export type Database = {
           id?: string
           notes?: string | null
           ownership_confidence?: string
-          person_id: string
+          person_id?: string | null
           source?: string | null
+          subject_id: string
+          subject_kind: string
         }
         Update: {
           account_id?: string
@@ -84,8 +88,10 @@ export type Database = {
           id?: string
           notes?: string | null
           ownership_confidence?: string
-          person_id?: string
+          person_id?: string | null
           source?: string | null
+          subject_id?: string
+          subject_kind?: string | null
         }
         Relationships: [
           {
@@ -120,6 +126,7 @@ export type Database = {
       }
       accounts: {
         Row: {
+          category: string | null
           created_at: string
           created_by: string | null
           display_name: string | null
@@ -127,35 +134,56 @@ export type Database = {
           handle: string
           handle_normalized: string | null
           id: string
+          is_compromised: boolean
+          is_impersonation: boolean
+          lifecycle: string
+          merged_into: string | null
+          operator_unknown: boolean
           platform: string
           profile_url: string | null
+          profile_url_normalized: string | null
           restricted: boolean
+          state: string | null
           summary: string | null
           updated_at: string
         }
         Insert: {
+          category?: string | null
           created_at?: string
           created_by?: string | null
           display_name?: string | null
           external_id?: string | null
           handle: string
           id?: string
+          is_compromised?: boolean
+          is_impersonation?: boolean
+          lifecycle?: string
+          merged_into?: string | null
+          operator_unknown?: boolean
           platform: string
           profile_url?: string | null
           restricted?: boolean
+          state?: string | null
           summary?: string | null
           updated_at?: string
         }
         Update: {
+          category?: string | null
           created_at?: string
           created_by?: string | null
           display_name?: string | null
           external_id?: string | null
           handle?: string
           id?: string
+          is_compromised?: boolean
+          is_impersonation?: boolean
+          lifecycle?: string
+          merged_into?: string | null
+          operator_unknown?: boolean
           platform?: string
           profile_url?: string | null
           restricted?: boolean
+          state?: string | null
           summary?: string | null
           updated_at?: string
         }
@@ -165,6 +193,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounts_merged_into_fkey"
+            columns: ["merged_into"]
+            isOneToOne: false
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -6761,6 +6796,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      account_merge: {
+        Args: { p_reason: string; p_survivor: string; p_victims: string[] }
+        Returns: undefined
+      }
       add_legal_exhibit: {
         Args: {
           p_meta?: Json
