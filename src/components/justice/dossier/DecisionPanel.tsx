@@ -7,14 +7,152 @@
  *  every action is the SAME definer RPC as before — a hidden button is
  *  cosmetic, the server revalidates everything. Awareness-only viewers
  *  (bureau prosecutor, not a gate) get a quiet note, never action styling. */
+import { useEffect, useState } from 'react'
 import { rpc } from '@/lib/db'
+import { useAuth } from '@/lib/auth'
+import { activeProfiles, useProfilesStore } from '@/lib/profiles'
 import { type LegalExhibit, type LegalRequest } from '@/lib/justice'
 import type { LegalDisposition } from '@/lib/legalWorkflow'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Field, Input, Textarea } from '@/components/ui/Field'
 import { uiPrompt } from '@/components/ui/dialog'
 
 type ActFn = (fn: () => Promise<{ error: { message: string } | null }>, okMsg: string) => Promise<void>
+
+type ExecResult = 'full' | 'partial' | 'unable'
+
+/** Warrant-execution capture form. Custody-grade: the server (record_warrant_
+ *  execution) REQUIRES a non-blank incident number, ≥1 executing officer that
+ *  exists in profiles, and a non-blank outcome for EVERY result — so this form
+ *  collects and client-gates all three (the server re-validates regardless).
+ *  The recording officer is default-checked; the pool is activeProfiles(). */
+function ExecutionModal({
+  result, requestNumber, defaultOfficerId, busy, onSubmit, onClose,
+}: {
+  result: ExecResult
+  requestNumber: string
+  defaultOfficerId: string
+  busy: boolean
+  onSubmit: (v: { incident: string; officers: string[]; outcome: string; notes: string }) => void
+  onClose: () => void
+}) {
+  const loaded = useProfilesStore((s) => s.loaded)
+  const fetchProfiles = useProfilesStore((s) => s.fetch)
+  const [incident, setIncident] = useState('')
+  const [officers, setOfficers] = useState<string[]>(defaultOfficerId ? [defaultOfficerId] : [])
+  const [outcome, setOutcome] = useState('')
+  const [notes, setNotes] = useState('')
+  const [query, setQuery] = useState('')
+
+  // Populate the officer pool if the roster isn't cached yet (loaded flips
+  // false→true on the first fetch, re-rendering the list once names arrive).
+  useEffect(() => { if (!loaded) void fetchProfiles() }, [loaded, fetchProfiles])
+
+  const q = query.trim().toLowerCase()
+  const options = activeProfiles().filter((p) => !q
+    || (p.display_name ?? '').toLowerCase().includes(q)
+    || (p.badge_number ?? '').toLowerCase().includes(q))
+
+  const toggle = (id: string) =>
+    setOfficers((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
+
+  const title = result === 'unable' ? 'Unable to execute' : result === 'partial' ? 'Partial execution' : 'Record execution'
+  const outcomeLabel = result === 'unable' ? 'Reason the warrant could not be executed' : 'Execution outcome'
+  const outcomeHint = result === 'unable' ? undefined : 'e.g. suspect in custody, premises searched.'
+  const ready = incident.trim() !== '' && officers.length > 0 && outcome.trim() !== ''
+  const dirty = () => incident.trim() !== '' || outcome.trim() !== '' || notes.trim() !== ''
+
+  return (
+    <Modal open onClose={onClose} wide dirty={dirty}>
+      <div className="p-5">
+        <ModalHeader title={title} onClose={onClose} />
+        <p className="text-sm text-slate-400">
+          Warrant <span className="font-semibold text-slate-200">{requestNumber}</span> — this record is part of the
+          custody chain. {result === 'unable'
+            ? 'The warrant stays issued and a follow-up task is opened.'
+            : 'A warrant-return draft is seeded on submit.'}
+        </p>
+
+        <div className="mt-4 space-y-4">
+          <Field label="Incident / offense number" required>
+            {(id) => (
+              <Input id={id} value={incident} onChange={(e) => setIncident(e.target.value)}
+                placeholder="e.g. 25-004821" autoComplete="off" />
+            )}
+          </Field>
+
+          <div>
+            <p className="mb-1 block text-xs font-semibold text-slate-400">
+              Executing officers<span className="ml-0.5 text-rose-300" aria-hidden>*</span>
+              <span className="ml-1.5 font-normal text-slate-500">({officers.length} selected)</span>
+            </p>
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filter by name or badge…"
+              aria-label="Filter executing officers"
+              autoComplete="off"
+            />
+            <ul
+              role="group"
+              aria-label="Executing officers"
+              className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-white/10 bg-ink-950/70"
+            >
+              {options.map((p) => {
+                const on = officers.includes(p.id)
+                return (
+                  <li key={p.id}>
+                    <label className="flex min-h-[40px] cursor-pointer items-center gap-2.5 px-3 py-2 hover:bg-white/5">
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => toggle(p.id)}
+                        className="h-4 w-4 rounded border-white/20 bg-ink-900 accent-badge-500"
+                      />
+                      <span className="text-sm font-semibold text-white">{p.display_name || 'Officer'}</span>
+                      {p.badge_number && <span className="text-xs text-slate-400">Badge {p.badge_number}</span>}
+                    </label>
+                  </li>
+                )
+              })}
+              {!options.length && (
+                <li className="px-3 py-2.5 text-sm text-slate-400">
+                  {loaded ? 'No active officers match.' : 'Loading roster…'}
+                </li>
+              )}
+            </ul>
+          </div>
+
+          <Field label={outcomeLabel} hint={outcomeHint} required>
+            {(id) => (
+              <Textarea id={id} rows={3} value={outcome} onChange={(e) => setOutcome(e.target.value)} />
+            )}
+          </Field>
+
+          <Field label="Notes" hint="Optional. Log seized property below as inventory.">
+            {(id) => (
+              <Textarea id={id} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+            )}
+          </Field>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <Button className="min-h-[44px] sm:min-h-0" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button
+            variant="primary"
+            className="min-h-[44px] sm:min-h-0"
+            disabled={busy || !ready}
+            onClick={() => onSubmit({ incident: incident.trim(), officers, outcome: outcome.trim(), notes: notes.trim() })}
+          >
+            {busy ? 'Recording…' : result === 'unable' ? 'Record — unable to execute' : 'Record execution'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
 
 /** One labelled action group: who you're acting as, then the controls. */
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
@@ -44,6 +182,10 @@ export function DecisionPanel({
   now: number
   onSubmitToCid: () => void
 }) {
+  const { profile } = useAuth()
+  // The execution capture form is a modal, opened pre-set to a result variant
+  // by the three record buttons (null = closed).
+  const [execResult, setExecResult] = useState<ExecResult | null>(null)
   /* ── Bureau Lead decision (approve / deny / return) — the single write
    *    surface for legal-request review. Every action mirrors, never replaces,
    *    the server-side authority check in review_legal_request_as_cid. ─────── */
@@ -84,21 +226,19 @@ export function DecisionPanel({
     const parse = (s: string | null) => (s?.trim() ? new Date(s.trim()).toISOString() : undefined)
     await act(() => rpc('issue_legal_request', { p_request: r.id, p_expires_at: parse(exp), p_response_deadline: parse(dl) }), 'Issued.')
   }
-  const execute = async (result: 'full' | 'partial' | 'unable') => {
-    const title = result === 'unable' ? 'Unable to execute' : result === 'partial' ? 'Partial execution' : 'Record execution'
-    const outcome = await uiPrompt(
-      result === 'unable'
-        ? 'Reason the warrant could not be executed (required).'
-        : 'Execution outcome (e.g. suspect in custody).',
-      { title },
-    )
-    if (!outcome?.trim()) return
-    const notes = await uiPrompt('Notes (optional). Log seized property below as inventory.', { title })
-    if (notes === null) return
+  // Custody-grade execution capture lives in ExecutionModal: an incident
+  // number, ≥1 executing officer (multi-select, defaulted to the recorder) and
+  // an outcome are required for EVERY result. This just runs the RPC with the
+  // form's values, then closes the modal.
+  const submitExecution = async (result: ExecResult, v: { incident: string; officers: string[]; outcome: string; notes: string }) => {
     await act(
-      () => rpc('record_warrant_execution', { p_request: r.id, p_outcome: outcome, p_notes: notes || undefined, p_result: result }),
+      () => rpc('record_warrant_execution', {
+        p_request: r.id, p_incident_number: v.incident, p_officers: v.officers, p_outcome: v.outcome,
+        p_notes: v.notes || undefined, p_result: result,
+      }),
       result === 'unable' ? 'Recorded — the warrant remains issued.' : 'Execution recorded.',
     )
+    setExecResult(null)
   }
   const fileReturn = async () => {
     const narrative = await uiPrompt('Return narrative (required).', { title: 'File return' })
@@ -172,9 +312,9 @@ export function DecisionPanel({
               {canIssue && <Button variant="primary" disabled={busy} onClick={() => void issue()}>Record issue</Button>}
               {canExecute && (
                 <>
-                  <Button variant="primary" disabled={busy} onClick={() => void execute('full')}>Record execution</Button>
-                  <Button disabled={busy} onClick={() => void execute('partial')}>Partial execution</Button>
-                  <Button disabled={busy} onClick={() => void execute('unable')}>Unable to execute</Button>
+                  <Button variant="primary" disabled={busy} onClick={() => setExecResult('full')}>Record execution</Button>
+                  <Button disabled={busy} onClick={() => setExecResult('partial')}>Partial execution</Button>
+                  <Button disabled={busy} onClick={() => setExecResult('unable')}>Unable to execute</Button>
                 </>
               )}
               {canFileReturn && <Button disabled={busy} onClick={() => void fileReturn()}>File return</Button>}
@@ -210,6 +350,17 @@ export function DecisionPanel({
           )}
         </Card>
       </section>
+
+      {execResult && profile?.id && (
+        <ExecutionModal
+          result={execResult}
+          requestNumber={r.request_number}
+          defaultOfficerId={profile.id}
+          busy={busy}
+          onClose={() => setExecResult(null)}
+          onSubmit={(v) => void submitExecution(execResult, v)}
+        />
+      )}
     </div>
   )
 }
