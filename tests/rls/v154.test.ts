@@ -51,6 +51,7 @@ describe.skipIf(!enabled)('v1.54 — warrant execution + seized-items completion
   let personId = ''
   let warrantId = ''
   let seizedId = ''
+  let otherReportId = ''
 
   beforeAll(async () => {
     lsb = mk(); lead = mk(); owner = mk(); anon = mk()
@@ -70,6 +71,15 @@ describe.skipIf(!enabled)('v1.54 — warrant execution + seized-items completion
     const p = await lsb.from('persons').insert({ name: `RLS Test V154 Suspect ${tag}` }).select('id')
     if (p.error) throw new Error(p.error.message)
     personId = p.data![0].id as string
+
+    // A SECOND LSB case + report, used to prove a cross-case custody link is
+    // refused. lsb can fulfil the warrant AND access this other case, so only
+    // the case-scope guard (not the fulfil gate) can reject the link.
+    const oc = await lsb.from('cases').insert({ case_number: `V154X-${tag}`, title: `[rls-test] v154 other case ${tag}`, bureau: 'LSB' }).select('id')
+    if (oc.error) throw new Error(oc.error.message)
+    const orep = await lsb.from('reports').insert({ case_id: oc.data![0].id as string, template: 'note' }).select('id')
+    if (orep.error) throw new Error(orep.error.message)
+    otherReportId = orep.data![0].id as string
 
     // Drive a warrant to 'issued' via the post-Phase-1 path: create → submit to
     // CID → Bureau Lead+ approve → issue. No expiry set (execution allowed).
@@ -198,6 +208,14 @@ describe.skipIf(!enabled)('v1.54 — warrant execution + seized-items completion
     const r = await lsb.rpc('legal_seized_item_add', { p_request: warrantId, p_item: 'Mystery box', p_disposition: 'vaporized' })
     expect(r.error).not.toBeNull()
     expect(r.error!.message).toMatch(/invalid disposition/i)
+  })
+
+  it('a seized-item report link from another case is refused (custody-chain scoping)', async () => {
+    const r = await lsb.rpc('legal_seized_item_add', {
+      p_request: warrantId, p_item: 'Cross-case link probe', p_report: otherReportId,
+    })
+    expect(r.error).not.toBeNull()
+    expect(r.error!.message).toMatch(/must belong to this warrant/i)
   })
 
   it('set_disposition updates a seized item disposition', async () => {
