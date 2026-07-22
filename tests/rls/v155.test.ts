@@ -162,6 +162,10 @@ describe.skipIf(!enabled)('v1.55 — accounts expansion (live)', () => {
     const a = await lsb.from('accounts').insert({
       platform: 'Birdy', handle: `@${handleTag}_victim`, display_name: `V155 Victim ${tag}`,
       summary: 'victim summary to fold', is_impersonation: true,
+      // Same-platform platform id the survivor (external_id null) must ADOPT —
+      // the merge tombstones the victim before adopting, so the partial unique
+      // index (platform, external_id) where lifecycle<>'merged' never collides.
+      external_id: `ext_${handleTag}`,
     }).select('id')
     expect(a.error, a.error?.message).toBeNull()
     victimId = a.data![0].id as string
@@ -211,9 +215,12 @@ describe.skipIf(!enabled)('v1.55 — accounts expansion (live)', () => {
     const v = await lead.from('accounts').select('lifecycle,merged_into,is_impersonation').eq('id', victimId).maybeSingle()
     expect(v.data).toMatchObject({ lifecycle: 'merged', merged_into: survivorId })
 
-    // The descriptor was OR-folded onto the survivor.
-    const s = await lead.from('accounts').select('is_impersonation').eq('id', survivorId).maybeSingle()
+    // The descriptor was OR-folded onto the survivor, and the survivor ADOPTED
+    // the victim's same-platform external_id (its own was null) without tripping
+    // the (platform, external_id) partial unique index.
+    const s = await lead.from('accounts').select('is_impersonation,external_id').eq('id', survivorId).maybeSingle()
     expect(s.data?.is_impersonation).toBe(true)
+    expect(s.data?.external_id).toBe(`ext_${handleTag}`)
 
     // The duplicate person link collapsed (survivor keeps exactly one person
     // link); the case_intel_links 'account' link now points at the survivor.

@@ -2346,7 +2346,7 @@ CREATE UNIQUE INDEX account_handles_current_uidx ON public.account_handles USING
 CREATE INDEX account_links_account_idx ON public.account_links USING btree (account_id);
 CREATE INDEX account_links_person_idx ON public.account_links USING btree (person_id);
 CREATE INDEX account_links_subject_idx ON public.account_links USING btree (subject_kind, subject_id);
-CREATE UNIQUE INDEX accounts_platform_extid_uidx ON public.accounts USING btree (platform, external_id) WHERE (external_id IS NOT NULL);
+CREATE UNIQUE INDEX accounts_platform_extid_uidx ON public.accounts USING btree (platform, external_id) WHERE ((external_id IS NOT NULL) AND (lifecycle <> 'merged'::text));
 CREATE INDEX accounts_platform_handle_idx ON public.accounts USING btree (platform, handle_normalized);
 CREATE INDEX accounts_handle_norm_idx ON public.accounts USING btree (handle_normalized);
 CREATE INDEX accounts_lifecycle_idx ON public.accounts USING btree (lifecycle);
