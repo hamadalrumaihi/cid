@@ -17,6 +17,8 @@ export type GangRow = Tables<'gangs'>
 export type IntelRow = Tables<'case_intel_links'>
 export type PersonRow = Tables<'persons'>
 export type HoldRow = Tables<'legal_holds'>
+export type ExtractionRow = Tables<'record_extractions'>
+export type ExtractionFactRow = Tables<'record_extraction_facts'>
 
 /** One-click row mutations (delete chips, detach) previously discarded the
  *  returned {error}, so an RLS-denied or failed write looked like a silent
