@@ -3199,7 +3199,9 @@ export type Database = {
           document_status: string
           executed_at: string | null
           executed_by: string | null
+          execution_incident_number: string | null
           execution_notes: string | null
+          execution_officers: string[] | null
           execution_outcome: string | null
           execution_result: string | null
           expires_at: string | null
@@ -3223,6 +3225,7 @@ export type Database = {
           responsible_bureau: Database["public"]["Enums"]["bureau"]
           return_filed_by: string | null
           return_narrative: string | null
+          return_report_id: string | null
           returned_at: string | null
           review_status: string
           revoke_reason: string | null
@@ -3275,7 +3278,9 @@ export type Database = {
           document_status?: string
           executed_at?: string | null
           executed_by?: string | null
+          execution_incident_number?: string | null
           execution_notes?: string | null
+          execution_officers?: string[] | null
           execution_outcome?: string | null
           execution_result?: string | null
           expires_at?: string | null
@@ -3299,6 +3304,7 @@ export type Database = {
           responsible_bureau: Database["public"]["Enums"]["bureau"]
           return_filed_by?: string | null
           return_narrative?: string | null
+          return_report_id?: string | null
           returned_at?: string | null
           review_status?: string
           revoke_reason?: string | null
@@ -3351,7 +3357,9 @@ export type Database = {
           document_status?: string
           executed_at?: string | null
           executed_by?: string | null
+          execution_incident_number?: string | null
           execution_notes?: string | null
+          execution_officers?: string[] | null
           execution_outcome?: string | null
           execution_result?: string | null
           expires_at?: string | null
@@ -3375,6 +3383,7 @@ export type Database = {
           responsible_bureau?: Database["public"]["Enums"]["bureau"]
           return_filed_by?: string | null
           return_narrative?: string | null
+          return_report_id?: string | null
           returned_at?: string | null
           review_status?: string
           revoke_reason?: string | null
@@ -3450,6 +3459,13 @@ export type Database = {
             referencedRelation: "legal_request_versions"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "legal_requests_return_report_id_fkey"
+            columns: ["return_report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
         ]
       }
       legal_seized_items: {
@@ -3457,39 +3473,63 @@ export type Database = {
           added_by: string | null
           category: string | null
           created_at: string
+          disposition: string | null
+          evidence_bag: string | null
           evidence_id: string | null
           id: string
           item: string
           legal_request_id: string
+          media_id: string | null
           notes: string | null
           person_id: string | null
           quantity: string | null
+          removal_reason: string | null
+          removed_at: string | null
+          removed_by: string | null
+          report_id: string | null
+          storage_location: string | null
           vehicle_id: string | null
         }
         Insert: {
           added_by?: string | null
           category?: string | null
           created_at?: string
+          disposition?: string | null
+          evidence_bag?: string | null
           evidence_id?: string | null
           id?: string
           item: string
           legal_request_id: string
+          media_id?: string | null
           notes?: string | null
           person_id?: string | null
           quantity?: string | null
+          removal_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          report_id?: string | null
+          storage_location?: string | null
           vehicle_id?: string | null
         }
         Update: {
           added_by?: string | null
           category?: string | null
           created_at?: string
+          disposition?: string | null
+          evidence_bag?: string | null
           evidence_id?: string | null
           id?: string
           item?: string
           legal_request_id?: string
+          media_id?: string | null
           notes?: string | null
           person_id?: string | null
           quantity?: string | null
+          removal_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          report_id?: string | null
+          storage_location?: string | null
           vehicle_id?: string | null
         }
         Relationships: [
@@ -3524,6 +3564,27 @@ export type Database = {
           {
             foreignKeyName: "legal_seized_items_added_by_fkey"
             columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_seized_items_media_id_fkey"
+            columns: ["media_id"]
+            isOneToOne: false
+            referencedRelation: "media"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_seized_items_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_seized_items_removed_by_fkey"
+            columns: ["removed_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -6907,12 +6968,21 @@ export type Database = {
           p_person?: string | null
           p_vehicle?: string | null
           p_notes?: string | null
+          p_evidence_bag?: string | null
+          p_storage_location?: string | null
+          p_media?: string | null
+          p_report?: string | null
+          p_disposition?: string | null
         }
         Returns: Database["public"]["Tables"]["legal_seized_items"]["Row"]
       }
       legal_seized_item_remove: {
-        Args: { p_item: string }
-        Returns: undefined
+        Args: { p_item: string; p_reason: string }
+        Returns: Database["public"]["Tables"]["legal_seized_items"]["Row"]
+      }
+      legal_seized_item_set_disposition: {
+        Args: { p_item: string; p_disposition: string; p_note?: string | null }
+        Returns: Database["public"]["Tables"]["legal_seized_items"]["Row"]
       }
       mdt_export_approve: {
         Args: { p_export: string }
@@ -6984,6 +7054,8 @@ export type Database = {
       record_warrant_execution: {
         Args: {
           p_request: string
+          p_incident_number: string
+          p_officers: string[]
           p_outcome: string
           p_notes?: string | null
           p_result?: string | null
@@ -6992,7 +7064,7 @@ export type Database = {
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
       }
       record_warrant_return: {
-        Args: { p_narrative: string; p_request: string }
+        Args: { p_narrative: string; p_request: string; p_report_id?: string | null }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
       }
       remove_legal_exhibit: { Args: { p_exhibit: string }; Returns: undefined }
