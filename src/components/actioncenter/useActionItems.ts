@@ -6,7 +6,7 @@
  *  previous items stay on screen while a realtime-triggered refresh is in
  *  flight, so the queue never flashes empty. */
 import { useCallback, useEffect, useState } from 'react'
-import { buildActionItems, type AcDoc, type AcHold, type AcSuggestion, type ActionItem, type ActionSources } from '@/lib/actionItems'
+import { buildActionItems, type AcDoc, type AcGrant, type AcHold, type AcSuggestion, type ActionItem, type ActionSources } from '@/lib/actionItems'
 import {
   ackState, canApproveDoc, docTitle, reviewState,
   type MyAckVersions, type ShelfDoc,
@@ -36,6 +36,8 @@ const LEGAL_COLS =
 const BLOCKER_COLS = 'id,case_id,title,type,status,owner_id,review_at,created_at,updated_at'
 /** Active legal holds — command only; the model gates the item on isCommand. */
 const HOLD_COLS = 'id,case_id,reason,placed_by,placed_at'
+/** Restricted-access grants — RLS-scoped (command: all; member: own rows). */
+const GRANT_COLS = 'id,case_id,user_id,status,reason,granted_at,decided_at,expires_at'
 const NOTIF_COLS = 'id,user_id,type,payload,read,created_at'
 /** Library governance projection — never full bodies (docModel AcDoc inputs). */
 const DOC_COLS =
@@ -95,6 +97,7 @@ export function useActionItems(): ActionItemsResult {
   const vDocuments = useTableVersion('documents')
   const vSuggestions = useTableVersion('document_suggestions')
   const vHolds = useTableVersion('legal_holds')
+  const vGrants = useTableVersion('restricted_access_grants')
 
   const refresh = useCallback(async () => {
     if (state !== 'in' || !profile) return
@@ -112,7 +115,7 @@ export function useActionItems(): ActionItemsResult {
     }
     try {
       const me = profile.id
-      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks, suggestionRows, holds] =
+      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks, suggestionRows, holds, restrictedGrants] =
         await Promise.all([
           list('cases', { select: CASE_COLS, is: { archived_at: null } }),
           list('case_tasks', { select: TASK_COLS, eq: { assignee: me, done: false } }),
@@ -159,6 +162,11 @@ export function useActionItems(): ActionItemsResult {
             ? list('legal_holds', { select: HOLD_COLS, is: { lifted_at: null } })
                 .then((r) => r as unknown as AcHold[]).catch(() => [] as AcHold[])
             : Promise.resolve([] as AcHold[]),
+          // Restricted-access grants (Phase 6): open lifecycle rows only —
+          // pending (command work) + granted (my own live access). RLS keeps
+          // the read tiny (a member only ever gets their own rows). Fail-open.
+          list('restricted_access_grants', { select: GRANT_COLS, in: { status: ['pending', 'granted'] } })
+            .then((r) => r as unknown as AcGrant[]).catch(() => [] as AcGrant[]),
         ])
       const nowMs = Date.now()
       // Command/owner: the shared awaitingCount (submitted + actionable
@@ -225,6 +233,7 @@ export function useActionItems(): ActionItemsResult {
         legalViewer: buildLegalViewer(auth, prosecutorBureaus),
         blockers,
         holds,
+        restrictedGrants,
         notifications,
         documents,
         suggestions,
@@ -256,7 +265,7 @@ export function useActionItems(): ActionItemsResult {
       window.clearTimeout(id)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs, vDocuments, vSuggestions, vHolds])
+  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs, vDocuments, vSuggestions, vHolds, vGrants])
 
   return {
     items: built?.items ?? [],

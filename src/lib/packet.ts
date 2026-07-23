@@ -1,7 +1,7 @@
 /** Court-packet export — port of vanilla app.js gatherCasePacket/packetDocx/
  *  caseToMarkdown (:175-279). Ships .docx (dependency-free writer), .md,
  *  and .pdf (shared paras via lib/pdf's lazy @react-pdf renderer). */
-import { list } from './db'
+import { list, rpc } from './db'
 import type { Tables } from './database.types'
 import { downloadDocx, type DocxPara } from './docx'
 import { downloadTextFile, fmtUSD, slug } from './format'
@@ -19,6 +19,9 @@ export interface PacketData {
   media: Tables<'media'>[]
   charges: { code: string; count: number; title: string; level: string; jail: number | null; fine: number | null }[]
   persons: { name: string | null; alias: string | null; status: string | null }[]
+  /** Restricted media rows EXCLUDED from this packet (Phase 6 default-deny):
+   *  0 when none exist or a fresh Lead+ export approval covered them. */
+  restrictedExcluded: number
 }
 
 export async function gatherCasePacket(c: CaseRow): Promise<PacketData> {
@@ -42,11 +45,24 @@ export async function gatherCasePacket(c: CaseRow): Promise<PacketData> {
         .map((p) => ({ name: p.name, alias: p.alias, status: p.status }))
     }
   } catch { /* partial packet is better than none; sections render as empty */ }
+  // Default-deny restricted export (Phase 6): restricted rows only ship inside
+  // a packet while a Lead+ approval is fresh (has_restricted_packet_approval,
+  // 1h window). Any doubt — RPC error included — excludes them.
+  let restrictedExcluded = 0
+  let approved = false
+  try {
+    const r = await rpc('has_restricted_packet_approval', { p_case: c.id })
+    approved = !r.error && r.data === true
+  } catch { approved = false }
+  if (!approved) {
+    restrictedExcluded = media.filter((m) => m.restricted).length
+    if (restrictedExcluded) media = media.filter((m) => !m.restricted)
+  }
   const charges = parseCharges(c.charges).map((x) => {
     const pc = penalByCode(x.code)
     return { code: x.code, count: Math.max(1, x.count || 1), title: pc ? pc.title : '(unknown)', level: pc ? pc.level : '', jail: pc ? pc.jail : null, fine: pc ? pc.fine : null }
   })
-  return { ev, rep, rico, preds, media, charges, persons }
+  return { ev, rep, rico, preds, media, charges, persons, restrictedExcluded }
 }
 
 export function packetParas(c: CaseRow, d: PacketData): DocxPara[] {

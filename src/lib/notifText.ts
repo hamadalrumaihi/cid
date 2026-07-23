@@ -54,6 +54,10 @@ export const NOTIF_LABEL: Record<string, string> = {
   stale_case: 'Case going stale',
   document_suggestion: 'Document suggestion update',
   restricted_break_glass: '🔓 Restricted media break-glass',
+  restricted_access_requested: '🔓 Restricted access requested',
+  restricted_access_granted: '🔓 Restricted access granted',
+  restricted_access_denied: '🔒 Restricted access denied',
+  restricted_access_revoked: '🔒 Restricted access revoked',
 }
 
 // Payload parsing is zod-validated (v1.14): malformed payloads degrade to {}
@@ -94,6 +98,12 @@ const NOTIF_CASE_TAB: Record<string, string> = {
   signoff_changes: 'signoff',
   signoff_escalated: 'signoff',
   signoff_heads_up: 'signoff',
+  // Restricted-media access lives in the Photos & Media tab (request banner,
+  // command decision panel) — land the click where the action is.
+  restricted_access_requested: 'media',
+  restricted_access_granted: 'media',
+  restricted_access_denied: 'media',
+  restricted_access_revoked: 'media',
 }
 
 /** Where clicking a notification should take the member — so bell rows are
