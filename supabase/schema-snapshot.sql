@@ -7472,3 +7472,17 @@ create policy wl_sel on public.watchlist
 -- restricted_log. The rendered rls_test_cleanup body above is a pre-20260807
 -- generation and is not re-rendered — changes are tracked here. Definitive SQL
 -- in supabase/migrations/20260808320000_break_glass_lead_granted.sql.
+
+-- 20260808340000_break_glass_hardening: function-only follow-up to the Phase 6
+-- security review (no schema/data changes). log_restricted_view now requires
+-- the caller to actually SEE the restricted row before writing to the trail —
+-- case media needs private.can_access_case(m.case_id); caseless restricted
+-- media needs private.can_edit_narcotics_intel() — closing the audit-pollution
+-- path where any active member with a leaked media UUID could salt a case's
+-- restricted-access trail (silent-return contract preserved).
+-- restricted_media_decide_access and restricted_media_revoke_access add an
+-- explicit private.can_access_case(g.case_id) defense-in-depth check after the
+-- command gate (today is_command() implies case access everywhere; the pin
+-- protects against any future re-tightening of command scoping). Bodies are
+-- otherwise byte-identical to 20260808320000. Definitive SQL in
+-- supabase/migrations/20260808340000_break_glass_hardening.sql.
