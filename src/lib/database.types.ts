@@ -3628,14 +3628,17 @@ export type Database = {
       }
       mdt_exports: {
         Row: {
+          account_id: string | null
           clear_reason: string | null
           cleared_at: string | null
           cleared_by: string | null
+          expires_at: string | null
           exported_at: string | null
           exported_by: string | null
           id: string
           instructions: string | null
           kind: string
+          patrol_visible: boolean
           person_id: string | null
           proposed_at: string
           proposed_by: string | null
@@ -3650,14 +3653,17 @@ export type Database = {
           wanted_status: string | null
         }
         Insert: {
+          account_id?: string | null
           clear_reason?: string | null
           cleared_at?: string | null
           cleared_by?: string | null
+          expires_at?: string | null
           exported_at?: string | null
           exported_by?: string | null
           id?: string
           instructions?: string | null
           kind: string
+          patrol_visible?: boolean
           person_id?: string | null
           proposed_at?: string
           proposed_by?: string | null
@@ -3672,14 +3678,17 @@ export type Database = {
           wanted_status?: string | null
         }
         Update: {
+          account_id?: string | null
           clear_reason?: string | null
           cleared_at?: string | null
           cleared_by?: string | null
+          expires_at?: string | null
           exported_at?: string | null
           exported_by?: string | null
           id?: string
           instructions?: string | null
           kind?: string
+          patrol_visible?: boolean
           person_id?: string | null
           proposed_at?: string
           proposed_by?: string | null
@@ -3734,6 +3743,13 @@ export type Database = {
             columns: ["cleared_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mdt_exports_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -7180,8 +7196,25 @@ export type Database = {
           p_instructions?: string | null
           p_reason?: string | null
           p_case?: string | null
+          p_account?: string | null
+          p_patrol_visible?: boolean
+          p_expires_at?: string | null
         }
         Returns: Database["public"]["Tables"]["mdt_exports"]["Row"]
+      }
+      mdt_patrol_feed: {
+        Args: never
+        Returns: {
+          expires_at: string | null
+          export_id: string
+          instructions: string | null
+          kind: string
+          risk_level: string | null
+          status: string
+          subject: string | null
+          updated_at: string
+          wanted_status: string | null
+        }[]
       }
       mdt_wanted_current: {
         Args: never
