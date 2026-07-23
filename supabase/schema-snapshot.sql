@@ -2183,12 +2183,23 @@ create table public.restricted_access_grants (
   user_id uuid not null,
   reason text not null,
   granted_at timestamp with time zone not null default now(),
-  expires_at timestamp with time zone not null default (now() + '24:00:00'::interval)
+  expires_at timestamp with time zone not null default (now() + '24:00:00'::interval),
+  status text not null default 'pending'::text,
+  decided_by uuid,
+  decided_at timestamp with time zone,
+  decision_note text,
+  revoked_at timestamp with time zone,
+  revoked_by uuid,
+  revoke_reason text
 );
 alter table public.restricted_access_grants add constraint restricted_access_grants_pkey PRIMARY KEY (id);
+alter table public.restricted_access_grants add constraint restricted_access_grants_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'granted'::text, 'denied'::text, 'revoked'::text])));
 alter table public.restricted_access_grants add constraint restricted_access_grants_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
 alter table public.restricted_access_grants add constraint restricted_access_grants_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.restricted_access_grants add constraint restricted_access_grants_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.restricted_access_grants add constraint restricted_access_grants_revoked_by_fkey FOREIGN KEY (revoked_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
 create index restricted_access_grants_lookup ON public.restricted_access_grants USING btree (case_id, user_id, expires_at);
+create unique index restricted_access_grants_pending_uidx ON public.restricted_access_grants USING btree (case_id, user_id) WHERE (status = 'pending'::text);
 alter table public.restricted_access_grants enable row level security;
 
 create table public.restricted_access_log (
@@ -2202,7 +2213,7 @@ create table public.restricted_access_log (
 );
 alter table public.restricted_access_log add constraint restricted_access_log_pkey PRIMARY KEY (id);
 alter table public.restricted_access_log add constraint restricted_access_log_entity_check CHECK ((entity_type = 'media'::text));
-alter table public.restricted_access_log add constraint restricted_access_log_action_check CHECK ((action = ANY (ARRAY['view'::text, 'break_glass'::text])));
+alter table public.restricted_access_log add constraint restricted_access_log_action_check CHECK ((action = ANY (ARRAY['view'::text, 'download'::text, 'break_glass'::text, 'request'::text, 'grant'::text, 'deny'::text, 'revoke'::text, 'packet_export'::text])));
 alter table public.restricted_access_log add constraint restricted_access_log_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
 create index restricted_access_log_entity_idx ON public.restricted_access_log USING btree (entity_type, entity_id);
 create index restricted_access_log_actor_idx ON public.restricted_access_log USING btree (actor_id);
@@ -7369,3 +7380,109 @@ create policy wl_sel on public.watchlist
 -- guarantee); no consumer is deployed yet. Contract in
 -- docs/MDT-BRIDGE-CONTRACT.md. Definitive SQL in
 -- supabase/migrations/20260808280000_mdt_bridge_expansion.sql.
+--
+-- 20260808300000_media_bureau_scope (policy-only; no schema/column/function
+-- change, so database.types.ts is unchanged): media follows CASE ACCESS. The
+-- media_sel / media_ins / media_upd policies are re-emitted (rendered above)
+-- with one added conjunct — (case_id IS NULL OR private.can_access_case(case_id))
+-- — so case-attached media obeys the bureau wall on reads AND writes while
+-- unattached vault media stays portal-wide; the restricted tier still applies
+-- on top; media_del untouched. Definitive SQL in
+-- supabase/migrations/20260808300000_media_bureau_scope.sql.
+--
+-- 20260808320000_break_glass_lead_granted (Phase 6; 7 restricted_access_grants
+-- cols + 1 CHECK + 1 partial-unique index + 1 log-CHECK widen + 1 predicate
+-- re-emit + 6 new RPCs + 1 signature widen + 1 retirement + rls_test_cleanup
+-- re-emit). ADDITIVE ONLY. Break-glass becomes LEAD-GRANTED:
+-- restricted_access_grants is now a request/decision record — new columns (all
+-- mirrored above) status text NOT NULL DEFAULT 'pending'
+-- (restricted_access_grants_status_check pending/granted/denied/revoked; added
+-- with DEFAULT 'granted' then flipped to 'pending', so every pre-existing
+-- self-service grant backfills to 'granted' — history preserved), decided_by /
+-- revoked_by uuid → profiles ON DELETE SET NULL, decided_at / revoked_at
+-- timestamptz, decision_note / revoke_reason text. expires_at stays NOT NULL: a
+-- 'pending' row carries the insert-time default (now()+24h) as a PLACEHOLDER —
+-- harmless, the predicate requires status='granted' — and the GRANT decision
+-- resets expires_at = now()+24h so the 24-hour clock starts at approval. The
+-- spec's full live-row partial unique ((case_id,user_id) WHERE status IN
+-- (pending,granted) AND revoked_at IS NULL) was judged NOT SAFE against live
+-- data (the old self-service RPC inserted a fresh grant per call — duplicate
+-- ('granted', unrevoked) pairs are plausible and would abort the index build),
+-- so enforcement is SPLIT: restricted_access_grants_pending_uidx UNIQUE
+-- (case_id,user_id) WHERE status='pending' (mirrored above — safe: no pending
+-- rows predate the migration) backstops request spam, and the no-second-LIVE-
+-- grant rule is enforced inside restricted_media_request_access (LIVE = pending,
+-- or granted AND unrevoked AND unexpired; an EXPIRED grant does NOT block a new
+-- request). restricted_access_log_action_check widens (mirrored above) to
+-- view/download/break_glass/request/grant/deny/revoke/packet_export; entity_id
+-- CONVENTION: case-scoped actions (request/grant/deny/revoke/break_glass/
+-- packet_export) store the CASE id, view/download store the MEDIA id;
+-- entity_type stays 'media'. private.has_media_break_glass(p_case,p_user) is
+-- re-emitted to require status='granted' AND revoked_at IS NULL AND
+-- expires_at > now() — revocation bites immediately; backfilled grants keep
+-- working until their own expiry. SELF-SERVICE RETIRED:
+-- public.restricted_media_break_glass(uuid,text) keeps its body (history) but
+-- EXECUTE is revoked from public/anon/authenticated (service_role retained).
+-- New SECURITY DEFINER RPCs (all set search_path='', schema-qualified, revoked
+-- from public/anon, granted authenticated + service_role):
+-- public.restricted_media_request_access(p_case uuid, p_reason text) returns
+-- restricted_access_grants — is_active + can_access_case + non-blank reason +
+-- NOT can_edit_narcotics_intel (cleared members don't request), refuses a
+-- second live row, inserts status='pending', logs 'request' (entity_id=case),
+-- notifies all active command (type 'restricted_access_requested', definer
+-- insert bypassing the create_notification allow-list) plus the case lead when
+-- distinct; self-notify suppressed. public.restricted_media_decide_access(
+-- p_grant uuid, p_decision text, p_note text default null) returns
+-- restricted_access_grants — is_command(), row FOR UPDATE, requires
+-- status='pending', p_decision grant/deny, decider ≠ requester, deny requires a
+-- note; grant sets status='granted' + decided_by/at + decision_note +
+-- expires_at=now()+24h, deny sets status='denied' + decided fields; logs
+-- 'grant'/'deny' (entity_id=case, reason=note), notifies the requester
+-- ('restricted_access_granted'/'_denied') and the case lead when distinct from
+-- both parties. public.restricted_media_revoke_access(p_grant uuid, p_reason
+-- text) returns restricted_access_grants — is_command(), reason required, FOR
+-- UPDATE, only a LIVE grant (status='granted', unrevoked, unexpired) can be
+-- revoked; sets status='revoked' + revoked_at/by + revoke_reason, logs
+-- 'revoke', notifies grantee + case lead (self-notify suppressed).
+-- public.log_restricted_view had its 2-arg (text,uuid) signature DROPPED and
+-- recreated as (p_entity_type text, p_entity uuid, p_action text default
+-- 'view') — existing 2-arg call sites keep working; validates action
+-- view/download, hourly de-dupe is now PER ACTION, still quietly ignores
+-- non-restricted media. public.case_restricted_events(p_case uuid) returns
+-- setof restricted_access_log — the case-member Timeline source (ral_sel stays
+-- command-only; rag_sel unchanged): gates is_active + can_access_case (raises
+-- otherwise) and returns rows where entity_id=case OR the entity is one of the
+-- case's media ids, ordered by created_at. Packet-export approval (GOVERNANCE
+-- gate, honestly NOT RLS exfiltration prevention — packet assembly is
+-- client-side and a grant holder can already read the rows; the client
+-- assembler default-denies restricted rows without a fresh approval):
+-- public.packet_export_approve_restricted(p_case uuid, p_note text default
+-- null) returns void — is_command() + can_access_case, logs a 'packet_export'
+-- row (entity_id=case, reason=note); public.has_restricted_packet_approval(
+-- p_case uuid) returns boolean — is_active + can_access_case AND a
+-- 'packet_export' log row for the case fresher than 1 HOUR exists.
+-- Notification types restricted_access_requested/_granted/_denied/_revoked are
+-- definer-inserted only — the client create_notification allow-list is NOT
+-- touched; payloads carry case_id/case_number/grant_id/actor_id +
+-- left(reason|note,200). rls_test_cleanup is re-emitted (verbatim from
+-- 20260807160000 + one block + two counts): restricted_access_log rows do NOT
+-- cascade with the case (entity_id has no FK), so fixture grants + log rows
+-- are purged explicitly (by actor, by fixture case, and by the fixture cases'
+-- media ids before the media delete), returning new counts restricted_grants /
+-- restricted_log. The rendered rls_test_cleanup body above is a pre-20260807
+-- generation and is not re-rendered — changes are tracked here. Definitive SQL
+-- in supabase/migrations/20260808320000_break_glass_lead_granted.sql.
+
+-- 20260808340000_break_glass_hardening: function-only follow-up to the Phase 6
+-- security review (no schema/data changes). log_restricted_view now requires
+-- the caller to actually SEE the restricted row before writing to the trail —
+-- case media needs private.can_access_case(m.case_id); caseless restricted
+-- media needs private.can_edit_narcotics_intel() — closing the audit-pollution
+-- path where any active member with a leaked media UUID could salt a case's
+-- restricted-access trail (silent-return contract preserved).
+-- restricted_media_decide_access and restricted_media_revoke_access add an
+-- explicit private.can_access_case(g.case_id) defense-in-depth check after the
+-- command gate (today is_command() implies case access everywhere; the pin
+-- protects against any future re-tightening of command scoping). Bodies are
+-- otherwise byte-identical to 20260808320000. Definitive SQL in
+-- supabase/migrations/20260808340000_break_glass_hardening.sql.

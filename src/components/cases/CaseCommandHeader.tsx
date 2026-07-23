@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/Button'
 import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
-import { uiConfirm } from '@/components/ui/dialog'
+import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { list, rpc, update } from '@/lib/db'
 import { copyText, slug, todayISO } from '@/lib/format'
 import { caseLink } from '@/lib/caseLinks'
@@ -24,7 +24,7 @@ import { officerName } from '@/lib/profiles'
 import { useWatchlistStore } from '@/lib/watchlist'
 import { caseCourtHint, caseStatusTint, CASE_STATUSES, signoffLabel, signoffTint } from '@/lib/signoff'
 import type { CaseAssessment, CaseStage } from '@/lib/caseWorkflow'
-import { gatherCasePacket, packetDocx, packetMarkdown, packetPdfSpec } from '@/lib/packet'
+import { gatherCasePacket, packetDocx, packetMarkdown, packetPdfSpec, type PacketData } from '@/lib/packet'
 import { toast } from '@/lib/toast'
 import { StaleBadge } from './StaleBadge'
 import { JointCaseModal } from './JointCaseModal'
@@ -290,41 +290,74 @@ function FollowUpModal({ open, c, onClose, onChanged }: { open: boolean; c: Case
 }
 
 function PacketModal({ open, c, onClose }: { open: boolean; c: CaseRow; onClose: () => void }) {
-  const exportMd = async () => {
-    try {
-      const data = await gatherCasePacket(c)
-      packetMarkdown(c, data)
-      onClose()
-    } catch (e) { toast(e instanceof Error ? e.message : e, 'danger') }
+  const { isCommand } = useAuth()
+  // Gathered once per open so the restricted-exclusion notice reflects what
+  // an export would actually ship; an in-modal approval re-gathers.
+  const [data, setData] = useState<PacketData | null>(null)
+  useEffect(() => {
+    if (!open) return
+    queueMicrotask(() => {
+      setData(null)
+      void gatherCasePacket(c).then(setData).catch((e) => toast(e instanceof Error ? e.message : e, 'danger'))
+    })
+  }, [open, c])
+
+  const exportMd = () => {
+    if (!data) return
+    packetMarkdown(c, data)
+    onClose()
   }
-  const exportDocx = async () => {
-    try {
-      const data = await gatherCasePacket(c)
-      packetDocx(c, data)
-      onClose()
-    } catch (e) { toast(e instanceof Error ? e.message : e, 'danger') }
+  const exportDocx = () => {
+    if (!data) return
+    packetDocx(c, data)
+    onClose()
   }
   const [pdfBusy, setPdfBusy] = useState(false)
   const exportPdf = async () => {
-    if (pdfBusy) return
+    if (!data || pdfBusy) return
     setPdfBusy(true)
     try {
-      const data = await gatherCasePacket(c)
       const { downloadPdf } = await import('@/lib/pdf')
       await downloadPdf(packetPdfSpec(c, data), `${slug(c.case_number)}-packet.pdf`)
       onClose()
     } catch (e) { toast(e instanceof Error ? e.message : e, 'danger') }
     finally { setPdfBusy(false) }
   }
+  // Command may open the 1h restricted-export window (server-audited); the
+  // re-gather folds the restricted rows back into the packet.
+  const approveRestricted = async () => {
+    const note = await uiPrompt('Optional note for the restricted-access audit trail.', {
+      title: 'Approve restricted export (1 h)',
+      confirmText: 'Approve export',
+    })
+    if (note === null) return
+    const res = await rpc('packet_export_approve_restricted', { p_case: c.id, ...(note.trim() ? { p_note: note.trim() } : {}) })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Restricted export approved for 1 hour.', 'success')
+    setData(null)
+    setData(await gatherCasePacket(c))
+  }
   return (
     <Modal open={open} onClose={onClose}>
       <div className="p-5">
         <ModalHeader title="Case packet" onClose={onClose} />
+        {data != null && data.restrictedExcluded > 0 && (
+          <div className="mb-3 space-y-2 rounded-lg border border-rose-400/30 bg-rose-500/[0.07] p-3">
+            <p className="text-xs text-rose-100">
+              {data.restrictedExcluded} restricted {data.restrictedExcluded === 1 ? 'item is' : 'items are'} excluded —
+              Lead+ approval required for restricted export.
+            </p>
+            {isCommand && (
+              <Button size="sm" variant="warn" onAction={approveRestricted}>Approve restricted export (1 h)</Button>
+            )}
+          </div>
+        )}
         <div className="grid gap-2">
-          <Button variant="primary" onClick={exportDocx}>Download DOCX</Button>
-          <Button variant="primary" onClick={exportMd}>Download Markdown</Button>
-          <Button variant="primary" onClick={() => void exportPdf()} disabled={pdfBusy}>{pdfBusy ? 'Rendering PDF…' : 'Download PDF'}</Button>
+          <Button variant="primary" onClick={exportDocx} disabled={!data}>Download DOCX</Button>
+          <Button variant="primary" onClick={exportMd} disabled={!data}>Download Markdown</Button>
+          <Button variant="primary" onClick={() => void exportPdf()} disabled={!data || pdfBusy}>{pdfBusy ? 'Rendering PDF…' : 'Download PDF'}</Button>
         </div>
+        {data == null && <p className="mt-2 text-xs text-slate-400">Gathering case data…</p>}
       </div>
     </Modal>
   )

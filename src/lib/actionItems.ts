@@ -41,6 +41,7 @@ export type ActionSourceType =
   | 'document_ack' | 'document_review' | 'document_approval' | 'document_sync'
   | 'document_suggestion'
   | 'legal_hold'
+  | 'restricted_access'
   | 'other'
 
 export type ActionPriority = 'critical' | 'high' | 'normal' | 'low'
@@ -111,6 +112,11 @@ export type AcBlocker = Pick<Tables<'case_blockers'>,
  *  is under a preservation lock until command lifts it. */
 export type AcHold = Pick<Tables<'legal_holds'>,
   'id' | 'case_id' | 'reason' | 'placed_by' | 'placed_at'>
+/** Restricted-media access grants (Phase 6). RLS scopes the read: command
+ *  sees every row, a member only their own — so pending rows here are
+ *  command work and granted rows are the viewer's own live access. */
+export type AcGrant = Pick<Tables<'restricted_access_grants'>,
+  'id' | 'case_id' | 'user_id' | 'status' | 'reason' | 'granted_at' | 'decided_at' | 'expires_at'>
 /** All notifications columns — notifText helpers take the full row. */
 export type AcNotif = Pick<Tables<'notifications'>,
   'id' | 'user_id' | 'type' | 'payload' | 'read' | 'created_at'>
@@ -182,6 +188,9 @@ export interface ActionSources {
   /** Additive (defaults []): active legal holds (lifted_at IS NULL) — command
    *  only, surfaced as standing informational items. */
   holds?: AcHold[]
+  /** Additive (defaults []): restricted-access grant rows (pending/granted),
+   *  RLS-scoped (see AcGrant). */
+  restrictedGrants?: AcGrant[]
   notifications: AcNotif[]     // my UNREAD notifications (read = false)
   /** Additive (defaults []): library governance items, pre-derived. */
   documents?: AcDoc[]
@@ -207,6 +216,7 @@ export const NUDGE = {
   signoffDecide: 40,
   legalExpiring: 60,   // expires_at within 72h (and not yet past)
   membership: 20,
+  restrictedAccess: 40, // a member is blocked until command decides
 } as const
 
 export function priorityFromScore(score: number): ActionPriority {
@@ -698,6 +708,49 @@ export function buildActionItems(s: ActionSources): ActionQueue {
         isCommandItem: true,
         sourceMetadata: { case_id: h.case_id, hold_id: h.id },
         dedupeKey: `legal_hold:${h.id}`,
+      })
+    }
+  }
+
+  /* 9e · restricted-media access (Phase 6) — command decides pending requests;
+   *      a grantee sees their live grant's remaining time. RLS scopes the read
+   *      (command sees all rows, a member their own), so the client gates
+   *      here are cosmetic mirrors of the decide/self-decide server rules. */
+  for (const g of s.restrictedGrants ?? []) {
+    const c = caseById.get(g.case_id)
+    if (g.status === 'pending' && s.isCommand && g.user_id !== s.me) {
+      add({
+        id: `restricted:${g.id}`, sourceType: 'restricted_access', sourceId: g.id,
+        title: `Restricted access request — ${c?.case_number ?? 'case'}`,
+        summary: `${s.profileName(g.user_id) || 'Officer'} · restricted case media`,
+        reason: g.reason || 'Pending restricted-access decision',
+        status: 'needs_action',
+        createdAt: g.granted_at, updatedAt: g.granted_at, waitingSince: g.granted_at,
+        ownerId: s.me, responsibleRole: s.role,
+        caseId: g.case_id, caseNumber: c?.case_number ?? null, bureau: c?.bureau ?? null,
+        deepLink: caseLink(g.case_id, 'media'),
+        isCommandItem: true, isWaitingOnCurrentUser: true,
+        nudge: NUDGE.restrictedAccess,
+        sourceMetadata: { grant_id: g.id, case_id: g.case_id, requester_id: g.user_id },
+        dedupeKey: `restricted:${g.id}`,
+      })
+    } else if (g.status === 'granted' && g.user_id === s.me) {
+      const dl = deadlineInfo(g.expires_at, 'expires', { now: s.nowMs })
+      if (!dl || dl.overdue) continue // expired — nothing left to show
+      add({
+        id: `restricted:${g.id}:expiry`, sourceType: 'restricted_access', sourceId: g.id,
+        title: `Restricted access — ${c?.case_number ?? 'case'}`,
+        summary: dl.text,
+        reason: 'Your temporary restricted-media access is time-limited',
+        status: 'informational',
+        dueAt: g.expires_at,
+        createdAt: g.decided_at ?? g.granted_at, updatedAt: g.decided_at ?? g.granted_at,
+        ownerId: s.me,
+        caseId: g.case_id, caseNumber: c?.case_number ?? null, bureau: c?.bureau ?? null,
+        deepLink: caseLink(g.case_id, 'media'),
+        isPersonalItem: true,
+        sourceMetadata: { grant_id: g.id, case_id: g.case_id, expires_at: g.expires_at },
+        dedupeKey: `restricted:${g.id}:expiry`,
       })
     }
   }

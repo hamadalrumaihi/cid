@@ -12,12 +12,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import type { Json } from '@/lib/database.types'
+import type { Json, Tables } from '@/lib/database.types'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
+import { uiPrompt } from '@/components/ui/dialog'
 import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
 import { caseLink } from '@/lib/caseLinks'
 import { CASE_MEDIA_CATEGORIES, caseMediaCategoryLabel, filterCaseMedia, legacyEvidenceRef } from '@/lib/caseMedia'
@@ -27,6 +29,7 @@ import { reportTitle } from '@/lib/forms'
 import { parseFormValues } from '@/lib/jsonShapes'
 import { useAuth } from '@/lib/auth'
 import { officerName } from '@/lib/profiles'
+import { useNow } from '@/lib/useNow'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
@@ -42,6 +45,13 @@ interface NameMaps { persons: Map<string, string>; gangs: Map<string, string>; p
 
 const EMPTY_NAMES: NameMaps = { persons: new Map(), gangs: new Map(), places: new Map(), narcotics: new Map() }
 
+type GrantRow = Tables<'restricted_access_grants'>
+
+/** Live = decided 'granted', unrevoked, unexpired — mirrors the server's
+ *  has_media_break_glass predicate (cosmetic; RLS is the real gate). */
+const grantIsLive = (g: GrantRow, nowMs: number) =>
+  g.status === 'granted' && !g.revoked_at && new Date(g.expires_at).getTime() > nowMs
+
 const mediaSrc = (m: MediaRow) => m.external_url || m.storage_path || ''
 const tagsOf = (m: MediaRow): Record<string, unknown> => parseFormValues(m.tags)
 const tagStr = (m: MediaRow, key: string): string | null => {
@@ -50,7 +60,7 @@ const tagStr = (m: MediaRow, key: string): string | null => {
 }
 
 export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: CaseRow; canEdit: boolean; canDelete: boolean; holdActive?: boolean }) {
-  const { profile } = useAuth()
+  const { profile, isCommand } = useAuth()
   const [rows, setRows] = useState<MediaRow[]>([])
   const [evidence, setEvidence] = useState<EvidenceRow[]>([])
   const [reports, setReports] = useState<ReportLite[]>([])
@@ -66,12 +76,15 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
   // the initial fetch resolves, and a failed load must say so (BUG-027).
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
-  // Restricted-media break-glass (spec D6): the total restricted count in this
-  // case (server-computed, gated on can_access_case) tells us whether there are
-  // restricted items the current viewer can't see — the delta drives the offer.
+  // Restricted media (Phase 6): the total restricted count in this case
+  // (server-computed, gated on can_access_case) tells us whether there are
+  // restricted items the current viewer can't see — the delta drives the
+  // request-access offer. Grants carry the request → decision lifecycle.
   const [restrictedCount, setRestrictedCount] = useState(0)
-  const [breakGlassOpen, setBreakGlassOpen] = useState(false)
+  const [requestOpen, setRequestOpen] = useState(false)
+  const [grants, setGrants] = useState<GrantRow[]>([])
   const vM = useTableVersion('media')
+  const vG = useTableVersion('restricted_access_grants')
 
   const refresh = useCallback(async () => {
     try {
@@ -97,7 +110,18 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
     } catch { setLoadError(true) /* loaded rows keep rendering stale */ }
     finally { setLoading(false) }
   }, [c.id, fetchLimit])
-  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vM])
+  // A grant decision flips restricted-media visibility, so grant bumps
+  // refetch the gallery too.
+  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vM, vG])
+
+  // One RLS-scoped read drives both restricted-access surfaces: command sees
+  // every grant row on the case; a member sees only their own (rag_sel).
+  const refreshGrants = useCallback(async () => {
+    try {
+      setGrants(await list('restricted_access_grants', { eq: { case_id: c.id }, order: 'granted_at', ascending: false }))
+    } catch { setGrants([]) }
+  }, [c.id])
+  useEffect(() => { queueMicrotask(() => { void refreshGrants() }) }, [refreshGrants, vG])
 
   // Resolve linked-entity names for chips — bounded `in` lookups over the ids
   // the loaded rows actually reference. Best-effort; a miss just hides a chip.
@@ -134,9 +158,53 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
     el.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' })
   }, [evParam, evidence])
 
-  // Restricted items the viewer can't load → offer break-glass (D6).
+  // Restricted items the viewer can't load → offer a request (Phase 6).
   const visibleRestricted = rows.filter((m) => m.restricted).length
   const hiddenRestricted = Math.max(0, restrictedCount - visibleRestricted)
+
+  // My grant lifecycle: a pending request or a live grant hides the request
+  // button; the newest denied/revoked row explains itself and re-opens it.
+  // (useNow keeps render pure; realtime/refresh cycles re-mount fresh data.)
+  const nowMs = useNow()
+  const me = profile?.id ?? null
+  const mine = me ? grants.filter((g) => g.user_id === me) : [] // granted_at desc
+  const myPending = mine.find((g) => g.status === 'pending') ?? null
+  const myLive = mine.find((g) => grantIsLive(g, nowMs)) ?? null
+  const myLatest = mine[0] ?? null
+  // Command panel inputs (RLS already hands non-command members only their
+  // own rows, so these stay empty for them anyway — the gate is cosmetic).
+  const pendingRequests = grants.filter((g) => g.status === 'pending' && g.user_id !== me)
+  const liveGrants = grants.filter((g) => grantIsLive(g, nowMs))
+
+  const decide = async (g: GrantRow, decision: 'grant' | 'deny') => {
+    let note: string | undefined
+    if (decision === 'deny') {
+      const v = await uiPrompt('A note is required — the requester sees it with the denial.', {
+        title: 'Deny restricted access',
+        placeholder: 'e.g. Not needed for your current assignment — coordinate with the case lead.',
+        confirmText: 'Deny request',
+      })
+      if (v === null) return
+      if (!v.trim()) { toast('A note is required to deny a request.', 'warn'); return }
+      note = v.trim()
+    }
+    const res = await rpc('restricted_media_decide_access', { p_grant: g.id, p_decision: decision, ...(note ? { p_note: note } : {}) })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast(decision === 'grant' ? 'Access granted — the 24-hour clock starts now.' : 'Request denied.', 'success')
+    void refreshGrants()
+  }
+  const revoke = async (g: GrantRow) => {
+    const v = await uiPrompt('A reason is required — it is logged and sent to the holder.', {
+      title: `Revoke access — ${officerName(g.user_id) || 'officer'}`,
+      confirmText: 'Revoke access',
+    })
+    if (v === null) return
+    if (!v.trim()) { toast('A reason is required to revoke a grant.', 'warn'); return }
+    const res = await rpc('restricted_media_revoke_access', { p_grant: g.id, p_reason: v.trim() })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Access revoked.', 'success')
+    void refreshGrants()
+  }
 
   const filtered = filterCaseMedia(rows, { category, showArchived })
   const visible = filtered.slice(0, PAGE * page)
@@ -182,8 +250,21 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
         </div>
       </div>
 
-      {/* Restricted break-glass (D6): only when items are actually hidden. */}
-      {hiddenRestricted > 0 && (
+      {/* Restricted access (Phase 6): request → Lead decision → 24h grant.
+          A live grant makes the hidden items visible (hiddenRestricted drops
+          to 0), so its countdown banner renders on its own branch. */}
+      {myLive ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-400/25 bg-emerald-500/[0.06] px-4 py-3">
+          <span aria-hidden className="text-lg">🔓</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-emerald-100">Temporary restricted access active</p>
+            <p className="text-xs text-emerald-200/70">
+              Granted by {officerName(myLive.decided_by) || 'command'} — every view and download is logged.
+            </p>
+          </div>
+          <DeadlineChip at={myLive.expires_at} kind="expires" />
+        </div>
+      ) : hiddenRestricted > 0 ? (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-rose-400/30 bg-rose-500/[0.07] px-4 py-3">
           <span aria-hidden className="text-lg">🔒</span>
           <div className="min-w-0 flex-1">
@@ -191,11 +272,63 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
               {hiddenRestricted} restricted {hiddenRestricted === 1 ? 'item is' : 'items are'} hidden
             </p>
             <p className="text-xs text-rose-200/70">
-              Restricted media is narcotics-command only. Break-glass grants you 24-hour view access — command is notified and the access is logged.
+              Restricted media is limited to cleared members. A Bureau Lead can approve a 24-hour view grant — every access is logged.
             </p>
           </div>
-          <Button size="sm" variant="warn" onClick={() => setBreakGlassOpen(true)}>Break-glass access</Button>
+          {myPending ? (
+            <Badge tint="bg-amber-500/15 text-amber-300">Awaiting command approval</Badge>
+          ) : (
+            <Button size="sm" variant="warn" onClick={() => setRequestOpen(true)}>Request restricted access</Button>
+          )}
+          {!myPending && myLatest?.status === 'denied' && (
+            <p className="w-full text-xs text-rose-200/80">
+              Your last request was denied{myLatest.decision_note ? ` — “${myLatest.decision_note}”` : ''}. You can submit a new request.
+            </p>
+          )}
+          {!myPending && myLatest?.status === 'revoked' && (
+            <p className="w-full text-xs text-rose-200/80">
+              Your access was revoked{myLatest.revoke_reason ? ` — “${myLatest.revoke_reason}”` : ''}. You can submit a new request.
+            </p>
+          )}
         </div>
+      ) : null}
+
+      {/* Command decision panel — pending requests + live grants (rag_sel
+          gives command every row; the isCommand gate mirrors the server's). */}
+      {isCommand && (pendingRequests.length > 0 || liveGrants.length > 0) && (
+        <section aria-label="Restricted access — command decisions" className="space-y-2 rounded-xl border border-white/10 bg-ink-950/50 p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Restricted access — command</h3>
+          {pendingRequests.map((g) => (
+            <div key={g.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-400/20 bg-amber-500/[0.05] px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white">
+                  {officerName(g.user_id) || 'Officer'}{' '}
+                  <span className="font-normal text-slate-400">requested access · {fmtDateTime(g.granted_at)}</span>
+                </p>
+                <p className="text-xs text-slate-300">{g.reason}</p>
+              </div>
+              <div className="flex flex-shrink-0 gap-2">
+                <Button size="sm" variant="success" onAction={() => decide(g, 'grant')}>Grant 24h</Button>
+                <Button size="sm" variant="danger" onAction={() => decide(g, 'deny')}>Deny…</Button>
+              </div>
+            </div>
+          ))}
+          {liveGrants.map((g) => (
+            <div key={g.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-white/5 bg-white/[0.03] px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-slate-200">
+                  <span className="font-semibold text-white">{officerName(g.user_id) || 'Officer'}</span> holds temporary access{' '}
+                  <DeadlineChip at={g.expires_at} kind="expires" />
+                </p>
+                <p className="text-xs text-slate-400">
+                  Granted by {officerName(g.decided_by) || 'command'}
+                  {g.reason ? ` · ${g.reason}` : ''}
+                </p>
+              </div>
+              <Button size="sm" variant="danger" onAction={() => revoke(g)}>Revoke…</Button>
+            </div>
+          ))}
+        </section>
       )}
 
       {/* Gallery grid — cards are buttons (keyboard-navigable), lazy images. */}
@@ -281,52 +414,52 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
           onClose={() => { setAddOpen(false); void refresh() }}
         />
       )}
-      {breakGlassOpen && (
-        <BreakGlassModal
+      {requestOpen && (
+        <RequestAccessModal
           c={c}
           hiddenCount={hiddenRestricted}
-          onClose={() => setBreakGlassOpen(false)}
-          onGranted={() => { setBreakGlassOpen(false); void refresh() }}
+          onClose={() => setRequestOpen(false)}
+          onRequested={() => { setRequestOpen(false); void refreshGrants() }}
         />
       )}
     </div>
   )
 }
 
-/* ── Restricted break-glass (spec D6) ────────────────────────────────────────
- * Emergency, accountable view-access to a case's restricted media for a member
- * without narcotics clearance: a mandatory reason, a 24h server-side grant,
- * command notified, and the event audited. Never edit — read-only widening. */
+/* ── Restricted-access request (Phase 6) ─────────────────────────────────────
+ * Accountable view-access to a case's restricted media for a member without
+ * narcotics clearance: a mandatory reason, a Bureau Lead (or higher) decision,
+ * and a 24h server-side grant from approval. Never edit — read-only widening. */
 
-function BreakGlassModal({ c, hiddenCount, onClose, onGranted }: {
+function RequestAccessModal({ c, hiddenCount, onClose, onRequested }: {
   c: CaseRow
   hiddenCount: number
   onClose: () => void
-  onGranted: () => void
+  onRequested: () => void
 }) {
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
 
   const submit = async () => {
     const trimmed = reason.trim()
-    if (!trimmed) { toast('A reason is required to break-glass.', 'warn'); return }
+    if (!trimmed) { toast('A reason is required to request access.', 'warn'); return }
     setBusy(true)
-    const res = await rpc('restricted_media_break_glass', { p_case: c.id, p_reason: trimmed })
+    const res = await rpc('restricted_media_request_access', { p_case: c.id, p_reason: trimmed })
     setBusy(false)
     if (res.error) { toast(res.error.message, 'danger'); return }
-    toast('Break-glass granted — command notified. Access expires in 24 hours.', 'success')
-    onGranted()
+    toast('Request sent — a Bureau Lead must approve it.', 'success')
+    onRequested()
   }
 
   return (
     <Modal open onClose={onClose} dirty={() => reason.trim().length > 0}>
       <div className="p-5">
-        <ModalHeader title="Break-glass: restricted media" onClose={onClose} />
+        <ModalHeader title="Request restricted access" onClose={onClose} />
         <div className="mt-1 space-y-3">
           <p className="rounded-lg border border-rose-400/30 bg-rose-500/[0.07] p-3 text-sm text-rose-100">
             This case has {hiddenCount} restricted {hiddenCount === 1 ? 'item' : 'items'} you aren&apos;t cleared to view.
-            Breaking glass grants you <strong>24-hour</strong> read-only access. Narcotics command is notified immediately
-            and your reason is permanently logged.
+            A Bureau Lead (or higher) must approve your request; approval grants <strong>24-hour</strong> read-only
+            access and your reason is permanently logged.
           </p>
           <Field label="Reason for access" hint="Required — this is recorded in the restricted-access audit trail.">
             {(id) => (
@@ -342,8 +475,8 @@ function BreakGlassModal({ c, hiddenCount, onClose, onGranted }: {
           </Field>
           <div className="flex justify-end gap-2">
             <Button onClick={onClose}>Cancel</Button>
-            <Button variant="danger" onClick={() => void submit()} disabled={busy || !reason.trim()}>
-              {busy ? 'Granting…' : 'Break-glass'}
+            <Button variant="primary" onClick={() => void submit()} disabled={busy || !reason.trim()}>
+              {busy ? 'Sending…' : 'Send request'}
             </Button>
           </div>
         </div>
@@ -542,7 +675,15 @@ function MediaDetailModal({ m, c, canEdit, canDelete, holdActive, names, vehicle
             </Link>
           )}
           {safe && (
-            <a href={safe} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-badge-200 hover:bg-white/5">
+            <a
+              href={safe}
+              target="_blank"
+              rel="noopener noreferrer"
+              // Opening the original is download-grade egress for a restricted
+              // item — audit it as such (fire-and-forget; server de-dups/hour).
+              onClick={() => { if (m.restricted) void rpc('log_restricted_view', { p_entity_type: 'media', p_entity: m.id, p_action: 'download' }) }}
+              className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-badge-200 hover:bg-white/5"
+            >
               Open original ↗
             </a>
           )}

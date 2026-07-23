@@ -6339,26 +6339,47 @@ export type Database = {
       restricted_access_grants: {
         Row: {
           case_id: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
           expires_at: string
           granted_at: string
           id: string
           reason: string
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          status: string
           user_id: string
         }
         Insert: {
           case_id: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
           expires_at?: string
           granted_at?: string
           id?: string
           reason: string
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          status?: string
           user_id: string
         }
         Update: {
           case_id?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
           expires_at?: string
           granted_at?: string
           id?: string
           reason?: string
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          status?: string
           user_id?: string
         }
         Relationships: [
@@ -6367,6 +6388,20 @@ export type Database = {
             columns: ["case_id"]
             isOneToOne: false
             referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "restricted_access_grants_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "restricted_access_grants_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -8001,7 +8036,7 @@ export type Database = {
         Returns: undefined
       }
       log_restricted_view: {
-        Args: { p_entity: string; p_entity_type: string }
+        Args: { p_action?: string; p_entity: string; p_entity_type: string }
         Returns: undefined
       }
       restricted_media_count: {
@@ -8011,6 +8046,30 @@ export type Database = {
       restricted_media_break_glass: {
         Args: { p_case: string; p_reason: string }
         Returns: Database["public"]["Tables"]["restricted_access_grants"]["Row"]
+      }
+      restricted_media_request_access: {
+        Args: { p_case: string; p_reason: string }
+        Returns: Database["public"]["Tables"]["restricted_access_grants"]["Row"]
+      }
+      restricted_media_decide_access: {
+        Args: { p_decision: string; p_grant: string; p_note?: string }
+        Returns: Database["public"]["Tables"]["restricted_access_grants"]["Row"]
+      }
+      restricted_media_revoke_access: {
+        Args: { p_grant: string; p_reason: string }
+        Returns: Database["public"]["Tables"]["restricted_access_grants"]["Row"]
+      }
+      case_restricted_events: {
+        Args: { p_case: string }
+        Returns: Database["public"]["Tables"]["restricted_access_log"]["Row"][]
+      }
+      packet_export_approve_restricted: {
+        Args: { p_case: string; p_note?: string }
+        Returns: undefined
+      }
+      has_restricted_packet_approval: {
+        Args: { p_case: string }
+        Returns: boolean
       }
     }
     Enums: {

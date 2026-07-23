@@ -34,7 +34,7 @@ const TYPE_FILTERS: { key: string; label: string; types: readonly ActionItem['so
   { key: 'task', label: 'Tasks', types: ['task'] },
   { key: 'signoff', label: 'Sign-offs', types: ['signoff', 'returned_case'] },
   { key: 'transfer', label: 'Transfers', types: ['transfer'] },
-  { key: 'access', label: 'Access', types: ['access_request', 'membership_request'] },
+  { key: 'access', label: 'Access', types: ['access_request', 'membership_request', 'restricted_access'] },
   { key: 'legal', label: 'Legal', types: ['legal_request'] },
   { key: 'followup', label: 'Follow-ups', types: ['case_followup'] },
   { key: 'blocker', label: 'Blockers', types: ['blocker'] },
