@@ -113,6 +113,14 @@ export function MdtExportsPanel({ persons, canPropose, isCommand }: { persons: P
       if (!name) return
       target = { person: personId, vehicle: null, account: null, snapshot: name }
     }
+    // Parse the expiry BEFORE setBusy — an unparseable datetime-local value
+    // would otherwise throw mid-flight and leave the button stuck disabled.
+    let expiresIso: string | null = null
+    if (expansion && expiry) {
+      const d = new Date(expiry)
+      if (Number.isNaN(d.getTime())) { toast('Invalid expiry date.', 'warn'); return }
+      expiresIso = d.toISOString()
+    }
     setBusy(true)
     const res = await rpc('mdt_export_propose', {
       p_kind: kind, p_person: target.person, p_vehicle: target.vehicle, p_snapshot: target.snapshot,
@@ -120,7 +128,7 @@ export function MdtExportsPanel({ persons, canPropose, isCommand }: { persons: P
       // Phase 5 params ride only when the expansion flag is on — the ungated
       // payload stays byte-identical to today's. p_patrol_visible is never
       // sent: kind='account' is forced CID-only server-side regardless.
-      ...(expansion ? { p_account: target.account, p_expires_at: expiry ? new Date(expiry).toISOString() : null } : {}),
+      ...(expansion ? { p_account: target.account, p_expires_at: expiresIso } : {}),
     })
     setBusy(false)
     if (res.error) { toast(res.error.message, 'danger'); return }
