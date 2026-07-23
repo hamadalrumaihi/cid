@@ -5537,16 +5537,16 @@ create policy media_del on public.media
 
 create policy media_ins on public.media
   as permissive for insert to authenticated
-  with check (private.is_active());
+  with check ((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id))));
 
 create policy media_sel on public.media
   as permissive for select to authenticated
-  using ((private.is_active() AND ((NOT restricted) OR private.can_edit_narcotics_intel() OR private.has_media_break_glass(case_id, ( SELECT auth.uid() AS uid)))));
+  using ((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel() OR private.has_media_break_glass(case_id, ( SELECT auth.uid() AS uid)))));
 
 create policy media_upd on public.media
   as permissive for update to authenticated
-  using ((private.is_active() AND ((NOT restricted) OR private.can_edit_narcotics_intel())))
-  with check ((private.is_active() AND ((NOT restricted) OR private.can_edit_narcotics_intel())));
+  using ((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel())))
+  with check ((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel())));
 
 create policy mo_profiles_del on public.mo_profiles
   as permissive for delete to authenticated
