@@ -1304,19 +1304,24 @@ create table public.mdt_exports (
   cleared_at timestamp with time zone,
   clear_reason text,
   sync_status text not null default 'pending'::text,
-  updated_at timestamp with time zone not null default now()
+  updated_at timestamp with time zone not null default now(),
+  account_id uuid,
+  patrol_visible boolean not null default true,
+  expires_at timestamp with time zone
 );
 alter table public.mdt_exports add constraint mdt_exports_pkey PRIMARY KEY (id);
 alter table public.mdt_exports add constraint mdt_exports_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE CASCADE;
 alter table public.mdt_exports add constraint mdt_exports_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id) ON DELETE CASCADE;
+alter table public.mdt_exports add constraint mdt_exports_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
 alter table public.mdt_exports add constraint mdt_exports_source_case_id_fkey FOREIGN KEY (source_case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
 alter table public.mdt_exports add constraint mdt_exports_proposed_by_fkey FOREIGN KEY (proposed_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
 alter table public.mdt_exports add constraint mdt_exports_exported_by_fkey FOREIGN KEY (exported_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
 alter table public.mdt_exports add constraint mdt_exports_cleared_by_fkey FOREIGN KEY (cleared_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
-alter table public.mdt_exports add constraint mdt_exports_kind_check CHECK ((kind = ANY (ARRAY['person_bolo'::text, 'vehicle_bolo'::text, 'caution'::text])));
+alter table public.mdt_exports add constraint mdt_exports_kind_check CHECK ((kind = ANY (ARRAY['person_bolo'::text, 'vehicle_bolo'::text, 'caution'::text, 'arrest_warrant'::text, 'person_record'::text, 'vehicle_record'::text, 'account'::text])));
 alter table public.mdt_exports add constraint mdt_exports_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'exported'::text, 'cleared'::text])));
 alter table public.mdt_exports add constraint mdt_exports_risk_check CHECK ((risk_level IS NULL OR (risk_level = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
-alter table public.mdt_exports add constraint mdt_exports_target_check CHECK (((kind = ANY (ARRAY['person_bolo'::text, 'caution'::text])) AND person_id IS NOT NULL AND vehicle_id IS NULL) OR (kind = 'vehicle_bolo'::text AND vehicle_id IS NOT NULL AND person_id IS NULL));
+alter table public.mdt_exports add constraint mdt_exports_target_check CHECK (((kind = ANY (ARRAY['person_bolo'::text, 'caution'::text, 'arrest_warrant'::text, 'person_record'::text])) AND person_id IS NOT NULL AND vehicle_id IS NULL AND account_id IS NULL) OR ((kind = ANY (ARRAY['vehicle_bolo'::text, 'vehicle_record'::text])) AND vehicle_id IS NOT NULL AND person_id IS NULL AND account_id IS NULL) OR (kind = 'account'::text AND account_id IS NOT NULL AND person_id IS NULL AND vehicle_id IS NULL));
+alter table public.mdt_exports add constraint mdt_exports_account_cid_only CHECK ((kind <> 'account'::text OR patrol_visible = false));
 alter table public.mdt_exports enable row level security;
 
 create table public.prosecutor_bureau_assignments (
@@ -2514,6 +2519,8 @@ CREATE INDEX mdt_exports_person_idx ON public.mdt_exports USING btree (person_id
 CREATE INDEX mdt_exports_vehicle_idx ON public.mdt_exports USING btree (vehicle_id) WHERE (vehicle_id IS NOT NULL);
 CREATE UNIQUE INDEX mdt_exports_live_person_uidx ON public.mdt_exports USING btree (person_id, kind) WHERE ((status <> 'cleared'::text) AND (person_id IS NOT NULL));
 CREATE UNIQUE INDEX mdt_exports_live_vehicle_uidx ON public.mdt_exports USING btree (vehicle_id) WHERE ((status <> 'cleared'::text) AND (vehicle_id IS NOT NULL));
+CREATE INDEX mdt_exports_account_idx ON public.mdt_exports USING btree (account_id) WHERE (account_id IS NOT NULL);
+CREATE UNIQUE INDEX mdt_exports_live_account_uidx ON public.mdt_exports USING btree (account_id) WHERE ((status <> 'cleared'::text) AND (account_id IS NOT NULL));
 CREATE INDEX media_case_id_archived_at_idx ON public.media USING btree (case_id, archived_at);
 CREATE INDEX media_case_id_idx ON public.media USING btree (case_id);
 CREATE INDEX media_gang_id_fkey_idx ON public.media USING btree (gang_id);
@@ -7300,3 +7307,65 @@ create policy wl_sel on public.watchlist
 -- authenticated + service_role. No extraction_create RPC — record_extractions is a
 -- plain RLS insert (case-access WITH CHECK covers it). Definitive SQL in
 -- supabase/migrations/20260808260000_returned_record_extraction.sql.
+--
+-- 20260808280000_mdt_bridge_expansion (Phase 5; 3 mdt_exports cols + 3
+-- constraints + 2 indexes + 2 RPC re-emits + 1 service_role-only function).
+-- ADDITIVE ONLY (no drops of tables/columns, no data deletes). Ships IN CODE
+-- but NOT ACTIVE on the site: nothing here fires unless invoked, and the new
+-- read surface is unreachable from the app runtime entirely. public.mdt_exports
+-- gained (all mirrored above): account_id uuid (mdt_exports_account_id_fkey →
+-- accounts ON DELETE CASCADE — same rationale as person/vehicle: the target
+-- CHECK requires the FK for its kind, so SET NULL would abort the parent
+-- delete), patrol_visible boolean NOT NULL DEFAULT true (the lane switch:
+-- true = patrol lane, false = CID-only), and expires_at timestamptz (an expiry
+-- REMINDER only — no auto-clear, no cron; manual clear stays the law per
+-- Batch-11 11.5). mdt_exports_kind_check widened to person_bolo / vehicle_bolo
+-- / caution / arrest_warrant / person_record / vehicle_record / account
+-- (person_record/vehicle_record are plain patrol records, not BOLOs;
+-- arrest_warrant is a MANUAL person-targeted warrant push — the automatic
+-- mdt_wanted_projections path via private.mdt_project is UNTOUCHED and stays
+-- separate; account is the CID-only lane). mdt_exports_target_check extended:
+-- person kinds (person_bolo/caution/arrest_warrant/person_record) ⇒ person_id
+-- set, vehicle_id/account_id null; vehicle kinds (vehicle_bolo/vehicle_record)
+-- ⇒ vehicle_id set, others null; account ⇒ account_id set, others null. New
+-- mdt_exports_account_cid_only CHECK (kind <> 'account' OR patrol_visible =
+-- false) — an account export is STRUCTURALLY incapable of being
+-- patrol-visible. Indexes mdt_exports_account_idx (partial) +
+-- mdt_exports_live_account_uidx (one live non-cleared export per account_id,
+-- mirroring the person/vehicle discipline; the existing vehicle-wide
+-- live-unique is deliberately kept as-is). public.mdt_export_propose had its
+-- 9-arg signature (text, uuid, uuid, text, text, text, text, text, uuid)
+-- DROPPED and recreated with 3 appended defaulted params (…, uuid p_account
+-- default null, boolean p_patrol_visible default true, timestamptz
+-- p_expires_at default null) returning public.mdt_exports: same is_active
+-- gate, kind whitelist widened, target validation per kind family (v149's
+-- asserted error strings kept verbatim), account branch validates existence +
+-- lifecycle <> 'merged', patrol_visible is FORCED false for kind='account'
+-- regardless of the param (the CHECK backstops it), inserts account_id /
+-- patrol_visible / expires_at, audits MDT_EXPORT_PROPOSED with the new
+-- account/patrol_visible/expires_at detail fields; unique_violation → 'this
+-- subject already has a live MDT export'. public.mdt_export_approve(uuid) was
+-- CREATE-OR-REPLACEd byte-faithful plus ONE new guard after the
+-- status='proposed' check: `if e.proposed_by = v_uid then raise exception 'an
+-- MDT export cannot be approved by its proposer'` — self-approval prohibited
+-- (proposer ≠ approver; authority matrix "Approve MDT export: Lead+, not the
+-- proposer"). proposed_by NULL (orphaned proposer) stays approvable by any
+-- Lead+. Both RPCs SECURITY DEFINER, set search_path='', schema-qualified,
+-- revoked from public/anon, granted authenticated + service_role. New
+-- public.mdt_patrol_feed() returns table(export_id uuid, kind text, subject
+-- text, wanted_status text, risk_level text, instructions text, status text,
+-- expires_at timestamptz, updated_at timestamptz) — LANGUAGE sql STABLE
+-- SECURITY DEFINER set search_path='' — the FiveM bridge read surface and the
+-- EXPLICIT per-kind field allowlist: selects ONLY those columns from
+-- mdt_exports where status='exported' AND patrol_visible AND kind <>
+-- 'account', UNION ALL the automatic arrest-warrant projection
+-- (mdt_wanted_projections where wanted_status='wanted', mapped to
+-- kind='arrest_warrant', subject=person_name_snapshot,
+-- instructions=classification_safe_warning, status='exported', risk NULL).
+-- NEVER exposes source_case_id, reason, proposed_by/exported_by/cleared_by, or
+-- person_id/vehicle_id/account_id (subject rides the snapshot text only —
+-- 11.7). GRANTS: revoked from public, anon AND authenticated; EXECUTE granted
+-- to service_role ONLY — the app cannot reach the bridge (the dormancy
+-- guarantee); no consumer is deployed yet. Contract in
+-- docs/MDT-BRIDGE-CONTRACT.md. Definitive SQL in
+-- supabase/migrations/20260808280000_mdt_bridge_expansion.sql.
