@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
 import type { Json, Tables } from '@/lib/database.types'
 import { copyText, downloadTextFile, fmtDateTime, timeAgo } from '@/lib/format'
@@ -276,7 +277,7 @@ function ReportDetail({ r, c, canEdit, canDelete, holdActive, onBack, onEdit, on
       {showVersions && (
         <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
           <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Versions</h4>
-          {!versions ? <p className="text-sm text-slate-500">Loading versions…</p> : (
+          {!versions ? <ListSkeleton count={3} /> : (
             <VersionViewer
               versions={versions.map((ver) => ({ id: ver.id, number: ver.version_number, label: 'Sealed', at: ver.created_at, byName: parseReportSignature(ver.signature)?.officer ?? null }))}
               renderContent={(item) => {

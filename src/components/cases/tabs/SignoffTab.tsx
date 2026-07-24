@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { WorkflowTimeline } from '@/components/ui/WorkflowTimeline'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { ErrorNotice } from '@/components/ui/Notice'
 import { Field, Select, Textarea } from '@/components/ui/Field'
 import { uiConfirm } from '@/components/ui/dialog'
 import { list, rpc } from '@/lib/db'
@@ -75,8 +76,16 @@ export function SignoffTab({ c }: { c: CaseRow }) {
   const { profile } = useAuth()
   const [history, setHistory] = useState<HistoryRow[]>([])
   const [note, setNote] = useState('')
+  // A load failure surfaces with Retry (IntelTab's rule: a fetch error must
+  // never read as an empty "No sign-off history yet"). Cleared on refetch.
+  const [err, setErr] = useState<unknown>(null)
   const v = useTableVersion('case_signoff_history')
-  const refresh = useCallback(async () => { try { setHistory(await list('case_signoff_history', { eq: { case_id: c.id }, order: 'created_at', ascending: false })) } catch { /* stale */ } }, [c.id])
+  const refresh = useCallback(async () => {
+    try {
+      setHistory(await list('case_signoff_history', { eq: { case_id: c.id }, order: 'created_at', ascending: false }))
+      setErr(null)
+    } catch (e) { setErr(e) }
+  }, [c.id])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, v])
   const owner = profile?.id && (profile.id === c.lead_detective_id || profile.id === c.signoff_submitted_by)
   // Mirror of private.signoff_assert_decider: the routed assignee, or any
@@ -132,25 +141,29 @@ export function SignoffTab({ c }: { c: CaseRow }) {
           </div>
         )}
       </div>
-      <WorkflowTimeline
-        empty="No sign-off history yet."
-        entries={history.map((h) => {
-          // Full trail: verb + chain stage, the from→to status transition and
-          // the recorded source — all fields the RPCs already stamp.
-          const stage = h.stage ? SIGNOFF_STAGE_LABEL[h.stage] || h.stage : null
-          const source = h.source ? SIGNOFF_SOURCE_LABEL[h.source] || h.source : null
-          const actor = h.actor_name || officerName(h.actor_id) || 'System'
-          return {
-            id: h.id,
-            title: stage ? `${SIGNOFF_ACTION_VERB[h.action] || h.action} — ${stage}` : SIGNOFF_ACTION_VERB[h.action] || h.action,
-            actor: source ? `${actor} · via ${source}` : actor,
-            at: h.created_at,
-            from: h.from_status ? signoffLabel(h.from_status) : null,
-            to: h.to_status ? signoffLabel(h.to_status) : null,
-            note: h.note,
-          }
-        })}
-      />
+      {err ? (
+        <ErrorNotice message={err} onRetry={() => void refresh()} />
+      ) : (
+        <WorkflowTimeline
+          empty="No sign-off history yet."
+          entries={history.map((h) => {
+            // Full trail: verb + chain stage, the from→to status transition and
+            // the recorded source — all fields the RPCs already stamp.
+            const stage = h.stage ? SIGNOFF_STAGE_LABEL[h.stage] || h.stage : null
+            const source = h.source ? SIGNOFF_SOURCE_LABEL[h.source] || h.source : null
+            const actor = h.actor_name || officerName(h.actor_id) || 'System'
+            return {
+              id: h.id,
+              title: stage ? `${SIGNOFF_ACTION_VERB[h.action] || h.action} — ${stage}` : SIGNOFF_ACTION_VERB[h.action] || h.action,
+              actor: source ? `${actor} · via ${source}` : actor,
+              at: h.created_at,
+              from: h.from_status ? signoffLabel(h.from_status) : null,
+              to: h.to_status ? signoffLabel(h.to_status) : null,
+              note: h.note,
+            }
+          })}
+        />
+      )}
     </div>
   )
 }

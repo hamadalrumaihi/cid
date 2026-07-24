@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { insert, list, deleteWithUndo } from '@/lib/db'
 import { Button } from '@/components/ui/Button'
+import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { Drafts } from '@/lib/drafts'
@@ -28,8 +29,16 @@ export function ChatTab({ c }: { c: CaseRow }) {
   // queues them, appends @Name to the text, and on send stores the id list
   // on the row + fires a chat_mention notification per mentioned officer.
   const [mentions, setMentions] = useState<{ id: string; name: string }[]>([])
+  // A load failure surfaces with Retry (IntelTab's rule: a fetch error must
+  // never read as an empty "No messages yet"). Cleared on the next good fetch.
+  const [err, setErr] = useState<unknown>(null)
   const v = useTableVersion('case_messages')
-  const refresh = useCallback(async () => { try { setMsgs(await list('case_messages', { eq: { case_id: c.id }, order: 'created_at' })) } catch { /* stale */ } }, [c.id])
+  const refresh = useCallback(async () => {
+    try {
+      setMsgs(await list('case_messages', { eq: { case_id: c.id }, order: 'created_at' }))
+      setErr(null)
+    } catch (e) { setErr(e) }
+  }, [c.id])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, v])
   // Never-lose-work: restore a half-typed message for THIS case on mount;
   // keep the stash current while typing; clear it on successful send.
@@ -62,10 +71,19 @@ export function ChatTab({ c }: { c: CaseRow }) {
   const rowMentions = (m: MessageRow): string[] => parseStringArray(m.mentions)
   return (
     <div className="space-y-3">
-      <div className="max-h-[48vh] space-y-3 overflow-y-auto rounded-xl border border-white/10 bg-ink-950/50 p-3">
-        {msgs.map((m) => <div key={m.id} className={`rounded-xl p-3 ${m.author_id === profile?.id ? 'ml-auto max-w-[85%] bg-badge-600/20' : 'max-w-[85%] bg-white/5'}`}><p className="text-xs font-bold text-slate-400">{m.author_name || officerName(m.author_id) || 'Officer'} - {timeAgo(m.created_at)}</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-100">{chatBody(m.body)}</p>{rowMentions(m).length > 0 && <span className="mt-1 flex flex-wrap gap-1">{rowMentions(m).map((id) => <span key={id} className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[11px] text-blue-300">@{officerName(id) || 'Officer'}</span>)}</span>}{(m.author_id === profile?.id || isCommand) && <button aria-label="Delete this message" onClick={() => void deleteWithUndo('case_messages', m, { confirmTitle: 'Delete message', confirmMessage: 'Delete this message from the case room? You can undo this for a few seconds.', confirmText: 'Delete message', label: 'message', after: refresh })} className="mt-2 text-xs font-bold text-rose-300 hover:text-rose-200">Delete</button>}</div>)}
-        {!msgs.length && <p className="py-8 text-center text-sm text-slate-500">No messages yet.</p>}
-      </div>
+      {err ? (
+        <ErrorNotice message={err} onRetry={() => void refresh()} />
+      ) : (
+        <div className="max-h-[48vh] space-y-3 overflow-y-auto rounded-xl border border-white/10 bg-ink-950/50 p-3">
+          {msgs.map((m) => <div key={m.id} className={`rounded-xl p-3 ${m.author_id === profile?.id ? 'ml-auto max-w-[85%] bg-badge-600/20' : 'max-w-[85%] bg-white/5'}`}><p className="text-xs font-bold text-slate-400">{m.author_name || officerName(m.author_id) || 'Officer'} - {timeAgo(m.created_at)}</p><p className="mt-1 whitespace-pre-wrap text-sm text-slate-100">{chatBody(m.body)}</p>{rowMentions(m).length > 0 && <span className="mt-1 flex flex-wrap gap-1">{rowMentions(m).map((id) => <span key={id} className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[11px] text-blue-300">@{officerName(id) || 'Officer'}</span>)}</span>}{(m.author_id === profile?.id || isCommand) && <button aria-label="Delete this message" onClick={() => void deleteWithUndo('case_messages', m, { confirmTitle: 'Delete message', confirmMessage: 'Delete this message from the case room? You can undo this for a few seconds.', confirmText: 'Delete message', label: 'message', after: refresh })} className="mt-2 text-xs font-bold text-rose-300 hover:text-rose-200">Delete</button>}</div>)}
+          {!msgs.length && (
+            <EmptyState
+              title="No messages yet"
+              hint="Start the case room below — mentioning an officer notifies them."
+            />
+          )}
+        </div>
+      )}
       {mentions.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {mentions.map((m) => (

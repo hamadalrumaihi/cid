@@ -154,6 +154,153 @@ function ExecutionModal({
   )
 }
 
+/** Issue capture — replaces the chained free-text uiPrompts (an unparseable
+ *  date string used to become Invalid Date silently). datetime-local input +
+ *  an explicit validity gate, so an invalid date can never reach the RPC. */
+function IssueModal({
+  warrant, requestNumber, busy, onSubmit, onClose,
+}: {
+  warrant: boolean
+  requestNumber: string
+  busy: boolean
+  onSubmit: (v: { when?: string }) => void
+  onClose: () => void
+}) {
+  const [when, setWhen] = useState('')
+  const invalid = when !== '' && Number.isNaN(new Date(when).getTime())
+  const dirty = () => when !== ''
+  return (
+    <Modal open onClose={onClose} dirty={dirty}>
+      <div className="p-5">
+        <ModalHeader title="Record issue" onClose={onClose} />
+        <p className="text-sm text-slate-400">
+          {warrant ? 'Warrant' : 'Subpoena'} <span className="font-semibold text-slate-200">{requestNumber}</span> — marks the request issued and active.
+        </p>
+        <div className="mt-4">
+          <Field
+            label={warrant ? 'Expiration date/time' : 'Response deadline'}
+            hint={warrant ? 'Optional if the Judge set one.' : 'Optional.'}
+          >
+            {(id) => <Input id={id} type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />}
+          </Field>
+          {invalid && <p className="mt-1 text-xs text-rose-300">That date/time could not be read — fix or clear it.</p>}
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button
+            variant="primary"
+            disabled={busy || invalid}
+            onClick={() => onSubmit({ when: when ? new Date(when).toISOString() : undefined })}
+          >
+            {busy ? 'Recording…' : 'Record issue'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+type ServiceStatus = 'served' | 'service_attempted' | 'service_failed'
+const SERVICE_TITLE: Record<ServiceStatus, string> = {
+  served: 'Record service',
+  service_attempted: 'Record service attempt',
+  service_failed: 'Record failed service',
+}
+
+/** Subpoena-service capture — one form (status pre-set by the button that
+ *  opened it) instead of two chained uiPrompts. Both fields stay optional,
+ *  matching the RPC's contract exactly. */
+function ServiceModal({
+  status, requestNumber, busy, onSubmit, onClose,
+}: {
+  status: ServiceStatus
+  requestNumber: string
+  busy: boolean
+  onSubmit: (v: { method: string; notes: string }) => void
+  onClose: () => void
+}) {
+  const [method, setMethod] = useState('')
+  const [notes, setNotes] = useState('')
+  const dirty = () => method.trim() !== '' || notes.trim() !== ''
+  return (
+    <Modal open onClose={onClose} dirty={dirty}>
+      <div className="p-5">
+        <ModalHeader title={SERVICE_TITLE[status]} onClose={onClose} />
+        <p className="text-sm text-slate-400">
+          Subpoena <span className="font-semibold text-slate-200">{requestNumber}</span>.
+        </p>
+        <div className="mt-4 space-y-4">
+          <Field label="Service method" hint="Optional — e.g. in person, registered agent, counsel.">
+            {(id) => <Input id={id} value={method} onChange={(e) => setMethod(e.target.value)} autoComplete="off" />}
+          </Field>
+          <Field label="Notes" hint="Optional.">
+            {(id) => <Textarea id={id} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />}
+          </Field>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" disabled={busy} onClick={() => onSubmit({ method: method.trim(), notes: notes.trim() })}>
+            {busy ? 'Recording…' : SERVICE_TITLE[status]}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+type ComplianceStatus = 'complete' | 'partial' | 'non_compliant' | 'return_recorded'
+const COMPLIANCE_TITLE: Record<ComplianceStatus, string> = {
+  complete: 'Compliance complete',
+  partial: 'Partial compliance',
+  non_compliant: 'Record non-compliance',
+  return_recorded: 'Record return',
+}
+
+/** Subpoena-compliance capture — one form (status pre-set by the button that
+ *  opened it). The reason field appears — and is required — only for
+ *  non-compliance, mirroring the old prompt chain's gate. */
+function ComplianceModal({
+  status, requestNumber, busy, onSubmit, onClose,
+}: {
+  status: ComplianceStatus
+  requestNumber: string
+  busy: boolean
+  onSubmit: (v: { reason: string; notes: string }) => void
+  onClose: () => void
+}) {
+  const [reason, setReason] = useState('')
+  const [notes, setNotes] = useState('')
+  const needReason = status === 'non_compliant'
+  const ready = !needReason || reason.trim() !== ''
+  const dirty = () => reason.trim() !== '' || notes.trim() !== ''
+  return (
+    <Modal open onClose={onClose} dirty={dirty}>
+      <div className="p-5">
+        <ModalHeader title={COMPLIANCE_TITLE[status]} onClose={onClose} />
+        <p className="text-sm text-slate-400">
+          Subpoena <span className="font-semibold text-slate-200">{requestNumber}</span>.
+        </p>
+        <div className="mt-4 space-y-4">
+          {needReason && (
+            <Field label="Non-compliance reason" required>
+              {(id) => <Textarea id={id} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />}
+            </Field>
+          )}
+          <Field label="Notes" hint="Optional. Received materials must be logged as case evidence/attachments — this record links back to the case.">
+            {(id) => <Textarea id={id} rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />}
+          </Field>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" disabled={busy || !ready} onClick={() => onSubmit({ reason: reason.trim(), notes: notes.trim() })}>
+            {busy ? 'Recording…' : COMPLIANCE_TITLE[status]}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 /** One labelled action group: who you're acting as, then the controls. */
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -184,8 +331,12 @@ export function DecisionPanel({
 }) {
   const { profile } = useAuth()
   // The execution capture form is a modal, opened pre-set to a result variant
-  // by the three record buttons (null = closed).
+  // by the three record buttons (null = closed). Issue/service/compliance use
+  // the same pattern: their buttons open a modal pre-set to the status.
   const [execResult, setExecResult] = useState<ExecResult | null>(null)
+  const [issueOpen, setIssueOpen] = useState(false)
+  const [serviceStatus, setServiceStatus] = useState<ServiceStatus | null>(null)
+  const [complianceStatus, setComplianceStatus] = useState<ComplianceStatus | null>(null)
   /* ── Bureau Lead decision (approve / deny / return) — the single write
    *    surface for legal-request review. Every action mirrors, never replaces,
    *    the server-side authority check in review_legal_request_as_cid. ─────── */
@@ -218,13 +369,15 @@ export function DecisionPanel({
   const approvedUnissued = r.review_status === 'approved' && r.fulfilment_status === 'unissued'
   const warrant = r.request_type === 'warrant'
 
-  const issue = async () => {
-    const exp = warrant ? await uiPrompt('Expiration date/time (optional if the Judge set one).', { title: 'Issue', placeholder: '2026-07-21 18:00' }) : ''
-    if (exp === null) return
-    const dl = !warrant ? await uiPrompt('Response deadline (optional).', { title: 'Issue', placeholder: '2026-07-21 18:00' }) : ''
-    if (dl === null) return
-    const parse = (s: string | null) => (s?.trim() ? new Date(s.trim()).toISOString() : undefined)
-    await act(() => rpc('issue_legal_request', { p_request: r.id, p_expires_at: parse(exp), p_response_deadline: parse(dl) }), 'Issued.')
+  // The IssueModal validates the datetime-local value before this runs, so
+  // `when` is always a well-formed ISO string (or absent).
+  const submitIssue = async (v: { when?: string }) => {
+    await act(() => rpc('issue_legal_request', {
+      p_request: r.id,
+      p_expires_at: warrant ? v.when : undefined,
+      p_response_deadline: warrant ? undefined : v.when,
+    }), 'Issued.')
+    setIssueOpen(false)
   }
   // Custody-grade execution capture lives in ExecutionModal: an incident
   // number, ≥1 executing officer (multi-select, defaulted to the recorder) and
@@ -245,22 +398,15 @@ export function DecisionPanel({
     if (!narrative?.trim()) return
     await act(() => rpc('record_warrant_return', { p_request: r.id, p_narrative: narrative }), 'Return filed.')
   }
-  const service = async (statusValue: string) => {
-    const method = await uiPrompt('Service method (optional).', { title: 'Record service' })
-    if (method === null) return
-    const notes = await uiPrompt('Service notes (optional).', { title: 'Record service' })
-    if (notes === null) return
-    await act(() => rpc('record_subpoena_service', { p_request: r.id, p_status: statusValue, p_method: method || undefined, p_notes: notes || undefined }), 'Service recorded.')
+  const submitService = async (statusValue: ServiceStatus, v: { method: string; notes: string }) => {
+    await act(() => rpc('record_subpoena_service', { p_request: r.id, p_status: statusValue, p_method: v.method || undefined, p_notes: v.notes || undefined }), 'Service recorded.')
+    setServiceStatus(null)
   }
-  const compliance = async (statusValue: string) => {
-    let reason: string | null = null
-    if (statusValue === 'non_compliant') {
-      reason = await uiPrompt('Non-compliance reason (required).', { title: 'Record compliance' })
-      if (!reason?.trim()) return
-    }
-    const notes = await uiPrompt('Notes (optional). Received materials must be logged as case evidence/attachments — this record links back to the case.', { title: 'Record compliance' })
-    if (notes === null) return
-    await act(() => rpc('record_subpoena_compliance', { p_request: r.id, p_status: statusValue, p_notes: notes || undefined, p_non_compliance_reason: reason ?? undefined }), 'Compliance recorded.')
+  // The ComplianceModal requires the reason exactly when the status is
+  // non_compliant, so `reason` is non-blank whenever the RPC needs it.
+  const submitCompliance = async (statusValue: ComplianceStatus, v: { reason: string; notes: string }) => {
+    await act(() => rpc('record_subpoena_compliance', { p_request: r.id, p_status: statusValue, p_notes: v.notes || undefined, p_non_compliance_reason: v.reason || undefined }), 'Compliance recorded.')
+    setComplianceStatus(null)
   }
   const close = async (outcome: 'closed' | 'expired' | 'revoked') => {
     const needNote = outcome === 'revoked'
@@ -309,7 +455,7 @@ export function DecisionPanel({
           )}
           {anyFulfilment && (
             <Block title="Service & return recording">
-              {canIssue && <Button variant="primary" disabled={busy} onClick={() => void issue()}>Record issue</Button>}
+              {canIssue && <Button variant="primary" disabled={busy} onClick={() => setIssueOpen(true)}>Record issue</Button>}
               {canExecute && (
                 <>
                   <Button variant="primary" disabled={busy} onClick={() => setExecResult('full')}>Record execution</Button>
@@ -320,17 +466,17 @@ export function DecisionPanel({
               {canFileReturn && <Button disabled={busy} onClick={() => void fileReturn()}>File return</Button>}
               {canRecordService && (
                 <>
-                  <Button variant="primary" disabled={busy} onClick={() => void service('served')}>Record service</Button>
-                  <Button disabled={busy} onClick={() => void service('service_attempted')}>Service attempted</Button>
-                  <Button disabled={busy} onClick={() => void service('service_failed')}>Service failed</Button>
+                  <Button variant="primary" disabled={busy} onClick={() => setServiceStatus('served')}>Record service</Button>
+                  <Button disabled={busy} onClick={() => setServiceStatus('service_attempted')}>Service attempted</Button>
+                  <Button disabled={busy} onClick={() => setServiceStatus('service_failed')}>Service failed</Button>
                 </>
               )}
               {canRecordCompliance && (
                 <>
-                  <Button variant="primary" disabled={busy} onClick={() => void compliance('complete')}>Compliance complete</Button>
-                  <Button disabled={busy} onClick={() => void compliance('partial')}>Partial</Button>
-                  <Button disabled={busy} onClick={() => void compliance('non_compliant')}>Non-compliance</Button>
-                  <Button disabled={busy} onClick={() => void compliance('return_recorded')}>Record return</Button>
+                  <Button variant="primary" disabled={busy} onClick={() => setComplianceStatus('complete')}>Compliance complete</Button>
+                  <Button disabled={busy} onClick={() => setComplianceStatus('partial')}>Partial</Button>
+                  <Button disabled={busy} onClick={() => setComplianceStatus('non_compliant')}>Non-compliance</Button>
+                  <Button disabled={busy} onClick={() => setComplianceStatus('return_recorded')}>Record return</Button>
                 </>
               )}
               {canClose && <Button disabled={busy} onClick={() => void close('closed')}>Close request</Button>}
@@ -359,6 +505,33 @@ export function DecisionPanel({
           busy={busy}
           onClose={() => setExecResult(null)}
           onSubmit={(v) => void submitExecution(execResult, v)}
+        />
+      )}
+      {issueOpen && (
+        <IssueModal
+          warrant={warrant}
+          requestNumber={r.request_number}
+          busy={busy}
+          onClose={() => setIssueOpen(false)}
+          onSubmit={(v) => void submitIssue(v)}
+        />
+      )}
+      {serviceStatus && (
+        <ServiceModal
+          status={serviceStatus}
+          requestNumber={r.request_number}
+          busy={busy}
+          onClose={() => setServiceStatus(null)}
+          onSubmit={(v) => void submitService(serviceStatus, v)}
+        />
+      )}
+      {complianceStatus && (
+        <ComplianceModal
+          status={complianceStatus}
+          requestNumber={r.request_number}
+          busy={busy}
+          onClose={() => setComplianceStatus(null)}
+          onSubmit={(v) => void submitCompliance(complianceStatus, v)}
         />
       )}
     </div>

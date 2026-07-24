@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { CaseBoard } from './CaseBoard'
 import { CaseDetail } from './CaseDetail'
 import { CaseFilterBar } from './CaseFilterBar'
@@ -31,7 +32,7 @@ export function CasesView() {
   // useSearchParams (deep links: ?case= / ?tab=) needs a client-side Suspense
   // boundary in this host — same idiom as LegalView / JusticePortalView.
   return (
-    <Suspense fallback={<p className="text-sm text-slate-400">Loading cases…</p>}>
+    <Suspense fallback={<CardGridSkeleton />}>
       <CasesViewInner />
     </Suspense>
   )
@@ -146,7 +147,7 @@ function CasesViewInner() {
 
       <CaseFilterBar filters={filters} scope={scope} query={query} activeViewName={activeViewName} onFilters={setFilters} onScope={setScope} onQuery={setQuery} onActiveViewName={setActiveViewName} />
 
-      {loading ? <Notice text="Loading cases..." />
+      {loading ? <CardGridSkeleton />
         : view === 'board' ? <CaseBoard items={filtered} canEdit={canEdit} onOpen={openCase} onMoved={fetchCases} />
         : <div className={CASE_GRID_CLASS}>{filtered.map((c, i) => <CaseCard key={c.id} c={c} index={i} selected={selected.includes(c.id)} canDelete={canDelete} onSelect={(on) => setSelected((s) => on ? [...s, c.id] : s.filter((x) => x !== c.id))} onOpen={() => openCase(c.id)} />)}</div>}
       {!loading && !filtered.length && <Notice text="No cases match this view." />}

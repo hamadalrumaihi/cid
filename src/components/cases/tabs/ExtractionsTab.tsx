@@ -32,7 +32,8 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
-import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
+import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
 import { type CaseRow, type ExtractionRow, type ExtractionFactRow } from './shared'
 
@@ -124,7 +125,7 @@ export function ExtractionsTab({ c, canEdit }: { c: CaseRow; canEdit: boolean })
       </div>
 
       {rows === null ? (
-        <Notice text="Loading extractions…" />
+        <ListSkeleton count={4} />
       ) : rows.length === 0 ? (
         <EmptyState
           icon="🗂"
@@ -300,7 +301,7 @@ function ExtractionDetail({ extraction, canEdit, onBack }: { extraction: Extract
       {error ? (
         <ErrorNotice message={error} onRetry={() => void refresh()} />
       ) : facts === null ? (
-        <Notice text="Loading facts…" />
+        <ListSkeleton count={3} />
       ) : facts.length === 0 ? (
         <EmptyState
           icon="🔎"
