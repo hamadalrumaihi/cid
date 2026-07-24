@@ -67,6 +67,11 @@ export function PlacesView() {
   // `?q=` seeds the filter — how entity chips / global search land here
   // prefiltered (the VehiclesView idiom; Suspense comes from the route).
   const [query, setQuery] = useState(() => sp.get('q') ?? '')
+  // `?place=` is the id deep-link (case graph/intel chips). Places have no
+  // dossier view, so the id resolves once to the record's name filter — the
+  // one-shot ref keeps the user free to clear or retype afterwards.
+  const placeId = sp.get('place')
+  const placeSeeded = useRef(false)
   const [places, setPlaces] = useState<PlaceRow[]>([])
   const [gangs, setGangs] = useState<GangRow[]>([])
   const [cases, setCases] = useState<CaseOption[]>([])
@@ -133,6 +138,14 @@ export function PlacesView() {
     const t = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(t)
   }, [refresh, vPlaces, vGangs, vCases, vNarcotics, vMedia, vLegal])
+
+  useEffect(() => {
+    if (!placeId || placeSeeded.current || !places.length) return
+    const p = places.find((x) => x.id === placeId)
+    if (!p) return
+    placeSeeded.current = true
+    queueMicrotask(() => setQuery(p.name))
+  }, [placeId, places])
 
   const gangName = (id: string | null) => (id && gangs.find((g) => g.id === id)?.name) || null
   const caseNum = (id: string | null) => (id && cases.find((c) => c.id === id)?.case_number) || null

@@ -68,8 +68,8 @@ const TAB_LABELS: Record<TabId, string> = {
 const TAB_GROUPS: ReadonlyArray<SectionTabGroup<TabId>> = [
   { label: 'Command', tabs: ['overview'] },
   { label: 'Investigation', tabs: ['graph', 'media', 'intel', 'extractions', 'charges', 'rico'] },
-  { label: 'Casework', tabs: ['reports', 'tasks', 'legal'] },
-  { label: 'Oversight', tabs: ['signoff', 'chat', 'timeline'] },
+  { label: 'Casework', tabs: ['reports', 'tasks', 'legal', 'chat'] },
+  { label: 'Oversight', tabs: ['signoff', 'timeline'] },
 ]
 
 /** Slim media projection — enough for the metric count + Overview recap. */

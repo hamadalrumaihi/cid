@@ -36,6 +36,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { caseStatusTint } from '@/lib/signoff'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
+import { Skeleton } from '@/components/ui/Skeleton'
 
 type CaseRow = Tables<'cases'>
 type LinkRow = Tables<'case_intel_links'>
@@ -265,7 +266,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
               ['Felonies', String(p.felony_count ?? 0)],
               ...(l.note ? [['Link note', l.note] as [string, string]] : []),
             ],
-            href: `/persons?q=${encodeURIComponent(p.name ?? '')}`, hrefLabel: 'Open in Persons',
+            href: `/persons?person=${encodeURIComponent(p.id)}`, hrefLabel: 'Open in Persons',
           },
         })
       } else if (l.kind === 'gang') {
@@ -285,7 +286,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
               ['Colors', g.colors || '—'],
               ...(l.note ? [['Link note', l.note] as [string, string]] : []),
             ],
-            href: `/gangs?q=${encodeURIComponent(g.name)}`, hrefLabel: 'Open in Gangs',
+            href: `/gangs?gang=${encodeURIComponent(g.id)}`, hrefLabel: 'Open in Gangs',
           },
         })
       } else if (l.kind === 'place') {
@@ -304,7 +305,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
               ['Controlled by', (p.controlling_gang_id && gangById.get(p.controlling_gang_id)?.name) || '—'],
               ...(l.note ? [['Link note', l.note] as [string, string]] : []),
             ],
-            href: '/places', hrefLabel: 'Open in Places',
+            href: `/places?place=${encodeURIComponent(p.id)}`, hrefLabel: 'Open in Places',
           },
         })
       }
@@ -394,7 +395,7 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
               ['Owner', (v.owner_id && personById.get(v.owner_id)?.name) || '—'],
               ['Gang', (v.gang_id && gangById.get(v.gang_id)?.name) || '—'],
             ],
-            href: `/vehicles?q=${encodeURIComponent(v.plate)}`, hrefLabel: 'Open in Vehicles',
+            href: `/vehicles?vehicle=${encodeURIComponent(v.id)}`, hrefLabel: 'Open in Vehicles',
           },
         })
       }
@@ -472,7 +473,14 @@ export function CaseGraphTab({ c }: { c: CaseRow }) {
 
   const selData = useMemo(() => graph.nodes.find((n) => n.id === sel)?.data ?? null, [graph, sel])
 
-  if (!data) return <p className="py-10 text-center text-sm text-slate-500">Building the link chart…</p>
+  if (!data) {
+    return (
+      <div role="status" aria-busy="true" className="h-[70vh] overflow-hidden rounded-xl border border-white/10 bg-ink-950/60">
+        <span className="sr-only">Building the link chart…</span>
+        <Skeleton className="h-full w-full rounded-none" />
+      </div>
+    )
+  }
   if (graph.nodes.length <= 1) {
     return (
       <div className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-400">

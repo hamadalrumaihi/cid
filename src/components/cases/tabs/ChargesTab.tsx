@@ -8,6 +8,7 @@ import { penalByCode, penalRecommend, penalSentence, penalSearch, penalTotals, t
 import { parseCharges } from '@/lib/jsonShapes'
 import { toast } from '@/lib/toast'
 import { useAction } from '@/lib/useAction'
+import { EmptyState } from '@/components/ui/Notice'
 import { Stat, type CaseRow } from './shared'
 
 export function ChargesTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boolean; onChanged: () => void }) {
@@ -39,7 +40,12 @@ export function ChargesTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boo
           const pc = penalByCode(ch.code)
           return <div key={ch.code} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3"><div className="min-w-0 flex-1"><p className="font-bold text-white">{ch.code} - {pc?.title || 'Unknown charge'}</p><p className="text-xs text-slate-500">{pc?.level} - {pc?.jail == null ? 'JUDGE' : penalSentence(pc.jail)} - {fmtUSD(pc?.fine)}</p></div><span className="font-mono text-white">x{ch.count || 1}</span>{canEdit && <><button onClick={() => void addCode(ch.code)} disabled={busy} className="rounded bg-white/10 px-2 py-1 text-sm text-white disabled:opacity-60">+</button><button onClick={() => void save(charges.map((x) => x.code === ch.code ? { ...x, count: Math.max(1, (x.count || 1) - 1) } : x))} disabled={busy} className="rounded bg-white/10 px-2 py-1 text-sm text-white disabled:opacity-60">-</button><button onClick={() => void save(charges.filter((x) => x.code !== ch.code))} disabled={busy} className="text-sm font-bold text-rose-300 disabled:opacity-60">Remove</button></>}</div>
         })}
-        {!charges.length && <p className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-500">No charges attached.</p>}
+        {!charges.length && (
+          <EmptyState
+            title="No charges attached"
+            hint={canEdit ? 'Search the penal code below, or add one of the recommended charges.' : 'Charges added to the case build the sentence and fine totals above.'}
+          />
+        )}
       </div>
       {canEdit && <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search penal code" className="mb-3 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white" />

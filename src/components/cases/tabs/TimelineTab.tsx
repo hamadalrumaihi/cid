@@ -10,6 +10,7 @@ import { mediaTimelineEvents, type MediaEventInput } from '@/lib/caseMedia'
 import { officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { SIGNOFF_ACTION_VERB } from '@/lib/signoff'
+import { ErrorNotice } from '@/components/ui/Notice'
 import { TimelineBand, type BandEvent } from '../TimelineBand'
 import type { CaseRow, EvidenceRow, HistoryRow, HoldRow, ReportRow, TaskRow } from './shared'
 
@@ -36,6 +37,9 @@ function restrictedEventLabel(x: RestrictedEventRow, titleOf: (id: string) => st
 
 export function TimelineTab({ c }: { c: CaseRow }) {
   const [rows, setRows] = useState<BandEvent[]>([])
+  // A load failure surfaces with Retry (IntelTab's rule: a fetch error must
+  // never read as an empty timeline). Cleared on the next good fetch.
+  const [err, setErr] = useState<unknown>(null)
   const vE = useTableVersion('evidence')
   const vM = useTableVersion('media')
   const vR = useTableVersion('reports')
@@ -83,9 +87,11 @@ export function TimelineTab({ c }: { c: CaseRow }) {
           href: caseLink(c.id, 'media'),
         })),
       ] as BandEvent[]).sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()))
-    } catch { /* stale */ }
+      setErr(null)
+    } catch (e) { setErr(e) }
   }, [c])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vE, vM, vR, vT, vS, vH, vG])
+  if (err) return <ErrorNotice message={err} onRetry={() => void refresh()} />
   return (
     <div>
       <TimelineBand events={rows} />

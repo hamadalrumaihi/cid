@@ -12,6 +12,7 @@
  *  links resolve via `in:` lookups on just the referenced ids, never a
  *  whole-registry load. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { insert, list, deleteWithUndo, ilikeAny, update } from '@/lib/db'
 import { Drafts } from '@/lib/drafts'
 import { copyText, downloadTextFile } from '@/lib/format'
@@ -20,6 +21,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { EmptyState } from '@/components/ui/Notice'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { RichEditor } from '@/components/ui/RichEditor'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
@@ -33,6 +35,21 @@ const KINDS: ReadonlyArray<{ id: LinkKind; label: string; section: string }> = [
   { id: 'place', label: 'Place', section: 'Places' },
   { id: 'narcotic', label: 'Narcotic', section: 'Narcotics' },
 ]
+
+/** Id deep-link to a linked record's dossier — the canonical query-param
+ *  shapes each registry reads (`?person=`/`?gang=`/`?place=`/`?drug=`).
+ *  Account-kind rows land on the Accounts registry; an unknown kind renders
+ *  as plain text. */
+const chipHref = (kind: string, id: string): string | null => {
+  switch (kind) {
+    case 'person': return `/persons?person=${encodeURIComponent(id)}`
+    case 'gang': return `/gangs?gang=${encodeURIComponent(id)}`
+    case 'place': return `/places?place=${encodeURIComponent(id)}`
+    case 'narcotic': return `/narcotics?drug=${encodeURIComponent(id)}`
+    case 'account': return '/accounts'
+    default: return null
+  }
+}
 
 export function IntelTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boolean; onChanged: () => void }) {
   const [links, setLinks] = useState<IntelRow[]>([])
@@ -79,25 +96,35 @@ export function IntelTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boole
       {KINDS.map(({ id, section }) => (
         <div key={id} className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
           <h3 className="mb-2 font-bold text-white">{section}</h3>
-          <div className="flex flex-wrap gap-2">
-            {links.filter((l) => l.kind === id).map((l) => (
-              <span key={l.id} className="inline-flex max-w-full items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-sm text-slate-200">
-                {label(l)}
-                {l.role && <span className="text-xs text-slate-400">{l.role}</span>}
-                {l.note && <span className="max-w-48 truncate text-xs text-slate-400" title={l.note}>· {l.note}</span>}
-                {canEdit && (
-                  <button
-                    aria-label={`Unlink ${label(l)}`}
-                    onClick={() => void deleteWithUndo('case_intel_links', l, { confirmTitle: 'Remove link', confirmMessage: `Unlink ${label(l)} from this case? The ${l.kind} record itself is kept — only the link is removed. You can undo this for a few seconds.`, confirmText: 'Unlink', label: 'link', after: refresh })}
-                    className="text-rose-300 hover:text-rose-200"
-                  >
-                    ×
-                  </button>
-                )}
-              </span>
-            ))}
-            {!links.some((l) => l.kind === id) && <p className="text-sm text-slate-500">None linked.</p>}
-          </div>
+          {links.some((l) => l.kind === id) ? (
+            <div className="flex flex-wrap gap-2">
+              {links.filter((l) => l.kind === id).map((l) => (
+                <span key={l.id} className="inline-flex max-w-full items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-sm text-slate-200">
+                  {chipHref(l.kind, l.ref_id) ? (
+                    <Link href={chipHref(l.kind, l.ref_id)!} title={`Open ${label(l)}`} className="truncate font-medium text-badge-300 hover:underline">
+                      {label(l)}
+                    </Link>
+                  ) : label(l)}
+                  {l.role && <span className="text-xs text-slate-400">{l.role}</span>}
+                  {l.note && <span className="max-w-48 truncate text-xs text-slate-400" title={l.note}>· {l.note}</span>}
+                  {canEdit && (
+                    <button
+                      aria-label={`Unlink ${label(l)}`}
+                      onClick={() => void deleteWithUndo('case_intel_links', l, { confirmTitle: 'Remove link', confirmMessage: `Unlink ${label(l)} from this case? The ${l.kind} record itself is kept — only the link is removed. You can undo this for a few seconds.`, confirmText: 'Unlink', label: 'link', after: refresh })}
+                      className="text-rose-300 hover:text-rose-200"
+                    >
+                      ×
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title={`No ${section.toLowerCase()} linked`}
+              hint={canEdit ? 'Use “Link intel to case” above to connect one.' : undefined}
+            />
+          )}
         </div>
       ))}
     </div>

@@ -17,7 +17,8 @@ import type { LegalRequest } from '@/lib/justice'
 import { dispositionFor, OP_GROUP_LABEL, type OpGroup } from '@/lib/legalWorkflow'
 import { useNow } from '@/lib/useNow'
 import { Button } from '@/components/ui/Button'
-import { EmptyState, Notice } from '@/components/ui/Notice'
+import { EmptyState } from '@/components/ui/Notice'
+import { ListSkeleton } from '@/components/ui/Skeleton'
 import { LegalRequestCard } from '@/components/justice/LegalRequestCard'
 import { buildLegalViewer, useMyProsecutorBureaus } from '@/components/justice/legalShared'
 
@@ -48,7 +49,7 @@ export function LegalTab({ rows }: { rows: LegalRequest[] | null }) {
     return GROUP_ORDER.filter((g) => buckets.has(g)).map((g) => ({ group: g, items: buckets.get(g)! }))
   }, [rows, viewer, now])
 
-  if (!rows) return <Notice text="Loading legal requests…" />
+  if (!rows) return <ListSkeleton count={4} />
   if (rows.length === 0) {
     return (
       <EmptyState

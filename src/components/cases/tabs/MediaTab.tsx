@@ -18,7 +18,8 @@ import { Button } from '@/components/ui/Button'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
-import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
+import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { uiPrompt } from '@/components/ui/dialog'
 import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
 import { caseLink } from '@/lib/caseLinks'
@@ -333,7 +334,7 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
 
       {/* Gallery grid — cards are buttons (keyboard-navigable), lazy images. */}
       {loading ? (
-        <Notice text="Loading case media…" />
+        <CardGridSkeleton count={8} cols="sm:grid-cols-3 xl:grid-cols-4" />
       ) : !rows.length && loadError ? (
         <ErrorNotice message="Could not load case media." onRetry={() => { void refresh() }} />
       ) : visible.length ? (

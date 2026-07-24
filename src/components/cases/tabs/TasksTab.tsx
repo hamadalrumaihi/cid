@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
+import { Field, Input } from '@/components/ui/Field'
+import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
 import { insert, list, update, deleteWithUndo } from '@/lib/db'
 import { deadlineInfo } from '@/lib/deadlines'
 import { caseLink } from '@/lib/caseLinks'
@@ -68,13 +71,37 @@ export function TasksTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
   const now = useNow()
   const [tasks, setTasks] = useState<TaskRow[]>([])
   const [title, setTitle] = useState('')
-  const [assignee, setAssignee] = useState('')
+  const [assignee, setAssignee] = useState<PickedRecord | null>(null)
   const [due, setDue] = useState('')
   // null = auto: collapsed unless a ?task= deep link targets a completed row.
   const [showDone, setShowDone] = useState<boolean | null>(null)
+  // A load failure surfaces with Retry (IntelTab's rule: a fetch error must
+  // never read as an empty "No tasks yet"). Cleared on the next good fetch.
+  const [err, setErr] = useState<unknown>(null)
   const v = useTableVersion('case_tasks')
-  const refresh = useCallback(async () => { try { setTasks(await list('case_tasks', { eq: { case_id: c.id }, order: 'due', nullsFirst: false })) } catch { /* stale ok */ } }, [c.id])
+  const refresh = useCallback(async () => {
+    try {
+      setTasks(await list('case_tasks', { eq: { case_id: c.id }, order: 'due', nullsFirst: false }))
+      setErr(null)
+    } catch (e) { setErr(e) }
+  }, [c.id])
   useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, v])
+
+  // Assignee search-picker source — a client-side filter over the cached
+  // roster (activeProfiles()), same pool the old <select> listed; no queries.
+  const searchRoster = useCallback(async (q: string): Promise<PickedRecord[]> => {
+    const needle = q.trim().toLowerCase()
+    return activeProfiles()
+      .filter((p) => !needle
+        || (p.display_name ?? '').toLowerCase().includes(needle)
+        || (p.badge_number ?? '').toLowerCase().includes(needle))
+      .slice(0, 20)
+      .map((p) => ({
+        id: p.id,
+        label: officerName(p.id) || p.display_name || 'Officer',
+        ...(p.badge_number ? { sublabel: `Badge ${p.badge_number}` } : {}),
+      }))
+  }, [])
 
   // ?task= deep link: scroll the referenced row into view once. Highlight is
   // a ring only — focus is never moved or trapped.
@@ -95,7 +122,7 @@ export function TasksTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
     if (!title.trim() || adding) return
     setAdding(true)
     const taskTitle = title.trim()
-    const taskAssignee = assignee
+    const taskAssignee = assignee?.id ?? ''
     const res = await insert('case_tasks', { case_id: c.id, title: taskTitle, assignee: taskAssignee || null, due: due || null })
     setAdding(false)
     if (res.error) toast(res.error.message, 'danger')
@@ -105,7 +132,7 @@ export function TasksTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
       if (taskAssignee && taskAssignee !== profile?.id) {
         void notify(taskAssignee, 'task_assigned', { case_id: c.id, case_number: c.case_number, title: taskTitle })
       }
-      setTitle(''); setAssignee(''); setDue(''); toast('Task added.', 'success'); void refresh()
+      setTitle(''); setAssignee(null); setDue(''); toast('Task added.', 'success'); void refresh()
     }
   }
   const toggle = async (t: TaskRow) => {
@@ -113,6 +140,8 @@ export function TasksTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
     if (res.error) toast(res.error.message, 'danger')
     else void refresh()
   }
+
+  if (err) return <ErrorNotice message={err} onRetry={() => void refresh()} />
 
   // The due-ordered fetch (earliest first, undated last) is preserved inside
   // each bucket, so the sharpest deadline always tops its group.
@@ -130,11 +159,15 @@ export function TasksTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
   )
   return (
     <div className="space-y-3">
-      {canEdit && <div className="grid gap-2 rounded-xl border border-white/10 bg-ink-950/50 p-3 md:grid-cols-[1fr_12rem_10rem_auto]">
-        <input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void add() }} placeholder="New task" aria-label="New task title" className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />
-        <select value={assignee} onChange={(e) => setAssignee(e.target.value)} aria-label="Assignee" className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white"><option value="">Unassigned</option>{activeProfiles().map((p) => <option key={p.id} value={p.id}>{officerName(p.id) || p.display_name}</option>)}</select>
-        <input type="date" value={due} onChange={(e) => setDue(e.target.value)} aria-label="Due date" className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />
-        <Button variant="primary" onClick={() => void add()} disabled={adding}>Add</Button>
+      {canEdit && <div className="grid items-start gap-2 rounded-xl border border-white/10 bg-ink-950/50 p-3 md:grid-cols-[minmax(0,1fr)_14rem_10rem_auto]">
+        <Field label="New task">
+          {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void add() }} placeholder="What needs doing?" />}
+        </Field>
+        <RecordSearchPicker label="Assignee" value={assignee} onChange={setAssignee} search={searchRoster} placeholder="Unassigned — search roster…" />
+        <Field label="Due date">
+          {(id) => <Input id={id} type="date" value={due} onChange={(e) => setDue(e.target.value)} />}
+        </Field>
+        <Button variant="primary" className="md:mt-5" onClick={() => void add()} disabled={adding}>Add</Button>
       </div>}
       {BUCKETS.map(({ id, label }) => {
         const items = grouped[id]
@@ -156,7 +189,12 @@ export function TasksTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
           {doneVisible && done.map(item)}
         </section>
       )}
-      {!tasks.length && !c.follow_up_at && <p className="py-8 text-center text-sm text-slate-500">No tasks yet.</p>}
+      {!tasks.length && !c.follow_up_at && (
+        <EmptyState
+          title="No tasks yet"
+          hint={canEdit ? 'Add the first task above — assign an officer and set a due date so it files into the urgency buckets.' : 'Tasks and the case follow-up appear here, bucketed by urgency.'}
+        />
+      )}
     </div>
   )
 }
