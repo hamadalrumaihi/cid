@@ -71,7 +71,7 @@ export function RaidComp() {
         )}
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-white/5">
+      <div className="mt-4 overflow-x-auto rounded-lg border border-white/5">
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="bg-ink-800 uppercase tracking-wider text-slate-400">

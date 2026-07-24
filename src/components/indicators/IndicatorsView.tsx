@@ -26,9 +26,10 @@ import { CardGridSkeleton } from '@/components/ui/Skeleton'
 type IndicatorRow = Tables<'indicators'>
 interface CaseOption { id: string; case_number: string; title: string }
 
-const KINDS = ['phone', 'account', 'serial', 'alias', 'address', 'other'] as const
+const KINDS = ['phone', 'email', 'account', 'serial', 'alias', 'address', 'other'] as const
 const KIND_META: Record<string, { icon: string; label: string }> = {
   phone:   { icon: '📞', label: 'Phone' },
+  email:   { icon: '📧', label: 'Email' },
   account: { icon: '💳', label: 'Account' },
   serial:  { icon: '🔩', label: 'Serial' },
   alias:   { icon: '🎭', label: 'Alias' },
@@ -215,8 +216,8 @@ export function IndicatorsView() {
                     </p>
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-2">
-                    {canEdit && <button onClick={() => setEditor({ record: r })} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
-                    {canDelete && <button onClick={() => void onDelete(r)} aria-label="Delete indicator" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10">✕</button>}
+                    {canEdit && <button onClick={() => setEditor({ record: r })} className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10 sm:min-h-0">Edit</button>}
+                    {canDelete && <button onClick={() => void onDelete(r)} aria-label="Delete indicator" className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10 sm:min-h-0">✕</button>}
                   </div>
                 </div>
                 <p className="mt-3 text-xs">

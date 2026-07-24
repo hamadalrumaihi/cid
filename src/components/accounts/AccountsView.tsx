@@ -24,7 +24,7 @@ import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Field, Select, Textarea } from '@/components/ui/Field'
+import { Field, Input, Select, Textarea, inputCls } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
@@ -70,7 +70,6 @@ const STATE_TINT: Record<string, string> = {
   suspended: 'bg-amber-500/15 text-amber-300',
   deleted: 'bg-rose-500/15 text-rose-300',
 }
-const INPUT = 'min-h-[38px] w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white'
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 /** Confidence options for a picker — the 'confirmed' rung is command-only
@@ -301,9 +300,9 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
           )}
         </div>
         <div className="flex flex-shrink-0 items-center gap-1.5">
-          {canEdit && <button onClick={onEdit} className="rounded-lg border border-white/10 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-white/10">Edit</button>}
-          {isCommand && <button onClick={onMerge} className="rounded-lg border border-white/10 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-white/10">Merge</button>}
-          <button onClick={onToggle} className="rounded-lg border border-white/10 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-white/10">{expanded ? 'Hide' : 'Details'}</button>
+          {canEdit && <Button size="sm" className="min-h-[44px] sm:min-h-0" aria-label={`Edit @${a.handle}`} onClick={onEdit}>Edit</Button>}
+          {isCommand && <Button size="sm" className="min-h-[44px] sm:min-h-0" aria-label={`Merge @${a.handle}`} onClick={onMerge}>Merge</Button>}
+          <Button size="sm" className="min-h-[44px] sm:min-h-0" aria-label={`${expanded ? 'Hide' : 'Show'} details for @${a.handle}`} aria-expanded={expanded} onClick={onToggle}>{expanded ? 'Hide' : 'Details'}</Button>
         </div>
       </div>
 
@@ -337,12 +336,12 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
                       <button onClick={() => router.push(`/persons?person=${encodeURIComponent(l.subject_id)}`)} className="font-medium text-badge-300 hover:underline">{nameOf(l.subject_id)}</button>
                     ) : <span className="font-medium text-white">{nameOf(l.subject_id)}</span>}
                     {canEdit ? (
-                      <select value={l.ownership_confidence} onChange={(e) => void setConfidence(l, e.target.value)} className="rounded border border-white/10 bg-ink-950 px-1.5 py-0.5 text-xs text-white" aria-label="Confidence">
+                      <select value={l.ownership_confidence} onChange={(e) => void setConfidence(l, e.target.value)} className="min-h-[44px] rounded border border-white/10 bg-ink-950 px-1.5 py-0.5 text-xs text-white sm:min-h-0" aria-label="Confidence">
                         {confidenceOptions(isCommand, l.ownership_confidence).map((c) => <option key={c} value={c}>{c}</option>)}
                       </select>
                     ) : <Badge tint={CONF_TINT[l.ownership_confidence]}>{l.ownership_confidence}</Badge>}
                     {l.ownership_confidence === 'confirmed' && l.confirmed_by && <span className="text-[11px] text-slate-500">by {officerName(l.confirmed_by)}</span>}
-                    {canEdit && <button onClick={() => void unlink(l)} className="ml-auto rounded px-1.5 py-0.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/10">Unlink</button>}
+                    {canEdit && <Button size="sm" variant="danger" className="ml-auto min-h-[44px] sm:min-h-0" aria-label={`Unlink ${nameOf(l.subject_id)}`} onClick={() => void unlink(l)}>Unlink</Button>}
                   </li>
                 ))}
               </ul>
@@ -360,7 +359,7 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
                   <RecordSearchPicker label={kindLabel} value={linkSubject} onChange={setLinkSubject} search={searchSubjects} placeholder={`Search ${kindLabel.toLowerCase()}s…`} />
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <select value={linkConf} onChange={(e) => setLinkConf(e.target.value as 'suspected' | 'probable' | 'confirmed')} className="min-h-[34px] rounded-lg border border-white/10 bg-ink-950 px-2 py-1 text-sm text-white" aria-label="Confidence">
+                  <select value={linkConf} onChange={(e) => setLinkConf(e.target.value as 'suspected' | 'probable' | 'confirmed')} className="min-h-[44px] rounded-lg border border-white/10 bg-ink-950 px-2 py-1 text-sm text-white sm:min-h-[34px]" aria-label="Confidence">
                     {confidenceOptions(isCommand).map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                   <Button disabled={!linkSubject} onClick={() => void addLink()}>Link</Button>
@@ -437,29 +436,55 @@ function AccountModal({ account, persons, onClose, onSaved }: { account?: Accoun
       <div className="p-5">
         <ModalHeader title={editing ? 'Edit account' : 'New account'} onClose={onClose} />
         <div className="grid gap-2 sm:grid-cols-2">
-          <select value={platform} onChange={(e) => setPlatform(e.target.value)} className={INPUT} aria-label="Platform">
-            {ACCOUNT_PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-          <input className={INPUT} placeholder="Handle / username *" value={handle} onChange={(e) => setHandle(e.target.value)} aria-label="Handle" />
-          <select value={category} onChange={(e) => setCategory(e.target.value)} className={INPUT} aria-label="Category">
-            {CATEGORIES.map((c) => <option key={c} value={c}>{cap(c)}</option>)}
-          </select>
-          <select value={accountState} onChange={(e) => setAccountState(e.target.value)} className={INPUT} aria-label="State">
-            {STATES.map((s) => <option key={s} value={s}>{cap(s)}</option>)}
-          </select>
-          {idLocked ? (
-            <input className={`${INPUT} cursor-not-allowed text-slate-400`} value={account?.external_id ?? ''} readOnly title="Platform ID is immutable once set" aria-label="Platform account ID (immutable)" />
-          ) : (
-            <input className={INPUT} placeholder="Platform account ID (immutable, if known)" value={externalId} onChange={(e) => setExternalId(e.target.value)} aria-label="External ID" />
-          )}
-          <input className={INPUT} placeholder="Display name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} aria-label="Display name" />
-          <input className={`${INPUT} sm:col-span-2`} placeholder="Profile URL" value={profileUrl} onChange={(e) => setProfileUrl(e.target.value)} aria-label="Profile URL" />
-          <textarea className={`${INPUT} sm:col-span-2`} rows={2} placeholder="Summary / notes" value={summary} onChange={(e) => setSummary(e.target.value)} aria-label="Summary" />
+          <Field label="Platform">
+            {(id) => (
+              <Select id={id} value={platform} onChange={(e) => setPlatform(e.target.value)}>
+                {ACCOUNT_PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
+              </Select>
+            )}
+          </Field>
+          <Field label="Handle / username" required>
+            {(id) => <Input id={id} value={handle} onChange={(e) => setHandle(e.target.value)} />}
+          </Field>
+          <Field label="Category">
+            {(id) => (
+              <Select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
+                {CATEGORIES.map((c) => <option key={c} value={c}>{cap(c)}</option>)}
+              </Select>
+            )}
+          </Field>
+          <Field label="State">
+            {(id) => (
+              <Select id={id} value={accountState} onChange={(e) => setAccountState(e.target.value)}>
+                {STATES.map((s) => <option key={s} value={s}>{cap(s)}</option>)}
+              </Select>
+            )}
+          </Field>
+          <Field label="Platform account ID">
+            {(id) => idLocked ? (
+              <Input id={id} className="cursor-not-allowed text-slate-400" value={account?.external_id ?? ''} readOnly title="Platform ID is immutable once set" />
+            ) : (
+              <Input id={id} placeholder="Immutable once set, if known" value={externalId} onChange={(e) => setExternalId(e.target.value)} />
+            )}
+          </Field>
+          <Field label="Display name">
+            {(id) => <Input id={id} value={displayName} onChange={(e) => setDisplayName(e.target.value)} />}
+          </Field>
+          <Field label="Profile URL" className="sm:col-span-2">
+            {(id) => <Input id={id} value={profileUrl} onChange={(e) => setProfileUrl(e.target.value)} />}
+          </Field>
+          <Field label="Summary / notes" className="sm:col-span-2">
+            {(id) => <Textarea id={id} rows={2} value={summary} onChange={(e) => setSummary(e.target.value)} />}
+          </Field>
           {!editing && (
-            <select value={ownerPerson} onChange={(e) => setOwnerPerson(e.target.value)} className={`${INPUT} sm:col-span-2`} aria-label="Suspected owner">
-              <option value="">Suspected owner (optional)…</option>
-              {persons.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <Field label="Suspected owner" className="sm:col-span-2">
+              {(id) => (
+                <Select id={id} value={ownerPerson} onChange={(e) => setOwnerPerson(e.target.value)}>
+                  <option value="">— optional —</option>
+                  {persons.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </Select>
+              )}
+            </Field>
           )}
           <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2">
             <label className="flex items-center gap-2 text-sm text-slate-300">
@@ -587,7 +612,7 @@ function AccountMergeModal({ survivor, pool, isCommand, onClose, onMerged }: {
             <>
               <div>
                 <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Pick the duplicate account(s) to merge in</p>
-                <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search handle, platform, display name…" aria-label="Search accounts to merge" className={INPUT} />
+                <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search handle, platform, display name…" aria-label="Search accounts to merge" className={inputCls} />
                 <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto">
                   {candidates.length === 0 ? (
                     <li className="px-1 py-2 text-xs text-slate-500">{q ? 'No other accounts match.' : 'No other accounts to merge.'}</li>

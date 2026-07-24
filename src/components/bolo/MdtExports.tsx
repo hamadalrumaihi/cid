@@ -22,6 +22,7 @@ import { useNow } from '@/lib/useNow'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
+import { inputCls } from '@/components/ui/Field'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
 import { isMdtExpansionConfigured } from './mdtExpansionConfig'
 
@@ -41,7 +42,7 @@ const STATUS_TINT: Record<string, string> = {
   exported: 'bg-emerald-500/15 text-emerald-300',
   cleared: 'bg-slate-500/20 text-slate-400',
 }
-const INPUT = 'min-h-[38px] rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white'
+const INPUT = inputCls
 
 // Today's kinds — the only ones offered while the expansion flag is off.
 const BASE_KINDS: ReadonlyArray<{ id: ExportKind; label: string }> = [
@@ -188,7 +189,7 @@ export function MdtExportsPanel({ persons, canPropose, isCommand }: { persons: P
                 )
               )}
               {isCommand && e.status !== 'cleared' && (
-                <button onClick={() => void clear(e.id)} className="rounded px-2 py-0.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/10">Clear</button>
+                <Button size="sm" variant="danger" className="min-h-[44px] sm:min-h-0" aria-label={`Clear ${e.subject_snapshot}`} onClick={() => void clear(e.id)}>Clear</Button>
               )}
             </li>
           ))}

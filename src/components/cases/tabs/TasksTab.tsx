@@ -46,10 +46,10 @@ function TaskItem({ t, c, canEdit, canDelete, holdActive, highlight, refCb, onTo
     <div ref={refCb} className={`flex items-center gap-3 rounded-xl border bg-ink-950/50 p-3 ${highlight ? 'border-badge-400/60 ring-1 ring-badge-400/40' : 'border-white/10'}`}>
       <input type="checkbox" checked={t.done} disabled={!canEdit} aria-label={`Mark task ${t.done ? 'open' : 'done'}: ${t.title}`} onChange={() => onToggle(t)} />
       <div className="min-w-0 flex-1"><p className={`font-semibold ${t.done ? 'text-slate-500 line-through' : 'text-white'}`}>{t.title}</p><p className="text-xs text-slate-500">{officerName(t.assignee) || 'Unassigned'}{t.done && t.due ? ` - due ${t.due}` : ''}{!t.done && t.due && <DeadlineChip at={t.due} kind="due" className="ml-2" />}</p></div>
-      <button aria-label={`Copy link to task: ${t.title}`} onClick={() => copyText(`${window.location.origin}${caseLink(c.id, 'tasks', { task: t.id })}`, 'Task link')} className="text-sm font-bold text-slate-400 hover:text-slate-200">Link</button>
+      <Button size="sm" variant="ghost" className="min-h-[44px] sm:min-h-0" aria-label={`Copy link to task: ${t.title}`} onClick={() => copyText(`${window.location.origin}${caseLink(c.id, 'tasks', { task: t.id })}`, 'Task link')}>Link</Button>
       {canDelete && (holdActive
         ? <span title="A legal hold preserves this case's tasks" className="text-sm font-bold text-rose-300/50">Held</span>
-        : <button aria-label={`Delete task: ${t.title}`} onClick={() => void deleteWithUndo('case_tasks', t, { confirmTitle: 'Delete task', confirmMessage: `Delete “${t.title}”? Any sub-tasks under it are removed too. You can undo this for a few seconds.`, confirmText: 'Delete task', label: 'task', children: [{ table: 'case_tasks', column: 'parent_id' }], after: refresh })} className="text-sm font-bold text-rose-300 hover:text-rose-200">Delete</button>)}
+        : <Button size="sm" variant="danger" className="min-h-[44px] sm:min-h-0" aria-label={`Delete task: ${t.title}`} onClick={() => void deleteWithUndo('case_tasks', t, { confirmTitle: 'Delete task', confirmMessage: `Delete “${t.title}”? Any sub-tasks under it are removed too. You can undo this for a few seconds.`, confirmText: 'Delete task', label: 'task', children: [{ table: 'case_tasks', column: 'parent_id' }], after: refresh })}>Delete</Button>)}
     </div>
   )
 }
