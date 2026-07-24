@@ -18,6 +18,7 @@ import { fmtDateTime } from '@/lib/format'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { inputCls } from '@/components/ui/Field'
 import { uiPrompt } from '@/components/ui/dialog'
 import { StatusChip } from '../legalShared'
 
@@ -32,7 +33,7 @@ const DISP_TONE: Record<string, 'slate' | 'amber' | 'emerald' | 'rose' | 'blue'>
   held: 'slate', returned: 'blue', destroyed: 'rose', forfeited: 'amber', other: 'slate',
 }
 
-const INPUT = 'min-h-[38px] rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white'
+const INPUT = inputCls
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 export function SeizedItemsPanel({ requestId, canFulfil }: { requestId: string; canFulfil: boolean }) {
@@ -133,17 +134,19 @@ export function SeizedItemsPanel({ requestId, canFulfil }: { requestId: string; 
                           value={disp}
                           onChange={(e) => void updateDisposition(s.id, e.target.value)}
                           aria-label={`Disposition for ${s.item}`}
-                          className="min-h-[32px] rounded-lg border border-white/10 bg-ink-950 px-2 py-1 text-xs text-white"
+                          className="min-h-[44px] rounded-lg border border-white/10 bg-ink-950 px-2 py-1 text-xs text-white sm:min-h-[32px]"
                         >
                           {SEIZED_DISPOSITIONS.map((d) => <option key={d} value={d}>{cap(d)}</option>)}
                         </select>
-                        <button
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          className="min-h-[44px] sm:min-h-0"
                           onClick={() => void remove(s.id)}
-                          className="rounded px-2 py-0.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/10"
                           aria-label={`Remove ${s.item}`}
                         >
                           Remove
-                        </button>
+                        </Button>
                       </>
                     )}
                   </div>
