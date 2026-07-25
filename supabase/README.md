@@ -35,6 +35,17 @@ Key rules:
 - **Server-authoritative workflows:** the case **sign-off chain** and **report
   finalize** run through SECURITY DEFINER RPCs (see below); the client never
   patches those columns directly, and a lockdown trigger enforces it.
+- **Legal review is Bureau Lead+ (DOJ retired).** As of Phase 1 (PR #197,
+  `20260808140000_legal_lead_approval`) legal-request approval is a **command
+  action** (`private.is_command()`): no ADA / DA / AG / Judge step remains. The
+  separate `justice_memberships` identity domain and all historical judicial
+  records are **preserved** but no longer drive an active workflow.
+- **Records & Requests domain.** A CID-scoped records/requests surface built on
+  the standard RLS + definer-RPC model: legal hold / preservation lock, warrant
+  execution + custody-grade seized items, Lead+-gated MDT exports, the Accounts
+  registry, restricted-media break-glass, and returned-record extraction. All
+  writes go through the RPCs in the table below; restricted media additionally
+  requires case access or an explicit break-glass grant.
 
 All `security definer` functions pin `set search_path = ''` and schema-qualify
 references. RBAC helper functions live in the `private` schema.
@@ -55,6 +66,13 @@ references. RBAC helper functions live in the `private` schema.
 | `public.joint_case_remove_member(p_case, p_officer, p_reason)` / `joint_case_end(p_case, p_note)` | Immediate revoke / end all temporary joint access; history preserved. | same |
 | `public.publish_announcement(title, body, audience, mentions, links, pinned)` | Audience-validated announcement + server-side notification fan-out (one per active recipient); returns recipient count. | `20260713050000_announcement_audiences.sql` |
 | `public.announcement_recipient_count(p_audience, p_mentions)` / `announcement_notify_update(p_announce)` | Composer preview / explicit re-notify on edit. | same |
+| `public.legal_hold_place(p_case, p_legal_request, p_reason)` / `legal_hold_lift(p_hold, p_reason)` | Lead+ places / lifts a legal hold; an active hold blocks archive/delete/merge everywhere (`private.case_has_active_hold`) and the Owner cannot override it. | `20260807190000_legal_hold.sql`, `20260808160000_legal_hold_preservation.sql` |
+| `public.record_warrant_execution(p_request, p_result, p_officers, …)` / `record_warrant_return(p_request, …)` | Custody-grade warrant execution (typed outcome full/partial/unable, required incident # + executing officers) and warrant-return linkage; auto-seeds a follow-up task or a return-report draft. | `20260807200000_legal_execution_inventory.sql`, `20260808180000_warrant_execution_completion.sql`, `20260808200000_seized_item_case_scope.sql` |
+| `public.legal_seized_item_add(…)` / `legal_seized_item_remove(p_item, p_reason)` / `legal_seized_item_set_disposition(…)` | Structured seized-items inventory linking evidence / persons / vehicles; linked media/report must belong to the warrant's own case. | same |
+| `public.mdt_export_propose(…)` / `mdt_export_approve(p_export)` / `mdt_export_clear(p_export, p_reason)` | Lead+-gated push of BOLOs / caution flags to the patrol MDT — CID-proposed, Lead+-approved (approver ≠ proposer), manual-clear, never carries case detail, audited. | `20260807210000_mdt_exports.sql`, `20260808280000_mdt_bridge_expansion.sql` |
+| `public.account_merge(p_survivor, p_victims, p_reason)` | Merge duplicate Accounts-registry rows onto a survivor; account-link confirmation authority is enforced by the `private.account_link_guard_confirm` trigger. | `20260807220000_accounts_registry.sql`, `20260808220000_accounts_expansion.sql`, `20260808240000_accounts_merge_hardening.sql` |
+| `public.restricted_media_request_access(p_case, p_reason)` / `restricted_media_decide_access(p_grant, p_decision, p_note)` / `restricted_media_revoke_access(p_grant, p_reason)` | Lead-granted break-glass into restricted media (request → decide → revoke), time-boxed + audited; every restricted view is logged via `log_restricted_view`. | `20260807240000_restricted_access.sql`, `20260808320000_break_glass_lead_granted.sql`, `20260808340000_break_glass_hardening.sql` |
+| `public.extraction_add_fact(…)` | Capture a records-return's facts into a case with per-fact source provenance (manual entry or known-format import; no runtime AI). | `20260808260000_returned_record_extraction.sql` |
 
 History rows in `case_signoff_history` are written **inside** the RPCs, so the
 client no longer logs them.
@@ -90,6 +108,16 @@ the repo honest about that gap:
   (or marked *applied live only*).
 
 ## DOJ legal-review migrations (v1.13.0)
+
+> **⚠️ RETIRED — workflow no longer active.** The CID → ADA → DA/AG → Judge
+> pipeline described in this section and the two below was **retired in Phase 1**
+> (PR #197, `20260808140000_legal_lead_approval`): legal-request approval is now
+> a **Bureau Lead+** command action with no ADA/DA/AG/Judge step. The
+> `justice_memberships` identity domain, signatures, decisions, and court-packet
+> records are **preserved** as history; the tables and RPCs below still exist but
+> the multi-seat routing they document is retired. See the top of `CHANGELOG.md`
+> ([Unreleased] — Records & Requests domain + 10-phase roadmap).
+
 Seven additive migrations add the DOJ Legal Review System (see
 [`../docs/DOJ-INTEGRATION.md`](../docs/DOJ-INTEGRATION.md)), all applied to the
 live project via MCP:
@@ -115,6 +143,13 @@ SECURITY DEFINER RPC. DOJ roles are **not** in the `app_role` enum — they live
 in `justice_memberships`, a separate identity domain.
 
 ## Shared-platform migrations (v1.14.0)
+
+> **⚠️ Partly retired.** The **DOJ legal-review workflow** these patterns were
+> lifted from is retired (see the banner above). The promoted platform pieces
+> themselves — report versions, legal-in-search, the Owner Security Testing
+> dashboard — **remain live**; only the multi-seat legal routing they reference
+> is gone.
+
 Three additive migrations promote the DOJ patterns portal-wide (see
 `CHANGELOG.md` 1.14.0 and the adoption register in
 [`../docs/DOJ-INTEGRATION.md`](../docs/DOJ-INTEGRATION.md)):
@@ -136,6 +171,13 @@ Three additive migrations promote the DOJ patterns portal-wide (see
   runs + live fixture health + leftover test-data counts).
 
 ## DOJ search-warrant & import migrations (v1.15.0)
+
+> **⚠️ RETIRED routing.** `search_warrant` remains a warrant subtype, but the
+> CID → ADA → Judge / Judge-only-approval routing described below was retired in
+> Phase 1 (PR #197): search warrants, like every legal request, now terminate at
+> **Bureau Lead+** approval. The provenance-import RPCs still exist; historical
+> imported records are preserved.
+
 Two additive migrations (see `CHANGELOG.md` 1.15.0 and
 [`../docs/DOJ-INTEGRATION.md`](../docs/DOJ-INTEGRATION.md)):
 

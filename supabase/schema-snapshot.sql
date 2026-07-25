@@ -7628,3 +7628,25 @@ create policy wl_sel on public.watchlist
 -- asserts a non-null error either way, so the in-body raise becoming
 -- permission-denied changes no assertion. Definitive SQL in
 -- supabase/migrations/20260808360000_advisor_hardening.sql.
+
+-- 20260808380000_historical_cleanup (Phase 10; data cleanup + rls_test_cleanup
+-- recurrence fix — no schema/column/signature change, so database.types.ts is
+-- unchanged). A full read-only audit found the live DB already clean (0
+-- enforced-FK orphans, 0 NOT-VALID constraints, 0 redundant indexes, 0
+-- disposable-fixture leakage). The migration deletes ~5 NON-JUDICIAL rows by
+-- idempotent predicate (0 rows on a fresh rebuild): 1 caseless '[rls-test]' v153
+-- media (not restricted, not a seized-item — judicial guard verified 0), 2
+-- is_test-owned document_user_state rows, 1 watchlist bookmark of a deleted
+-- case, 1 case_files row whose case was permanently deleted (case_files links by
+-- case_number TEXT, no FK, so permanent delete didn't cascade it). ALL historical
+-- judicial records are preserved untouched: the 7 legacy legal_requests + 28
+-- versions / 42 actions / 45 exhibits / 21 participants / 14 signatures (decided
+-- under fixture ADA/Judge identities — kept as-is, never rewritten), 10
+-- justice_memberships, 4 prosecutor_bureau_assignments, append-only audit logs,
+-- and the 16 standing is_test fixtures. rls_test_cleanup() gains two sweeps so
+-- the media leak cannot recur: caseless fixture-uploaded media
+-- (uploaded_by = fixture and case_id is null) and fixture document_user_state;
+-- body otherwise byte-identical (search_path='' + anon-revoke preserved).
+-- Follow-up noted in the PR: cascade case_files by case_number on permanent
+-- delete. Definitive SQL in
+-- supabase/migrations/20260808380000_historical_cleanup.sql.

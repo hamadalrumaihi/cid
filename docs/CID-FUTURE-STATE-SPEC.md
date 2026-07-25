@@ -1,19 +1,32 @@
 # CID Portal — Confirmed Future‑State Specification & Roadmap
 
-**Status:** discovery in progress (Batches 1–8 resolved; D5 + website‑wide open).
-**Do not implement** until an approval option (below) is explicitly selected.
-**Source‑of‑truth order:** live schema → PR #193 branch → main → migrations/snapshot → types → tests → spec → this doc → older docs.
+> **Executed.** This roadmap was carried out in full through **Phase 9**, all merged to `main`
+> (Phase 10 — the cleanup + documentation pass — is the branch you are on). It is retained as the
+> **historical planning record**: the discovery, the confirmed decisions, and the phase plan as they
+> stood before the build. For what actually shipped and when, see [`CHANGELOG.md`](../CHANGELOG.md)
+> and the per‑phase PRs cited in the roadmap below.
+
+**Status:** delivered (Phases 0–9 merged; Phase 10 in progress). Historical planning record.
+**Source‑of‑truth order:** live schema → main → migrations/snapshot → types → tests → this doc → older docs.
+(The original order placed the then‑unmerged PR #193 branch ahead of `main`; #193 merged long ago, so `main` is now authoritative.)
 
 ---
 
-## Repository & deployment state (verified this session)
+## Repository & deployment state (historical snapshot — superseded)
+
+> *Point‑in‑time snapshot from the discovery session, kept for the record. It described the
+> then‑open PR #193 branch. #193 has since merged, along with every phase that followed — the
+> live schema and `main` are the current truth. See the shipped roadmap below and `CHANGELOG.md`.*
 
 - **Live DB:** all 8 delta tables present; all delta RPCs present; `media_sel` widened with `has_media_break_glass`; `legal_requests.execution_result` exists; `search_all` has the account branch. **No live‑vs‑branch drift.**
 - **Branch `claude/continue-previous-7pqwjg`:** 19 commits ahead of `main`, contains all of `main` (clean fast‑forward). Each delta's SQL added once; no in‑place rewrite of applied SQL.
 - **Tests:** RLS suites `v147`–`v151`; all pass live.
 - **CI/preview:** Vercel green on head `e12f622`. PR **#193 open, draft, not merged.**
 
-## PR #193 disposition (Batch 1 — CONFIRMED)
+## PR #193 disposition (historical — resolved)
+
+> *This was the plan for landing #193. It has since merged as the Records & Requests foundation
+> (D1–D7), and D5 shipped later as in‑app reminders in Phase 6 (PR #205). Kept for the record.*
 
 - **Merge after a UI walkthrough** of the six flows, then take out of draft.
 - **Safe reversible fixtures in production are permitted** for the walkthrough (append‑only audit rows persist by design).
@@ -22,9 +35,14 @@
 
 ---
 
-## Records & Requests domain — confirmed target behavior
+## Records & Requests domain — target behavior (delivered)
 
-> Legend: **[live]** already shipped · **[Δmig]** needs a migration · **[new]** net‑new build
+> **All of the below shipped.** The foundation (D1–D7) landed as PR #193; hardening and the
+> remaining deltas followed across Phases 2–6 (D5 in‑app reminders in Phase 6, PR #205). The
+> legend records each item's state *at planning time* — it is not the current state; everything
+> here is now live on `main`.
+>
+> Legend (planning‑time): **[live]** already shipped · **[Δmig]** needed a migration · **[new]** was net‑new build
 
 ### Legal holds (D7)
 - Place/lift authority: **command‑only, both** **[live]**.
@@ -79,16 +97,16 @@
 
 ---
 
-## Investigation‑centered legal workflow (confirmed direction)
+## Investigation‑centered legal workflow (shipped — Phase 1, PR #197)
 
-- **No active AG / Judge / ADA / prosecutor‑management / judicial‑docket / Justice‑only workflow.**
+- **No active AG / Judge / ADA / prosecutor‑management / judicial‑docket / Justice‑only workflow.** The Justice Portal was removed from `src/lib/nav.ts` (zero DOJ/Justice nav entries remain).
 - New request approval → **Bureau Lead+**.
 - **Historical DOJ/AG/ADA/Judge/signature/decision/court‑packet records are preserved** — never erased; moved to read‑only/legacy metadata; never rewritten to imply Lead+ made past judicial decisions.
 
-### DOJ/Judicial retirement reconciliation — default direction
-- **Convert active legal review to Bureau Lead+**; keep AG/Judge/ADA/decision/signature/court‑packet records as **read‑only legacy metadata** (no deletes).
-- **Fold legal/records tools into the CID investigation + intelligence navigation**; drop the separate Justice framing.
-- Per‑feature classification (remove/rename/redirect/read‑only/Lead+‑review/preserve) to be finalized as the first task of Phase 1 against the live surface list.
+### DOJ/Judicial retirement reconciliation — delivered
+- **Active legal review converted to Bureau Lead+**; AG/Judge/ADA/decision/signature/court‑packet records kept as **read‑only legacy metadata** (no deletes).
+- **Legal/records tools folded into the CID investigation + intelligence navigation**; the separate Justice framing was dropped.
+- Backend + frontend + RLS suite reworked to the Bureau Lead+ model in Phase 1 (PR #197).
 
 ---
 
@@ -106,33 +124,33 @@
 
 ---
 
-## Proposed Implementation Roadmap
+## Implementation Roadmap — SHIPPED
 
-Each phase: objective · baseline · migrations · permissions · user impact · risk · rollback · tests · acceptance. (Detailed per‑phase specs to be expanded on approval.)
+Delivered in order and merged to `main`. Each phase's PR is cited below (confirm against
+`git log origin/main` / `CHANGELOG.md`). Phase 4 landed as two PRs (4a/4b); the media‑follows‑case
+access change (PR #204) shipped alongside Phase 5.
 
-- **Phase 0 — Merge & verify PR #193.** UI walkthrough with safe fixtures → screenshots → out of draft → merge to main. Open the D5 issue. *No schema change.*
-- **Phase 1 — Retire active DOJ/Judge workflow.** Reconcile per the classification table; convert to Lead+ review + historical read‑only; **preserve all historical rows**. *Migration: status/label remaps only, no deletes.*
-- **Phase 2 — Legal‑hold hardening.** Extend the purge guard to archive/media/report/merge/related deletion; add Timeline + search + Action Center surfacing. *Δmig + UI.*
-- **Phase 3 — Warrant execution & custody completion.** Structured execution record; custody‑grade seized inventory (soft‑delete); return doc + automation (task/report draft). *Δmig + new RPCs + UI.*
-- **Phase 4 — Accounts & extraction expansion.** Categories, polymorphic links, content/state, merge (Lead+), Lead+ confirm; structured + city‑format extraction routed through Indicators. *Δmig + new + UI.*
-- **Phase 5 — MDT & FiveM bridge.** Self‑approval guard; new export types; per‑type field allowlist; expiry reminder. *Δmig + bridge contract.*
-- **Phase 6 — Break‑glass rework + D5.** Convert break‑glass to Lead+‑granted with revoke/remaining‑time/lead‑notify + packet‑export approval; then in‑app deadlines (Discord later). *Δmig + UI + (infra for D5).*
-- **Phase 7 — Case‑workspace improvements** (website‑wide, pending Batch 10).
-- **Phase 8 — Shared design‑system + mobile pass.**
-- **Phase 9 — Security, reliability, operational hardening** (staging/seed env, E2E, visual regression for new flows).
-- **Phase 10 — Historical‑data cleanup & documentation.**
-
-*Sequence may reorder if repository findings indicate a safer order (e.g. Phase 6 break‑glass rework could pair with Phase 2 since both touch case‑scoped RLS).* 
+- ☑ **Phase 0 — Records & Requests foundation (D1–D7).** The six‑flow domain build, merged as **PR #193** (D5 deferred to its own track). *Delivered.*
+- ☑ **Phase 1 — Retire active DOJ/Judge workflow — PR #197.** Converted to Bureau Lead+ review + historical read‑only; all historical rows preserved; Justice Portal removed from nav; backend + frontend + RLS suite reworked. *Delivered.*
+- ☑ **Phase 2 — Legal‑hold hardening — PR #198.** Preservation lock extended across archive/media/report/merge/related deletion; Timeline + search + Action Center surfacing. *Delivered.*
+- ☑ **Phase 3 — Warrant execution & custody completion — PR #199.** Structured execution record; custody‑grade seized inventory (soft‑delete); return doc + automation. *Delivered.*
+- ☑ **Phase 4 — Accounts & extraction expansion — PR #200 (4a) + PR #201 (4b).** Categories, polymorphic links, content/state, merge (Lead+), Lead+ confirm (4a); returned‑record extraction routed through Indicators (4b). *Delivered.*
+- ☑ **Phase 5 — MDT & FiveM bridge (dormant) — PR #203.** Self‑approval guard; new export types; per‑type field allowlist; expiry reminder. Media‑follows‑case access shipped alongside as **PR #204**. *Delivered.*
+- ☑ **Phase 6 — Break‑glass rework + D5 — PR #205.** Lead+‑granted break‑glass with revoke/remaining‑time/lead‑notify; **D5 in‑app deadline reminders** landed here (Discord/digest still deferred to infra). *Delivered.*
+- ☑ **Phase 7 — Case‑workspace polish — PR #206.** *Delivered.*
+- ☑ **Phase 8 — Shared design‑system consistency + mobile pass — PR #207.** *Delivered.*
+- ◧ **Phase 9 — Security, reliability, operational hardening — PR #208 (security track only).** Advisor hardening shipped: anon‑revoke drift, `search_path` pin, insert‑policy tightening, FK indexes — the live baseline is now zero anon‑executable `public` functions. *The reliability/operational track (staging/seed Supabase project, live‑verifying CI secrets, Playwright E2E + visual‑regression baselines) is **deferred** — it needs test infrastructure only the owner can provision.*
+- ◧ **Phase 10 — Historical‑data cleanup & documentation.** *In progress on the current branch (not yet merged).*
 
 ---
 
-## Website‑wide defaults (Batch 10 — default‑settled, revisit per phase)
+## Website‑wide defaults (Batch 10 — delivered)
 
-- **DOJ/Justice surfaces:** convert to Lead+ review + historical read‑only (above).
-- **Navigation:** fold legal/records/accounts into CID investigation + intelligence nav.
-- **Top build priority after merge:** Phase 1 — DOJ retirement + Lead+ legal review (square the workflow before layering features).
-- **Testing strategy:** stand up a **seeded staging/local Supabase** and add **Playwright E2E + visual regression** for the new flows before merge — replacing "RPC tests only." Prod fixtures remain the fallback for the immediate #193 walkthrough.
-- Remaining page‑level polish (My Desk, Cases tabs, registries, mobile, a11y, motion, performance, backups) carried into Phases 7–10 and decided per phase against the live surface.
+- **DOJ/Justice surfaces:** converted to Lead+ review + historical read‑only (Phase 1, PR #197).
+- **Navigation:** legal/records/accounts folded into CID investigation + intelligence nav.
+- **Build priority after merge:** Phase 1 (DOJ retirement + Lead+ legal review) was taken first, squaring the workflow before layering features — as planned.
+- **Testing strategy:** RLS security suites (v152–v160) cover the new flows; the seeded staging Supabase project and Playwright E2E + visual‑regression baselines remain **deferred** (Phase 9 reliability track — pending owner‑provisioned test infrastructure). Note: the CI `security-suites` job currently self‑skips the live RLS suites because the fixture‑password secrets are unset — verification has been by direct live catalog queries per phase.
+- Remaining page‑level polish (My Desk, Cases tabs, registries, mobile, a11y, motion, performance, backups) shipped across Phases 7–9.
 
 ## Notes on process
 Batches 1–8 were answered explicitly; D5 (9) and website‑wide (10) were settled with the recommended defaults above after the question rounds were closed out. Any of these defaults can be overridden per phase before that phase is built.

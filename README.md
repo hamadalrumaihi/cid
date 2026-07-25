@@ -1,12 +1,12 @@
 # CID Portal — Criminal Investigation Division
 
-CID Portal is a case-management, intelligence, and legal-review platform
-for a GTA V roleplay Criminal Investigation Division. Detectives, command
-staff, and DOJ/Judiciary members use it to run investigations end-to-end:
-cases, reports, persons of interest, gangs, vehicles, locations, photos
-and case media, legal requests (warrants and subpoenas), assignments,
-approvals, and audit history — all through role-based workflows enforced
-by the database.
+CID Portal is a case-management and criminal-intelligence platform
+for a GTA V roleplay Criminal Investigation Division. Detectives and
+command staff use it to run investigations end-to-end: cases, reports,
+persons of interest, gangs, vehicles, locations, photos and case media,
+legal requests (warrants and subpoenas, reviewed in-division by Bureau
+Lead and above), assignments, approvals, and audit history — all through
+role-based workflows enforced by the database.
 
 The front-end is a **Next.js single-page app** (React 19, TypeScript,
 Tailwind CSS v4) served as static pages from Vercel; all data lives in a
@@ -85,18 +85,17 @@ defaults for the live project.
 ## What's inside
 
 Workspaces organized into five sidebar sections — Command, Cases,
-Intelligence, Reference, and Oversight — plus the standalone Justice
-Portal, Command Center, Owner Portal, Feedback, and Profile screens
-(the routing truth is `NAV_CATEGORIES` in `src/lib/nav.ts`):
+Intelligence, Reference, and Oversight — plus the standalone Command
+Center, Owner Portal, Feedback, and Profile screens (the routing truth
+is `NAV_CATEGORIES` in `src/lib/nav.ts`):
 
 | Area | Purpose |
 | --- | --- |
 | **Command** | My Desk (everything waiting on you — the landing page), Action Center (prioritized queue of pending decisions), dashboard (KPIs, tickets, activity feed, bureau load, GPS trackers, raid-compensation calculator), division analytics charts, announcements, crime heatmap, roster & commendations |
-| **Cases** | Case board + full case detail (photos & case media, template-driven reports with finalize/e-sign, tasks, penal-code charges, case chat with @mentions, investigation graph, zoomable timeline, RICO tracking, sign-off workflow, court-packet export to PDF/DOCX/Markdown), operations/task forces, **legal requests** (warrant/subpoena drafting, packets, DOJ review & fulfilment), file attachments |
-| **Intelligence** | Persons (with dossier export), BOLO board, gangs (ranks/members/turf), places, vehicle registry with cross-case matching, indicators registry with automatic deconfliction, network graph, narcotics, ballistics, M.O. detector, media vault, records |
+| **Cases** | Case board + full case detail (photos & case media, template-driven reports with finalize/e-sign, tasks, penal-code charges, case chat with @mentions, investigation graph, zoomable timeline, RICO tracking, sign-off workflow, court-packet export to PDF/DOCX/Markdown), operations/task forces, **legal requests** (warrant/subpoena drafting, packets, Bureau Lead+ review & fulfilment), file attachments |
+| **Intelligence** | Persons (with dossier export), BOLO board, gangs (ranks/members/turf), places, vehicle registry with cross-case matching, account registry (handles, links & confidence), indicators registry with automatic deconfliction, network graph, narcotics, ballistics, M.O. detector, media vault, records |
 | **Reference** | S.A. Penal Code, SOPs & document library (with version history), in-app user guide, developer handbook (owner-only) |
 | **Oversight** | Division calendar, weekly shift reports, audit log |
-| **Justice Portal** | The DOJ/Judiciary workspace: prosecutor and judge review queues, bureau coverage, issued warrants & service/returns, justice applications — justice-only members get this as their whole app |
 
 Plus cross-cutting tools: global typo-tolerant search + command palette
 (`/` or `Ctrl-K`), notifications (in-app + optional Discord DM), a

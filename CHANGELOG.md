@@ -6,7 +6,75 @@ instance, versions mark *release milestones*: MAJOR for breaking platform
 changes, MINOR for feature releases, PATCH for fixes. Each release lists
 the merged PRs that compose it.
 
-## [Unreleased] — DOJ / Justice Portal operational redesign
+## [Unreleased] — Records & Requests domain + 10-phase roadmap
+
+The **Records & Requests** domain and the 10-phase roadmap built on top of it.
+This is the current, authoritative shape of the legal/records surfaces — it
+**supersedes** the DOJ / Justice Portal redesign below: the active
+DOJ / AG / ADA / Judge / prosecutor legal-review workflow was **RETIRED** in
+Phase 1 and folded into a Bureau Lead+ review model. Historical judicial
+records (justice memberships, signatures, decisions, court packets) are
+**preserved** untouched.
+
+> **Two unrelated "Phase" numbering schemes.** The phases below (Phase 1 …
+> Phase 10) are the *records/requests roadmap*. The `## Phase 1` … `## Phase 11`
+> build-wave headings much further down this file are the *original
+> 2026-06 build waves* and have nothing to do with this roadmap — see the
+> disambiguation note above the first of them.
+
+### Records & Requests foundation (D1–D7) — PR #193
+
+The discovery-driven records/requests delta that seeds the roadmap: legal
+hold (D7), warrant execution + seized-items inventory (D3), Lead+-gated MDT
+exports (D4), the Accounts registry + cross-registry search (D1/D2), and
+restricted-content view-audit + break-glass (D6).
+
+- Migrations `20260807190000_legal_hold`, `20260807200000_legal_execution_inventory`,
+  `20260807210000_mdt_exports`, `20260807220000_accounts_registry`,
+  `20260807230000_search_include_accounts`, `20260807240000_restricted_access`.
+
+### The 10-phase roadmap
+
+Each phase → PR number(s) → backing migration(s). Phases 7 and 8 are UI-only
+(no migration).
+
+- **Phase 1 — DOJ/Judge/ADA retirement → Bureau Lead+ approval** (PR #197):
+  `20260808140000_legal_lead_approval`. Legal-request approval moves to
+  `private.is_command()`; no ADA/DA/AG/Judge step remains. Historical judicial
+  paper is preserved.
+- **Phase 2 — legal-hold preservation lock** (PR #198):
+  `20260808160000_legal_hold_preservation`. An active hold now blocks
+  archive/delete/merge at every destructive chokepoint (`private.case_has_active_hold`).
+- **Phase 3 — custody-grade warrant execution + seized items** (PR #199):
+  `20260808180000_warrant_execution_completion`,
+  `20260808200000_seized_item_case_scope`.
+- **Phase 4a — accounts expansion** (PR #200):
+  `20260808220000_accounts_expansion`, `20260808240000_accounts_merge_hardening`
+  (taxonomy, polymorphic links, merge).
+- **Phase 4b — returned-record extraction** (PR #201):
+  `20260808260000_returned_record_extraction`.
+- **Phase 5 — MDT & FiveM bridge expansion, dormant** (PR #203):
+  `20260808280000_mdt_bridge_expansion` (ships in code, inert on the site).
+- **Media follows case access — bureau-scoped media** (PR #204):
+  `20260808300000_media_bureau_scope` (interleaved between Phase 5 and 6).
+- **Phase 6 — Lead-granted break-glass + D5 in-app reminders** (PR #205):
+  `20260808320000_break_glass_lead_granted`, `20260808340000_break_glass_hardening`.
+- **Phase 7 — case-workspace polish** (PR #206): UI only.
+- **Phase 8 — design-system consistency + mobile pass** (PR #207): UI only.
+- **Phase 9 — advisor hardening** (PR #208):
+  `20260808360000_advisor_hardening` (anon-EXECUTE drift, search_path pin, one
+  policy fix, FK indexes).
+- **Phase 10 — historical cleanup & documentation** (current branch, unmerged):
+  `20260808380000_historical_cleanup` (~5 non-judicial rows via idempotent
+  predicates; this reconciliation of `CHANGELOG.md`, `supabase/README.md`, and
+  `supabase/MIGRATION-HISTORY.md`).
+
+## [Unreleased] — DOJ / Justice Portal operational redesign — SUPERSEDED
+
+> **SUPERSEDED** by the Records & Requests roadmap above. The active
+> DOJ/AG/ADA/Judge/prosecutor workflow this redesign polished was RETIRED in
+> Phase 1 (PR #197) and folded into Bureau Lead+ legal review. Kept here as
+> history; historical judicial records remain preserved.
 
 Interface/workflow-clarity redesign of every legal surface (PR #178); no
 authority rule was weakened. Durable design notes:
@@ -1146,6 +1214,11 @@ is the source of truth (mirrored in `src/lib/database.types.ts`).
   `aoa_to_sheet`, `json_to_sheet`, `writeFile`, `read`, `sheet_to_csv` in
   `app.js` / `core.js`) are unchanged — the public API is stable across the
   upgrade. The existing offline guard (`if (!window.XLSX)`) still applies.
+
+> **Note — numbering.** The `## Phase 1` … `## Phase 11` headings below are the
+> *original 2026-06 build waves* of the vanilla-era app. They are UNRELATED to
+> the records/requests **10-phase roadmap** (Phase 1 … Phase 10) documented in
+> the top `[Unreleased]` section; do not conflate the two schemes.
 
 ## Phase 11 — Gap-close patch: numbering, isolation, FiveManage, heatmap, shifts (2026-06-17)
 - **§1 Case numbering** — manual, unique, bureau-prefixed `BUREAU-NUMBER` (e.g.
