@@ -2403,11 +2403,14 @@ CREATE UNIQUE INDEX account_handles_current_uidx ON public.account_handles USING
 CREATE INDEX account_links_account_idx ON public.account_links USING btree (account_id);
 CREATE INDEX account_links_person_idx ON public.account_links USING btree (person_id);
 CREATE INDEX account_links_subject_idx ON public.account_links USING btree (subject_kind, subject_id);
+CREATE INDEX account_links_confirmed_by_idx ON public.account_links USING btree (confirmed_by);
+CREATE INDEX account_links_created_by_idx ON public.account_links USING btree (created_by);
 CREATE UNIQUE INDEX accounts_platform_extid_uidx ON public.accounts USING btree (platform, external_id) WHERE ((external_id IS NOT NULL) AND (lifecycle <> 'merged'::text));
 CREATE INDEX accounts_platform_handle_idx ON public.accounts USING btree (platform, handle_normalized);
 CREATE INDEX accounts_handle_norm_idx ON public.accounts USING btree (handle_normalized);
 CREATE INDEX accounts_lifecycle_idx ON public.accounts USING btree (lifecycle);
 CREATE INDEX accounts_merged_into_idx ON public.accounts USING btree (merged_into) WHERE (merged_into IS NOT NULL);
+CREATE INDEX accounts_created_by_idx ON public.accounts USING btree (created_by);
 CREATE INDEX announcements_author_id_fkey_idx ON public.announcements USING btree (author_id);
 CREATE INDEX audit_log_actor_id_fkey_idx ON public.audit_log USING btree (actor_id);
 CREATE INDEX audit_log_created_at_idx ON public.audit_log USING btree (created_at DESC);
@@ -2421,6 +2424,8 @@ CREATE INDEX case_access_requests_decided_by_fkey_idx ON public.case_access_requ
 CREATE INDEX case_access_requests_requester_id_fkey_idx ON public.case_access_requests USING btree (requester_id);
 CREATE INDEX idx_car_case ON public.case_access_requests USING btree (case_id);
 CREATE INDEX case_assignments_officer_id_fkey_idx ON public.case_assignments USING btree (officer_id);
+CREATE INDEX case_assignments_added_by_idx ON public.case_assignments USING btree (added_by);
+CREATE INDEX case_assignments_removed_by_idx ON public.case_assignments USING btree (removed_by);
 CREATE INDEX case_blockers_case_id_fkey_idx ON public.case_blockers USING btree (case_id);
 CREATE INDEX case_blockers_created_by_fkey_idx ON public.case_blockers USING btree (created_by);
 CREATE INDEX case_blockers_legal_request_id_fkey_idx ON public.case_blockers USING btree (legal_request_id);
@@ -2451,7 +2456,11 @@ CREATE INDEX cases_operation_id_idx ON public.cases USING btree (operation_id);
 CREATE INDEX cases_signoff_assignee_id_fkey_idx ON public.cases USING btree (signoff_assignee_id);
 CREATE INDEX cases_signoff_submitted_by_fkey_idx ON public.cases USING btree (signoff_submitted_by);
 CREATE INDEX cases_title_trgm ON public.cases USING gin (title extensions.gin_trgm_ops);
+CREATE INDEX cases_archived_by_idx ON public.cases USING btree (archived_by);
+CREATE INDEX cases_joint_case_created_by_idx ON public.cases USING btree (joint_case_created_by);
+CREATE INDEX cases_joint_case_ended_by_idx ON public.cases USING btree (joint_case_ended_by);
 CREATE INDEX cid_records_created_by_fkey_idx ON public.cid_records USING btree (created_by);
+CREATE INDEX client_errors_reporter_id_idx ON public.client_errors USING btree (reporter_id);
 CREATE INDEX commendations_created_by_fkey_idx ON public.commendations USING btree (created_by);
 CREATE INDEX commendations_recipient_id_fkey_idx ON public.commendations USING btree (recipient_id);
 CREATE INDEX custody_chain_evidence_id_at_idx ON public.custody_chain USING btree (evidence_id, at);
@@ -2479,6 +2488,7 @@ CREATE INDEX document_suggestions_document_idx ON public.document_suggestions US
 CREATE INDEX document_suggestions_duplicate_idx ON public.document_suggestions USING btree (duplicate_of);
 CREATE INDEX document_suggestions_status_idx ON public.document_suggestions USING btree (status);
 CREATE INDEX document_suggestions_version_idx ON public.document_suggestions USING btree (implemented_version_id);
+CREATE INDEX document_suggestions_decided_by_idx ON public.document_suggestions USING btree (decided_by);
 CREATE INDEX document_user_state_document_fkey_idx ON public.document_user_state USING btree (document_id);
 CREATE INDEX documents_approved_by_fkey_idx ON public.documents USING btree (approved_by);
 CREATE INDEX documents_bureau_idx ON public.documents USING btree (bureau);
@@ -2496,11 +2506,14 @@ CREATE INDEX evidence_case_id_idx ON public.evidence USING btree (case_id);
 CREATE INDEX evidence_collected_by_fkey_idx ON public.evidence USING btree (collected_by);
 CREATE INDEX evidence_created_by_fkey_idx ON public.evidence USING btree (created_by);
 CREATE INDEX feedback_created_by_fkey_idx ON public.feedback USING btree (created_by);
+CREATE INDEX feedback_meta_updated_by_idx ON public.feedback_meta USING btree (updated_by);
 CREATE INDEX gang_members_case_id_fkey_idx ON public.gang_members USING btree (case_id);
 CREATE INDEX gang_members_gang_id_fkey_idx ON public.gang_members USING btree (gang_id);
 CREATE INDEX gang_members_person_id_fkey_idx ON public.gang_members USING btree (person_id);
 CREATE INDEX gang_members_rank_id_fkey_idx ON public.gang_members USING btree (rank_id);
 CREATE UNIQUE INDEX gang_members_one_active_per_person ON public.gang_members USING btree (gang_id, person_id) WHERE ((person_id IS NOT NULL) AND (status IS DISTINCT FROM 'Former member'::text));
+CREATE INDEX gang_members_created_by_idx ON public.gang_members USING btree (created_by);
+CREATE INDEX gang_members_reviewed_by_idx ON public.gang_members USING btree (reviewed_by);
 CREATE INDEX gang_ranks_gang_id_fkey_idx ON public.gang_ranks USING btree (gang_id);
 CREATE INDEX gang_turf_gang_id_fkey_idx ON public.gang_turf USING btree (gang_id);
 CREATE INDEX gang_places_gang_id_fkey_idx ON public.gang_places USING btree (gang_id);
@@ -2513,11 +2526,34 @@ CREATE INDEX gangs_name_trgm ON public.gangs USING gin (name extensions.gin_trgm
 CREATE INDEX indicators_case_idx ON public.indicators USING btree (case_id);
 CREATE INDEX indicators_created_by_fkey_idx ON public.indicators USING btree (created_by);
 CREATE INDEX indicators_value_idx ON public.indicators USING btree (lower(btrim(value)));
+CREATE INDEX justice_membership_request_history_actor_id_idx ON public.justice_membership_request_history USING btree (actor_id);
+CREATE INDEX justice_membership_request_history_request_id_idx ON public.justice_membership_request_history USING btree (request_id);
+CREATE INDEX justice_membership_requests_decided_by_idx ON public.justice_membership_requests USING btree (decided_by);
+CREATE INDEX justice_memberships_approved_by_idx ON public.justice_memberships USING btree (approved_by);
 CREATE UNIQUE INDEX legal_holds_active_case_uidx ON public.legal_holds USING btree (case_id) WHERE ((lifted_at IS NULL) AND (case_id IS NOT NULL));
 CREATE UNIQUE INDEX legal_holds_active_request_uidx ON public.legal_holds USING btree (legal_request_id) WHERE ((lifted_at IS NULL) AND (legal_request_id IS NOT NULL));
 CREATE INDEX legal_holds_case_idx ON public.legal_holds USING btree (case_id) WHERE (case_id IS NOT NULL);
 CREATE INDEX legal_holds_request_idx ON public.legal_holds USING btree (legal_request_id) WHERE (legal_request_id IS NOT NULL);
+CREATE INDEX legal_holds_lifted_by_idx ON public.legal_holds USING btree (lifted_by);
+CREATE INDEX legal_holds_placed_by_idx ON public.legal_holds USING btree (placed_by);
+CREATE INDEX legal_request_actions_actor_id_idx ON public.legal_request_actions USING btree (actor_id);
+CREATE INDEX legal_request_actions_version_id_idx ON public.legal_request_actions USING btree (version_id);
+CREATE INDEX legal_request_exhibits_added_by_idx ON public.legal_request_exhibits USING btree (added_by);
+CREATE INDEX legal_request_exhibits_version_id_idx ON public.legal_request_exhibits USING btree (version_id);
+CREATE INDEX legal_request_participants_added_by_idx ON public.legal_request_participants USING btree (added_by);
+CREATE INDEX legal_request_participants_removed_by_idx ON public.legal_request_participants USING btree (removed_by);
+CREATE INDEX legal_request_signatures_legal_request_id_idx ON public.legal_request_signatures USING btree (legal_request_id);
+CREATE INDEX legal_request_signatures_signer_id_idx ON public.legal_request_signatures USING btree (signer_id);
+CREATE INDEX legal_request_signatures_version_id_idx ON public.legal_request_signatures USING btree (version_id);
+CREATE INDEX legal_request_versions_created_by_idx ON public.legal_request_versions USING btree (created_by);
 CREATE INDEX legal_seized_items_request_idx ON public.legal_seized_items USING btree (legal_request_id);
+CREATE INDEX legal_seized_items_added_by_idx ON public.legal_seized_items USING btree (added_by);
+CREATE INDEX legal_seized_items_evidence_id_idx ON public.legal_seized_items USING btree (evidence_id);
+CREATE INDEX legal_seized_items_media_id_idx ON public.legal_seized_items USING btree (media_id);
+CREATE INDEX legal_seized_items_person_id_idx ON public.legal_seized_items USING btree (person_id);
+CREATE INDEX legal_seized_items_removed_by_idx ON public.legal_seized_items USING btree (removed_by);
+CREATE INDEX legal_seized_items_report_id_idx ON public.legal_seized_items USING btree (report_id);
+CREATE INDEX legal_seized_items_vehicle_id_idx ON public.legal_seized_items USING btree (vehicle_id);
 CREATE INDEX legal_requests_ada_idx ON public.legal_requests USING btree (assigned_ada_id) WHERE (assigned_ada_id IS NOT NULL);
 CREATE INDEX legal_requests_bureau_idx ON public.legal_requests USING btree (responsible_bureau);
 CREATE INDEX legal_requests_case_idx ON public.legal_requests USING btree (case_id);
@@ -2525,6 +2561,20 @@ CREATE INDEX legal_requests_creator_idx ON public.legal_requests USING btree (cr
 CREATE UNIQUE INDEX legal_requests_import_key_key ON public.legal_requests USING btree (import_key) WHERE (import_key IS NOT NULL);
 CREATE INDEX legal_requests_judge_idx ON public.legal_requests USING btree (assigned_judge_id) WHERE (assigned_judge_id IS NOT NULL);
 CREATE INDEX legal_requests_review_idx ON public.legal_requests USING btree (review_status);
+CREATE INDEX legal_requests_cid_reviewed_by_idx ON public.legal_requests USING btree (cid_reviewed_by);
+CREATE INDEX legal_requests_closed_by_idx ON public.legal_requests USING btree (closed_by);
+CREATE INDEX legal_requests_current_version_id_idx ON public.legal_requests USING btree (current_version_id);
+CREATE INDEX legal_requests_decided_by_idx ON public.legal_requests USING btree (decided_by);
+CREATE INDEX legal_requests_executed_by_idx ON public.legal_requests USING btree (executed_by);
+CREATE INDEX legal_requests_imported_by_idx ON public.legal_requests USING btree (imported_by);
+CREATE INDEX legal_requests_issued_by_idx ON public.legal_requests USING btree (issued_by);
+CREATE INDEX legal_requests_person_id_idx ON public.legal_requests USING btree (person_id);
+CREATE INDEX legal_requests_return_filed_by_idx ON public.legal_requests USING btree (return_filed_by);
+CREATE INDEX legal_requests_return_report_id_idx ON public.legal_requests USING btree (return_report_id);
+CREATE INDEX legal_requests_revoked_by_idx ON public.legal_requests USING btree (revoked_by);
+CREATE INDEX legal_requests_served_by_idx ON public.legal_requests USING btree (served_by);
+CREATE INDEX legal_requests_source_report_id_idx ON public.legal_requests USING btree (source_report_id);
+CREATE INDEX legal_requests_source_submitter_id_idx ON public.legal_requests USING btree (source_submitter_id);
 CREATE INDEX mdt_exports_status_idx ON public.mdt_exports USING btree (status);
 CREATE INDEX mdt_exports_person_idx ON public.mdt_exports USING btree (person_id) WHERE (person_id IS NOT NULL);
 CREATE INDEX mdt_exports_vehicle_idx ON public.mdt_exports USING btree (vehicle_id) WHERE (vehicle_id IS NOT NULL);
@@ -2532,6 +2582,11 @@ CREATE UNIQUE INDEX mdt_exports_live_person_uidx ON public.mdt_exports USING btr
 CREATE UNIQUE INDEX mdt_exports_live_vehicle_uidx ON public.mdt_exports USING btree (vehicle_id) WHERE ((status <> 'cleared'::text) AND (vehicle_id IS NOT NULL));
 CREATE INDEX mdt_exports_account_idx ON public.mdt_exports USING btree (account_id) WHERE (account_id IS NOT NULL);
 CREATE UNIQUE INDEX mdt_exports_live_account_uidx ON public.mdt_exports USING btree (account_id) WHERE ((status <> 'cleared'::text) AND (account_id IS NOT NULL));
+CREATE INDEX mdt_exports_cleared_by_idx ON public.mdt_exports USING btree (cleared_by);
+CREATE INDEX mdt_exports_exported_by_idx ON public.mdt_exports USING btree (exported_by);
+CREATE INDEX mdt_exports_proposed_by_idx ON public.mdt_exports USING btree (proposed_by);
+CREATE INDEX mdt_exports_source_case_id_idx ON public.mdt_exports USING btree (source_case_id);
+CREATE INDEX mdt_wanted_projections_person_id_idx ON public.mdt_wanted_projections USING btree (person_id);
 CREATE INDEX media_case_id_archived_at_idx ON public.media USING btree (case_id, archived_at);
 CREATE INDEX media_case_id_idx ON public.media USING btree (case_id);
 CREATE INDEX media_gang_id_fkey_idx ON public.media USING btree (gang_id);
@@ -2542,6 +2597,9 @@ CREATE INDEX media_report_id_fkey_idx ON public.media USING btree (report_id);
 CREATE INDEX media_restricted_idx ON public.media USING btree (restricted) WHERE restricted;
 CREATE INDEX media_uploaded_by_fkey_idx ON public.media USING btree (uploaded_by);
 CREATE INDEX media_vehicle_id_fkey_idx ON public.media USING btree (vehicle_id);
+CREATE INDEX membership_request_history_actor_id_idx ON public.membership_request_history USING btree (actor_id);
+CREATE INDEX membership_request_history_request_id_idx ON public.membership_request_history USING btree (request_id);
+CREATE INDEX membership_requests_decided_by_idx ON public.membership_requests USING btree (decided_by);
 CREATE INDEX mo_profiles_case_id_fkey_idx ON public.mo_profiles USING btree (case_id);
 CREATE INDEX narcotic_aliases_created_by_fkey_idx ON public.narcotic_aliases USING btree (created_by);
 CREATE UNIQUE INDEX narcotic_aliases_narcotic_alias_key ON public.narcotic_aliases USING btree (narcotic_id, lower(alias));
@@ -2641,10 +2699,12 @@ CREATE INDEX places_name_trgm ON public.places USING gin (name extensions.gin_tr
 CREATE INDEX places_narcotic_fk_idx ON public.places USING btree (narcotic_id);
 CREATE INDEX predicate_acts_evidence_id_fkey_idx ON public.predicate_acts USING btree (evidence_id);
 CREATE INDEX predicate_acts_rico_case_id_fkey_idx ON public.predicate_acts USING btree (rico_case_id);
+CREATE INDEX profiles_login_denied_by_idx ON public.profiles USING btree (login_denied_by);
 CREATE UNIQUE INDEX one_active_acting_ada_per_bureau ON public.prosecutor_bureau_assignments USING btree (bureau) WHERE ((assignment_type = 'acting'::text) AND (ends_at IS NULL));
 CREATE UNIQUE INDEX one_active_primary_ada_per_bureau ON public.prosecutor_bureau_assignments USING btree (bureau) WHERE ((assignment_type = 'primary'::text) AND (ends_at IS NULL));
 CREATE INDEX pba_bureau_active_idx ON public.prosecutor_bureau_assignments USING btree (bureau) WHERE (ends_at IS NULL);
 CREATE INDEX pba_prosecutor_idx ON public.prosecutor_bureau_assignments USING btree (prosecutor_id);
+CREATE INDEX prosecutor_bureau_assignments_assigned_by_idx ON public.prosecutor_bureau_assignments USING btree (assigned_by);
 CREATE INDEX raid_compensations_case_id_fkey_idx ON public.raid_compensations USING btree (case_id);
 CREATE INDEX raid_compensations_created_by_fkey_idx ON public.raid_compensations USING btree (created_by);
 CREATE INDEX record_extraction_facts_account_idx ON public.record_extraction_facts USING btree (linked_account_id) WHERE (linked_account_id IS NOT NULL);
@@ -2654,10 +2714,17 @@ CREATE INDEX record_extraction_facts_indicator_idx ON public.record_extraction_f
 CREATE INDEX record_extraction_facts_link_idx ON public.record_extraction_facts USING btree (linked_link_id) WHERE (linked_link_id IS NOT NULL);
 CREATE INDEX record_extractions_case_idx ON public.record_extractions USING btree (case_id);
 CREATE INDEX record_extractions_created_by_idx ON public.record_extractions USING btree (created_by);
+CREATE INDEX report_versions_created_by_idx ON public.report_versions USING btree (created_by);
 CREATE INDEX reports_author_id_fkey_idx ON public.reports USING btree (author_id);
 CREATE INDEX reports_case_id_idx ON public.reports USING btree (case_id);
 CREATE INDEX reports_parent_id_fkey_idx ON public.reports USING btree (parent_id);
+CREATE INDEX restricted_access_grants_decided_by_idx ON public.restricted_access_grants USING btree (decided_by);
+CREATE INDEX restricted_access_grants_revoked_by_idx ON public.restricted_access_grants USING btree (revoked_by);
+CREATE INDEX restricted_access_grants_user_id_idx ON public.restricted_access_grants USING btree (user_id);
 CREATE INDEX rico_cases_enterprise_gang_id_fkey_idx ON public.rico_cases USING btree (enterprise_gang_id);
+CREATE INDEX role_events_actor_id_idx ON public.role_events USING btree (actor_id);
+CREATE INDEX role_events_target_id_idx ON public.role_events USING btree (target_id);
+CREATE INDEX security_test_runs_created_by_idx ON public.security_test_runs USING btree (created_by);
 CREATE INDEX shift_reports_bureau_week_idx ON public.shift_reports USING btree (bureau, week_start DESC);
 CREATE INDEX tickets_case_id_fkey_idx ON public.tickets USING btree (case_id);
 CREATE INDEX tickets_created_by_fkey_idx ON public.tickets USING btree (created_by);
@@ -5182,7 +5249,7 @@ create policy cid_update on public.cid_records
 
 create policy client_errors_ins on public.client_errors
   as permissive for insert to authenticated
-  with check (true);
+  with check (((reporter_id = ( SELECT auth.uid() AS uid)) OR (reporter_id IS NULL)));
 
 create policy client_errors_owner_del on public.client_errors
   as permissive for delete to authenticated
@@ -7486,3 +7553,78 @@ create policy wl_sel on public.watchlist
 -- protects against any future re-tightening of command scoping). Bodies are
 -- otherwise byte-identical to 20260808320000. Definitive SQL in
 -- supabase/migrations/20260808340000_break_glass_hardening.sql.
+
+-- 20260808360000_advisor_hardening (Phase 9; grants + 1 defacl + 1 search_path
+-- pin + 1 policy re-emit + 67 FK covering indexes — no schema/column/function
+-- signature change, so database.types.ts is unchanged). Source: full advisor
+-- digest of the live project (zero ERROR-level findings; this clears the
+-- actionable WARN/INFO items). (1) 51 RPCs (plus the cid_touch_updated_at
+-- trigger function — cosmetic, since a trigger fn is not RPC-exposable and
+-- trigger firing bypasses the EXECUTE check) had kept anon's creation-time
+-- EXECUTE grant (their waves ran `revoke ... from public` without `from anon`;
+-- Supabase's postgres defacl grants anon EXPLICITLY, which a public-revoke
+-- does not touch): admin_membership_requests, announcement_notify_update,
+-- announcement_recipient_count, approve_transfer_source/_target, assign_member
+-- (the live (uuid, boolean) form — the 4-arg overload was dropped by
+-- 20260807120000), cancel_transfer, case_reassign_bureau, change_member_role,
+-- cid_touch_updated_at (trigger fn), close_legal_request, complete_transfer,
+-- convert_case_to_joint, correct_membership_organization, create_legal_request,
+-- deny_member_login, doj_bureau_coverage, import_legal_warrant,
+-- import_rollback_by_key, issue_legal_request,
+-- joint_case_add_members/_end/_remove_member, justice_directory,
+-- legal_internal_notes, legal_request_people, legal_search, mdt_wanted_current,
+-- membership_request_submit/_withdraw, owner_security_overview,
+-- permanent_delete_arm/_execute/_preview, publish_announcement,
+-- record_subpoena_compliance/_service, reject_transfer, remove_legal_exhibit,
+-- report_reopen, resolve_case_originating_bureau, restore_member_login,
+-- review_membership_request, rls_test_cleanup, rls_test_reset_member,
+-- rls_test_spawn_disposable, security_test_report, set_profile_test_flag,
+-- signoff_command_override, update_legal_draft, warrant_set_status,
+-- withdraw_legal_request — each revoked `from public, anon` at its exact live
+-- signature; authenticated/service_role grants untouched. The function-grant
+-- baseline is now: NO public.* RPC is anon-executable. (2) Anti-drift defacl:
+-- `alter default privileges for role postgres in schema public revoke execute
+-- on functions from anon, public` (plus the plain current-role form —
+-- identical when the executor is postgres): future functions are born without
+-- the anon grant while keeping Supabase's default authenticated +
+-- service_role EXECUTE. (3) private.case_number_base(text) — the one function
+-- left unpinned — got `set search_path = ''` via bare ALTER (body is a pure
+-- CASE over its argument, pg_catalog only, so no re-emit needed;
+-- next_case_number is unchanged). (4) client_errors_ins tightened from WITH
+-- CHECK (true) to (reporter_id = (select auth.uid()) OR reporter_id IS NULL)
+-- (rendered above) — the client reporter never sets reporter_id (column
+-- default auth.uid() fills it), so nothing breaks; what dies is attributing an
+-- error row to another member. (5) 67 covering indexes for the advisor's
+-- unindexed FKs, all named <table>_<col>_idx (rendered above): account_links
+-- (confirmed_by, created_by), accounts(created_by), case_assignments
+-- (added_by, removed_by), cases(archived_by, joint_case_created_by,
+-- joint_case_ended_by), client_errors(reporter_id), document_suggestions
+-- (decided_by), feedback_meta(updated_by), gang_members(created_by,
+-- reviewed_by), justice_membership_request_history(actor_id, request_id),
+-- justice_membership_requests(decided_by), justice_memberships(approved_by),
+-- legal_holds(lifted_by, placed_by), legal_request_actions(actor_id,
+-- version_id), legal_request_exhibits(added_by, version_id),
+-- legal_request_participants(added_by, removed_by), legal_request_signatures
+-- (legal_request_id, signer_id, version_id), legal_request_versions
+-- (created_by), legal_requests(cid_reviewed_by, closed_by,
+-- current_version_id, decided_by, executed_by, imported_by, issued_by,
+-- person_id, return_filed_by, return_report_id, revoked_by, served_by,
+-- source_report_id, source_submitter_id — NOTE: the *_by/-submitter FK
+-- constraints on legal_requests and cases.archived_by exist live but were
+-- never mirrored into this file's constraint lists, a pre-existing snapshot
+-- gap tracked here), legal_seized_items(added_by, evidence_id, media_id,
+-- person_id, removed_by, report_id, vehicle_id), mdt_exports(cleared_by,
+-- exported_by, proposed_by, source_case_id), mdt_wanted_projections
+-- (person_id), membership_request_history(actor_id, request_id),
+-- membership_requests(decided_by), profiles(login_denied_by),
+-- prosecutor_bureau_assignments(assigned_by), report_versions(created_by),
+-- restricted_access_grants(decided_by, revoked_by, user_id), role_events
+-- (actor_id, target_id), security_test_runs(created_by). FKs already covered
+-- by a PARTIAL index (legal_holds.case_id/legal_request_id, mdt_exports
+-- person/vehicle/account, accounts.merged_into, legal_requests assigned_ada/
+-- judge, record_extraction_facts linked_*) are deliberately NOT duplicated —
+-- the advisor treats a partial index as covering. Test note: the only anon
+-- call to any of the 51 in the suites (rls.test.ts → rls_test_cleanup)
+-- asserts a non-null error either way, so the in-body raise becoming
+-- permission-denied changes no assertion. Definitive SQL in
+-- supabase/migrations/20260808360000_advisor_hardening.sql.
