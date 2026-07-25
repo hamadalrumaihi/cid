@@ -1,8 +1,9 @@
 # Records & Requests Domain — Delta Implementation Report
 
-**Branch:** `claude/continue-previous-7pqwjg` · **PR:** [#193](https://github.com/hamadalrumaihi/cid/pull/193) (draft, open)
-**Date:** 2026-07-21 · **Spec:** `docs/RECORDS-REQUESTS-SPEC.md`
-**Status:** 6 of 7 deltas shipped, applied to the live `cid` Supabase project, and RLS-verified.
+**Foundation PR:** [#193](https://github.com/hamadalrumaihi/cid/pull/193) (merged to `main`) · **Spec:** `docs/RECORDS-REQUESTS-SPEC.md`
+**Status:** all 7 deltas delivered and merged. D1–D4, D6, D7 landed in the foundation PR #193;
+D5 (in-app deadline reminders) shipped in Phase 6 (PR #205). Applied to the live `cid` Supabase
+project and RLS-verified. Later phases (2–6) hardened these flows further — see `CHANGELOG.md`.
 
 ---
 
@@ -31,10 +32,13 @@ UI**. Security-sensitive changes were reviewed by the security-reviewer agent be
 | **D1** | Account registry (handles, links, confidence) | `20260807220000` | `v150` 8/8 | Registry view, person section, graph nodes | ✅ Shipped |
 | **D2** | Accounts in global search (dup-check) | `20260807230000` | (search executes clean live) | Search palette + section | ✅ Shipped |
 | **D6** | Restricted-media view-audit + break-glass | `20260807240000` | `v151` 9/9 | Break-glass banner, view-audit | ✅ Shipped |
-| **D5** | High-priority Discord + daily digest notifications | — | — | — | ⏸ Deferred (infra) |
+| **D5** | In-app deadline reminders (Discord ping + daily digest still infra-deferred) | Phase 6 (#205) | — | In-app reminders | ✅ Shipped (in-app) |
 
-**Six migrations applied to the live `cid` project; five dedicated RLS suites pass live
-(v147–v151); D2's search branch executes clean live.** Latest Vercel preview deploy is **Ready**.
+**As of this PR #193 report, six migrations were applied to the live `cid` project and five
+dedicated RLS suites passed live (v147–v151); D2's search branch executes clean live; the Vercel
+preview was Ready. D5's in-app deadline reminders subsequently shipped in Phase 6 (PR #205),
+completing all seven deltas** — the Discord-ping and daily-digest pieces remain deferred on
+notification/scheduling infrastructure.
 
 ---
 

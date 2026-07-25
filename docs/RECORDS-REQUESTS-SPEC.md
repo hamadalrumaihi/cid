@@ -1,6 +1,10 @@
 # Records & Requests — Decision Log + Gap Analysis
 
-**Status:** design captured, not yet implemented
+**Status:** shipped & merged. The seven deltas below (D1–D7) were built and merged — the
+foundation D1–D4/D6/D7 as PR #193, and D5 (in-app deadline reminders) in Phase 6 as PR #205;
+subsequent hardening followed across Phases 2–6. See `CHANGELOG.md` and
+`docs/RECORDS-REQUESTS-DELTAS-REPORT.md` for the delivery detail. This document is retained as
+the decision log + gap analysis that scoped the work.
 **Scope:** the "requests" domain — subpoenas, warrants, social-media/account
 requests, records returns, MDT projection, classification, notifications,
 retention. Covers requirements **Batches 8–14** from the owner Q&A.
