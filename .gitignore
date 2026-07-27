@@ -76,3 +76,6 @@ test-results/
 playwright-report/
 .gang-shots/
 .artifacts/
+
+# Claude Code session worktrees (local tooling, never project code)
+.claude/worktrees/
