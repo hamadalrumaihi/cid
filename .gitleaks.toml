@@ -16,6 +16,9 @@ regexes = [
   # Google OAuth Web client ID + browser API key for the Case Files picker (public, referrer/origin-restricted)
   '''[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com''',
   '''AIza[0-9A-Za-z_-]{35}''',
-  # FiveManage client-side upload token (Case Files + Media vault). Referrer-bound on FiveManage's side.
-  '''Z3ctM38GCUw5aPam9xscHYcxjghj8iTE''',
+  # NOTE: the FiveManage upload token is deliberately NO LONGER allow-listed.
+  # Keys are not committed to the tree anymore (they live in the Vercel
+  # dashboard / .env.local); if a scan flags one, that is a true positive —
+  # remove it and rotate. The historical key remains in git history until
+  # rotated on FiveManage's side (docs/OPERATIONS.md §8).
 ]

@@ -10,6 +10,10 @@ Reference → Developer Handbook). This file is the short version.
 preview deployment before it reaches production.** Production tracks
 `main`; a broken merge deploys immediately. Never push to `main` directly.
 
+Preview deployments build with the Vercel **Preview** env scope
+(placeholders, never production credentials) — see
+[DEPLOYMENT.md §4](docs/DEPLOYMENT.md).
+
 > Note: GitHub branch protection is a repository *setting*, not code — see
 > "Manual configuration" in
 > [`docs/archive/RELEASE-READINESS.md`](docs/archive/RELEASE-READINESS.md).

@@ -1,7 +1,9 @@
-/** DOJ/Justice Portal redesign — functional E2E against the LIVE project
+/** Legal workflow redesign — functional E2E against the LIVE project
  *  (rls-test-* fixtures, PW_SUPABASE_SHIM-compatible, see liveAuth.ts).
  *
- *  Covers the redesigned surfaces end to end:
+ *  Post-Phase-1 (migration 20260808140000_legal_lead_approval) the DOJ / ADA /
+ *  Judge chain is retired — approval terminates at Bureau Lead+ and the
+ *  request is then issued by CID. Covers the shipped surfaces end to end:
  *   - investigator /legal landing (Overview metrics + needs-attention,
  *     Requests registry + filter row)
  *   - the guided create wizard (type cards → case & target → details →
@@ -10,33 +12,30 @@
  *   - structured search-warrant targets mirroring into search_targets text +
  *     the subject-OR-targets validation
  *   - the unified dossier (?request= / ?section= deep links, stage tracker,
- *     breadcrumbs, role decision panel for CID supervisor vs creator)
- *   - the judge parallel lane (Available to claim → in-dossier claim)
- *   - ADA bureau-awareness (quiet lane, never action items)
+ *     breadcrumbs, role decision panel for Bureau Lead vs creator)
  *   - court-packet print DOM (window.print stubbed)
  *   - entity cross-cuts (vehicle profile Legal panel, place card Legal block)
  *   - Action Center legal items (returned-to-me ranked as returned).
  *
  *  Fixtures are built once per file through the same definer RPCs the RLS
- *  suite uses and swept by rls_test_cleanup() (see legalFixtures.ts). Specs
- *  that need a DOJ-parked request self-skip when the live LSB bureau already
- *  has real ADA coverage — the harness refuses to assign work to real members. */
+ *  suite uses (see tests/rls/v154.test.ts) and swept by rls_test_cleanup()
+ *  (see legalFixtures.ts, which also tears down best-effort if the build
+ *  itself fails). */
 import { test, expect, type Page } from '@playwright/test'
-import { LIVE, enabled, inject, type Live } from './liveAuth'
+import { enabled, inject, type Live } from './liveAuth'
 import {
   buildLegalFixtures, fixturesEnabled, teardownLegalFixtures, type LegalFixtures,
 } from './legalFixtures'
 
 let f: LegalFixtures | null = null
 
-test.describe('DOJ redesign — legal E2E', () => {
+test.describe('Legal workflow — E2E', () => {
   test.skip(!enabled || !fixturesEnabled(), 'RLS_TEST_* fixture credentials not set')
 
   test.beforeAll(async () => {
     test.setTimeout(300_000)
     f = await buildLegalFixtures()
-    console.info(`[e2e:legal] fixtures ready — tag ${f.tag}, dojAvailable=${f.dojAvailable}`
-      + (f.dojUnavailableReason ? ` (${f.dojUnavailableReason})` : ''))
+    console.info(`[e2e:legal] fixtures ready — tag ${f.tag}`)
   })
 
   test.afterAll(async () => {
@@ -49,8 +48,6 @@ test.describe('DOJ redesign — legal E2E', () => {
     return f
   }
   const as = async (page: Page, actor: Live) => { await inject(page, actor) }
-  const requireDoj = () =>
-    test.skip(!fx().dojAvailable, `DOJ-stage fixture unavailable: ${fx().dojUnavailableReason ?? 'unknown'}`)
 
   /* ── 1 · investigator Overview ─────────────────────────────────────────── */
   test('investigator /legal Overview: metric strip, needs-attention, activity rail', async ({ page }) => {
@@ -226,7 +223,8 @@ test.describe('DOJ redesign — legal E2E', () => {
 
     // Stage tracker (accessible list with the current stage announced).
     await expect(page.getByLabel(/Request progress — current stage/)).toBeVisible()
-    await expect(page.getByText(/awaiting CID supervisor/i).first()).toBeVisible()
+    // Post-Phase-1 the responsible role at cid_supervisor_review is Bureau Lead.
+    await expect(page.getByText(/awaiting Bureau Lead/i).first()).toBeVisible()
 
     // ?section=review selected the Review tab directly.
     const tabs = page.getByRole('tablist', { name: 'Legal request sections' })
@@ -240,137 +238,35 @@ test.describe('DOJ redesign — legal E2E', () => {
   })
 
   /* ── 6 · decision panel role gating ────────────────────────────────────── */
-  test('decision panel: a CID supervisor sees review actions on a cid_supervisor_review request', async ({ page }) => {
+  test('decision panel: the Bureau Lead sees terminal review actions on a cid_supervisor_review request', async ({ page }) => {
     await as(page, fx().actors.lead)
     await page.goto(`/legal?request=${fx().cidReview.id}`)
     await expect(page.getByRole('heading', { name: fx().cidReview.title })).toBeVisible({ timeout: 30_000 })
-    await expect(page.getByText('As CID supervisor')).toBeVisible()
-    await expect(page.getByRole('button', { name: /Approve → submit to DOJ/ })).toBeVisible()
+    await expect(page.getByText('As Bureau Lead')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Approve', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Deny', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Return for revision' })).toBeVisible()
   })
 
-  test('decision panel: the creator does NOT see CID review actions on their own submission', async ({ page }) => {
+  test('decision panel: the creator does NOT see Bureau Lead review actions on their own submission', async ({ page }) => {
     await as(page, fx().actors.lsb)
     await page.goto(`/legal?request=${fx().cidReview.id}`)
     await expect(page.getByRole('heading', { name: fx().cidReview.title })).toBeVisible({ timeout: 30_000 })
     await expect(page.getByText('No actions available for your role at this stage.')).toBeVisible()
-    await expect(page.getByRole('button', { name: /Approve → submit to DOJ/ })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Return for revision' })).toHaveCount(0)
     // Withdraw stays available to the creator via the overflow menu.
     await page.getByRole('button', { name: 'Request actions' }).click()
     await expect(page.getByRole('menuitem', { name: /Withdraw request/ })).toBeVisible()
   })
 
-  /* ── 7 · judge parallel lane: claim from the dossier ───────────────────── */
-  test('judge: Assigned view shows the Available-to-claim lane; claiming from the dossier moves it to the docket', async ({ page }) => {
-    requireDoj()
-    test.setTimeout(120_000)
-    await as(page, fx().actors.judge)
-    await page.goto('/command?view=assigned')
-
-    await expect(page.getByRole('heading', { name: 'Justice Portal' })).toBeVisible({ timeout: 30_000 })
-    await expect(page.getByRole('heading', { name: /Available to claim/ })).toBeVisible()
-    const claimable = page.locator('section', { has: page.getByRole('heading', { name: /Available to claim/ }) })
-    await expect(claimable.getByText(fx().parkedClaim!.number)).toBeVisible({ timeout: 15_000 })
-
-    // Open the dossier from the claim lane and take it.
-    await claimable.getByRole('button', { name: new RegExp(fx().parkedClaim!.number) }).click()
-    await expect(page.getByRole('heading', { name: fx().parkedClaim!.title })).toBeVisible({ timeout: 20_000 })
-    await expect(page.getByText('As a Judge — parallel lane')).toBeVisible()
-    await page.getByRole('button', { name: 'Take for judicial review' }).click()
-    await page.getByRole('dialog').getByRole('button', { name: 'Take it' }).click()
-
-    // The request is now on the judge's docket with judicial actions live.
-    await expect(page.getByText('As the assigned Judge')).toBeVisible({ timeout: 20_000 })
-    await expect(page.getByRole('button', { name: 'Approve warrant/subpoena' })).toBeVisible()
-
-    // Back in the Assigned view (fresh load — the portal list refreshes via
-    // realtime, which the shim's HTTP relay deliberately leaves out) it sits
-    // under the docket, not the claim lane.
-    await page.goto('/command?view=assigned')
-    const docket = page.locator('section', { has: page.getByRole('heading', { name: /Assigned for judicial review/ }) })
-    await expect(docket.getByText(fx().parkedClaim!.number)).toBeVisible({ timeout: 20_000 })
-    const claimLane = page.locator('section', { has: page.getByRole('heading', { name: /Available to claim/ }) })
-    await expect(claimLane.getByText(fx().parkedClaim!.number)).toHaveCount(0)
-  })
-
-  /* ── 8 · justice portal ?view= deep links + role gating ────────────────── */
-  test('justice portal: ?view= deep links for a DA (roster, coverage, applications) and gating for a judge', async ({ page }) => {
-    test.setTimeout(120_000)
-    await as(page, fx().actors.da)
-    await page.goto('/command?view=roster')
-    await expect(page.getByRole('heading', { name: 'Justice Portal' })).toBeVisible({ timeout: 30_000 })
-    await expect(page.getByText(/District Attorney \(DA\)/)).toBeVisible()
-    const tabs = page.getByRole('tablist', { name: 'Justice portal views' })
-    await expect(tabs.getByRole('tab', { name: /Roster & coverage/ })).toHaveAttribute('aria-selected', 'true')
-
-    // Coverage cards render per bureau for DOJ management.
-    await expect(page.getByRole('heading', { name: 'Bureau ADA coverage' })).toBeVisible()
-    for (const bureau of ['LSB', 'BCB', 'SAB']) {
-      await expect(page.getByRole('heading', { name: bureau, exact: true })).toBeVisible()
-    }
-    await expect(page.getByRole('heading', { name: 'DOJ & Judiciary personnel' })).toBeVisible()
-    // The roster lists the durable judge fixture.
-    await expect(page.getByText(LIVE.judge.name).first()).toBeVisible()
-
-    // Applications view exists for DA (owner matrix mirrors the server).
-    await page.goto('/command?view=applications')
-    await expect(tabs.getByRole('tab', { name: /Applications/ })).toHaveAttribute('aria-selected', 'true')
-    await expect(page.getByRole('heading', { name: 'Membership applications' })).toBeVisible()
-
-    // Issued & requests deep links resolve too.
-    await page.goto('/command?view=issued')
-    await expect(tabs.getByRole('tab', { name: /Issued & service/ })).toHaveAttribute('aria-selected', 'true')
-    await page.goto('/command?view=requests')
-    await expect(tabs.getByRole('tab', { name: /Requests/ })).toHaveAttribute('aria-selected', 'true')
-  })
-
-  test('justice portal: a judge never gets roster/applications — unknown ?view= falls back to Overview', async ({ page }) => {
-    await as(page, fx().actors.judge)
-    await page.goto('/command?view=roster')
-    await expect(page.getByRole('heading', { name: 'Justice Portal' })).toBeVisible({ timeout: 30_000 })
-    const tabs = page.getByRole('tablist', { name: 'Justice portal views' })
-    await expect(tabs.getByRole('tab', { name: /Roster & coverage/ })).toHaveCount(0)
-    await expect(tabs.getByRole('tab', { name: /Applications/ })).toHaveCount(0)
-    await expect(tabs.getByRole('tab', { name: /Overview/ })).toHaveAttribute('aria-selected', 'true')
-    // Judges keep the docket + claim metrics instead.
-    await expect(page.getByRole('button', { name: /Available to claim/ })).toBeVisible()
-  })
-
-  /* ── 9 · ADA bureau awareness — quiet lane, never work ─────────────────── */
-  test('ADA bureau awareness: parked bureau request renders in the quiet lane and never as an action item', async ({ page }) => {
-    requireDoj()
-    await as(page, fx().actors.adaLsb)
-    await page.goto('/command')
-    await expect(page.getByRole('heading', { name: 'Justice Portal' })).toBeVisible({ timeout: 30_000 })
-
-    // The awareness section carries the parked fixture…
-    await expect(page.getByRole('heading', { name: /For your awareness — no action required/ })).toBeVisible({ timeout: 20_000 })
-    const awareness = page.locator('section', {
-      has: page.getByRole('heading', { name: /For your awareness — no action required/ }),
-    })
-    await expect(awareness.getByText(fx().parkedAware!.number)).toBeVisible()
-    // …styled quiet ("Awareness only" pill, never an action verb).
-    await expect(awareness.getByText('Awareness only').first()).toBeVisible()
-
-    // And it never appears under "Your action items".
-    const actionSection = page.locator('section', { has: page.getByRole('heading', { name: 'Your action items' }) })
-    await expect(actionSection.getByText(fx().parkedAware!.number)).toHaveCount(0)
-
-    // The dossier mirrors the quiet state: no action styling, explicit note.
-    await page.goto(`/command?request=${fx().parkedAware!.id}`)
-    await expect(page.getByRole('heading', { name: fx().parkedAware!.title })).toBeVisible({ timeout: 20_000 })
-    await expect(page.getByText('Visible for bureau awareness — no action is assigned to you.')).toBeVisible()
-  })
-
-  /* ── 10 · court packet print DOM ───────────────────────────────────────── */
+  /* ── 7 · court packet print DOM ────────────────────────────────────────── */
   test('court packet: the dossier ActionMenu prepares the print sheet in the DOM (window.print stubbed)', async ({ page }) => {
-    requireDoj()
     await as(page, fx().actors.lsb)
     // Never open the real print dialog in the harness.
     await page.addInitScript(() => { window.print = () => {} })
-    await page.goto(`/legal?request=${fx().approved!.id}`)
-    await expect(page.getByRole('heading', { name: fx().approved!.title })).toBeVisible({ timeout: 30_000 })
+    await page.goto(`/legal?request=${fx().leadApproved.id}`)
+    await expect(page.getByRole('heading', { name: fx().leadApproved.title })).toBeVisible({ timeout: 30_000 })
 
     await page.getByRole('button', { name: 'Request actions' }).click()
     await page.getByRole('menuitem', { name: /Print court packet/ }).click()
@@ -379,11 +275,11 @@ test.describe('DOJ redesign — legal E2E', () => {
     // @media print swaps it in — assert the DOM, not the dialog).
     const sheet = page.locator('.legal-print-sheet')
     await expect(sheet).toHaveCount(1)
-    await expect(sheet).toContainText(fx().approved!.number)
+    await expect(sheet).toContainText(fx().leadApproved.number)
     await expect(sheet).toContainText('State of San Andreas')
   })
 
-  /* ── 11 · entity cross-cuts ────────────────────────────────────────────── */
+  /* ── 8 · entity cross-cuts ─────────────────────────────────────────────── */
   test('vehicle profile: the Legal panel lists requests naming the vehicle as a structured target', async ({ page }) => {
     await as(page, fx().actors.lsb)
     await page.goto(`/vehicles?vehicle=${fx().vehicleId}`)
@@ -405,7 +301,7 @@ test.describe('DOJ redesign — legal E2E', () => {
     await expect(page.getByText('Suspected stash location per CI report.')).toBeVisible()
   })
 
-  /* ── 12 · Action Center legal items ────────────────────────────────────── */
+  /* ── 9 · Action Center legal items ─────────────────────────────────────── */
   test('Action Center: a returned-to-me legal request ranks under "Returned to you"; the Legal filter isolates it', async ({ page }) => {
     await as(page, fx().actors.lsb)
     await page.goto('/action')
@@ -417,15 +313,5 @@ test.describe('DOJ redesign — legal E2E', () => {
     // The Legal type filter keeps the returned item visible.
     await page.getByRole('button', { name: 'Legal', exact: true }).click()
     await expect(page.getByText(new RegExp(fx().returned.number)).first()).toBeVisible()
-  })
-
-  test('Action Center: awareness-only visibility never becomes CID work (justice-only ADA has no Action Center at all)', async ({ page }) => {
-    // The bureau-awareness lane belongs to justice-only prosecutors; they get
-    // the standalone Justice shell on EVERY route — /action included — so an
-    // awareness row can never surface as an Action Center item.
-    await as(page, fx().actors.adaLsb)
-    await page.goto('/action')
-    await expect(page.getByRole('heading', { name: 'Justice Portal' })).toBeVisible({ timeout: 30_000 })
-    await expect(page.getByRole('heading', { name: /Action Center/i })).toHaveCount(0)
   })
 })
