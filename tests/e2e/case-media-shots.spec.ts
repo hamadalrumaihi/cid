@@ -118,14 +118,12 @@ test.describe('case media — screenshot capture', () => {
     const CATS = ['scene', 'scene', 'people', 'vehicles', 'surveillance', 'surveillance', 'documents', null] as const
     const NAMES = ['dock-a', 'dock-b', 'crew', 'boxtruck', 'cam-12', 'cam-14', 'ledger', 'misc'] as const
     const titles = ['Dock A overview', 'Dock B pallet stack', 'Crew at gate 3', 'Box truck — rear plate', 'Cam 12 still 02:14', 'Cam 14 still 02:19', 'Ledger page (seized copy)', 'Unfiled still']
-    let firstId = ''
     for (let i = 0; i < CATS.length; i++) {
       const row = await insertRow<{ id: string }>(lsb, 'media', {
         case_id: c.id, title: `${titles[i]} ${tag}`, type: 'image',
         external_url: imgUrl(tag, NAMES[i]), uploaded_by: lsb.session.user?.id ?? null,
         category: CATS[i], ...(i === 0 ? { featured: true } : {}),
       })
-      if (i === 0) firstId = row.id
       if (i === 3) await patchRow(lsb, 'media', row.id, { vehicle_id: vehicle.id })
     }
     await insertRow(lsb, 'case_intel_links', { case_id: c.id, kind: 'person', ref_id: person.id, role: 'Fence', note: 'Takes the Friday drops' })

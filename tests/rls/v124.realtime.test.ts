@@ -25,15 +25,22 @@ if (!enabled) console.warn('[rls:v124] skipped — set RLS_TEST_REALTIME=1 (plus
 const mk = () => createClient(URL, ANON, { auth: { persistSession: false, autoRefreshToken: false } })
 
 describe.skipIf(!enabled)('v1.24 — realtime honors column-level grants (live, opt-in)', () => {
-  const sub = mk()
-  const act = mk()
+  // Lazy: describe factories run at collection even when skipIf skips the
+  // tests, and createClient throws on an empty anon key — clients must not
+  // be constructed on secretless machines (self-skip stays clean).
+  let clients: ReturnType<typeof mk>[] = []
+  const lazy = () => { const c = mk(); clients.push(c); return c }
 
   afterAll(async () => {
-    sub.realtime.disconnect()
-    await Promise.all([sub.auth.signOut(), act.auth.signOut()])
+    for (const c of clients) c.realtime.disconnect()
+    await Promise.all(clients.map((c) => c.auth.signOut()))
+    clients = []
   })
 
   it('a profiles UPDATE event excludes the grant-revoked email column', async () => {
+    const sub = lazy()
+    const act = lazy()
+
     const s1 = await sub.auth.signInWithPassword({ email: 'rls-test-lsb@cidportal.test', password: PW.lsb! })
     const s2 = await act.auth.signInWithPassword({ email: 'rls-test-director@cidportal.test', password: PW.director! })
     expect(s1.error).toBeNull()

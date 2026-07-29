@@ -8,7 +8,8 @@ The suites verify **server-enforced rules**: every RLS policy, RPC caller check,
 
 | Suite | Runner / config | Target | Command |
 | --- | --- | --- | --- |
-| Unit | vitest, [`vitest.config.ts`](../vitest.config.ts), `src/**/*.test.{ts,tsx}` | pure functions, offline | `npm test` |
+| Unit | vitest (`unit` project), [`vitest.config.ts`](../vitest.config.ts), `src/**/*.test.{ts,tsx}` | pure functions, offline | `npm test` |
+| MSW integration | vitest (`msw` project, happy-dom), `tests/msw/**` | real supabase-js/db.ts against the offline mock layer — [TESTING-MOCKS.md](TESTING-MOCKS.md) | `npm test` |
 | Live RLS / RPC | vitest, [`vitest.rls.config.ts`](../vitest.rls.config.ts), `tests/rls/*.test.ts` | **production project**, `rls-test-*` fixtures | `npm run test:rls` |
 | E2E (functional) | Playwright, [`playwright.config.ts`](../playwright.config.ts), `tests/e2e/*.spec.ts` | live fixtures (+ `roles.spec.ts` on the dedicated test project) | `npm run build && npm run test:e2e` |
 | Visual regression | Playwright, `playwright.visual.config.ts`, `tests/visual/*` | dedicated test project ([TEST-ENVIRONMENT.md](TEST-ENVIRONMENT.md)) | `npm run test:visual` |

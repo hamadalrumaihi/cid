@@ -4,6 +4,13 @@
   // router pages, playwright*.config.ts + tests, vitest configs), so no
   // manual `entry` list is needed — it tracks the repo layout automatically.
   "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    // MSW browser worker: inert until the Storybook phase (src/mocks/browser.ts
+    // header) — nothing imports it yet, but it is a deliberate entry point of
+    // the mock layer, not dead code. The vitest plugin picks up the node side
+    // (src/mocks/server.ts via tests/msw/setup.ts) automatically.
+    "src/mocks/browser.ts"
+  ],
   "ignore": [
     // Generated TypeScript mirror of the live schema — exports exist for
     // completeness, not for use.
