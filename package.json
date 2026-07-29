@@ -22,7 +22,9 @@
     "check:schema": "node scripts/check-schema-sync.mjs",
     "check:dead": "knip",
     "check:freshness": "node scripts/check-snapshot-freshness.mjs",
-    "check:bundle": "node scripts/check-bundle-budget.mjs"
+    "check:bundle": "node scripts/check-bundle-budget.mjs",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
@@ -42,7 +44,10 @@
     "@axe-core/playwright": "^4.12.1",
     "@next/bundle-analyzer": "^16.2.10",
     "@playwright/test": "^1.61.1",
+    "@storybook/addon-a11y": "^10.5.5",
+    "@storybook/react-vite": "^10.5.5",
     "@tailwindcss/postcss": "^4",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -51,8 +56,10 @@
     "happy-dom": "^20.11.1",
     "knip": "^6.26.0",
     "msw": "^2.15.0",
+    "storybook": "^10.5.5",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "vite": "^7.3.6",
     "vitest": "^4.1.10"
   }
 }

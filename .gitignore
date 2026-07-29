@@ -79,3 +79,7 @@ playwright-report/
 
 # Claude Code session worktrees (local tooling, never project code)
 .claude/worktrees/
+
+# Storybook build output + logs
+storybook-static/
+*storybook.log

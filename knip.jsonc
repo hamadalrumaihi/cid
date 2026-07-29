@@ -9,7 +9,12 @@
     // header) — nothing imports it yet, but it is a deliberate entry point of
     // the mock layer, not dead code. The vitest plugin picks up the node side
     // (src/mocks/server.ts via tests/msw/setup.ts) automatically.
-    "src/mocks/browser.ts"
+    "src/mocks/browser.ts",
+    // next/navigation stub for Storybook's Vite builder: reached only through
+    // the resolve.alias in .storybook/main.ts, which knip's import graph
+    // can't follow. (The storybook plugin handles .storybook/* and *.stories.*
+    // automatically.)
+    ".storybook/mocks/next-navigation.ts"
   ],
   "ignore": [
     // Generated TypeScript mirror of the live schema — exports exist for

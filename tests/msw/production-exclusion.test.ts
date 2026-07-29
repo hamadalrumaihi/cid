@@ -51,6 +51,12 @@ describe('production exclusion — static import graph', () => {
     const offenders: string[] = []
     for (const root of ['src/app', 'src/components', 'src/lib']) {
       for (const file of walk(path.join(repoRoot, root), ['.ts', '.tsx'])) {
+        // *.stories.tsx are Storybook-only modules (Phase 2): colocated under
+        // src/components but never imported by app code, so the Next build
+        // cannot reach them — and they deliberately reuse the typed fixture
+        // builders (docs/STORYBOOK.md). The build-output sentinel scan below
+        // remains the hard proof that no emitted chunk carries the mock layer.
+        if (/\.stories\.tsx?$/.test(file)) continue
         const source = readFileSync(file, 'utf8')
         if (importSpecifiers(source).some((spec) => isMocksImport(spec, file))) {
           offenders.push(path.relative(repoRoot, file))
