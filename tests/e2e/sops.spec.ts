@@ -371,13 +371,11 @@ test.describe('SOPs & Reference Library', () => {
         const overflow = await page.evaluate(() =>
           document.documentElement.scrollWidth - window.innerWidth)
         report.push(`[overflow] ${s.name} @ ${w} = ${overflow}`)
-        // eslint-disable-next-line no-console
         console.log(`[overflow] ${s.name} @ ${w} = ${overflow}`)
         if (overflow > 0) offenders.push(`${s.name} @ ${w}px = ${overflow}`)
         await page.screenshot({ path: path.join(outDir, `${s.name}-${w}.png`), fullPage: true })
       }
     }
-    // eslint-disable-next-line no-console
     console.log(`[overflow-summary]\n${report.join('\n')}`)
     // The contract: no surface may scroll horizontally at any breakpoint.
     expect(offenders, `horizontal overflow at: ${offenders.join(', ')}`).toEqual([])

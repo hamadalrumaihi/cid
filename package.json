@@ -48,7 +48,9 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
+    "happy-dom": "^20.11.1",
     "knip": "^6.26.0",
+    "msw": "^2.15.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.10"

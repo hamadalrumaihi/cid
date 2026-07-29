@@ -51,7 +51,6 @@ let mgr: Live   // bureau lead — catalog manager
 let det: Live   // plain detective — provisional guard
 let owner: Live // teardown deletes only
 let primaryId = ''
-let secondaryId = ''
 let placeId = ''
 let shotDrugId = '' // seeded prod substance (Fentanyl) for the screenshot sweep
 /** Every narcotic id this suite creates — all deleted (owner) in afterAll. */
@@ -155,7 +154,6 @@ test.describe(run ? 'narcotics intelligence workspace' : 'narcotics intelligence
       name: N_SECONDARY, category: 'stimulant', status: 'confirmed',
       summary: '[rls-test] synthetic narcotics fixture.',
     })
-    secondaryId = s.id
     narcoticIds.push(s.id)
 
     // A place + production-role link so the Places section (and Intelligence's
@@ -459,13 +457,11 @@ test.describe(run ? 'narcotics intelligence workspace' : 'narcotics intelligence
         const overflow = await page.evaluate(() =>
           document.documentElement.scrollWidth - window.innerWidth)
         report.push(`[overflow] ${s.name} @ ${w} = ${overflow}`)
-        // eslint-disable-next-line no-console
         console.log(`[overflow] ${s.name} @ ${w} = ${overflow}`)
         if (overflow > 0) offenders.push(`${s.name} @ ${w}px = ${overflow}`)
         await page.screenshot({ path: path.join(outDir, `${s.name}-${w}.png`), fullPage: true })
       }
     }
-    // eslint-disable-next-line no-console
     console.log(`[overflow-summary]\n${report.join('\n')}`)
     expect(offenders, `horizontal overflow at: ${offenders.join(', ')}`).toEqual([])
   })
