@@ -12,21 +12,31 @@ a project from nothing).
 
 Names only — never commit values that aren't public-by-design.
 
-### Front-end (client) — public by design
+### Front-end (client) — public by design, but no longer committed
 
-Defined in [`.env.example`](../.env.example), duplicated in
-[`vercel.json`](../vercel.json) and [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
-(remember all three when a value changes):
+Names are documented in [`.env.example`](../.env.example) (placeholders only).
+**Values live in the Vercel dashboard** (Project → Settings → Environment
+Variables), scoped per environment — `vercel.json` deliberately carries no
+`build.env` anymore, because a committed `build.env` applies to *every*
+deployment and previously pointed **all PR previews at the production
+database**:
 
-| Variable | Purpose |
-| --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Publishable (anon) key — grants nothing RLS doesn't allow |
-| `NEXT_PUBLIC_FIVEMANAGE_API_KEY` | FiveManage upload token (referrer-bound) |
-| `NEXT_PUBLIC_FIVEMANAGE_BASE_URL` | FiveManage API base URL |
+| Variable | Production scope | Preview scope | Local dev |
+| --- | --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | live project URL | `PASTE_` placeholder — previews render the config gate instead of touching prod | `.env.local` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | live publishable key | placeholder | `.env.local` |
+| `NEXT_PUBLIC_FIVEMANAGE_API_KEY` | live token (referrer-bound) | unset/placeholder — previews use the paste-URL fallback | `.env.local` |
+| `NEXT_PUBLIC_FIVEMANAGE_BASE_URL` | `https://api.fivemanage.com` | same | same |
+
+CI ([`ci.yml`](../.github/workflows/ci.yml)) keeps the production Supabase
+URL/publishable key inline (needed by the prod-fixture security suites; the
+publishable key is public by design) but carries **no FiveManage key** — its
+builds and E2E assert the keyless paste-URL fallback.
 
 **Never put a `service_role` key anywhere in this app** — client-side or in
-these files. See [ARCHITECTURE.md §5–6](ARCHITECTURE.md).
+these files. Real credentials are never committed, even "public-by-design"
+ones: the historical FiveManage token in git history is pending rotation
+([OPERATIONS.md §8](OPERATIONS.md)). See [ARCHITECTURE.md §5–6](ARCHITECTURE.md).
 
 ### CI secrets (GitHub → Settings → Secrets → Actions)
 
@@ -115,8 +125,39 @@ offline, so CI runs it on every PR. It catches the classic failure
 
 - **Production deploys automatically from `main`**; every PR gets a preview
   deployment. Framework config is in [`vercel.json`](../vercel.json)
-  (build-time env) and [`next.config.ts`](../next.config.ts) (security
-  headers + CSP).
+  (framework pin only — env values live in the dashboard, §1) and
+  [`next.config.ts`](../next.config.ts) (security headers + CSP).
+
+### Branch model
+
+```
+feature/* ──► Pull Request preview (Preview env scope — never production values)
+                 │ merge
+                 ▼
+               main  ──► production
+```
+
+- Preview deployments read the **Preview** env scope, which carries
+  placeholder values — previews render the config gate instead of touching
+  production data. (A dedicated staging database/site was evaluated and
+  deliberately not adopted; if that changes, point the Preview scope at it.)
+- Verify what's deployed: the Owner Portal Health section shows
+  `NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA` / branch / environment — compare
+  against `git log`.
+- Previews on the Hobby plan are publicly reachable by URL (Deployment
+  Protection is a Pro feature). Mitigation: previews carry placeholder
+  credentials only — never production's.
+
+### One-time dashboard setup (owner)
+
+1. Vercel → Project `cid` → Settings → Environment Variables: create the
+   four `NEXT_PUBLIC_*` variables from §1 twice — once scoped **Production**
+   (live values), once scoped **Preview** (`PASTE_` placeholders).
+2. Trigger a redeploy of `main` and one PR preview; confirm production still
+   signs in and the preview shows the config gate.
+3. Rollback: restore the previous deployment from the Vercel Deployments
+   list (deployments are immutable); re-adding `build.env` to `vercel.json`
+   also restores the old behavior in one commit if ever needed.
 - Every tab is statically prerendered (`generateStaticParams` — see
   [ARCHITECTURE.md §3](ARCHITECTURE.md)), so a deploy is a static-asset
   swap; deployments are immutable and production merely points at one.

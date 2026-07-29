@@ -7,8 +7,9 @@
  *    RR_SHOTS=1 PW_SUPABASE_SHIM=1 npx playwright test \
  *      tests/e2e/records-requests-shots.spec.ts --workers=1
  *
- *  Fixtures ride on legalFixtures (a real LSB case + person + — when LSB has no
- *  live ADA coverage — an issued warrant) and add, as the fixture users through
+ *  Fixtures ride on legalFixtures (a real LSB case + person + an issued
+ *  warrant via the post-Phase-1 Bureau Lead approval path — see
+ *  20260808140000_legal_lead_approval) and add, as the fixture users through
  *  the SAME shipped RPCs/policies: an account+link (D1/D2), a restricted media
  *  row (D6), a legal hold (D7) and an approved MDT export (D4). Everything is
  *  swept in afterAll (rls_test_cleanup + the legalFixtures registry deletes +
@@ -88,8 +89,7 @@ test.describe('Records & Requests — Phase-0 screenshot verification', () => {
     test.setTimeout(300_000)
     fs.mkdirSync(OUT, { recursive: true })
     f = await buildLegalFixtures()
-    console.info(`[rr-shots] legal fixtures ready — tag ${f.tag}, dojAvailable=${f.dojAvailable}`
-      + (f.dojUnavailableReason ? ` (${f.dojUnavailableReason})` : ''))
+    console.info(`[rr-shots] legal fixtures ready — tag ${f.tag}`)
 
     const { lsb, lead } = f.actors
     const tag = f.tag
@@ -144,14 +144,12 @@ test.describe('Records & Requests — Phase-0 screenshot verification', () => {
       if (exportId) { await rpcOk(lead, 'mdt_export_approve', { p_export: exportId }); ex.mdtApproved = true }
     } catch (e) { ex.mdtError = e instanceof Error ? e.message : String(e) }
 
-    // D3 — a seized item on the issued warrant (only exists when dojAvailable).
-    if (f.approved) {
-      try {
-        await rpcOk(lsb, 'legal_seized_item_add', {
-          p_request: f.approved.id, p_item: 'Glock 19', p_quantity: '1', p_category: 'weapon', p_notes: `[rls-test] ${tag}`,
-        })
-      } catch (e) { console.warn('[rr-shots] seized_item_add failed:', e) }
-    }
+    // D3 — a seized item on the issued (Lead-approved) warrant.
+    try {
+      await rpcOk(lsb, 'legal_seized_item_add', {
+        p_request: f.leadApproved.id, p_item: 'Glock 19', p_quantity: '1', p_category: 'weapon', p_notes: `[rls-test] ${tag}`,
+      })
+    } catch (e) { console.warn('[rr-shots] seized_item_add failed:', e) }
 
     x = ex
     console.info('[rr-shots] extras:', JSON.stringify(ex))
@@ -202,12 +200,11 @@ test.describe('Records & Requests — Phase-0 screenshot verification', () => {
   test('D3 · warrant execution controls + seized-items panel', async ({ page }) => {
     test.setTimeout(120_000)
     const errs = watch(page)
-    test.skip(!fx().dojAvailable || !fx().approved, `no issued warrant fixture: ${fx().dojUnavailableReason ?? 'unknown'}`)
     await inject(page, fx().actors.lsb)
     // The seized-items panel lives in the Service & Return section; the
     // execution-outcome controls (DecisionPanel) render on every section.
-    await page.goto(`/legal?request=${fx().approved!.id}&section=service`)
-    await expect(page.getByRole('heading', { name: fx().approved!.title })).toBeVisible({ timeout: 30_000 })
+    await page.goto(`/legal?request=${fx().leadApproved.id}&section=service`)
+    await expect(page.getByRole('heading', { name: fx().leadApproved.title })).toBeVisible({ timeout: 30_000 })
     // Execution outcome controls (D3): full / partial / unable.
     await expect(page.getByRole('button', { name: 'Unable to execute' })).toBeVisible({ timeout: 20_000 })
     await expect(page.getByRole('button', { name: 'Partial execution' })).toBeVisible()
