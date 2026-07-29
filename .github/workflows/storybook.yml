@@ -1,0 +1,43 @@
+# Storybook — builds the component workshop when a PR touches the shared
+# primitives or the Storybook config, and uploads the static build as a
+# workflow artifact (private to the repo, free — no Chromatic, no hosting).
+#
+# Gate semantics: the BUILD is blocking (a story that no longer compiles or
+# renders at build time fails the job). Accessibility stays ADVISORY — the
+# a11y addon annotates the panel inside the built Storybook and never fails
+# this job (parameters.a11y.test = 'todo' in .storybook/preview.tsx).
+name: Storybook
+
+on:
+  pull_request:
+    paths:
+      - 'src/components/ui/**'
+      - '.storybook/**'
+      - 'src/app/globals.css' # theme tokens + accent remap the preview loads
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/storybook.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build static Storybook (blocking)
+        # No Supabase env on purpose: stories must never touch the network,
+        # so the build proves the ui/ primitives stand alone.
+        run: npm run build-storybook
+        continue-on-error: false
+      - name: Upload static build
+        # Download from the PR's checks → Storybook → Artifacts, unzip, and
+        # open index.html (or `npx http-server storybook-static`).
+        uses: actions/upload-artifact@v4
+        with:
+          name: storybook-static
+          path: storybook-static
+          retention-days: 14
