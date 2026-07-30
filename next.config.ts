@@ -15,6 +15,13 @@ const csp = [
   // eval() — so the script-injection posture is unchanged.
   `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
+  // MapLibre GL (investigation map) runs its tile/geometry parser in a Web
+  // Worker it spawns from an inline blob: URL — same-origin code only, no
+  // remote script. worker-src is the modern directive; child-src is the
+  // documented fallback for engines that predate it. Everything else
+  // (tiles, styles, glyphs) is self-hosted under public/map/.
+  "worker-src 'self' blob:",
+  "child-src 'self' blob:",
   "img-src 'self' data: blob: https:",
   "font-src 'self'",
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://discord.com https://*.discord.com https://api.fivemanage.com",

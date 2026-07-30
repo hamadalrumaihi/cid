@@ -9,6 +9,7 @@
  * 'place' targets, batched in one RLS-trimmed fetch — sealed or out-of-scope
  * requests simply never appear). */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import type { Database, Json, Tables } from '@/lib/database.types'
 import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
@@ -45,6 +46,17 @@ const LOC_TYPES: { value: LocationType; label: string }[] = [
 ]
 
 const locLabel = (value: string | null | undefined) => LOC_TYPES.find((t) => t.value === value)?.label || value || 'Location'
+
+// MapLibre (~230 KB gzip) loads only when the Map view is actually opened —
+// the CaseGraphTab/React-Flow precedent. List stays the default view.
+const InvestigationMap = dynamic(() => import('@/components/map/InvestigationMap').then((m) => m.InvestigationMap), {
+  ssr: false,
+  loading: () => (
+    <div className="grid h-[420px] place-items-center rounded-2xl border border-white/5 bg-ink-900/60 text-sm text-slate-400 sm:h-[520px]">
+      Loading map…
+    </div>
+  ),
+})
 
 const PLACE_DELETE_CHILDREN = [{ table: 'place_process_steps' as const, column: 'place_id' }]
 
@@ -85,6 +97,9 @@ export function PlacesView() {
   const [attach, setAttach] = useState<PlaceRow | null>(null)
   const [addPhoto, setAddPhoto] = useState<PlaceRow | null>(null)
   const [lightbox, setLightbox] = useState<PlacePhoto | null>(null)
+  // List | Map presentation of the SAME RLS-visible, client-filtered rows —
+  // no separate data path. List is the default and the keyboard-first record.
+  const [mode, setMode] = useState<'list' | 'map'>('list')
 
   const vPlaces = useTableVersion('places')
   const vGangs = useTableVersion('gangs')
@@ -201,6 +216,20 @@ export function PlacesView() {
                   <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />live
                 </span>
               )}
+              {state === 'in' && (
+                <span className="inline-flex rounded-lg border border-white/10 bg-ink-900 p-0.5" role="group" aria-label="Presentation">
+                  {(['list', 'map'] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setMode(m)}
+                      aria-pressed={mode === m}
+                      className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${mode === m ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                    >
+                      {m === 'list' ? 'List' : 'Map'}
+                    </button>
+                  ))}
+                </span>
+              )}
               {places.length > 0 && (
                 <input
                   type="search"
@@ -231,6 +260,18 @@ export function PlacesView() {
         </div>
       )}
 
+      {mode === 'map' && state === 'in' && !err && places.length > 0 ? (
+        // Map view of the very rows the list renders (same query + filter).
+        // Unrecognized areas — including Roxwood, which has no map data yet —
+        // surface as the unplaced count in the map footer.
+        <InvestigationMap
+          items={rows.map((p) => ({ id: p.id, name: p.name, subtitle: locLabel(p.type), area: p.area }))}
+          onSelect={(id) => {
+            const p = places.find((x) => x.id === id)
+            if (p) { setQuery(p.name); setMode('list') }
+          }}
+        />
+      ) : (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {state !== 'in' ? (
           <Notice text="Live location records require sign-in." className="lg:col-span-2" />
@@ -271,6 +312,7 @@ export function PlacesView() {
           ))
         )}
       </div>
+      )}
 
       {editor && (
         <PlaceModal
