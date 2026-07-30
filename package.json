@@ -31,6 +31,8 @@
     "@supabase/supabase-js": "^2.110.0",
     "@tiptap/react": "^3.27.3",
     "@tiptap/starter-kit": "^3.27.3",
+    "@uppy/core": "^5.2.0",
+    "@uppy/xhr-upload": "^5.2.0",
     "@xyflow/react": "^12.11.2",
     "next": "16.2.10",
     "page-agent": "^1.12.2",

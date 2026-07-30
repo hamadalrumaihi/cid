@@ -4,12 +4,14 @@
  *  table (typed FK columns, category, featured, archived_at). Replaces the
  *  frozen Evidence tab: category pills filter INSIDE the tab, cards open a
  *  focus-trapped detail lightbox (same Modal engine as the vault), and "Add
- *  photos" reuses the MediaView FiveManage upload machinery (multi-file, edit
- *  metadata after upload). Archive never deletes — archived_at only; hard
+ *  photos" runs the Uppy → FiveManage upload pilot (lazy-loaded queue with
+ *  byte progress + per-file retry; multi-file, edit metadata after upload).
+ *  Archive never deletes — archived_at only; hard
  *  delete stays command-only via the shared delete/undo path. The three
  *  frozen legacy `evidence` rows render read-only at the bottom (writes are
  *  revoked server-side; custody UI is gone — the table never held a row). */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import type { Json, Tables } from '@/lib/database.types'
@@ -19,12 +21,12 @@ import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
-import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { CardGridSkeleton, Skeleton } from '@/components/ui/Skeleton'
 import { uiPrompt } from '@/components/ui/dialog'
 import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
 import { caseLink } from '@/lib/caseLinks'
 import { CASE_MEDIA_CATEGORIES, caseMediaCategoryLabel, filterCaseMedia, legacyEvidenceRef } from '@/lib/caseMedia'
-import { fmConfigured, fmUpload } from '@/lib/fivemanage'
+import { fmConfigured } from '@/lib/fivemanage'
 import { fmtDate, fmtDateTime } from '@/lib/format'
 import { reportTitle } from '@/lib/forms'
 import { parseFormValues } from '@/lib/jsonShapes'
@@ -34,6 +36,7 @@ import { useNow } from '@/lib/useNow'
 import { useTableVersion } from '@/lib/realtime'
 import { safeUrl } from '@/lib/safeUrl'
 import { toast } from '@/lib/toast'
+import type { UploadedFile } from '@/lib/uppyFivemanage'
 import { mutateThen, type CaseRow, type EvidenceRow, type MediaRow } from './shared'
 
 const PAGE = 24
@@ -724,13 +727,27 @@ function MetaRow({ k, v, muted }: { k: string; v: string; muted?: boolean }) {
   )
 }
 
-/* ── Add photos (multi-file FiveManage upload) ───────────────────────────────
- * ONE primary action: pick files, each uploads to FiveManage and lands as a
- * media row immediately (current case, current user, now, original filename
- * as the title fallback + kept in tags.source_filename). Category/caption/
- * links are edited AFTER upload — inline here per file, or later from the
- * detail view. Paste-a-URL fallback covers the unconfigured-key case and
- * external clips. */
+/* ── Add photos (multi-file Uppy → FiveManage upload — pilot surface) ────────
+ * ONE primary action: pick or drop files; each uploads to FiveManage through
+ * the headless Uppy queue (MediaUploadPanel, dynamically imported so the
+ * @uppy chunks load only when this modal opens) and lands as a media row
+ * immediately after its host upload succeeds (current case, current user,
+ * now, original filename as the title fallback + kept in
+ * tags.source_filename). Host-first, insert-second — a failed insert leaves
+ * the file "hosted, not saved" in the queue with an insert-only retry.
+ * Category/caption/links are edited AFTER upload — inline here per file, or
+ * later from the detail view. Paste-a-URL fallback covers the
+ * unconfigured-key case and external clips. */
+
+const MediaUploadPanel = dynamic(() => import('./MediaUploadPanel').then((m) => m.MediaUploadPanel), {
+  ssr: false,
+  loading: () => (
+    <div aria-hidden className="rounded-xl border border-dashed border-white/15 bg-white/[0.03] p-6">
+      <Skeleton className="mx-auto h-9 w-56 rounded-lg" />
+      <Skeleton className="mx-auto mt-3 h-3 w-72" />
+    </div>
+  ),
+})
 
 interface UploadedItem { row: MediaRow; caption: string; category: string; reportId: string; vehicleId: string; saved: boolean }
 
@@ -743,9 +760,9 @@ function AddPhotosModal({ c, uploaderId, reports, vehicles, onClose }: {
 }) {
   const [items, setItems] = useState<UploadedItem[]>([])
   const [pending, setPending] = useState(0)
+  const [failed, setFailed] = useState(0)
   const [linkUrl, setLinkUrl] = useState('')
   const [linkTitle, setLinkTitle] = useState('')
-  const fileRef = useRef<HTMLInputElement>(null)
 
   const insertRow = async (title: string, type: MediaRow['type'], url: string, sourceFilename?: string) => {
     const res = await insert('media', {
@@ -760,21 +777,25 @@ function AddPhotosModal({ c, uploaderId, reports, vehicles, onClose }: {
     return res.data[0]
   }
 
-  const uploadFiles = async (files: File[]) => {
-    setPending((n) => n + files.length)
-    for (const file of files) {
-      try {
-        const out = await fmUpload(file)
-        const type: MediaRow['type'] = out.kind === 'video' ? 'video' : out.kind === 'audio' ? 'fivemanage' : 'image'
-        const row = await insertRow(file.name.replace(/\.[a-z0-9]+$/i, '') || file.name, type, out.url, file.name)
-        setItems((xs) => [...xs, { row, caption: row.title, category: '', reportId: '', vehicleId: '', saved: false }])
-      } catch (e) {
-        toast(`${file.name}: ${e instanceof Error ? e.message : String(e)}`, 'danger')
-      } finally {
-        setPending((n) => n - 1)
-      }
+  // Phase 2 of the upload seam: the host upload already succeeded; insert the
+  // media row. Rethrow on failure so the queue row shows "hosted, not saved"
+  // (and its retry re-runs THIS insert without re-uploading) — the toast is
+  // the loud part, the row state is the honest part.
+  const handleUploaded = async (f: UploadedFile) => {
+    const type: MediaRow['type'] = f.kind === 'video' ? 'video' : f.kind === 'audio' ? 'fivemanage' : 'image'
+    try {
+      const row = await insertRow(f.name.replace(/\.[a-z0-9]+$/i, '') || f.name, type, f.url, f.name)
+      setItems((xs) => [...xs, { row, caption: row.title, category: '', reportId: '', vehicleId: '', saved: false }])
+    } catch (e) {
+      toast(`${f.name}: uploaded to host, but saving to the case failed — ${e instanceof Error ? e.message : String(e)}`, 'danger')
+      throw e
     }
   }
+
+  const onQueueChange = useCallback((active: number, failedCount: number) => {
+    setPending(active)
+    setFailed(failedCount)
+  }, [])
 
   const addLink = async () => {
     const url = safeUrl(linkUrl)
@@ -803,24 +824,11 @@ function AddPhotosModal({ c, uploaderId, reports, vehicles, onClose }: {
   }
 
   return (
-    <Modal open onClose={onClose} wide dirty={() => pending > 0 || items.some((x) => !x.saved)}>
+    <Modal open onClose={onClose} wide dirty={() => pending > 0 || failed > 0 || items.some((x) => !x.saved)}>
       <div className="p-5">
         <ModalHeader title="Add photos" onClose={onClose} />
         {fmConfigured() ? (
-          <div className="rounded-xl border border-dashed border-white/15 bg-white/[0.03] p-6 text-center">
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              accept="image/*,video/*,audio/*"
-              className="hidden"
-              onChange={(e) => { const fs = Array.from(e.target.files ?? []); if (fs.length) void uploadFiles(fs); e.target.value = '' }}
-            />
-            <Button variant="primary" onClick={() => fileRef.current?.click()} disabled={pending > 0}>
-              {pending > 0 ? `Uploading ${pending}…` : '📤 Choose photos to upload'}
-            </Button>
-            <p className="mt-2 text-xs text-slate-400">Multiple files supported. Details are editable after upload — nothing to fill in first.</p>
-          </div>
+          <MediaUploadPanel onUploaded={handleUploaded} onQueueChange={onQueueChange} />
         ) : (
           <p className="rounded-lg bg-white/5 p-3 text-xs text-slate-400">
             File upload is not configured (NEXT_PUBLIC_FIVEMANAGE_API_KEY) — paste a hosted URL below instead.
