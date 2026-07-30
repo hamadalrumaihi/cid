@@ -2400,6 +2400,7 @@ alter table public.watchlist enable row level security;
 
 CREATE INDEX account_handles_account_idx ON public.account_handles USING btree (account_id);
 CREATE UNIQUE INDEX account_handles_current_uidx ON public.account_handles USING btree (account_id) WHERE is_current;
+CREATE INDEX account_handles_handle_trgm ON public.account_handles USING gin (handle extensions.gin_trgm_ops);
 CREATE INDEX account_links_account_idx ON public.account_links USING btree (account_id);
 CREATE INDEX account_links_person_idx ON public.account_links USING btree (person_id);
 CREATE INDEX account_links_subject_idx ON public.account_links USING btree (subject_kind, subject_id);
@@ -2411,12 +2412,18 @@ CREATE INDEX accounts_handle_norm_idx ON public.accounts USING btree (handle_nor
 CREATE INDEX accounts_lifecycle_idx ON public.accounts USING btree (lifecycle);
 CREATE INDEX accounts_merged_into_idx ON public.accounts USING btree (merged_into) WHERE (merged_into IS NOT NULL);
 CREATE INDEX accounts_created_by_idx ON public.accounts USING btree (created_by);
+CREATE INDEX accounts_handle_trgm ON public.accounts USING gin (handle extensions.gin_trgm_ops);
+CREATE INDEX accounts_display_name_trgm ON public.accounts USING gin (display_name extensions.gin_trgm_ops);
+CREATE INDEX accounts_external_id_trgm ON public.accounts USING gin (external_id extensions.gin_trgm_ops);
 CREATE INDEX announcements_author_id_fkey_idx ON public.announcements USING btree (author_id);
 CREATE INDEX audit_log_actor_id_fkey_idx ON public.audit_log USING btree (actor_id);
 CREATE INDEX audit_log_created_at_idx ON public.audit_log USING btree (created_at DESC);
 CREATE INDEX ballistic_footprints_case_id_fkey_idx ON public.ballistic_footprints USING btree (case_id);
 CREATE INDEX ballistic_footprints_gang_id_fkey_idx ON public.ballistic_footprints USING btree (gang_id);
+CREATE INDEX ballistic_footprints_signature_trgm ON public.ballistic_footprints USING gin (signature extensions.gin_trgm_ops);
+CREATE INDEX ballistic_footprints_weapon_trgm ON public.ballistic_footprints USING gin (weapon extensions.gin_trgm_ops);
 CREATE INDEX ballistics_benches_case_id_fkey_idx ON public.ballistics_benches USING btree (case_id);
+CREATE INDEX ballistics_benches_name_trgm ON public.ballistics_benches USING gin (name extensions.gin_trgm_ops);
 CREATE INDEX case_access_grants_granted_by_fkey_idx ON public.case_access_grants USING btree (granted_by);
 CREATE INDEX case_access_grants_officer_id_fkey_idx ON public.case_access_grants USING btree (officer_id);
 CREATE INDEX idx_cag_case ON public.case_access_grants USING btree (case_id);
@@ -2456,6 +2463,7 @@ CREATE INDEX cases_operation_id_idx ON public.cases USING btree (operation_id);
 CREATE INDEX cases_signoff_assignee_id_fkey_idx ON public.cases USING btree (signoff_assignee_id);
 CREATE INDEX cases_signoff_submitted_by_fkey_idx ON public.cases USING btree (signoff_submitted_by);
 CREATE INDEX cases_title_trgm ON public.cases USING gin (title extensions.gin_trgm_ops);
+CREATE INDEX cases_summary_trgm ON public.cases USING gin (summary extensions.gin_trgm_ops);
 CREATE INDEX cases_archived_by_idx ON public.cases USING btree (archived_by);
 CREATE INDEX cases_joint_case_created_by_idx ON public.cases USING btree (joint_case_created_by);
 CREATE INDEX cases_joint_case_ended_by_idx ON public.cases USING btree (joint_case_ended_by);
@@ -2496,6 +2504,7 @@ CREATE INDEX documents_case_id_fkey_idx ON public.documents USING btree (case_id
 CREATE INDEX documents_owner_user_id_fkey_idx ON public.documents USING btree (owner_user_id);
 CREATE INDEX documents_review_due_idx ON public.documents USING btree (review_due_at) WHERE (review_due_at IS NOT NULL);
 CREATE INDEX documents_reviewed_by_fkey_idx ON public.documents USING btree (reviewed_by);
+CREATE INDEX documents_name_trgm ON public.documents USING gin (name extensions.gin_trgm_ops);
 CREATE INDEX documents_search_tsv_idx ON public.documents USING gin (search_tsv);
 CREATE INDEX documents_updated_by_fkey_idx ON public.documents USING btree (updated_by);
 CREATE INDEX documents_versions_doc_idx ON public.documents_versions USING btree (document_id, saved_at DESC);
@@ -2505,6 +2514,11 @@ CREATE INDEX documents_versions_saved_by_fkey_idx ON public.documents_versions U
 CREATE INDEX evidence_case_id_idx ON public.evidence USING btree (case_id);
 CREATE INDEX evidence_collected_by_fkey_idx ON public.evidence USING btree (collected_by);
 CREATE INDEX evidence_created_by_fkey_idx ON public.evidence USING btree (created_by);
+CREATE INDEX evidence_item_code_trgm ON public.evidence USING gin (item_code extensions.gin_trgm_ops);
+CREATE INDEX evidence_description_trgm ON public.evidence USING gin (description extensions.gin_trgm_ops);
+CREATE INDEX evidence_type_trgm ON public.evidence USING gin (type extensions.gin_trgm_ops);
+CREATE INDEX evidence_location_trgm ON public.evidence USING gin (location extensions.gin_trgm_ops);
+CREATE INDEX evidence_notes_trgm ON public.evidence USING gin (notes extensions.gin_trgm_ops);
 CREATE INDEX feedback_created_by_fkey_idx ON public.feedback USING btree (created_by);
 CREATE INDEX feedback_meta_updated_by_idx ON public.feedback_meta USING btree (updated_by);
 CREATE INDEX gang_members_case_id_fkey_idx ON public.gang_members USING btree (case_id);
@@ -2523,6 +2537,8 @@ CREATE INDEX gangs_created_by_fkey_idx ON public.gangs USING btree (created_by);
 CREATE INDEX gangs_lead_detective_id_fkey_idx ON public.gangs USING btree (lead_detective_id);
 CREATE INDEX gangs_reviewed_by_fkey_idx ON public.gangs USING btree (reviewed_by);
 CREATE INDEX gangs_name_trgm ON public.gangs USING gin (name extensions.gin_trgm_ops);
+CREATE INDEX gangs_colors_trgm ON public.gangs USING gin (colors extensions.gin_trgm_ops);
+CREATE INDEX gangs_notes_trgm ON public.gangs USING gin (notes extensions.gin_trgm_ops);
 CREATE INDEX indicators_case_idx ON public.indicators USING btree (case_id);
 CREATE INDEX indicators_created_by_fkey_idx ON public.indicators USING btree (created_by);
 CREATE INDEX indicators_value_idx ON public.indicators USING btree (lower(btrim(value)));
@@ -2575,6 +2591,11 @@ CREATE INDEX legal_requests_revoked_by_idx ON public.legal_requests USING btree 
 CREATE INDEX legal_requests_served_by_idx ON public.legal_requests USING btree (served_by);
 CREATE INDEX legal_requests_source_report_id_idx ON public.legal_requests USING btree (source_report_id);
 CREATE INDEX legal_requests_source_submitter_id_idx ON public.legal_requests USING btree (source_submitter_id);
+CREATE INDEX legal_requests_request_number_trgm ON public.legal_requests USING gin (request_number extensions.gin_trgm_ops);
+CREATE INDEX legal_requests_title_trgm ON public.legal_requests USING gin (title extensions.gin_trgm_ops);
+CREATE INDEX legal_requests_person_name_snapshot_trgm ON public.legal_requests USING gin (person_name_snapshot extensions.gin_trgm_ops);
+CREATE INDEX legal_requests_recipient_name_trgm ON public.legal_requests USING gin (recipient_name extensions.gin_trgm_ops);
+CREATE INDEX legal_requests_case_number_snapshot_trgm ON public.legal_requests USING gin (case_number_snapshot extensions.gin_trgm_ops);
 CREATE INDEX mdt_exports_status_idx ON public.mdt_exports USING btree (status);
 CREATE INDEX mdt_exports_person_idx ON public.mdt_exports USING btree (person_id) WHERE (person_id IS NOT NULL);
 CREATE INDEX mdt_exports_vehicle_idx ON public.mdt_exports USING btree (vehicle_id) WHERE (vehicle_id IS NOT NULL);
@@ -2605,6 +2626,7 @@ CREATE INDEX narcotic_aliases_created_by_fkey_idx ON public.narcotic_aliases USI
 CREATE UNIQUE INDEX narcotic_aliases_narcotic_alias_key ON public.narcotic_aliases USING btree (narcotic_id, lower(alias));
 CREATE INDEX narcotic_aliases_narcotic_id_fkey_idx ON public.narcotic_aliases USING btree (narcotic_id);
 CREATE INDEX narcotic_aliases_source_case_id_fkey_idx ON public.narcotic_aliases USING btree (source_case_id);
+CREATE INDEX narcotic_aliases_alias_trgm ON public.narcotic_aliases USING gin (alias extensions.gin_trgm_ops);
 CREATE INDEX narcotic_gangs_created_by_fkey_idx ON public.narcotic_gangs USING btree (created_by);
 CREATE INDEX narcotic_gangs_gang_id_fkey_idx ON public.narcotic_gangs USING btree (gang_id);
 CREATE INDEX narcotic_gangs_narcotic_id_fkey_idx ON public.narcotic_gangs USING btree (narcotic_id);
@@ -2662,6 +2684,7 @@ CREATE INDEX narcotic_vehicles_vehicle_id_fkey_idx ON public.narcotic_vehicles U
 CREATE INDEX narcotics_created_by_fkey_idx ON public.narcotics USING btree (created_by);
 CREATE INDEX narcotics_merged_into_fkey_idx ON public.narcotics USING btree (merged_into);
 CREATE INDEX narcotics_name_trgm ON public.narcotics USING gin (name extensions.gin_trgm_ops);
+CREATE INDEX narcotics_classification_trgm ON public.narcotics USING gin (classification extensions.gin_trgm_ops);
 CREATE INDEX narcotics_representative_media_id_fkey_idx ON public.narcotics USING btree (representative_media_id);
 CREATE INDEX narcotics_reviewed_by_fkey_idx ON public.narcotics USING btree (reviewed_by);
 CREATE INDEX narcotics_search_tsv_idx ON public.narcotics USING gin (search_tsv);
@@ -2669,6 +2692,8 @@ CREATE INDEX narcotics_source_case_id_fkey_idx ON public.narcotics USING btree (
 CREATE INDEX narcotics_source_evidence_id_fkey_idx ON public.narcotics USING btree (source_evidence_id);
 CREATE INDEX narcotics_status_idx ON public.narcotics USING btree (status);
 CREATE INDEX notifications_user_id_read_idx ON public.notifications USING btree (user_id, read);
+CREATE INDEX operations_name_trgm ON public.operations USING gin (name extensions.gin_trgm_ops);
+CREATE INDEX operations_description_trgm ON public.operations USING gin (description extensions.gin_trgm_ops);
 CREATE INDEX person_places_person_id_fkey_idx ON public.person_places USING btree (person_id);
 CREATE INDEX person_places_place_id_fkey_idx ON public.person_places USING btree (place_id);
 CREATE INDEX person_places_created_by_fkey_idx ON public.person_places USING btree (created_by);
@@ -2690,12 +2715,14 @@ CREATE INDEX persons_merged_into_fkey_idx ON public.persons USING btree (merged_
 CREATE INDEX persons_name_trgm ON public.persons USING gin (name extensions.gin_trgm_ops);
 CREATE INDEX persons_notes_trgm ON public.persons USING gin (notes extensions.gin_trgm_ops);
 CREATE INDEX persons_phone_trgm ON public.persons USING gin (phone extensions.gin_trgm_ops);
+CREATE INDEX persons_status_trgm ON public.persons USING gin (status extensions.gin_trgm_ops);
 CREATE INDEX persons_reviewed_by_fkey_idx ON public.persons USING btree (reviewed_by);
 CREATE INDEX place_process_steps_place_id_fkey_idx ON public.place_process_steps USING btree (place_id);
 CREATE INDEX places_case_id_fkey_idx ON public.places USING btree (case_id);
 CREATE INDEX places_controlling_gang_id_fkey_idx ON public.places USING btree (controlling_gang_id);
 CREATE INDEX places_created_by_fkey_idx ON public.places USING btree (created_by);
 CREATE INDEX places_name_trgm ON public.places USING gin (name extensions.gin_trgm_ops);
+CREATE INDEX places_area_trgm ON public.places USING gin (area extensions.gin_trgm_ops);
 CREATE INDEX places_narcotic_fk_idx ON public.places USING btree (narcotic_id);
 CREATE INDEX predicate_acts_evidence_id_fkey_idx ON public.predicate_acts USING btree (evidence_id);
 CREATE INDEX predicate_acts_rico_case_id_fkey_idx ON public.predicate_acts USING btree (rico_case_id);
@@ -2743,6 +2770,9 @@ CREATE INDEX vehicles_gang_idx ON public.vehicles USING btree (gang_id);
 CREATE INDEX vehicles_owner_idx ON public.vehicles USING btree (owner_id);
 CREATE UNIQUE INDEX vehicles_plate_key ON public.vehicles USING btree (upper(plate));
 CREATE INDEX vehicles_plate_trgm ON public.vehicles USING gin (plate extensions.gin_trgm_ops);
+CREATE INDEX vehicles_model_trgm ON public.vehicles USING gin (model extensions.gin_trgm_ops);
+CREATE INDEX vehicles_color_trgm ON public.vehicles USING gin (color extensions.gin_trgm_ops);
+CREATE INDEX vehicles_notes_trgm ON public.vehicles USING gin (notes extensions.gin_trgm_ops);
 CREATE INDEX watchlist_user_idx ON public.watchlist USING btree (user_id);
 
 -- ============================================================
@@ -7650,3 +7680,56 @@ create policy wl_sel on public.watchlist
 -- Follow-up noted in the PR: cascade case_files by case_number on permanent
 -- delete. Definitive SQL in
 -- supabase/migrations/20260808380000_historical_cleanup.sql.
+
+-- 20260808400000_search_hardening (30 pg_trgm GIN indexes + 1 function
+-- re-emit — no schema/column/signature change, so database.types.ts is
+-- unchanged). The approved in-Postgres alternative to Meilisearch. (1) Every
+-- indexable column search_all touches now carries a trgm GIN index on the RAW
+-- column (rendered above; pg_trgm lowercases during trigram extraction, so no
+-- lower() expression index is needed and the same index serves the ILIKE
+-- arms): cases.summary, persons.status, gangs.colors/notes, places.area,
+-- vehicles.model/color/notes, accounts.handle/display_name/external_id,
+-- account_handles.handle, narcotics.classification, narcotic_aliases.alias,
+-- ballistics_benches.name, ballistic_footprints.signature/weapon,
+-- documents.name, legal_requests.request_number/title/person_name_snapshot/
+-- recipient_name/case_number_snapshot, evidence.item_code/description/type/
+-- location/notes, operations.name/description. reports is deliberately NOT
+-- indexed: its jsonb_each_text(fields) arm is unindexable and poisons the OR
+-- (no BitmapOr with a subquery arm), so that arm is instead BOUNDED to
+-- queries with length(trim(q)) >= 4 — short-query jsonb hits are the accepted
+-- loss. (2) public.search_all(q) is re-emitted from the 20260808240000 body:
+-- STILL SECURITY INVOKER (RLS is the only wall), STABLE, search_path
+-- 'public','extensions', same grants (revoked public/anon, granted
+-- authenticated + service_role), same return shape/caps/rank expressions.
+-- Changes: fuzzy WHERE predicates convert from the un-indexable
+-- word_similarity() function form to the index-served operator form
+-- `token <% column` (query string on the LEFT — the documented index-served
+-- direction), with a function-level SET pg_trgm.word_similarity_threshold =
+-- 0.3 preserving today's cutoff (GUC default is 0.6); the old concat fuzzies
+-- (case_number||title, name||alias, request_number||title,
+-- item_code||description) become per-column `<%` (a fuzzy extent spanning the
+-- boundary no longer matches — multi-word AND recovers that case). MULTI-WORD
+-- AND: q splits on whitespace; a row matches only if EVERY token matches
+-- (ilike OR fuzzy) the branch's searched columns, via
+-- bool_and(coalesce(expr,false)) over unnest(tokens) — coalesce because
+-- bool_and ignores nulls and a token seen only against NULL columns must
+-- count as a miss; each branch keeps an INDEX-SERVED ANCHOR conjunct on the
+-- LONGEST token (implied by the all-tokens pass, so it never excludes a valid
+-- row, but it is a plain OR of indexable quals the planner can BitmapOr);
+-- single-token behavior is unchanged (anchor = whole query, per-token pass
+-- degenerates to the same predicate). ACCOUNT HISTORY (deferred spec item):
+-- the account branch LEFT JOIN LATERALs the best matching non-current
+-- account_handles row (excluding handles equal to the current one, newest
+-- first) — a history match widens the WHERE (anchor arm + per-token EXISTS),
+-- adds a 0.9 rank arm (the narcotic-alias convention), and renders
+-- 'formerly @handle' in the sublabel; one row per account by construction (no
+-- second 'account' row, merged tombstones still excluded), and
+-- account_handles reads pass through the caller's RLS (account_handles_sel =
+-- is_active) because the function stays INVOKER. Invariants preserved:
+-- merged-person/account/narcotic exclusions, '🔒 Legal hold · ' case-sublabel
+-- marker, sealed-legal header-only projection, report/evidence rows returning
+-- the parent CASE id, 8-per-kind/60-total caps, rank shape
+-- (kind,id,label,sublabel,term,rank). The rendered search_all body above is a
+-- pre-20260807110000 generation and is not re-rendered — changes are tracked
+-- here. Definitive SQL in
+-- supabase/migrations/20260808400000_search_hardening.sql.
