@@ -250,3 +250,51 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
 .rich-editor-content code { background: rgba(255, 255, 255, 0.1); border-radius: 0.25rem; padding: 0.1rem 0.3rem; font-size: 0.85em; font-family: ui-monospace, monospace; }
 .rich-editor-content pre { background: rgba(255, 255, 255, 0.06); border-radius: 0.5rem; padding: 0.6rem 0.8rem; margin: 0.5rem 0; overflow-x: auto; }
 .rich-editor-content hr { border-color: rgba(255, 255, 255, 0.1); margin: 0.8rem 0; }
+
+/* Investigation map (InvestigationMap.tsx) — marker + dark popup skin over
+ * MapLibre's stock (light) chrome. The 28px marker hit area wraps a 14px
+ * amber dot; focus ring matches the portal's visible-focus treatment. */
+.inv-map-marker {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.inv-map-marker::after {
+  content: '';
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #f59e0b;
+  border: 2px solid #0b1120;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.35);
+}
+.inv-map-marker:hover::after { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.45); }
+.inv-map-marker:focus-visible { outline: 2px solid #f59e0b; outline-offset: 2px; border-radius: 9999px; }
+.inv-map-popup .maplibregl-popup-content {
+  background: var(--color-ink-850);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.inv-map-popup .maplibregl-popup-tip { border-top-color: var(--color-ink-850); border-bottom-color: var(--color-ink-850); }
+.inv-map-popup .maplibregl-popup-close-button { color: #94a3b8; font-size: 1rem; right: 4px; top: 2px; }
+.inv-map-popup .maplibregl-popup-close-button:hover { color: #fff; background: transparent; }
+.inv-map-popup-title { margin: 0 1rem 0 0; font-size: 0.8125rem; font-weight: 700; color: #fff; }
+.inv-map-popup-meta { margin: 0.15rem 0 0; font-size: 0.6875rem; color: #94a3b8; }
+.inv-map-popup-link {
+  margin-top: 0.4rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #93c5fd;
+}
+.inv-map-popup-link:hover { text-decoration: underline; }
