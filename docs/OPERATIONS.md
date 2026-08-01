@@ -245,3 +245,26 @@ service account syncs).
   `.github/workflows/ci.yml`. Move it to a Vercel environment variable and
   a GitHub Actions secret, then rotate the key. This needs FiveManage +
   Vercel/GitHub dashboard access.
+# CID General one-time import
+
+The Gang Fact Sheet importer is dry-run-first and resumable. It matches gangs
+and members by normalized name, places by normalized name plus area, and media
+by the source file SHA-256 stored in `media.tags.source_sha256`. Existing
+non-empty portal fields are never overwritten; differences are emitted as
+conflicts in the JSON report.
+
+```bash
+python scripts/build-cid-general-import.py /path/to/workbook.xlsx \
+  /path/to/manifest.json --photos /path/to/photos \
+  --output imports/cid-general.payload.json
+
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+  npm run import:cid-general -- --payload imports/cid-general.payload.json
+
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... FIVEMANAGE_API_KEY=... \
+  npm run import:cid-general -- --payload imports/cid-general.payload.json --apply --yes
+```
+
+Never commit the payload, report, workbook, photos, or privileged keys. Review
+the dry-run conflicts and errors before apply. Re-running the same payload is
+safe: existing records and media hashes are skipped.
