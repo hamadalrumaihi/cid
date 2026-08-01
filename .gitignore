@@ -77,6 +77,11 @@ playwright-report/
 .gang-shots/
 .artifacts/
 
+# Local source packs and generated intelligence imports (never commit)
+/imports/
+/cid-general-import-report.json
+__pycache__/
+
 # Claude Code session worktrees (local tooling, never project code)
 .claude/worktrees/
 
