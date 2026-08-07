@@ -1,0 +1,10 @@
+{
+    "id": "my-hackhub-mod",
+    "name": "my-hackhub-mod",
+    "version": "1.0.0",
+    "apiVersion": 1,
+    "author": "hamadalrumaihi",
+    "description": "A HackHub mod",
+    "permissions": ["filesystem", "network", "events", "mail", "bank", "shell", "ui"],
+    "dependencies": []
+}

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0a;
+            color: #00ff41;
+            min-height: 100vh;
+            padding: 32px;
+        }
+        .header {
+            border-bottom: 1px solid #00ff4133;
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+        }
+        h1 {
+            font-size: 1.8rem;
+            text-shadow: 0 0 10px #00ff41, 0 0 20px #00ff4180;
+            margin-bottom: 4px;
+        }
+        .version {
+            color: #00ff4180;
+            font-size: 0.8rem;
+        }
+        nav {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        nav a {
+            color: #00ff41;
+            text-decoration: none;
+            padding: 6px 12px;
+            border: 1px solid #00ff4133;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        nav a:hover {
+            background: #00ff4115;
+            border-color: #00ff41;
+        }
+        .content {
+            max-width: 600px;
+        }
+        .content p {
+            color: #00ff41cc;
+            line-height: 1.7;
+            margin-bottom: 16px;
+        }
+        .actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 24px;
+        }
+        button {
+            background: #00ff4120;
+            color: #00ff41;
+            border: 1px solid #00ff4150;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #00ff4130;
+            border-color: #00ff41;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 id="site-title"></h1>
+        <span class="version" id="site-version"></span>
+    </div>
+
+    <nav>
+        <a href="/">Home</a>
+        <a href="/about">About</a>
+    </nav>
+
+    <div class="content">
+        <p>Welcome to <strong id="name-display"></strong>. This is a mod-powered website
+        running inside the HackHub browser.</p>
+
+        <p>This page demonstrates multi-page navigation, Exports, and SDK API usage.
+        Try clicking the buttons below or navigating to the About page.</p>
+
+        <div class="actions">
+            <button onclick="showToast()">Show Toast</button>
+            <button onclick="testFormat()">Test Export</button>
+            <button onclick="goToAbout()">Go to About</button>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById("site-title").textContent = siteName;
+        document.getElementById("site-version").textContent = "v" + siteVersion;
+        document.getElementById("name-display").textContent = siteName;
+
+        function showToast() {
+            HackhubSDK.UI.toast("Hello from " + siteName + "!", "success");
+        }
+
+        function testFormat() {
+            var result = formatText("hello world");
+            HackhubSDK.UI.toast("formatText result: " + result, "info");
+        }
+
+        function goToAbout() {
+            HackhubSDK.Browser.navigate("https://my-hackhub-mod.mod/about");
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #1e1e2e;
+            color: #cdd6f4;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #181825;
+            border-bottom: 1px solid #313244;
+        }
+        .toolbar button {
+            background: #313244;
+            color: #cdd6f4;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.15s;
+        }
+        .toolbar button:hover { background: #45475a; }
+        .toolbar button.primary { background: #89b4fa; color: #1e1e2e; }
+        .toolbar button.primary:hover { background: #74c7ec; }
+        .toolbar .spacer { flex: 1; }
+        .toolbar .version {
+            font-size: 11px;
+            color: #6c7086;
+        }
+        textarea {
+            flex: 1;
+            background: #1e1e2e;
+            color: #cdd6f4;
+            border: none;
+            padding: 16px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            resize: none;
+            outline: none;
+        }
+        textarea::placeholder { color: #585b70; }
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 12px;
+            background: #181825;
+            border-top: 1px solid #313244;
+            font-size: 11px;
+            color: #6c7086;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button class="primary" onclick="saveNote()">Save</button>
+        <button onclick="loadNote()">Load</button>
+        <button onclick="clearNote()">Clear</button>
+        <div class="spacer"></div>
+        <span class="version" id="version-label"></span>
+    </div>
+
+    <textarea id="editor" placeholder="Start typing your notes here..."></textarea>
+
+    <div class="status-bar">
+        <span id="status">Ready</span>
+        <span id="char-count">0 characters</span>
+    </div>
+
+    <script>
+        var editor = document.getElementById("editor");
+        var status = document.getElementById("status");
+        var charCount = document.getElementById("char-count");
+        var versionLabel = document.getElementById("version-label");
+
+        versionLabel.textContent = "v" + appVersion;
+
+        editor.addEventListener("input", function () {
+            charCount.textContent = editor.value.length + " characters";
+        });
+
+        function saveNote() {
+            HackhubSDK.Storage.set("notepad_content", editor.value);
+            HackhubSDK.Storage.set("notepad_saved_at", Date.now());
+            status.textContent = "Saved at " + formatDate(Date.now());
+            HackhubSDK.UI.toast("Note saved!", "success");
+        }
+
+        function loadNote() {
+            var content = HackhubSDK.Storage.get("notepad_content");
+            var savedAt = HackhubSDK.Storage.get("notepad_saved_at");
+            if (content !== undefined) {
+                editor.value = content;
+                charCount.textContent = content.length + " characters";
+                status.textContent = savedAt ? "Loaded (saved " + formatDate(savedAt) + ")" : "Loaded";
+                HackhubSDK.UI.toast("Note loaded!", "info");
+            } else {
+                HackhubSDK.UI.toast("No saved note found.", "warning");
+            }
+        }
+
+        function clearNote() {
+            editor.value = "";
+            charCount.textContent = "0 characters";
+            status.textContent = "Cleared";
+        }
+
+        (function () {
+            var saved = HackhubSDK.Storage.get("notepad_content");
+            if (saved) {
+                editor.value = saved;
+                charCount.textContent = saved.length + " characters";
+                status.textContent = "Auto-loaded previous note";
+            }
+        })();
+    </script>
+</body>
+</html>

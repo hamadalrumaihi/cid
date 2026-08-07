@@ -1,0 +1,15 @@
+{
+    "name": "my-hackhub-mod",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "build": "tsx esbuild.config.ts",
+        "dev": "tsx esbuild.config.ts --watch"
+    },
+    "devDependencies": {
+        "@hotbunny/hackhub-content-sdk": "latest",
+        "esbuild": "^0.25.0",
+        "tsx": "^4.0.0",
+        "typescript": "^5.0.0"
+    }
+}

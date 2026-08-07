@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0a;
+            color: #00ff41;
+            min-height: 100vh;
+            padding: 32px;
+        }
+        .header {
+            border-bottom: 1px solid #00ff4133;
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+        }
+        h1 {
+            font-size: 1.8rem;
+            text-shadow: 0 0 10px #00ff41, 0 0 20px #00ff4180;
+            margin-bottom: 4px;
+        }
+        nav {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        nav a {
+            color: #00ff41;
+            text-decoration: none;
+            padding: 6px 12px;
+            border: 1px solid #00ff4133;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        nav a:hover {
+            background: #00ff4115;
+            border-color: #00ff41;
+        }
+        .content {
+            max-width: 600px;
+        }
+        .content p {
+            color: #00ff41cc;
+            line-height: 1.7;
+            margin-bottom: 16px;
+        }
+        .info-box {
+            border: 1px solid #00ff4133;
+            border-radius: 6px;
+            padding: 16px;
+            margin-top: 16px;
+            background: #00ff4108;
+        }
+        .info-box h3 {
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+        .info-box ul {
+            list-style: none;
+            padding: 0;
+        }
+        .info-box li {
+            color: #00ff41aa;
+            font-size: 0.85rem;
+            padding: 4px 0;
+        }
+        .info-box li::before {
+            content: "> ";
+            color: #00ff4150;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>About</h1>
+    </div>
+
+    <nav>
+        <a href="/">Home</a>
+        <a href="/about">About</a>
+    </nav>
+
+    <div class="content">
+        <p>This is the about page of <strong id="name-display"></strong>.
+        It demonstrates multi-page website navigation in HackHub mods.</p>
+
+        <p>Pages are linked using standard HTML anchor tags. The game browser
+        automatically intercepts link clicks and navigates to the correct page.</p>
+
+        <div class="info-box">
+            <h3>Page Navigation Methods</h3>
+            <ul>
+                <li>HTML links: &lt;a href="/about"&gt;About&lt;/a&gt;</li>
+                <li>SDK: HackhubSDK.Browser.navigate(url)</li>
+                <li>SDK: HackhubSDK.Browser.push(url)</li>
+            </ul>
+        </div>
+
+        <div class="info-box">
+            <h3>Available SDK APIs</h3>
+            <ul>
+                <li>HackhubSDK.UI — Toasts and notifications</li>
+                <li>HackhubSDK.Events — Game event system</li>
+                <li>HackhubSDK.Storage — Persistent data storage</li>
+                <li>HackhubSDK.Network — Network simulation</li>
+                <li>HackhubSDK.Mail — Email system</li>
+                <li>HackhubSDK.Bank — Banking system</li>
+                <li>HackhubSDK.Browser — Page navigation</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById("name-display").textContent = siteName;
+    </script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+node_modules/
+dist/
+mod.js
+*.tgz
+.DS_Store
+Thumbs.db
