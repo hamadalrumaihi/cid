@@ -8,6 +8,37 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Joint / JTF Operations — operation-scoped joint cases
+
+Operations now come in two kinds: **normal** (bureau-owned coordination —
+new operations are stamped with the creator's bureau; legacy rows keep
+today's behavior) and **JTF** (multi-bureau joint task force with a lead
+bureau and participating bureaus). A case linked to an *active* JTF
+operation becomes a joint case **within that operation's scope**: active
+members of the participating bureaus gain access to exactly the linked
+cases (and their child rows, search hits, realtime payloads) through one
+new branch in `private.can_access_case` — never bureau-wide, and never
+overriding stricter walls (sealed/classified legal, restricted media, CI
+materials). Ownership never moves: linked cases keep their bureau, case
+number, and lead detective; the lead bureau only coordinates.
+
+Migration `20260810120000_jtf_operations`: `operations` type/lead/lifecycle
+columns, `operation_bureaus` (participation registry with joined/left
+history), `operation_case_links` (permanent participation history —
+`was_jtf` is the historical joint marker, kept through case closure,
+operation resolution, manual removal, and revert-to-normal), a validating
+link-sync trigger on `cases.operation_id` (participating-bureau +
+`can_manage_joint` authority, full audit + lead notifications), a column
+freeze guard on operations, and audited command RPCs
+(`operation_convert_to_jtf` / `add_bureau` / `remove_bureau` / `set_lead` /
+`revert_to_normal` — remove/revert refuse while linked cases would be
+stranded). Ops page becomes a JTF workspace (participants, per-bureau Add
+Case picker, personnel, derived timeline, former participations); case
+header/board show operation-derived JOINT badges with the "why" and
+"Joint via Operation …" chip; the case timeline gains joined/removed/
+resolved events. Pure client mirrors + pins in `src/lib/opsJoint.ts`;
+live security matrix in `tests/rls/v138.test.ts`.
+
 ### CID SOP refreshed to the current OdysseyRP document
 
 The SOPs & Library "Criminal Investigation Division (CID) Standard Operating

@@ -5414,35 +5414,188 @@ export type Database = {
           },
         ]
       }
+      operation_bureaus: {
+        Row: {
+          bureau: Database["public"]["Enums"]["bureau"]
+          id: string
+          joined_at: string
+          joined_by: string | null
+          left_at: string | null
+          left_by: string | null
+          operation_id: string
+        }
+        Insert: {
+          bureau: Database["public"]["Enums"]["bureau"]
+          id?: string
+          joined_at?: string
+          joined_by?: string | null
+          left_at?: string | null
+          left_by?: string | null
+          operation_id: string
+        }
+        Update: {
+          bureau?: Database["public"]["Enums"]["bureau"]
+          id?: string
+          joined_at?: string
+          joined_by?: string | null
+          left_at?: string | null
+          left_by?: string | null
+          operation_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operation_bureaus_joined_by_fkey"
+            columns: ["joined_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operation_bureaus_left_by_fkey"
+            columns: ["left_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operation_bureaus_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      operation_case_links: {
+        Row: {
+          added_at: string
+          added_by: string | null
+          case_id: string
+          id: string
+          operation_id: string
+          removal_reason: string | null
+          removed_at: string | null
+          removed_by: string | null
+          was_jtf: boolean
+        }
+        Insert: {
+          added_at?: string
+          added_by?: string | null
+          case_id: string
+          id?: string
+          operation_id: string
+          removal_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          was_jtf?: boolean
+        }
+        Update: {
+          added_at?: string
+          added_by?: string | null
+          case_id?: string
+          id?: string
+          operation_id?: string
+          removal_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          was_jtf?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operation_case_links_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operation_case_links_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operation_case_links_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "operations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operation_case_links_removed_by_fkey"
+            columns: ["removed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       operations: {
         Row: {
+          bureau: Database["public"]["Enums"]["bureau"] | null
           created_at: string
           created_by: string | null
           description: string | null
           id: string
+          jtf_converted_at: string | null
+          jtf_converted_by: string | null
+          lead_bureau: Database["public"]["Enums"]["bureau"] | null
           name: string
+          op_type: string
+          resolved_at: string | null
+          resolved_by: string | null
           status: string
           updated_at: string
         }
         Insert: {
+          bureau?: Database["public"]["Enums"]["bureau"] | null
           created_at?: string
           created_by?: string | null
           description?: string | null
           id?: string
+          jtf_converted_at?: string | null
+          jtf_converted_by?: string | null
+          lead_bureau?: Database["public"]["Enums"]["bureau"] | null
           name: string
+          op_type?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
           status?: string
           updated_at?: string
         }
         Update: {
+          bureau?: Database["public"]["Enums"]["bureau"] | null
           created_at?: string
           created_by?: string | null
           description?: string | null
           id?: string
+          jtf_converted_at?: string | null
+          jtf_converted_by?: string | null
+          lead_bureau?: Database["public"]["Enums"]["bureau"] | null
           name?: string
+          op_type?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
           status?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "operations_jtf_converted_by_fkey"
+            columns: ["jtf_converted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operations_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       person_places: {
         Row: {
@@ -7270,6 +7423,40 @@ export type Database = {
       next_case_number: {
         Args: { p_bureau: string }
         Returns: string
+      }
+      operation_add_bureau: {
+        Args: {
+          p_bureau: Database["public"]["Enums"]["bureau"]
+          p_op: string
+        }
+        Returns: undefined
+      }
+      operation_convert_to_jtf: {
+        Args: {
+          p_bureaus: Database["public"]["Enums"]["bureau"][]
+          p_lead: Database["public"]["Enums"]["bureau"]
+          p_op: string
+        }
+        Returns: Database["public"]["Tables"]["operations"]["Row"]
+      }
+      operation_remove_bureau: {
+        Args: {
+          p_bureau: Database["public"]["Enums"]["bureau"]
+          p_op: string
+          p_reason?: string
+        }
+        Returns: undefined
+      }
+      operation_revert_to_normal: {
+        Args: { p_op: string }
+        Returns: Database["public"]["Tables"]["operations"]["Row"]
+      }
+      operation_set_lead: {
+        Args: {
+          p_bureau: Database["public"]["Enums"]["bureau"]
+          p_op: string
+        }
+        Returns: undefined
       }
       reassign_legal_ada: {
         Args: { p_new_ada: string; p_reason?: string; p_request: string }

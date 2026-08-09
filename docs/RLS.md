@@ -16,12 +16,14 @@ All are `SECURITY DEFINER` with `set search_path to ''` and key on `auth.uid()` 
 | `can_delete()` | command check used by most delete policies |
 | `can_announce()` / `can_post_audience(a)` | announcement authorship + audience authority |
 | `can_access_bureau(b)` | JTF, own division, or command |
-| `can_access_case(cid)` / `can_access_case_row(...)` | the case wall: JTF case, own-bureau case, lead/creator, command, explicit grant, or active joint assignment (row variant avoids self-referencing `cases` in its own policy) |
+| `can_access_case(cid)` / `can_access_case_row(...)` | the case wall: JTF case, own-bureau case, lead/creator, command, explicit grant, active joint assignment, or operation-scoped JTF access (row variant avoids self-referencing `cases` in its own policy) |
 | `can_access_case_number(cn)` | `case_files` legacy text-key variant |
 | `can_create_case(b)` | own bureau, JTF, or command |
 | `can_grant_case(cid)` | case lead or command — governs `case_access_grants/_requests` |
 | `has_joint_access(cid)` | unexpired, unremoved `joint_case` assignment row ([`20260713040000_joint_cases.sql`](../supabase/migrations/20260713040000_joint_cases.sql)) |
-| `can_manage_joint(cid)` | command, case lead/creator, or an active JTF (Co-)Lead on this case |
+| `can_manage_joint(cid)` | command, case lead/creator, or an active JTF (Co-)Lead on this case — also gates linking/unlinking a case to a JTF operation |
+| `has_op_joint_access(cid)` | operation-scoped joint access: the case's ACTIVE operation is `jtf` + `active`, an active `operation_case_links` row exists, and the viewer's division is an active `operation_bureaus` participant ([`20260810120000_jtf_operations.sql`](../supabase/migrations/20260810120000_jtf_operations.sql)) |
+| `op_has_bureau(op, b)` / `can_manage_operation(op)` | JTF-operation participation check + operation management wall (legacy normal ops: any active; bureau-owned: own bureau or command; JTF: DD+/Owner or a participating bureau's Bureau Lead) |
 | `cid_role_rank(r)` / `can_assign_cid_role(r, b)` | the v1.16 unified assignment matrix ([`20260718010000_unified_role_policy.sql`](../supabase/migrations/20260718010000_unified_role_policy.sql)) |
 | `can_decide_transfer_side(b)` | **legacy** — Bureau Lead of that bureau, DD+, or Owner ([`20260718020000_officer_transfers.sql`](../supabase/migrations/20260718020000_officer_transfers.sql)); since single-step transfers ([`20260807040000_transfer_single_step.sql`](../supabase/migrations/20260807040000_transfer_single_step.sql)) it only settles pre-existing open transfer rows |
 | `signoff_pick / signoff_route / signoff_status_of` | rule-based sign-off routing (LOA-aware assignee choice) |
