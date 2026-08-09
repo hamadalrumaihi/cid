@@ -94,3 +94,22 @@ describe('renderDocumentMarkdown (doc mode — TOC in lockstep with render)', ()
     expect(tags(nodes)).toContain('p')
   })
 })
+
+describe('inline links', () => {
+  it('renders [text](https://…) as a safe external anchor', () => {
+    const { nodes } = renderDocumentMarkdown('See the [Weapons SOP](https://docs.google.com/spreadsheets/d/abc/edit) for details.')
+    const a = elements(nodes).find((e) => e.type === 'a')
+    expect(a).toBeDefined()
+    const props = a!.props as { href: string; target: string; rel: string; children: ReactNode }
+    expect(props.href).toBe('https://docs.google.com/spreadsheets/d/abc/edit')
+    expect(props.target).toBe('_blank')
+    expect(props.rel).toBe('noreferrer')
+    expect(props.children).toBe('Weapons SOP')
+  })
+
+  it('never linkifies non-http(s) schemes — javascript:/data: stay plain text', () => {
+    for (const md of ['[x](javascript:alert(1))', '[x](data:text/html,hi)', '[x](ftp://host/file)']) {
+      expect(elements(renderMarkdown(md)).some((e) => e.type === 'a')).toBe(false)
+    }
+  })
+})
