@@ -8,11 +8,14 @@
  *  the short-ALL-CAPS / colon-terminated heading heuristic. */
 import type { ReactNode } from 'react'
 
-/** Inline **bold** and `code` within an escaped-by-React text run. */
+/** Inline **bold**, `code`, and [label](https://…) links within an
+ *  escaped-by-React text run. Links are http(s)-only by the tokenizer's own
+ *  pattern — any other scheme stays plain text, so javascript:/data: URLs
+ *  can never become an href. */
 function inline(t: string): ReactNode[] {
   const out: ReactNode[] = []
-  // Tokenize on **bold** and `code` spans, preserving order.
-  const re = /(\*\*[^*]+\*\*|`[^`]+`)/g
+  // Tokenize on **bold**, `code`, and [text](http…) links, preserving order.
+  const re = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\))/g
   let last = 0
   let m: RegExpExecArray | null
   let k = 0
@@ -20,6 +23,14 @@ function inline(t: string): ReactNode[] {
     if (m.index > last) out.push(t.slice(last, m.index))
     const tok = m[0]
     if (tok.startsWith('**')) out.push(<strong key={k++}>{tok.slice(2, -2)}</strong>)
+    else if (tok.startsWith('[')) {
+      const link = /^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/.exec(tok) as RegExpExecArray
+      out.push(
+        <a key={k++} href={link[2]} target="_blank" rel="noreferrer" className="text-blue-300 underline decoration-blue-300/40 underline-offset-2 transition hover:text-blue-200">
+          {link[1]}
+        </a>,
+      )
+    }
     else out.push(<code key={k++} className="rounded bg-white/10 px-1 font-mono text-[0.9em]">{tok.slice(1, -1)}</code>)
     last = m.index + tok.length
   }

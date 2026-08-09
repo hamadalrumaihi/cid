@@ -8,6 +8,21 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### CID SOP refreshed to the current OdysseyRP document
+
+The SOPs & Library "Criminal Investigation Division (CID) Standard Operating
+Procedure" now carries the current OdysseyRP CID SOP verbatim (authoritative
+Google Drive document, source last modified 2026-08-03) — three-bureau
+jurisdiction model (LSPD / BCSO / SAHP + joint task forces), Title 2 chain of
+command, and the Title 12C compensation brackets. Content replacement only:
+migration `20260809120000_cid_sop_odysseyrp_refresh` updates the existing
+`documents` row in place through the `document_save` version model (prior text
+stays in version history; acknowledgements/bookmarks survive), moves it under
+the command-locked `SOPs` folder, and classifies it `sops`/`sop`. The safe
+mini-Markdown renderer additionally renders `[text](https://…)` links as
+http(s)-only anchors, and `src/lib/sopContent.test.tsx` pins the rendered
+structure (all 12 Titles, section order, the compensation table, anchor ids).
+
 The **Records & Requests** domain and the 10-phase roadmap built on top of it.
 This is the current, authoritative shape of the legal/records surfaces — it
 **supersedes** the DOJ / Justice Portal redesign below: the active
