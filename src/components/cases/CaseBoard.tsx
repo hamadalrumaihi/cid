@@ -2,6 +2,8 @@
 
 import { update } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
+import { useOperationsStore } from '@/lib/operations'
+import { isJtf } from '@/lib/opsJoint'
 import { officerName } from '@/lib/profiles'
 import { caseStatusTint } from '@/lib/signoff'
 import { toast } from '@/lib/toast'
@@ -20,6 +22,10 @@ const BOARD_COLS = [
 const STATUS_LABEL: Record<string, string> = { open: 'Open', active: 'Active', cold: 'Cold', closed: 'Closed' }
 
 export function CaseBoard({ items, canEdit, onOpen, onMoved }: { items: CaseRow[]; canEdit: boolean; onOpen: (id: string) => void; onMoved: () => void }) {
+  // Cases linked to an ACTIVE JTF operation carry the JTF badge too (the
+  // operation-derived joint marker; ops shelf is already cached app-wide).
+  const operations = useOperationsStore((s) => s.operations)
+  const jtfOpIds = new Set(operations.filter((o) => isJtf(o) && o.status === 'active').map((o) => o.id))
   const { run: move } = useAction(async (id: string, status: CaseRow['status']) => {
     const row = items.find((c) => c.id === id)
     if (!row || row.status === status) return
@@ -72,7 +78,7 @@ export function CaseBoard({ items, canEdit, onOpen, onMoved }: { items: CaseRow[
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-mono text-sm font-bold text-white">{c.case_number.replaceAll('-', ' - ')}</p>
                       <span className="flex flex-shrink-0 items-center gap-1">
-                        {c.is_joint_case && <span className="rounded-full bg-violet-500/15 px-1.5 py-1 text-[10px] font-bold uppercase text-violet-300">JTF</span>}
+                        {(c.is_joint_case || jtfOpIds.has(c.operation_id ?? '')) && <span className="rounded-full bg-violet-500/15 px-1.5 py-1 text-[10px] font-bold uppercase text-violet-300">JTF</span>}
                         <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${caseStatusTint(c.status)}`}>{c.bureau}</span>
                       </span>
                     </div>

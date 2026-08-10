@@ -1,53 +1,46 @@
-/** v1.38 — case media canonical + evidence/custody freeze
- *  (migration 20260807010000_case_media_canonical).
+/** v1.38 — Joint / JTF Operations: operation-scoped joint access
+ *  (migration 20260810120000_jtf_operations).
  *
- *  media gained typed FKs (report_id, vehicle_id) and gallery metadata
- *  (category, featured, archived_at) with media_category_check; NO media
- *  policy changed — the audience stays is_active()-wide with the restricted
- *  gate intact. evidence + custody_chain lost their client write grants
- *  (INSERT/UPDATE/DELETE/TRUNCATE revoked from anon+authenticated; SELECT
- *  unchanged), and the 2 evidence-only medal.tv clips were copied into media
- *  with tags.legacy_evidence provenance (source rows preserved).
+ *  The wall under test: a case linked to an ACTIVE JTF operation is readable
+ *  (and child rows with it) by active members of the operation's
+ *  participating bureaus — and by NOBODY else, for NO other case. One new
+ *  branch in private.can_access_case/can_access_case_row
+ *  (private.has_op_joint_access); link/unlink is validated + historized by
+ *  the trg_sync_case_operation_link trigger; JTF lifecycle is RPC-only.
  *
- *  Pins:
- *   - an active member INSERTs media carrying the new columns (category,
- *     featured) — media_ins is still just is_active();
- *   - media_category_check rejects an unknown category (23514);
- *   - media_upd stays BROAD (pre-existing, unchanged): another active member
- *     from another bureau edits category/archived_at on a row they did not
- *     create; the archived row stays SELECTable (archive is client-side
- *     filtering only — RLS audience untouched);
- *   - the restricted gate survived the new columns: a plain detective reads
- *     ZERO restricted rows and their UPDATE matches 0 rows, while an intel
- *     editor (bureau_lead) still sees the row;
- *   - media.report_id is NOT a read path into reports: the media row is
- *     visible is_active()-wide, but the `report:report_id(...)` embed
- *     evaluates reports RLS and comes back null for a member without case
- *     access (and populated for the case creator);
- *   - evidence INSERT is now 42501 permission denied even for the case
- *     CREATOR (pre-freeze the RLS with-check passed for them — the denial is
- *     the revoke, not the policy);
- *   - evidence UPDATE and DELETE are 42501 even for command (director), while
- *     SELECT still works for a case-access fixture (read-only legacy);
- *   - custody_chain INSERT is 42501 (privilege check precedes RLS and FKs);
- *   - the 2 migrated legacy clips exist in media (tags.legacy_evidence,
- *     medal.tv clips mJtoIcmMSrKz / mJtHojLXXxEZXLe2K, category 'scene'),
- *     are readable by a plain active fixture WITHOUT SAB case access (case
- *     media is standard), and their evidence source rows are STILL in
- *     evidence — the migration copied, never deleted.
+ *  Pins (§authorization matrix):
+ *   - baseline: an unlinked LSB case is invisible to the BCB detective;
+ *   - direct inserts are guarded: a detective-created operation is stamped
+ *     normal + creator's bureau, and op_type/lead_bureau cannot be set or
+ *     changed by direct writes (column freeze);
+ *   - operation_convert_to_jtf is command-only (detective call rejected);
+ *   - after conversion (LSB lead, LSB+BCB participants) and the creator
+ *     linking their case: the BCB detective CAN read the linked LSB case and
+ *     its reports — and still CANNOT read the unlinked sibling LSB case;
+ *   - a same-bureau NON-managing detective (target, LSB) cannot link a case
+ *     they neither lead nor created (trigger rejects);
+ *   - the BCB detective links their OWN BCB case (creator authority) without
+ *     any lead-bureau involvement;
+ *   - search_all follows the wall (SECURITY INVOKER): the linked case is
+ *     findable by the BCB detective, the unlinked one is not;
+ *   - RESOLUTION: status → resolved ends BCB's access but KEEPS
+ *     cases.operation_id, the active link rows, and was_jtf (historical
+ *     joint marker survives closure);
+ *   - MANUAL REMOVAL (after reactivation): unlinking stamps removed_at/by
+ *     and access ends, but the was_jtf history row remains;
+ *   - STRICTER WALLS: a legal-request draft on the linked case stays
+ *     invisible to the op-joint BCB viewer (can_view_legal_request is its
+ *     own wall — JTF access never overrides it).
  *
- *  Fixtures (tests/rls/README.md): lsb (LSB detective — creator), bcb (BCB
- *  detective — broad-update + no-report-access side), lead (bureau_lead —
- *  can_edit_narcotics_intel for the restricted row), director (is_command —
- *  reads the live SAB-9000018 legacy rows; READ-ONLY, never mutated). All
- *  writes land on a per-run [rls-test] v138 case; rls_test_cleanup() runs at
- *  start AND teardown and sweeps the case plus every media/report row on it
- *  (media is deleted by case_id). No registry fixtures, no notifications, no
- *  storage uploads. Requires migration 20260807010000 applied. */
+ *  Fixtures (tests/rls/README.md): lsb (LSB detective, case creator), bcb
+ *  (BCB detective), target (throwaway LSB detective — the non-managing
+ *  linker), lead (LSB bureau_lead), director (SAB director — command for
+ *  conversion/lifecycle). rls_test_cleanup() runs at start AND teardown; the
+ *  20260810120000 re-emit sweeps test-created operations too (bureau/link
+ *  children cascade). Requires migration 20260810120000 applied. */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { randomUUID } from 'node:crypto'
 import { signInWithRetry } from './auth'
 
 const URL = process.env.RLS_TEST_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jhxuflzmqspidkvjckox.supabase.co'
@@ -57,287 +50,282 @@ const PW = {
   bcb: process.env.RLS_TEST_PASSWORD_BCB,
   lead: process.env.RLS_TEST_PASSWORD_LEAD,
   director: process.env.RLS_TEST_PASSWORD_DIRECTOR,
+  target: process.env.RLS_TEST_PASSWORD_TARGET,
 }
-const enabled = !!(ANON && PW.lsb && PW.bcb && PW.lead && PW.director)
+const enabled = !!(ANON && PW.lsb && PW.bcb && PW.lead && PW.director && PW.target)
 if (!enabled) console.warn('[rls:v138] fixture passwords not set — suite skipped')
 
 const mk = () => createClient(URL, ANON, { auth: { persistSession: false, autoRefreshToken: false } })
 type C = SupabaseClient
 
-/** Live prod legacy surface migrated by 20260807010000 — READ-ONLY here. */
-const LEGACY = {
-  caseNumber: 'SAB-9000018',
-  clips: ['mJtoIcmMSrKz', 'mJtHojLXXxEZXLe2K'],
-  evidencePrefixes: ['45ce4c71', '31803cfd'],
-}
-
-describe.skipIf(!enabled)('v1.38 — case media canonical + evidence freeze (live)', () => {
-  let lsb: C, bcb: C, lead: C, director: C
+describe.skipIf(!enabled)('v1.38 — JTF operations: operation-scoped joint access (live)', () => {
+  let lsb: C, bcb: C, lead: C, director: C, target: C
+  let targetId = ''
   const tag = Math.random().toString(36).slice(2, 8).toUpperCase()
-  let caseId = ''       // per-run LSB fixture case (lsb-created)
-  let reportId = ''     // lsb report on the fixture case — the embed target
-  let mediaId = ''      // test 1's row — updated/archived by test 3
-  let restrictedId = '' // lead's restricted row — the gate pin
-  let sabCaseId = ''    // LIVE SAB-9000018 (read-only legacy assertions)
+  let opId = ''       // the operation under test (director-created)
+  let caseAId = ''    // LSB case, linked to the op
+  let caseBId = ''    // LSB case, NEVER linked — the isolation control
+  let caseCId = ''    // BCB case, linked by its own creator
+  let reportId = ''   // report on case A — child-resource pin
+  let legalId = ''    // legal draft on case A — stricter-wall pin
+
+  const resetTarget = (role: string, division: string) =>
+    director.rpc('rls_test_reset_member', {
+      p_target: targetId, p_role: role, p_division: division, p_active: true,
+    })
 
   beforeAll(async () => {
-    lsb = mk(); bcb = mk(); lead = mk(); director = mk()
-    // Sequential with backoff — parallel password grants trip the per-IP limit.
-    for (const [client, email, pw] of [
-      [lsb, 'rls-test-lsb@cidportal.test', PW.lsb],
-      [bcb, 'rls-test-bcb@cidportal.test', PW.bcb],
-      [lead, 'rls-test-lead@cidportal.test', PW.lead],
-      [director, 'rls-test-director@cidportal.test', PW.director],
+    lsb = mk(); bcb = mk(); lead = mk(); director = mk(); target = mk()
+    for (const [client, email, pw, key] of [
+      [lsb, 'rls-test-lsb@cidportal.test', PW.lsb, 'lsb'],
+      [bcb, 'rls-test-bcb@cidportal.test', PW.bcb, 'bcb'],
+      [lead, 'rls-test-lead@cidportal.test', PW.lead, 'lead'],
+      [director, 'rls-test-director@cidportal.test', PW.director, 'director'],
+      [target, 'rls-test-target@cidportal.test', PW.target, 'target'],
     ] as const) {
-      await signInWithRetry(client, email, pw!)
+      const id = await signInWithRetry(client, email, pw!)
+      if (key === 'target') targetId = id
     }
-    // Purge leftovers from any crashed prior run FIRST.
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
+    const base = await resetTarget('detective', 'LSB')
+    if (base.error) throw new Error(`target baseline failed: ${base.error.message}`)
 
-    const c = await lsb.from('cases')
-      .insert({ case_number: `V138-${tag}`, title: '[rls-test] v138 media canonical', bureau: 'LSB' })
+    // Fixture cases: two LSB (creator: lsb), one BCB (creator: bcb).
+    const a = await lsb.from('cases')
+      .insert({ case_number: `V138A-${tag}`, title: '[rls-test] v138 linked case', bureau: 'LSB' })
       .select('id')
-    if (c.error) throw new Error(`fixture case: ${c.error.message}`)
-    caseId = c.data![0].id
+    if (a.error) throw new Error(`case A: ${a.error.message}`)
+    caseAId = a.data![0].id
+    const b = await lsb.from('cases')
+      .insert({ case_number: `V138B-${tag}`, title: '[rls-test] v138 unlinked case', bureau: 'LSB' })
+      .select('id')
+    if (b.error) throw new Error(`case B: ${b.error.message}`)
+    caseBId = b.data![0].id
+    const c = await bcb.from('cases')
+      .insert({ case_number: `V138C-${tag}`, title: '[rls-test] v138 bcb case', bureau: 'BCB' })
+      .select('id')
+    if (c.error) throw new Error(`case C: ${c.error.message}`)
+    caseCId = c.data![0].id
 
+    // A child report on case A (author: lsb) for the child-resource pin.
     const r = await lsb.from('reports')
-      .insert({ case_id: caseId, template: 'initial', kind: 'initial', seq: 1, fields: { summary: `[rls-test] v138 ${tag}` } })
+      .insert({ case_id: caseAId, template: 'incident', fields: { note: '[rls-test] v138' } })
       .select('id')
-    if (r.error) throw new Error(`fixture report: ${r.error.message}`)
+    if (r.error) throw new Error(`report: ${r.error.message}`)
     reportId = r.data![0].id
 
-    // The live legacy case — located as command (is_command read), never written.
-    const sab = await director.from('cases').select('id').eq('case_number', LEGACY.caseNumber)
-    if (sab.error) throw new Error(`legacy case lookup: ${sab.error.message}`)
-    if ((sab.data ?? []).length !== 1) throw new Error(`legacy case ${LEGACY.caseNumber} not found — wrong environment?`)
-    sabCaseId = sab.data![0].id
+    // The operation under test — director-created, then converted.
+    const o = await director.from('operations')
+      .insert({ name: `[rls-test] v138 Black Cross ${tag}`, description: 'JTF wall test' })
+      .select('id, op_type, bureau')
+    if (o.error) throw new Error(`operation: ${o.error.message}`)
+    opId = o.data![0].id
   })
 
   afterAll(async () => {
     if (!lsb) return
-    // The cleanup RPC sweeps the rls-test case and every media/report row on
-    // it (media is deleted by case_id, so the lead's restricted row and the
-    // bcb-edited row go too).
+    if (director && targetId) await resetTarget('detective', 'LSB')
+    // Cleanup sweeps rls-test cases AND operations (20260810120000 re-emit);
+    // operation_bureaus / operation_case_links cascade with their parents.
     const { data, error } = await lsb.rpc('rls_test_cleanup')
     if (error) throw new Error(`rls_test_cleanup failed: ${error.message}`)
     console.info('[rls:v138] cleanup:', JSON.stringify(data))
-    await Promise.all([lsb, bcb, lead, director].filter(Boolean).map((c) => c.auth.signOut()))
+    await Promise.all([lsb, bcb, lead, director, target].filter(Boolean).map((c) => c.auth.signOut()))
   })
 
-  /* ── 1. media_ins is still just is_active() — new columns write through ── */
+  /* ── 0. baseline + direct-write guards ─────────────────────────────────── */
 
-  it('an active member INSERTs a media row with the new columns (category, featured)', async () => {
-    const r = await lsb.from('media')
-      .insert({
-        title: `[rls-test] v138 scene ${tag}`, type: 'image',
-        external_url: 'https://example.com/v138-scene.png',
-        case_id: caseId, category: 'scene', featured: true,
-      })
-      .select('id, category, featured, archived_at, report_id, vehicle_id')
+  it('baseline: the BCB detective cannot see either LSB case', async () => {
+    for (const id of [caseAId, caseBId]) {
+      const r = await bcb.from('cases').select('id').eq('id', id)
+      expect(r.error).toBeNull()
+      expect(r.data ?? []).toHaveLength(0)
+    }
+  })
+
+  it('a detective-created operation is stamped normal + creator bureau; jtf fields cannot be set directly', async () => {
+    const ins = await lsb.from('operations')
+      .insert({ name: `[rls-test] v138 det op ${tag}`, op_type: 'jtf', lead_bureau: 'LSB' })
+      .select('id, op_type, bureau, lead_bureau')
+    expect(ins.error).toBeNull()
+    // Guard: direct insert can never mint a JTF op or a lead bureau.
+    expect(ins.data![0]).toMatchObject({ op_type: 'normal', bureau: 'LSB', lead_bureau: null })
+  })
+
+  it('operation_convert_to_jtf is command-only', async () => {
+    const r = await lsb.rpc('operation_convert_to_jtf', {
+      p_op: opId, p_lead: 'LSB', p_bureaus: ['LSB', 'BCB'],
+    })
+    expect(r.error).not.toBeNull()
+    expect(r.error!.message).toMatch(/command/i)
+  })
+
+  /* ── 1. conversion + linking ───────────────────────────────────────────── */
+
+  it('director converts to JTF (LSB lead, LSB+BCB); participation rows appear', async () => {
+    const r = await director.rpc('operation_convert_to_jtf', {
+      p_op: opId, p_lead: 'LSB', p_bureaus: ['LSB', 'BCB'],
+    })
+    expect(r.error).toBeNull()
+    expect(r.data).toMatchObject({ op_type: 'jtf', lead_bureau: 'LSB' })
+    const parts = await lsb.from('operation_bureaus')
+      .select('bureau, left_at').eq('operation_id', opId).is('left_at', null)
+    expect(parts.error).toBeNull()
+    expect((parts.data ?? []).map((x) => x.bureau).sort()).toEqual(['BCB', 'LSB'])
+  })
+
+  it('a non-managing same-bureau detective cannot link someone else’s case', async () => {
+    // target is an LSB detective with bureau access to case B, but is neither
+    // its lead nor creator nor command — the sync trigger rejects the link.
+    const r = await target.from('cases').update({ operation_id: opId }).eq('id', caseBId).select('id')
+    expect(r.error).not.toBeNull()
+    expect(r.error!.message).toMatch(/joint-case management authority/i)
+  })
+
+  it('the case creator links case A; the link row is active and was_jtf', async () => {
+    const r = await lsb.from('cases').update({ operation_id: opId }).eq('id', caseAId).select('id, operation_id')
+    expect(r.error).toBeNull()
+    expect(r.data![0].operation_id).toBe(opId)
+    const l = await lsb.from('operation_case_links')
+      .select('was_jtf, removed_at').eq('operation_id', opId).eq('case_id', caseAId)
+    expect(l.error).toBeNull()
+    expect(l.data).toHaveLength(1)
+    expect(l.data![0]).toMatchObject({ was_jtf: true, removed_at: null })
+  })
+
+  /* ── 2. the wall: operation-scoped access ──────────────────────────────── */
+
+  it('the BCB detective now reads the LINKED case A — and its reports', async () => {
+    const r = await bcb.from('cases').select('id, case_number, bureau').eq('id', caseAId)
     expect(r.error).toBeNull()
     expect(r.data).toHaveLength(1)
-    expect(r.data![0]).toMatchObject({
-      category: 'scene', featured: true, archived_at: null, report_id: null, vehicle_id: null,
+    expect(r.data![0].bureau).toBe('LSB') // ownership never moved
+    const rep = await bcb.from('reports').select('id').eq('id', reportId)
+    expect(rep.error).toBeNull()
+    expect(rep.data).toHaveLength(1)
+  })
+
+  it('the unlinked sibling case B stays invisible (never bureau-wide)', async () => {
+    const r = await bcb.from('cases').select('id').eq('id', caseBId)
+    expect(r.error).toBeNull()
+    expect(r.data ?? []).toHaveLength(0)
+  })
+
+  it('search_all follows the same wall for the BCB viewer', async () => {
+    const hitA = await bcb.rpc('search_all', { q: `V138A-${tag}` })
+    expect(hitA.error).toBeNull()
+    expect((hitA.data ?? []).some((x: { kind: string; id: string }) => x.kind === 'case' && x.id === caseAId)).toBe(true)
+    const hitB = await bcb.rpc('search_all', { q: `V138B-${tag}` })
+    expect(hitB.error).toBeNull()
+    expect((hitB.data ?? []).some((x: { id: string }) => x.id === caseBId)).toBe(false)
+  })
+
+  it('the BCB creator adds their OWN case without lead-bureau involvement', async () => {
+    const r = await bcb.from('cases').update({ operation_id: opId }).eq('id', caseCId).select('id, operation_id')
+    expect(r.error).toBeNull()
+    expect(r.data![0].operation_id).toBe(opId)
+    // Now the LSB detective (participating bureau) can read the BCB case.
+    const x = await lsb.from('cases').select('id').eq('id', caseCId)
+    expect(x.error).toBeNull()
+    expect(x.data).toHaveLength(1)
+  })
+
+  /* ── 3. stricter walls stay stricter ───────────────────────────────────── */
+
+  it('a legal-request draft on the linked case stays invisible to the op-joint viewer', async () => {
+    const d = await lsb.rpc('create_legal_request', {
+      p_case: caseAId, p_request_type: 'warrant', p_subtype: 'search_warrant',
+      p_title: `[rls-test] v138 draft ${tag}`, p_priority: 'Medium',
+      p_narrative: 'JTF must not widen the legal wall.',
+      p_form: { search_targets: 'RLS test locker 138' },
     })
-    mediaId = r.data![0].id as string
+    expect(d.error).toBeNull()
+    legalId = d.data!.id as string
+    const r = await bcb.from('legal_requests').select('id').eq('id', legalId)
+    expect(r.error).toBeNull()
+    expect(r.data ?? []).toHaveLength(0)
   })
 
-  /* ── 2. media_category_check closes over unknown values ── */
+  /* ── 4. closure: access ends, history survives ─────────────────────────── */
 
-  it('media_category_check rejects an invalid category', async () => {
-    const r = await lsb.from('media')
-      .insert({
-        title: `[rls-test] v138 bad category ${tag}`, type: 'image',
-        external_url: 'https://example.com/v138-bad.png',
-        case_id: caseId, category: 'selfie',
-      })
-      .select('id')
-    expect(r.error).not.toBeNull()
-    expect(r.error!.code).toBe('23514')
-    expect(r.error!.message).toMatch(/media_category_check/i)
-  })
-
-  /* ── 3. media_upd is broad (pre-existing, unchanged) + archive keeps the row readable ── */
-
-  it('ANOTHER active member (other bureau, not the creator) updates category/archived_at; the archived row stays SELECTable', async () => {
-    const archivedAt = new Date().toISOString()
-    const up = await bcb.from('media')
-      .update({ category: 'documents', archived_at: archivedAt })
-      .eq('id', mediaId)
-      .select('id, category, archived_at')
+  it('resolving the operation ends cross-bureau access but keeps links + markers', async () => {
+    const up = await director.from('operations').update({ status: 'resolved' }).eq('id', opId).select('status, resolved_at')
     expect(up.error).toBeNull()
-    expect(up.data).toHaveLength(1) // pinned reality: media_upd is is_active()-broad
-    expect(up.data![0].category).toBe('documents')
-    expect(up.data![0].archived_at).not.toBeNull()
+    expect(up.data![0].status).toBe('resolved')
+    expect(up.data![0].resolved_at).not.toBeNull()
 
-    // Archive is client-side gallery filtering only — the RLS audience is untouched.
-    const sel = await lsb.from('media').select('id, category, archived_at').eq('id', mediaId)
-    expect(sel.error).toBeNull()
-    expect(sel.data).toHaveLength(1)
-    expect(sel.data![0].archived_at).not.toBeNull()
+    // Access OFF for the participating-bureau viewer…
+    const r = await bcb.from('cases').select('id').eq('id', caseAId)
+    expect(r.error).toBeNull()
+    expect(r.data ?? []).toHaveLength(0)
+
+    // …but the relationship + historical joint marker are UNTOUCHED.
+    const c = await lsb.from('cases').select('operation_id').eq('id', caseAId)
+    expect(c.data![0].operation_id).toBe(opId)
+    const l = await lsb.from('operation_case_links')
+      .select('was_jtf, removed_at').eq('operation_id', opId).eq('case_id', caseAId)
+    expect(l.data).toHaveLength(1)
+    expect(l.data![0]).toMatchObject({ was_jtf: true, removed_at: null })
   })
 
-  /* ── 4. the restricted gate survived the new columns ── */
+  it('no NEW links while resolved; reactivation restores access', async () => {
+    const no = await lsb.from('cases').update({ operation_id: opId }).eq('id', caseBId).select('id')
+    expect(no.error).not.toBeNull()
+    expect(no.error!.message).toMatch(/active/i)
 
-  it('a RESTRICTED media row stays invisible and unwritable for a plain member; an intel editor sees it', async () => {
-    const ins = await lead.from('media')
-      .insert({
-        title: `[rls-test] v138 restricted ${tag}`, type: 'image',
-        external_url: 'https://example.com/v138-restricted.png',
-        case_id: caseId, restricted: true, category: 'surveillance',
-      })
-      .select('id')
-    expect(ins.error).toBeNull()
-    restrictedId = ins.data![0].id as string
-
-    // Plain active member: SELECT sees zero rows...
-    const sel = await lsb.from('media').select('id').eq('id', restrictedId)
-    expect(sel.error).toBeNull()
-    expect(sel.data ?? []).toHaveLength(0)
-    // ...and UPDATE (including the new columns) matches zero rows.
-    const up = await lsb.from('media')
-      .update({ category: 'other', archived_at: new Date().toISOString() })
-      .eq('id', restrictedId)
-      .select('id')
+    const up = await director.from('operations').update({ status: 'active' }).eq('id', opId).select('status')
     expect(up.error).toBeNull()
-    expect(up.data ?? []).toHaveLength(0)
-
-    // Positive control: the bureau_lead (can_edit_narcotics_intel) reads it.
-    const seen = await lead.from('media').select('id, category, restricted').eq('id', restrictedId)
-    expect(seen.error).toBeNull()
-    expect(seen.data).toHaveLength(1)
-    expect(seen.data![0]).toMatchObject({ restricted: true, category: 'surveillance' })
+    const r = await bcb.from('cases').select('id').eq('id', caseAId)
+    expect(r.data).toHaveLength(1)
   })
 
-  /* ── 5. report_id is not a read path into reports ── */
+  /* ── 5. manual removal: access ends, participation history survives ────── */
 
-  it('linking media to a report does NOT leak the report: the embed is null without case access, the media row stays visible', async () => {
-    const ins = await lsb.from('media')
-      .insert({
-        title: `[rls-test] v138 report link ${tag}`, type: 'document',
-        external_url: 'https://example.com/v138-report.pdf',
-        case_id: caseId, report_id: reportId, category: 'report_media',
-      })
-      .select('id')
-    expect(ins.error).toBeNull()
-    const linkedId = ins.data![0].id as string
+  it('unlinking stamps the history row and ends operation-derived access', async () => {
+    const un = await lsb.from('cases').update({ operation_id: null }).eq('id', caseAId).select('operation_id')
+    expect(un.error).toBeNull()
+    expect(un.data![0].operation_id).toBeNull()
 
-    // Sanity: the wall itself — bcb cannot read the LSB report directly.
-    const direct = await bcb.from('reports').select('id').eq('id', reportId)
-    expect(direct.error).toBeNull()
-    expect(direct.data ?? []).toHaveLength(0)
+    const l = await lsb.from('operation_case_links')
+      .select('was_jtf, removed_at, removed_by').eq('operation_id', opId).eq('case_id', caseAId)
+    expect(l.data).toHaveLength(1)
+    expect(l.data![0].was_jtf).toBe(true)         // permanent historical marker
+    expect(l.data![0].removed_at).not.toBeNull()  // participation window closed
+    expect(l.data![0].removed_by).not.toBeNull()
 
-    // The media row is is_active()-wide, but the embed evaluates reports RLS:
-    // PostgREST filters the to-one embed to null for the no-access member.
-    const b = await bcb.from('media')
-      .select('id, report_id, report:report_id(id, template)')
-      .eq('id', linkedId)
-    expect(b.error).toBeNull()
-    expect(b.data).toHaveLength(1)
-    expect(b.data![0].report_id).toBe(reportId)
-    expect(b.data![0].report).toBeNull()
-
-    // Positive control: the case creator gets the embedded report.
-    const a = await lsb.from('media')
-      .select('id, report:report_id(id, template)')
-      .eq('id', linkedId)
-    expect(a.error).toBeNull()
-    expect(a.data).toHaveLength(1)
-    // (cast through unknown: the untyped client mis-infers the to-one embed
-    // as an array; runtime is an object — asserted by the id match)
-    expect((a.data![0].report as unknown as { id: string } | null)?.id).toBe(reportId)
+    const r = await bcb.from('cases').select('id').eq('id', caseAId)
+    expect(r.error).toBeNull()
+    expect(r.data ?? []).toHaveLength(0)
   })
 
-  /* ── 6. evidence INSERT is frozen — even for the case creator ── */
+  /* ── 6. lifecycle guard rails ──────────────────────────────────────────── */
 
-  it('evidence INSERT is 42501 permission denied for authenticated (case creator included)', async () => {
-    // Pre-freeze, evidence_ins (can_access_case) PASSED for the creator — the
-    // denial below is the grant revoke, not the policy.
-    const r = await lsb.from('evidence')
-      .insert({ case_id: caseId, item_code: `EV-V138-${tag}`, description: '[rls-test] v138 must not land' })
-      .select('id')
-    expect(r.error).not.toBeNull()
-    expect(r.error!.code).toBe('42501')
-    expect(r.error!.message).toMatch(/permission denied/i)
+  it('direct updates cannot flip a JTF operation back to normal (column freeze)', async () => {
+    const up = await director.from('operations').update({ op_type: 'normal', lead_bureau: 'BCB' }).eq('id', opId).select('op_type, lead_bureau')
+    expect(up.error).toBeNull()
+    expect(up.data![0]).toMatchObject({ op_type: 'jtf', lead_bureau: 'LSB' })
   })
 
-  /* ── 7. evidence UPDATE/DELETE frozen; SELECT unchanged for a case-access fixture ── */
-
-  it('evidence UPDATE and DELETE are 42501 even for command; SELECT still serves the legacy rows', async () => {
-    // Privilege check precedes RLS and execution — nothing is ever mutated.
-    const up = await director.from('evidence')
-      .update({ notes: '[rls-test] v138 tamper attempt' })
-      .eq('case_id', sabCaseId)
-      .select('id')
-    expect(up.error).not.toBeNull()
-    expect(up.error!.code).toBe('42501')
-
-    const del = await director.from('evidence').delete().eq('case_id', sabCaseId).select('id')
-    expect(del.error).not.toBeNull()
-    expect(del.error!.code).toBe('42501')
-
-    // evidence_sel (can_access_case) is untouched: command still reads the
-    // frozen legacy rows.
-    const sel = await director.from('evidence').select('id, item_code').eq('case_id', sabCaseId)
-    expect(sel.error).toBeNull()
-    expect((sel.data ?? []).length).toBeGreaterThanOrEqual(2)
+  it('a plain detective cannot update a JTF operation at all (RLS)', async () => {
+    const up = await lsb.from('operations').update({ description: 'detective edit' }).eq('id', opId).select('id')
+    expect(up.error).toBeNull()
+    expect(up.data ?? []).toHaveLength(0) // policy filtered — nothing updated
   })
 
-  /* ── 8. custody_chain INSERT frozen ── */
+  it('removing a bureau with linked cases is refused; after unlink it succeeds and history stays', async () => {
+    const no = await director.rpc('operation_remove_bureau', { p_op: opId, p_bureau: 'BCB' })
+    expect(no.error).not.toBeNull()
+    expect(no.error!.message).toMatch(/linked case/i)
 
-  it('custody_chain INSERT is 42501 permission denied', async () => {
-    // The privilege check fires before the FK would — no fixture evidence row
-    // is needed (and none can exist: evidence is frozen too).
-    const r = await lsb.from('custody_chain')
-      .insert({ evidence_id: randomUUID(), from_officer: 'A', to_officer: 'B', reason: '[rls-test] v138' })
-      .select('id')
-    expect(r.error).not.toBeNull()
-    expect(r.error!.code).toBe('42501')
-    expect(r.error!.message).toMatch(/permission denied/i)
-  })
-
-  /* ── 9. the 2 migrated legacy clips: present in media, sources intact in evidence ── */
-
-  it('the migrated clips live in media with tags.legacy_evidence, readable by a plain active fixture; the evidence sources are STILL present', async () => {
-    const m = await director.from('media')
-      .select('id, type, category, restricted, external_url, tags')
-      .eq('case_id', sabCaseId)
-      .not('tags->legacy_evidence', 'is', null)
-    expect(m.error).toBeNull()
-    expect(m.data).toHaveLength(2)
-
-    const evidenceIds: string[] = []
-    for (const clip of LEGACY.clips) {
-      const row = m.data!.find((r) => (r.external_url as string).includes(clip))
-      expect(row, `media row for clip ${clip}`).toBeTruthy()
-      expect(row!).toMatchObject({ type: 'video', category: 'scene', restricted: false })
-      expect(row!.external_url).toContain('medal.tv')
-      const prov = (row!.tags as { legacy_evidence?: { evidence_id?: string } }).legacy_evidence
-      expect(prov?.evidence_id).toBeTruthy()
-      expect(LEGACY.evidencePrefixes.some((p) => prov!.evidence_id!.startsWith(p))).toBe(true)
-      evidenceIds.push(prov!.evidence_id!)
-    }
-
-    // Case media is STANDARD: an active fixture WITHOUT SAB case access reads
-    // both rows (media_sel is is_active()-wide for non-restricted rows).
-    const asLsb = await lsb.from('media').select('id')
-      .in('id', m.data!.map((r) => r.id))
-    expect(asLsb.error).toBeNull()
-    expect(asLsb.data).toHaveLength(2)
-    // ...while the same fixture has no access to the underlying case.
-    const wall = await lsb.from('cases').select('id').eq('id', sabCaseId)
-    expect(wall.error).toBeNull()
-    expect(wall.data ?? []).toHaveLength(0)
-
-    // Copied, never deleted: both evidence source rows still exist, on the
-    // same case, with the clip still embedded in notes.
-    const ev = await director.from('evidence').select('id, case_id, notes').in('id', evidenceIds)
-    expect(ev.error).toBeNull()
-    expect(ev.data).toHaveLength(2)
-    for (const row of ev.data!) {
-      expect(row.case_id).toBe(sabCaseId)
-      expect(LEGACY.clips.some((clip) => (row.notes ?? '').includes(clip))).toBe(true)
-    }
+    const un = await bcb.from('cases').update({ operation_id: null }).eq('id', caseCId)
+    expect(un.error).toBeNull()
+    const ok = await director.rpc('operation_remove_bureau', { p_op: opId, p_bureau: 'BCB', p_reason: 'v138 teardown' })
+    expect(ok.error).toBeNull()
+    const hist = await lsb.from('operation_bureaus')
+      .select('bureau, left_at').eq('operation_id', opId).eq('bureau', 'BCB')
+    expect(hist.error).toBeNull()
+    expect(hist.data).toHaveLength(1)
+    expect(hist.data![0].left_at).not.toBeNull() // history kept, not deleted
   })
 })

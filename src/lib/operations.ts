@@ -8,7 +8,8 @@ import type { Tables } from './database.types'
 
 export type OperationRow = Tables<'operations'>
 
-/** Slim case rows for rollups + linking (projection, not full rows). */
+/** Slim case rows for rollups + linking (projection, not full rows).
+ *  created_by rides along for the JTF link-authority mirror (opsJoint). */
 export interface OpsCaseRow {
   id: string
   case_number: string | null
@@ -17,10 +18,11 @@ export interface OpsCaseRow {
   bureau: string | null
   operation_id: string | null
   lead_detective_id: string | null
+  created_by: string | null
   updated_at: string
 }
 
-export const OPS_CASE_COLS = 'id,case_number,title,status,bureau,operation_id,lead_detective_id,updated_at'
+export const OPS_CASE_COLS = 'id,case_number,title,status,bureau,operation_id,lead_detective_id,created_by,updated_at'
 
 interface OperationsState {
   operations: OperationRow[]
@@ -46,4 +48,6 @@ export const useOperationsStore = create<OperationsState>((set) => ({
 export const OP_STATUSES = ['open', 'active', 'cold', 'closed'] as const
 export const OP_SEG_COLOR: Record<string, string> = { open: 'bg-amber-400', active: 'bg-emerald-400', cold: 'bg-blue-400', closed: 'bg-slate-500' }
 export const opStatusTint = (s?: string | null): string =>
-  s === 'closed' ? 'bg-slate-500/20 text-slate-300' : 'bg-emerald-500/15 text-emerald-300'
+  s === 'closed' ? 'bg-slate-500/20 text-slate-300'
+  : s === 'resolved' ? 'bg-blue-500/15 text-blue-300'
+  : 'bg-emerald-500/15 text-emerald-300'

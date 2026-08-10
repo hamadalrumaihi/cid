@@ -1867,6 +1867,40 @@ alter table public.notifications add constraint notifications_pkey PRIMARY KEY (
 alter table public.notifications add constraint notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 alter table public.notifications enable row level security;
 
+create table public.operation_bureaus (
+  id uuid not null default gen_random_uuid(),
+  operation_id uuid not null,
+  bureau public.bureau not null,
+  joined_at timestamp with time zone not null default now(),
+  joined_by uuid,
+  left_at timestamp with time zone,
+  left_by uuid
+);
+alter table public.operation_bureaus add constraint operation_bureaus_pkey PRIMARY KEY (id);
+alter table public.operation_bureaus add constraint operation_bureaus_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES public.operations(id) ON DELETE CASCADE;
+alter table public.operation_bureaus add constraint operation_bureaus_joined_by_fkey FOREIGN KEY (joined_by) REFERENCES public.profiles(id);
+alter table public.operation_bureaus add constraint operation_bureaus_left_by_fkey FOREIGN KEY (left_by) REFERENCES public.profiles(id);
+alter table public.operation_bureaus add constraint operation_bureaus_bureau_check CHECK ((bureau <> 'JTF'::public.bureau));
+alter table public.operation_bureaus enable row level security;
+
+create table public.operation_case_links (
+  id uuid not null default gen_random_uuid(),
+  operation_id uuid not null,
+  case_id uuid not null,
+  added_by uuid,
+  added_at timestamp with time zone not null default now(),
+  removed_by uuid,
+  removed_at timestamp with time zone,
+  removal_reason text,
+  was_jtf boolean not null default false
+);
+alter table public.operation_case_links add constraint operation_case_links_pkey PRIMARY KEY (id);
+alter table public.operation_case_links add constraint operation_case_links_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES public.operations(id) ON DELETE CASCADE;
+alter table public.operation_case_links add constraint operation_case_links_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.operation_case_links add constraint operation_case_links_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id);
+alter table public.operation_case_links add constraint operation_case_links_removed_by_fkey FOREIGN KEY (removed_by) REFERENCES public.profiles(id);
+alter table public.operation_case_links enable row level security;
+
 create table public.operations (
   id uuid not null default gen_random_uuid(),
   name text not null,
@@ -1874,9 +1908,21 @@ create table public.operations (
   status text not null default 'active'::text,
   created_by uuid default auth.uid(),
   created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now()
+  updated_at timestamp with time zone not null default now(),
+  op_type text not null default 'normal'::text,
+  bureau public.bureau,
+  lead_bureau public.bureau,
+  jtf_converted_at timestamp with time zone,
+  jtf_converted_by uuid,
+  resolved_at timestamp with time zone,
+  resolved_by uuid
 );
 alter table public.operations add constraint operations_pkey PRIMARY KEY (id);
+alter table public.operations add constraint operations_jtf_converted_by_fkey FOREIGN KEY (jtf_converted_by) REFERENCES public.profiles(id);
+alter table public.operations add constraint operations_resolved_by_fkey FOREIGN KEY (resolved_by) REFERENCES public.profiles(id);
+alter table public.operations add constraint operations_op_type_check CHECK ((op_type = ANY (ARRAY['normal'::text, 'jtf'::text])));
+alter table public.operations add constraint operations_bureau_check CHECK (((bureau IS NULL) OR (bureau <> 'JTF'::public.bureau)));
+alter table public.operations add constraint operations_lead_bureau_check CHECK (((lead_bureau IS NULL) OR (lead_bureau <> 'JTF'::public.bureau)));
 alter table public.operations enable row level security;
 
 create table public.person_places (
@@ -2692,6 +2738,17 @@ CREATE INDEX narcotics_source_case_id_fkey_idx ON public.narcotics USING btree (
 CREATE INDEX narcotics_source_evidence_id_fkey_idx ON public.narcotics USING btree (source_evidence_id);
 CREATE INDEX narcotics_status_idx ON public.narcotics USING btree (status);
 CREATE INDEX notifications_user_id_read_idx ON public.notifications USING btree (user_id, read);
+CREATE UNIQUE INDEX operation_bureaus_active_key ON public.operation_bureaus USING btree (operation_id, bureau) WHERE (left_at IS NULL);
+CREATE INDEX operation_bureaus_operation_idx ON public.operation_bureaus USING btree (operation_id);
+CREATE INDEX operation_bureaus_joined_by_fkey_idx ON public.operation_bureaus USING btree (joined_by);
+CREATE INDEX operation_bureaus_left_by_fkey_idx ON public.operation_bureaus USING btree (left_by);
+CREATE UNIQUE INDEX operation_case_links_active_key ON public.operation_case_links USING btree (operation_id, case_id) WHERE (removed_at IS NULL);
+CREATE INDEX operation_case_links_case_idx ON public.operation_case_links USING btree (case_id);
+CREATE INDEX operation_case_links_operation_idx ON public.operation_case_links USING btree (operation_id);
+CREATE INDEX operation_case_links_added_by_fkey_idx ON public.operation_case_links USING btree (added_by);
+CREATE INDEX operation_case_links_removed_by_fkey_idx ON public.operation_case_links USING btree (removed_by);
+CREATE INDEX operations_jtf_converted_by_fkey_idx ON public.operations USING btree (jtf_converted_by);
+CREATE INDEX operations_resolved_by_fkey_idx ON public.operations USING btree (resolved_by);
 CREATE INDEX operations_name_trgm ON public.operations USING gin (name extensions.gin_trgm_ops);
 CREATE INDEX operations_description_trgm ON public.operations USING gin (description extensions.gin_trgm_ops);
 CREATE INDEX person_places_person_id_fkey_idx ON public.person_places USING btree (person_id);
@@ -5932,6 +5989,17 @@ create policy notif_upd on public.notifications
   using ((user_id = ( SELECT auth.uid() AS uid)))
   with check ((user_id = ( SELECT auth.uid() AS uid)));
 
+create policy operation_bureaus_sel on public.operation_bureaus
+  as permissive for select to authenticated
+  using (( SELECT private.is_active() AS is_active));
+
+create policy operation_case_links_sel on public.operation_case_links
+  as permissive for select to authenticated
+  using (private.can_access_case(case_id));
+
+-- operations_upd/operations_del below show the PRE-20260810120000 predicates;
+-- the JTF migration re-created them over private.can_manage_operation(id)
+-- (definitive SQL in supabase/migrations/20260810120000_jtf_operations.sql).
 create policy operations_del on public.operations
   as permissive for delete to authenticated
   using (private.can_delete());
@@ -7733,3 +7801,46 @@ create policy wl_sel on public.watchlist
 -- pre-20260807110000 generation and is not re-rendered — changes are tracked
 -- here. Definitive SQL in
 -- supabase/migrations/20260808400000_search_hardening.sql.
+
+-- ============================================================
+-- 20260810120000_jtf_operations (Joint / JTF Operations):
+-- operations gained op_type/bureau/lead_bureau/jtf_converted_at/
+-- jtf_converted_by/resolved_at/resolved_by (table block above updated);
+-- new tables operation_bureaus (participation registry with joined/left
+-- history, one active row per bureau) and operation_case_links (permanent
+-- case-participation history; was_jtf is the permanent historical joint
+-- marker, separate from access). The ACTIVE link remains cases.operation_id.
+-- New/changed functions (definitive SQL in
+-- supabase/migrations/20260810120000_jtf_operations.sql):
+-- private.op_has_bureau(uuid, public.bureau),
+-- private.has_op_joint_access(uuid) — operation-scoped joint access: true
+--   only while the case's operation is jtf AND status='active' AND an active
+--   link row exists AND the viewer's division is an active participating
+--   bureau;
+-- private.can_access_case(uuid) / can_access_case_row(...) gained the
+--   has_op_joint_access() branch (their rendered bodies above are the
+--   pre-joint generation — see also the 20260713040000 note);
+-- private.can_manage_operation(uuid) — operations_upd/del now route through
+--   it (legacy bureau-NULL normal ops: any active member; bureau-owned
+--   normal ops: own bureau or command; jtf ops: deputy_director/director/
+--   owner or a participating bureau's bureau_lead);
+-- private.guard_operation() [trigger trg_guard_operation on operations] —
+--   direct inserts are forced to normal ops stamped with the creator's
+--   bureau; JTF/lifecycle columns frozen for direct writers; status
+--   transitions stamp resolved_at/by and audit OP_CLOSED/OP_REOPENED/
+--   OP_STATUS_CHANGED;
+-- private.sync_case_operation_link() [trigger trg_sync_case_operation_link
+--   on cases, after insert or update of operation_id] — validates JTF links
+--   (active op + participating bureau + private.can_manage_joint) and
+--   maintains operation_case_links history + OP_CASE_LINKED/OP_CASE_UNLINKED
+--   audit + op_joint_linked/op_joint_removed lead notifications on every
+--   write path;
+-- public.operation_convert_to_jtf(uuid, public.bureau, public.bureau[]),
+-- public.operation_add_bureau(uuid, public.bureau),
+-- public.operation_remove_bureau(uuid, public.bureau, text),
+-- public.operation_set_lead(uuid, public.bureau),
+-- public.operation_revert_to_normal(uuid) — command/managed JTF lifecycle,
+--   all audited; revert refuses while foreign-bureau cases are linked.
+-- rls_test_cleanup() re-emitted with an operations sweep.
+-- operation_case_links + operation_bureaus added to the supabase_realtime
+-- publication (RLS applies to payloads).

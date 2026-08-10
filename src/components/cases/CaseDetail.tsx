@@ -13,6 +13,7 @@ import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { countRows, list, rpc, update, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useOperationsStore } from '@/lib/operations'
+import { caseJointInfo, type OpCaseLinkRow } from '@/lib/opsJoint'
 import { assessCase, ricoTabVisible } from '@/lib/caseWorkflow'
 import { normalizeCaseTab } from '@/lib/caseLinks'
 import type { Tables } from '@/lib/database.types'
@@ -212,6 +213,20 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   }, [id])
   useEffect(() => { queueMicrotask(() => { void fetchHold() }) }, [fetchHold, vH])
 
+  // JTF-operation participation history — feeds the JOINT badge and the
+  // "Joint via Operation …" chip. Permanent rows (survive op closure and
+  // manual removal); best-effort, the header renders without them.
+  const [opLinks, setOpLinks] = useState<OpCaseLinkRow[]>([])
+  const vOpLinks = useTableVersion('operation_case_links')
+  const opsLoaded = useOperationsStore((s) => s.loaded)
+  const fetchOpsStore = useOperationsStore((s) => s.fetch)
+  useEffect(() => { if (!opsLoaded) void fetchOpsStore() }, [opsLoaded, fetchOpsStore])
+  const fetchOpLinks = useCallback(async () => {
+    try { setOpLinks(await list('operation_case_links', { eq: { case_id: id }, order: 'added_at', ascending: false })) }
+    catch { setOpLinks([]) }
+  }, [id])
+  useEffect(() => { queueMicrotask(() => { void fetchOpLinks() }) }, [fetchOpLinks, vOpLinks])
+
   // Photos = non-archived case media (archived rows stay out of every count).
   const mediaCount = useMemo(() => (wf ? wf.media.filter((m) => !m.archived_at).length : null), [wf])
 
@@ -252,6 +267,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   }
 
   const op = operations.find((x) => x.id === c.operation_id)
+  const joint = caseJointInfo(c, opLinks, new Map(operations.map((o) => [o.id, o])))
   const pinned = isPinnedCase(c.id)
   // The current lead (or command) may hand the case to another officer.
   const canHandover = !!profile && (c.lead_detective_id === profile.id || isCommand)
@@ -402,6 +418,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       <CaseCommandHeader
         c={c}
         op={op ? { id: op.id, name: op.name } : null}
+        joint={joint}
         assessment={assessment}
         pinned={pinned}
         canEdit={canEdit}

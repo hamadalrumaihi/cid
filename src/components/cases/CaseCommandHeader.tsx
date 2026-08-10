@@ -24,6 +24,7 @@ import { officerName } from '@/lib/profiles'
 import { useWatchlistStore } from '@/lib/watchlist'
 import { caseCourtHint, caseStatusTint, CASE_STATUSES, signoffLabel, signoffTint } from '@/lib/signoff'
 import type { CaseAssessment, CaseStage } from '@/lib/caseWorkflow'
+import { jointReasonText, type CaseJointInfo } from '@/lib/opsJoint'
 import { gatherCasePacket, packetDocx, packetMarkdown, packetPdfSpec, type PacketData } from '@/lib/packet'
 import { toast } from '@/lib/toast'
 import { StaleBadge } from './StaleBadge'
@@ -47,6 +48,7 @@ const CONTROL = 'min-h-[40px] rounded-lg border border-white/10 bg-ink-950 px-3 
 export function CaseCommandHeader({
   c,
   op,
+  joint,
   assessment,
   pinned,
   canEdit,
@@ -69,6 +71,8 @@ export function CaseCommandHeader({
 }: {
   c: CaseRow
   op: { id: string; name: string } | null
+  /** Operation-derived joint picture (opsJoint.caseJointInfo). */
+  joint: CaseJointInfo | null
   assessment: CaseAssessment | null
   pinned: boolean
   canEdit: boolean
@@ -191,6 +195,16 @@ export function CaseCommandHeader({
                 JTF · Joint case
               </Badge>
             )}
+            {joint?.activeVia && (
+              <Badge tint="bg-violet-500/15 text-violet-300" title={jointReasonText(joint)}>
+                JOINT · Op {joint.activeVia.opName}
+              </Badge>
+            )}
+            {joint && !joint.activeVia && !c.is_joint_case && joint.everJoint && (
+              <Badge tint="bg-violet-500/10 text-violet-300/80" title={jointReasonText(joint)}>
+                JOINT · historical
+              </Badge>
+            )}
             <span aria-hidden className="mx-0.5 h-4 w-px bg-white/10" />
             {/* Workflow group — where the case stands. */}
             <Badge tint={caseStatusTint(c.status)} className="uppercase">{c.status}</Badge>
@@ -215,7 +229,16 @@ export function CaseCommandHeader({
           </div>
           <h1 className="text-2xl font-black text-white">{c.title || 'Untitled case'}</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-300">{c.summary || 'No summary recorded.'}</p>
-          {op && <Link href={`/operations?op=${op.id}`} className="mt-2 inline-flex items-center rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-white/10">Operation: {op.name}</Link>}
+          {op && (
+            <Link href={`/operations?op=${op.id}`} className="mt-2 inline-flex items-center rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-white/10">
+              {joint?.activeVia?.opId === op.id ? `Joint via Operation ${op.name}` : `Operation: ${op.name}`}
+            </Link>
+          )}
+          {!op && joint?.operations.filter((o) => !o.linked).slice(0, 1).map((o) => (
+            <Link key={o.opId} href={`/operations?op=${o.opId}`} className="mt-2 inline-flex items-center rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-400 hover:bg-white/10">
+              Formerly Operation {o.opName} ({o.opStatus})
+            </Link>
+          ))}
           {hint && <p className={`mt-3 inline-flex rounded-lg px-3 py-2 text-sm font-semibold ${hint.c}`}>{hint.t}</p>}
         </div>
         <div className="flex flex-wrap items-start justify-end gap-2">

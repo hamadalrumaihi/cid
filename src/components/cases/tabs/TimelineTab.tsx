@@ -7,6 +7,8 @@ import { list, rpc } from '@/lib/db'
 import { caseLink } from '@/lib/caseLinks'
 import { timeAgo } from '@/lib/format'
 import { mediaTimelineEvents, type MediaEventInput } from '@/lib/caseMedia'
+import { useOperationsStore } from '@/lib/operations'
+import type { OpCaseLinkRow } from '@/lib/opsJoint'
 import { officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { SIGNOFF_ACTION_VERB } from '@/lib/signoff'
@@ -47,9 +49,11 @@ export function TimelineTab({ c }: { c: CaseRow }) {
   const vS = useTableVersion('case_signoff_history')
   const vH = useTableVersion('legal_holds')
   const vG = useTableVersion('restricted_access_grants')
+  const vOL = useTableVersion('operation_case_links')
+  const operations = useOperationsStore((st) => st.operations)
   const refresh = useCallback(async () => {
     try {
-      const [e, m, r, t, s, h, ra] = await Promise.all([
+      const [e, m, r, t, s, h, ra, ol] = await Promise.all([
         list('evidence', { eq: { case_id: c.id } }) as Promise<EvidenceRow[]>,
         // Media events are derived from row columns only (added/archived/
         // featured) — there is no media event table.
@@ -65,6 +69,10 @@ export function TimelineTab({ c }: { c: CaseRow }) {
         rpc('case_restricted_events', { p_case: c.id })
           .then((x) => (Array.isArray(x.data) ? x.data : []) as RestrictedEventRow[])
           .catch(() => [] as RestrictedEventRow[]),
+        // Operation participation history (permanent rows — joined/removed/
+        // resolution events survive operation closure). Fail-open to empty.
+        (list('operation_case_links', { eq: { case_id: c.id } }) as Promise<OpCaseLinkRow[]>)
+          .catch(() => [] as OpCaseLinkRow[]),
       ])
       const mediaTitle = new Map(m.map((x) => [x.id, x.title]))
       setRows(([
@@ -86,11 +94,37 @@ export function TimelineTab({ c }: { c: CaseRow }) {
           type: 'restricted' as const,
           href: caseLink(c.id, 'media'),
         })),
+        ...ol.flatMap((x) => {
+          const op = operations.find((o) => o.id === x.operation_id)
+          const name = op?.name ?? 'operation'
+          const joint = x.was_jtf
+          const events = [{
+            at: x.added_at,
+            label: joint ? `Case joined Joint Operation “${name}”` : `Case linked to Operation “${name}”`,
+            sub: officerName(x.added_by) || undefined,
+            type: 'task' as const,
+          }, ...(x.removed_at ? [{
+            at: x.removed_at,
+            label: joint ? `Case removed from Joint Operation “${name}”` : `Case unlinked from Operation “${name}”`,
+            sub: [officerName(x.removed_by) || undefined, x.removal_reason || undefined].filter(Boolean).join(' · ') || undefined,
+            type: 'task' as const,
+          }] : [])]
+          // Operation resolution while this case was (still) linked.
+          if (joint && !x.removed_at && op?.resolved_at) {
+            events.push({
+              at: op.resolved_at,
+              label: `Joint Operation “${name}” was ${op.status === 'closed' ? 'closed' : 'resolved'}`,
+              sub: undefined as unknown as string,
+              type: 'task' as const,
+            })
+          }
+          return events
+        }),
       ] as BandEvent[]).sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()))
       setErr(null)
     } catch (e) { setErr(e) }
-  }, [c])
-  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vE, vM, vR, vT, vS, vH, vG])
+  }, [c, operations])
+  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vE, vM, vR, vT, vS, vH, vG, vOL])
   if (err) return <ErrorNotice message={err} onRetry={() => void refresh()} />
   return (
     <div>
