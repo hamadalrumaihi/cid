@@ -163,3 +163,85 @@ discipline.)
 - No inbound (in-city → portal) surface exists.
 - No portal UI exposes the new kinds/lanes yet — the backend accepts them,
   the site does not offer them.
+
+## Inbound contract (FiveM → CID Portal) — dormant
+
+**Status: forward-looking. No bridge server or FiveM resource is deployed.**
+The server-side ingestion surface ships with migration
+`20260812120000_surveillance_domain` and is **inert by construction**: its
+RPC is EXECUTE-granted to `service_role` only (the same dormancy guarantee
+as `mdt_patrol_feed()`), so neither the portal frontend, any signed-in
+member, nor a game client can call it.
+
+### The ingestion surface
+
+```sql
+public.bridge_ingest_event(
+  p_source          text,         -- trusted bridge identifier, e.g. 'fivem-main'
+  p_event_type      text,         -- see event types below
+  p_source_event_id text,         -- bridge-unique id; idempotency key
+  p_event_time      timestamptz,  -- when it happened IN-CITY (source clock)
+  p_payload         jsonb         -- event body (schema below)
+) returns jsonb  -- {status: processed|duplicate|quarantined, ...}
+```
+
+Accepted `p_event_type` values: `fixed_camera`, `alpr`,
+`monitored_location`, `vehicle_observation`, `person_observation`,
+`meeting_event`, `patrol_submission`.
+
+Required payload fields: `activity` (non-empty text) and `target_id` (the
+uuid of an **authorized/active, unexpired** `surveillance_targets` row).
+Optional: `location`, `lat`, `lng`, `plate`, `description`.
+
+### Guarantees
+
+- **Authentication** — only the trusted server-side bridge holding the
+  `service_role` key may call it. That key is never shipped to a FiveM
+  client, a browser, or the portal runtime.
+- **Idempotency** — `(source, source_event_id)` is UNIQUE in
+  `bridge_ingestion_events`; replaying an event returns
+  `{"status":"duplicate"}` and writes nothing.
+- **Quarantine, never silent intelligence** — unknown event types, missing
+  fields, unknown/unauthorized/expired targets are recorded as
+  `status='quarantined'` with the validation error, audited
+  (`BRIDGE_EVENT_QUARANTINED`), and produce **no** observation.
+- **Server-stamped receipt** — `received_at` is stamped server-side;
+  `event_time` (the source clock) is preserved separately on both the
+  ingestion row and the observation (`observed_at`).
+- **Unverified by default** — every ingested observation lands with
+  `verification_status='unverified'` and enters the detective verification
+  queue (Action Center). Automated events can never become verified
+  investigative facts without a detective's review.
+- **Audit trail** — every ingestion outcome writes `audit_log`
+  (`BRIDGE_EVENT_INGESTED` / `BRIDGE_EVENT_QUARANTINED`); the raw envelope
+  is retained in `bridge_ingestion_events` (command/owner-readable).
+- **Rate/abuse protection** — the bridge server is expected to batch and
+  rate-limit; server-side, the idempotency key bounds replays and
+  quarantine bounds garbage. Additional PostgREST-level rate limiting is a
+  deploy-time concern for the bridge service, not a schema concern.
+
+## Sync acknowledgement (outbound) — implemented server-side, dormant
+
+`sync_status` on `mdt_exports` / `mdt_wanted_projections` now has its
+acknowledgement path (the "not yet defined" RPC this document previously
+called out):
+
+```sql
+public.mdt_bridge_ack(
+  p_kind   text,  -- 'export' (mdt_exports) | 'wanted' (mdt_wanted_projections)
+  p_id     uuid,
+  p_result text,  -- 'synced' | 'failed' | 'retryable' | 'pending'
+  p_error  text default null
+) returns void
+```
+
+- EXECUTE-granted to **`service_role` only** — an authenticated browser
+  user can never spoof bridge acknowledgement.
+- Bookkeeping on both tables: `sync_attempts` (incremented per ack),
+  `last_sync_at` (stamped on `synced`), `last_sync_error` (cleared on
+  `synced`, recorded otherwise). `mdt_exports` gained these columns in
+  `20260812120000`; `mdt_wanted_projections` already carried them.
+- Every ack is audited (`MDT_SYNC_ACK`).
+- The feed itself remains authoritative: consumers should still diff
+  against `mdt_patrol_feed()`; `sync_status` is bookkeeping, not a source
+  of truth.
