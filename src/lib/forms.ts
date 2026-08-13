@@ -313,31 +313,32 @@ export const FORM_SCHEMAS: Record<string, FormSchema> = {
         { key: 'department', label: 'Department', type: 'select', opts: ['', 'LSPD', 'BCSO', 'SAHP'] },
         { key: 'date', label: 'Date', type: 'text' },
       ] },
-      { id: 'op', label: 'Operation Details', type: 'kv', fields: [
-        { key: 'subject', label: 'Subject / Target', type: 'text', person: true },
-        { key: 'location', label: 'Location / Area', type: 'text' },
-        { key: 'start_time', label: 'Start Date / Time', type: 'text' },
-        { key: 'end_time', label: 'End Date / Time', type: 'text' },
+      { id: 'authorization', label: 'Authorization', type: 'kv', fields: [
+        { key: 'target_label', label: 'Target Label', type: 'text' },
+        { key: 'authorized_by', label: 'Authorized By', type: 'text' },
+        { key: 'period_from', label: 'Period From', type: 'text' },
+        { key: 'period_to', label: 'Period To', type: 'text' },
+        { key: 'auth_objective', label: 'Objective', type: 'text' },
       ] },
-      { id: 'method', label: 'Method of Surveillance', type: 'kv', fields: [
-        { key: 'method', label: 'Method', type: 'checks', opts: ['Static / Stationary', 'Vehicle (Mobile)', 'Foot', 'Electronic / Camera', 'Aerial', 'Other'] },
+      { id: 'scope', label: 'Objective / Scope', type: 'textarea', key: 'scope' },
+      { id: 'detectives', label: 'Participating Detectives', type: 'grid', cols: [
+        { key: 'name', label: 'Name', type: 'text', person: true },
+        { key: 'role', label: 'Role', type: 'text' },
       ] },
-      { id: 'observations', label: 'Observations / Activity Log', type: 'textarea', key: 'observations' },
-      { id: 'persons', label: 'Persons Observed', type: 'grid', cols: [
-        { key: 'name', label: 'Name / Description', type: 'text', person: true },
-        { key: 'role', label: 'Role / Activity', type: 'text' },
+      { id: 'obs_note', label: 'Observations — Selection', type: 'note', text: 'Copy in only the observations you intend to include. Selection is a deliberate investigative decision — observations are never auto-dumped into a report, and unverified entries must be identified as such.' },
+      { id: 'observations', label: 'Observations Included', type: 'grid', cols: [
+        { key: 'observed_at', label: 'Observed At', type: 'text' },
+        { key: 'source', label: 'Source', type: 'text' },
+        { key: 'summary', label: 'Summary', type: 'text' },
+        { key: 'verified', label: 'Verified', type: 'select', opts: ['', 'Yes', 'No'] },
       ] },
-      { id: 'vehicles', label: 'Vehicles Observed', type: 'grid', cols: [
-        { key: 'vehicle', label: 'Vehicle', type: 'text' },
-        { key: 'plate', label: 'Plate', type: 'text' },
-        { key: 'notes', label: 'Notes', type: 'text' },
+      { id: 'entities', label: 'Relevant Persons / Vehicles', type: 'grid', cols: [
+        { key: 'name_or_plate', label: 'Name / Plate', type: 'text', person: true },
+        { key: 'relevance', label: 'Relevance', type: 'text' },
       ] },
-      { id: 'media', label: 'Photos / Recordings Captured (attach references)', type: 'textarea', key: 'media_refs', mediaPick: true },
-      { id: 'assessment', label: 'Assessment / Findings', type: 'textarea', key: 'assessment' },
-      { id: 'sign', label: 'Review', type: 'kv', fields: [
-        { key: 'detective_sig', label: 'Detective Signature', type: 'text' },
-        { key: 'supervisor_sig', label: 'Supervisor Signature', type: 'text' },
-      ] },
+      { id: 'meetings', label: 'Notable Meetings & Patterns', type: 'textarea', key: 'meetings' },
+      { id: 'assessment', label: 'Investigative Assessment', type: 'textarea', key: 'assessment' },
+      { id: 'outcome', label: 'Outcome / Recommendations', type: 'textarea', key: 'outcome' },
     ],
   },
 }

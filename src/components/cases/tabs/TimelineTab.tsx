@@ -18,6 +18,14 @@ import type { CaseRow, EvidenceRow, HistoryRow, HoldRow, ReportRow, TaskRow } fr
 
 type RestrictedEventRow = Tables<'restricted_access_log'>
 
+/** Slim surveillance projections — fail-open sources (the domain may be
+ *  absent/sealed in an environment; the timeline never sinks on it). */
+type SurvTargetEventRow = Pick<Tables<'surveillance_targets'>,
+  'id' | 'label' | 'status' | 'created_at' | 'approved_at' | 'ended_at'>
+type SurvObsEventRow = Pick<Tables<'surveillance_observations'>,
+  'id' | 'activity' | 'created_at' | 'reviewed_at' | 'verification_status'>
+type SurvAlertEventRow = Pick<Tables<'surveillance_alerts'>, 'id' | 'title' | 'created_at'>
+
 /** Restricted-access trail vocabulary (Phase 6). Case-scoped actions carry
  *  the CASE id in entity_id; view/download rows carry the MEDIA id — those
  *  label with the media title when the already-loaded media list resolves it
@@ -50,10 +58,13 @@ export function TimelineTab({ c }: { c: CaseRow }) {
   const vH = useTableVersion('legal_holds')
   const vG = useTableVersion('restricted_access_grants')
   const vOL = useTableVersion('operation_case_links')
+  const vSvT = useTableVersion('surveillance_targets')
+  const vSvO = useTableVersion('surveillance_observations')
+  const vSvA = useTableVersion('surveillance_alerts')
   const operations = useOperationsStore((st) => st.operations)
   const refresh = useCallback(async () => {
     try {
-      const [e, m, r, t, s, h, ra, ol] = await Promise.all([
+      const [e, m, r, t, s, h, ra, ol, st, so, sa] = await Promise.all([
         list('evidence', { eq: { case_id: c.id } }) as Promise<EvidenceRow[]>,
         // Media events are derived from row columns only (added/archived/
         // featured) — there is no media event table.
@@ -73,6 +84,15 @@ export function TimelineTab({ c }: { c: CaseRow }) {
         // resolution events survive operation closure). Fail-open to empty.
         (list('operation_case_links', { eq: { case_id: c.id } }) as Promise<OpCaseLinkRow[]>)
           .catch(() => [] as OpCaseLinkRow[]),
+        // Surveillance history-worthy events (requested/authorized/concluded),
+        // observation receipt/verification, and rule-generated alerts — all
+        // fail-open (the domain may not exist in this environment).
+        list('surveillance_targets', { select: 'id,label,status,created_at,approved_at,ended_at', eq: { case_id: c.id } })
+          .then((x) => x as unknown as SurvTargetEventRow[]).catch(() => [] as SurvTargetEventRow[]),
+        list('surveillance_observations', { select: 'id,activity,created_at,reviewed_at,verification_status', eq: { case_id: c.id } })
+          .then((x) => x as unknown as SurvObsEventRow[]).catch(() => [] as SurvObsEventRow[]),
+        list('surveillance_alerts', { select: 'id,title,created_at', eq: { case_id: c.id } })
+          .then((x) => x as unknown as SurvAlertEventRow[]).catch(() => [] as SurvAlertEventRow[]),
       ])
       const mediaTitle = new Map(m.map((x) => [x.id, x.title]))
       setRows(([
@@ -120,11 +140,25 @@ export function TimelineTab({ c }: { c: CaseRow }) {
           }
           return events
         }),
+        // Surveillance lifecycle — short labels, 'task' lane (BandEvent's
+        // union is closed; surveillance rides the generic activity lane).
+        ...st.flatMap((x) => [
+          { at: x.created_at, label: `Surveillance requested — ${x.label}`, type: 'task' as const, href: caseLink(c.id, 'surveillance') },
+          ...(x.approved_at ? [{ at: x.approved_at, label: 'Surveillance authorized', sub: x.label, type: 'task' as const, href: caseLink(c.id, 'surveillance') }] : []),
+          ...(x.ended_at ? [{ at: x.ended_at, label: `Surveillance ${x.status === 'denied' ? 'denied' : x.status}`, sub: x.label, type: 'task' as const, href: caseLink(c.id, 'surveillance') }] : []),
+        ]),
+        ...so.flatMap((x) => [
+          { at: x.created_at, label: 'Observation received', sub: x.activity || undefined, type: 'task' as const, href: caseLink(c.id, 'surveillance') },
+          ...(x.reviewed_at && x.verification_status === 'verified'
+            ? [{ at: x.reviewed_at, label: 'Observation verified', sub: x.activity || undefined, type: 'task' as const, href: caseLink(c.id, 'surveillance') }]
+            : []),
+        ]),
+        ...sa.map((x) => ({ at: x.created_at, label: `Surveillance alert — ${x.title}`, type: 'task' as const, href: caseLink(c.id, 'surveillance') })),
       ] as BandEvent[]).sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()))
       setErr(null)
     } catch (e) { setErr(e) }
   }, [c, operations])
-  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vE, vM, vR, vT, vS, vH, vG, vOL])
+  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, vE, vM, vR, vT, vS, vH, vG, vOL, vSvT, vSvO, vSvA])
   if (err) return <ErrorNotice message={err} onRetry={() => void refresh()} />
   return (
     <div>

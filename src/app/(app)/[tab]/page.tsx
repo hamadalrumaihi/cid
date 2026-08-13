@@ -25,6 +25,7 @@ import { GuideView } from '@/components/guide/GuideView'
 import { CalendarView } from '@/components/calendar/CalendarView'
 import { AnalyticsView } from '@/components/analytics/AnalyticsView'
 import { IndicatorsView } from '@/components/indicators/IndicatorsView'
+import { TipsView } from '@/components/tips/TipsView'
 import { ProfileView } from '@/components/profile/ProfileView'
 import { CommandCenterView } from '@/components/command-center/CommandCenterView'
 import { LegalView } from '@/components/legal/LegalView'
@@ -262,6 +263,13 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="indicators" />}>
         <IndicatorsView />
+      </Suspense>
+    )
+  }
+  if (tab === 'tips') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="tips" />}>
+        <TipsView />
       </Suspense>
     )
   }

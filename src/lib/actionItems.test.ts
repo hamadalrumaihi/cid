@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildActionItems, priorityFromScore, NUDGE, STATUS_BASE,
   type AcAccess, type AcBlocker, type AcCase, type AcDoc, type AcLegal, type AcNotif,
-  type AcSuggestion, type AcTask, type AcTransfer, type ActionSources,
+  type AcObservation, type AcSuggestion, type AcSurvTarget, type AcTask, type AcTransfer,
+  type ActionSources,
 } from './actionItems'
 
 const ME = 'me-1'
@@ -651,5 +652,80 @@ describe('document suggestions (AcSuggestion — pre-derived facts)', () => {
     expect(q.suppressedCount).toBe(1)
     const it1 = q.items.find((i) => i.sourceType === 'document_suggestion')!
     expect(it1.sourceMetadata.notificationIds).toEqual(['n-9'])
+  })
+})
+
+/* ---- surveillance ------------------------------------------------------------- */
+
+describe('surveillance (observations + targets)', () => {
+  const mkObs = (over: Partial<AcObservation> = {}): AcObservation => ({
+    id: 'so-1', case_id: 'c-1', activity: 'Two subjects loading crates',
+    source_type: 'detective_manual', created_at: NOW_ISO,
+    observed_at: NOW_ISO, updated_at: NOW_ISO, ...over,
+  })
+  const mkTarget = (over: Partial<AcSurvTarget> = {}): AcSurvTarget => ({
+    id: 'st-1', case_id: 'c-1', label: 'Dockside warehouse',
+    status: 'pending_approval', expires_at: null, requested_by: 'off-2',
+    created_at: NOW_ISO, updated_at: NOW_ISO, ...over,
+  })
+
+  it('an unverified observation → needs_action review item deep-linked to the Surveillance tab', () => {
+    const q = buildActionItems(src({ cases: [mkCase()], observations: [mkObs()] }))
+    const item = byKey(q, 'surv_obs:so-1')
+    expect(item).toMatchObject({
+      sourceType: 'unverified_observation', status: 'needs_action', canAct: true,
+      actionLabel: 'Review observation', isPersonalItem: true, isWaitingOnCurrentUser: true,
+      caseId: 'c-1', caseNumber: 'CID-26-001',
+      deepLink: '/cases?case=c-1&tab=surveillance',
+    })
+    expect(item?.summary).toBe('Two subjects loading crates')
+  })
+
+  it('pending approval → command decide item ONLY for the authorization mirror (bureau lead of the case bureau)', () => {
+    const cases = [mkCase({ bureau: 'LSB' })]
+    const lead = buildActionItems(src({ role: 'bureau_lead', division: 'LSB', isCommand: true, cases, survTargets: [mkTarget()] }))
+    expect(byKey(lead, 'surv_tgt:st-1')).toMatchObject({
+      sourceType: 'surveillance_expiring', status: 'needs_action',
+      isCommandItem: true, isWaitingOnCurrentUser: true,
+      deepLink: '/cases?case=c-1&tab=surveillance',
+    })
+    // A bureau lead of ANOTHER bureau has no authority — and is not a party.
+    const otherLead = buildActionItems(src({ role: 'bureau_lead', division: 'BCB', isCommand: true, cases, survTargets: [mkTarget()] }))
+    expect(byKey(otherLead, 'surv_tgt:st-1')).toBeUndefined()
+  })
+
+  it('self-approval is barred: the requesting deputy director waits instead of deciding', () => {
+    const q = buildActionItems(src({
+      role: 'deputy_director', isCommand: true,
+      cases: [mkCase()], survTargets: [mkTarget({ requested_by: ME })],
+    }))
+    expect(byKey(q, 'surv_tgt:st-1')).toMatchObject({ status: 'waiting', isPersonalItem: true, isCommandItem: false })
+  })
+
+  it('an active authorization expiring within 72h → due_soon with dueAt for the requester', () => {
+    const q = buildActionItems(src({
+      cases: [mkCase()],
+      survTargets: [mkTarget({ status: 'active', requested_by: ME, expires_at: '2026-07-17T12:00:00.000Z' })],
+    }))
+    const item = byKey(q, 'surv_tgt:st-1:expiry')
+    expect(item).toMatchObject({
+      sourceType: 'surveillance_expiring', status: 'due_soon',
+      dueAt: '2026-07-17T12:00:00.000Z', isPersonalItem: true,
+    })
+    // due within 48h window adds +50 on top of due_soon's 250.
+    expect(item?.urgencyScore).toBeGreaterThanOrEqual(STATUS_BASE.due_soon)
+  })
+
+  it('a far-future expiry emits nothing; an uninvolved detective sees no expiry item', () => {
+    const far = buildActionItems(src({
+      cases: [mkCase()],
+      survTargets: [mkTarget({ status: 'active', requested_by: ME, expires_at: '2026-09-01T00:00:00.000Z' })],
+    }))
+    expect(byKey(far, 'surv_tgt:st-1:expiry')).toBeUndefined()
+    const bystander = buildActionItems(src({
+      cases: [mkCase()],
+      survTargets: [mkTarget({ status: 'active', requested_by: 'off-2', expires_at: '2026-07-16T12:00:00.000Z' })],
+    }))
+    expect(byKey(bystander, 'surv_tgt:st-1:expiry')).toBeUndefined()
   })
 })

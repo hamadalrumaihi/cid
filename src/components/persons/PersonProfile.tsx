@@ -64,9 +64,10 @@ import {
 import { BoloStateBadge, LegalSection, ManageBoloModal } from './ProfileLegal'
 import { PersonAccountsSection } from './PersonAccountsSection'
 import { PersonDuplicatesModal } from './PersonMergeModal'
+import { ObservationHistory } from '@/components/shared/ObservationHistory'
 
-type SectionId = 'overview' | 'identity' | 'relationships' | 'cases' | 'legal' | 'vehicles' | 'accounts' | 'locations' | 'media' | 'activity'
-const SECTION_IDS: SectionId[] = ['overview', 'identity', 'relationships', 'cases', 'legal', 'vehicles', 'locations', 'media', 'activity']
+type SectionId = 'overview' | 'identity' | 'relationships' | 'cases' | 'legal' | 'vehicles' | 'accounts' | 'locations' | 'observations' | 'media' | 'activity'
+const SECTION_IDS: SectionId[] = ['overview', 'identity', 'relationships', 'cases', 'legal', 'vehicles', 'locations', 'observations', 'media', 'activity']
 
 /** Stable empty fallback so memo deps don't churn while the core loads. */
 const NO_LEGAL: PersonCore['legal'] = []
@@ -191,6 +192,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
       case 'activity': apply({ activity: await loadActivityData(id) }); break
       case 'identity': // person row only — nothing extra to fetch
       case 'legal': // served by the core's slim legal projection
+      case 'observations': // ObservationHistory fetches its own slice
         break
     }
   }, [id])
@@ -349,6 +351,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
     { id: 'vehicles', label: 'Vehicles', count: counts?.vehicles },
     { id: 'accounts', label: 'Accounts' },
     { id: 'locations', label: 'Locations', count: counts?.places },
+    { id: 'observations', label: 'Observations' },
     { id: 'media', label: 'Media', count: counts?.media ?? slices.media?.length },
     { id: 'activity', label: 'Activity', marker: !!p && isPersonStale(p.reviewed_at, now), markerLabel: 'Intelligence overdue for review' },
   ]
@@ -478,6 +481,12 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
               slices.places
                 ? <PersonPlacesSection person={p} data={slices.places} canEdit={mayEdit} onLink={(legacy) => setLinkPlace({ legacy })} onRefresh={refresh} />
                 : <Notice text="Loading locations…" />
+            )}
+            {section === 'observations' && (
+              <Card>
+                <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Surveillance history</h3>
+                <ObservationHistory kind="person" refId={p.id} />
+              </Card>
             )}
             {section === 'media' && (
               slices.media

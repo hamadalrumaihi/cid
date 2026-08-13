@@ -6,7 +6,7 @@
  *  previous items stay on screen while a realtime-triggered refresh is in
  *  flight, so the queue never flashes empty. */
 import { useCallback, useEffect, useState } from 'react'
-import { buildActionItems, type AcDoc, type AcGrant, type AcHold, type AcSuggestion, type ActionItem, type ActionSources } from '@/lib/actionItems'
+import { buildActionItems, type AcDoc, type AcGrant, type AcHold, type AcObservation, type AcSuggestion, type AcSurvTarget, type ActionItem, type ActionSources } from '@/lib/actionItems'
 import {
   ackState, canApproveDoc, docTitle, reviewState,
   type MyAckVersions, type ShelfDoc,
@@ -38,6 +38,10 @@ const BLOCKER_COLS = 'id,case_id,title,type,status,owner_id,review_at,created_at
 const HOLD_COLS = 'id,case_id,reason,placed_by,placed_at'
 /** Restricted-access grants — RLS-scoped (command: all; member: own rows). */
 const GRANT_COLS = 'id,case_id,user_id,status,reason,granted_at,decided_at,expires_at'
+/** Surveillance — unverified observations + decision/expiry targets, both
+ *  RLS-scoped to accessible cases and fail-open (the domain may be absent). */
+const OBS_COLS = 'id,case_id,activity,source_type,created_at,observed_at,updated_at'
+const TGT_COLS = 'id,case_id,label,status,expires_at,requested_by,updated_at,created_at'
 const NOTIF_COLS = 'id,user_id,type,payload,read,created_at'
 /** Library governance projection — never full bodies (docModel AcDoc inputs). */
 const DOC_COLS =
@@ -98,6 +102,8 @@ export function useActionItems(): ActionItemsResult {
   const vSuggestions = useTableVersion('document_suggestions')
   const vHolds = useTableVersion('legal_holds')
   const vGrants = useTableVersion('restricted_access_grants')
+  const vSurvObs = useTableVersion('surveillance_observations')
+  const vSurvTgt = useTableVersion('surveillance_targets')
 
   const refresh = useCallback(async () => {
     if (state !== 'in' || !profile) return
@@ -115,7 +121,7 @@ export function useActionItems(): ActionItemsResult {
     }
     try {
       const me = profile.id
-      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks, suggestionRows, holds, restrictedGrants] =
+      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks, suggestionRows, holds, restrictedGrants, survObservations, survTargetRows] =
         await Promise.all([
           list('cases', { select: CASE_COLS, is: { archived_at: null } }),
           list('case_tasks', { select: TASK_COLS, eq: { assignee: me, done: false } }),
@@ -167,6 +173,17 @@ export function useActionItems(): ActionItemsResult {
           // the read tiny (a member only ever gets their own rows). Fail-open.
           list('restricted_access_grants', { select: GRANT_COLS, in: { status: ['pending', 'granted'] } })
             .then((r) => r as unknown as AcGrant[]).catch(() => [] as AcGrant[]),
+          // Surveillance verification queue: unverified observations on cases
+          // the viewer can access (RLS trims), bounded. Fail-open to empty.
+          list('surveillance_observations', {
+            select: OBS_COLS, eq: { verification_status: 'unverified' },
+            order: 'created_at', ascending: false, limit: 100,
+          }).then((r) => r as unknown as AcObservation[]).catch(() => [] as AcObservation[]),
+          // Targets awaiting a decision or still running — the builder keeps
+          // pending_approval rows plus authorized/active ones expiring ≤72h.
+          list('surveillance_targets', {
+            select: TGT_COLS, in: { status: ['pending_approval', 'authorized', 'active'] },
+          }).then((r) => r as unknown as AcSurvTarget[]).catch(() => [] as AcSurvTarget[]),
         ])
       const nowMs = Date.now()
       // Command/owner: the shared awaitingCount (submitted + actionable
@@ -234,6 +251,8 @@ export function useActionItems(): ActionItemsResult {
         blockers,
         holds,
         restrictedGrants,
+        observations: survObservations,
+        survTargets: survTargetRows,
         notifications,
         documents,
         suggestions,
@@ -265,7 +284,7 @@ export function useActionItems(): ActionItemsResult {
       window.clearTimeout(id)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs, vDocuments, vSuggestions, vHolds, vGrants])
+  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs, vDocuments, vSuggestions, vHolds, vGrants, vSurvObs, vSurvTgt])
 
   return {
     items: built?.items ?? [],

@@ -27,6 +27,7 @@ import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTi
 import { ConfidenceBadge, ProvenanceBadge, StaleIntelBadge } from '@/components/ui/IntelBadges'
 import { EntityLink } from '@/components/ui/EntityLink'
 import { uiConfirm } from '@/components/ui/dialog'
+import { ObservationHistory } from '@/components/shared/ObservationHistory'
 import { useNow } from '@/lib/useNow'
 import { RosterSection } from './gangRoster'
 import { MemberModal, TurfModal, LinkPlaceModal, AddGangPhotoModal, GangPhotoLightbox, AttachGangModal } from './gangModals'
@@ -35,8 +36,8 @@ import {
 } from './gangIntel'
 import { densityTint, cap, type CaseOption, type CaseRow, type GangPlaceRow, type GangRow, type IntelLinkRow, type LinkedPlace, type MediaRow, type MemberRow, type PlaceRow, type TurfRow, type VehicleRow } from './gangShared'
 
-type SectionId = 'overview' | 'members' | 'territory' | 'places' | 'vehicles' | 'cases' | 'media' | 'activity'
-const SECTION_IDS: SectionId[] = ['overview', 'members', 'territory', 'places', 'vehicles', 'cases', 'media', 'activity']
+type SectionId = 'overview' | 'members' | 'territory' | 'places' | 'vehicles' | 'cases' | 'observations' | 'media' | 'activity'
+const SECTION_IDS: SectionId[] = ['overview', 'members', 'territory', 'places', 'vehicles', 'cases', 'observations', 'media', 'activity']
 
 const fmtDate = (iso: string | null | undefined) => {
   if (!iso) return '—'
@@ -502,6 +503,7 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
     { id: 'places', label: 'Places', count: linkedPlaces.length },
     { id: 'vehicles', label: 'Vehicles', count: vehicles.length },
     { id: 'cases', label: 'Cases', count: intelLinks.length },
+    { id: 'observations', label: 'Observations' },
     { id: 'media', label: 'Media', count: media.length },
     { id: 'activity', label: 'Activity', count: activity.length, marker: isGangStale(gang, now), markerLabel: 'Intelligence overdue for review' },
   ]
@@ -606,6 +608,12 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
         {section === 'places' && <PlacesSection linked={linkedPlaces} media={media} canEdit={canEdit} canDelete={canDelete} onLink={() => setLinkPlaceOpen(true)} onUnlink={(l) => void unlinkPlace(l)} />}
         {section === 'vehicles' && <VehiclesSection vehicles={vehicles} />}
         {section === 'cases' && <CasesSection links={intelLinks} cases={linkedCases} indirect={indirectCases} canEdit={canEdit} onAttach={() => setAttachOpen(true)} onUnlink={(l) => void unlinkCase(l)} />}
+        {section === 'observations' && (
+          <Card pad="lg">
+            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-300">Surveillance history</h3>
+            <ObservationHistory kind="gang" refId={gang.id} />
+          </Card>
+        )}
         {section === 'media' && <MediaSection media={media} canEdit={canEdit} onAdd={() => setPhotoOpen(true)} onOpen={(m) => setLightbox(m)} />}
         {section === 'activity' && (
           <Card pad="lg">

@@ -77,7 +77,6 @@ describe.skipIf(!enabled)('v1.39 — surveillance & intelligence domain (live)',
   let caseId = ''         // LSB case (creator: lsb) — the surveillance case
   let caseBId = ''        // second LSB case (creator: lsb) — deconfliction sibling
   let personId = ''       // shared subject for the pattern/deconfliction pins
-  let lsbReqId = ''       // lsb's surveillance request (stays pending)
   let leadReqId = ''      // lead's request — the self-approval + lifecycle pin
   let obsId = ''          // manual observation (guard + review/promote pins)
   let restrictedObsId = ''// restricted observation — the stricter wall pin
@@ -150,7 +149,6 @@ describe.skipIf(!enabled)('v1.39 — surveillance & intelligence domain (live)',
     })
     expect(r.error, r.error?.message).toBeNull()
     expect(r.data).toMatchObject({ status: 'pending_approval', case_id: caseId })
-    lsbReqId = r.data.id as string
 
     // No INSERT policy on surveillance_targets — the browser can never mint one.
     const direct = await lsb.from('surveillance_targets')

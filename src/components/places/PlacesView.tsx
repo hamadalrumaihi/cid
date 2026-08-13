@@ -27,6 +27,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { EntityLink } from '@/components/ui/EntityLink'
 import { EntityLegalLine, fetchEntityLegalRefs, type EntityLegalRef } from '@/components/justice/EntityLegalSection'
+import { ObservationHistory } from '@/components/shared/ObservationHistory'
 
 type PlaceRow = Tables<'places'>
 type GangRow = Tables<'gangs'>
@@ -92,6 +93,7 @@ export function PlacesView() {
   const [err, setErr] = useState<string | null>(null)
   const [photos, setPhotos] = useState<PlacePhoto[]>([])
   const [legalRefs, setLegalRefs] = useState<ReadonlyMap<string, EntityLegalRef[]>>(new Map())
+  const [obsCounts, setObsCounts] = useState<ReadonlyMap<string, number>>(new Map())
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [editor, setEditor] = useState<PlaceRow | 'new' | null>(null)
   const [attach, setAttach] = useState<PlaceRow | null>(null)
@@ -107,6 +109,7 @@ export function PlacesView() {
   const vNarcotics = useTableVersion('narcotics')
   const vMedia = useTableVersion('media')
   const vLegal = useTableVersion('legal_requests')
+  const vObs = useTableVersion('surveillance_observations')
 
   const refresh = useCallback(async () => {
     if (state !== 'in') return
@@ -114,7 +117,7 @@ export function PlacesView() {
     setLoading(true)
     setErr(null)
     try {
-      const [pl, g, c, n, prec, hot, ph, lg] = await Promise.all([
+      const [pl, g, c, n, prec, hot, ph, lg, ob] = await Promise.all([
         withRetry(() => list('places', { order: 'updated_at', ascending: false })),
         list('gangs', { order: 'name' }).catch(() => [] as GangRow[]),
         list('cases', { select: 'id,case_number,title', order: 'updated_at', ascending: false })
@@ -130,12 +133,20 @@ export function PlacesView() {
         // degraded read hides the section (no false "no legal activity" claim
         // is ever rendered — the cards simply omit it).
         fetchEntityLegalRefs('place').catch(() => new Map<string, EntityLegalRef[]>()),
+        // Surveillance-observation counts per place (RLS-trimmed, one batch —
+        // the photos idiom). A degraded read hides the line, never claims 0.
+        list('surveillance_observations', { select: 'id,place_id', limit: 1000 })
+          .then((rows) => (rows as unknown as { id: string; place_id: string | null }[]).filter((o) => o.place_id))
+          .catch(() => [] as { id: string; place_id: string | null }[]),
       ])
       setPlaces(pl)
       setGangs(g)
       setCases(c)
       setPhotos(ph)
       setLegalRefs(lg)
+      const oc = new Map<string, number>()
+      for (const o of ob) oc.set(o.place_id!, (oc.get(o.place_id!) ?? 0) + 1)
+      setObsCounts(oc)
       setDrugs(n.map((row) => ({
         row,
         precursors: prec.filter((p) => p.narcotic_id === row.id),
@@ -152,7 +163,7 @@ export function PlacesView() {
   useEffect(() => {
     const t = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(t)
-  }, [refresh, vPlaces, vGangs, vCases, vNarcotics, vMedia, vLegal])
+  }, [refresh, vPlaces, vGangs, vCases, vNarcotics, vMedia, vLegal, vObs])
 
   useEffect(() => {
     if (!placeId || placeSeeded.current || !places.length) return
@@ -299,6 +310,7 @@ export function PlacesView() {
               drug={drugById(place.narcotic_id)}
               photos={photosByPlace.get(place.id) ?? []}
               legal={legalRefs.get(place.id) ?? []}
+              observationCount={obsCounts.get(place.id) ?? 0}
               onOpenPhoto={setLightbox}
               onAddPhoto={() => setAddPhoto(place)}
               canEdit={canEdit}
@@ -427,13 +439,14 @@ function PhotoLightbox({ photo, onClose }: { photo: PlacePhoto; onClose: () => v
   )
 }
 
-function PlaceCard({ place, gang, caseNumber, drug, photos, legal, onOpenPhoto, onAddPhoto, canEdit, canDelete, selected, onSelect, onEdit, onDelete, onAttach }: {
+function PlaceCard({ place, gang, caseNumber, drug, photos, legal, observationCount, onOpenPhoto, onAddPhoto, canEdit, canDelete, selected, onSelect, onEdit, onDelete, onAttach }: {
   place: PlaceRow
   gang: string | null
   caseNumber: string | null
   drug: DrugBundle | null
   photos: PlacePhoto[]
   legal: EntityLegalRef[]
+  observationCount: number
   onOpenPhoto: (p: PlacePhoto) => void
   onAddPhoto: () => void
   canEdit: boolean
@@ -481,6 +494,7 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, onOpenPhoto, 
           </div>
         </div>
       )}
+      {observationCount > 0 && <PlaceObservations placeId={place.id} count={observationCount} />}
       {photos.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {photos.map((p) => {
@@ -528,6 +542,31 @@ function PlaceCard({ place, gang, caseNumber, drug, photos, legal, onOpenPhoto, 
         </div>
       )}
     </Card>
+  )
+}
+
+/** Surveillance-history line + lazy expandable (the shared ObservationHistory
+ *  only mounts — and fetches — once opened). Verified rows read as fact;
+ *  unverified stay a muted count inside the panel. */
+function PlaceObservations({ placeId, count }: { placeId: string; count: number }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="inline-flex min-h-[40px] items-center gap-1.5 rounded text-[11px] font-semibold text-slate-400 transition hover:text-slate-200 sm:min-h-0"
+      >
+        <span aria-hidden>{open ? '▾' : '▸'}</span>
+        {count} surveillance observation{count === 1 ? '' : 's'}
+      </button>
+      {open && (
+        <div className="mt-2">
+          <ObservationHistory kind="place" refId={placeId} />
+        </div>
+      )}
+    </div>
   )
 }
 

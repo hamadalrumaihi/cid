@@ -60,6 +60,7 @@ export const NOTIF_LABEL: Record<string, string> = {
   restricted_access_granted: '🔓 Restricted access granted',
   restricted_access_denied: '🔒 Restricted access denied',
   restricted_access_revoked: '🔒 Restricted access revoked',
+  surveillance_decided: 'Surveillance request decided',
 }
 
 // Payload parsing is zod-validated (v1.14): malformed payloads degrade to {}
@@ -106,6 +107,8 @@ const NOTIF_CASE_TAB: Record<string, string> = {
   restricted_access_granted: 'media',
   restricted_access_denied: 'media',
   restricted_access_revoked: 'media',
+  // Surveillance decisions land on the case's Surveillance tab.
+  surveillance_decided: 'surveillance',
 }
 
 /** Where clicking a notification should take the member — so bell rows are
