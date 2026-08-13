@@ -28,6 +28,7 @@ import { activeDeadline, dispositionFor, humanize, type LegalViewer } from './le
 import { notifDetail, notifHref, notifSub, notifTitle } from './notifText'
 import { parseNotifPayload } from './schemas'
 import { signoffLabel } from './signoff'
+import { canAuthorizeSurveillance } from './surveillanceModel'
 
 /* ---- canonical types ------------------------------------------------------ */
 
@@ -42,6 +43,7 @@ export type ActionSourceType =
   | 'document_suggestion'
   | 'legal_hold'
   | 'restricted_access'
+  | 'unverified_observation' | 'surveillance_expiring'
   | 'other'
 
 export type ActionPriority = 'critical' | 'high' | 'normal' | 'low'
@@ -117,6 +119,14 @@ export type AcHold = Pick<Tables<'legal_holds'>,
  *  command work and granted rows are the viewer's own live access. */
 export type AcGrant = Pick<Tables<'restricted_access_grants'>,
   'id' | 'case_id' | 'user_id' | 'status' | 'reason' | 'granted_at' | 'decided_at' | 'expires_at'>
+/** Unverified surveillance observations on cases the viewer can access (RLS
+ *  scopes the read) — every one is verification work for the case team. */
+export type AcObservation = Pick<Tables<'surveillance_observations'>,
+  'id' | 'case_id' | 'activity' | 'source_type' | 'created_at' | 'observed_at' | 'updated_at'>
+/** Surveillance targets that need a decision (pending_approval) or are about
+ *  to lapse (authorized/active with expires_at inside 72h). */
+export type AcSurvTarget = Pick<Tables<'surveillance_targets'>,
+  'id' | 'case_id' | 'label' | 'status' | 'expires_at' | 'requested_by' | 'updated_at' | 'created_at'>
 /** All notifications columns — notifText helpers take the full row. */
 export type AcNotif = Pick<Tables<'notifications'>,
   'id' | 'user_id' | 'type' | 'payload' | 'read' | 'created_at'>
@@ -191,6 +201,12 @@ export interface ActionSources {
   /** Additive (defaults []): restricted-access grant rows (pending/granted),
    *  RLS-scoped (see AcGrant). */
   restrictedGrants?: AcGrant[]
+  /** Additive (defaults []): unverified surveillance observations (see
+   *  AcObservation). */
+  observations?: AcObservation[]
+  /** Additive (defaults []): pending/expiring surveillance targets (see
+   *  AcSurvTarget). */
+  survTargets?: AcSurvTarget[]
   notifications: AcNotif[]     // my UNREAD notifications (read = false)
   /** Additive (defaults []): library governance items, pre-derived. */
   documents?: AcDoc[]
@@ -751,6 +767,87 @@ export function buildActionItems(s: ActionSources): ActionQueue {
         isPersonalItem: true,
         sourceMetadata: { grant_id: g.id, case_id: g.case_id, expires_at: g.expires_at },
         dedupeKey: `restricted:${g.id}:expiry`,
+      })
+    }
+  }
+
+  /* 9f · surveillance — unverified observations are verification work for the
+   *      case team; pending authorizations surface for Bureau Lead+ deciders
+   *      (never the requester — the RPC's self-approval bar, mirrored); an
+   *      authorization inside its last 72h surfaces for the requester and
+   *      command. All cosmetic mirrors — the RPCs re-decide. */
+  for (const o of s.observations ?? []) {
+    const c = caseById.get(o.case_id)
+    add({
+      id: `surv_obs:${o.id}`, sourceType: 'unverified_observation', sourceId: o.id,
+      title: `Review observation — ${c ? c.case_number : 'case'}`,
+      summary: o.activity,
+      reason: 'Unverified intelligence awaiting detective verification',
+      status: 'needs_action',
+      createdAt: o.created_at, updatedAt: o.updated_at, waitingSince: o.created_at,
+      ownerId: s.me, caseId: o.case_id, caseNumber: c?.case_number ?? null,
+      bureau: c?.bureau ?? null,
+      deepLink: caseLink(o.case_id, 'surveillance'),
+      actionLabel: 'Review observation', canAct: true,
+      isPersonalItem: true, isWaitingOnCurrentUser: true,
+      sourceMetadata: { case_id: o.case_id, source_type: o.source_type, observed_at: o.observed_at },
+      dedupeKey: `surv_obs:${o.id}`,
+    })
+  }
+  const survViewer = { userId: s.me, role: s.role, division: s.division, isOwner: s.isOwner ?? false }
+  for (const t of s.survTargets ?? []) {
+    const c = caseById.get(t.case_id)
+    if (t.status === 'pending_approval') {
+      if (canAuthorizeSurveillance(survViewer, c?.bureau ?? null) && t.requested_by !== s.me) {
+        add({
+          id: `surv_tgt:${t.id}`, sourceType: 'surveillance_expiring', sourceId: t.id,
+          title: `Surveillance authorization — ${t.label}`,
+          summary: c ? `${c.case_number} · ${c.title || 'Untitled'}` : 'Surveillance request',
+          reason: 'Awaiting your Bureau Lead+ authorization decision',
+          status: 'needs_action',
+          createdAt: t.created_at, updatedAt: t.updated_at, waitingSince: t.created_at,
+          ownerId: s.me, responsibleRole: s.role,
+          caseId: t.case_id, caseNumber: c?.case_number ?? null, bureau: c?.bureau ?? null,
+          deepLink: caseLink(t.case_id, 'surveillance'),
+          isCommandItem: true, isWaitingOnCurrentUser: true,
+          sourceMetadata: { case_id: t.case_id, requested_by: t.requested_by },
+          dedupeKey: `surv_tgt:${t.id}`,
+        })
+      } else if (t.requested_by === s.me) {
+        add({
+          id: `surv_tgt:${t.id}`, sourceType: 'surveillance_expiring', sourceId: t.id,
+          title: `Surveillance request — ${t.label}`,
+          summary: c ? `${c.case_number} · ${c.title || 'Untitled'}` : 'Surveillance request',
+          reason: 'Waiting on a Bureau Lead+ authorization decision',
+          status: 'waiting',
+          createdAt: t.created_at, updatedAt: t.updated_at, waitingSince: t.created_at,
+          caseId: t.case_id, caseNumber: c?.case_number ?? null, bureau: c?.bureau ?? null,
+          deepLink: caseLink(t.case_id, 'surveillance'),
+          isPersonalItem: true,
+          dedupeKey: `surv_tgt:${t.id}`,
+        })
+      }
+      continue
+    }
+    if ((t.status === 'authorized' || t.status === 'active') && t.expires_at) {
+      const mine = t.requested_by === s.me
+      if (!mine && !s.isCommand && !(s.isOwner ?? false)) continue
+      const dl = deadlineInfo(t.expires_at, 'expires', { now: s.nowMs, soonHours: 72, urgentHours: 72 })
+      if (!dl || (!dl.urgent && !dl.overdue)) continue
+      add({
+        id: `surv_tgt:${t.id}:expiry`, sourceType: 'surveillance_expiring', sourceId: t.id,
+        title: `Surveillance expiring — ${t.label}`,
+        summary: dl.text,
+        reason: mine ? 'Your authorization lapses soon — conclude it or request an extension' : 'An authorization on a case you oversee lapses soon',
+        status: 'due_soon',
+        dueAt: t.expires_at,
+        createdAt: t.created_at, updatedAt: t.updated_at,
+        ownerId: mine ? s.me : null,
+        caseId: t.case_id, caseNumber: c?.case_number ?? null, bureau: c?.bureau ?? null,
+        deepLink: caseLink(t.case_id, 'surveillance'),
+        isPersonalItem: mine, isCommandItem: !mine, isWaitingOnCurrentUser: true,
+        sourceMetadata: { case_id: t.case_id, expires_at: t.expires_at },
+        dedupeKey: `surv_tgt:${t.id}:expiry`,
       })
     }
   }

@@ -26,6 +26,7 @@ import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { WatchButton } from '@/components/cases/WatchButton'
 import { EntityLegalPanel } from '@/components/justice/EntityLegalSection'
+import { ObservationHistory } from '@/components/shared/ObservationHistory'
 import { VehicleModal, type GangOption, type PersonOption } from './VehiclesView'
 
 type VehicleRow = Tables<'vehicles'>
@@ -388,6 +389,14 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
             <VehiclePhotosPanel vehicleId={id} />
             <EntityLegalPanel exhibitType="vehicle" sourceId={id} noun="vehicle" />
             <LinkedCasesPanel plate={v.plate} ownerId={v.owner_id} />
+            {/* Verified-observation history (RLS-trimmed — restricted or
+                out-of-scope rows simply never arrive). */}
+            <Card>
+              <h3 className={PANEL_TITLE}>Surveillance history</h3>
+              <div className="mt-3">
+                <ObservationHistory kind="vehicle" refId={id} />
+              </div>
+            </Card>
           </div>
         </div>
       )}

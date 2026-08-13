@@ -87,6 +87,7 @@ export function mediaRow(overrides: Partial<Tables<'media'>> = {}): Tables<'medi
     id: mockId(),
     kind: 'image',
     narcotic_id: null,
+    observation_id: null,
     person_id: null,
     place_id: null,
     report_id: null,

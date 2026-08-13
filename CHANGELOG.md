@@ -8,6 +8,31 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Surveillance & Intelligence domain
+
+The portal-side surveillance pipeline (SOP Title 7): **surveillance
+targets** with a server-authoritative authorization lifecycle (draft →
+pending_approval → authorized → active → suspended → completed, plus
+denied/expired/cancelled; Bureau Lead+ decides, never their own request,
+every decision in `surveillance_target_history` + audit), **structured
+observations** (unverified by default, guard-stamped provenance, restricted
+rows walled to command/logger/reviewer, per-viewer view-auditing via the
+widened `log_restricted_view`), a **detective verification queue** in the
+Action Center, **intelligence tips + patrol submissions** (one triage
+queue; confidential source identity in a stricter-walled side table),
+**association events**, **explainable pattern alerts** (configurable rules,
+open-dedupe, every alert states its rule/threshold/window and that a
+pattern is a lead, not proof), **cross-case deconfliction** with
+existence-only stubs for hidden cases, verified-only **registry observation
+history** (person/vehicle/place/gang), a **surveillance report template**
+in the existing engine, case timeline/graph integration, and the dormant
+**inbound FiveM bridge surface** (`bridge_ingest_event`, service_role-only,
+idempotent, quarantining) plus the **MDT sync acknowledgement path**
+(`mdt_bridge_ack`, service_role-only) the bridge contract previously
+documented as missing. Migration `20260812120000_surveillance_domain`
+(additive; validated on a scratch cluster with a 14-scenario functional
+smoke). Discord and the FiveM sensor side are untouched.
+
 ### Joint / JTF Operations — operation-scoped joint cases
 
 Operations now come in two kinds: **normal** (bureau-owned coordination —
