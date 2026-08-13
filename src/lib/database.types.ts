@@ -402,6 +402,56 @@ export type Database = {
           },
         ]
       }
+      bridge_ingestion_events: {
+        Row: {
+          error: string | null
+          event_time: string | null
+          event_type: string
+          id: string
+          observation_id: string | null
+          payload: Json
+          processed_at: string | null
+          received_at: string
+          source: string
+          source_event_id: string
+          status: string
+        }
+        Insert: {
+          error?: string | null
+          event_time?: string | null
+          event_type: string
+          id?: string
+          observation_id?: string | null
+          payload?: Json
+          processed_at?: string | null
+          received_at?: string
+          source: string
+          source_event_id: string
+          status?: string
+        }
+        Update: {
+          error?: string | null
+          event_time?: string | null
+          event_type?: string
+          id?: string
+          observation_id?: string | null
+          payload?: Json
+          processed_at?: string | null
+          received_at?: string
+          source?: string
+          source_event_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bridge_ingestion_events_observation_id_fkey"
+            columns: ["observation_id"]
+            isOneToOne: false
+            referencedRelation: "surveillance_observations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       case_access_grants: {
         Row: {
           case_id: string
@@ -2662,6 +2712,221 @@ export type Database = {
           },
         ]
       }
+      intelligence_tip_links: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          note: string | null
+          ref_id: string
+          tip_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind: string
+          note?: string | null
+          ref_id: string
+          tip_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          note?: string | null
+          ref_id?: string
+          tip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intelligence_tip_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intelligence_tip_links_tip_id_fkey"
+            columns: ["tip_id"]
+            isOneToOne: false
+            referencedRelation: "intelligence_tips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      intelligence_tip_sources: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          handler_notes: string | null
+          source_contact: string | null
+          source_name: string | null
+          tip_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          handler_notes?: string | null
+          source_contact?: string | null
+          source_name?: string | null
+          tip_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          handler_notes?: string | null
+          source_contact?: string | null
+          source_name?: string | null
+          tip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intelligence_tip_sources_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intelligence_tip_sources_tip_id_fkey"
+            columns: ["tip_id"]
+            isOneToOne: true
+            referencedRelation: "intelligence_tips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      intelligence_tips: {
+        Row: {
+          assigned_to: string | null
+          case_id: string | null
+          created_at: string
+          created_by: string | null
+          decided_at: string | null
+          decided_by: string | null
+          details: string | null
+          disposition: string | null
+          id: string
+          kind: string
+          location_text: string | null
+          observed_at: string | null
+          operation_id: string | null
+          place_id: string | null
+          related_bolo: string | null
+          related_observation_id: string | null
+          reliability: string
+          source_type: string
+          status: string
+          summary: string
+          triage_notes: string | null
+          updated_at: string
+          urgency: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          case_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          details?: string | null
+          disposition?: string | null
+          id?: string
+          kind?: string
+          location_text?: string | null
+          observed_at?: string | null
+          operation_id?: string | null
+          place_id?: string | null
+          related_bolo?: string | null
+          related_observation_id?: string | null
+          reliability?: string
+          source_type?: string
+          status?: string
+          summary: string
+          triage_notes?: string | null
+          updated_at?: string
+          urgency?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          case_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          details?: string | null
+          disposition?: string | null
+          id?: string
+          kind?: string
+          location_text?: string | null
+          observed_at?: string | null
+          operation_id?: string | null
+          place_id?: string | null
+          related_bolo?: string | null
+          related_observation_id?: string | null
+          reliability?: string
+          source_type?: string
+          status?: string
+          summary?: string
+          triage_notes?: string | null
+          updated_at?: string
+          urgency?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intelligence_tips_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intelligence_tips_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intelligence_tips_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intelligence_tips_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intelligence_tips_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "operations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intelligence_tips_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intelligence_tips_related_observation_id_fkey"
+            columns: ["related_observation_id"]
+            isOneToOne: false
+            referencedRelation: "surveillance_observations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       justice_membership_request_history: {
         Row: {
           action: string
@@ -3638,6 +3903,8 @@ export type Database = {
           id: string
           instructions: string | null
           kind: string
+          last_sync_at: string | null
+          last_sync_error: string | null
           patrol_visible: boolean
           person_id: string | null
           proposed_at: string
@@ -3647,6 +3914,7 @@ export type Database = {
           source_case_id: string | null
           status: string
           subject_snapshot: string
+          sync_attempts: number
           sync_status: string
           updated_at: string
           vehicle_id: string | null
@@ -3663,6 +3931,8 @@ export type Database = {
           id?: string
           instructions?: string | null
           kind: string
+          last_sync_at?: string | null
+          last_sync_error?: string | null
           patrol_visible?: boolean
           person_id?: string | null
           proposed_at?: string
@@ -3672,6 +3942,7 @@ export type Database = {
           source_case_id?: string | null
           status?: string
           subject_snapshot: string
+          sync_attempts?: number
           sync_status?: string
           updated_at?: string
           vehicle_id?: string | null
@@ -3688,6 +3959,8 @@ export type Database = {
           id?: string
           instructions?: string | null
           kind?: string
+          last_sync_at?: string | null
+          last_sync_error?: string | null
           patrol_visible?: boolean
           person_id?: string | null
           proposed_at?: string
@@ -3697,6 +3970,7 @@ export type Database = {
           source_case_id?: string | null
           status?: string
           subject_snapshot?: string
+          sync_attempts?: number
           sync_status?: string
           updated_at?: string
           vehicle_id?: string | null
@@ -3889,6 +4163,7 @@ export type Database = {
           id: string
           kind: string | null
           narcotic_id: string | null
+          observation_id: string | null
           person_id: string | null
           place_id: string | null
           report_id: string | null
@@ -3912,6 +4187,7 @@ export type Database = {
           id?: string
           kind?: string | null
           narcotic_id?: string | null
+          observation_id?: string | null
           person_id?: string | null
           place_id?: string | null
           report_id?: string | null
@@ -3935,6 +4211,7 @@ export type Database = {
           id?: string
           kind?: string | null
           narcotic_id?: string | null
+          observation_id?: string | null
           person_id?: string | null
           place_id?: string | null
           report_id?: string | null
@@ -3967,6 +4244,13 @@ export type Database = {
             columns: ["narcotic_id"]
             isOneToOne: false
             referencedRelation: "narcotics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_observation_id_fkey"
+            columns: ["observation_id"]
+            isOneToOne: false
+            referencedRelation: "surveillance_observations"
             referencedColumns: ["id"]
           },
           {
@@ -6082,6 +6366,7 @@ export type Database = {
           evidence_ref: string | null
           id: string
           note: string | null
+          observation_id: string | null
           predicate_type: string
           rico_case_id: string
           updated_at: string
@@ -6093,6 +6378,7 @@ export type Database = {
           evidence_ref?: string | null
           id?: string
           note?: string | null
+          observation_id?: string | null
           predicate_type: string
           rico_case_id: string
           updated_at?: string
@@ -6104,6 +6390,7 @@ export type Database = {
           evidence_ref?: string | null
           id?: string
           note?: string | null
+          observation_id?: string | null
           predicate_type?: string
           rico_case_id?: string
           updated_at?: string
@@ -6114,6 +6401,13 @@ export type Database = {
             columns: ["evidence_id"]
             isOneToOne: false
             referencedRelation: "evidence"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predicate_acts_observation_id_fkey"
+            columns: ["observation_id"]
+            isOneToOne: false
+            referencedRelation: "surveillance_observations"
             referencedColumns: ["id"]
           },
           {
@@ -6890,6 +7184,690 @@ export type Database = {
           week_start?: string
         }
         Relationships: []
+      }
+      surveillance_alert_rules: {
+        Row: {
+          enabled: boolean
+          rule_key: string
+          threshold: number
+          updated_at: string
+          updated_by: string | null
+          window_days: number
+        }
+        Insert: {
+          enabled?: boolean
+          rule_key: string
+          threshold: number
+          updated_at?: string
+          updated_by?: string | null
+          window_days: number
+        }
+        Update: {
+          enabled?: boolean
+          rule_key?: string
+          threshold?: number
+          updated_at?: string
+          updated_by?: string | null
+          window_days?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "surveillance_alert_rules_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      surveillance_alerts: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          alert_type: string
+          case_id: string
+          created_at: string
+          dedupe_key: string
+          explanation: string
+          id: string
+          observation_id: string | null
+          status: string
+          target_id: string | null
+          title: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          alert_type: string
+          case_id: string
+          created_at?: string
+          dedupe_key: string
+          explanation: string
+          id?: string
+          observation_id?: string | null
+          status?: string
+          target_id?: string | null
+          title: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          alert_type?: string
+          case_id?: string
+          created_at?: string
+          dedupe_key?: string
+          explanation?: string
+          id?: string
+          observation_id?: string | null
+          status?: string
+          target_id?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "surveillance_alerts_acknowledged_by_fkey"
+            columns: ["acknowledged_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_alerts_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_alerts_observation_id_fkey"
+            columns: ["observation_id"]
+            isOneToOne: false
+            referencedRelation: "surveillance_observations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_alerts_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "surveillance_targets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      surveillance_association_events: {
+        Row: {
+          case_id: string
+          confidence: string
+          created_at: string
+          created_by: string | null
+          event_type: string
+          id: string
+          location_text: string | null
+          notes: string | null
+          occurred_at: string
+          operation_id: string | null
+          place_id: string | null
+          summary: string
+          updated_at: string
+          verification_status: string
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          case_id: string
+          confidence?: string
+          created_at?: string
+          created_by?: string | null
+          event_type?: string
+          id?: string
+          location_text?: string | null
+          notes?: string | null
+          occurred_at: string
+          operation_id?: string | null
+          place_id?: string | null
+          summary: string
+          updated_at?: string
+          verification_status?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          case_id?: string
+          confidence?: string
+          created_at?: string
+          created_by?: string | null
+          event_type?: string
+          id?: string
+          location_text?: string | null
+          notes?: string | null
+          occurred_at?: string
+          operation_id?: string | null
+          place_id?: string | null
+          summary?: string
+          updated_at?: string
+          verification_status?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "surveillance_association_events_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_association_events_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_association_events_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "operations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_association_events_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_association_events_verified_by_fkey"
+            columns: ["verified_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      surveillance_event_participants: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          event_id: string
+          id: string
+          kind: string
+          observation_id: string | null
+          ref_id: string
+          role: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          event_id: string
+          id?: string
+          kind: string
+          observation_id?: string | null
+          ref_id: string
+          role?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          event_id?: string
+          id?: string
+          kind?: string
+          observation_id?: string | null
+          ref_id?: string
+          role?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "surveillance_event_participants_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_event_participants_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "surveillance_association_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_event_participants_observation_id_fkey"
+            columns: ["observation_id"]
+            isOneToOne: false
+            referencedRelation: "surveillance_observations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      surveillance_observation_entities: {
+        Row: {
+          confirmed: boolean
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          matched_by: string
+          note: string | null
+          observation_id: string
+          ref_id: string
+          role: string | null
+        }
+        Insert: {
+          confirmed?: boolean
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind: string
+          matched_by?: string
+          note?: string | null
+          observation_id: string
+          ref_id: string
+          role?: string | null
+        }
+        Update: {
+          confirmed?: boolean
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          matched_by?: string
+          note?: string | null
+          observation_id?: string
+          ref_id?: string
+          role?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "surveillance_observation_entities_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_observation_entities_observation_id_fkey"
+            columns: ["observation_id"]
+            isOneToOne: false
+            referencedRelation: "surveillance_observations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      surveillance_observations: {
+        Row: {
+          activity: string
+          case_id: string
+          confidence: string
+          created_at: string
+          created_by: string | null
+          id: string
+          ingestion_id: string | null
+          lat: number | null
+          lng: number | null
+          location_text: string | null
+          observed_at: string
+          person_id: string | null
+          place_id: string | null
+          plate_snapshot: string | null
+          promoted_at: string | null
+          promoted_by: string | null
+          received_at: string
+          restricted: boolean
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          source_event_id: string | null
+          source_ref: string | null
+          source_type: string
+          subject_description: string | null
+          target_id: string | null
+          updated_at: string
+          vehicle_id: string | null
+          verification_status: string
+        }
+        Insert: {
+          activity: string
+          case_id: string
+          confidence?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          ingestion_id?: string | null
+          lat?: number | null
+          lng?: number | null
+          location_text?: string | null
+          observed_at: string
+          person_id?: string | null
+          place_id?: string | null
+          plate_snapshot?: string | null
+          promoted_at?: string | null
+          promoted_by?: string | null
+          received_at?: string
+          restricted?: boolean
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source_event_id?: string | null
+          source_ref?: string | null
+          source_type?: string
+          subject_description?: string | null
+          target_id?: string | null
+          updated_at?: string
+          vehicle_id?: string | null
+          verification_status?: string
+        }
+        Update: {
+          activity?: string
+          case_id?: string
+          confidence?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          ingestion_id?: string | null
+          lat?: number | null
+          lng?: number | null
+          location_text?: string | null
+          observed_at?: string
+          person_id?: string | null
+          place_id?: string | null
+          plate_snapshot?: string | null
+          promoted_at?: string | null
+          promoted_by?: string | null
+          received_at?: string
+          restricted?: boolean
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source_event_id?: string | null
+          source_ref?: string | null
+          source_type?: string
+          subject_description?: string | null
+          target_id?: string | null
+          updated_at?: string
+          vehicle_id?: string | null
+          verification_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "surveillance_observations_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_observations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_observations_ingestion_fkey"
+            columns: ["ingestion_id"]
+            isOneToOne: false
+            referencedRelation: "bridge_ingestion_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_observations_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_observations_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_observations_promoted_by_fkey"
+            columns: ["promoted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_observations_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_observations_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "surveillance_targets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_observations_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      surveillance_review_history: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          from_status: string | null
+          id: string
+          notes: string | null
+          observation_id: string
+          to_status: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          notes?: string | null
+          observation_id: string
+          to_status?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          notes?: string | null
+          observation_id?: string
+          to_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "surveillance_review_history_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_review_history_observation_id_fkey"
+            columns: ["observation_id"]
+            isOneToOne: false
+            referencedRelation: "surveillance_observations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      surveillance_target_history: {
+        Row: {
+          action: string
+          actor_id: string | null
+          actor_role: string | null
+          created_at: string
+          from_status: string | null
+          id: string
+          reason: string | null
+          target_id: string
+          to_status: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          actor_role?: string | null
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          reason?: string | null
+          target_id: string
+          to_status?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          actor_role?: string | null
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          reason?: string | null
+          target_id?: string
+          to_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "surveillance_target_history_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_target_history_target_id_fkey"
+            columns: ["target_id"]
+            isOneToOne: false
+            referencedRelation: "surveillance_targets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      surveillance_targets: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          approved_start: string | null
+          bureau: Database["public"]["Enums"]["bureau"] | null
+          case_id: string
+          created_at: string
+          ended_at: string | null
+          ended_by: string | null
+          expires_at: string | null
+          id: string
+          label: string
+          objective: string | null
+          operation_id: string | null
+          outcome_notes: string | null
+          priority: string
+          reason: string
+          ref_id: string | null
+          requested_by: string | null
+          requested_start: string | null
+          risk_level: string | null
+          status: string
+          target_type: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          approved_start?: string | null
+          bureau?: Database["public"]["Enums"]["bureau"] | null
+          case_id: string
+          created_at?: string
+          ended_at?: string | null
+          ended_by?: string | null
+          expires_at?: string | null
+          id?: string
+          label: string
+          objective?: string | null
+          operation_id?: string | null
+          outcome_notes?: string | null
+          priority?: string
+          reason: string
+          ref_id?: string | null
+          requested_by?: string | null
+          requested_start?: string | null
+          risk_level?: string | null
+          status?: string
+          target_type: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          approved_start?: string | null
+          bureau?: Database["public"]["Enums"]["bureau"] | null
+          case_id?: string
+          created_at?: string
+          ended_at?: string | null
+          ended_by?: string | null
+          expires_at?: string | null
+          id?: string
+          label?: string
+          objective?: string | null
+          operation_id?: string | null
+          outcome_notes?: string | null
+          priority?: string
+          reason?: string
+          ref_id?: string | null
+          requested_by?: string | null
+          requested_start?: string | null
+          risk_level?: string | null
+          status?: string
+          target_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "surveillance_targets_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_targets_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_targets_ended_by_fkey"
+            columns: ["ended_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_targets_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "operations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "surveillance_targets_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tickets: {
         Row: {
@@ -8257,6 +9235,96 @@ export type Database = {
       has_restricted_packet_approval: {
         Args: { p_case: string }
         Returns: boolean
+      }
+      bridge_ingest_event: {
+        Args: {
+          p_event_time: string
+          p_event_type: string
+          p_payload: Json
+          p_source: string
+          p_source_event_id: string
+        }
+        Returns: Json
+      }
+      mdt_bridge_ack: {
+        Args: { p_error?: string; p_id: string; p_kind: string; p_result: string }
+        Returns: undefined
+      }
+      observation_promote: {
+        Args: { p_note?: string; p_observation: string }
+        Returns: Database["public"]["Tables"]["surveillance_observations"]["Row"]
+      }
+      observation_review: {
+        Args: { p_decision: string; p_notes?: string; p_observation: string }
+        Returns: Database["public"]["Tables"]["surveillance_observations"]["Row"]
+      }
+      surveillance_alert_ack: {
+        Args: { p_alert: string; p_dismiss?: boolean }
+        Returns: Database["public"]["Tables"]["surveillance_alerts"]["Row"]
+      }
+      surveillance_decide: {
+        Args: {
+          p_approved_start?: string
+          p_decision: string
+          p_expires_at?: string
+          p_reason?: string
+          p_target: string
+        }
+        Returns: Database["public"]["Tables"]["surveillance_targets"]["Row"]
+      }
+      surveillance_deconflict: {
+        Args: { p_case: string }
+        Returns: {
+          kind: string
+          my_count: number
+          other_case_count: number
+          ref_id: string
+          visible_case_ids: string[]
+        }[]
+      }
+      surveillance_event_review: {
+        Args: { p_decision: string; p_event: string; p_notes?: string }
+        Returns: Database["public"]["Tables"]["surveillance_association_events"]["Row"]
+      }
+      surveillance_request_create: {
+        Args: {
+          p_case: string
+          p_label: string
+          p_objective?: string
+          p_operation?: string
+          p_priority?: string
+          p_reason: string
+          p_ref?: string
+          p_requested_start?: string
+          p_risk?: string
+          p_submit?: boolean
+          p_target_type: string
+        }
+        Returns: Database["public"]["Tables"]["surveillance_targets"]["Row"]
+      }
+      surveillance_request_submit: {
+        Args: { p_target: string }
+        Returns: Database["public"]["Tables"]["surveillance_targets"]["Row"]
+      }
+      surveillance_transition: {
+        Args: {
+          p_action: string
+          p_new_expiry?: string
+          p_reason?: string
+          p_target: string
+        }
+        Returns: Database["public"]["Tables"]["surveillance_targets"]["Row"]
+      }
+      tip_triage: {
+        Args: {
+          p_action: string
+          p_assign?: string
+          p_case?: string
+          p_create_observation?: boolean
+          p_notes?: string
+          p_tip: string
+        }
+        Returns: Database["public"]["Tables"]["intelligence_tips"]["Row"]
       }
     }
     Enums: {

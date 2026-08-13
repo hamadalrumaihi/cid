@@ -192,6 +192,27 @@ alter table public.ballistics_benches add constraint ballistics_benches_pkey PRI
 alter table public.ballistics_benches add constraint ballistics_benches_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
 alter table public.ballistics_benches enable row level security;
 
+create table public.bridge_ingestion_events (
+  id uuid not null default gen_random_uuid(),
+  source text not null,
+  event_type text not null,
+  source_event_id text not null,
+  event_time timestamp with time zone,
+  received_at timestamp with time zone not null default now(),
+  payload jsonb not null default '{}'::jsonb,
+  status text not null default 'accepted'::text,
+  error text,
+  observation_id uuid,
+  processed_at timestamp with time zone
+);
+alter table public.bridge_ingestion_events add constraint bridge_ingestion_events_pkey PRIMARY KEY (id);
+alter table public.bridge_ingestion_events add constraint bridge_ingestion_events_source_source_event_id_key UNIQUE (source, source_event_id);
+alter table public.bridge_ingestion_events add constraint bridge_ingestion_events_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES public.surveillance_observations(id) ON DELETE SET NULL;
+alter table public.bridge_ingestion_events add constraint bridge_ingestion_events_status_check CHECK ((status = ANY (ARRAY['accepted'::text, 'processed'::text, 'quarantined'::text, 'duplicate'::text])));
+alter table public.bridge_ingestion_events enable row level security;
+-- Dormant inbound FiveM surface (mdt_patrol_feed precedent): written only by
+-- the service_role-only bridge_ingest_event RPC; command/owner read audit.
+
 create table public.case_access_grants (
   id uuid not null default gen_random_uuid(),
   case_id uuid not null,
@@ -966,6 +987,80 @@ alter table public.indicators add constraint indicators_kind_check CHECK ((kind 
 alter table public.indicators add constraint indicators_value_check CHECK ((length(btrim(value)) > 0));
 alter table public.indicators enable row level security;
 
+create table public.intelligence_tip_links (
+  id uuid not null default gen_random_uuid(),
+  tip_id uuid not null,
+  kind text not null,
+  ref_id uuid not null,
+  note text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now()
+);
+alter table public.intelligence_tip_links add constraint intelligence_tip_links_pkey PRIMARY KEY (id);
+alter table public.intelligence_tip_links add constraint intelligence_tip_links_tip_id_kind_ref_id_key UNIQUE (tip_id, kind, ref_id);
+alter table public.intelligence_tip_links add constraint intelligence_tip_links_tip_id_fkey FOREIGN KEY (tip_id) REFERENCES public.intelligence_tips(id) ON DELETE CASCADE;
+alter table public.intelligence_tip_links add constraint intelligence_tip_links_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.intelligence_tip_links add constraint intelligence_tip_links_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'gang'::text, 'place'::text, 'vehicle'::text, 'account'::text])));
+alter table public.intelligence_tip_links enable row level security;
+
+create table public.intelligence_tip_sources (
+  tip_id uuid not null,
+  source_name text,
+  source_contact text,
+  handler_notes text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now()
+);
+alter table public.intelligence_tip_sources add constraint intelligence_tip_sources_pkey PRIMARY KEY (tip_id);
+alter table public.intelligence_tip_sources add constraint intelligence_tip_sources_tip_id_fkey FOREIGN KEY (tip_id) REFERENCES public.intelligence_tips(id) ON DELETE CASCADE;
+alter table public.intelligence_tip_sources add constraint intelligence_tip_sources_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.intelligence_tip_sources enable row level security;
+-- SENSITIVE source identity: deliberately a stricter wall than the tip itself
+-- (handler/assignee/command/owner only — never mere tip or case visibility).
+
+create table public.intelligence_tips (
+  id uuid not null default gen_random_uuid(),
+  kind text not null default 'tip'::text,
+  source_type text not null default 'cid_detective'::text,
+  summary text not null,
+  details text,
+  observed_at timestamp with time zone,
+  location_text text,
+  place_id uuid,
+  urgency text not null default 'medium'::text,
+  reliability text not null default 'unverified'::text,
+  case_id uuid,
+  operation_id uuid,
+  related_bolo text,
+  status text not null default 'new'::text,
+  assigned_to uuid,
+  triage_notes text,
+  disposition text,
+  decided_by uuid,
+  decided_at timestamp with time zone,
+  related_observation_id uuid,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.intelligence_tips add constraint intelligence_tips_pkey PRIMARY KEY (id);
+alter table public.intelligence_tips add constraint intelligence_tips_place_id_fkey FOREIGN KEY (place_id) REFERENCES public.places(id) ON DELETE SET NULL;
+alter table public.intelligence_tips add constraint intelligence_tips_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.intelligence_tips add constraint intelligence_tips_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES public.operations(id) ON DELETE SET NULL;
+alter table public.intelligence_tips add constraint intelligence_tips_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.profiles(id);
+alter table public.intelligence_tips add constraint intelligence_tips_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id);
+alter table public.intelligence_tips add constraint intelligence_tips_related_observation_id_fkey FOREIGN KEY (related_observation_id) REFERENCES public.surveillance_observations(id) ON DELETE SET NULL;
+alter table public.intelligence_tips add constraint intelligence_tips_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.intelligence_tips add constraint intelligence_tips_kind_check CHECK ((kind = ANY (ARRAY['tip'::text, 'patrol_submission'::text])));
+alter table public.intelligence_tips add constraint intelligence_tips_source_type_check CHECK ((source_type = ANY (ARRAY['cid_detective'::text, 'patrol'::text, 'confidential_source'::text, 'imported'::text, 'system'::text, 'fivem_bridge'::text])));
+alter table public.intelligence_tips add constraint intelligence_tips_summary_check CHECK ((length(btrim(summary)) > 0));
+alter table public.intelligence_tips add constraint intelligence_tips_urgency_check CHECK ((urgency = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text])));
+alter table public.intelligence_tips add constraint intelligence_tips_reliability_check CHECK ((reliability = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text])));
+alter table public.intelligence_tips add constraint intelligence_tips_status_check CHECK ((status = ANY (ARRAY['new'::text, 'reviewing'::text, 'actioned'::text, 'closed'::text, 'rejected'::text])));
+alter table public.intelligence_tips enable row level security;
+-- Triage/lifecycle columns are frozen for direct writers by
+-- private.guard_intelligence_tip(); they move only through tip_triage().
+
 create table public.justice_membership_request_history (
   id uuid not null default gen_random_uuid(),
   request_id uuid not null,
@@ -1307,7 +1402,10 @@ create table public.mdt_exports (
   updated_at timestamp with time zone not null default now(),
   account_id uuid,
   patrol_visible boolean not null default true,
-  expires_at timestamp with time zone
+  expires_at timestamp with time zone,
+  sync_attempts integer not null default 0,
+  last_sync_at timestamp with time zone,
+  last_sync_error text
 );
 alter table public.mdt_exports add constraint mdt_exports_pkey PRIMARY KEY (id);
 alter table public.mdt_exports add constraint mdt_exports_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE CASCADE;
@@ -1361,7 +1459,8 @@ create table public.media (
   vehicle_id uuid,
   category text,
   featured boolean not null default false,
-  archived_at timestamp with time zone
+  archived_at timestamp with time zone,
+  observation_id uuid
 );
 alter table public.media add constraint media_pkey PRIMARY KEY (id);
 alter table public.media add constraint media_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
@@ -1372,6 +1471,7 @@ alter table public.media add constraint media_place_id_fkey FOREIGN KEY (place_i
 alter table public.media add constraint media_report_id_fkey FOREIGN KEY (report_id) REFERENCES public.reports(id) ON DELETE SET NULL;
 alter table public.media add constraint media_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.profiles(id);
 alter table public.media add constraint media_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id) ON DELETE SET NULL;
+alter table public.media add constraint media_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES public.surveillance_observations(id) ON DELETE SET NULL;
 alter table public.media add constraint media_category_check CHECK (((category IS NULL) OR (category = ANY (ARRAY['scene'::text, 'people'::text, 'vehicles'::text, 'places'::text, 'surveillance'::text, 'documents'::text, 'report_media'::text, 'other'::text]))));
 alter table public.media enable row level security;
 -- archived_at = soft archive (hidden from default gallery views, restorable);
@@ -2095,11 +2195,13 @@ create table public.predicate_acts (
   evidence_ref text,
   note text,
   created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now()
+  updated_at timestamp with time zone not null default now(),
+  observation_id uuid
 );
 alter table public.predicate_acts add constraint predicate_acts_pkey PRIMARY KEY (id);
 alter table public.predicate_acts add constraint predicate_acts_evidence_id_fkey FOREIGN KEY (evidence_id) REFERENCES public.evidence(id) ON DELETE SET NULL;
 alter table public.predicate_acts add constraint predicate_acts_rico_case_id_fkey FOREIGN KEY (rico_case_id) REFERENCES public.rico_cases(id) ON DELETE CASCADE;
+alter table public.predicate_acts add constraint predicate_acts_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES public.surveillance_observations(id) ON DELETE SET NULL;
 alter table public.predicate_acts enable row level security;
 
 create table public.profiles (
@@ -2258,7 +2360,7 @@ create table public.restricted_access_log (
   created_at timestamp with time zone not null default now()
 );
 alter table public.restricted_access_log add constraint restricted_access_log_pkey PRIMARY KEY (id);
-alter table public.restricted_access_log add constraint restricted_access_log_entity_check CHECK ((entity_type = 'media'::text));
+alter table public.restricted_access_log add constraint restricted_access_log_entity_check CHECK ((entity_type = ANY (ARRAY['media'::text, 'observation'::text]))); -- widened by 20260812120000_surveillance_domain
 alter table public.restricted_access_log add constraint restricted_access_log_action_check CHECK ((action = ANY (ARRAY['view'::text, 'download'::text, 'break_glass'::text, 'request'::text, 'grant'::text, 'deny'::text, 'revoke'::text, 'packet_export'::text])));
 alter table public.restricted_access_log add constraint restricted_access_log_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
 create index restricted_access_log_entity_idx ON public.restricted_access_log USING btree (entity_type, entity_id);
@@ -2335,6 +2437,242 @@ create table public.shift_reports (
 alter table public.shift_reports add constraint shift_reports_author_id_week_start_key UNIQUE (author_id, week_start);
 alter table public.shift_reports add constraint shift_reports_pkey PRIMARY KEY (id);
 alter table public.shift_reports enable row level security;
+
+create table public.surveillance_alert_rules (
+  rule_key text not null,
+  enabled boolean not null default true,
+  threshold integer not null,
+  window_days integer not null,
+  updated_by uuid,
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.surveillance_alert_rules add constraint surveillance_alert_rules_pkey PRIMARY KEY (rule_key);
+alter table public.surveillance_alert_rules add constraint surveillance_alert_rules_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id);
+alter table public.surveillance_alert_rules add constraint surveillance_alert_rules_rule_key_check CHECK ((rule_key = ANY (ARRAY['repeated_vehicle'::text, 'repeated_person'::text, 'repeated_location_activity'::text, 'multiple_targets_co_located'::text])));
+alter table public.surveillance_alert_rules add constraint surveillance_alert_rules_threshold_check CHECK ((threshold >= 2));
+alter table public.surveillance_alert_rules add constraint surveillance_alert_rules_window_days_check CHECK (((window_days >= 1) AND (window_days <= 365)));
+alter table public.surveillance_alert_rules enable row level security;
+-- Seeded with the four default rules (repeated_vehicle 3/30, repeated_person
+-- 3/30, repeated_location_activity 5/7, multiple_targets_co_located 2/1).
+
+create table public.surveillance_alerts (
+  id uuid not null default gen_random_uuid(),
+  alert_type text not null,
+  case_id uuid not null,
+  target_id uuid,
+  observation_id uuid,
+  title text not null,
+  explanation text not null,
+  dedupe_key text not null,
+  status text not null default 'open'::text,
+  acknowledged_by uuid,
+  acknowledged_at timestamp with time zone,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.surveillance_alerts add constraint surveillance_alerts_pkey PRIMARY KEY (id);
+alter table public.surveillance_alerts add constraint surveillance_alerts_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.surveillance_alerts add constraint surveillance_alerts_target_id_fkey FOREIGN KEY (target_id) REFERENCES public.surveillance_targets(id) ON DELETE SET NULL;
+alter table public.surveillance_alerts add constraint surveillance_alerts_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES public.surveillance_observations(id) ON DELETE SET NULL;
+alter table public.surveillance_alerts add constraint surveillance_alerts_acknowledged_by_fkey FOREIGN KEY (acknowledged_by) REFERENCES public.profiles(id);
+alter table public.surveillance_alerts add constraint surveillance_alerts_alert_type_check CHECK ((alert_type = ANY (ARRAY['repeated_vehicle'::text, 'repeated_person'::text, 'repeated_location_activity'::text, 'known_associate_seen'::text, 'multiple_targets_co_located'::text, 'monitored_target_activity'::text, 'surveillance_expiring'::text, 'authorization_expiring'::text, 'unreviewed_observation'::text])));
+alter table public.surveillance_alerts add constraint surveillance_alerts_status_check CHECK ((status = ANY (ARRAY['open'::text, 'acknowledged'::text, 'dismissed'::text])));
+alter table public.surveillance_alerts enable row level security;
+-- Written by the definer scan trigger (private.surveillance_alert_scan);
+-- acknowledged via surveillance_alert_ack() only. Every alert self-explains.
+
+create table public.surveillance_association_events (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  operation_id uuid,
+  event_type text not null default 'meeting'::text,
+  occurred_at timestamp with time zone not null,
+  place_id uuid,
+  location_text text,
+  summary text not null,
+  notes text,
+  confidence text not null default 'possible'::text,
+  verification_status text not null default 'unverified'::text,
+  verified_by uuid,
+  verified_at timestamp with time zone,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.surveillance_association_events add constraint surveillance_association_events_pkey PRIMARY KEY (id);
+alter table public.surveillance_association_events add constraint surveillance_association_events_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.surveillance_association_events add constraint surveillance_association_events_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES public.operations(id) ON DELETE SET NULL;
+alter table public.surveillance_association_events add constraint surveillance_association_events_place_id_fkey FOREIGN KEY (place_id) REFERENCES public.places(id) ON DELETE SET NULL;
+alter table public.surveillance_association_events add constraint surveillance_association_events_verified_by_fkey FOREIGN KEY (verified_by) REFERENCES public.profiles(id);
+alter table public.surveillance_association_events add constraint surveillance_association_events_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.surveillance_association_events add constraint surveillance_association_events_event_type_check CHECK ((event_type = ANY (ARRAY['meeting'::text, 'co_presence'::text, 'group_activity'::text, 'organization_activity'::text, 'other'::text])));
+alter table public.surveillance_association_events add constraint surveillance_association_events_summary_check CHECK ((length(btrim(summary)) > 0));
+alter table public.surveillance_association_events add constraint surveillance_association_events_confidence_check CHECK ((confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text])));
+alter table public.surveillance_association_events add constraint surveillance_association_events_verification_status_check CHECK ((verification_status = ANY (ARRAY['unverified'::text, 'verified'::text, 'rejected'::text])));
+alter table public.surveillance_association_events enable row level security;
+-- Verification columns frozen for direct writers by
+-- private.guard_surveillance_event(); verified via surveillance_event_review().
+
+create table public.surveillance_event_participants (
+  id uuid not null default gen_random_uuid(),
+  event_id uuid not null,
+  kind text not null,
+  ref_id uuid not null,
+  role text,
+  observation_id uuid,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now()
+);
+alter table public.surveillance_event_participants add constraint surveillance_event_participants_pkey PRIMARY KEY (id);
+alter table public.surveillance_event_participants add constraint surveillance_event_participants_event_id_kind_ref_id_key UNIQUE (event_id, kind, ref_id);
+alter table public.surveillance_event_participants add constraint surveillance_event_participants_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.surveillance_association_events(id) ON DELETE CASCADE;
+alter table public.surveillance_event_participants add constraint surveillance_event_participants_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES public.surveillance_observations(id) ON DELETE SET NULL;
+alter table public.surveillance_event_participants add constraint surveillance_event_participants_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.surveillance_event_participants add constraint surveillance_event_participants_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'gang'::text, 'place'::text, 'vehicle'::text, 'account'::text])));
+alter table public.surveillance_event_participants enable row level security;
+
+create table public.surveillance_observation_entities (
+  id uuid not null default gen_random_uuid(),
+  observation_id uuid not null,
+  kind text not null,
+  ref_id uuid not null,
+  role text,
+  note text,
+  matched_by text not null default 'manual'::text,
+  confirmed boolean not null default true,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now()
+);
+alter table public.surveillance_observation_entities add constraint surveillance_observation_entities_pkey PRIMARY KEY (id);
+alter table public.surveillance_observation_entities add constraint surveillance_observation_entitie_observation_id_kind_ref_id_key UNIQUE (observation_id, kind, ref_id);
+alter table public.surveillance_observation_entities add constraint surveillance_observation_entities_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES public.surveillance_observations(id) ON DELETE CASCADE;
+alter table public.surveillance_observation_entities add constraint surveillance_observation_entities_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.surveillance_observation_entities add constraint surveillance_observation_entities_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'gang'::text, 'place'::text, 'vehicle'::text, 'account'::text])));
+alter table public.surveillance_observation_entities add constraint surveillance_observation_entities_matched_by_check CHECK ((matched_by = ANY (ARRAY['manual'::text, 'suggested'::text, 'bridge'::text])));
+alter table public.surveillance_observation_entities enable row level security;
+
+create table public.surveillance_observations (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  target_id uuid,
+  observed_at timestamp with time zone not null,
+  received_at timestamp with time zone not null default now(),
+  source_type text not null default 'detective_manual'::text,
+  source_ref text,
+  source_event_id text,
+  place_id uuid,
+  location_text text,
+  lat double precision,
+  lng double precision,
+  person_id uuid,
+  vehicle_id uuid,
+  plate_snapshot text,
+  subject_description text,
+  activity text not null,
+  confidence text not null default 'unverified'::text,
+  restricted boolean not null default false,
+  verification_status text not null default 'unverified'::text,
+  reviewed_by uuid,
+  reviewed_at timestamp with time zone,
+  review_notes text,
+  promoted_at timestamp with time zone,
+  promoted_by uuid,
+  ingestion_id uuid,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.surveillance_observations add constraint surveillance_observations_pkey PRIMARY KEY (id);
+alter table public.surveillance_observations add constraint surveillance_observations_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.surveillance_observations add constraint surveillance_observations_target_id_fkey FOREIGN KEY (target_id) REFERENCES public.surveillance_targets(id) ON DELETE SET NULL;
+alter table public.surveillance_observations add constraint surveillance_observations_place_id_fkey FOREIGN KEY (place_id) REFERENCES public.places(id) ON DELETE SET NULL;
+alter table public.surveillance_observations add constraint surveillance_observations_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE SET NULL;
+alter table public.surveillance_observations add constraint surveillance_observations_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id) ON DELETE SET NULL;
+alter table public.surveillance_observations add constraint surveillance_observations_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.profiles(id);
+alter table public.surveillance_observations add constraint surveillance_observations_promoted_by_fkey FOREIGN KEY (promoted_by) REFERENCES public.profiles(id);
+alter table public.surveillance_observations add constraint surveillance_observations_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.surveillance_observations add constraint surveillance_observations_ingestion_fkey FOREIGN KEY (ingestion_id) REFERENCES public.bridge_ingestion_events(id) ON DELETE SET NULL;
+alter table public.surveillance_observations add constraint surveillance_observations_source_type_check CHECK ((source_type = ANY (ARRAY['detective_manual'::text, 'patrol_submission'::text, 'fixed_camera'::text, 'mobile_camera'::text, 'alpr'::text, 'vehicle_sensor'::text, 'property_monitor'::text, 'fivem_bridge'::text, 'imported'::text, 'other'::text])));
+alter table public.surveillance_observations add constraint surveillance_observations_activity_check CHECK ((length(btrim(activity)) > 0));
+alter table public.surveillance_observations add constraint surveillance_observations_confidence_check CHECK ((confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text])));
+alter table public.surveillance_observations add constraint surveillance_observations_verification_status_check CHECK ((verification_status = ANY (ARRAY['unverified'::text, 'verified'::text, 'rejected'::text, 'needs_information'::text])));
+alter table public.surveillance_observations enable row level security;
+-- Source/identity/verification columns frozen for direct writers by
+-- private.guard_surveillance_observation() (guard_document pattern; definer
+-- RPCs pass through via current_user); reviewed/promoted via RPCs only.
+
+create table public.surveillance_review_history (
+  id uuid not null default gen_random_uuid(),
+  observation_id uuid not null,
+  action text not null,
+  from_status text,
+  to_status text,
+  actor_id uuid,
+  notes text,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.surveillance_review_history add constraint surveillance_review_history_pkey PRIMARY KEY (id);
+alter table public.surveillance_review_history add constraint surveillance_review_history_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES public.surveillance_observations(id) ON DELETE CASCADE;
+alter table public.surveillance_review_history add constraint surveillance_review_history_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id);
+alter table public.surveillance_review_history enable row level security;
+-- Append-only, RPC-written (observation_review); SELECT is the only policy.
+
+create table public.surveillance_target_history (
+  id uuid not null default gen_random_uuid(),
+  target_id uuid not null,
+  action text not null,
+  from_status text,
+  to_status text,
+  actor_id uuid,
+  actor_role text,
+  reason text,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.surveillance_target_history add constraint surveillance_target_history_pkey PRIMARY KEY (id);
+alter table public.surveillance_target_history add constraint surveillance_target_history_target_id_fkey FOREIGN KEY (target_id) REFERENCES public.surveillance_targets(id) ON DELETE CASCADE;
+alter table public.surveillance_target_history add constraint surveillance_target_history_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id);
+alter table public.surveillance_target_history enable row level security;
+-- Append-only, RPC-written (private.surveillance_log); SELECT is the only policy.
+
+create table public.surveillance_targets (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  operation_id uuid,
+  target_type text not null,
+  ref_id uuid,
+  label text not null,
+  reason text not null,
+  objective text,
+  requested_by uuid default auth.uid(),
+  bureau public.bureau,
+  priority text not null default 'medium'::text,
+  risk_level text,
+  status text not null default 'draft'::text,
+  requested_start timestamp with time zone,
+  approved_start timestamp with time zone,
+  approved_by uuid,
+  approved_at timestamp with time zone,
+  expires_at timestamp with time zone,
+  ended_at timestamp with time zone,
+  ended_by uuid,
+  outcome_notes text,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.surveillance_targets add constraint surveillance_targets_pkey PRIMARY KEY (id);
+alter table public.surveillance_targets add constraint surveillance_targets_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.surveillance_targets add constraint surveillance_targets_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES public.operations(id) ON DELETE SET NULL;
+alter table public.surveillance_targets add constraint surveillance_targets_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.profiles(id);
+alter table public.surveillance_targets add constraint surveillance_targets_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES public.profiles(id);
+alter table public.surveillance_targets add constraint surveillance_targets_ended_by_fkey FOREIGN KEY (ended_by) REFERENCES public.profiles(id);
+alter table public.surveillance_targets add constraint surveillance_targets_target_type_check CHECK ((target_type = ANY (ARRAY['person'::text, 'vehicle'::text, 'place'::text, 'gang'::text, 'account'::text, 'area'::text, 'unknown_subject'::text])));
+alter table public.surveillance_targets add constraint surveillance_targets_label_check CHECK ((length(btrim(label)) > 0));
+alter table public.surveillance_targets add constraint surveillance_targets_reason_check CHECK ((length(btrim(reason)) > 0));
+alter table public.surveillance_targets add constraint surveillance_targets_priority_check CHECK ((priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text])));
+alter table public.surveillance_targets add constraint surveillance_targets_risk_level_check CHECK (((risk_level IS NULL) OR (risk_level = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
+alter table public.surveillance_targets add constraint surveillance_targets_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'pending_approval'::text, 'authorized'::text, 'active'::text, 'suspended'::text, 'completed'::text, 'denied'::text, 'expired'::text, 'cancelled'::text])));
+alter table public.surveillance_targets enable row level security;
+-- SELECT is the only policy: the lifecycle RPCs (surveillance_request_create/
+-- _submit, surveillance_decide, surveillance_transition) are the only writers.
 
 create table public.tickets (
   id uuid not null default gen_random_uuid(),
@@ -2470,6 +2808,8 @@ CREATE INDEX ballistic_footprints_signature_trgm ON public.ballistic_footprints 
 CREATE INDEX ballistic_footprints_weapon_trgm ON public.ballistic_footprints USING gin (weapon extensions.gin_trgm_ops);
 CREATE INDEX ballistics_benches_case_id_fkey_idx ON public.ballistics_benches USING btree (case_id);
 CREATE INDEX ballistics_benches_name_trgm ON public.ballistics_benches USING gin (name extensions.gin_trgm_ops);
+CREATE INDEX bridge_ingestion_events_status_idx ON public.bridge_ingestion_events USING btree (status, received_at DESC);
+CREATE INDEX bridge_ingestion_events_obs_idx ON public.bridge_ingestion_events USING btree (observation_id);
 CREATE INDEX case_access_grants_granted_by_fkey_idx ON public.case_access_grants USING btree (granted_by);
 CREATE INDEX case_access_grants_officer_id_fkey_idx ON public.case_access_grants USING btree (officer_id);
 CREATE INDEX idx_cag_case ON public.case_access_grants USING btree (case_id);
@@ -2588,6 +2928,18 @@ CREATE INDEX gangs_notes_trgm ON public.gangs USING gin (notes extensions.gin_tr
 CREATE INDEX indicators_case_idx ON public.indicators USING btree (case_id);
 CREATE INDEX indicators_created_by_fkey_idx ON public.indicators USING btree (created_by);
 CREATE INDEX indicators_value_idx ON public.indicators USING btree (lower(btrim(value)));
+CREATE INDEX intelligence_tip_links_tip_idx ON public.intelligence_tip_links USING btree (tip_id);
+CREATE INDEX intelligence_tip_links_ref_idx ON public.intelligence_tip_links USING btree (kind, ref_id);
+CREATE INDEX intelligence_tip_links_created_by_idx ON public.intelligence_tip_links USING btree (created_by);
+CREATE INDEX intelligence_tip_sources_created_by_idx ON public.intelligence_tip_sources USING btree (created_by);
+CREATE INDEX intelligence_tips_status_idx ON public.intelligence_tips USING btree (status, created_at DESC);
+CREATE INDEX intelligence_tips_case_idx ON public.intelligence_tips USING btree (case_id);
+CREATE INDEX intelligence_tips_assigned_idx ON public.intelligence_tips USING btree (assigned_to);
+CREATE INDEX intelligence_tips_place_idx ON public.intelligence_tips USING btree (place_id);
+CREATE INDEX intelligence_tips_operation_idx ON public.intelligence_tips USING btree (operation_id);
+CREATE INDEX intelligence_tips_decided_by_idx ON public.intelligence_tips USING btree (decided_by);
+CREATE INDEX intelligence_tips_related_obs_idx ON public.intelligence_tips USING btree (related_observation_id);
+CREATE INDEX intelligence_tips_created_by_idx ON public.intelligence_tips USING btree (created_by);
 CREATE INDEX justice_membership_request_history_actor_id_idx ON public.justice_membership_request_history USING btree (actor_id);
 CREATE INDEX justice_membership_request_history_request_id_idx ON public.justice_membership_request_history USING btree (request_id);
 CREATE INDEX justice_membership_requests_decided_by_idx ON public.justice_membership_requests USING btree (decided_by);
@@ -2658,6 +3010,7 @@ CREATE INDEX media_case_id_archived_at_idx ON public.media USING btree (case_id,
 CREATE INDEX media_case_id_idx ON public.media USING btree (case_id);
 CREATE INDEX media_gang_id_fkey_idx ON public.media USING btree (gang_id);
 CREATE INDEX media_narcotic_id_fkey_idx ON public.media USING btree (narcotic_id);
+CREATE INDEX media_observation_idx ON public.media USING btree (observation_id);
 CREATE INDEX media_person_id_fkey_idx ON public.media USING btree (person_id);
 CREATE INDEX media_place_id_fkey_idx ON public.media USING btree (place_id);
 CREATE INDEX media_report_id_fkey_idx ON public.media USING btree (report_id);
@@ -2782,6 +3135,7 @@ CREATE INDEX places_name_trgm ON public.places USING gin (name extensions.gin_tr
 CREATE INDEX places_area_trgm ON public.places USING gin (area extensions.gin_trgm_ops);
 CREATE INDEX places_narcotic_fk_idx ON public.places USING btree (narcotic_id);
 CREATE INDEX predicate_acts_evidence_id_fkey_idx ON public.predicate_acts USING btree (evidence_id);
+CREATE INDEX predicate_acts_observation_idx ON public.predicate_acts USING btree (observation_id);
 CREATE INDEX predicate_acts_rico_case_id_fkey_idx ON public.predicate_acts USING btree (rico_case_id);
 CREATE INDEX profiles_login_denied_by_idx ON public.profiles USING btree (login_denied_by);
 CREATE UNIQUE INDEX one_active_acting_ada_per_bureau ON public.prosecutor_bureau_assignments USING btree (bureau) WHERE ((assignment_type = 'acting'::text) AND (ends_at IS NULL));
@@ -2810,6 +3164,45 @@ CREATE INDEX role_events_actor_id_idx ON public.role_events USING btree (actor_i
 CREATE INDEX role_events_target_id_idx ON public.role_events USING btree (target_id);
 CREATE INDEX security_test_runs_created_by_idx ON public.security_test_runs USING btree (created_by);
 CREATE INDEX shift_reports_bureau_week_idx ON public.shift_reports USING btree (bureau, week_start DESC);
+CREATE INDEX surveillance_alert_rules_updated_by_idx ON public.surveillance_alert_rules USING btree (updated_by);
+CREATE UNIQUE INDEX surveillance_alerts_open_dedupe_key ON public.surveillance_alerts USING btree (dedupe_key) WHERE (status = 'open'::text);
+CREATE INDEX surveillance_alerts_case_idx ON public.surveillance_alerts USING btree (case_id, created_at DESC);
+CREATE INDEX surveillance_alerts_target_idx ON public.surveillance_alerts USING btree (target_id);
+CREATE INDEX surveillance_alerts_obs_idx ON public.surveillance_alerts USING btree (observation_id);
+CREATE INDEX surveillance_alerts_ack_by_idx ON public.surveillance_alerts USING btree (acknowledged_by);
+CREATE INDEX surveillance_association_events_case_idx ON public.surveillance_association_events USING btree (case_id, occurred_at DESC);
+CREATE INDEX surveillance_association_events_place_idx ON public.surveillance_association_events USING btree (place_id);
+CREATE INDEX surveillance_association_events_operation_idx ON public.surveillance_association_events USING btree (operation_id);
+CREATE INDEX surveillance_association_events_verified_by_idx ON public.surveillance_association_events USING btree (verified_by);
+CREATE INDEX surveillance_association_events_created_by_idx ON public.surveillance_association_events USING btree (created_by);
+CREATE INDEX surveillance_event_participants_event_idx ON public.surveillance_event_participants USING btree (event_id);
+CREATE INDEX surveillance_event_participants_ref_idx ON public.surveillance_event_participants USING btree (kind, ref_id);
+CREATE INDEX surveillance_event_participants_obs_idx ON public.surveillance_event_participants USING btree (observation_id);
+CREATE INDEX surveillance_event_participants_created_by_idx ON public.surveillance_event_participants USING btree (created_by);
+CREATE INDEX surveillance_observation_entities_obs_idx ON public.surveillance_observation_entities USING btree (observation_id);
+CREATE INDEX surveillance_observation_entities_ref_idx ON public.surveillance_observation_entities USING btree (kind, ref_id);
+CREATE INDEX surveillance_observation_entities_created_by_idx ON public.surveillance_observation_entities USING btree (created_by);
+CREATE INDEX surveillance_observations_case_idx ON public.surveillance_observations USING btree (case_id, observed_at DESC);
+CREATE INDEX surveillance_observations_target_idx ON public.surveillance_observations USING btree (target_id);
+CREATE INDEX surveillance_observations_person_idx ON public.surveillance_observations USING btree (person_id);
+CREATE INDEX surveillance_observations_vehicle_idx ON public.surveillance_observations USING btree (vehicle_id);
+CREATE INDEX surveillance_observations_place_idx ON public.surveillance_observations USING btree (place_id);
+CREATE INDEX surveillance_observations_status_idx ON public.surveillance_observations USING btree (verification_status) WHERE (verification_status = 'unverified'::text);
+CREATE INDEX surveillance_observations_reviewed_by_idx ON public.surveillance_observations USING btree (reviewed_by);
+CREATE INDEX surveillance_observations_promoted_by_idx ON public.surveillance_observations USING btree (promoted_by);
+CREATE INDEX surveillance_observations_created_by_idx ON public.surveillance_observations USING btree (created_by);
+CREATE INDEX surveillance_observations_ingestion_idx ON public.surveillance_observations USING btree (ingestion_id);
+CREATE INDEX surveillance_review_history_obs_idx ON public.surveillance_review_history USING btree (observation_id, created_at DESC);
+CREATE INDEX surveillance_review_history_actor_idx ON public.surveillance_review_history USING btree (actor_id);
+CREATE INDEX surveillance_target_history_target_idx ON public.surveillance_target_history USING btree (target_id, created_at DESC);
+CREATE INDEX surveillance_target_history_actor_idx ON public.surveillance_target_history USING btree (actor_id);
+CREATE INDEX surveillance_targets_case_idx ON public.surveillance_targets USING btree (case_id);
+CREATE INDEX surveillance_targets_ref_idx ON public.surveillance_targets USING btree (target_type, ref_id);
+CREATE INDEX surveillance_targets_status_idx ON public.surveillance_targets USING btree (status);
+CREATE INDEX surveillance_targets_operation_idx ON public.surveillance_targets USING btree (operation_id);
+CREATE INDEX surveillance_targets_requested_by_idx ON public.surveillance_targets USING btree (requested_by);
+CREATE INDEX surveillance_targets_approved_by_idx ON public.surveillance_targets USING btree (approved_by);
+CREATE INDEX surveillance_targets_ended_by_idx ON public.surveillance_targets USING btree (ended_by);
 CREATE INDEX tickets_case_id_fkey_idx ON public.tickets USING btree (case_id);
 CREATE INDEX tickets_created_by_fkey_idx ON public.tickets USING btree (created_by);
 CREATE INDEX trackers_case_id_fkey_idx ON public.trackers USING btree (case_id);
@@ -5145,6 +5538,10 @@ create policy ballistics_benches_upd on public.ballistics_benches
   using (private.is_active())
   with check (private.is_active());
 
+create policy bridge_ingestion_events_sel on public.bridge_ingestion_events
+  as permissive for select to authenticated
+  using ((( SELECT private.is_command() AS is_command) OR ( SELECT COALESCE(profiles.is_owner, false) FROM public.profiles WHERE (profiles.id = ( SELECT auth.uid() AS uid)))));
+
 create policy cag_del on public.case_access_grants
   as permissive for delete to authenticated
   using (private.can_grant_case(case_id));
@@ -5626,6 +6023,57 @@ create policy indicators_upd on public.indicators
   as permissive for update to authenticated
   using (private.is_active())
   with check (private.is_active());
+
+create policy intelligence_tip_links_del on public.intelligence_tip_links
+  as permissive for delete to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.intelligence_tips t
+  WHERE (t.id = intelligence_tip_links.tip_id))));
+
+create policy intelligence_tip_links_ins on public.intelligence_tip_links
+  as permissive for insert to authenticated
+  with check ((EXISTS ( SELECT 1
+   FROM public.intelligence_tips t
+  WHERE (t.id = intelligence_tip_links.tip_id))));
+
+create policy intelligence_tip_links_sel on public.intelligence_tip_links
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.intelligence_tips t
+  WHERE (t.id = intelligence_tip_links.tip_id))));
+
+create policy intelligence_tip_sources_del on public.intelligence_tip_sources
+  as permissive for delete to authenticated
+  using (((created_by = ( SELECT auth.uid() AS uid)) OR ( SELECT private.can_delete() AS can_delete)));
+
+create policy intelligence_tip_sources_ins on public.intelligence_tip_sources
+  as permissive for insert to authenticated
+  with check ((EXISTS ( SELECT 1
+   FROM public.intelligence_tips t
+  WHERE ((t.id = intelligence_tip_sources.tip_id) AND (t.created_by = ( SELECT auth.uid() AS uid))))));
+
+create policy intelligence_tip_sources_sel on public.intelligence_tip_sources
+  as permissive for select to authenticated
+  using (((created_by = ( SELECT auth.uid() AS uid)) OR private.is_command() OR ( SELECT COALESCE(profiles.is_owner, false) FROM public.profiles WHERE (profiles.id = ( SELECT auth.uid() AS uid))) OR (EXISTS ( SELECT 1
+   FROM public.intelligence_tips t
+  WHERE ((t.id = intelligence_tip_sources.tip_id) AND (t.assigned_to = ( SELECT auth.uid() AS uid)))))));
+
+create policy intelligence_tips_del on public.intelligence_tips
+  as permissive for delete to authenticated
+  using (( SELECT private.can_delete() AS can_delete));
+
+create policy intelligence_tips_ins on public.intelligence_tips
+  as permissive for insert to authenticated
+  with check (( SELECT private.is_active() AS is_active));
+
+create policy intelligence_tips_sel on public.intelligence_tips
+  as permissive for select to authenticated
+  using ((private.is_active() AND ((created_by = ( SELECT auth.uid() AS uid)) OR (assigned_to = ( SELECT auth.uid() AS uid)) OR private.is_command() OR ( SELECT COALESCE(profiles.is_owner, false) FROM public.profiles WHERE (profiles.id = ( SELECT auth.uid() AS uid))) OR ((case_id IS NOT NULL) AND private.can_access_case(case_id)))));
+
+create policy intelligence_tips_upd on public.intelligence_tips
+  as permissive for update to authenticated
+  using (((status = 'new'::text) AND ((created_by = ( SELECT auth.uid() AS uid)) OR private.is_command())))
+  with check ((created_by IS NOT NULL));
 
 create policy jmrh_sel on public.justice_membership_request_history
   as permissive for select to authenticated
@@ -6270,6 +6718,114 @@ create policy shift_reports_upd on public.shift_reports
   as permissive for update to authenticated
   using (((author_id = ( SELECT auth.uid() AS uid)) OR private.is_command()))
   with check (((author_id = ( SELECT auth.uid() AS uid)) OR private.is_command()));
+
+create policy surveillance_alert_rules_sel on public.surveillance_alert_rules
+  as permissive for select to authenticated
+  using (( SELECT private.is_active() AS is_active));
+
+create policy surveillance_alert_rules_upd on public.surveillance_alert_rules
+  as permissive for update to authenticated
+  using (( SELECT private.is_command() AS is_command))
+  with check (( SELECT private.is_command() AS is_command));
+
+create policy surveillance_alerts_sel on public.surveillance_alerts
+  as permissive for select to authenticated
+  using (private.can_access_case(case_id));
+
+create policy surveillance_association_events_del on public.surveillance_association_events
+  as permissive for delete to authenticated
+  using ((( SELECT private.can_delete() AS can_delete) AND private.can_access_case(case_id)));
+
+create policy surveillance_association_events_ins on public.surveillance_association_events
+  as permissive for insert to authenticated
+  with check (private.can_access_case(case_id));
+
+create policy surveillance_association_events_sel on public.surveillance_association_events
+  as permissive for select to authenticated
+  using (private.can_access_case(case_id));
+
+create policy surveillance_association_events_upd on public.surveillance_association_events
+  as permissive for update to authenticated
+  using ((private.can_access_case(case_id) AND (verification_status = 'unverified'::text) AND ((created_by = ( SELECT auth.uid() AS uid)) OR private.is_command())))
+  with check (private.can_access_case(case_id));
+
+create policy surveillance_event_participants_del on public.surveillance_event_participants
+  as permissive for delete to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.surveillance_association_events e
+  WHERE ((e.id = surveillance_event_participants.event_id) AND private.can_access_case(e.case_id)))));
+
+create policy surveillance_event_participants_ins on public.surveillance_event_participants
+  as permissive for insert to authenticated
+  with check ((EXISTS ( SELECT 1
+   FROM public.surveillance_association_events e
+  WHERE ((e.id = surveillance_event_participants.event_id) AND private.can_access_case(e.case_id)))));
+
+create policy surveillance_event_participants_sel on public.surveillance_event_participants
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.surveillance_association_events e
+  WHERE ((e.id = surveillance_event_participants.event_id) AND private.can_access_case(e.case_id)))));
+
+create policy surveillance_observation_entities_del on public.surveillance_observation_entities
+  as permissive for delete to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.surveillance_observations o
+  WHERE ((o.id = surveillance_observation_entities.observation_id) AND private.can_access_case(o.case_id)))));
+
+create policy surveillance_observation_entities_ins on public.surveillance_observation_entities
+  as permissive for insert to authenticated
+  with check ((EXISTS ( SELECT 1
+   FROM public.surveillance_observations o
+  WHERE ((o.id = surveillance_observation_entities.observation_id) AND private.can_access_case(o.case_id)))));
+
+create policy surveillance_observation_entities_sel on public.surveillance_observation_entities
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.surveillance_observations o
+  WHERE (o.id = surveillance_observation_entities.observation_id))));
+
+create policy surveillance_observation_entities_upd on public.surveillance_observation_entities
+  as permissive for update to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.surveillance_observations o
+  WHERE ((o.id = surveillance_observation_entities.observation_id) AND private.can_access_case(o.case_id)))))
+  with check ((EXISTS ( SELECT 1
+   FROM public.surveillance_observations o
+  WHERE ((o.id = surveillance_observation_entities.observation_id) AND private.can_access_case(o.case_id)))));
+
+create policy surveillance_observations_del on public.surveillance_observations
+  as permissive for delete to authenticated
+  using ((( SELECT private.can_delete() AS can_delete) AND private.can_access_case(case_id)));
+
+create policy surveillance_observations_ins on public.surveillance_observations
+  as permissive for insert to authenticated
+  with check (private.can_access_case(case_id));
+
+create policy surveillance_observations_sel on public.surveillance_observations
+  as permissive for select to authenticated
+  using ((private.can_access_case(case_id) AND ((NOT restricted) OR private.is_command() OR ( SELECT COALESCE(profiles.is_owner, false) FROM public.profiles WHERE (profiles.id = ( SELECT auth.uid() AS uid))) OR (created_by = ( SELECT auth.uid() AS uid)) OR (reviewed_by = ( SELECT auth.uid() AS uid)))));
+
+create policy surveillance_observations_upd on public.surveillance_observations
+  as permissive for update to authenticated
+  using ((private.can_access_case(case_id) AND (verification_status = ANY (ARRAY['unverified'::text, 'needs_information'::text])) AND ((created_by = ( SELECT auth.uid() AS uid)) OR private.is_command())))
+  with check (private.can_access_case(case_id));
+
+create policy surveillance_review_history_sel on public.surveillance_review_history
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.surveillance_observations o
+  WHERE (o.id = surveillance_review_history.observation_id))));
+
+create policy surveillance_target_history_sel on public.surveillance_target_history
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.surveillance_targets t
+  WHERE ((t.id = surveillance_target_history.target_id) AND private.can_access_case(t.case_id)))));
+
+create policy surveillance_targets_sel on public.surveillance_targets
+  as permissive for select to authenticated
+  using (private.can_access_case(case_id));
 
 create policy tickets_del on public.tickets
   as permissive for delete to authenticated
@@ -7844,3 +8400,67 @@ create policy wl_sel on public.watchlist
 -- rls_test_cleanup() re-emitted with an operations sweep.
 -- operation_case_links + operation_bureaus added to the supabase_realtime
 -- publication (RLS applies to payloads).
+
+-- ============================================================
+-- 20260812120000_surveillance_domain (Surveillance & Intelligence):
+-- the portal-side investigative layer (SOP Title 7): CID authorization →
+-- surveillance target → observation → detective verification → intelligence.
+-- NEW TABLES (blocks above): surveillance_targets (the authorization unit;
+-- SELECT-only, lifecycle RPC-written), surveillance_target_history +
+-- surveillance_review_history (append-only decision/verification trails),
+-- surveillance_observations (manual casework inserts allowed; restricted rows
+-- carry a stricter read wall than case visibility),
+-- surveillance_observation_entities, surveillance_association_events +
+-- surveillance_event_participants (structured meetings/co-presence),
+-- surveillance_alert_rules (seeded 4 rules; command-tunable) +
+-- surveillance_alerts (trigger-written, dedupe-keyed, self-explaining),
+-- intelligence_tips + intelligence_tip_links + intelligence_tip_sources
+-- (source identity behind a stricter handler/assignee/command/owner wall),
+-- and bridge_ingestion_events (dormant inbound FiveM surface; quarantine +
+-- (source, source_event_id) idempotency).
+-- Cross-domain columns: media.observation_id and predicate_acts
+-- .observation_id (FK → surveillance_observations); mdt_exports gained
+-- sync_attempts / last_sync_at / last_sync_error (sync-ack bookkeeping);
+-- restricted_access_log_entity_check widened to ('media','observation').
+-- GUARD TRIGGERS (NOT security definer — guard_document pattern; the
+-- current_user in ('authenticated','anon') gate lets definer RPCs pass):
+-- private.guard_surveillance_observation() [trg_guard_surveillance_observation]
+--   stamps created_by/received_at, forces manual source types, resets
+--   verification/promotion/ingestion state on insert, freezes provenance and
+--   workflow columns on update (restricted may tighten, never loosen);
+-- private.guard_intelligence_tip() [trg_guard_intelligence_tip] stamps
+--   created_by, forces status='new', clears triage/decision columns on
+--   insert and freezes them on update;
+-- private.guard_surveillance_event() [trg_guard_surveillance_event] same
+--   for association-event verification columns.
+-- ALERT SCAN: private.surveillance_alert_scan() [trg_surveillance_alert_scan,
+-- after insert on surveillance_observations; SECURITY DEFINER] evaluates the
+-- enabled rules (repeated_vehicle / repeated_person /
+-- repeated_location_activity / multiple_targets_co_located) and inserts
+-- explainable surveillance_alerts, deduped by the partial unique
+-- surveillance_alerts_open_dedupe_key ("a pattern is a lead, never proof").
+-- RPCs (all SECURITY DEFINER, search_path=''; definitive SQL in
+-- supabase/migrations/20260812120000_surveillance_domain.sql):
+--   authenticated + service_role: surveillance_request_create,
+--   surveillance_request_submit, surveillance_decide (Bureau-Lead+ authority
+--   via private.can_authorize_surveillance; self-approval rejected),
+--   surveillance_transition (activate/suspend/complete/cancel/extend; lazy
+--   expiry; extension = new approval), observation_review,
+--   observation_promote (verified-only promotion into the case record),
+--   tip_triage, surveillance_event_review, surveillance_alert_ack,
+--   surveillance_deconflict (existence-only cross-case stubs; case ids only
+--   where the caller has access);
+--   service_role ONLY (dormancy guarantee — mdt_patrol_feed precedent; no
+--   authenticated grant exists): bridge_ingest_event (validate → quarantine
+--   or observation, idempotent replay) and mdt_bridge_ack (mdt_exports /
+--   mdt_wanted_projections sync acknowledgement).
+-- Helpers: private.can_authorize_surveillance(uuid),
+-- private.surveillance_log(...), private.rls_test_cleanup_surveillance(...).
+-- RE-EMITS: public.log_restricted_view now accepts restricted observations
+-- (same per-viewer/hour dedupe); public.rls_test_cleanup re-emitted from the
+-- 20260810120000 body plus the surveillance sweep (tips/observations/targets/
+-- alerts/bridge events, before cases are deleted).
+-- REALTIME: surveillance_targets, surveillance_observations,
+-- surveillance_alerts and intelligence_tips added to the supabase_realtime
+-- publication (RLS applies to payloads).
+-- Definitive SQL in supabase/migrations/20260812120000_surveillance_domain.sql.
