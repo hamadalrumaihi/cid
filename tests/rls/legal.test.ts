@@ -280,8 +280,9 @@ describe.skipIf(!enabled)('Legal requests — RLS/RPC security wall (minimal-DOJ
     await lsb.rpc('add_legal_exhibit', { p_request: subpoenaId, p_type: 'external_link', p_meta: { url: 'https://x/docs' } })
     const sub = await lsb.rpc('submit_legal_request_to_cid', { p_request: subpoenaId })
     expect(sub.error).toBeNull()
-    // subpoenas enter the shared prosecutor queue on Lead+ approval too
-    // (no bureau-ADA / DA / AG routing — one queue for everything)
+    // subpoenas enter the responsible bureau's prosecutor queue on Lead+
+    // approval too (since 20260818120000 each bureau has its own queue,
+    // worked by its home/covering prosecutors — see v165)
     const ap = await lead.rpc('review_legal_request_as_cid', { p_request: subpoenaId, p_decision: 'approve', p_signature: 'RLS Lead' })
     expect(ap.error).toBeNull()
     expect(ap.data).toMatchObject({

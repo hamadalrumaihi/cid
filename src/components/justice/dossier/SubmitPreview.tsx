@@ -4,24 +4,35 @@
  * One last look at EXACTLY what leaves CID: the form content, the selected
  * exhibits (cross-checked against their live sources), and what DOJ will NOT
  * receive. Confirm calls the same save + submit RPCs — the server remains
- * the authority on every requirement shown here. */
+ * the authority on every requirement shown here.
+ *
+ * Judge/prosecutor returns (20260818120000): a corrected resubmission goes
+ * STRAIGHT back to the prosecutor queue — repeated CID review happens only
+ * when the investigator explicitly DECLARES a material change here. */
+import { useState } from 'react'
 import type { LegalExhibit, LegalRequest } from '@/lib/justice'
 import { humanize } from '@/lib/legalWorkflow'
 import { Button } from '@/components/ui/Button'
+import { Field, Textarea } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
 import { ClassificationBadge } from '../legalShared'
 import { exhibitFlag, type CaseRecords, type DraftShape } from './dossierShared'
 
-export function SubmitPreview({ r, draft, exhibits, records, checklist, busy, onCancel, onConfirm }: {
+export function SubmitPreview({ r, draft, exhibits, records, checklist, busy, returnedBy = null, onCancel, onConfirm }: {
   r: LegalRequest
   draft: DraftShape
   exhibits: LegalExhibit[]
   records: CaseRecords | null
   checklist: { label: string; ok: boolean; blocking: boolean }[]
   busy: boolean
+  /** Set when resubmitting after a judge/prosecutor return — shows the
+   *  material-change declaration (returned_by_cid / first submissions don't). */
+  returnedBy?: 'judge' | 'prosecutor' | null
   onCancel: () => void
-  onConfirm: () => void
+  onConfirm: (v: { materialChange: boolean; changeSummary: string }) => void
 }) {
+  const [materialChange, setMaterialChange] = useState(false)
+  const [changeSummary, setChangeSummary] = useState('')
   const blocked = checklist.some((c) => c.blocking && !c.ok)
   const flagged = exhibits.map((e) => ({ e, flag: exhibitFlag(e, records) }))
   const brokenCount = flagged.filter((x) => x.flag).length
@@ -81,13 +92,43 @@ export function SubmitPreview({ r, draft, exhibits, records, checklist, busy, on
           </ul>
         </section>
 
+        {returnedBy && (
+          <section className="space-y-3 rounded-lg border border-white/10 bg-ink-950/50 p-3">
+            <p className="text-xs text-slate-300">
+              Corrected requests return directly to the prosecutor. Check below only if you made a
+              material change.
+            </p>
+            <label className="flex min-h-[40px] cursor-pointer items-center gap-2.5 text-sm text-slate-200">
+              <input
+                type="checkbox"
+                checked={materialChange}
+                onChange={(e) => setMaterialChange(e.target.checked)}
+                className="h-4 w-4 rounded border-white/20 bg-ink-900 accent-badge-500"
+              />
+              I made a material change (requires renewed CID review)
+            </label>
+            <Field
+              label="What changed since the last version?"
+              hint="Optional — saved with the new version so reviewers see the changes at a glance."
+            >
+              {(id) => <Textarea id={id} rows={2} value={changeSummary} onChange={(e) => setChangeSummary(e.target.value)} />}
+            </Field>
+          </section>
+        )}
+
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-white/10 pt-3">
           {blocked && <span className="mr-auto text-xs text-rose-300">Complete the required fields before submitting.</span>}
           {!blocked && brokenCount > 0 && (
             <span className="mr-auto text-xs text-amber-300">{brokenCount} exhibit{brokenCount === 1 ? '' : 's'} flagged — you can still submit; reviewers see the frozen snapshot titles.</span>
           )}
           <Button onClick={onCancel}>Back to editing</Button>
-          <Button variant="primary" disabled={busy || blocked} onClick={onConfirm}>Confirm &amp; submit to CID</Button>
+          <Button
+            variant="primary"
+            disabled={busy || blocked}
+            onClick={() => onConfirm({ materialChange: !!returnedBy && materialChange, changeSummary: changeSummary.trim() })}
+          >
+            {returnedBy && !materialChange ? 'Confirm & resubmit to the prosecutor' : 'Confirm & submit to CID'}
+          </Button>
         </div>
       </div>
     </Modal>

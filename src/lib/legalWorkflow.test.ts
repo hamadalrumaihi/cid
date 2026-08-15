@@ -240,6 +240,15 @@ describe('routing explanation', () => {
     const prosecutor = viewer({ myId: 'p-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['SAB'] })
     expect(routingExplanation(req(), prosecutor)).toContain('bureau awareness')
   })
+  it('queue explanation names the responsible bureau and the coverage path (bureau queues, 20260818120000)', () => {
+    const queued = routingExplanation(req({ review_status: 'prosecutor_queue', responsible_bureau: 'BCB' }))
+    expect(queued).toContain('BCB prosecutor queue')
+    expect(queued).toContain('coverage')
+    expect(queued).not.toContain('any active prosecutor') // the shared-queue phrasing is gone
+    // sealed rows never advertise the queue at all
+    const sealed = routingExplanation(req({ review_status: 'prosecutor_queue', responsible_bureau: 'BCB', classification: 'sealed' }))
+    expect(sealed).toContain('formal prosecutor assignment by the Attorney General')
+  })
 })
 
 describe('fulfilment event derivation (service/return event cards)', () => {

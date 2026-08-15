@@ -7,8 +7,9 @@
  *
  *  Backend behaviour is preserved exactly: creation is the create_legal_request
  *  definer RPC (verbatim args), draft edits stay on update_legal_draft,
- *  submission on submit_legal_request_to_cid (now optionally carrying
- *  p_change_summary on a returned-request resubmission), and structured
+ *  submission on submit_legal_request_to_cid (optionally carrying
+ *  p_change_summary on a returned-request resubmission, and the explicit
+ *  p_material_change declaration after a judge/prosecutor return), and structured
  *  targets ride the existing add_legal_exhibit flow with the new kinds +
  *  per-target p_rationale. Validation is the pure legalWizardIssues model —
  *  the exact client mirror of the server checks; the server revalidates all
@@ -225,6 +226,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
   const [targets, setTargets] = useState<TargetDraft[]>([])
   const [savedTargets, setSavedTargets] = useState<Tables<'legal_request_exhibits'>[]>([])
   const [changeSummary, setChangeSummary] = useState('')
+  const [materialChange, setMaterialChange] = useState(false)
   const [busy, setBusy] = useState(false)
   const [stepIdx, setStepIdx] = useState(0)
   const [attempted, setAttempted] = useState(false)
@@ -478,6 +480,11 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     ? WARRANT_FIELDS[subtype as WarrantType] ?? []
     : requestType === 'subpoena' ? SUBPOENA_FIELDS[subtype as SubpoenaType] ?? [] : []
   const isReturned = !!row && row.review_status.startsWith('returned_by')
+  // Judge/prosecutor returns fast-track (20260818120000): the corrected
+  // resubmission goes STRAIGHT back to the prosecutor queue unless the
+  // investigator explicitly declares a material change below. returned_by_cid
+  // and first submissions enter CID review as always.
+  const isFastReturn = !!row && ['returned_by_judge', 'returned_by_prosecutor'].includes(row.review_status)
   // Review readout: the resolved responsible bureau (permanent-bureau cases
   // resolve with source 'bureau'); while revising, the stamped column.
   const editRoutingRaw = row?.responsible_bureau ?? null
@@ -616,11 +623,17 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     const sr = await rpc('submit_legal_request_to_cid', {
       p_request: row.id,
       p_change_summary: isReturned && changeSummary.trim() ? changeSummary.trim() : undefined,
+      p_material_change: isFastReturn ? materialChange : undefined,
     })
     setBusy(false)
     if (sr.error) { toast(sr.error.message, 'danger'); return }
     Drafts.clear(`legal:edit:${row.id}`)
-    toast('Submitted for CID supervisor review.', 'success')
+    toast(
+      isFastReturn && !materialChange
+        ? 'Resubmitted — the corrected request returned directly to the prosecutor queue.'
+        : 'Submitted for CID supervisor review.',
+      'success',
+    )
     onDone(row.id)
   }
 
@@ -981,7 +994,24 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
               )}
             </Card>
             {isEdit && isReturned && (
-              <Card pad="sm">
+              <Card pad="sm" className="space-y-3">
+                {isFastReturn && (
+                  <>
+                    <p className="text-xs text-slate-300">
+                      Corrected requests return directly to the prosecutor. Check below only if you
+                      made a material change.
+                    </p>
+                    <label className="flex min-h-[40px] cursor-pointer items-center gap-2.5 text-sm text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={materialChange}
+                        onChange={(e) => setMaterialChange(e.target.checked)}
+                        className="h-4 w-4 rounded border-white/20 bg-ink-900 accent-badge-500"
+                      />
+                      I made a material change (requires renewed CID review)
+                    </label>
+                  </>
+                )}
                 <Field
                   label="What changed since the last version? (optional)"
                   hint="Saved with the new version so reviewers can see what changed at a glance."
@@ -1027,7 +1057,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
                 <>
                   <Button disabled={busy} onClick={() => void saveEdit(false)}>Save draft</Button>
                   <Button variant="primary" disabled={busy} onClick={() => void saveEdit(true)}>
-                    Submit for CID review
+                    {isFastReturn ? 'Resubmit for review' : 'Submit for CID review'}
                   </Button>
                 </>
               ) : (

@@ -12,10 +12,14 @@
  *     a Bureau Lead cannot CHANGE an already-set value, DD+/Owner change
  *     requires a reason, 'JTF' is never storable, and a permanent-bureau
  *     case refuses the RPC outright;
- *   - approval routes through the responsible bureau: after a change to SAB
- *     (and a resubmit that re-stamps the request), the LSB Bureau Lead is
- *     DENIED review_legal_request_as_cid while a Director still decides
- *     cross-bureau (can_approve_legal narrowing, §7);
+ *   - approval on a JTF-ASSIGNED case accepts ANY eligible Bureau Lead
+ *     (migration 20260818120000 — audited jtf_any_lead): after a change to
+ *     SAB (and a resubmit that re-stamps the request), the LSB Bureau Lead
+ *     can still act on the SAB-routed request, and the Director's DD+
+ *     cross-bureau fallback decides as before. (The responsible-bureau
+ *     NARROWING for ordinary — non-JTF — cases survives unchanged: §6 pins
+ *     the own-bureau lead path, and bureau-scoped prosecutor queues are
+ *     pinned by v165.);
  *   - the freeze trigger still blocks direct originating_bureau writes;
  *   - regression: a permanent-bureau LSB case stamps LSB and its own Lead
  *     approves unchanged, and another bureau still cannot draft on it.
@@ -148,7 +152,7 @@ describe.skipIf(!enabled)('v1.62 — JTF legal routing: responsible-bureau wall 
 
   /* ============ 3. approval routes through the responsible bureau ============ */
 
-  it('after the change to SAB, a resubmit re-stamps the request; the LSB Lead is denied and a Director decides', async () => {
+  it('after the change to SAB, a resubmit re-stamps the request; ANY Bureau Lead may act (JTF) and a Director still decides', async () => {
     // While the request is still stamped LSB the LSB Lead may act — return it
     // (a real supervisor move) so the resubmit below re-resolves the bureau.
     const ret = await lead.rpc('review_legal_request_as_cid', {
@@ -162,15 +166,23 @@ describe.skipIf(!enabled)('v1.62 — JTF legal routing: responsible-bureau wall 
     expect(resub.error).toBeNull()
     expect(resub.data).toMatchObject({ review_status: 'cid_supervisor_review', responsible_bureau: 'SAB' })
 
-    // the LSB Bureau Lead can no longer decide an SAB-routed request —
-    // can_approve_legal now requires the lead's division to equal responsible_bureau
-    const deny = await lead.rpc('review_legal_request_as_cid', {
-      p_request: jtfRequestId, p_decision: 'approve', p_signature: 'RLS Lead',
+    // Bureau queues + stages (20260818120000): the case is JTF-ASSIGNED, so
+    // ANY eligible Bureau Lead may decide — the LSB Lead acts on the
+    // SAB-routed request (audited jtf_any_lead=true). A return with a note is
+    // the least-destructive proof of that authority.
+    const anyLead = await lead.rpc('review_legal_request_as_cid', {
+      p_request: jtfRequestId, p_decision: 'return', p_note: '[rls-test] v162 JTF any-lead authority check',
     })
-    expect(deny.error).not.toBeNull()
-    expect(deny.error!.message).toMatch(/only Bureau Lead or above may decide/i)
+    expect(anyLead.error).toBeNull()
+    expect(anyLead.data).toMatchObject({ review_status: 'returned_by_cid' })
 
-    // Deputy Director / Director keep cross-bureau authority — approval still works
+    // a CID return re-enters CID review on resubmission (never the fast track
+    // — that is reserved for judge/prosecutor returns, see 20260818120000 §4)
+    const resub2 = await lsb.rpc('submit_legal_request_to_cid', { p_request: jtfRequestId })
+    expect(resub2.error).toBeNull()
+    expect(resub2.data).toMatchObject({ review_status: 'cid_supervisor_review', responsible_bureau: 'SAB' })
+
+    // Deputy Director / Director keep the audited cross-bureau fallback — approval still works
     const ok = await director.rpc('review_legal_request_as_cid', {
       p_request: jtfRequestId, p_decision: 'approve', p_signature: 'RLS Director',
     })

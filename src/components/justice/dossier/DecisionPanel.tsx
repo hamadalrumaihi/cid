@@ -343,7 +343,7 @@ function ProsecutorDecisionModal({ decision, requestNumber, busy, onSubmit, onCl
         <p className="text-sm text-slate-400">
           Request <span className="font-semibold text-slate-200">{requestNumber}</span>.{' '}
           {decision === 'approve' && 'Approval freezes the reviewed version and hands the request to the judicial queue.'}
-          {decision === 'return' && 'The draft reopens for the investigator; resubmission re-enters CID review.'}
+          {decision === 'return' && 'The draft reopens for the investigator; a corrected resubmission returns directly to your bureau’s queue (renewed CID review only on a declared material change).'}
           {decision === 'decline' && 'A terminal prosecutorial refusal — the reason stays on record.'}
           {decision === 'note' && 'Recorded in the internal review trail.'}
         </p>
@@ -685,8 +685,16 @@ export function DecisionPanel({
 
           {editable && (
             <Block title="As the requesting investigator">
-              <Button variant="primary" disabled={busy} onClick={onSubmitToCid}>Submit for CID review</Button>
-              <span className="text-xs text-slate-400">Draft — edit in the Request and Supporting sections, then submit.</span>
+              <Button variant="primary" disabled={busy} onClick={onSubmitToCid}>
+                {['returned_by_judge', 'returned_by_prosecutor'].includes(r.review_status)
+                  ? 'Resubmit for review'
+                  : 'Submit for CID review'}
+              </Button>
+              <span className="text-xs text-slate-400">
+                {['returned_by_judge', 'returned_by_prosecutor'].includes(r.review_status)
+                  ? 'Corrected requests return directly to the prosecutor — a declared material change re-enters CID review.'
+                  : 'Draft — edit in the Request and Supporting sections, then submit.'}
+              </span>
             </Block>
           )}
           {canCidReview && (

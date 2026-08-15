@@ -12,9 +12,13 @@
  *  number + type only (the sealed-list convention). */
 import { useState } from 'react'
 import { rpc } from '@/lib/db'
+import { fmtDate } from '@/lib/format'
 import type { LegalRequest } from '@/lib/justice'
+import { CID_ROUTING_BUREAUS } from '@/lib/legalWorkflow'
 import { toast } from '@/lib/toast'
+import { Badge } from '@/components/ui/Badge'
 import { SectionHeader } from '@/components/ui/PageHeader'
+import { useMyBureauScope } from '@/components/justice/legalShared'
 import { DojQueueList } from './DojQueueList'
 import { DojAdmin } from './DojAdmin'
 import { JusticePickerModal } from './JusticePickerModal'
@@ -83,6 +87,10 @@ export function DojWorkspace({ view, role, myId, lists, requests, onOpen, reload
   const [conflict, setConflict] = useState<string | null>(null)
   const [assign, setAssign] = useState<{ seat: 'prosecutor' | 'judge'; request: LegalRequest } | null>(null)
   const [assignBusy, setAssignBusy] = useState(false)
+  // Bureau queues (20260818120000): a prosecutor works their home bureau +
+  // live coverage (the server already filters visibility — these chips only
+  // LABEL the queue); the AG oversees all three queues, grouped by bureau.
+  const scope = useMyBureauScope()
 
   /** Run a definer RPC; a conflict/recusal refusal raises the banner with the
    *  server message verbatim (plus the toast every failure gets). */
@@ -128,33 +136,86 @@ export function DojWorkspace({ view, role, myId, lists, requests, onOpen, reload
     <div className="space-y-4">
       {conflict && <RecusalBanner message={conflict} onDismiss={() => setConflict(null)} />}
 
-      {view === 'queue' && (
-        <>
-          <SectionHeader
-            title="Prosecutor queue"
-            subtitle={role === 'attorney_general'
-              ? 'One shared queue, oldest first. Assignment is yours; sealed requests reach the bench only through you.'
-              : 'One shared queue, oldest first. Claiming is atomic — if a request vanishes, a colleague claimed it first.'}
-          />
-          <DojQueueList
-            rows={lists.queue}
-            onOpen={onOpen}
-            ageOf={(r) => r.queue_entered_at ?? r.submitted_to_doj_at}
-            ageLabel="queued"
-            empty="The prosecutor queue is empty."
-            action={(r) => {
-              if (role === 'prosecutor') {
-                if (r.classification === 'sealed' || r.created_by === myId) return null
-                return { label: 'Claim', onRun: claimAsProsecutor }
-              }
-              if (role === 'attorney_general') {
-                return { label: 'Assign…', variant: 'secondary', onRun: async () => setAssign({ seat: 'prosecutor', request: r }) }
-              }
-              return null
-            }}
-          />
-        </>
-      )}
+      {view === 'queue' && (() => {
+        const queueAction = (r: LegalRequest) => {
+          if (role === 'prosecutor') {
+            if (r.classification === 'sealed' || r.created_by === myId) return null
+            return { label: 'Claim', onRun: claimAsProsecutor }
+          }
+          if (role === 'attorney_general') {
+            return { label: 'Assign…', variant: 'secondary' as const, onRun: async () => setAssign({ seat: 'prosecutor', request: r }) }
+          }
+          return null
+        }
+        // The AG oversees every bureau queue — group by responsible bureau
+        // (an off-lane bureau appears only if a row actually carries it).
+        const extra = lists.queue.filter((r) => !(CID_ROUTING_BUREAUS as readonly string[]).includes(r.responsible_bureau ?? ''))
+        return (
+          <>
+            <SectionHeader
+              title={role === 'attorney_general' ? 'Prosecutor queues' : 'Prosecutor queue'}
+              subtitle={role === 'attorney_general'
+                ? 'All three bureau queues, oldest first. Assignment is yours; sealed requests reach the bench only through you.'
+                : 'Your bureau queue (home + any temporary coverage), oldest first. Claiming is atomic — if a request vanishes, a colleague claimed it first.'}
+            />
+            {role === 'prosecutor' && (scope.home || scope.coverage.length > 0) && (
+              <div className="flex flex-wrap items-center gap-1.5" aria-label="Your bureau coverage">
+                {scope.home && <Badge tone="good">Home: {scope.home}</Badge>}
+                {scope.coverage.map((c) => (
+                  <Badge key={c.id} tone="warn">
+                    Coverage: {c.bureau}{c.expires_at ? ` until ${fmtDate(c.expires_at)}` : ''}
+                  </Badge>
+                ))}
+              </div>
+            )}
+            {role === 'attorney_general' ? (
+              <div className="space-y-4">
+                {CID_ROUTING_BUREAUS.map((b) => {
+                  const rows = lists.queue.filter((r) => r.responsible_bureau === b)
+                  return (
+                    <section key={b} className="space-y-2">
+                      <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+                        {b} queue
+                        <span className="rounded-full bg-white/10 px-1.5 text-[10px] font-bold text-slate-300">{rows.length}</span>
+                      </h3>
+                      <DojQueueList
+                        rows={rows}
+                        onOpen={onOpen}
+                        ageOf={(r) => r.queue_entered_at ?? r.submitted_to_doj_at}
+                        ageLabel="queued"
+                        empty={`The ${b} queue is empty.`}
+                        action={queueAction}
+                      />
+                    </section>
+                  )
+                })}
+                {extra.length > 0 && (
+                  <section className="space-y-2">
+                    <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Unrouted</h3>
+                    <DojQueueList
+                      rows={extra}
+                      onOpen={onOpen}
+                      ageOf={(r) => r.queue_entered_at ?? r.submitted_to_doj_at}
+                      ageLabel="queued"
+                      empty=""
+                      action={queueAction}
+                    />
+                  </section>
+                )}
+              </div>
+            ) : (
+              <DojQueueList
+                rows={lists.queue}
+                onOpen={onOpen}
+                ageOf={(r) => r.queue_entered_at ?? r.submitted_to_doj_at}
+                ageLabel="queued"
+                empty="Your prosecutor queue is empty."
+                action={queueAction}
+              />
+            )}
+          </>
+        )
+      })()}
 
       {view === 'judicial' && (
         <>
@@ -208,7 +269,7 @@ export function DojWorkspace({ view, role, myId, lists, requests, onOpen, reload
         <>
           <SectionHeader
             title="Returned"
-            subtitle="Requests returned to the investigator for corrections. Resubmission re-enters CID review, then the queue."
+            subtitle="Requests returned to the investigator for corrections. A corrected resubmission returns directly to the bureau's prosecutor queue; a declared material change re-enters CID review first."
           />
           <DojQueueList
             rows={lists.returned}

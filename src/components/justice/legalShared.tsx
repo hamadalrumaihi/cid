@@ -149,6 +149,52 @@ export function useMyProsecutorBureaus(): readonly string[] {
   return key ? bureaus : NO_BUREAUS
 }
 
+/** The signed-in prosecutor's BUREAU SCOPE (20260818120000): home bureau from
+ *  their own justice_memberships row plus LIVE temporary coverage grants from
+ *  prosecutor_coverage (self-select is always allowed on both). Presentation
+ *  only — the server enforces bureau eligibility on every claim/assign; this
+ *  just labels the queue ("Home: LSB", "Coverage: BCB until …"). Non-
+ *  prosecutors skip the reads entirely. */
+export interface BureauScope {
+  /** justice_memberships.prosecutor_bureau, or null (legacy row — surfaced to
+   *  the AG via justice_migration_review for manual assignment). */
+  home: string | null
+  /** Live coverage grants: started, not ended, not expired. */
+  coverage: { id: string; bureau: string; expires_at: string | null }[]
+}
+const NO_SCOPE: BureauScope = { home: null, coverage: [] }
+export function useMyBureauScope(): BureauScope {
+  const { profile } = useAuth()
+  const role = useMyJusticeRole()
+  const key = role === 'prosecutor' ? profile?.id ?? null : null
+  const jmV = useTableVersion('justice_memberships')
+  const pcV = useTableVersion('prosecutor_coverage')
+  const [scope, setScope] = useState<BureauScope>(NO_SCOPE)
+  useEffect(() => {
+    if (!key) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const [mRows, cRows] = await Promise.all([
+          list('justice_memberships', { select: 'prosecutor_bureau', eq: { user_id: key } }),
+          list('prosecutor_coverage', {
+            select: 'id,bureau,starts_at,expires_at,ended_at',
+            eq: { prosecutor_id: key }, order: 'starts_at',
+          }),
+        ])
+        const now = Date.now()
+        const coverage = cRows
+          .filter((c) => !c.ended_at && Date.parse(c.starts_at) <= now
+            && (!c.expires_at || Date.parse(c.expires_at) > now))
+          .map((c) => ({ id: c.id, bureau: String(c.bureau), expires_at: c.expires_at }))
+        if (!cancelled) setScope({ home: mRows[0]?.prosecutor_bureau ?? null, coverage })
+      } catch { /* transient — the queue labels just stay quiet */ }
+    })()
+    return () => { cancelled = true }
+  }, [key, jmV, pcV])
+  return key ? scope : NO_SCOPE
+}
+
 /** Client mirror of private.justice_role_effective: legacy ADA/DA memberships
  *  act with the effective role 'prosecutor'; historical rows are never
  *  rewritten — only interpreted. */

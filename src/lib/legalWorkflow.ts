@@ -88,8 +88,8 @@ export type StageId =
 export const STAGE_LABEL: Record<StageId, string> = {
   draft: 'Draft',
   cid_review: 'CID Review',
-  // Minimal-DOJ: the intake stage IS the shared prosecutor queue (one queue,
-  // no bureau slots) — labelled as what it is.
+  // Minimal-DOJ: the intake stage IS the prosecutor queue (bureau-scoped
+  // since 20260818120000) — labelled as what it is.
   doj_intake: 'Prosecutor queue',
   prosecutorial_review: 'Prosecutorial Review',
   judicial_review: 'Judicial Review',
@@ -545,8 +545,8 @@ export function routingExplanation(r: LegalReqLike, v?: LegalViewer): string {
     return 'This request passed CID review and is waiting at DOJ for prosecutorial assignment.'
   }
   if (s === 'prosecutor_queue') {
-    if (sealed) return 'This sealed request is not claimable from the shared queue. It waits for formal prosecutor assignment by the Attorney General.'
-    return 'Waiting in the shared prosecutor queue — any active prosecutor may claim it.'
+    if (sealed) return 'This sealed request is not claimable from the queue. It waits for formal prosecutor assignment by the Attorney General.'
+    return `Waiting in the ${r.responsible_bureau ?? 'responsible bureau'} prosecutor queue — prosecutors covering that bureau (home or temporary coverage) may claim it.`
   }
   if (s === 'prosecutor_review') return 'This request is under prosecutorial review by the assigned prosecutor, who may approve it for judicial review, return it for corrections, or decline it.'
   if (s === 'ada_review') return 'This request is under review by the assigned bureau ADA.'
