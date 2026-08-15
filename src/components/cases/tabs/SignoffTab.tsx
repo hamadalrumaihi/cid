@@ -9,6 +9,7 @@ import { Field, Select, Textarea } from '@/components/ui/Field'
 import { uiConfirm } from '@/components/ui/dialog'
 import { list, rpc } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
+import { investigativeStageLabel } from '@/components/cases/CaseCommandHeader'
 import { officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { signoffLabel, signoffTint, SIGNOFF_ACTION_VERB, SIGNOFF_STAGE_LABEL } from '@/lib/signoff'
@@ -68,6 +69,61 @@ function CommandOverrideControl({ caseId, onDone }: { caseId: string; onDone: ()
         {(id) => <Textarea id={id} value={reason} onChange={(e) => setReason(e.target.value)} rows={2} placeholder="Why command is overriding the owner's decision" />}
       </Field>
       <Button variant="danger" size="sm" onAction={run}>Record override…</Button>
+    </div>
+  )
+}
+
+/** One row of case_stage_history (the RPC's RETURNS TABLE shape). */
+interface StageHistoryRow {
+  changed_at: string
+  actor_id: string | null
+  actor_name: string | null
+  from_stage: string | null
+  to_stage: string | null
+  reason: string | null
+}
+
+/** Investigative-stage trail — the member-visible view of the
+ *  CASE_STAGE_CHANGED audit rows (case_stage_history, 20260819120000; the
+ *  audit log itself stays Owner-only). Refetches when the case's stage
+ *  changes so a move made in the command header appears immediately. */
+function StageHistoryCard({ caseId, currentStage }: { caseId: string; currentStage: string | null }) {
+  const [rows, setRows] = useState<StageHistoryRow[]>([])
+  const [err, setErr] = useState<unknown>(null)
+  const refresh = useCallback(async () => {
+    const res = await rpc('case_stage_history', { p_case: caseId })
+    if (res.error) setErr(res.error)
+    else { setRows((res.data as StageHistoryRow[] | null) ?? []); setErr(null) }
+  }, [caseId])
+  useEffect(() => { queueMicrotask(() => { void refresh() }) }, [refresh, currentStage])
+  return (
+    <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-300">Investigative stage history</h3>
+        <Badge>{investigativeStageLabel(currentStage)}</Badge>
+      </div>
+      <p className="mt-1 text-sm text-slate-400">
+        Every stage move is manual, requires a reason, and is recorded with the acting member — nothing moves automatically.
+      </p>
+      <div className="mt-3">
+        {err ? (
+          <ErrorNotice message={err} onRetry={() => void refresh()} />
+        ) : (
+          <WorkflowTimeline
+            dense
+            empty="No stage changes yet — the case is still at its intake stage."
+            entries={rows.map((r, i) => ({
+              id: `${r.changed_at}-${i}`,
+              title: 'Stage changed',
+              actor: r.actor_name || officerName(r.actor_id) || 'System',
+              at: r.changed_at,
+              from: investigativeStageLabel(r.from_stage),
+              to: investigativeStageLabel(r.to_stage),
+              note: r.reason,
+            }))}
+          />
+        )}
+      </div>
     </div>
   )
 }
@@ -164,6 +220,7 @@ export function SignoffTab({ c }: { c: CaseRow }) {
           })}
         />
       )}
+      <StageHistoryCard caseId={c.id} currentStage={c.investigative_stage} />
     </div>
   )
 }

@@ -9647,6 +9647,17 @@ export type Database = {
         Args: { p_case: string; p_reason: string; p_stage: string }
         Returns: Database["public"]["Tables"]["cases"]["Row"]
       }
+      case_stage_history: {
+        Args: { p_case: string }
+        Returns: {
+          changed_at: string
+          actor_id: string | null
+          actor_name: string | null
+          from_stage: string | null
+          to_stage: string | null
+          reason: string | null
+        }[]
+      }
       justice_end_coverage: {
         Args: { p_coverage: string; p_reason?: string }
         Returns: Database["public"]["Tables"]["prosecutor_coverage"]["Row"]
