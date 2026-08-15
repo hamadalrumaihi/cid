@@ -87,7 +87,7 @@ SELECT-only for clients; these definer RPCs are the only write path.
 | `assign_judge` / `decide_legal_request_as_judge` | judicial assignment (conflict-of-role checked) and decision (signs the exact version) |
 | `issue_legal_request` / `record_warrant_execution` / `record_warrant_return` | CID-side warrant fulfilment |
 | `record_subpoena_service` / `record_subpoena_compliance` | CID-side subpoena fulfilment (materials link back to the case) |
-| `set_legal_approval_route` / `resolve_case_originating_bureau` | DA/AG route change; CID supervisor sets a legacy JTF case's responsible bureau |
+| `set_legal_approval_route` / `resolve_case_originating_bureau` | DA/AG route change; Senior Detective+ SETS a JTF-assigned case's missing responsible bureau (LSB/BCB/SAB — never 'JTF', never a permanent-bureau case), Deputy Director+/Owner CHANGES an already-set one with a required reason. The server chain (`private.legal_resolve_bureau`: bureau → originating → case-number prefix → lead's division → creator's division) persists successful derivations automatically |
 | `close_legal_request` / `withdraw_legal_request` | close / expire / revoke; creator withdraw (records preserved) |
 | `legal_search(q)` | RLS-limited header search (SECURITY INVOKER — sealed rows undiscoverable) |
 | `legal_internal_notes(p_request)` | prosecution/judicial-side internal notes (column-revoked otherwise) |
