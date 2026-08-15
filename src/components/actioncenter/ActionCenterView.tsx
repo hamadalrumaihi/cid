@@ -33,9 +33,14 @@ import { useActionItems } from './useActionItems'
 const TYPE_FILTERS: { key: string; label: string; types: readonly ActionItem['sourceType'][] }[] = [
   { key: 'task', label: 'Tasks', types: ['task'] },
   { key: 'signoff', label: 'Sign-offs', types: ['signoff', 'returned_case'] },
+  // Transfers covers both bureau transfer_requests and DOJ member_transfers
+  // (one sourceType — distinct member_transfer: keys).
   { key: 'transfer', label: 'Transfers', types: ['transfer'] },
   { key: 'access', label: 'Access', types: ['access_request', 'membership_request', 'restricted_access'] },
   { key: 'legal', label: 'Legal', types: ['legal_request'] },
+  // DOJ pipeline work (prosecutor queue pickups, assigned prosecutorial /
+  // judicial reviews) — only justice-role viewers ever produce these.
+  { key: 'doj', label: 'DOJ queue', types: ['legal_queue'] },
   { key: 'followup', label: 'Follow-ups', types: ['case_followup'] },
   { key: 'blocker', label: 'Blockers', types: ['blocker'] },
   { key: 'surveillance', label: 'Surveillance', types: ['unverified_observation', 'surveillance_expiring'] },

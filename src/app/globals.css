@@ -107,6 +107,14 @@ body .to-blue-700\/5 { --tw-gradient-to: rgb(var(--acc-700) / .05) var(--tw-grad
 /* Density — same html[data-density] contract as the legacy app. */
 html[data-density="compact"] { font-size: 14px; }
 
+/* Flat bordered surface — the dense "case jacket" panel (Card variant="flat"
+   as a plain class for non-component markup). Keep in step with ui/Card. */
+.panel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  background: rgb(11 18 32 / 0.4); /* ink-900/40 */
+}
+
 /* Base — dark ink, native controls dark (select popups etc.), visible focus. */
 :root {
   color-scheme: dark;

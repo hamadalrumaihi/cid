@@ -55,7 +55,8 @@ export function SummarySection({ r, name, viewer, disposition, caseLinkable }: {
         </Row>
         <Row label="Requesting detective">{name(r.created_by)}</Row>
         <Row label="CID supervisor">{name(r.cid_reviewed_by)}</Row>
-        <Row label="Assigned ADA">{name(r.assigned_ada_id)}</Row>
+        <Row label="Assigned prosecutor">{name(r.assigned_prosecutor_id)}</Row>
+        {r.assigned_ada_id && <Row label="Assigned ADA (legacy)">{name(r.assigned_ada_id)}</Row>}
         <Row label="Assigned Judge">{name(r.assigned_judge_id)}</Row>
       </Card>
       <Card pad="sm">
@@ -127,8 +128,29 @@ export function ReviewSection({ actions, name }: { actions: ActionRow[]; name: N
 }
 
 /* ── Decision ─────────────────────────────────────────────────────────────── */
-export function DecisionSection({ r, name }: { r: LegalRequest; name: NameFn }) {
+/** Cross-reference chip (supersession / amendment links) — navigates the host
+ *  to /legal?request=<id> via the dossier's openRequest. */
+function RequestChip({ label, id, onOpen }: { label: string; id: string; onOpen?: (id: string) => void }) {
+  if (!onOpen) return null
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(id)}
+      className="inline-flex min-h-[28px] items-center gap-1 rounded-full border border-badge-500/40 bg-badge-500/10 px-2.5 py-0.5 text-xs font-semibold text-blue-200 transition hover:bg-badge-500/20"
+    >
+      {label}
+    </button>
+  )
+}
+
+export function DecisionSection({ r, name, onOpenRequest }: {
+  r: LegalRequest
+  name: NameFn
+  /** Enables the superseded/amends cross-links. */
+  onOpenRequest?: (id: string) => void
+}) {
   const lane = laneThatAdvanced(r)
+  const hasLinks = !!(r.superseded_by_id || r.amends_request_id)
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card pad="sm">
@@ -137,7 +159,7 @@ export function DecisionSection({ r, name }: { r: LegalRequest; name: NameFn }) 
           <>
             <Row label="Decision">{`${humanize(r.decision)} by ${name(r.decided_by)}${r.decided_at ? ` · ${fmtDateTime(r.decided_at)}` : ''}`}</Row>
             {r.decision_note && <Row label="Decision note">{r.decision_note}</Row>}
-            {r.judicial_conditions && <Row label="Conditions">{r.judicial_conditions}</Row>}
+            {r.judicial_conditions && <Row label="Judicial conditions">{r.judicial_conditions}</Row>}
             <Row label="Issued">{r.issued_at ? `${fmtDateTime(r.issued_at)} by ${name(r.issued_by)}` : '—'}</Row>
             <Row label="Expires">{fmtDateTime(r.expires_at)}</Row>
             {r.request_type === 'subpoena' && <Row label="Response deadline">{fmtDateTime(r.response_deadline)}</Row>}
@@ -147,10 +169,21 @@ export function DecisionSection({ r, name }: { r: LegalRequest; name: NameFn }) 
             No decision has been recorded yet — this request is at {reviewStatusLabel(r.review_status).toLowerCase()}.
           </p>
         )}
+        {hasLinks && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-white/5 pt-2">
+            {r.superseded_by_id && (
+              <RequestChip label="Superseded by → replacement request" id={r.superseded_by_id} onOpen={onOpenRequest} />
+            )}
+            {r.amends_request_id && (
+              <RequestChip label="Amends → original request" id={r.amends_request_id} onOpen={onOpenRequest} />
+            )}
+          </div>
+        )}
       </Card>
       <Card pad="sm">
         <h3 className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Assignment</h3>
-        <Row label="Assigned ADA">{name(r.assigned_ada_id)}</Row>
+        <Row label="Assigned prosecutor">{name(r.assigned_prosecutor_id)}</Row>
+        {r.assigned_ada_id && <Row label="Assigned ADA (legacy)">{name(r.assigned_ada_id)}</Row>}
         <Row label="Assigned Judge">{name(r.assigned_judge_id)}</Row>
         <Row label="CID supervisor">{name(r.cid_reviewed_by)}</Row>
         {lane && (

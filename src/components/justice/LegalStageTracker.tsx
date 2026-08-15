@@ -92,9 +92,21 @@ export function LegalStageTracker({ request, className = '' }: {
   const curIdx = STAGE_ORDER.indexOf(cur)
   const judgeRouted = (request.approval_route ?? 'judge') === 'judge'
   const sealed = request.classification === 'sealed'
-  // Parallel lanes apply only to a Judge-routed, non-sealed request; a sealed
-  // request keeps explicit-assignment routing (no open pickup, no split).
+  const lane = laneThatAdvanced(request)
+  // Minimal-DOJ requests move SEQUENTIALLY — queue → prosecutorial review →
+  // judicial review — so the legacy parallel-lane band would misread them (a
+  // judge's decision after a prosecutor hand-off is not a "skipped" lane).
+  // The band stays ONLY for legacy evidence: a request parked at the retired
+  // DOJ intake, an ADA-carried request, or a direct judicial claim.
+  const sharedQueuePipeline = !!request.assigned_prosecutor_id
+    || ['prosecutor_queue', 'prosecutor_review', 'returned_by_prosecutor', 'declined']
+      .includes(request.review_status)
+  const legacyIntake = request.review_status === 'submitted_to_doj'
+    || !!request.assigned_ada_id || lane === 'judicial'
+  // Parallel lanes apply only to a LEGACY Judge-routed, non-sealed request; a
+  // sealed request keeps explicit-assignment routing (no open pickup, no split).
   const parallel = judgeRouted && !sealed && stages.includes('judicial_review')
+    && !sharedQueuePipeline && legacyIntake
 
   const items: Item[] = []
   for (const s of stages) {
@@ -110,8 +122,7 @@ export function LegalStageTracker({ request, className = '' }: {
     return 'upcoming'
   }
 
-  // Parallel band state + which lane carried the request.
-  const lane = laneThatAdvanced(request)
+  // Parallel band state (lane computed above — it also gates `parallel`).
   const judIdx = STAGE_ORDER.indexOf('judicial_review')
   const bandActive = cur === 'prosecutorial_review' || cur === 'judicial_review'
   const bandPast = curIdx > judIdx

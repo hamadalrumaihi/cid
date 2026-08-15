@@ -41,15 +41,17 @@ interface CmdData {
 }
 const EMPTY: CmdData = { cases: [], raids: [], evidence: [], persons: [], gangs: [] }
 
-/* ---- KPI vocabulary (command.js:9, T_ICONS core.js:1134) ------------------ */
+/* ---- KPI vocabulary (command.js:9, T_ICONS core.js:1134) ------------------
+ * Flat case-jacket strip: the accent survives as the icon temperature only —
+ * no gradients, no per-tile card chrome. Drill behavior is unchanged. */
 const KPI_ACCENTS: Record<string, string> = {
-  blue: 'from-blue-500/20 to-blue-700/5 text-blue-300 border-blue-500/20',
-  slate: 'from-slate-500/20 to-slate-700/5 text-slate-300 border-slate-500/20',
-  violet: 'from-violet-500/20 to-violet-700/5 text-violet-300 border-violet-500/20',
-  emerald: 'from-emerald-500/20 to-emerald-700/5 text-emerald-300 border-emerald-500/20',
-  amber: 'from-amber-500/20 to-amber-700/5 text-amber-300 border-amber-500/20',
-  rose: 'from-rose-500/20 to-rose-700/5 text-rose-300 border-rose-500/20',
-  cyan: 'from-cyan-500/20 to-cyan-700/5 text-cyan-300 border-cyan-500/20',
+  blue: 'text-blue-300',
+  slate: 'text-slate-400',
+  violet: 'text-violet-300',
+  emerald: 'text-emerald-300',
+  amber: 'text-amber-300',
+  rose: 'text-rose-300',
+  cyan: 'text-cyan-300',
 }
 
 const KPI_ICON_PATHS: Record<string, React.ReactNode> = {
@@ -234,26 +236,36 @@ export function CommandView() {
         </Card>
       )}
 
-      {/* KPI grid — compact tiles; drill behavior unchanged */}
+      {/* KPI strip — flat border-separated stat cells; drill behavior unchanged */}
       <div>
-        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">Division vitals</h3>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {kpis.map((m) => (
-            <div
-              key={m.label}
-              onClick={m.go && live ? m.go : undefined}
-              className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${KPI_ACCENTS[m.accent]} p-4 transition hover:shadow-glow${m.go && live ? ' cursor-pointer hover:brightness-110' : ''}`}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{m.label}</p>
-                  <p className="mt-1.5 text-2xl font-bold text-white">{live ? m.value : '—'}</p>
-                  <p className="mt-0.5 text-[11px] text-slate-400">{m.delta}</p>
+        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">Division vitals</h3>
+        <div className="flex flex-wrap gap-px overflow-hidden rounded-lg border border-white/10 bg-white/5">
+          {kpis.map((m) => {
+            const body = (
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-400">{m.label}</p>
+                  <p className="mt-0.5 text-lg font-bold leading-6 tabular-nums text-white">{live ? m.value : '—'}</p>
+                  <p className="truncate text-[10px] text-slate-400">{m.delta}</p>
                 </div>
-                <span className="text-slate-500"><KpiIcon name={m.icon} /></span>
+                <span aria-hidden className={KPI_ACCENTS[m.accent]}><KpiIcon name={m.icon} /></span>
               </div>
-            </div>
-          ))}
+            )
+            const cell = 'min-h-[44px] min-w-0 flex-1 basis-48 bg-ink-900 px-3 py-2 text-left'
+            return m.go && live ? (
+              <button
+                key={m.label}
+                type="button"
+                onClick={m.go}
+                title={`Filter to ${m.label}`}
+                className={`${cell} transition hover:bg-ink-850 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-badge-500`}
+              >
+                {body}
+              </button>
+            ) : (
+              <div key={m.label} className={cell}>{body}</div>
+            )
+          })}
         </div>
       </div>
 

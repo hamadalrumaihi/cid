@@ -1,10 +1,14 @@
 'use client'
 
-/** Case command header — one identity line (number · status · bureau · joint ·
- *  priority), a stage readout with THE single primary next action (from the
- *  shared assessCase engine), and the long tail of case actions folded into an
- *  ActionMenu instead of an 11-button wall. Behavior is unchanged: every
- *  former header action is still reachable, just grouped. */
+/** Case jacket header — a persistent, flat, bordered panel in three lines:
+ *  1 · identity (mono case number + copy, title) with the ActionMenu;
+ *  2 · a definition-list of the case facts (status/priority controls, stage,
+ *      assigned unit vs responsible bureau, lead, supporting count,
+ *      classification, last update, joint/op chips);
+ *  3 · the stage strip with THE single primary next action (shared assessCase
+ *      engine), the follow-up chip and the urgent blocker/overdue counters.
+ *  Behavior is unchanged: every former header action is still reachable —
+ *  the long tail stays folded into the ActionMenu. */
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/Badge'
@@ -14,7 +18,7 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { list, rpc, update } from '@/lib/db'
-import { copyText, slug, todayISO } from '@/lib/format'
+import { copyText, slug, timeAgo, todayISO } from '@/lib/format'
 import { caseLink } from '@/lib/caseLinks'
 import { priorityTint } from '@/lib/tint'
 import { useAuth } from '@/lib/auth'
@@ -46,11 +50,22 @@ const STAGE_TINTS: Record<CaseStage, string> = {
 
 const CONTROL = 'min-h-[40px] rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white'
 
+/** One labelled fact in the line-2 definition list. */
+function DlField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</span>
+      <span className="flex min-w-0 items-center gap-1 text-sm text-slate-200">{children}</span>
+    </div>
+  )
+}
+
 export function CaseCommandHeader({
   c,
   op,
   joint,
   assessment,
+  openBlockers,
   pinned,
   canEdit,
   canArchive,
@@ -77,6 +92,8 @@ export function CaseCommandHeader({
   /** Operation-derived joint picture (opsJoint.caseJointInfo). */
   joint: CaseJointInfo | null
   assessment: CaseAssessment | null
+  /** Open case_blockers count (null until the workflow snapshot lands). */
+  openBlockers: number | null
   pinned: boolean
   canEdit: boolean
   canArchive: boolean
@@ -192,89 +209,45 @@ export function CaseCommandHeader({
   else if (primary?.key === 'followup_due' && canEdit) primaryGo = () => setFollowUpOpen(true)
 
   const followUpDue = !!c.follow_up_at && c.follow_up_at.slice(0, 10) <= todayISO()
+  const overdueTasks = assessment?.counts.overdueTasks ?? 0
+  // Legal routing bureau: recorded responsible bureau first, else a permanent
+  // CID bureau routes itself; JTF/unset shows the needs-routing amber.
+  const responsibleBureau = isRoutingBureau(c.originating_bureau)
+    ? c.originating_bureau
+    : isRoutingBureau(c.bureau) ? c.bureau : null
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-ink-900/60 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            {/* Identity group — what the case is. */}
-            <button onClick={() => copyText(c.case_number, 'Case number')} title="Copy case number" className="inline-flex items-center rounded-full bg-white/5 px-2.5 py-0.5 font-mono text-[11px] font-bold text-badge-200 hover:bg-white/10">{c.case_number}</button>
-            <Badge>{c.bureau}</Badge>
-            {/* JTF is an operational assignment — legal routing rides the
-                responsible bureau (originating_bureau). Surface it (or its
-                absence) right next to the unit badge. */}
-            {isJtfAssigned(c) && (isRoutingBureau(c.originating_bureau) ? (
-              <Badge title="Responsible bureau for legal routing">Routing: {c.originating_bureau}</Badge>
-            ) : (
-              <Badge
-                tint="bg-amber-500/15 text-amber-300"
-                title="No responsible bureau is set — a CID supervisor (Senior Detective or above) must select LSB, BCB, or SAB before legal requests can route."
-              >
-                Needs routing bureau
-              </Badge>
-            ))}
-            {c.is_joint_case && (
-              <Badge
-                tint="bg-violet-500/15 text-violet-300"
-                title={`Originating department: ${bureauLabel(c.originating_bureau ?? c.bureau)}`}
-              >
-                JTF · Joint case
-              </Badge>
-            )}
-            {joint?.activeVia && (
-              <Badge tint="bg-violet-500/15 text-violet-300" title={jointReasonText(joint)}>
-                JOINT · Op {joint.activeVia.opName}
-              </Badge>
-            )}
-            {joint && !joint.activeVia && !c.is_joint_case && joint.everJoint && (
-              <Badge tint="bg-violet-500/10 text-violet-300/80" title={jointReasonText(joint)}>
-                JOINT · historical
-              </Badge>
-            )}
-            <span aria-hidden className="mx-0.5 h-4 w-px bg-white/10" />
-            {/* Workflow group — where the case stands. */}
-            <Badge tint={caseStatusTint(c.status)} className="uppercase">{c.status}</Badge>
-            <Badge tint={signoffTint(c.signoff_status)}>{signoffLabel(c.signoff_status)}</Badge>
-            {c.priority && <Badge tint={priorityTint(c.priority)} className="uppercase">{c.priority} priority</Badge>}
-            <StaleBadge c={c} />
-            {c.follow_up_at && (canEdit ? (
-              <button
-                onClick={() => setFollowUpOpen(true)}
-                title="Edit follow-up"
-                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${followUpDue ? 'bg-amber-500/15 text-amber-300' : 'bg-white/5 text-slate-300'} hover:bg-white/10`}
-              >
-                Follow-up {c.follow_up_at.slice(0, 10)}
-                <DeadlineChip at={c.follow_up_at} kind="due" />
-              </button>
-            ) : (
-              <Badge tint={followUpDue ? 'bg-amber-500/15 text-amber-300' : undefined}>
-                Follow-up {c.follow_up_at.slice(0, 10)}
-                <DeadlineChip at={c.follow_up_at} kind="due" />
-              </Badge>
-            ))}
+    <section className="rounded-lg border border-white/10 bg-ink-900/40">
+      {/* Line 1 — identity: mono case number (copy) · title · the action menu. */}
+      <div className="border-b border-white/5 px-4 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
+            <button
+              onClick={() => copyText(c.case_number, 'Case number')}
+              title="Copy case number"
+              className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-white/5 px-2.5 font-mono text-sm font-bold tabular-nums text-badge-200 transition hover:bg-white/10 sm:min-h-0 sm:py-1"
+            >
+              {c.case_number}
+              <span aria-hidden className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">copy</span>
+            </button>
+            <h1 className="min-w-0 truncate text-lg font-black text-white">{c.title || 'Untitled case'}</h1>
           </div>
-          <h1 className="text-2xl font-black text-white">{c.title || 'Untitled case'}</h1>
-          <p className="mt-2 max-w-3xl text-sm text-slate-300">{c.summary || 'No summary recorded.'}</p>
-          {op && (
-            <Link href={`/operations?op=${op.id}`} className="mt-2 inline-flex items-center rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-white/10">
-              {joint?.activeVia?.opId === op.id ? `Joint via Operation ${op.name}` : `Operation: ${op.name}`}
-            </Link>
-          )}
-          {!op && joint?.operations.filter((o) => !o.linked).slice(0, 1).map((o) => (
-            <Link key={o.opId} href={`/operations?op=${o.opId}`} className="mt-2 inline-flex items-center rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-400 hover:bg-white/10">
-              Formerly Operation {o.opName} ({o.opStatus})
-            </Link>
-          ))}
-          {hint && <p className={`mt-3 inline-flex rounded-lg px-3 py-2 text-sm font-semibold ${hint.c}`}>{hint.t}</p>}
+          <ActionMenu items={items} label="More case actions" buttonClassName="h-10 px-3.5" />
         </div>
-        <div className="flex flex-wrap items-start justify-end gap-2">
+        {c.summary && <p className="mt-1 line-clamp-2 max-w-4xl text-sm text-slate-400">{c.summary}</p>}
+      </div>
+
+      {/* Line 2 — the case facts as a compact definition list. */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-white/5 px-4 py-2">
+        <DlField label="Status">
           {canEdit ? (
             <select aria-label="Case status" value={c.status} onChange={(e) => onStatusChange(e.target.value as CaseRow['status'])} className={CONTROL}>
               {CASE_STATUSES.map((s) => <option key={s} value={s}>{s.toUpperCase()}</option>)}
             </select>
-          ) : <span className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300">Read-only</span>}
-          {canEdit && (
+          ) : <Badge tint={caseStatusTint(c.status)} className="uppercase">{c.status}</Badge>}
+        </DlField>
+        <DlField label="Priority">
+          {canEdit ? (
             <select
               aria-label="Case priority"
               value={c.priority ?? ''}
@@ -285,23 +258,107 @@ export function CaseCommandHeader({
               <option value="">NO PRIORITY</option>
               {CASE_PRIORITIES.map((p) => <option key={p} value={p}>{p.toUpperCase()}</option>)}
             </select>
+          ) : c.priority ? <Badge tint={priorityTint(c.priority)} className="uppercase">{c.priority}</Badge> : <span className="text-slate-400">—</span>}
+        </DlField>
+        {!canEdit && <span className="rounded-lg border border-white/10 px-2 py-0.5 text-xs text-slate-300">Read-only</span>}
+        {assessment && (
+          <DlField label="Stage"><Badge tint={STAGE_TINTS[assessment.stage]}>{assessment.stageLabel}</Badge></DlField>
+        )}
+        <DlField label="Unit">{isJtfAssigned(c) ? 'JTF (operational)' : c.bureau}</DlField>
+        <DlField label="Responsible bureau">
+          {responsibleBureau ? (
+            <Badge title="Responsible bureau for legal routing">{responsibleBureau}</Badge>
+          ) : (
+            <Badge
+              tint="bg-amber-500/15 text-amber-300"
+              title="No responsible bureau is set — a CID supervisor (Senior Detective or above) must select LSB, BCB, or SAB before legal requests can route."
+            >
+              Needs routing bureau
+            </Badge>
           )}
-          <ActionMenu items={items} label="More case actions" buttonClassName="h-10 px-3.5" />
+        </DlField>
+        <DlField label="Lead">{officerName(c.lead_detective_id) || 'Unassigned'}</DlField>
+        <DlField label="Supporting">
+          <span className="tabular-nums">{assessment ? assessment.counts.supportOfficers : '—'}</span>
+        </DlField>
+        <DlField label="Classification">
+          {holdActive ? <Badge tint="bg-rose-500/15 text-rose-300">Legal hold</Badge>
+            : c.archived_at ? <Badge tint="bg-amber-500/15 text-amber-300">Archived</Badge>
+            : <span className="text-slate-400">Standard</span>}
+        </DlField>
+        <DlField label="Updated"><span title={c.updated_at}>{timeAgo(c.updated_at)}</span></DlField>
+        {/* Workflow + joint/op chips — same set as before, unchanged meaning. */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge tint={signoffTint(c.signoff_status)}>{signoffLabel(c.signoff_status)}</Badge>
+          <StaleBadge c={c} />
+          {c.is_joint_case && (
+            <Badge
+              tint="bg-violet-500/15 text-violet-300"
+              title={`Originating department: ${bureauLabel(c.originating_bureau ?? c.bureau)}`}
+            >
+              JTF · Joint case
+            </Badge>
+          )}
+          {joint?.activeVia && (
+            <Badge tint="bg-violet-500/15 text-violet-300" title={jointReasonText(joint)}>
+              JOINT · Op {joint.activeVia.opName}
+            </Badge>
+          )}
+          {joint && !joint.activeVia && !c.is_joint_case && joint.everJoint && (
+            <Badge tint="bg-violet-500/10 text-violet-300/80" title={jointReasonText(joint)}>
+              JOINT · historical
+            </Badge>
+          )}
+          {op && (
+            <Link href={`/operations?op=${op.id}`} className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-white/10">
+              {joint?.activeVia?.opId === op.id ? `Joint via Operation ${op.name}` : `Operation: ${op.name}`}
+            </Link>
+          )}
+          {!op && joint?.operations.filter((o) => !o.linked).slice(0, 1).map((o) => (
+            <Link key={o.opId} href={`/operations?op=${o.opId}`} className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-400 hover:bg-white/10">
+              Formerly Operation {o.opName} ({o.opStatus})
+            </Link>
+          ))}
         </div>
       </div>
 
-      {assessment && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/5 pt-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Stage</span>
-            <Badge tint={STAGE_TINTS[assessment.stage]}>{assessment.stageLabel}</Badge>
-            {primary?.detail && <span className="text-sm text-slate-400">{primary.detail}</span>}
-          </div>
-          {primary && (primaryGo
-            ? <Button variant="primary" onClick={primaryGo}>{primary.label}</Button>
-            : <span className="rounded-lg bg-white/5 px-3 py-2 text-sm font-semibold text-slate-300">{primary.label}</span>)}
+      {/* Line 3 — stage strip: primary next action + follow-up + counters. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-2.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {hint && <span className={`inline-flex rounded-lg px-2.5 py-1 text-sm font-semibold ${hint.c}`}>{hint.t}</span>}
+          {primary?.detail && <span className="text-sm text-slate-400">{primary.detail}</span>}
+          {c.follow_up_at && (canEdit ? (
+            <button
+              onClick={() => setFollowUpOpen(true)}
+              title="Edit follow-up"
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${followUpDue ? 'bg-amber-500/15 text-amber-300' : 'bg-white/5 text-slate-300'} hover:bg-white/10`}
+            >
+              Follow-up {c.follow_up_at.slice(0, 10)}
+              <DeadlineChip at={c.follow_up_at} kind="due" />
+            </button>
+          ) : (
+            <Badge tint={followUpDue ? 'bg-amber-500/15 text-amber-300' : undefined}>
+              Follow-up {c.follow_up_at.slice(0, 10)}
+              <DeadlineChip at={c.follow_up_at} kind="due" />
+            </Badge>
+          ))}
+          <Badge
+            tint={(openBlockers ?? 0) > 0 ? 'bg-amber-500/15 text-amber-300' : undefined}
+            title="Open blockers on this case (see the Brief tab)"
+          >
+            <span className="tabular-nums">{openBlockers ?? '—'}</span> blockers
+          </Badge>
+          <Badge
+            tint={overdueTasks > 0 ? 'bg-rose-500/15 text-rose-300' : undefined}
+            title="Overdue tasks on this case"
+          >
+            <span className="tabular-nums">{assessment ? overdueTasks : '—'}</span> overdue
+          </Badge>
         </div>
-      )}
+        {primary && (primaryGo
+          ? <Button variant="primary" onClick={primaryGo}>{primary.label}</Button>
+          : <span className="rounded-lg bg-white/5 px-3 py-2 text-sm font-semibold text-slate-300">{primary.label}</span>)}
+      </div>
 
       <FollowUpModal open={followUpOpen} c={c} onClose={() => setFollowUpOpen(false)} onChanged={onChanged} />
       <PacketModal open={packetOpen} c={c} onClose={() => setPacketOpen(false)} />

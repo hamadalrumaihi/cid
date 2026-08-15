@@ -6,18 +6,26 @@
  *  predicate here mirrors (never replaces) a server-side authority check, and
  *  every action is the SAME definer RPC as before — a hidden button is
  *  cosmetic, the server revalidates everything. Awareness-only viewers
- *  (bureau prosecutor, not a gate) get a quiet note, never action styling. */
+ *  (bureau prosecutor, not a gate) get a quiet note, never action styling.
+ *
+ *  Minimal-DOJ revival: the panel adds the prosecutor seat (claim / approve /
+ *  return / decline / note on the shared-queue pipeline), the judge seat
+ *  (claim; approve with reasoning + conditions + expiry / deny / return), and
+ *  AG oversight (assign prosecutor or judge, return-to-queue). A refusal from
+ *  the server's conflict detection surfaces verbatim in the RecusalBanner. */
 import { useEffect, useState } from 'react'
 import { rpc } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { activeProfiles, useProfilesStore } from '@/lib/profiles'
 import { type LegalExhibit, type LegalRequest } from '@/lib/justice'
-import type { LegalDisposition } from '@/lib/legalWorkflow'
+import type { LegalDisposition, LegalViewer } from '@/lib/legalWorkflow'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { uiPrompt } from '@/components/ui/dialog'
+import { JusticePickerModal } from '@/components/doj/JusticePickerModal'
+import { RecusalBanner, isRecusalError } from '@/components/doj/RecusalBanner'
 
 type ActFn = (fn: () => Promise<{ error: { message: string } | null }>, okMsg: string) => Promise<void>
 
@@ -301,6 +309,142 @@ function ComplianceModal({
   )
 }
 
+type ProsecutorDecision = 'approve' | 'return' | 'decline' | 'note'
+const PROSECUTOR_TITLE: Record<ProsecutorDecision, string> = {
+  approve: 'Approve for judicial review',
+  return: 'Return to the investigator',
+  decline: 'Decline the request',
+  note: 'Add review note',
+}
+
+/** Prosecutorial decision capture (review_legal_request_as_prosecutor). The
+ *  note is required exactly where the server requires it (return needs the
+ *  corrections; decline needs the recorded reason; a note action needs the
+ *  note); approve/decline may carry a signature bound to the frozen version. */
+function ProsecutorDecisionModal({ decision, requestNumber, busy, onSubmit, onClose }: {
+  decision: ProsecutorDecision
+  requestNumber: string
+  busy: boolean
+  onSubmit: (v: { note: string; signature: string }) => void
+  onClose: () => void
+}) {
+  const [note, setNote] = useState('')
+  const [signature, setSignature] = useState('')
+  const needNote = decision !== 'approve'
+  const signs = decision === 'approve' || decision === 'decline'
+  const ready = !needNote || note.trim() !== ''
+  const noteLabel = decision === 'return' ? 'Required corrections'
+    : decision === 'decline' ? 'Reason for declining'
+    : decision === 'note' ? 'Review note' : 'Note'
+  return (
+    <Modal open onClose={onClose} dirty={() => note.trim() !== '' || signature.trim() !== ''}>
+      <div className="p-5">
+        <ModalHeader title={PROSECUTOR_TITLE[decision]} onClose={onClose} />
+        <p className="text-sm text-slate-400">
+          Request <span className="font-semibold text-slate-200">{requestNumber}</span>.{' '}
+          {decision === 'approve' && 'Approval freezes the reviewed version and hands the request to the judicial queue.'}
+          {decision === 'return' && 'The draft reopens for the investigator; resubmission re-enters CID review.'}
+          {decision === 'decline' && 'A terminal prosecutorial refusal — the reason stays on record.'}
+          {decision === 'note' && 'Recorded in the internal review trail.'}
+        </p>
+        <div className="mt-4 space-y-4">
+          <Field label={noteLabel} required={needNote} hint={needNote ? undefined : 'Optional.'}>
+            {(id) => <Textarea id={id} rows={3} value={note} onChange={(e) => setNote(e.target.value)} />}
+          </Field>
+          {signs && (
+            <Field label="Signature" hint="Optional — type your name to sign this decision.">
+              {(id) => <Input id={id} value={signature} onChange={(e) => setSignature(e.target.value)} autoComplete="off" />}
+            </Field>
+          )}
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button
+            variant={decision === 'decline' ? 'danger' : 'primary'}
+            disabled={busy || !ready}
+            onClick={() => onSubmit({ note: note.trim(), signature: signature.trim() })}
+          >
+            {busy ? 'Recording…' : PROSECUTOR_TITLE[decision]}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+type JudgeDecision = 'approve' | 'deny' | 'return'
+const JUDGE_TITLE: Record<JudgeDecision, string> = {
+  approve: 'Approve request',
+  deny: 'Deny request',
+  return: 'Return to the investigator',
+}
+
+/** Judicial decision capture (decide_legal_request_as_judge). Reasoning is
+ *  required for every outcome (the server refuses without it); approval may
+ *  add conditions and an expiry, and issuance stays a CID act afterwards. */
+function JudgeDecisionModal({ decision, requestNumber, busy, onSubmit, onClose }: {
+  decision: JudgeDecision
+  requestNumber: string
+  busy: boolean
+  onSubmit: (v: { note: string; conditions: string; expires?: string; signature: string }) => void
+  onClose: () => void
+}) {
+  const [note, setNote] = useState('')
+  const [conditions, setConditions] = useState('')
+  const [expires, setExpires] = useState('')
+  const [signature, setSignature] = useState('')
+  const invalidExpiry = expires !== '' && Number.isNaN(new Date(expires).getTime())
+  const ready = note.trim() !== '' && !invalidExpiry
+  return (
+    <Modal open onClose={onClose} dirty={() => note.trim() !== '' || conditions.trim() !== '' || expires !== ''}>
+      <div className="p-5">
+        <ModalHeader title={JUDGE_TITLE[decision]} onClose={onClose} />
+        <p className="text-sm text-slate-400">
+          Request <span className="font-semibold text-slate-200">{requestNumber}</span>.{' '}
+          {decision === 'approve'
+            ? 'Approval freezes the official issued-basis version; issuance itself remains a CID fulfilment act.'
+            : decision === 'deny'
+              ? 'A judicial denial with the reasoning on record.'
+              : 'The draft reopens for the investigator with your reasoning attached.'}
+        </p>
+        <div className="mt-4 space-y-4">
+          <Field label="Reasoning" required>
+            {(id) => <Textarea id={id} rows={3} value={note} onChange={(e) => setNote(e.target.value)} />}
+          </Field>
+          {decision === 'approve' && (
+            <>
+              <Field label="Conditions" hint="Optional — recorded as judicial conditions on the approval.">
+                {(id) => <Textarea id={id} rows={2} value={conditions} onChange={(e) => setConditions(e.target.value)} />}
+              </Field>
+              <Field label="Expiry" hint="Optional — when the authorization lapses.">
+                {(id) => <Input id={id} type="datetime-local" value={expires} onChange={(e) => setExpires(e.target.value)} />}
+              </Field>
+              {invalidExpiry && <p className="text-xs text-rose-300">That date/time could not be read — fix or clear it.</p>}
+            </>
+          )}
+          <Field label="Signature" hint="Optional — type your name to sign this decision.">
+            {(id) => <Input id={id} value={signature} onChange={(e) => setSignature(e.target.value)} autoComplete="off" />}
+          </Field>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button
+            variant={decision === 'deny' ? 'danger' : 'primary'}
+            disabled={busy || !ready}
+            onClick={() => onSubmit({
+              note: note.trim(), conditions: conditions.trim(),
+              expires: expires ? new Date(expires).toISOString() : undefined,
+              signature: signature.trim(),
+            })}
+          >
+            {busy ? 'Recording…' : JUDGE_TITLE[decision]}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 /** One labelled action group: who you're acting as, then the controls. */
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -313,7 +457,7 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
 
 export function DecisionPanel({
   r, busy, act, promptSig, exhibits,
-  editable, canCidReview, cidActive,
+  editable, canCidReview, cidActive, viewer,
   awarenessOnly, disposition, now, onSubmitToCid,
 }: {
   r: LegalRequest
@@ -324,6 +468,8 @@ export function DecisionPanel({
   editable: boolean
   canCidReview: boolean
   cidActive: boolean
+  /** The workflow model's viewer (effective justice role included). */
+  viewer: LegalViewer
   awarenessOnly: boolean
   disposition: LegalDisposition
   now: number
@@ -337,6 +483,22 @@ export function DecisionPanel({
   const [issueOpen, setIssueOpen] = useState(false)
   const [serviceStatus, setServiceStatus] = useState<ServiceStatus | null>(null)
   const [complianceStatus, setComplianceStatus] = useState<ComplianceStatus | null>(null)
+  // DOJ seats: decision modals (pre-set like the fulfilment ones), the AG
+  // assignment picker, and the verbatim conflict banner.
+  const [prosDecision, setProsDecision] = useState<ProsecutorDecision | null>(null)
+  const [judgeDecision, setJudgeDecision] = useState<JudgeDecision | null>(null)
+  const [assignSeat, setAssignSeat] = useState<'prosecutor' | 'judge' | null>(null)
+  const [conflict, setConflict] = useState<string | null>(null)
+
+  /** Same contract as `act`, but a conflict/recusal refusal also raises the
+   *  banner with the server message verbatim. */
+  const dojAct = (fn: () => Promise<{ error: { message: string } | null }>, okMsg: string) =>
+    act(async () => {
+      const res = await fn()
+      if (res.error && isRecusalError(res.error.message)) setConflict(res.error.message)
+      else if (!res.error) setConflict(null)
+      return res
+    }, okMsg)
   /* ── Bureau Lead decision (approve / deny / return) — the single write
    *    surface for legal-request review. Every action mirrors, never replaces,
    *    the server-side authority check in review_legal_request_as_cid. ─────── */
@@ -363,6 +525,68 @@ export function DecisionPanel({
     await act(() => rpc('review_legal_request_as_cid', {
       p_request: r.id, p_decision: 'approve', p_override_reason: override ?? undefined, p_signature: sig || undefined,
     }), 'Approved — ready to issue.')
+  }
+
+  /* ── DOJ handlers (minimal-DOJ revival — all definer RPCs) ───────────────── */
+  // Claim from the shared queue (atomic FOR UPDATE claim server-side).
+  const claimAsProsecutor = () =>
+    dojAct(() => rpc('legal_claim_prosecutor', { p_request: r.id }), 'Claimed — the request is yours to review.')
+  const claimAsJudge = () =>
+    dojAct(() => rpc('claim_legal_request_as_judge', { p_request: r.id }), 'Claimed for judicial review.')
+
+  // Prosecutorial decision. Capacity passthrough: dual CID+DOJ members must
+  // state an acting capacity — if the server raises it, retry acting as DOJ
+  // (this panel IS the DOJ seat).
+  const submitProsecutorDecision = async (decision: ProsecutorDecision, v: { note: string; signature: string }) => {
+    await dojAct(async () => {
+      const call = (cap?: string) => rpc('review_legal_request_as_prosecutor', {
+        p_request: r.id, p_decision: decision,
+        p_note: v.note || undefined, p_signature: v.signature || undefined,
+        ...(cap ? { p_capacity: cap } : {}),
+      })
+      let res = await call()
+      if (res.error && /acting capacity/i.test(res.error.message)) res = await call('doj')
+      return res
+    }, decision === 'approve' ? 'Approved — handed to the judicial queue.'
+      : decision === 'return' ? 'Returned to the investigator.'
+      : decision === 'decline' ? 'Declined — the reason is on record.'
+      : 'Review note recorded.')
+    setProsDecision(null)
+  }
+
+  // The holding prosecutor steps back to the shared queue.
+  const returnToQueue = async () => {
+    const reason = await uiPrompt('Reason for returning this to the shared queue (optional).', { title: 'Return to queue' })
+    if (reason === null) return
+    await dojAct(
+      () => rpc('legal_return_to_prosecutor_queue', { p_request: r.id, p_reason: reason || undefined }),
+      'Returned to the prosecutor queue.',
+    )
+  }
+
+  // Judicial decision — reasoning required for every outcome.
+  const submitJudgeDecision = async (decision: JudgeDecision, v: { note: string; conditions: string; expires?: string; signature: string }) => {
+    await dojAct(() => rpc('decide_legal_request_as_judge', {
+      p_request: r.id, p_decision: decision, p_note: v.note,
+      p_conditions: decision === 'approve' ? (v.conditions || undefined) : undefined,
+      p_expires_at: decision === 'approve' ? v.expires : undefined,
+      p_signature: v.signature || undefined,
+    }), decision === 'approve' ? 'Approved — ready for CID issuance.'
+      : decision === 'deny' ? 'Denied.' : 'Returned to the investigator.')
+    setJudgeDecision(null)
+  }
+
+  // AG assignment (the only path for sealed requests).
+  const submitAssign = async (v: { userId: string; reason: string }) => {
+    if (assignSeat === 'prosecutor') {
+      await dojAct(
+        () => rpc('legal_assign_prosecutor', { p_request: r.id, p_prosecutor: v.userId, p_reason: v.reason || undefined }),
+        'Prosecutor assigned.',
+      )
+    } else if (assignSeat === 'judge') {
+      await dojAct(() => rpc('assign_judge', { p_request: r.id, p_judge: v.userId }), 'Judge assigned.')
+    }
+    setAssignSeat(null)
   }
 
   /* ── Fulfilment handlers: issue / execute / return / service / compliance ── */
@@ -426,7 +650,24 @@ export function DecisionPanel({
   const canRevoke = cidActive && ['issued', 'executed'].includes(r.fulfilment_status)
   const anyFulfilment = canIssue || canExecute || canFileReturn || canRecordService || canRecordCompliance || canClose || canMarkExpired || canRevoke
 
-  const hasActions = editable || canCidReview || anyFulfilment
+  /* ── DOJ seat visibility (mirrors — the RPCs re-check everything) ────────── */
+  const me = viewer.myId
+  const status = r.review_status
+  const sealed = r.classification === 'sealed'
+  const isAG = viewer.justiceRole === 'attorney_general' || viewer.isOwner
+  const canClaimProsecutor = viewer.justiceRole === 'prosecutor'
+    && status === 'prosecutor_queue' && !sealed && r.created_by !== me
+  const isAssignedProsecutor = !!me && status === 'prosecutor_review' && r.assigned_prosecutor_id === me
+  const canClaimJudge = viewer.justiceRole === 'judge'
+    && status === 'submitted_to_judge' && !sealed && !r.assigned_judge_id && r.created_by !== me
+  const isAssignedJudge = !!me && status === 'judicial_review' && r.assigned_judge_id === me
+  const agAssignProsecutor = isAG && ['prosecutor_queue', 'prosecutor_review'].includes(status)
+  const agAssignJudge = isAG && status === 'submitted_to_judge'
+  const agReturnToQueue = isAG && status === 'prosecutor_review'
+  const anyDoj = canClaimProsecutor || isAssignedProsecutor || canClaimJudge || isAssignedJudge
+    || agAssignProsecutor || agAssignJudge
+
+  const hasActions = editable || canCidReview || anyFulfilment || anyDoj
 
   return (
     <div className="sticky bottom-0 z-20 pb-[env(safe-area-inset-bottom)] sm:static sm:pb-0">
@@ -440,6 +681,8 @@ export function DecisionPanel({
             </p>
           </div>
 
+          {conflict && <RecusalBanner message={conflict} onDismiss={() => setConflict(null)} />}
+
           {editable && (
             <Block title="As the requesting investigator">
               <Button variant="primary" disabled={busy} onClick={onSubmitToCid}>Submit for CID review</Button>
@@ -451,6 +694,54 @@ export function DecisionPanel({
               <Button variant="primary" disabled={busy} onClick={() => void cidDecide('approve')}>Approve</Button>
               <Button disabled={busy} onClick={() => void cidDecide('deny')}>Deny</Button>
               <Button disabled={busy} onClick={() => void cidDecide('return')}>Return for revision</Button>
+            </Block>
+          )}
+          {canClaimProsecutor && (
+            <Block title="As Prosecutor">
+              <Button variant="primary" disabled={busy} onClick={() => void claimAsProsecutor()}>Claim from the queue</Button>
+              <span className="text-xs text-slate-400">Claiming is atomic — the request becomes yours to review.</span>
+            </Block>
+          )}
+          {isAssignedProsecutor && (
+            <Block title="As the assigned Prosecutor">
+              <Button variant="primary" disabled={busy} onClick={() => setProsDecision('approve')}>Approve for judicial review</Button>
+              <Button disabled={busy} onClick={() => setProsDecision('return')}>Return for corrections</Button>
+              <Button disabled={busy} onClick={() => setProsDecision('decline')}>Decline</Button>
+              <Button disabled={busy} onClick={() => setProsDecision('note')}>Add review note</Button>
+              <Button variant="ghost" disabled={busy} onClick={() => void returnToQueue()}>Return to queue…</Button>
+            </Block>
+          )}
+          {canClaimJudge && (
+            <Block title="As Judge">
+              <Button variant="primary" disabled={busy} onClick={() => void claimAsJudge()}>Claim for judicial review</Button>
+            </Block>
+          )}
+          {isAssignedJudge && (
+            <Block title="As the assigned Judge">
+              <Button variant="primary" disabled={busy} onClick={() => setJudgeDecision('approve')}>Approve…</Button>
+              <Button disabled={busy} onClick={() => setJudgeDecision('deny')}>Deny…</Button>
+              <Button disabled={busy} onClick={() => setJudgeDecision('return')}>Return…</Button>
+              <span className="text-xs text-slate-400">Every judicial decision requires recorded reasoning.</span>
+            </Block>
+          )}
+          {(agAssignProsecutor || agAssignJudge) && (
+            <Block title="As Attorney General">
+              {agAssignProsecutor && (
+                <Button variant={sealed ? 'primary' : 'secondary'} disabled={busy} onClick={() => setAssignSeat('prosecutor')}>
+                  {r.assigned_prosecutor_id ? 'Reassign prosecutor…' : 'Assign prosecutor…'}
+                </Button>
+              )}
+              {agAssignJudge && (
+                <Button variant={sealed ? 'primary' : 'secondary'} disabled={busy} onClick={() => setAssignSeat('judge')}>
+                  Assign judge…
+                </Button>
+              )}
+              {agReturnToQueue && (
+                <Button variant="ghost" disabled={busy} onClick={() => void returnToQueue()}>Return to queue…</Button>
+              )}
+              {sealed && (
+                <span className="text-xs text-slate-400">Sealed — formal assignment is the only path forward.</span>
+              )}
             </Block>
           )}
           {anyFulfilment && (
@@ -532,6 +823,38 @@ export function DecisionPanel({
           busy={busy}
           onClose={() => setComplianceStatus(null)}
           onSubmit={(v) => void submitCompliance(complianceStatus, v)}
+        />
+      )}
+      {prosDecision && (
+        <ProsecutorDecisionModal
+          decision={prosDecision}
+          requestNumber={r.request_number}
+          busy={busy}
+          onClose={() => setProsDecision(null)}
+          onSubmit={(v) => void submitProsecutorDecision(prosDecision, v)}
+        />
+      )}
+      {judgeDecision && (
+        <JudgeDecisionModal
+          decision={judgeDecision}
+          requestNumber={r.request_number}
+          busy={busy}
+          onClose={() => setJudgeDecision(null)}
+          onSubmit={(v) => void submitJudgeDecision(judgeDecision, v)}
+        />
+      )}
+      {assignSeat && (
+        <JusticePickerModal
+          seat={assignSeat}
+          title={assignSeat === 'prosecutor' ? `Assign a prosecutor — ${r.request_number}` : `Assign a judge — ${r.request_number}`}
+          hint={sealed
+            ? 'Sealed request — formal assignment is the only path to the bench.'
+            : 'Formal assignment. Conflicted members are refused server-side.'}
+          reasonMode={assignSeat === 'judge' ? 'none' : r.assigned_prosecutor_id ? 'required' : 'optional'}
+          busy={busy}
+          excludeIds={[r.created_by, r.assigned_prosecutor_id ?? ''].filter(Boolean)}
+          onSubmit={(v) => void submitAssign(v)}
+          onClose={() => setAssignSeat(null)}
         />
       )}
     </div>

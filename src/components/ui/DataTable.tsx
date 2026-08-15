@@ -32,7 +32,7 @@ export const csvCell = (raw: string): string => {
   return v
 }
 
-export function DataTable<T>({ columns, rows, rowKey, pageSize = 50, initialSort, filterPlaceholder = 'Filter…', csvName, emptyText = 'No entries.', countLabel, searchText }: {
+export function DataTable<T>({ columns, rows, rowKey, pageSize = 50, initialSort, filterPlaceholder = 'Filter…', csvName, emptyText = 'No entries.', countLabel, searchText, dense = false, onRowClick }: {
   columns: DataColumn<T>[]
   rows: T[]
   rowKey: (row: T) => string
@@ -46,6 +46,13 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = 50, initialSort
   countLabel?: string
   /** Extra per-row text the filter matches beyond the visible columns. */
   searchText?: (row: T) => string
+  /** Tighter rows (py-1.5) for registry-density tables. Additive — default
+   *  geometry is unchanged. */
+  dense?: boolean
+  /** Whole-row activation (master-detail navigation). Keep a real link or
+   *  button in one column too — the row click is a pointer convenience, not
+   *  the keyboard path. */
+  onRowClick?: (row: T) => void
 }) {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState(initialSort ?? { key: columns[0]?.key ?? '', dir: 'asc' as 'asc' | 'desc' })
@@ -117,7 +124,7 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = 50, initialSort
                   {columns.map((c) => (
                     <th
                       key={c.key}
-                      className="cursor-pointer select-none px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white"
+                      className={`cursor-pointer select-none px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-white ${dense ? 'py-1.5' : 'py-2'}`}
                       onClick={() => { setSort((s) => ({ key: c.key, dir: s.key === c.key && s.dir === 'desc' ? 'asc' : 'desc' })); setPage(0) }}
                       aria-sort={sort.key === c.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
@@ -128,9 +135,13 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = 50, initialSort
               </thead>
               <tbody className="divide-y divide-white/5">
                 {slice.map((r) => (
-                  <tr key={rowKey(r)}>
+                  <tr
+                    key={rowKey(r)}
+                    onClick={onRowClick ? () => onRowClick(r) : undefined}
+                    className={onRowClick ? 'cursor-pointer transition hover:bg-white/5' : undefined}
+                  >
                     {columns.map((c) => (
-                      <td key={c.key} className={c.className ?? 'px-3 py-2 text-slate-200'}>
+                      <td key={c.key} className={c.className ?? `px-3 text-sm text-slate-200 ${dense ? 'py-1.5' : 'py-2'}`}>
                         {c.render ? c.render(r) : c.value(r)}
                       </td>
                     ))}
