@@ -15,9 +15,12 @@ import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { priorityTint } from '@/lib/tint'
+import { isRoutingBureau } from '@/lib/legalWorkflow'
 import { CaseBoard } from './CaseBoard'
 import { CaseDetail } from './CaseDetail'
 import { CaseFilterBar } from './CaseFilterBar'
@@ -47,7 +50,9 @@ function CasesViewInner() {
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState(() => Store.get('casesScope', 'mine'))
-  const [view, setView] = useState(() => Store.get('casesView', 'grid'))
+  // Dense registry table is the default working view; grid/board persist via
+  // the same casesView Store key as before.
+  const [view, setView] = useState(() => Store.get('casesView', 'table'))
   const [filters, setFilters] = useState<CaseFilters>(() => loadCaseFilters())
   const [activeViewName, setActiveViewName] = useState('')
   const [selected, setSelected] = useState<string[]>([])
@@ -136,7 +141,7 @@ function CasesViewInner() {
               </button>
             )}
             <div className="flex rounded-lg border border-white/10 bg-ink-950 p-1">
-              {['grid', 'board'].map((v) => <button key={v} onClick={() => setView(v)} className={`rounded-md px-3 py-1.5 text-sm font-bold capitalize ${view === v ? 'bg-badge-600 text-white' : 'text-slate-400'}`}>{v}</button>)}
+              {['table', 'grid', 'board'].map((v) => <button key={v} onClick={() => setView(v)} className={`rounded-md px-3 py-1.5 text-sm font-bold capitalize ${view === v ? 'bg-badge-600 text-white' : 'text-slate-400'}`}>{v}</button>)}
             </div>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search cases" className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white" />
             <Button onClick={() => void fetchCases()}>Refresh</Button>
@@ -149,8 +154,9 @@ function CasesViewInner() {
 
       {loading ? <CardGridSkeleton />
         : view === 'board' ? <CaseBoard items={filtered} canEdit={canEdit} onOpen={openCase} onMoved={fetchCases} />
-        : <div className={CASE_GRID_CLASS}>{filtered.map((c, i) => <CaseCard key={c.id} c={c} index={i} selected={selected.includes(c.id)} canDelete={canDelete} onSelect={(on) => setSelected((s) => on ? [...s, c.id] : s.filter((x) => x !== c.id))} onOpen={() => openCase(c.id)} />)}</div>}
-      {!loading && !filtered.length && <Notice text="No cases match this view." />}
+        : view === 'grid' ? <div className={CASE_GRID_CLASS}>{filtered.map((c, i) => <CaseCard key={c.id} c={c} index={i} selected={selected.includes(c.id)} canDelete={canDelete} onSelect={(on) => setSelected((s) => on ? [...s, c.id] : s.filter((x) => x !== c.id))} onOpen={() => openCase(c.id)} />)}</div>
+        : <CaseTable items={filtered} canDelete={canDelete} selected={selected} onSelect={(id, on) => setSelected((s) => on ? [...s, id] : s.filter((x) => x !== id))} onOpen={openCase} />}
+      {!loading && !filtered.length && view !== 'table' && <Notice text="No cases match this view." />}
 
       {selected.length > 0 && <div className="sticky bottom-4 z-20 flex items-center justify-between rounded-2xl border border-white/10 bg-ink-850 p-3 shadow-glow">
         <p className="text-sm font-bold text-white">{selected.length} selected</p>
@@ -159,6 +165,93 @@ function CasesViewInner() {
 
       <CaseModal open={modalOpen} record={editRecord} onClose={() => setModalOpen(false)} onSaved={(id) => { setModalOpen(false); void fetchCases(); if (id) openCase(id) }} />
     </div>
+  )
+}
+
+/* ── Dense registry table — the default cases view. Same `filtered` rows as
+ * the grid/board (search, filters, saved views and scope all apply), row
+ * click opens the case, the mono case number is the keyboard path, and the
+ * canDelete checkbox column feeds the same bulk-action bar. ── */
+function CaseTable({ items, canDelete, selected, onSelect, onOpen }: {
+  items: CaseRow[]
+  canDelete: boolean
+  selected: string[]
+  onSelect: (id: string, on: boolean) => void
+  onOpen: (id: string) => void
+}) {
+  const columns: DataColumn<CaseRow>[] = [
+    ...(canDelete ? [{
+      key: 'sel', label: '', value: () => '',
+      render: (c: CaseRow) => (
+        <input
+          type="checkbox"
+          aria-label={`Select ${c.case_number}`}
+          checked={selected.includes(c.id)}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => onSelect(c.id, e.target.checked)}
+        />
+      ),
+      className: 'w-8 px-3 py-1.5',
+    } satisfies DataColumn<CaseRow>] : []),
+    {
+      key: 'number', label: 'Case №', value: (c) => c.case_number,
+      render: (c) => (
+        <button onClick={(e) => { e.stopPropagation(); onOpen(c.id) }} className="rounded font-mono text-sm font-bold tabular-nums text-badge-200 hover:text-white">
+          {c.case_number}
+        </button>
+      ),
+      className: 'px-3 py-1.5 whitespace-nowrap',
+    },
+    {
+      key: 'title', label: 'Title', value: (c) => c.title || 'Untitled case',
+      render: (c) => <span className="line-clamp-1 font-semibold text-white">{c.title || 'Untitled case'}</span>,
+    },
+    { key: 'bureau', label: 'Unit', value: (c) => c.bureau },
+    {
+      key: 'responsible', label: 'Responsible',
+      value: (c) => (isRoutingBureau(c.originating_bureau) ? c.originating_bureau
+        : isRoutingBureau(c.bureau) ? c.bureau : '—'),
+      render: (c) => {
+        const b = isRoutingBureau(c.originating_bureau) ? c.originating_bureau
+          : isRoutingBureau(c.bureau) ? c.bureau : null
+        return b ?? <span className="text-amber-300" title="No responsible bureau — legal routing is blocked">Needs routing</span>
+      },
+    },
+    {
+      key: 'status', label: 'Status', value: (c) => c.status,
+      render: (c) => <Badge tint={caseStatusTint(c.status)} className="uppercase">{c.status}</Badge>,
+    },
+    {
+      key: 'priority', label: 'Priority', value: (c) => c.priority ?? '',
+      render: (c) => c.priority
+        ? <Badge tint={priorityTint(c.priority)} className="uppercase">{c.priority}</Badge>
+        : <span className="text-slate-400">—</span>,
+    },
+    { key: 'lead', label: 'Lead', value: (c) => officerName(c.lead_detective_id) || 'Unassigned' },
+    {
+      key: 'updated', label: 'Updated', value: (c) => timeAgo(c.updated_at),
+      sortValue: (c) => c.updated_at,
+      render: (c) => (
+        <span className="whitespace-nowrap text-slate-400" title={c.updated_at}>
+          {timeAgo(c.updated_at)} <StaleBadge c={c} />
+        </span>
+      ),
+    },
+  ]
+  return (
+    <DataTable<CaseRow>
+      dense
+      columns={columns}
+      rows={items}
+      rowKey={(c) => c.id}
+      onRowClick={(c) => onOpen(c.id)}
+      initialSort={{ key: 'updated', dir: 'desc' }}
+      csvName="cases"
+      countLabel="cases"
+      emptyText="No cases match this view."
+      filterPlaceholder="Filter table…"
+      searchText={(c) => `${c.summary ?? ''} ${signoffLabel(c.signoff_status)}`}
+    />
   )
 }
 

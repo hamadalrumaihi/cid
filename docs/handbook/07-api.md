@@ -55,17 +55,18 @@ SECURITY DEFINER (run privileged, then check the caller inside) except
 | `announcement_notify_update(p_announce)` | announcement id | count | AnnouncementModal | explicit re-notify on edit (never automatic) |
 | `bootstrap_command` / `bootstrap_director(email)` | email | text | nobody (setup-era) | first-user bootstrap; candidates for removal |
 
-### DOJ legal-review RPCs (v1.13.0)
+### DOJ legal-review RPCs (v1.13.0, minimal-DOJ revival 2026-08-15)
 
-> **Retired — see [DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md) Phase-1 banner;
-> approval is now Bureau Lead+** (`private.is_command()`, via
-> `review_legal_request_as_cid`). As of 2026-07-22 the justice-membership, ADA/DA/AG
-> (`review_legal_request_as_ada`/`_da`/`_ag`), Judge (`assign_judge`,
-> `decide_legal_request_as_judge`, `claim_legal_request_as_judge`), DOJ-intake
-> (`submit_legal_request_to_doj`, `reassign_legal_ada`, `set_legal_approval_route`),
-> and prosecutor-coverage RPCs below are **EXECUTE-revoked** (retained for
-> history); `justice_memberships` are deactivated. The draft → CID-supervisor →
-> fulfilment RPCs remain live.
+> **Minimal DOJ (Phase 2) — see [DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md)
+> Phase-2 banner.** The pipeline is `cid_supervisor_review` → (Bureau Lead+
+> approve via `review_legal_request_as_cid`) → **`prosecutor_queue`** (one
+> shared queue) → `prosecutor_review` → `submitted_to_judge` →
+> `judicial_review` → approved/denied → CID fulfilment. Exactly three live
+> roles (`attorney_general` / `prosecutor` / `judge`; legacy ADA/DA map to the
+> effective role prosecutor). The Phase-1-retired ADA/DA/AG review, DOJ-intake
+> routing (`submit_legal_request_to_doj`, `reassign_legal_ada`,
+> `set_legal_approval_route`), bureau-coverage, and self-serve
+> justice-membership-request RPCs **stay EXECUTE-revoked** (history only).
 
 Justice identity and legal review are a **separate domain** (see
 [`docs/DOJ-INTEGRATION.md`](../DOJ-INTEGRATION.md)). Every legal table is
@@ -73,21 +74,26 @@ SELECT-only for clients; these definer RPCs are the only write path.
 
 | RPC | Purpose |
 |---|---|
-| `justice_membership_request_submit` / `_withdraw(p_request)` | applicant-side justice onboarding transitions |
-| `review_justice_membership_request(p_request, p_decision, p_final_agency, p_final_role, …)` | DA/AG/Owner decision; activates the justice membership atomically (approval matrix enforced) |
-| `admin_justice_membership_requests()` | reviewer-only full read (incl. the revoked internal note) |
-| `set_justice_membership_active(p_target, p_active)` | deactivate/reactivate a justice membership |
-| `assign_ada_to_bureau` / `set_primary_ada` / `set_acting_ada` / `end_ada_bureau_assignment` | DA/AG/Owner manage bureau ADA coverage (assignments, not roles) |
-| `doj_bureau_coverage()` | coverage board (primary/acting/supporting per bureau) |
 | `create_legal_request` / `update_legal_draft` | draft a warrant or subpoena on an accessible case |
 | `add_legal_exhibit` / `remove_legal_exhibit` | build the deliberate packet (source validated against caller's own access) |
-| `submit_legal_request_to_cid` / `review_legal_request_as_cid` | CID supervisor stage; approval freezes a version + auto-routes to the bureau ADA |
-| `submit_legal_request_to_doj` / `reassign_legal_ada` | DA/AG/Owner manual routing / cross-bureau override (reason required) |
-| `review_legal_request_as_ada` / `_da` / `_ag` | prosecutorial review (return / submit-onward / DA-or-AG approve on their route) |
-| `assign_judge` / `decide_legal_request_as_judge` | judicial assignment (conflict-of-role checked) and decision (signs the exact version) |
-| `issue_legal_request` / `record_warrant_execution` / `record_warrant_return` | CID-side warrant fulfilment |
+| `submit_legal_request_to_cid` / `review_legal_request_as_cid` | CID supervisor stage; **approve freezes a version and hands off to the shared `prosecutor_queue`** (deny/return unchanged; sealed requests skip the bench fan-out and wait for AG assignment) |
+| `legal_claim_prosecutor(p_request)` | atomic claim from the shared queue (active prosecutors only; sealed refused; creator/conflicted refused — `private.legal_is_conflicted`) |
+| `legal_assign_prosecutor(p_request, p_prosecutor, p_reason?)` | AG/Owner formal assignment or reassignment (reason required to take a claimed request; the ONLY path for sealed); conflicts never overridable |
+| `legal_return_to_prosecutor_queue(p_request, p_reason?)` | the holder steps back — or the AG returns abandoned work — to the shared queue |
+| `review_legal_request_as_prosecutor(p_request, p_decision, p_note?, p_signature?, p_capacity?)` | assigned prosecutor: approve → judicial queue / return (corrections required) / decline (terminal, reason required) / note; dual CID+DOJ members state their acting capacity |
+| `claim_legal_request_as_judge` / `assign_judge` / `decide_legal_request_as_judge` | judicial claim (non-sealed) or formal assignment (AG/Owner/approving prosecutor; only path for sealed), then decision — approve (reasoning required, optional conditions + expiry) / deny / return; conflict-of-role + investigator-history checked |
+| `justice_appoint(p_user, p_role, p_reason?)` | AG/Owner appoint prosecutors and judges (**Owner only** for an Attorney General); active CID members refused — the transfer workflow is their path |
+| `set_justice_membership_active(p_target, p_active)` | deactivate/reactivate a membership; deactivation auto-returns the member's unfinished work to the queues (nothing strands) |
+| `legal_admin_cancel(p_request, p_reason)` | command/AG/Owner cancels a stuck, undecided request (decided/issued work untouchable here) |
+| `legal_mark_superseded(p_old, p_new, p_reason)` | the ONLY correction path for issued instruments: links both directions, retires the old one, revokes live fulfilment; snapshots stay immutable |
+| `justice_migration_review()` | Owner/AG migration report: legacy roles, dual identities, requests in retired states, inactive holders, self-review conflicts |
+| `transfer_doj_request(p_user, p_direction, p_role, p_reason, p_bureau?)` | CID Command proposes CID→DOJ (AG/Owner proposes DOJ→CID) — an organizational transfer, never account recreation |
+| `transfer_doj_decide(p_transfer, p_stage, p_decision, p_note?, p_retain_cid?, p_dual_expires_at?)` | two-stage approval: CID stage (DD+/Owner), DOJ stage (AG/Owner; AG appointments Owner-only); temporary dual membership requires an expiry ≤ 90 days |
+| `transfer_handover(p_transfer)` / `transfer_doj_activate(p_transfer, p_reassignments?)` | handover checklist (led cases, open work), then ONE transactional activation — refused while a led case lacks a named new lead |
+| `transfer_doj_cancel(p_transfer, p_reason?)` | requester/command/AG/Owner cancels a pre-effective transfer |
+| `issue_legal_request` / `record_warrant_execution` / `record_warrant_return` | CID-side warrant fulfilment (**a prosecutor or judge can never issue**) |
 | `record_subpoena_service` / `record_subpoena_compliance` | CID-side subpoena fulfilment (materials link back to the case) |
-| `set_legal_approval_route` / `resolve_case_originating_bureau` | DA/AG route change; Senior Detective+ SETS a JTF-assigned case's missing responsible bureau (LSB/BCB/SAB — never 'JTF', never a permanent-bureau case), Deputy Director+/Owner CHANGES an already-set one with a required reason. The server chain (`private.legal_resolve_bureau`: bureau → originating → case-number prefix → lead's division → creator's division) persists successful derivations automatically |
+| `resolve_case_originating_bureau` | Senior Detective+ SETS a JTF-assigned case's missing responsible bureau (LSB/BCB/SAB — never 'JTF', never a permanent-bureau case), Deputy Director+/Owner CHANGES an already-set one with a required reason. The server chain (`private.legal_resolve_bureau`: bureau → originating → case-number prefix → lead's division → creator's division) persists successful derivations automatically |
 | `close_legal_request` / `withdraw_legal_request` | close / expire / revoke; creator withdraw (records preserved) |
 | `legal_search(q)` | RLS-limited header search (SECURITY INVOKER — sealed rows undiscoverable) |
 | `legal_internal_notes(p_request)` | prosecution/judicial-side internal notes (column-revoked otherwise) |

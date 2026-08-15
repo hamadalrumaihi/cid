@@ -18,7 +18,7 @@
 --   * The grants / ACL / realtime sections are informational
 --     comments, not executable statements.
 --
--- Contents: enum types, tables (public + private), standalone
+-- Contents: enum types, tables (public + private), views, standalone
 -- indexes, functions, triggers, RLS policies, realtime publication
 -- members, and grants — the body is the count authority.
 -- ============================================================
@@ -1113,11 +1113,15 @@ create table public.justice_memberships (
   approved_by uuid,
   approved_at timestamp with time zone,
   created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now()
+  updated_at timestamp with time zone not null default now(),
+  ended_at timestamp with time zone,
+  expires_at timestamp with time zone
 );
 alter table public.justice_memberships add constraint justice_memberships_pkey PRIMARY KEY (user_id);
 alter table public.justice_memberships add constraint justice_memberships_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id);
 alter table public.justice_memberships add constraint justice_memberships_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES public.profiles(id);
+alter table public.justice_memberships add constraint justice_memberships_justice_role_check CHECK (justice_role in ('assistant_district_attorney', 'district_attorney', 'attorney_general', 'judge', 'prosecutor'));
+alter table public.justice_memberships add constraint justice_memberships_check CHECK ((agency = 'doj' and justice_role in ('assistant_district_attorney', 'district_attorney', 'attorney_general', 'prosecutor')) or (agency = 'judiciary' and justice_role = 'judge'));
 alter table public.justice_memberships enable row level security;
 
 create table public.legal_holds (
@@ -1225,6 +1229,7 @@ alter table public.legal_request_participants add constraint legal_request_parti
 alter table public.legal_request_participants add constraint legal_request_participants_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id);
 alter table public.legal_request_participants add constraint legal_request_participants_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id);
 alter table public.legal_request_participants add constraint legal_request_participants_removed_by_fkey FOREIGN KEY (removed_by) REFERENCES public.profiles(id);
+alter table public.legal_request_participants add constraint legal_request_participants_participant_role_check CHECK (participant_role in ('requesting_investigator', 'cid_supervisor', 'assigned_ada', 'district_attorney', 'attorney_general', 'judicial_reviewer', 'observer', 'prosecutor'));
 alter table public.legal_request_participants enable row level security;
 
 create table public.legal_request_signatures (
@@ -1242,6 +1247,7 @@ alter table public.legal_request_signatures add constraint legal_request_signatu
 alter table public.legal_request_signatures add constraint legal_request_signatures_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id);
 alter table public.legal_request_signatures add constraint legal_request_signatures_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.legal_request_versions(id);
 alter table public.legal_request_signatures add constraint legal_request_signatures_signer_id_fkey FOREIGN KEY (signer_id) REFERENCES public.profiles(id);
+alter table public.legal_request_signatures add constraint legal_request_signatures_action_check CHECK (action in ('cid_supervisor_approval', 'ada_submission', 'da_decision', 'ag_decision', 'judge_decision', 'prosecutor_decision'));
 alter table public.legal_request_signatures enable row level security;
 
 create table public.legal_request_versions (
@@ -1341,7 +1347,12 @@ create table public.legal_requests (
   source_submitter_id uuid,
   imported_by uuid,
   imported_at timestamp with time zone,
-  import_key text
+  import_key text,
+  assigned_prosecutor_id uuid,
+  prosecutor_claimed_at timestamp with time zone,
+  queue_entered_at timestamp with time zone,
+  amends_request_id uuid,
+  superseded_by_id uuid
 );
 alter table public.legal_requests add constraint legal_requests_pkey PRIMARY KEY (id);
 alter table public.legal_requests add constraint legal_requests_request_number_key UNIQUE (request_number);
@@ -1353,7 +1364,11 @@ alter table public.legal_requests add constraint legal_requests_assigned_judge_i
 alter table public.legal_requests add constraint legal_requests_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id);
 alter table public.legal_requests add constraint legal_requests_current_version_fkey FOREIGN KEY (current_version_id) REFERENCES public.legal_request_versions(id);
 alter table public.legal_requests add constraint legal_requests_return_report_id_fkey FOREIGN KEY (return_report_id) REFERENCES public.reports(id) ON DELETE SET NULL;
+alter table public.legal_requests add constraint legal_requests_assigned_prosecutor_id_fkey FOREIGN KEY (assigned_prosecutor_id) REFERENCES public.profiles(id);
+alter table public.legal_requests add constraint legal_requests_amends_request_id_fkey FOREIGN KEY (amends_request_id) REFERENCES public.legal_requests(id);
+alter table public.legal_requests add constraint legal_requests_superseded_by_id_fkey FOREIGN KEY (superseded_by_id) REFERENCES public.legal_requests(id);
 alter table public.legal_requests add constraint legal_requests_execution_result_check CHECK ((execution_result IS NULL OR (execution_result = ANY (ARRAY['full'::text, 'partial'::text, 'unable'::text]))));
+alter table public.legal_requests add constraint legal_requests_review_status_check CHECK (review_status in ('not_submitted', 'cid_supervisor_review', 'returned_by_cid', 'submitted_to_doj', 'ada_review', 'returned_by_ada', 'submitted_to_da', 'da_review', 'returned_by_da', 'submitted_to_ag', 'ag_review', 'returned_by_ag', 'submitted_to_judge', 'judicial_review', 'returned_by_judge', 'approved', 'denied', 'withdrawn', 'prosecutor_queue', 'prosecutor_review', 'returned_by_prosecutor', 'declined', 'cancelled', 'superseded'));
 alter table public.legal_requests enable row level security;
 
 create table public.mdt_wanted_projections (
@@ -1477,6 +1492,49 @@ alter table public.media add constraint media_category_check CHECK (((category I
 alter table public.media enable row level security;
 -- archived_at = soft archive (hidden from default gallery views, restorable);
 -- the row, its URL and its RLS audience are unchanged — archive never deletes.
+
+create table public.member_transfers (
+  id uuid not null default gen_random_uuid(),
+  user_id uuid not null,
+  direction text not null,
+  status text not null default 'requested'::text,
+  requested_role text not null,
+  target_bureau public.bureau,
+  from_role text,
+  from_division text,
+  from_justice_role text,
+  reason text not null,
+  retain_cid boolean not null default false,
+  dual_expires_at timestamp with time zone,
+  requested_by uuid not null,
+  cid_decided_by uuid,
+  cid_decided_at timestamp with time zone,
+  cid_note text,
+  doj_decided_by uuid,
+  doj_decided_at timestamp with time zone,
+  doj_note text,
+  effective_by uuid,
+  effective_at timestamp with time zone,
+  return_note text,
+  handover jsonb,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.member_transfers add constraint member_transfers_pkey PRIMARY KEY (id);
+alter table public.member_transfers add constraint member_transfers_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE RESTRICT;
+alter table public.member_transfers add constraint member_transfers_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.profiles(id);
+alter table public.member_transfers add constraint member_transfers_cid_decided_by_fkey FOREIGN KEY (cid_decided_by) REFERENCES public.profiles(id);
+alter table public.member_transfers add constraint member_transfers_doj_decided_by_fkey FOREIGN KEY (doj_decided_by) REFERENCES public.profiles(id);
+alter table public.member_transfers add constraint member_transfers_effective_by_fkey FOREIGN KEY (effective_by) REFERENCES public.profiles(id);
+alter table public.member_transfers add constraint member_transfers_direction_check CHECK (direction in ('cid_to_doj', 'doj_to_cid'));
+alter table public.member_transfers add constraint member_transfers_status_check CHECK (status in ('requested', 'cid_approved', 'doj_accepted', 'effective', 'returned', 'rejected', 'cancelled'));
+alter table public.member_transfers add constraint member_transfers_target_bureau_check CHECK (target_bureau is null or target_bureau in ('LSB', 'BCB', 'SAB'));
+alter table public.member_transfers add constraint member_transfers_check CHECK ((direction = 'cid_to_doj' and requested_role in ('prosecutor', 'judge', 'attorney_general')) or (direction = 'doj_to_cid' and requested_role in ('detective', 'senior_detective', 'bureau_lead', 'deputy_director', 'director') and target_bureau is not null));
+alter table public.member_transfers add constraint member_transfers_check1 CHECK (not retain_cid or direction = 'cid_to_doj');
+alter table public.member_transfers enable row level security;
+-- SELECT is the only policy: the transfer RPCs (transfer_doj_request/_decide/
+-- _cancel/_activate) are the only writers (insert/update/delete revoked from
+-- authenticated and anon).
 
 create table public.mo_profiles (
   id uuid not null default gen_random_uuid(),
@@ -2397,7 +2455,7 @@ create table public.role_events (
   source_id uuid
 );
 alter table public.role_events add constraint role_events_pkey PRIMARY KEY (id);
-alter table public.role_events add constraint role_events_source_check CHECK (source in ('membership_approval', 'role_change', 'transfer', 'activation', 'admin_remove_member', 'admin_restore_member'));
+alter table public.role_events add constraint role_events_source_check CHECK (source in ('membership_approval', 'role_change', 'transfer', 'activation', 'admin_remove_member', 'admin_restore_member', 'doj_transfer'));
 alter table public.role_events add constraint role_events_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
 alter table public.role_events add constraint role_events_target_id_fkey FOREIGN KEY (target_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 alter table public.role_events enable row level security;
@@ -2780,6 +2838,33 @@ alter table public.watchlist add constraint watchlist_target_type_check CHECK ((
 alter table public.watchlist enable row level security;
 
 -- ============================================================
+-- Views
+-- ============================================================
+
+-- Composite membership-history read model (20260816130000): CID role periods
+-- (role_events) + DOJ tenure (justice_memberships) + the transfer records
+-- (member_transfers). SECURITY INVOKER — underlying-table RLS applies.
+create or replace view public.membership_history
+with (security_invoker = true) as
+  select re.target_id as user_id, 'cid'::text as organization,
+         re.new_role::text as role,
+         case when re.new_active then 'active' else 'ended' end as status,
+         re.created_at as recorded_at, re.reason, re.source, re.source_id as reference_id
+    from public.role_events re
+  union all
+  select m.user_id, case m.agency when 'judiciary' then 'judiciary' else 'doj' end,
+         m.justice_role,
+         case when m.active and (m.expires_at is null or m.expires_at > now()) then 'active'
+              when m.expires_at is not null and m.expires_at <= now() then 'expired'
+              else 'ended' end,
+         coalesce(m.approved_at, m.created_at), null::text, 'justice_membership', null::uuid
+    from public.justice_memberships m
+  union all
+  select tr.user_id, 'transfer', tr.direction || ':' || tr.requested_role, tr.status,
+         coalesce(tr.effective_at, tr.updated_at), tr.reason, 'member_transfer', tr.id
+    from public.member_transfers tr;
+
+-- ============================================================
 -- Indexes (excluding those backing PK/unique constraints)
 -- ============================================================
 
@@ -2995,6 +3080,10 @@ CREATE INDEX legal_requests_title_trgm ON public.legal_requests USING gin (title
 CREATE INDEX legal_requests_person_name_snapshot_trgm ON public.legal_requests USING gin (person_name_snapshot extensions.gin_trgm_ops);
 CREATE INDEX legal_requests_recipient_name_trgm ON public.legal_requests USING gin (recipient_name extensions.gin_trgm_ops);
 CREATE INDEX legal_requests_case_number_snapshot_trgm ON public.legal_requests USING gin (case_number_snapshot extensions.gin_trgm_ops);
+CREATE INDEX legal_requests_prosecutor_idx ON public.legal_requests USING btree (assigned_prosecutor_id) WHERE (assigned_prosecutor_id IS NOT NULL);
+CREATE INDEX legal_requests_queue_idx ON public.legal_requests USING btree (queue_entered_at) WHERE (review_status = 'prosecutor_queue'::text);
+CREATE INDEX legal_requests_amends_fkey_idx ON public.legal_requests USING btree (amends_request_id) WHERE (amends_request_id IS NOT NULL);
+CREATE INDEX legal_requests_superseded_fkey_idx ON public.legal_requests USING btree (superseded_by_id) WHERE (superseded_by_id IS NOT NULL);
 CREATE INDEX mdt_exports_status_idx ON public.mdt_exports USING btree (status);
 CREATE INDEX mdt_exports_person_idx ON public.mdt_exports USING btree (person_id) WHERE (person_id IS NOT NULL);
 CREATE INDEX mdt_exports_vehicle_idx ON public.mdt_exports USING btree (vehicle_id) WHERE (vehicle_id IS NOT NULL);
@@ -3018,6 +3107,12 @@ CREATE INDEX media_report_id_fkey_idx ON public.media USING btree (report_id);
 CREATE INDEX media_restricted_idx ON public.media USING btree (restricted) WHERE restricted;
 CREATE INDEX media_uploaded_by_fkey_idx ON public.media USING btree (uploaded_by);
 CREATE INDEX media_vehicle_id_fkey_idx ON public.media USING btree (vehicle_id);
+CREATE UNIQUE INDEX member_transfers_one_open ON public.member_transfers USING btree (user_id) WHERE (status = ANY (ARRAY['requested'::text, 'cid_approved'::text, 'doj_accepted'::text]));
+CREATE INDEX member_transfers_user_idx ON public.member_transfers USING btree (user_id);
+CREATE INDEX member_transfers_requested_by_fkey_idx ON public.member_transfers USING btree (requested_by);
+CREATE INDEX member_transfers_cid_decided_by_fkey_idx ON public.member_transfers USING btree (cid_decided_by);
+CREATE INDEX member_transfers_doj_decided_by_fkey_idx ON public.member_transfers USING btree (doj_decided_by);
+CREATE INDEX member_transfers_effective_by_fkey_idx ON public.member_transfers USING btree (effective_by);
 CREATE INDEX membership_request_history_actor_id_idx ON public.membership_request_history USING btree (actor_id);
 CREATE INDEX membership_request_history_request_id_idx ON public.membership_request_history USING btree (request_id);
 CREATE INDEX membership_requests_decided_by_idx ON public.membership_requests USING btree (decided_by);
@@ -6255,6 +6350,10 @@ create policy media_upd on public.media
   as permissive for update to authenticated
   using ((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel())))
   with check ((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel())));
+
+create policy member_transfers_sel on public.member_transfers
+  as permissive for select to authenticated
+  using (((user_id = ( SELECT auth.uid() AS uid)) OR private.is_command() OR COALESCE((private.justice_role_effective(( SELECT auth.uid() AS uid)) = 'attorney_general'::text), false) OR private.owner_flag(( SELECT auth.uid() AS uid))));
 
 create policy mo_profiles_del on public.mo_profiles
   as permissive for delete to authenticated

@@ -46,11 +46,11 @@ export const NOTIF_LABEL: Record<string, string> = {
   login_restored: 'Portal access restored',
   justice_membership_request: 'Justice membership request awaiting review',
   justice_membership_update: 'Justice membership update',
-  ada_assignment: 'Prosecutor bureau assignment',
+  ada_assignment: 'Prosecutor bureau assignment', // legacy (bureau slots retired)
   legal_request: '⚖️ Legal request needs your attention',
   legal_update: '⚖️ Legal request update',
   legal_decision: '⚖️ Legal decision recorded',
-  legal_coverage: '⚠ Bureau ADA coverage gap',
+  legal_coverage: '⚠ Prosecutor coverage gap',
   client_error: '⚠ App error reported',
   case_stale: 'Case going stale',
   stale_case: 'Case going stale',
@@ -122,10 +122,10 @@ export function notifHref(n: NotificationRow, opts: { command?: boolean } = {}):
   const p = asPayload(n.payload)
   const t = n.type
   if (p.case_id) return caseLink(p.case_id, NOTIF_CASE_TAB[t])
-  // Legal review now lives entirely in the CID Legal surface. Legacy
-  // justice/ada_assignment notifications (memberships retired) route to a
-  // specific request when one is carried, else the Legal registry — never the
-  // removed Justice Portal.
+  // Legal review lives in the /legal surface (the minimal-DOJ workspace is a
+  // role-aware mode of the same route). legal*/justice*/ada_assignment
+  // notifications route to a specific request when one is carried, else the
+  // Legal registry — never the removed standalone Justice Portal.
   const isLegal = t.startsWith('legal') || t.startsWith('justice') || t === 'ada_assignment'
   if (isLegal && p.request_id) return `/legal?request=${encodeURIComponent(p.request_id)}`
   if (isLegal) return '/legal'

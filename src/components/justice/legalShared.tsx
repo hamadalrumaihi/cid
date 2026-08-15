@@ -83,7 +83,10 @@ export const LEGAL_LIST_COLS =
   'fulfilment_status,service_status,compliance_status,approval_route,classification,' +
   'responsible_bureau,assigned_ada_id,assigned_judge_id,person_name_snapshot,' +
   'recipient_name,recipient_type,case_number_snapshot,expires_at,response_deadline,' +
-  'submitted_to_doj_at,created_by,priority,created_at,updated_at,current_version_id'
+  'submitted_to_doj_at,created_by,priority,created_at,updated_at,current_version_id,' +
+  // minimal-DOJ queue + amendment columns (20260816120000)
+  'assigned_prosecutor_id,prosecutor_claimed_at,queue_entered_at,submitted_to_judge_at,' +
+  'amends_request_id,superseded_by_id'
 
 /** RLS-scoped legal request loader — every queue filters CLIENT-side over
  *  rows the server already authorized; the queue predicate is presentation. */
@@ -146,24 +149,67 @@ export function useMyProsecutorBureaus(): readonly string[] {
   return key ? bureaus : NO_BUREAUS
 }
 
+/** Client mirror of private.justice_role_effective: legacy ADA/DA memberships
+ *  act with the effective role 'prosecutor'; historical rows are never
+ *  rewritten — only interpreted. */
+export function effectiveJusticeRole(role: string | null | undefined): 'prosecutor' | 'attorney_general' | 'judge' | null {
+  if (role === 'assistant_district_attorney' || role === 'district_attorney' || role === 'prosecutor') return 'prosecutor'
+  if (role === 'attorney_general' || role === 'judge') return role
+  return null
+}
+
+/** The signed-in viewer's EFFECTIVE justice role — read from their own
+ *  justice_memberships row (self-select is always allowed) because the auth
+ *  context doesn't carry `expires_at`: temporary dual memberships expire
+ *  automatically (is_justice_active), so an expired row must read as null.
+ *  Cached module-wide like the bureau read; realtime refreshes it. Non-justice
+ *  users skip the read entirely. The server re-checks on every RPC. */
+let justiceRoleCache: { key: string; value: ReturnType<typeof effectiveJusticeRole> } | null = null
+export function useMyJusticeRole(): 'prosecutor' | 'attorney_general' | 'judge' | null {
+  const { profile, justiceRole } = useAuth()
+  const key = justiceRole ? profile?.id ?? null : null
+  const v = useTableVersion('justice_memberships')
+  const [role, setRole] = useState<ReturnType<typeof effectiveJusticeRole>>(
+    () => (key && justiceRoleCache?.key === key ? justiceRoleCache.value : effectiveJusticeRole(justiceRole)),
+  )
+  useEffect(() => {
+    if (!key) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const rows = await list('justice_memberships', {
+          select: 'justice_role,active,expires_at', eq: { user_id: key },
+        })
+        const m = rows[0]
+        const live = !!m && m.active && (!m.expires_at || Date.parse(m.expires_at) > Date.now())
+        const value = live ? effectiveJusticeRole(m.justice_role) : null
+        justiceRoleCache = { key, value }
+        if (!cancelled) setRole(value)
+      } catch { /* transient — keep the auth-derived value; the server re-checks */ }
+    })()
+    return () => { cancelled = true }
+  }, [key, v])
+  return key ? role : null
+}
+
 /** Map the app's auth context → the workflow model's viewer. The model NEVER
  *  decides access (RLS + definer RPCs do); this only shapes what an authorised
  *  viewer is shown. Pass `useMyProsecutorBureaus()` so the bureau-awareness
- *  lane (isBureauAwareness) works — it defaults to none. */
+ *  lane (isBureauAwareness) works — it defaults to none. Pass
+ *  `useMyJusticeRole()` for the expiry-aware effective role; callers that omit
+ *  it fall back to mapping the auth context's active membership (no expiry
+ *  check — the server enforces it regardless). */
 export function buildLegalViewer(
   auth: ReturnType<typeof useAuth>,
   prosecutorBureaus: readonly string[] = [],
+  justiceRole?: 'prosecutor' | 'attorney_general' | 'judge' | null,
 ): LegalViewer {
   const p = auth.profile
-  const jr = auth.justiceRole
-  const justiceRole =
-    jr === 'assistant_district_attorney' || jr === 'district_attorney' ||
-    jr === 'attorney_general' || jr === 'judge' ? jr : null
   return {
     myId: p?.id ?? null,
     cidActive: p?.active ?? false,
     cidRole: p?.role ?? null,
-    justiceRole,
+    justiceRole: justiceRole !== undefined ? justiceRole : effectiveJusticeRole(auth.justiceRole),
     isOwner: auth.isOwner,
     prosecutorBureaus,
   }

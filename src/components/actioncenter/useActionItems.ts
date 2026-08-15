@@ -6,12 +6,14 @@
  *  previous items stay on screen while a realtime-triggered refresh is in
  *  flight, so the queue never flashes empty. */
 import { useCallback, useEffect, useState } from 'react'
-import { buildActionItems, type AcDoc, type AcGrant, type AcHold, type AcObservation, type AcSuggestion, type AcSurvTarget, type ActionItem, type ActionSources } from '@/lib/actionItems'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { buildActionItems, type AcDoc, type AcGrant, type AcHold, type AcMemberTransfer, type AcObservation, type AcSuggestion, type AcSurvTarget, type ActionItem, type ActionSources } from '@/lib/actionItems'
 import {
   ackState, canApproveDoc, docTitle, reviewState,
   type MyAckVersions, type ShelfDoc,
 } from '@/components/sops/docModel'
 import { list, rpc } from '@/lib/db'
+import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import { todayISO } from '@/lib/format'
 import { useJusticeRoster } from '@/lib/justiceRoster'
@@ -32,6 +34,7 @@ const LEGAL_COLS =
   'id,case_id,case_number_snapshot,request_number,request_type,subtype,review_status,'
   + 'document_status,fulfilment_status,service_status,compliance_status,approval_route,'
   + 'classification,created_by,responsible_bureau,assigned_ada_id,assigned_judge_id,'
+  + 'assigned_prosecutor_id,queue_entered_at,'
   + 'response_deadline,expires_at,submitted_to_doj_at,created_at,updated_at'
 const BLOCKER_COLS = 'id,case_id,title,type,status,owner_id,review_at,created_at,updated_at'
 /** Active legal holds — command only; the model gates the item on isCommand. */
@@ -53,6 +56,45 @@ const DOC_COLS =
 const SUGGESTION_COLS = 'id,title,status,document_id,created_by,assigned_editor,created_at,updated_at'
 
 const TRANSFER_PENDING = ['pending_source', 'pending_target']
+
+/* ── DOJ revival surface (minimal_doj_revival + doj_transfers) ─────────────── */
+
+/** member_transfers projection — must mirror AcMemberTransfer exactly. */
+const MEMBER_TRANSFER_COLS =
+  'id,user_id,direction,status,requested_role,target_bureau,reason,cid_decided_by,created_at,updated_at'
+/** Open (decidable) transfer stages — effective/terminal rows never surface. */
+const MEMBER_TRANSFER_OPEN = ['requested', 'cid_approved', 'doj_accepted']
+
+/** Open member_transfers rows. The table is newer than the generated
+ *  database.types, so this is the one cast-boundary read in the loader (RLS
+ *  scopes the rows: subject, CID command, active AG, Owner). Fail-open. */
+async function fetchMemberTransfers(): Promise<AcMemberTransfer[]> {
+  try {
+    const sb = supabase() as unknown as SupabaseClient
+    const { data, error } = await sb
+      .from('member_transfers')
+      .select(MEMBER_TRANSFER_COLS)
+      .in('status', MEMBER_TRANSFER_OPEN)
+    if (error) return []
+    return (data ?? []) as unknown as AcMemberTransfer[]
+  } catch { return [] }
+}
+
+/** The viewer's EFFECTIVE justice role: their justice_memberships row when
+ *  active and unexpired, legacy ADA/DA titles mapped to 'prosecutor' — the
+ *  client mirror of private.justice_role_effective. Fail-open to null. */
+function effectiveJusticeRole(
+  rows: Array<{ justice_role: string; active: boolean; expires_at: string | null }>,
+  nowMs: number,
+): 'prosecutor' | 'judge' | 'attorney_general' | null {
+  const m = rows.find((r) => r.active && (!r.expires_at || Date.parse(r.expires_at) > nowMs))
+  if (!m) return null
+  if (m.justice_role === 'assistant_district_attorney' || m.justice_role === 'district_attorney'
+    || m.justice_role === 'prosecutor') return 'prosecutor'
+  if (m.justice_role === 'judge') return 'judge'
+  if (m.justice_role === 'attorney_general') return 'attorney_general'
+  return null
+}
 
 /** Only open-work statuses can produce an action item (see buildActionItems
  *  section 9c); terminal/waiting rows never need a fetch-side row. */
@@ -101,6 +143,8 @@ export function useActionItems(): ActionItemsResult {
   const vDocuments = useTableVersion('documents')
   const vSuggestions = useTableVersion('document_suggestions')
   const vHolds = useTableVersion('legal_holds')
+  const vJusticeMemberships = useTableVersion('justice_memberships')
+  const vMemberTransfers = useTableVersion('member_transfers')
   const vGrants = useTableVersion('restricted_access_grants')
   const vSurvObs = useTableVersion('surveillance_observations')
   const vSurvTgt = useTableVersion('surveillance_targets')
@@ -121,7 +165,7 @@ export function useActionItems(): ActionItemsResult {
     }
     try {
       const me = profile.id
-      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks, suggestionRows, holds, restrictedGrants, survObservations, survTargetRows] =
+      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks, suggestionRows, holds, restrictedGrants, survObservations, survTargetRows, justiceMembershipRows, memberTransfers] =
         await Promise.all([
           list('cases', { select: CASE_COLS, is: { archived_at: null } }),
           list('case_tasks', { select: TASK_COLS, eq: { assignee: me, done: false } }),
@@ -184,6 +228,14 @@ export function useActionItems(): ActionItemsResult {
           list('surveillance_targets', {
             select: TGT_COLS, in: { status: ['pending_approval', 'authorized', 'active'] },
           }).then((r) => r as unknown as AcSurvTarget[]).catch(() => [] as AcSurvTarget[]),
+          // The viewer's own justice membership — drives the DOJ-pipeline
+          // items (effective role, expiry-aware). Fail-open to empty.
+          list('justice_memberships', { select: 'justice_role,active,expires_at', eq: { user_id: me } })
+            .then((r) => r as Array<{ justice_role: string; active: boolean; expires_at: string | null }>)
+            .catch(() => [] as Array<{ justice_role: string; active: boolean; expires_at: string | null }>),
+          // Open member transfers — only viewers who could hold a stage
+          // decision fetch (command/owner/justice); RLS trims the rest.
+          canAdmin || justiceRole ? fetchMemberTransfers() : Promise.resolve([] as AcMemberTransfer[]),
         ])
       const nowMs = Date.now()
       // Command/owner: the shared awaitingCount (submitted + actionable
@@ -248,6 +300,8 @@ export function useActionItems(): ActionItemsResult {
         membershipPending,
         legal,
         legalViewer: buildLegalViewer(auth, prosecutorBureaus),
+        justiceRole: effectiveJusticeRole(justiceMembershipRows, nowMs),
+        memberTransfers,
         blockers,
         holds,
         restrictedGrants,
@@ -284,7 +338,7 @@ export function useActionItems(): ActionItemsResult {
       window.clearTimeout(id)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs, vDocuments, vSuggestions, vHolds, vGrants, vSurvObs, vSurvTgt])
+  }, [refresh, vCases, vTasks, vTransfers, vAccess, vNotifs, vBlockers, vLegal, vProfiles, vMembership, vJusticeReqs, vDocuments, vSuggestions, vHolds, vGrants, vSurvObs, vSurvTgt, vJusticeMemberships, vMemberTransfers])
 
   return {
     items: built?.items ?? [],

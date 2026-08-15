@@ -19,6 +19,7 @@ import { toast } from '@/lib/toast'
 import { markWatchSeen, type WatchType } from '@/lib/watchlist'
 import { useJusticeRoster } from '@/lib/justiceRoster'
 import { canReviewCase } from '@/components/command-center/lib/approvals'
+import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { PageHeader } from '@/components/ui/PageHeader'
 
 type CaseRow = Tables<'cases'>
@@ -106,37 +107,25 @@ function caseHref(id: string): string {
   return caseLink(id)
 }
 
-function Stat({ label, value, tone = 'slate' }: { label: string; value: number; tone?: 'slate' | 'amber' | 'rose' | 'emerald' | 'blue' }) {
-  const tint: Record<typeof tone, string> = {
-    slate: 'border-white/10 bg-white/[0.03] text-slate-100',
-    amber: 'border-amber-400/20 bg-amber-500/10 text-amber-100',
-    rose: 'border-rose-400/20 bg-rose-500/10 text-rose-100',
-    emerald: 'border-emerald-400/20 bg-emerald-500/10 text-emerald-100',
-    blue: 'border-blue-400/20 bg-blue-500/10 text-blue-100',
-  }
-  return (
-    <div className={`rounded border px-3 py-2 ${tint[tone]}`}>
-      <p className="t-readout text-[10px] uppercase tracking-widest opacity-70">{label}</p>
-      <p className="mt-1 text-2xl font-black">{value}</p>
-    </div>
-  )
+function EmptyLine({ text }: { text: string }) {
+  return <p className="px-3 py-2.5 text-sm text-slate-400">{text}</p>
 }
 
-function EmptyLine({ text }: { text: string }) {
-  return <p className="rounded border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-slate-500">{text}</p>
-}
+/** One dense list row inside a Panel — no nested card chrome; the panel's
+ *  divide-y draws the separators. */
+const ROW = 'block px-3 py-2 transition hover:bg-white/5'
 
 function CaseLine({ c, meta }: { c: CaseRow; meta?: React.ReactNode }) {
   return (
-    <Link href={caseHref(c.id)} className="group block rounded border border-white/10 bg-white/[0.03] p-3 transition hover:border-amber-300/30 hover:bg-white/[0.06]">
+    <Link href={caseHref(c.id)} className={`group ${ROW}`}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-sm font-black text-slate-100">{c.case_number}</span>
-        <span className={`rounded px-2 py-0.5 text-[10px] font-black uppercase ${caseStatusTint(c.status)}`}>{c.status}</span>
-        <span className="rounded border border-white/10 px-2 py-0.5 text-[10px] font-black text-slate-300">{c.bureau}</span>
+        <span className="font-mono text-sm font-black tabular-nums text-slate-100">{c.case_number}</span>
+        <span className={`rounded px-1.5 py-0.5 text-[10px] font-black uppercase ${caseStatusTint(c.status)}`}>{c.status}</span>
+        <span className="rounded border border-white/10 px-1.5 py-0.5 text-[10px] font-black text-slate-300">{c.bureau}</span>
         <StaleBadge c={c} />
+        <span className="min-w-0 truncate text-sm font-bold text-white group-hover:text-amber-100">{c.title || 'Untitled case'}</span>
       </div>
-      <p className="mt-1 truncate text-sm font-bold text-white group-hover:text-amber-100">{c.title || 'Untitled case'}</p>
-      <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
+      <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-slate-400">
         <span>Lead: {officerName(c.lead_detective_id) || 'Unassigned'}</span>
         <span>Updated {timeAgo(c.updated_at)}</span>
         {meta}
@@ -147,15 +136,15 @@ function CaseLine({ c, meta }: { c: CaseRow; meta?: React.ReactNode }) {
 
 function Panel({ title, count, action, children }: { title: string; count: number; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="rounded-lg border border-white/10 bg-ink-900/55 p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-black uppercase tracking-wide text-slate-100">{title}</h2>
+    <section className="overflow-hidden rounded-lg border border-white/10 bg-ink-900/40">
+      <div className="flex items-center justify-between gap-3 border-b border-white/5 px-3 py-2">
+        <h2 className="text-xs font-black uppercase tracking-wide text-slate-200">{title}</h2>
         <span className="flex items-center gap-2">
           {action}
-          <span className="rounded border border-white/10 px-2 py-0.5 text-xs font-black text-slate-300">{count}</span>
+          <span className="rounded border border-white/10 px-1.5 py-0.5 text-xs font-black tabular-nums text-slate-300">{count}</span>
         </span>
       </div>
-      <div className="space-y-2">{children}</div>
+      <div className="divide-y divide-white/5">{children}</div>
     </section>
   )
 }
@@ -293,16 +282,22 @@ export function InboxView() {
         </Link>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
-        <Stat label="Review" value={model.review.length} tone={model.review.length ? 'amber' : 'slate'} />
-        <Stat label="Bounced" value={model.bounced.length} tone={model.bounced.length ? 'rose' : 'slate'} />
-        <Stat label="Follow-ups" value={model.followUps.length} tone={model.followUps.length ? 'amber' : 'slate'} />
-        <Stat label="Stale" value={model.stale.length} tone={model.stale.length ? 'rose' : 'slate'} />
-        <Stat label="Tasks" value={model.tasks.length} tone={model.overdueTasks.length ? 'rose' : model.tasks.length ? 'blue' : 'slate'} />
-        <Stat label="Mentions" value={model.mentions.length} tone={model.mentions.length ? 'blue' : 'slate'} />
-        <Stat label="Unread" value={model.unread.length} tone={model.unread.length ? 'emerald' : 'slate'} />
-        <Stat label="Drafts" value={model.draftReports.length} tone={model.draftReports.length ? 'amber' : 'slate'} />
-      </div>
+      <MetricStrip
+        metrics={([
+          { label: 'Review', value: model.review.length, tint: model.review.length ? 'bg-amber-500/15 text-amber-300' : undefined },
+          { label: 'Bounced', value: model.bounced.length, tint: model.bounced.length ? 'bg-rose-500/15 text-rose-300' : undefined },
+          { label: 'Follow-ups', value: model.followUps.length, tint: model.followUps.length ? 'bg-amber-500/15 text-amber-300' : undefined },
+          { label: 'Stale', value: model.stale.length, tint: model.stale.length ? 'bg-rose-500/15 text-rose-300' : undefined },
+          {
+            label: 'Tasks', value: model.tasks.length,
+            hint: model.overdueTasks.length ? `${model.overdueTasks.length} overdue` : undefined,
+            tint: model.overdueTasks.length ? 'bg-rose-500/15 text-rose-300' : undefined,
+          },
+          { label: 'Mentions', value: model.mentions.length },
+          { label: 'Unread', value: model.unread.length, tint: model.unread.length ? 'bg-emerald-500/15 text-emerald-300' : undefined },
+          { label: 'Drafts', value: model.draftReports.length, tint: model.draftReports.length ? 'bg-amber-500/15 text-amber-300' : undefined },
+        ] satisfies Metric[])}
+      />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Panel title="Sign-off waiting on me" count={model.review.length}>
@@ -331,9 +326,9 @@ export function InboxView() {
 
         <Panel title="My open tasks" count={model.tasks.length}>
           {model.tasks.length ? model.tasks.slice(0, 12).map((t) => (
-            <Link key={t.id} href={caseHref(t.case_id)} className="block rounded border border-white/10 bg-white/[0.03] p-3 hover:border-amber-300/30">
+            <Link key={t.id} href={caseHref(t.case_id)} className={ROW}>
               <p className="text-sm font-bold text-white">{t.title}</p>
-              <p className={`mt-1 text-xs ${isDue(t.due) ? 'text-rose-300' : 'text-slate-500'}`}>
+              <p className={`mt-0.5 text-xs ${isDue(t.due) ? 'text-rose-300' : 'text-slate-400'}`}>
                 {t.due ? `${isDue(t.due) ? 'Due' : 'Due in ' + daysUntil(t.due)} ${t.due}` : 'No due date'} - {t.assignee ? `Assigned to ${officerName(t.assignee) || 'officer'}` : 'Unassigned'}
               </p>
             </Link>
@@ -342,9 +337,9 @@ export function InboxView() {
 
         <Panel title="Mentions" count={model.mentions.length}>
           {model.mentions.length ? model.mentions.map((m) => (
-            <Link key={m.id} href={caseHref(m.case_id)} className="block rounded border border-white/10 bg-white/[0.03] p-3 hover:border-blue-300/30">
+            <Link key={m.id} href={caseHref(m.case_id)} className={ROW}>
               <p className="text-xs font-bold text-slate-400">{m.author_name || officerName(m.author_id) || 'Officer'} - {timeAgo(m.created_at)}</p>
-              <p className="mt-1 line-clamp-2 text-sm text-slate-100">{m.body}</p>
+              <p className="mt-0.5 line-clamp-2 text-sm text-slate-100">{m.body}</p>
             </Link>
           )) : <EmptyLine text="No recent case-chat mentions." />}
         </Panel>
@@ -369,32 +364,32 @@ export function InboxView() {
               key={it.w.id}
               href={it.href}
               onClick={() => { markWatchSeen(it.w.target_type as WatchType, it.w.target_id, it.ts ?? undefined); setSeenVer((v) => v + 1) }}
-              className={`block rounded border p-3 transition hover:bg-white/[0.06] ${it.fresh ? 'border-amber-400/25 bg-amber-500/[0.04]' : 'border-white/10 bg-white/[0.03] hover:border-amber-300/30'}`}
+              className={`${ROW} ${it.fresh ? 'bg-amber-500/[0.04]' : ''}`}
             >
               <p className="truncate text-sm font-bold text-white">
                 <span aria-hidden>{it.icon}</span> {it.title}
                 {it.fresh && <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-black uppercase text-amber-300">updated</span>}
               </p>
-              <p className="mt-1 text-xs text-slate-500">{it.sub}{it.ts ? ` · ${timeAgo(it.ts)}` : ''}</p>
+              <p className="mt-0.5 text-xs text-slate-400">{it.sub}{it.ts ? ` · ${timeAgo(it.ts)}` : ''}</p>
             </Link>
           )) : <EmptyLine text="Follow cases, persons or vehicles (the ☆ Follow button) to pin their changes here." />}
         </Panel>
 
         <Panel title="Notifications" count={model.unread.length}>
           {data.notifications.length ? data.notifications.slice(0, 12).map((n) => (
-            <button key={n.id} onClick={() => { if (!n.read) void markNotificationRead(n) }} className={`block w-full rounded border p-3 text-left ${n.read ? 'border-white/10 bg-white/[0.02] text-slate-500' : 'border-emerald-400/20 bg-emerald-500/10 text-emerald-100'}`}>
+            <button key={n.id} onClick={() => { if (!n.read) void markNotificationRead(n) }} className={`w-full text-left ${ROW} ${n.read ? 'text-slate-500' : 'bg-emerald-500/[0.06] text-emerald-100'}`}>
               <p className="text-xs font-black uppercase tracking-wide">{notifTitle(n)}</p>
-              <p className="mt-1 line-clamp-2 text-sm">{[notifDetail(n), notifSub(n)].filter(Boolean).join(' — ') || 'Notification'}</p>
-              <p className="mt-1 text-xs opacity-70">{timeAgo(n.created_at)}{n.read ? '' : ' - click to mark read'}</p>
+              <p className="mt-0.5 line-clamp-2 text-sm">{[notifDetail(n), notifSub(n)].filter(Boolean).join(' — ') || 'Notification'}</p>
+              <p className="mt-0.5 text-xs opacity-70">{timeAgo(n.created_at)}{n.read ? '' : ' - click to mark read'}</p>
             </button>
           )) : <EmptyLine text="No notifications yet." />}
         </Panel>
 
         <Panel title="Draft reports" count={model.draftReports.length}>
           {model.draftReports.length ? model.draftReports.map((r) => (
-            <Link key={r.id} href={`${caseHref(r.case_id)}&tab=reports`} className="block rounded border border-white/10 bg-white/[0.03] p-3 hover:border-amber-300/30">
+            <Link key={r.id} href={`${caseHref(r.case_id)}&tab=reports`} className={ROW}>
               <p className="text-sm font-bold text-white">{r.template}</p>
-              <p className="mt-1 text-xs text-slate-500">Updated {timeAgo(r.updated_at)} - case report draft</p>
+              <p className="mt-0.5 text-xs text-slate-400">Updated {timeAgo(r.updated_at)} - case report draft</p>
             </Link>
           )) : <EmptyLine text="No unfinalized report rows authored by you." />}
         </Panel>

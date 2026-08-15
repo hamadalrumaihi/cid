@@ -1,15 +1,14 @@
-/** v152 — Bureau Lead+ legal approval replaces the DOJ/Judge/ADA workflow.
+/** v152 — Bureau Lead+ legal approval (the CID gate).
  *
- *  Asserts the 20260808140000_legal_lead_approval contract on the LIVE project
- *  with rls-test accounts:
+ *  Originally asserted the 20260808140000_legal_lead_approval contract
+ *  (terminal approve). Updated for the 20260816120000 minimal-DOJ revival:
  *    - a Bureau Lead (command, not the creator) approves a cid_supervisor_review
- *      request straight to `approved` (no DOJ/ADA hop);
+ *      request INTO the shared prosecutor queue (undecided, unissued);
  *    - a non-command detective cannot approve;
  *    - the creator cannot approve their own request;
  *    - deny (with a note) → `denied`; return (with a note) → `returned_by_cid`;
- *    - the retired workflow RPCs (review_legal_request_as_ada,
- *      decide_legal_request_as_judge) are EXECUTE-revoked — any authenticated
- *      non-owner call is permission-denied.
+ *    - the retired ADA/DA/AG lane RPCs stay EXECUTE-revoked; the revived judge
+ *      decision RPC refuses non-judicial states/actors inside the RPC.
  *
  *  Fixtures reused from the CID build: lsb (detective, LSB, the creator),
  *  lead (bureau_lead, LSB — command), bcb (detective, BCB — non-command),
@@ -91,15 +90,16 @@ describe.skipIf(!enabled)('v152 — Bureau Lead+ legal approval (live)', () => {
     await Promise.all([lsb, bcb, lead, director].map((c) => c.auth.signOut()))
   })
 
-  it('a Bureau Lead (command, not the creator) approves straight to `approved` — no DOJ/ADA hop', async () => {
+  it('a Bureau Lead (command, not the creator) approves into the shared prosecutor queue (minimal-DOJ revival)', async () => {
     const id = await mkSubmitted('V152 Approve')
     const ok = await lead.rpc('review_legal_request_as_cid', { p_request: id, p_decision: 'approve', p_signature: 'RLS Lead' })
     expect(ok.error).toBeNull()
-    // terminal at approved; NOT submitted_to_doj, no assigned ADA, still unissued
+    // 20260816120000: approve is the CID gate, not the legal decision — the
+    // request enters the shared prosecutor queue, undecided and unissued.
     expect(ok.data).toMatchObject({
-      review_status: 'approved', decision: 'approved',
-      decided_by: ids.lead, cid_reviewed_by: ids.lead,
-      assigned_ada_id: null, fulfilment_status: 'unissued',
+      review_status: 'prosecutor_queue', decision: null,
+      decided_by: null, cid_reviewed_by: ids.lead,
+      assigned_ada_id: null, assigned_prosecutor_id: null, fulfilment_status: 'unissued',
     })
     // the command signature is recorded on the frozen version
     const sigs = await lead.from('legal_request_signatures').select('action,signer_id').eq('legal_request_id', id)
@@ -137,14 +137,17 @@ describe.skipIf(!enabled)('v152 — Bureau Lead+ legal approval (live)', () => {
     expect(ret.data).toMatchObject({ review_status: 'returned_by_cid', document_status: 'reopened' })
   })
 
-  it('the retired workflow RPCs are EXECUTE-revoked — any authenticated call is permission-denied', async () => {
+  it('the retired ADA/DA/AG lane stays EXECUTE-revoked; the revived judge RPC gates on role', async () => {
     const id = await mkSubmitted('V152 Retired')
     const ada = await lsb.rpc('review_legal_request_as_ada', { p_request: id, p_decision: 'return', p_note: 'x' })
     expect(ada.error).not.toBeNull()
     expect(ada.error?.code).toBe('42501') // permission denied for function
+    // decide_legal_request_as_judge is granted again (20260816120000) but a
+    // CID lead is not an assigned judge on an in-review request — refused
+    // inside the RPC, never permission-denied silence.
     const judge = await lead.rpc('decide_legal_request_as_judge', { p_request: id, p_decision: 'approve' })
     expect(judge.error).not.toBeNull()
-    expect(judge.error?.code).toBe('42501')
+    expect(judge.error?.message).toMatch(/not under judicial review/i)
     // clean up the parked request via a command decision
     const clean = await lead.rpc('review_legal_request_as_cid', { p_request: id, p_decision: 'deny', p_note: 'v152 teardown' })
     expect(clean.error).toBeNull()

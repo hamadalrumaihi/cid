@@ -60,20 +60,25 @@ const TABS = ['overview', 'graph', 'media', 'intel', 'surveillance', 'extraction
 type TabId = (typeof TABS)[number]
 
 const TAB_LABELS: Record<TabId, string> = {
-  overview: 'Overview', graph: 'Graph', media: 'Photos & Media', intel: 'Intel & Notes',
+  overview: 'Brief', graph: 'Graph', media: 'Photos & Media', intel: 'Intel & Notes',
   surveillance: 'Surveillance',
   extractions: 'Extractions', charges: 'Charges', rico: 'RICO', reports: 'Reports', tasks: 'Tasks',
   legal: 'Legal', signoff: 'Sign-off', chat: 'Chat', timeline: 'Timeline',
 }
 
-// Visual grouping only — `?tab=` URL values match the ids (legacy
-// `tab=evidence`/`tab=notes` links resolve via normalizeCaseTab). RICO is
-// conditional (ricoTabVisible): the group simply skips it when hidden.
+// Visual grouping only — the 8-area case-jacket IA. `?tab=` URL values match
+// the ids (legacy `tab=evidence`/`tab=notes` links resolve via
+// normalizeCaseTab), so every deep link keeps working. RICO is conditional
+// (ricoTabVisible): the Operations group simply skips it when hidden.
 const TAB_GROUPS: ReadonlyArray<SectionTabGroup<TabId>> = [
-  { label: 'Command', tabs: ['overview'] },
-  { label: 'Investigation', tabs: ['graph', 'media', 'intel', 'surveillance', 'extractions', 'charges', 'rico'] },
-  { label: 'Casework', tabs: ['reports', 'tasks', 'legal', 'chat'] },
-  { label: 'Oversight', tabs: ['signoff', 'timeline'] },
+  { label: 'Brief', tabs: ['overview'] },
+  { label: 'Investigation', tabs: ['intel', 'surveillance', 'extractions', 'timeline'] },
+  { label: 'Subjects & Links', tabs: ['graph'] },
+  { label: 'Evidence', tabs: ['media', 'charges'] },
+  { label: 'Reports', tabs: ['reports'] },
+  { label: 'Legal', tabs: ['legal'] },
+  { label: 'Operations', tabs: ['tasks', 'rico'] },
+  { label: 'Record', tabs: ['signoff', 'chat'] },
 ]
 
 /** Slim media projection — enough for the metric count + Overview recap. */
@@ -93,6 +98,9 @@ export interface WorkflowRows {
   /** rico_cases rows for this case (0/1 — UNIQUE case_id). HEAD count only;
    *  drives the conditional RICO tab. */
   rico: number
+  /** Live (non-removed) case_assignments — HEAD count only; feeds the case
+   *  jacket header's Supporting field via assessCase's supportCount. */
+  assignments: number
 }
 
 export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () => void; onChanged: () => void }) {
@@ -186,9 +194,10 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const vL = useTableVersion('legal_requests')
   const vB = useTableVersion('case_blockers')
   const vRi = useTableVersion('rico_cases')
+  const vAsg = useTableVersion('case_assignments')
   const fetchWorkflow = useCallback(async () => {
     try {
-      const [tasks, reports, legal, media, blockers, rico] = await Promise.all([
+      const [tasks, reports, legal, media, blockers, rico, assignments] = await Promise.all([
         list('case_tasks', { eq: { case_id: id } }),
         list('reports', { eq: { case_id: id } }),
         // Legal is read-scoped by RLS; a failure must not sink the header.
@@ -199,11 +208,13 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         list('case_blockers', { eq: { case_id: id }, order: 'created_at', ascending: false }).catch(() => [] as BlockerRow[]),
         // Cheap HEAD count — has this case ever grown a RICO tracker?
         countRows('rico_cases', { eq: { case_id: id } }).catch(() => 0),
+        // Live assignment roster size (Supporting field in the case jacket).
+        countRows('case_assignments', { eq: { case_id: id }, is: { removed_at: null } }).catch(() => 0),
       ])
-      setWf({ tasks, reports, legal: legal as LegalRequest[], media, blockers, rico })
+      setWf({ tasks, reports, legal: legal as LegalRequest[], media, blockers, rico, assignments })
     } catch { /* header/metrics render with em-dashes until a fetch lands */ }
   }, [id])
-  useEffect(() => { queueMicrotask(() => { void fetchWorkflow() }) }, [fetchWorkflow, casesV, vM, vR, vT, vL, vB, vRi])
+  useEffect(() => { queueMicrotask(() => { void fetchWorkflow() }) }, [fetchWorkflow, casesV, vM, vR, vT, vL, vB, vRi, vAsg])
 
   // Legal hold — its own tiny fetch (independent of the workflow snapshot).
   // RLS lets command + anyone who can access the case read it; a denied read
@@ -238,6 +249,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     c,
     tasks: wf.tasks, reports: wf.reports, legal: wf.legal,
     mediaCount: mediaCount ?? 0,
+    supportCount: wf.assignments,
     persistedBlockers: wf.blockers,
     meId: profile?.id ?? null,
     assigneeName: officerName(c.signoff_assignee_id),
@@ -433,6 +445,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         op={op ? { id: op.id, name: op.name } : null}
         joint={joint}
         assessment={assessment}
+        openBlockers={openBlockers}
         pinned={pinned}
         canEdit={canEdit}
         canArchive={isCommand}

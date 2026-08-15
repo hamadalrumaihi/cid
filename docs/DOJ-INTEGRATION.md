@@ -1,39 +1,63 @@
 # DOJ Legal Review System
 
-> ## 🛑 RETIRED (Phase 1) — 2026-07-22
+> ## ✅ MINIMAL DOJ (Phase 2) — 2026-08-15 — the CURRENT model
 >
-> **The DOJ / AG / Judge / ADA legal-review workflow described below is
-> RETIRED.** Legal-request approval now belongs to **Bureau Lead+ ("Command" =
-> `private.is_command()`: bureau_lead / deputy_director / director)**. Shipped in
-> code and the live DB by migration
-> [`20260808140000`](../supabase/migrations/20260808140000_legal_lead_approval.sql).
+> The retired multi-stage DOJ pipeline (see the Phase 1 note below) was revived
+> in **minimal form** by
+> [`20260816120000_minimal_doj_revival.sql`](../supabase/migrations/20260816120000_minimal_doj_revival.sql)
+> + [`20260816130000_doj_transfers.sql`](../supabase/migrations/20260816130000_doj_transfers.sql).
+> DOJ access exists ONLY to review legal requests created from CID cases —
+> there are no DOJ cases, investigations, evidence vaults, or registries.
 >
-> **The new model (authoritative):**
-> - Any CID author drafts a legal request → `submit_legal_request_to_cid` →
->   `cid_supervisor_review` → a **Bureau Lead+** approves / denies / returns via
->   `review_legal_request_as_cid`.
-> - **Approve terminates at `review_status='approved'`** (`fulfilment_status`
->   stays `unissued`). Approval authorizes applying the warrant / subpoena
->   **in-city** but does **not** auto-activate it — issuance / execution remains
->   the existing separate CID fulfilment step (`issue_legal_request` →
->   `record_warrant_execution` / `_return` or `record_subpoena_service` /
->   `_compliance` → close).
-> - **Warrants AND subpoenas both terminate at Lead+ approval.** There is **no**
->   judge / ADA / DA / AG step anymore.
-> - The ADA/DA/AG/Judge review RPCs, prosecutor-coverage RPCs, and
->   justice-membership RPCs are **EXECUTE-revoked** (retained for history). All
->   `justice_memberships` are **deactivated** (rows preserved). The separate
->   Justice Portal tab/route and the DOJ signup path are **removed**; legal work
->   lives entirely in the CID **Legal** surface (the `legal` tab + the case Legal
->   tab).
-> - **Historical decisions are preserved.** Judge / DA approvals, signatures, and
->   court packets from before retirement remain **visible read-only** inside each
->   legal-request dossier and are never rewritten.
+> **Active roles (exactly three):** `attorney_general` · `prosecutor` · `judge`.
+> Legacy ADA/DA membership rows are preserved untouched as history; the
+> authority helpers map them to the effective role `prosecutor`
+> (`private.justice_role_effective`). Membership is by appointment only
+> (`justice_appoint`: AG/Owner appoint prosecutors and judges; **the Owner
+> alone appoints an Attorney General**) or by the CID↔DOJ transfer workflow
+> (`member_transfers` — identity and attribution preserved, handover enforced,
+> transactional activation).
 >
-> **Everything below the workflow sections is LEGACY / historical context** — it
-> documents the retired multi-stage DOJ pipeline exactly as it once ran, so the
-> preserved historical records stay legible. Read it as history, not as the
-> current workflow.
+> **The pipeline (authoritative):**
+> `not_submitted` → `cid_supervisor_review` (Bureau Lead+ of the responsible
+> bureau gates the packet) → **`prosecutor_queue`** (ONE shared queue — no
+> bureau slots; atomic claim via `legal_claim_prosecutor`, AG assignment via
+> `legal_assign_prosecutor`) → `prosecutor_review`
+> (`review_legal_request_as_prosecutor`: approve / return / decline / note) →
+> `submitted_to_judge` (judicial queue; `claim_legal_request_as_judge` or
+> AG/prosecutor `assign_judge`) → `judicial_review`
+> (`decide_legal_request_as_judge`: approve with reasoning + conditions / deny
+> / return) → `approved` | `denied` → CID fulfilment (`issue_legal_request` —
+> unchanged; **a prosecutor or judge can never issue**) → executed/served →
+> return → closed. Returns (`returned_by_cid` / `_prosecutor` / `_judge`)
+> reopen the draft for the investigator; resubmission re-enters CID review.
+> Admin terminals: `declined` (prosecutor), `cancelled`
+> (`legal_admin_cancel`), `withdrawn`, `superseded` (`legal_mark_superseded` —
+> the ONLY path to correct an issued instrument; issued snapshots are
+> immutable).
+>
+> **Integrity:** permanent-user-ID conflict detection
+> (`private.legal_is_conflicted` — request creator, case creator/lead, any
+> case assignment ever, report author, evidence uploader, CID review actors)
+> blocks claiming, assignment, and decisions; the AG cannot override a
+> conflict; self-approval is blocked at every stage; a prosecutor cannot judge
+> their own review (prosecution-side detection); deactivating a member
+> (`set_justice_membership_active`) auto-returns their unfinished work to the
+> queues — no request can be stranded. Dual CID+DOJ membership is temporary
+> only (transfer-approved, expires ≤90 days automatically) and every sensitive
+> action records the acting capacity.
+>
+> ## 🛑 Phase 1 retirement (2026-07-22) — historical
+>
+> Between [`20260808140000`](../supabase/migrations/20260808140000_legal_lead_approval.sql)
+> and the Phase 2 revival, approval terminated at Bureau Lead+
+> (`review_status='approved'` with no DOJ hop). Requests decided in that
+> window carry `cid_supervisor_approval` signatures with `decided_by` =
+> the CID reviewer — preserved, never rewritten.
+>
+> **The sections below document the ORIGINAL multi-stage pipeline** — kept so
+> preserved historical records stay legible. Where they conflict with the
+> Phase 2 note above, the note wins.
 
 Shipped in **v1.13.0**. This supersedes the original proposal (kept as a
 historical record in `docs/archive/DOJ-INTEGRATION-DRAFT.md`).

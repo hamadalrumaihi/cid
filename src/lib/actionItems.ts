@@ -1,7 +1,8 @@
 /** Action Center priority model — the canonical normalizer that turns every
  *  "something is waiting on me" source (tasks, sign-offs, returned cases,
- *  transfers, access/membership requests, legal requests, follow-ups,
- *  blockers, notifications) into ONE ranked `ActionItem` queue.
+ *  transfers, access/membership requests, legal requests, DOJ-pipeline queue
+ *  work, member transfers, follow-ups, blockers, notifications) into ONE
+ *  ranked `ActionItem` queue.
  *
  *  Intentionally PURE: no React, no db, no I/O, no Date.now() — the clock
  *  (`nowMs`/`todayISO`) and the name resolver are injected, so the module is
@@ -44,6 +45,10 @@ export type ActionSourceType =
   | 'legal_hold'
   | 'restricted_access'
   | 'unverified_observation' | 'surveillance_expiring'
+  /** DOJ pipeline work for justice-role viewers (prosecutor queue pickups,
+   *  assigned prosecutorial/judicial reviews). `transfer` is reused for
+   *  member_transfers stage decisions (distinct `member_transfer:` keys). */
+  | 'legal_queue'
   | 'other'
 
 export type ActionPriority = 'critical' | 'high' | 'normal' | 'low'
@@ -107,6 +112,9 @@ export type AcLegal = Pick<Tables<'legal_requests'>,
   | 'created_by' | 'responsible_bureau' | 'assigned_ada_id' | 'assigned_judge_id'
   | 'response_deadline' | 'expires_at' | 'submitted_to_doj_at'
   | 'created_at' | 'updated_at'>
+  // DOJ revival columns (minimal_doj_revival) — optional so existing callers
+  // and fixtures keep compiling; the loader selects them when present.
+  & { assigned_prosecutor_id?: string | null; queue_entered_at?: string | null }
 export type AcBlocker = Pick<Tables<'case_blockers'>,
   'id' | 'case_id' | 'title' | 'type' | 'status' | 'owner_id' | 'review_at'
   | 'created_at' | 'updated_at'>
@@ -130,6 +138,24 @@ export type AcSurvTarget = Pick<Tables<'surveillance_targets'>,
 /** All notifications columns — notifText helpers take the full row. */
 export type AcNotif = Pick<Tables<'notifications'>,
   'id' | 'user_id' | 'type' | 'payload' | 'read' | 'created_at'>
+/** Open member_transfers rows (DOJ transfers migration — the table is newer
+ *  than the generated types, so this is a hand-kept projection the loader's
+ *  cast-boundary read must match). RLS scopes the read: the subject, CID
+ *  command, the active AG, and the Owner. */
+export interface AcMemberTransfer {
+  id: string
+  user_id: string
+  direction: string        // 'cid_to_doj' | 'doj_to_cid'
+  status: string           // 'requested' | 'cid_approved' | 'doj_accepted' | …
+  requested_role: string
+  target_bureau: string | null
+  reason: string
+  /** Who took the CID stage — mirrors the server's "same person cannot
+   *  complete both stages" bar (Owner excepted). */
+  cid_decided_by: string | null
+  created_at: string
+  updated_at: string
+}
 /** Library governance facts, PRE-DERIVED by the loader through the sops
  *  docModel (ack state, review state, approval/resolve authority) so this
  *  module stays free of component imports and every flag is unit-testable
@@ -207,6 +233,13 @@ export interface ActionSources {
   /** Additive (defaults []): pending/expiring surveillance targets (see
    *  AcSurvTarget). */
   survTargets?: AcSurvTarget[]
+  /** Additive (defaults null): the viewer's EFFECTIVE justice role — the
+   *  loader reads justice_memberships (active && expires_at null-or-future)
+   *  and maps legacy ADA/DA titles to 'prosecutor' (the server's
+   *  justice_role_effective mirror). Gates the DOJ-pipeline items. */
+  justiceRole?: 'prosecutor' | 'judge' | 'attorney_general' | null
+  /** Additive (defaults []): open member_transfers rows (see AcMemberTransfer). */
+  memberTransfers?: AcMemberTransfer[]
   notifications: AcNotif[]     // my UNREAD notifications (read = false)
   /** Additive (defaults []): library governance items, pre-derived. */
   documents?: AcDoc[]
@@ -569,6 +602,123 @@ export function buildActionItems(s: ActionSources): ActionQueue {
       nudge: expiring ? NUDGE.legalExpiring : 0,
       dedupeKey: `legal:${l.id}`,
     })
+  }
+
+  /* 7b · DOJ pipeline (minimal_doj_revival) — work for justice-role viewers.
+   *      Prosecutors: unclaimed prosecutor_queue rows (shared queue pickup)
+   *      and prosecutor_review rows assigned to them. Judges: unassigned
+   *      submitted_to_judge rows (judicial queue) and reviews assigned to
+   *      them. Sealed rows never surface as open pickups (formal assignment
+   *      only — the claim RPCs' bar, mirrored); creators are excluded (their
+   *      view is branch 7's waiting lane + the conflict-of-interest bar).
+   *      Assigned-review items reuse the `legal:<id>` dedupe key so they can
+   *      never double up with a branch-7 item for the same request. */
+  const jr = s.justiceRole ?? null
+  if (jr) {
+    for (const l of s.legal) {
+      const st = l.review_status || ''
+      if (l.created_by === s.me) continue
+      const deadline = activeDeadline(l)
+      const common = {
+        sourceType: 'legal_queue' as const, sourceId: l.id,
+        title: `${l.request_number} — ${humanize(l.request_type || 'request')}`,
+        summary: l.case_number_snapshot ? `Case ${l.case_number_snapshot}` : 'Legal request',
+        dueAt: deadline?.at ?? null,
+        createdAt: l.created_at, updatedAt: l.updated_at,
+        ownerId: s.me,
+        caseId: l.case_id, caseNumber: l.case_number_snapshot, bureau: l.responsible_bureau,
+        deepLink: `/legal?request=${encodeURIComponent(l.id)}`,
+        isWaitingOnCurrentUser: true,
+      }
+      if (jr === 'prosecutor' && st === 'prosecutor_queue' && l.classification !== 'sealed') {
+        add({
+          ...common, id: `legal_queue:${l.id}`,
+          summary: l.case_number_snapshot ? `Case ${l.case_number_snapshot} · shared queue` : 'Shared prosecutor queue',
+          reason: 'Unclaimed request in the shared queue',
+          status: 'needs_action',
+          waitingSince: l.queue_entered_at ?? l.created_at,
+          dedupeKey: `legal_queue:${l.id}`,
+        })
+      } else if (st === 'prosecutor_review' && (l.assigned_prosecutor_id === s.me || l.assigned_ada_id === s.me)) {
+        add({
+          ...common, id: `legal_queue:${l.id}`,
+          reason: 'Assigned for prosecutorial review',
+          status: 'needs_action',
+          waitingSince: l.updated_at,
+          isPersonalItem: true,
+          dedupeKey: `legal:${l.id}`,
+        })
+      } else if (jr === 'judge' && st === 'submitted_to_judge' && !l.assigned_judge_id && l.classification !== 'sealed') {
+        add({
+          ...common, id: `legal_queue:${l.id}`,
+          summary: l.case_number_snapshot ? `Case ${l.case_number_snapshot} · judicial queue` : 'Judicial queue',
+          reason: 'Awaiting judicial pickup — available to claim',
+          status: 'needs_action',
+          waitingSince: l.submitted_to_doj_at ?? l.updated_at,
+          dedupeKey: `legal_queue:${l.id}`,
+        })
+      } else if ((st === 'submitted_to_judge' || st === 'judicial_review') && l.assigned_judge_id === s.me) {
+        add({
+          ...common, id: `legal_queue:${l.id}`,
+          reason: 'Assigned for judicial review',
+          status: 'needs_action',
+          waitingSince: l.updated_at,
+          isPersonalItem: true,
+          dedupeKey: `legal:${l.id}`,
+        })
+      }
+    }
+  }
+
+  /* 7c · member transfers (DOJ transfers migration) — stage decisions only,
+   *      never the subject's own row (the server bars self-decision; the
+   *      Owner bypass is deliberate). requested → CID command (Deputy
+   *      Director+/Owner); cid_approved → the AG (or Owner), minus whoever
+   *      took the CID stage; doj_accepted → activation (DD+/AG/Owner). */
+  const CID_TRANSFER_DECIDERS = new Set(['deputy_director', 'director'])
+  const cidTransferDecider = (s.isOwner ?? false) || CID_TRANSFER_DECIDERS.has(s.role ?? '')
+  const agViewer = jr === 'attorney_general' || (s.isOwner ?? false)
+  for (const t of s.memberTransfers ?? []) {
+    if (t.user_id === s.me) continue
+    const name = s.profileName(t.user_id) || 'Member'
+    const route = t.direction === 'doj_to_cid'
+      ? `DOJ → CID · ${humanize(t.requested_role)}${t.target_bureau ? ` (${t.target_bureau})` : ''}`
+      : `CID → DOJ · ${humanize(t.requested_role)}`
+    const base = {
+      sourceType: 'transfer' as const, sourceId: t.id,
+      title: `DOJ transfer — ${name}`,
+      createdAt: t.created_at, updatedAt: t.updated_at, waitingSince: t.updated_at,
+      ownerId: s.me,
+      bureau: t.target_bureau,
+      isCommandItem: true, isWaitingOnCurrentUser: true,
+      sourceMetadata: { member_transfer: true, user_id: t.user_id, direction: t.direction, status: t.status },
+      dedupeKey: `member_transfer:${t.id}`,
+    }
+    if (t.status === 'requested' && cidTransferDecider) {
+      add({
+        ...base, id: `member_transfer:${t.id}`,
+        summary: `${route} · awaiting CID command decision`,
+        reason: t.reason || 'Awaiting your command authorization',
+        status: 'needs_action', responsibleRole: s.role,
+        deepLink: '/command-center?s=promotions',
+      })
+    } else if (t.status === 'cid_approved' && agViewer && !((t.cid_decided_by === s.me) && !(s.isOwner ?? false))) {
+      add({
+        ...base, id: `member_transfer:${t.id}`,
+        summary: `${route} · awaiting DOJ acceptance`,
+        reason: t.reason || 'Awaiting the Attorney General’s acceptance',
+        status: 'needs_action', responsibleRole: 'attorney_general',
+        deepLink: '/legal',
+      })
+    } else if (t.status === 'doj_accepted' && (cidTransferDecider || agViewer)) {
+      add({
+        ...base, id: `member_transfer:${t.id}`,
+        summary: `${route} · accepted — ready for activation`,
+        reason: 'Run the handover checklist and activate the transfer',
+        status: 'needs_action', responsibleRole: s.role ?? 'attorney_general',
+        deepLink: cidTransferDecider ? '/command-center?s=promotions' : '/legal',
+      })
+    }
   }
 
   /* 9 · blockers — open blockers I own; overdue once review_at is past. */

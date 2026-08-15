@@ -4,12 +4,17 @@
  *  add_legal_exhibit, submit_legal_request_to_cid, review_legal_request_as_cid,
  *  issue_legal_request) — never direct table writes to workflow columns.
  *
- *  Post-Phase-1 (migration 20260808140000_legal_lead_approval) the DOJ / ADA /
- *  Judge chain is RETIRED: approval terminates at Bureau Lead+ via
- *  review_legal_request_as_cid ('approve' / 'deny' / 'return'), then
- *  issue_legal_request fulfils. This pipeline mirrors tests/rls/v154.test.ts —
- *  no revoked RPC (assign_ada_to_bureau, claim/decide_legal_request_as_judge,
- *  doj routing, …) is ever called.
+ *  Minimal-DOJ revival (migration 20260816120000_minimal_doj_revival): a
+ *  Bureau Lead+ 'approve' via review_legal_request_as_cid is no longer
+ *  terminal — it hands the request to the shared PROSECUTOR QUEUE
+ *  (review_status='prosecutor_queue'), and reaching 'approved' (and therefore
+ *  issue_legal_request) requires an active prosecutor + judge. The CID
+ *  fixtures cannot ride that pipeline (justice_appoint refuses is_test
+ *  accounts by design), so the furthest deterministic state this builder can
+ *  produce is `queuedWarrant` — a warrant sitting in prosecutor_queue with a
+ *  frozen cid_approved version. E2E specs that need an ISSUED warrant are
+ *  skipped until the DOJ fixture accounts exist (see the provisioning
+ *  contract in tests/rls/v163.test.ts).
  *
  *  Safety rails (live project):
  *   - rls_test_cleanup() runs FIRST (purges leftovers from crashed runs) and
@@ -43,8 +48,11 @@ export interface LegalFixtures {
   cidReview: FixtureRequest
   /** Arrest warrant returned_by_cid to the lsb creator. */
   returned: FixtureRequest
-  /** Search warrant approved by the Bureau Lead and issued (fulfilment_status='issued'). */
-  leadApproved: FixtureRequest
+  /** Search warrant past Bureau Lead approval, sitting in the shared
+   *  prosecutor queue (review_status='prosecutor_queue', unissued, with a
+   *  frozen cid_approved version). Reaching 'approved'/issued requires the
+   *  DOJ fixture accounts — see tests/rls/v163.test.ts. */
+  queuedWarrant: FixtureRequest
   actors: {
     lsb: Live
     lead: Live
@@ -223,23 +231,22 @@ export async function buildLegalFixtures(): Promise<LegalFixtures> {
       p_request: returnedRow.id, p_decision: 'return', p_note: 'Tighten the probable-cause statement (E2E fixture).',
     })
 
-    // 4 · leadApproved — the post-Phase-1 terminal path: submit → Bureau Lead+
-    //     approve (review_legal_request_as_cid 'approve') → issue_legal_request.
-    //     Same chain tests/rls/v154.test.ts proves live.
-    const approvedRow = await createWarrant('search_warrant', 'approved warrant (issued)', {
+    // 4 · queuedWarrant — the minimal-DOJ CID handoff: submit → Bureau Lead+
+    //     approve (review_legal_request_as_cid 'approve') → prosecutor_queue.
+    //     Issuance is NOT possible here: review_legal_request_as_cid no longer
+    //     terminates at 'approved' (20260816120000_minimal_doj_revival), and
+    //     the prosecutor/judge stages need DOJ fixture accounts the build
+    //     doesn't have. Fail fast on contract drift either way.
+    const queuedRow = await createWarrant('search_warrant', 'queued warrant (prosecutor queue)', {
       form: { search_targets: `Place: ${place.name}`, items_sought: 'Stolen property' },
     })
-    await attachLink(approvedRow.id)
-    await submit(approvedRow.id)
+    await attachLink(queuedRow.id)
+    await submit(queuedRow.id)
     const decided = await rpcOk<ReqRow>(lead, 'review_legal_request_as_cid', {
-      p_request: approvedRow.id, p_decision: 'approve', p_signature: 'RLS Lead',
+      p_request: queuedRow.id, p_decision: 'approve', p_signature: 'RLS Lead',
     })
-    if (decided.review_status !== 'approved') {
-      throw new Error(`leadApproved fixture: expected review_status 'approved', got '${decided.review_status}'`)
-    }
-    const issued = await rpcOk<ReqRow & { fulfilment_status?: string }>(lsb, 'issue_legal_request', { p_request: approvedRow.id })
-    if (issued.fulfilment_status !== 'issued') {
-      throw new Error(`leadApproved fixture: expected fulfilment_status 'issued', got '${issued.fulfilment_status}'`)
+    if (decided.review_status !== 'prosecutor_queue') {
+      throw new Error(`queuedWarrant fixture: expected review_status 'prosecutor_queue', got '${decided.review_status}'`)
     }
 
     return {
@@ -255,7 +262,7 @@ export async function buildLegalFixtures(): Promise<LegalFixtures> {
       entityDraft: asFixture(entityDraftRow),
       cidReview: asFixture(cidReviewRow),
       returned: asFixture(returnedRow),
-      leadApproved: asFixture(approvedRow),
+      queuedWarrant: asFixture(queuedRow),
       actors,
     }
   } catch (err) {

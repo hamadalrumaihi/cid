@@ -175,9 +175,11 @@ export function legalRequestRow(
   overrides: Partial<Tables<'legal_requests'>> & Pick<Tables<'legal_requests'>, 'case_id' | 'created_by'>,
 ): Tables<'legal_requests'> {
   return {
+    amends_request_id: null,
     approval_route: null,
     assigned_ada_id: null,
     assigned_judge_id: null,
+    assigned_prosecutor_id: null,
     case_number_snapshot: 'CID-26-0101',
     case_title_snapshot: 'Mock Case',
     cid_reviewed_at: null,
@@ -220,6 +222,8 @@ export function legalRequestRow(
     person_name_snapshot: null,
     priority: 'routine',
     recipient_acknowledged: null,
+    prosecutor_claimed_at: null,
+    queue_entered_at: null,
     recipient_name: null,
     recipient_type: null,
     request_number: 'LR-26-0001',
@@ -248,6 +252,7 @@ export function legalRequestRow(
     submitted_to_doj_at: null,
     submitted_to_judge_at: null,
     subtype: 'search_warrant',
+    superseded_by_id: null,
     title: 'Search Warrant — Mock Case',
     updated_at: mockTimestamp(),
     ...overrides,

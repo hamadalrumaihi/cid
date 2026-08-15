@@ -12,13 +12,18 @@ import { deadlineInfo as sharedDeadlineInfo } from './deadlines'
 
 export type JusticeRole =
   | 'assistant_district_attorney' | 'district_attorney' | 'attorney_general' | 'judge'
+  | 'prosecutor'
 export type JusticeAgency = 'doj' | 'judiciary'
 
 export const JUSTICE_ROLE_LABEL: Record<JusticeRole, string> = {
+  // Legacy titles are preserved exactly — historical rows keep their name;
+  // the minimal-DOJ model maps ADA/DA to the effective role 'prosecutor'
+  // (private.justice_role_effective) without rewriting them.
   assistant_district_attorney: 'Assistant District Attorney',
   district_attorney: 'District Attorney',
   attorney_general: 'Attorney General',
   judge: 'Judge',
+  prosecutor: 'Prosecutor',
 }
 export const AGENCY_LABEL: Record<JusticeAgency, string> = {
   doj: 'Department of Justice',
@@ -152,6 +157,14 @@ export const REVIEW_STATUS_LABEL: Record<string, string> = {
   approved: 'Approved',
   denied: 'Denied',
   withdrawn: 'Withdrawn',
+  // Minimal-DOJ revival (20260816120000): the shared prosecutor queue + the
+  // administrative terminals.
+  prosecutor_queue: 'Prosecutor queue',
+  prosecutor_review: 'Prosecutorial review',
+  returned_by_prosecutor: 'Returned by prosecutor',
+  declined: 'Declined by prosecutor',
+  cancelled: 'Cancelled',
+  superseded: 'Superseded',
 }
 export const FULFILMENT_LABEL: Record<string, string> = {
   unissued: 'Not issued',
@@ -181,10 +194,12 @@ export const CLASSIFICATION_STYLE: Record<Classification, string> = {
 export const reviewStatusLabel = (s?: string | null) => (s && REVIEW_STATUS_LABEL[s]) || s || '—'
 export const fulfilmentLabel = (s?: string | null) => (s && FULFILMENT_LABEL[s]) || s || '—'
 
-/** The editable (draft/returned) states — mirrors private.can_edit_legal_draft. */
+/** The editable (draft/returned) states — EXACT mirror of
+ *  private.can_edit_legal_draft (incl. the minimal-DOJ prosecutor return). */
 export const EDITABLE_REVIEW_STATES = new Set([
   'not_submitted', 'returned_by_cid', 'returned_by_ada',
   'returned_by_da', 'returned_by_ag', 'returned_by_judge',
+  'returned_by_prosecutor',
 ])
 export const isEditableDraft = (r: Pick<LegalRequest, 'document_status' | 'review_status'>): boolean =>
   (r.document_status === 'draft' || r.document_status === 'reopened') &&

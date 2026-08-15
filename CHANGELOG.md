@@ -8,6 +8,49 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Minimal DOJ, member transfers, and the investigative-workspace redesign
+
+The legal pipeline regains a prosecutorial + judicial stage in minimal form
+(migrations `20260816120000_minimal_doj_revival` +
+`20260816130000_doj_transfers`). Bureau Lead+ approval is now the CID gate:
+approve hands the request to ONE shared prosecutor queue (atomic claim,
+Attorney General assignment; sealed requests are AG-assign-only), a
+prosecutor approves it for judicial review (or returns it with corrections,
+or declines it with a recorded reason), a judge decides with recorded
+reasoning and optional conditions, and issuance stays a CID act — a
+prosecutor or judge can never issue. Active justice roles are exactly
+`attorney_general` / `prosecutor` / `judge`; legacy ADA/DA membership rows
+are preserved untouched and mapped to the effective role `prosecutor`.
+Conflicts recuse on permanent user IDs (request creator, case creator/lead,
+any historical assignment, report author, evidence uploader, CID reviewers) —
+not overridable by the AG; deactivating a member auto-returns their held work
+to the queues, so no request can be stranded. Post-issuance corrections go
+through supersession (`legal_mark_superseded`) — issued snapshots stay
+immutable.
+
+CID↔DOJ member transfers (`member_transfers`) preserve identity and
+attribution end-to-end: DD+ authorizes, the AG (Owner for AG appointments)
+accepts, a handover checklist blocks activation while the member still leads
+open cases, and ONE transactional RPC ends the outgoing membership (dated
+`role_events` row — never a deletion), reassigns work, and activates the
+destination membership. Reverse transfers re-enter CID at an explicitly
+approved new rank/bureau; temporary dual membership requires an expiry ≤90
+days, lapses automatically, and forces an acting-capacity choice recorded on
+every sensitive action. `membership_history` view composes the record.
+
+The portal itself moves toward a dense investigative workspace: the case
+page regroups its 14 tabs into an 8-area jacket (Brief / Investigation /
+Subjects & Links / Evidence / Reports / Legal / Operations / Record) under a
+flat persistent case header (assigned unit vs responsible bureau vs lead,
+stage, blockers, overdue work, primary next action); the cases registry
+defaults to a dense sortable table (grid/board still available); My Desk and
+Central Command trade metric tiles for compact bordered strips; the Action
+Center gains prosecutor/judge/AG/transfer awareness; and `/legal` is
+role-aware — CID members keep their surface while justice members get the
+minimal DOJ workspace (queue, my requests, judicial queue, returned,
+archive, AG administration) with recusal notices surfacing server refusals
+verbatim. No tab, action, or deep link was removed.
+
 ### JTF legal routing
 
 Legal requests on JTF cases no longer dead-end at draft creation. Root

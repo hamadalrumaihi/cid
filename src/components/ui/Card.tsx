@@ -19,12 +19,21 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   pad?: Pad
   /** Slightly brighter border for a hoverable/interactive card. */
   interactive?: boolean
+  /** `flat` — the dense "digital case jacket" panel (rounded-lg, clear
+   *  border, quieter fill). `default` stays byte-identical for the ~60
+   *  existing call sites. */
+  variant?: 'default' | 'flat'
 }
 
-export function Card({ pad = 'md', interactive = false, className = '', ...rest }: CardProps) {
+const VARIANT: Record<NonNullable<CardProps['variant']>, string> = {
+  default: 'rounded-2xl border border-white/5 bg-ink-900/60',
+  flat: 'rounded-lg border border-white/10 bg-ink-900/40',
+}
+
+export function Card({ pad = 'md', interactive = false, variant = 'default', className = '', ...rest }: CardProps) {
   return (
     <div
-      className={`rounded-2xl border border-white/5 bg-ink-900/60 ${PAD[pad]} ${
+      className={`${VARIANT[variant]} ${PAD[pad]} ${
         interactive ? 'transition hover:border-white/10' : ''
       } ${className}`}
       {...rest}

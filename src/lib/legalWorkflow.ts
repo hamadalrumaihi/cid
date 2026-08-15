@@ -14,7 +14,11 @@
  *     judge claim a waiting (submitted_to_doj / submitted_to_judge) non-sealed
  *     judge-routed request without an ADA hand-off (claim_legal_request_as_judge);
  *   - a prosecution-side actor or the creator can never judge their own request;
- *   - sealed requests keep their explicit-assignment audience (no open pickup). */
+ *   - sealed requests keep their explicit-assignment audience (no open pickup);
+ *   - minimal-DOJ revival (20260816120000): CID approval hands off to ONE
+ *     shared prosecutor queue (atomic claim / AG assignment), prosecutorial
+ *     review feeds the judicial queue, and declined/cancelled/superseded are
+ *     closed terminals beside denied/withdrawn. */
 
 import type { Tables } from './database.types'
 import {
@@ -30,14 +34,21 @@ export interface LegalViewer {
   cidActive: boolean
   /** CID rank (profiles.role) — NEVER implies justice authority. */
   cidRole: string | null
-  /** Active justice_memberships.justice_role, or null. */
-  justiceRole: 'assistant_district_attorney' | 'district_attorney' | 'attorney_general' | 'judge' | null
+  /** EFFECTIVE justice role, or null. buildLegalViewer maps legacy ADA/DA
+   *  memberships to 'prosecutor' (the client mirror of
+   *  private.justice_role_effective); the legacy literals stay accepted so
+   *  historical fixtures/viewers keep working. */
+  justiceRole:
+    | 'prosecutor' | 'attorney_general' | 'judge'
+    | 'assistant_district_attorney' | 'district_attorney' | null
   isOwner: boolean
   /** Bureaus this viewer is a live prosecutor for (SAB/LSB/BCB). */
   prosecutorBureaus?: readonly string[]
 }
 
-/** The request fields the model reads (a Pick keeps it decoupled from the wide row). */
+/** The request fields the model reads (a Pick keeps it decoupled from the wide
+ *  row). The minimal-DOJ columns are OPTIONAL — legacy projections and test
+ *  fixtures that predate the revival stay valid; absent reads as null. */
 export type LegalReqLike = Pick<
   Tables<'legal_requests'>,
   | 'created_by' | 'review_status' | 'document_status' | 'fulfilment_status'
@@ -45,14 +56,29 @@ export type LegalReqLike = Pick<
   | 'request_type' | 'subtype' | 'responsible_bureau'
   | 'assigned_ada_id' | 'assigned_judge_id'
   | 'expires_at' | 'response_deadline' | 'submitted_to_doj_at'
->
+> & {
+  /** Minimal-DOJ revival (20260816120000): the shared-queue holder + the
+   *  amendment/supersession links. */
+  assigned_prosecutor_id?: string | null
+  queue_entered_at?: string | null
+  amends_request_id?: string | null
+  superseded_by_id?: string | null
+}
 
 // Legal-request approval is Bureau Lead+ (Phase 1 — mirrors private.is_command()
 // / can_approve_legal on the server). Senior detectives can author/submit but
 // no longer approve.
 const LEGAL_APPROVER_ROLES = new Set(['bureau_lead', 'deputy_director', 'director'])
 const DECIDED = new Set(['approved', 'denied', 'withdrawn'])
-const RETURNED = new Set(['returned_by_cid', 'returned_by_ada', 'returned_by_da', 'returned_by_ag', 'returned_by_judge'])
+/** Administrative/prosecutorial terminals (minimal-DOJ): closed like DECIDED
+ *  but recorded separately — declined is a prosecutorial refusal, cancelled an
+ *  admin stop, superseded a replaced instrument. */
+const ADMIN_TERMINAL = new Set(['declined', 'cancelled', 'superseded'])
+const isTerminal = (s: string): boolean => DECIDED.has(s) || ADMIN_TERMINAL.has(s)
+const RETURNED = new Set([
+  'returned_by_cid', 'returned_by_ada', 'returned_by_da', 'returned_by_ag',
+  'returned_by_judge', 'returned_by_prosecutor',
+])
 
 /* ── Stage model ──────────────────────────────────────────────────────────── */
 export type StageId =
@@ -62,7 +88,9 @@ export type StageId =
 export const STAGE_LABEL: Record<StageId, string> = {
   draft: 'Draft',
   cid_review: 'CID Review',
-  doj_intake: 'DOJ Intake',
+  // Minimal-DOJ: the intake stage IS the shared prosecutor queue (one queue,
+  // no bureau slots) — labelled as what it is.
+  doj_intake: 'Prosecutor queue',
   prosecutorial_review: 'Prosecutorial Review',
   judicial_review: 'Judicial Review',
   issued: 'Issued',
@@ -85,12 +113,17 @@ export function stageForReviewStatus(status: string): StageId {
     case 'returned_by_cid': case 'returned_by_ada':
     case 'returned_by_da': case 'returned_by_ag': case 'returned_by_judge': return 'draft'
     case 'cid_supervisor_review': return 'cid_review'
-    case 'submitted_to_doj': return 'doj_intake'
+    // The shared queue (and a prosecutor return, which re-enters via the
+    // queue's stage once the investigator resubmits) sits at DOJ intake.
+    case 'submitted_to_doj': case 'prosecutor_queue':
+    case 'returned_by_prosecutor': return 'doj_intake'
     case 'ada_review': case 'submitted_to_da': case 'da_review':
-    case 'submitted_to_ag': case 'ag_review': return 'prosecutorial_review'
+    case 'submitted_to_ag': case 'ag_review':
+    case 'prosecutor_review': return 'prosecutorial_review'
     case 'submitted_to_judge': case 'judicial_review': return 'judicial_review'
     case 'approved': return 'issued'
-    case 'denied': case 'withdrawn': return 'closed'
+    case 'denied': case 'withdrawn':
+    case 'declined': case 'cancelled': case 'superseded': return 'closed'
     default: return 'draft'
   }
 }
@@ -125,11 +158,12 @@ export function stagesForRequest(r: LegalReqLike): StageId[] {
 /** Did the judiciary lane or the prosecutorial lane carry the request forward?
  *  (Surfaces show which lane advanced it.) */
 export function laneThatAdvanced(r: LegalReqLike): 'judicial' | 'prosecutorial' | null {
+  const prosecuted = !!r.assigned_ada_id || !!r.assigned_prosecutor_id
   if (r.assigned_judge_id && (r.review_status === 'judicial_review' || r.review_status === 'approved' || r.review_status === 'denied' || r.review_status === 'returned_by_judge')) {
-    // Claimed directly from DOJ intake (no ADA ever assigned) = judicial lane.
-    return r.assigned_ada_id ? 'prosecutorial' : 'judicial'
+    // Claimed directly from DOJ intake (no prosecutor ever assigned) = judicial lane.
+    return prosecuted ? 'prosecutorial' : 'judicial'
   }
-  if (r.assigned_ada_id) return 'prosecutorial'
+  if (prosecuted) return 'prosecutorial'
   return null
 }
 
@@ -157,17 +191,24 @@ export function judgeClaimEligible(r: LegalReqLike, v: LegalViewer): boolean {
 export type ResponsibleRole =
   | 'investigator' | 'cid_supervisor' | 'assigned_ada' | 'bureau_prosecutor'
   | 'district_attorney' | 'attorney_general' | 'assigned_judge' | 'any_judge'
-  | 'doj_management' | 'none'
+  | 'doj_management' | 'prosecutor' | 'none'
 
 export function responsibleRole(r: LegalReqLike): ResponsibleRole {
   const s = r.review_status
   if (s === 'not_submitted' || RETURNED.has(s)) return 'investigator'
   if (s === 'cid_supervisor_review') return 'cid_supervisor'
   if (s === 'submitted_to_doj') return r.assigned_ada_id ? 'assigned_ada' : (r.approval_route === 'judge' ? 'any_judge' : 'doj_management')
+  // Shared queue: sealed requests wait for AG assignment; everything else is
+  // any active prosecutor's to claim.
+  if (s === 'prosecutor_queue') return r.classification === 'sealed' ? 'attorney_general' : 'prosecutor'
+  if (s === 'prosecutor_review') return 'prosecutor'
   if (s === 'ada_review') return 'assigned_ada'
   if (s === 'da_review' || s === 'submitted_to_da') return 'district_attorney'
   if (s === 'ag_review' || s === 'submitted_to_ag') return 'attorney_general'
-  if (s === 'submitted_to_judge') return r.assigned_judge_id ? 'assigned_judge' : 'any_judge'
+  if (s === 'submitted_to_judge') {
+    if (r.assigned_judge_id) return 'assigned_judge'
+    return r.classification === 'sealed' ? 'attorney_general' : 'any_judge'
+  }
   if (s === 'judicial_review') return 'assigned_judge'
   if (s === 'approved') {
     // operational phase — responsibility is the executing/serving officer, tracked elsewhere
@@ -186,6 +227,7 @@ export const RESPONSIBLE_ROLE_LABEL: Record<ResponsibleRole, string> = {
   assigned_judge: 'Assigned Judge',
   any_judge: 'Any eligible Judge',
   doj_management: 'DOJ management',
+  prosecutor: 'Prosecutor',
   none: '—',
 }
 
@@ -248,6 +290,21 @@ function viewerOwnsAction(r: LegalReqLike, v: LegalViewer): boolean {
   if (s === 'ada_review') return mine && r.assigned_ada_id === v.myId
   if (s === 'da_review') return v.justiceRole === 'district_attorney'
   if (s === 'ag_review') return v.justiceRole === 'attorney_general'
+  // Shared prosecutor queue (minimal-DOJ): any active prosecutor owns the
+  // claim on a non-sealed request they didn't create; sealed rows are the
+  // AG's to assign (legal_claim_prosecutor refuses them server-side).
+  if (s === 'prosecutor_queue') {
+    if (r.classification === 'sealed') return v.justiceRole === 'attorney_general' || v.isOwner
+    return v.justiceRole === 'prosecutor' && !isCreator
+  }
+  if (s === 'prosecutor_review') return mine && (r.assigned_prosecutor_id ?? null) === v.myId
+  // Judicial queue: an eligible judge owns the claim; a sealed request waits
+  // for formal assignment (assign_judge — AG/Owner or the approving prosecutor).
+  if (s === 'submitted_to_judge') {
+    if (r.assigned_judge_id) return mine && r.assigned_judge_id === v.myId
+    if (r.classification === 'sealed') return v.justiceRole === 'attorney_general' || v.isOwner
+    return v.justiceRole === 'judge' && !isCreator
+  }
   if (s === 'judicial_review') return mine && r.assigned_judge_id === v.myId
   // Parked at DOJ with no routing prosecutor: assigning one IS the next
   // action, and it belongs to DOJ management — without this branch a
@@ -275,10 +332,21 @@ export function dispositionFor(r: LegalReqLike, v: LegalViewer, now: number): Le
   let awarenessOnly = false
   let whyNoAction: string | null = null
 
-  if (DECIDED.has(s)) {
-    group = s === 'withdrawn' ? 'closed' : (s === 'denied' ? 'closed' : issuedGroup(r))
+  if (isTerminal(s)) {
+    // approved runs the fulfilment ladder; every other terminal (denied,
+    // withdrawn, declined, cancelled, superseded) is closed.
+    group = s === 'approved' ? issuedGroup(r) : 'closed'
   } else if (canAct) {
-    group = isCreator && RETURNED.has(s) ? 'returned_to_you' : (respRole === 'assigned_judge' || respRole === 'assigned_ada' ? 'assigned_to_you' : 'needs_action')
+    // Queue ownership is claim-shaped: the shared prosecutor queue and the
+    // open judicial queue read as "available to claim", not assigned work.
+    const claimShaped = (s === 'prosecutor_queue' && respRole === 'prosecutor')
+      || (s === 'submitted_to_judge' && !r.assigned_judge_id && respRole === 'any_judge')
+    group = isCreator && RETURNED.has(s) ? 'returned_to_you'
+      : claimShaped ? 'available_to_claim'
+      : (respRole === 'assigned_judge' || respRole === 'assigned_ada'
+          || (respRole === 'prosecutor' && s === 'prosecutor_review'))
+        ? 'assigned_to_you'
+        : 'needs_action'
   } else if (canClaim) {
     group = 'available_to_claim'
   } else {
@@ -316,7 +384,8 @@ export function countViewerActionable(rows: readonly LegalReqLike[], v: LegalVie
 function waitingLane(r: LegalReqLike): 'cid' | 'doj' | 'prosecution' | 'judge' {
   const s = r.review_status
   if (s === 'cid_supervisor_review') return 'cid'
-  if (s === 'submitted_to_doj') return 'doj'
+  // The shared queue + prosecutor states wait at DOJ.
+  if (['submitted_to_doj', 'prosecutor_queue', 'prosecutor_review'].includes(s)) return 'doj'
   if (['ada_review', 'da_review', 'ag_review', 'submitted_to_da', 'submitted_to_ag'].includes(s)) return 'prosecution'
   if (['submitted_to_judge', 'judicial_review'].includes(s)) return 'judge'
   return 'doj'
@@ -350,9 +419,12 @@ function nextActionLabel(
 ): string {
   const s = r.review_status
   const isCreator = !!v.myId && r.created_by === v.myId
-  if (DECIDED.has(s)) {
+  if (isTerminal(s)) {
     if (s === 'withdrawn') return 'Withdrawn'
     if (s === 'denied') return 'Denied'
+    if (s === 'declined') return 'Declined by prosecutor'
+    if (s === 'cancelled') return 'Cancelled'
+    if (s === 'superseded') return 'Superseded'
     return issuedActionLabel(r) // approved
   }
   if (flags.canAct) {
@@ -362,6 +434,14 @@ function nextActionLabel(
     if (s === 'ada_review') return 'Review as assigned ADA'
     if (s === 'da_review') return 'Review as DA'
     if (s === 'ag_review') return 'Review as AG'
+    if (s === 'prosecutor_queue') {
+      return r.classification === 'sealed' ? 'Assign a prosecutor' : 'Claim from the queue'
+    }
+    if (s === 'prosecutor_review') return 'Review as prosecutor'
+    if (s === 'submitted_to_judge') {
+      if (r.classification === 'sealed') return 'Assign a Judge'
+      return v.justiceRole === 'judge' ? 'Claim for judicial review' : 'Assign a Judge'
+    }
     if (s === 'judicial_review') return 'Decide request'
   }
   if (flags.canClaim) return 'Take for judicial review'
@@ -372,6 +452,7 @@ function nextActionLabel(
   if (role === 'any_judge') return 'Available for judicial pickup'
   if (role === 'cid_supervisor') return 'Waiting on CID review'
   if (role === 'assigned_ada' || role === 'bureau_prosecutor') return 'Waiting on ADA'
+  if (role === 'prosecutor') return s === 'prosecutor_queue' ? 'Waiting in the prosecutor queue' : 'Waiting on the prosecutor'
   if (role === 'district_attorney' || role === 'attorney_general') return 'Waiting on prosecution'
   if (role === 'assigned_judge') return 'Waiting on Judge'
   return 'No action required'
@@ -463,14 +544,26 @@ export function routingExplanation(r: LegalReqLike, v?: LegalViewer): string {
     if (judgeRouted) return 'This request passed CID review and is waiting at DOJ. The responsible bureau prosecutor can review it, while an eligible Judge may claim it directly because the request is Judge-routed and not sealed.'
     return 'This request passed CID review and is waiting at DOJ for prosecutorial assignment.'
   }
+  if (s === 'prosecutor_queue') {
+    if (sealed) return 'This sealed request is not claimable from the shared queue. It waits for formal prosecutor assignment by the Attorney General.'
+    return 'Waiting in the shared prosecutor queue — any active prosecutor may claim it.'
+  }
+  if (s === 'prosecutor_review') return 'This request is under prosecutorial review by the assigned prosecutor, who may approve it for judicial review, return it for corrections, or decline it.'
   if (s === 'ada_review') return 'This request is under review by the assigned bureau ADA.'
   if (s === 'da_review') return 'This request is under District Attorney review.'
   if (s === 'ag_review') return 'This request is under Attorney General review.'
-  if (s === 'submitted_to_judge') return r.assigned_judge_id ? 'This request is assigned to a Judge for judicial review.' : 'This request is awaiting judicial assignment.'
+  if (s === 'submitted_to_judge') {
+    if (r.assigned_judge_id) return 'This request is assigned to a Judge for judicial review.'
+    if (sealed) return 'This sealed request is not claimable from the judicial queue. It waits for formal judicial assignment.'
+    return 'This request cleared prosecutorial review and is waiting in the judicial queue — any eligible Judge may claim it.'
+  }
   if (s === 'judicial_review') return 'This request is under judicial review by the assigned Judge.'
   if (s === 'approved') return 'This request was approved and is now in its operational (issuance / service) phase.'
   if (s === 'denied') return 'This request was denied.'
   if (s === 'withdrawn') return 'This request was withdrawn by the requester.'
+  if (s === 'declined') return 'This request was declined by the prosecutor — a terminal prosecutorial refusal with the reason on record.'
+  if (s === 'cancelled') return 'This request was cancelled administratively with a recorded reason.'
+  if (s === 'superseded') return 'This request was superseded — a replacement request now carries the authority; the issued snapshot stays immutable.'
   return REVIEW_STATUS_LABEL[s] ?? s
 }
 
@@ -557,6 +650,9 @@ export function canReviewJusticeRole(
   reviewerRole: LegalViewer['justiceRole'], isOwner: boolean, requestedRole: string,
 ): boolean {
   if (isOwner) return true
+  // Minimal-DOJ appointment matrix (justice_appoint): the AG appoints
+  // prosecutors and judges; an Attorney General stays Owner-only.
+  if (requestedRole === 'prosecutor') return reviewerRole === 'attorney_general'
   if (requestedRole === 'assistant_district_attorney') return reviewerRole === 'district_attorney' || reviewerRole === 'attorney_general'
   if (requestedRole === 'district_attorney') return reviewerRole === 'attorney_general'
   // Judges are reviewed by the AG (server: 20260731010000). AG memberships
@@ -570,7 +666,11 @@ export function canAssignAsJudge(entry: { active: boolean; justice_role: string 
   return entry.active && entry.justice_role === 'judge'
 }
 export function canAssignAsProsecutor(entry: { active: boolean; justice_role: string }): boolean {
-  return entry.active && (entry.justice_role === 'assistant_district_attorney' || entry.justice_role === 'district_attorney')
+  return entry.active && (
+    entry.justice_role === 'prosecutor'
+    || entry.justice_role === 'assistant_district_attorney'
+    || entry.justice_role === 'district_attorney'
+  )
 }
 
 /* ── Target formatting ────────────────────────────────────────────────────── */

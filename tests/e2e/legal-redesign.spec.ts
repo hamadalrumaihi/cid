@@ -1,9 +1,12 @@
 /** Legal workflow redesign — functional E2E against the LIVE project
  *  (rls-test-* fixtures, PW_SUPABASE_SHIM-compatible, see liveAuth.ts).
  *
- *  Post-Phase-1 (migration 20260808140000_legal_lead_approval) the DOJ / ADA /
- *  Judge chain is retired — approval terminates at Bureau Lead+ and the
- *  request is then issued by CID. Covers the shipped surfaces end to end:
+ *  Minimal-DOJ revival (migration 20260816120000_minimal_doj_revival): a
+ *  Bureau Lead+ approval hands the request to the shared prosecutor queue —
+ *  it is no longer terminal, and issuance requires the prosecutor → judge
+ *  pipeline (DOJ fixture accounts, not yet provisioned; see
+ *  tests/rls/v163.test.ts). The furthest fixture here is `queuedWarrant`
+ *  (prosecutor_queue, unissued). Covers the shipped surfaces end to end:
  *   - investigator /legal landing (Overview metrics + needs-attention,
  *     Requests registry + filter row)
  *   - the guided create wizard (type cards → case & target → details →
@@ -265,8 +268,11 @@ test.describe('Legal workflow — E2E', () => {
     await as(page, fx().actors.lsb)
     // Never open the real print dialog in the harness.
     await page.addInitScript(() => { window.print = () => {} })
-    await page.goto(`/legal?request=${fx().leadApproved.id}`)
-    await expect(page.getByRole('heading', { name: fx().leadApproved.title })).toBeVisible({ timeout: 30_000 })
+    // queuedWarrant (prosecutor_queue) carries the frozen cid_approved version
+    // the print sheet renders from — printing gates on a version existing, not
+    // on issuance, so this surface stays testable without the DOJ fixtures.
+    await page.goto(`/legal?request=${fx().queuedWarrant.id}`)
+    await expect(page.getByRole('heading', { name: fx().queuedWarrant.title })).toBeVisible({ timeout: 30_000 })
 
     await page.getByRole('button', { name: 'Request actions' }).click()
     await page.getByRole('menuitem', { name: /Print court packet/ }).click()
@@ -275,7 +281,7 @@ test.describe('Legal workflow — E2E', () => {
     // @media print swaps it in — assert the DOM, not the dialog).
     const sheet = page.locator('.legal-print-sheet')
     await expect(sheet).toHaveCount(1)
-    await expect(sheet).toContainText(fx().leadApproved.number)
+    await expect(sheet).toContainText(fx().queuedWarrant.number)
     await expect(sheet).toContainText('State of San Andreas')
   })
 

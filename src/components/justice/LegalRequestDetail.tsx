@@ -41,7 +41,7 @@ import { EmptyState, Notice } from '@/components/ui/Notice'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
 import {
   ClassificationBadge, DeadlineChip, StatusChip, buildLegalViewer, reviewTone,
-  useLegalPeople, useMyProsecutorBureaus,
+  useLegalPeople, useMyJusticeRole, useMyProsecutorBureaus,
 } from './legalShared'
 import { LegalStageTracker } from './LegalStageTracker'
 import { CourtPacketPrint } from './dossier/CourtPacketPrint'
@@ -87,6 +87,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
   const [printPreparedAt, setPrintPreparedAt] = useState<string | null>(null)
   const people = useLegalPeople(requestId)
   const prosecutorBureaus = useMyProsecutorBureaus()
+  const dojRole = useMyJusticeRole()
   const v = useTableVersion('legal_requests')
   const [tick, setTick] = useState(0)
   const reload = useCallback(() => setTick((t) => t + 1), [])
@@ -236,8 +237,17 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
     && status === 'submitted_to_doj' && (!me || r.assigned_ada_id !== me)
   const currentVersion = versions.find((x) => x.id === r.current_version_id) ?? versions[0] ?? null
 
-  const viewer = buildLegalViewer(auth, prosecutorBureaus)
+  const viewer = buildLegalViewer(auth, prosecutorBureaus, dojRole)
   const disposition = dispositionFor(r, viewer, now)
+  // "Current owner" — the named holder when one exists, else the responsible
+  // role (the queue, the bench, the investigator, …).
+  const currentOwner = status === 'prosecutor_review' && r.assigned_prosecutor_id
+    ? name(r.assigned_prosecutor_id)
+    : ['judicial_review', 'submitted_to_judge'].includes(status) && r.assigned_judge_id
+      ? name(r.assigned_judge_id)
+      : status === 'ada_review' && r.assigned_ada_id
+        ? name(r.assigned_ada_id)
+        : disposition.responsibleRoleLabel
 
   const promptSig = () => uiPrompt('Type your name to sign this action.', { title: 'Signature', placeholder: profile?.display_name ?? '' })
 
@@ -389,12 +399,29 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
 
         <LegalStageTracker request={r} className="mt-4 border-t border-white/5 pt-4" />
 
-        <p className="mt-3 text-sm text-slate-300">
-          <span className="font-semibold text-white">{disposition.stageLabel}</span>
-          {disposition.responsibleRoleLabel !== '—' && (
-            <span className="text-slate-400"> — awaiting {disposition.responsibleRoleLabel}</span>
-          )}
-        </p>
+        {/* Disposition strip: stage · current owner · next required action ·
+            responsible bureau — the four facts every seat needs at a glance. */}
+        <dl className="mt-3 grid gap-x-6 gap-y-2 border-t border-white/5 pt-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <dt className="text-xs font-semibold text-slate-400">Stage</dt>
+            <dd className="text-sm font-semibold text-white">{disposition.stageLabel}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold text-slate-400">Current owner</dt>
+            <dd className="text-sm text-slate-200">{currentOwner}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold text-slate-400">Next required action</dt>
+            <dd className="text-sm text-slate-200">{disposition.nextAction}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold text-slate-400">Responsible bureau</dt>
+            <dd className="text-sm text-slate-200">{r.responsible_bureau ?? '—'}</dd>
+          </div>
+        </dl>
+        {!disposition.viewerCanAct && disposition.whyNoAction && (
+          <p className="mt-2 text-xs text-slate-400">{disposition.whyNoAction}</p>
+        )}
         <details className="mt-1">
           <summary className="cursor-pointer rounded text-xs font-semibold text-badge-200 hover:text-white">
             Why is it here?
@@ -432,7 +459,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
           />
         )}
         {section === 'review' && <ReviewSection actions={actions} name={name} />}
-        {section === 'decision' && <DecisionSection r={r} name={name} />}
+        {section === 'decision' && <DecisionSection r={r} name={name} onOpenRequest={openRequest} />}
         {section === 'service' && <ServiceSection r={r} name={name} canFulfil={cidActive && r.request_type === 'warrant'} />}
         {section === 'activity' && <ActivitySection actions={actions} participants={participants} name={name} />}
       </div>
@@ -442,7 +469,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
         r={r} busy={busy} act={act} promptSig={promptSig}
         exhibits={exhibits}
         editable={editable} canCidReview={canCidReview}
-        cidActive={cidActive} awarenessOnly={awarenessOnly}
+        cidActive={cidActive} viewer={viewer} awarenessOnly={awarenessOnly}
         disposition={disposition} now={now} onSubmitToCid={submitToCid}
       />
 
