@@ -155,7 +155,7 @@ Key rules (all server-enforced):
 | Stage | Who / RPC |
 | --- | --- |
 | Draft + packet | creator (any CID author): `create_legal_request`, `update_legal_draft`, `add_legal_exhibit` / `remove_legal_exhibit` — reviewers later see **only** the selected exhibits, never the whole case |
-| CID supervisor gate | `submit_legal_request_to_cid` → `review_legal_request_as_cid` (source report finalized, required fields, subject or search targets, valid responsible bureau via `private.legal_resolve_bureau`) |
+| CID supervisor gate | `submit_legal_request_to_cid` → `review_legal_request_as_cid` (source report finalized, required fields, subject or search targets, valid responsible bureau via `private.legal_resolve_bureau` — for JTF-assigned cases the chain derives it from `originating_bureau` → case-number prefix → lead detective's division → creator's division and persists the answer; approval is decided by the responsible bureau's Bureau Lead or DD+, [`20260815120000_jtf_legal_routing.sql`](../supabase/migrations/20260815120000_jtf_legal_routing.sql)) |
 | Legal approval | `review_legal_request_as_cid(approve\|deny\|return)` — a **Bureau Lead+** (`private.is_command()`) approves, denies, or returns. **Warrants and subpoenas both terminate at Lead+ approval** — there is **no** ADA/DA/AG/Judge step. Approve lands at `review_status='approved'` (in-city authorization; `fulfilment_status` stays `unissued`) |
 | Fulfilment (CID side) | `issue_legal_request`, `record_warrant_execution`, `record_warrant_return`, `record_subpoena_service`, `record_subpoena_compliance`, `close_legal_request`, `withdraw_legal_request` (gated by `private.can_fulfil_legal`) |
 

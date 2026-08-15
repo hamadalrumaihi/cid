@@ -447,6 +447,7 @@ alter table public.cases add constraint cases_operation_id_fkey FOREIGN KEY (ope
 alter table public.cases add constraint cases_signoff_assignee_id_fkey FOREIGN KEY (signoff_assignee_id) REFERENCES public.profiles(id);
 alter table public.cases add constraint cases_signoff_submitted_by_fkey FOREIGN KEY (signoff_submitted_by) REFERENCES public.profiles(id);
 alter table public.cases add constraint cases_priority_check CHECK (((priority IS NULL) OR (priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
+alter table public.cases add constraint cases_originating_bureau_permanent CHECK (((originating_bureau IS NULL) OR (originating_bureau = ANY (ARRAY['LSB'::public.bureau, 'BCB'::public.bureau, 'SAB'::public.bureau]))));
 alter table public.cases enable row level security;
 
 create table public.cid_records (
@@ -3262,6 +3263,24 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION private.default_case_originating_bureau()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  if new.originating_bureau = 'JTF' then new.originating_bureau := null; end if;
+  if new.bureau = 'JTF' and new.originating_bureau is null then
+    select p.division into new.originating_bureau
+      from public.profiles p
+     where p.id = coalesce(new.created_by, (select auth.uid()))
+       and p.division in ('LSB', 'BCB', 'SAB');
+  end if;
+  return new;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION private.block_direct_report_finalize()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -3905,6 +3924,81 @@ begin
           or exists (select 1 from auth.users u
                       where u.id = p.id and u.email like 'rls-test-%@cidportal.test'));
 
+  return c;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.convert_case_to_joint(p_case uuid, p_members jsonb, p_note text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); c public.cases; v_n int;
+begin
+  if not private.can_manage_joint(p_case) then raise exception 'not permitted to manage this case'; end if;
+  select * into c from public.cases where id = p_case for update;
+  if not found then raise exception 'case not found'; end if;
+  if c.is_joint_case then raise exception 'case is already a joint case'; end if;
+  update public.cases
+     set is_joint_case = true,
+         originating_bureau = coalesce(originating_bureau,
+           case when bureau in ('LSB', 'BCB', 'SAB') then bureau end),
+         joint_case_created_by = v_uid, joint_case_created_at = now(),
+         joint_case_ended_by = null, joint_case_ended_at = null
+   where id = p_case;
+  v_n := private.joint_apply_members(p_case, p_members, v_uid);
+  insert into public.audit_log (actor_id, action, entity, entity_id)
+  values (v_uid, 'JOINT_CASE_CREATED', 'cases', p_case);
+  return jsonb_build_object('case_id', p_case, 'members_added', v_n);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.resolve_case_originating_bureau(p_case uuid, p_bureau public.bureau, p_reason text DEFAULT NULL::text)
+ RETURNS public.cases
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_uid uuid := (select auth.uid()); c public.cases; me public.profiles;
+        v_old public.bureau; v_reason text := btrim(coalesce(p_reason, ''));
+begin
+  select * into me from public.profiles where id = v_uid;
+  if me.id is null or not coalesce(me.active, false)
+     or not (me.role in ('senior_detective', 'bureau_lead', 'deputy_director', 'director')
+             or coalesce(me.is_owner, false)) then
+    raise exception 'only a CID supervisor may set the responsible bureau';
+  end if;
+  select * into c from public.cases where id = p_case for update;
+  if not found or not private.can_access_case(p_case) then
+    raise exception 'case not found or not accessible';
+  end if;
+  if p_bureau not in ('LSB', 'BCB', 'SAB') then
+    raise exception 'the responsible bureau must be LSB, BCB, or SAB';
+  end if;
+  if c.bureau in ('LSB', 'BCB', 'SAB') then
+    raise exception 'this case''s responsible bureau is its own bureau (%) — use the reassign-bureau workflow to move it', c.bureau;
+  end if;
+  v_old := c.originating_bureau;
+  if v_old in ('LSB', 'BCB', 'SAB') then
+    if v_old = p_bureau then
+      raise exception 'the responsible bureau is already %', p_bureau;
+    end if;
+    if not (me.role in ('deputy_director', 'director') or coalesce(me.is_owner, false)) then
+      raise exception 'the responsible bureau is already set to % — only a Deputy Director or higher may change it', v_old;
+    end if;
+    if v_reason = '' then
+      raise exception 'a reason is required to change the responsible bureau';
+    end if;
+  end if;
+  update public.cases set originating_bureau = p_bureau where id = p_case returning * into c;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid,
+          case when v_old in ('LSB', 'BCB', 'SAB')
+               then 'ORIGINATING_BUREAU_CHANGED' else 'ORIGINATING_BUREAU_SET' end,
+          'cases', p_case,
+          jsonb_build_object('bureau', p_bureau, 'previous', v_old, 'source', 'manual',
+                             'reason', nullif(left(v_reason, 500), '')));
   return c;
 end $function$
 ;
@@ -5358,6 +5452,7 @@ CREATE TRIGGER cases_audit AFTER INSERT OR DELETE OR UPDATE ON public.cases FOR 
 CREATE TRIGGER cases_touch BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.touch_cases();
 CREATE TRIGGER trg_block_direct_signoff BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_signoff();
 CREATE TRIGGER trg_block_direct_case_bureau BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_bureau();
+CREATE TRIGGER trg_default_case_originating_bureau BEFORE INSERT ON public.cases FOR EACH ROW EXECUTE FUNCTION private.default_case_originating_bureau();
 CREATE TRIGGER trg_case_closed_at BEFORE UPDATE OF status ON public.cases FOR EACH ROW EXECUTE FUNCTION public.set_case_closed_at();
 CREATE TRIGGER cases_block_archive_cols BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_archive();
 CREATE TRIGGER cid_records_touch BEFORE UPDATE ON public.cid_records FOR EACH ROW EXECUTE FUNCTION public.cid_touch_updated_at();
@@ -8464,3 +8559,48 @@ create policy wl_sel on public.watchlist
 -- surveillance_alerts and intelligence_tips added to the supabase_realtime
 -- publication (RLS applies to payloads).
 -- Definitive SQL in supabase/migrations/20260812120000_surveillance_domain.sql.
+
+-- ============================================================
+-- 20260815120000_jtf_legal_routing (JTF legal routing — operational
+-- assignment vs legal routing). ADDITIVE ONLY (no table/column drops, no data
+-- deletes). cases.bureau stays the operational assignment (may be 'JTF');
+-- cases.originating_bureau is the RESPONSIBLE bureau for legal routing and
+-- 'JTF' is now unstorable there via the new
+-- cases_originating_bureau_permanent CHECK (rendered above in the cases
+-- block). New BEFORE INSERT trigger trg_default_case_originating_bureau →
+-- private.default_case_originating_bureau() (both rendered above): a case
+-- born with bureau='JTF' and no explicit originating_bureau defaults it from
+-- the creator's division when permanent; an incoming 'JTF' originating value
+-- is normalized to null. private.legal_resolve_bureau(uuid) (comment-tracked
+-- here, like the rest of the 20260714 legal_* private family) is re-emitted
+-- VOLATILE (was stable; only ever called from definer RPCs, never from a
+-- policy/SELECT context) with an extended chain: cases.bureau when permanent
+-- → cases.originating_bureau when permanent → NEW the case-number prefix
+-- (LSB/BCB/SAB) → NEW the lead detective's division → NEW the creator's
+-- division; a successful derivation is PERSISTED to cases.originating_bureau
+-- (guarded on "still unset") and audited (ORIGINATING_BUREAU_SET,
+-- source='derived:…'); nothing resolvable still raises the clear
+-- supervisor-must-set message. public.convert_case_to_joint(uuid, jsonb,
+-- text) is re-emitted (rendered above) with ONE change from the 20260713040000
+-- body: the originating_bureau backfill now only records a PERMANENT bureau
+-- (case when bureau in LSB/BCB/SAB), so a JTF case keeps its existing
+-- responsible bureau or stays null. public.resolve_case_originating_bureau
+-- had its 2-arg (uuid, public.bureau) signature DROPPED and was recreated as
+-- (p_case uuid, p_bureau public.bureau, p_reason text default null)
+-- returning public.cases (rendered above; database.types.ts updated): SETTING
+-- a missing responsible bureau stays Senior Detective+; CHANGING an
+-- already-valid value is Deputy Director+/Owner with a required reason
+-- (case_reassign_bureau parity), audited ORIGINATING_BUREAU_CHANGED vs _SET;
+-- a case whose own bureau is permanent is refused (case_reassign_bureau is
+-- the path). private.can_approve_legal(p_request uuid, p_user uuid)
+-- (comment-tracked here, like its 20260808140000 introduction above) is
+-- re-emitted NARROWER: a bureau_lead may now approve only requests routed to
+-- THEIR bureau (me.division = r.responsible_bureau); deputy_director/director
+-- keep cross-bureau authority; self-approval stays blocked. One-time
+-- idempotent backfill (data, not schema): JTF cases with a missing
+-- responsible bureau and any originating_bureau='JTF'-poisoned row derived
+-- via case-number prefix → permanent bureau → lead → creator, audited
+-- ORIGINATING_BUREAU_BACKFILL; unresolvable 'JTF' values normalized to NULL.
+-- All function grants unchanged in audience (revoked from public/anon; the
+-- two public RPCs granted authenticated + service_role). Definitive SQL in
+-- supabase/migrations/20260815120000_jtf_legal_routing.sql.
