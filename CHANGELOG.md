@@ -8,6 +8,61 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Bureau prosecutor queues, review routing, stages, and evidence designation
+
+Migration `20260818120000_bureau_queues_stages` refines the minimal-DOJ
+workflow and the case workspace:
+
+- **Bureau-scoped prosecutor queues.** Every prosecutor holds exactly one
+  home bureau (`justice_memberships.prosecutor_bureau`, required at
+  appointment and on staged transfers) and sees/claims only their own
+  bureau's shared queue. The Attorney General oversees all three queues and
+  grants **temporary cross-bureau coverage** (`prosecutor_coverage` —
+  explicit, dated, expiring, audited, endable, never permanent) via
+  `justice_set_coverage` / `justice_end_coverage`; AG status alone never
+  authorizes prosecutorial work. Claiming, AG assignment, prosecutor lane
+  visibility, and the approve fan-out all ride one predicate
+  (`private.prosecutor_bureaus_of` = home + live coverage); a queue with no
+  covering prosecutor alerts the AG + Owner.
+- **CID review routing.** An ordinary bureau case is gated by the
+  responsible bureau's Bureau Lead only; a **JTF-assigned case by ANY
+  eligible Bureau Lead**; Deputy Director / Director / Owner remain the
+  fallback everywhere — and every decision by anyone other than the
+  responsible bureau's own lead is audited with `fallback` /
+  `jtf_any_lead` flags.
+- **Judge-returned requests.** Corrections go to the investigator and
+  resubmit **straight back to the bureau's prosecutor queue**
+  (`resubmitted_to_prosecutor`); renewed Bureau Lead review happens ONLY on
+  an explicitly **declared** material change (3-arg
+  `submit_legal_request_to_cid`; the declaration is logged, never inferred).
+- **Limited DOJ case access.** `legal_request_case_brief()` gives
+  prosecutors/judges a database-enforced brief: concise case summary plus
+  ONLY the request's referenced exhibits, finalized-report content, and
+  media metadata — never case access.
+- **Investigative stages.** `cases.investigative_stage` (intake →
+  active_investigation → legal_process → enforcement_ready →
+  pending_closure → closed) is a stored, manually-moved dimension distinct
+  from case status: RPC-only (`case_set_stage`, required reason, case lead /
+  Senior Detective+ / Owner), trigger-frozen against direct writes, audited
+  with previous/new stage + actor + reason.
+- **Evidence vs. general media.** `media_designate_evidence()` promotes a
+  case upload to a designated evidence record (auto or custom reference,
+  designating actor + timestamp) or clears it — the original uploader and
+  timestamps are never touched.
+- **Direct DOJ assignment handover.** `justice_appoint` (now 4-arg, bureau
+  required for prosecutors) reassigns an appointed member's open led cases
+  to the acting authority as **interim lead** (audited per case, command
+  notified) — work is never stranded, with no approval wait reintroduced.
+- **Manual review.** `justice_migration_review()` also surfaces prosecutors
+  without a home bureau and JTF cases missing a responsible bureau.
+- **UI.** Bureau-labeled DOJ queues with AG all-queue oversight + coverage
+  management; a material-change declaration on resubmission; a case-brief
+  panel for justice reviewers; an investigative-stage control with audited
+  history; the Media tab split into Evidence / General uploads with
+  promotion; a dedicated destructive case-deletion screen (exact case-number
+  confirmation + dependency summary + reason); and the Action Center as the
+  portal's default landing page.
+
 ### Minimal DOJ, member transfers, and the investigative-workspace redesign
 
 The legal pipeline regains a prosecutorial + judicial stage in minimal form

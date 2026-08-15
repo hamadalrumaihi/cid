@@ -79,6 +79,8 @@ Two independent dimensions on `public.cases` (see [handbook ch. 4.1](handbook/04
 
 **Status board** — `status ∈ open / active / cold / closed` (`CASE_STATUSES`, `src/lib/signoff.ts`). Moved by a direct RLS-checked `update('cases', {status})` from anyone with case access (`private.can_access_case`: own bureau, lead, creator, command, access grant, or active joint assignment); a trigger stamps `closed_at`.
 
+**Investigative stage** — a third, investigator-facing dimension since [`20260818120000_bureau_queues_stages.sql`](../supabase/migrations/20260818120000_bureau_queues_stages.sql): `investigative_stage ∈ intake / active_investigation / legal_process / enforcement_ready / pending_closure / closed`, distinct from `status`. Moves are **manual and RPC-only** — direct writes are frozen by the non-definer trigger `private.block_direct_case_stage()`; `case_set_stage(p_case, p_stage, p_reason)` requires a non-blank reason and is allowed for the case lead, Senior Detective+ supervisors, or the Owner, and every change is audited (`CASE_STAGE_CHANGED` with previous stage, new stage, actor, reason, timestamp). Nothing moves a stage automatically.
+
 **Sign-off chain** — a separate `signoff_status`/`signoff_stage` dimension, movable **only** through the sign-off RPCs ([`20260617190100_signoff_server_side_rpcs.sql`](../supabase/migrations/20260617190100_signoff_server_side_rpcs.sql) as hardened by [`20260702170000`](../supabase/migrations/20260702170000_signoff_owner_only_submit.sql), [`20260706140000`](../supabase/migrations/20260706140000_signoff_decide_assignee_access.sql), and [`20260721040000_signoff_integrity.sql`](../supabase/migrations/20260721040000_signoff_integrity.sql), which adds the command-override lane); direct column writes are trigger-blocked. (A case's *bureau* is likewise frozen — moving one is `case_reassign_bureau()`, DD/Dir/Owner only; see [AUTHORIZATION.md §4](AUTHORIZATION.md).)
 
 ```mermaid
@@ -133,30 +135,57 @@ Full narrative in [DOJ-INTEGRATION.md](DOJ-INTEGRATION.md); server surface in [`
 - `review_status`: the review pipeline below
 - `fulfilment_status`: post-approval lifecycle (warrant: `unissued / issued / executed / returned / expired / revoked / closed`; subpoena: `served / compliance_pending / records_received / testimony_completed / non_compliance / return_recorded / closed`)
 
-**Active pipeline (both warrants and subpoenas).** Approve terminates at
-`review_status='approved'` and authorizes applying the warrant/subpoena in-city;
-it does **not** auto-activate — issuance/execution is the separate CID fulfilment
-step (`fulfilment_status` stays `unissued` until `issue_legal_request`):
+**Active pipeline (both warrants and subpoenas).** CID review hands off to the
+DOJ ([`20260816120000_minimal_doj_revival.sql`](../supabase/migrations/20260816120000_minimal_doj_revival.sql)),
+whose prosecutor queues are **bureau-scoped** since
+[`20260818120000_bureau_queues_stages.sql`](../supabase/migrations/20260818120000_bureau_queues_stages.sql):
+each prosecutor has exactly one home bureau (`justice_memberships.prosecutor_bureau`)
+and claims only their own bureau's queue; the Attorney General oversees all
+three and grants **temporary, audited coverage** (`prosecutor_coverage`) when a
+bureau has no prosecutor — AG status alone never substitutes for coverage.
+Judicial approval terminates at `review_status='approved'`; issuance stays a
+separate CID fulfilment step (`fulfilment_status` stays `unissued` until
+`issue_legal_request`):
 
 ```mermaid
 stateDiagram-v2
     [*] --> not_submitted: create_legal_request() — any CID author
     not_submitted --> cid_supervisor_review: submit_legal_request_to_cid()
-    cid_supervisor_review --> returned: review_legal_request_as_cid(return) — Bureau Lead+
-    returned --> cid_supervisor_review: resubmit after edits
-    cid_supervisor_review --> approved: review_legal_request_as_cid(approve) — Bureau Lead+ (private.is_command())
-    cid_supervisor_review --> denied: review_legal_request_as_cid(deny) — Bureau Lead+
-    approved --> [*]: fulfilment takes over (issue → execute/serve → return → close)
+    cid_supervisor_review --> returned_by_cid: review_legal_request_as_cid(return)
+    returned_by_cid --> cid_supervisor_review: resubmit (always CID review)
+    cid_supervisor_review --> prosecutor_queue: review_legal_request_as_cid(approve) — responsible bureau's Lead (JTF case — ANY Lead); DD/Dir/Owner audited fallback
+    cid_supervisor_review --> denied: review_legal_request_as_cid(deny)
+    prosecutor_queue --> prosecutor_review: legal_claim_prosecutor() — own-bureau/coverage only — or AG legal_assign_prosecutor()
+    prosecutor_review --> submitted_to_judge: review_legal_request_as_prosecutor(approve)
+    prosecutor_review --> returned_by_prosecutor: return to investigator
+    prosecutor_review --> declined: decline (terminal)
+    returned_by_prosecutor --> prosecutor_queue: resubmit — FAST LANE (no repeated CID review)
+    returned_by_prosecutor --> cid_supervisor_review: resubmit with DECLARED material change
+    submitted_to_judge --> judicial_review: claim_legal_request_as_judge() / assign_judge()
+    judicial_review --> approved: decide_legal_request_as_judge(approve — reasoning + conditions)
+    judicial_review --> denied
+    judicial_review --> returned_by_judge: return to investigator
+    returned_by_judge --> prosecutor_queue: resubmit — FAST LANE
+    returned_by_judge --> cid_supervisor_review: resubmit with DECLARED material change
+    approved --> [*]: CID fulfilment (issue → execute/serve → return → close)
     denied --> [*]
+    declined --> [*]
 ```
+
+Return routing is explicit, never inferred: `submit_legal_request_to_cid(p_request,
+p_change_summary, p_material_change)` sends a corrected judge-/prosecutor-returned
+request **straight back to its bureau's prosecutor queue** unless the investigator
+sets `p_material_change=true` — the declaration is logged
+(`material_change_declared`) and the request re-enters full CID review.
 
 Key rules (all server-enforced):
 
 | Stage | Who / RPC |
 | --- | --- |
 | Draft + packet | creator (any CID author): `create_legal_request`, `update_legal_draft`, `add_legal_exhibit` / `remove_legal_exhibit` — reviewers later see **only** the selected exhibits, never the whole case |
-| CID supervisor gate | `submit_legal_request_to_cid` → `review_legal_request_as_cid` (source report finalized, required fields, subject or search targets, valid responsible bureau via `private.legal_resolve_bureau` — for JTF-assigned cases the chain derives it from `originating_bureau` → case-number prefix → lead detective's division → creator's division and persists the answer; the gate is decided by the responsible bureau's Bureau Lead or DD+, [`20260815120000_jtf_legal_routing.sql`](../supabase/migrations/20260815120000_jtf_legal_routing.sql)). **Approve hands off to the shared prosecutor queue** ([`20260816120000_minimal_doj_revival.sql`](../supabase/migrations/20260816120000_minimal_doj_revival.sql)): `prosecutor_queue` → atomic claim (`legal_claim_prosecutor`) or AG assignment → `prosecutor_review` (approve / return / decline) → `submitted_to_judge` → judge claim/assignment → `judicial_review` → approved (reasoning + conditions, frozen judicial version) / denied / returned. Issuance stays CID-side (`issue_legal_request`, unchanged); conflicts recuse on permanent user IDs; deactivation auto-requeues held work |
-| Legal approval | `review_legal_request_as_cid(approve\|deny\|return)` — a **Bureau Lead+** (`private.is_command()`) approves, denies, or returns. **Warrants and subpoenas both terminate at Lead+ approval** — there is **no** ADA/DA/AG/Judge step. Approve lands at `review_status='approved'` (in-city authorization; `fulfilment_status` stays `unissued`) |
+| CID supervisor gate | `submit_legal_request_to_cid` → `review_legal_request_as_cid` (source report finalized, required fields, subject or search targets, valid responsible bureau via `private.legal_resolve_bureau` — for JTF-assigned cases the chain derives it from `originating_bureau` → case-number prefix → lead detective's division → creator's division and persists the answer, [`20260815120000_jtf_legal_routing.sql`](../supabase/migrations/20260815120000_jtf_legal_routing.sql)). **Who decides** ([`20260818120000`](../supabase/migrations/20260818120000_bureau_queues_stages.sql)): an ordinary bureau case — the responsible bureau's Bureau Lead ONLY; a **JTF-assigned case — ANY eligible Bureau Lead**; DD/Director/Owner are the fallback everywhere, and every decision by anyone other than the responsible bureau's own lead is audited with `fallback`/`jtf_any_lead` flags. The creator can never decide. **Approve hands off to the responsible bureau's prosecutor queue** ([`20260816120000_minimal_doj_revival.sql`](../supabase/migrations/20260816120000_minimal_doj_revival.sql)): atomic claim (`legal_claim_prosecutor` — own home bureau or live AG-granted coverage only) or AG assignment (assignee must cover the bureau) → `prosecutor_review` (approve / return / decline) → `submitted_to_judge` → judge claim/assignment → `judicial_review` → approved (reasoning + conditions, frozen judicial version) / denied / returned. If a queue has no covering prosecutor, the approve fan-out alerts the AG + Owner instead. Issuance stays CID-side (`issue_legal_request`, unchanged); conflicts recuse on permanent user IDs; deactivation auto-requeues held work |
+| DOJ case visibility | Prosecutors/judges never gain case access — `legal_request_case_brief(p_request)` returns the concise case summary plus ONLY the material the request references (exhibits, finalized-report content, media metadata), gated by `private.can_view_legal_request` — database-enforced, not a UI convention ([`20260818120000`](../supabase/migrations/20260818120000_bureau_queues_stages.sql)) |
+| Coverage | `justice_set_coverage(p_user, p_bureau, p_reason, p_expires_at?)` / `justice_end_coverage` — AG/Owner only; explicit, dated, expiring, audited (`PROSECUTOR_COVERAGE_GRANTED/ENDED`), endable at any time, never permanent. `private.prosecutor_bureaus_of(u)` = home bureau + live unexpired coverage — the single predicate behind claiming, assignment, visibility, and fan-out |
 | Fulfilment (CID side) | `issue_legal_request`, `record_warrant_execution`, `record_warrant_return`, `record_subpoena_service`, `record_subpoena_compliance`, `close_legal_request`, `withdraw_legal_request` (gated by `private.can_fulfil_legal`) |
 
 <details>
