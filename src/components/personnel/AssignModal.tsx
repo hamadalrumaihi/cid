@@ -17,7 +17,7 @@ import { rpc, updateNoSelect } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import type { RosterProfile } from '@/lib/profiles'
 import {
-  BUREAUS, ROLE_LABEL, bureauLabel, canRemoveMember, canTransfer,
+  BUREAUS, PERMANENT_BUREAUS, ROLE_LABEL, bureauLabel, canRemoveMember, canTransfer,
   getAssignableRoles, isCommandRole, roleLabel, type RoleParty,
 } from '@/lib/roles'
 import { justiceRoleLabel } from '@/lib/justice'
@@ -49,6 +49,9 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
   const [toBureau, setToBureau] = useState<Bureau | ''>('')
   const [justiceRole, setJusticeRole] = useState('')
   const [dojRole, setDojRole] = useState('')
+  // Prosecutors belong to ONE home bureau queue (LSB/BCB/SAB) — required by
+  // justice_appoint for role=prosecutor, forbidden for judge/AG.
+  const [dojBureau, setDojBureau] = useState('')
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -68,6 +71,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
     setToBureau('')
     setJusticeRole('')
     setDojRole('')
+    setDojBureau('')
     setReason('')
   }
 
@@ -103,6 +107,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
   // surface verbatim.
   const assignDoj = async () => {
     if (!dojRole) { toast('Pick the DOJ role.', 'warn'); return }
+    if (dojRole === 'prosecutor' && !dojBureau) { toast('Pick the prosecutor’s home bureau (LSB, BCB, or SAB).', 'warn'); return }
     const ok = await uiConfirm(
       p.active
         ? `This ends ${p.display_name}'s CID membership immediately and activates their DOJ access. Cases they lead keep them as lead until handed over. Continue?`
@@ -112,7 +117,10 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
     if (!ok) return
     setBusy(true)
     const res = await rpc('justice_appoint', {
-      p_user: p.id, p_role: dojRole, ...(reason.trim() ? { p_reason: reason.trim() } : {}),
+      p_user: p.id, p_role: dojRole,
+      ...(reason.trim() ? { p_reason: reason.trim() } : {}),
+      // Home bureau rides ONLY on prosecutor appointments (server-enforced).
+      ...(dojRole === 'prosecutor' ? { p_bureau: dojBureau as never } : {}),
     })
     setBusy(false)
     if (res.error) { toast(res.error.message, 'danger'); return }
@@ -347,7 +355,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
               </p>
               <Field label="DOJ role" required hint={actor.is_owner ? undefined : 'Attorney General appointments are Owner-only.'}>
                 {(id) => (
-                  <Select id={id} value={dojRole} onChange={(e) => setDojRole(e.target.value)}>
+                  <Select id={id} value={dojRole} onChange={(e) => { setDojRole(e.target.value); setDojBureau('') }}>
                     <option value="">Select…</option>
                     <option value="prosecutor">Prosecutor</option>
                     <option value="judge">Judge</option>
@@ -355,10 +363,20 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
                   </Select>
                 )}
               </Field>
+              {dojRole === 'prosecutor' && (
+                <Field label="Home bureau" required hint="A prosecutor works exactly one bureau queue. The Attorney General can grant temporary cross-bureau coverage later.">
+                  {(id) => (
+                    <Select id={id} value={dojBureau} onChange={(e) => setDojBureau(e.target.value)}>
+                      <option value="">Select…</option>
+                      {PERMANENT_BUREAUS.map((b) => <option key={b} value={b}>{b} — {bureauLabel(b)}</option>)}
+                    </Select>
+                  )}
+                </Field>
+              )}
               <Field label="Reason" hint="Optional — recorded on the transfer and in the audit log.">
                 {(id) => <Input id={id} value={reason} onChange={(e) => setReason(e.target.value)} autoComplete="off" />}
               </Field>
-              <Button variant={p.active ? 'danger' : 'primary'} className="w-full" disabled={busy || !dojRole} onClick={() => void assignDoj()}>
+              <Button variant={p.active ? 'danger' : 'primary'} className="w-full" disabled={busy || !dojRole || (dojRole === 'prosecutor' && !dojBureau)} onClick={() => void assignDoj()}>
                 Assign to DOJ — effective immediately
               </Button>
             </div>

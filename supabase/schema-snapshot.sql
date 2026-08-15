@@ -435,7 +435,8 @@ create table public.cases (
   joint_case_created_at timestamp with time zone,
   joint_case_ended_by uuid,
   joint_case_ended_at timestamp with time zone,
-  priority text
+  priority text,
+  investigative_stage text not null default 'intake'::text
 );
 alter table public.cases add constraint cases_joint_case_created_by_fkey FOREIGN KEY (joint_case_created_by) REFERENCES public.profiles(id);
 alter table public.cases add constraint cases_joint_case_ended_by_fkey FOREIGN KEY (joint_case_ended_by) REFERENCES public.profiles(id);
@@ -448,7 +449,11 @@ alter table public.cases add constraint cases_signoff_assignee_id_fkey FOREIGN K
 alter table public.cases add constraint cases_signoff_submitted_by_fkey FOREIGN KEY (signoff_submitted_by) REFERENCES public.profiles(id);
 alter table public.cases add constraint cases_priority_check CHECK (((priority IS NULL) OR (priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
 alter table public.cases add constraint cases_originating_bureau_permanent CHECK (((originating_bureau IS NULL) OR (originating_bureau = ANY (ARRAY['LSB'::public.bureau, 'BCB'::public.bureau, 'SAB'::public.bureau]))));
+alter table public.cases add constraint cases_investigative_stage_check CHECK (investigative_stage in ('intake', 'active_investigation', 'legal_process', 'enforcement_ready', 'pending_closure', 'closed'));
 alter table public.cases enable row level security;
+-- investigative_stage is a stored, manually-moved stage (distinct from status);
+-- direct writers are blocked by trg_block_direct_case_stage — case_set_stage()
+-- (reason required, audited) is the only path.
 
 create table public.cid_records (
   id uuid not null default gen_random_uuid(),
@@ -1115,14 +1120,19 @@ create table public.justice_memberships (
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
   ended_at timestamp with time zone,
-  expires_at timestamp with time zone
+  expires_at timestamp with time zone,
+  prosecutor_bureau public.bureau
 );
 alter table public.justice_memberships add constraint justice_memberships_pkey PRIMARY KEY (user_id);
 alter table public.justice_memberships add constraint justice_memberships_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id);
 alter table public.justice_memberships add constraint justice_memberships_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES public.profiles(id);
 alter table public.justice_memberships add constraint justice_memberships_justice_role_check CHECK (justice_role in ('assistant_district_attorney', 'district_attorney', 'attorney_general', 'judge', 'prosecutor'));
 alter table public.justice_memberships add constraint justice_memberships_check CHECK ((agency = 'doj' and justice_role in ('assistant_district_attorney', 'district_attorney', 'attorney_general', 'prosecutor')) or (agency = 'judiciary' and justice_role = 'judge'));
+alter table public.justice_memberships add constraint justice_memberships_prosecutor_bureau_check CHECK (prosecutor_bureau is null or prosecutor_bureau in ('LSB', 'BCB', 'SAB'));
 alter table public.justice_memberships enable row level security;
+-- prosecutor_bureau is the prosecutor's HOME bureau (exactly one of LSB/BCB/
+-- SAB; null for judges/AG and for legacy prosecutors pending manual
+-- assignment — surfaced by justice_migration_review).
 
 create table public.legal_holds (
   id uuid not null default gen_random_uuid(),
@@ -1454,6 +1464,30 @@ alter table public.prosecutor_bureau_assignments add constraint prosecutor_burea
 alter table public.prosecutor_bureau_assignments add constraint prosecutor_bureau_assignments_assigned_by_fkey FOREIGN KEY (assigned_by) REFERENCES public.profiles(id);
 alter table public.prosecutor_bureau_assignments enable row level security;
 
+create table public.prosecutor_coverage (
+  id uuid not null default gen_random_uuid(),
+  prosecutor_id uuid not null,
+  bureau public.bureau not null,
+  reason text not null,
+  authorized_by uuid not null,
+  starts_at timestamp with time zone not null default now(),
+  expires_at timestamp with time zone,
+  ended_at timestamp with time zone,
+  ended_by uuid,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.prosecutor_coverage add constraint prosecutor_coverage_pkey PRIMARY KEY (id);
+alter table public.prosecutor_coverage add constraint prosecutor_coverage_prosecutor_id_fkey FOREIGN KEY (prosecutor_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.prosecutor_coverage add constraint prosecutor_coverage_authorized_by_fkey FOREIGN KEY (authorized_by) REFERENCES public.profiles(id);
+alter table public.prosecutor_coverage add constraint prosecutor_coverage_ended_by_fkey FOREIGN KEY (ended_by) REFERENCES public.profiles(id);
+alter table public.prosecutor_coverage add constraint prosecutor_coverage_bureau_check CHECK (bureau in ('LSB', 'BCB', 'SAB'));
+alter table public.prosecutor_coverage enable row level security;
+-- TEMPORARY cross-bureau prosecutor coverage granted by the AG/Owner
+-- (explicit, dated, expiring, endable, audited). SELECT is the only policy
+-- (prosecutor_coverage_sel): writes are RPC-only via justice_set_coverage /
+-- justice_end_coverage (insert/update/delete revoked from authenticated and
+-- anon).
+
 create table public.media (
   id uuid not null default gen_random_uuid(),
   title text not null,
@@ -1476,7 +1510,10 @@ create table public.media (
   category text,
   featured boolean not null default false,
   archived_at timestamp with time zone,
-  observation_id uuid
+  observation_id uuid,
+  evidence_ref text,
+  evidence_designated_by uuid,
+  evidence_designated_at timestamp with time zone
 );
 alter table public.media add constraint media_pkey PRIMARY KEY (id);
 alter table public.media add constraint media_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
@@ -1488,10 +1525,14 @@ alter table public.media add constraint media_report_id_fkey FOREIGN KEY (report
 alter table public.media add constraint media_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.profiles(id);
 alter table public.media add constraint media_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id) ON DELETE SET NULL;
 alter table public.media add constraint media_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES public.surveillance_observations(id) ON DELETE SET NULL;
+alter table public.media add constraint media_evidence_designated_by_fkey FOREIGN KEY (evidence_designated_by) REFERENCES public.profiles(id);
 alter table public.media add constraint media_category_check CHECK (((category IS NULL) OR (category = ANY (ARRAY['scene'::text, 'people'::text, 'vehicles'::text, 'places'::text, 'surveillance'::text, 'documents'::text, 'report_media'::text, 'other'::text]))));
 alter table public.media enable row level security;
 -- archived_at = soft archive (hidden from default gallery views, restorable);
 -- the row, its URL and its RLS audience are unchanged — archive never deletes.
+-- evidence_ref/evidence_designated_by/evidence_designated_at mark a row as
+-- DESIGNATED EVIDENCE (uploader/identity untouched); set and cleared only via
+-- media_designate_evidence() (audited).
 
 create table public.member_transfers (
   id uuid not null default gen_random_uuid(),
@@ -3098,6 +3139,7 @@ CREATE INDEX mdt_exports_source_case_id_idx ON public.mdt_exports USING btree (s
 CREATE INDEX mdt_wanted_projections_person_id_idx ON public.mdt_wanted_projections USING btree (person_id);
 CREATE INDEX media_case_id_archived_at_idx ON public.media USING btree (case_id, archived_at);
 CREATE INDEX media_case_id_idx ON public.media USING btree (case_id);
+CREATE INDEX media_evidence_designated_by_fkey_idx ON public.media USING btree (evidence_designated_by) WHERE (evidence_designated_by IS NOT NULL);
 CREATE INDEX media_gang_id_fkey_idx ON public.media USING btree (gang_id);
 CREATE INDEX media_narcotic_id_fkey_idx ON public.media USING btree (narcotic_id);
 CREATE INDEX media_observation_idx ON public.media USING btree (observation_id);
@@ -3239,6 +3281,9 @@ CREATE UNIQUE INDEX one_active_primary_ada_per_bureau ON public.prosecutor_burea
 CREATE INDEX pba_bureau_active_idx ON public.prosecutor_bureau_assignments USING btree (bureau) WHERE (ends_at IS NULL);
 CREATE INDEX pba_prosecutor_idx ON public.prosecutor_bureau_assignments USING btree (prosecutor_id);
 CREATE INDEX prosecutor_bureau_assignments_assigned_by_idx ON public.prosecutor_bureau_assignments USING btree (assigned_by);
+CREATE INDEX prosecutor_coverage_prosecutor_idx ON public.prosecutor_coverage USING btree (prosecutor_id) WHERE (ended_at IS NULL);
+CREATE INDEX prosecutor_coverage_authorized_by_fkey_idx ON public.prosecutor_coverage USING btree (authorized_by);
+CREATE INDEX prosecutor_coverage_ended_by_fkey_idx ON public.prosecutor_coverage USING btree (ended_by);
 CREATE INDEX raid_compensations_case_id_fkey_idx ON public.raid_compensations USING btree (case_id);
 CREATE INDEX raid_compensations_created_by_fkey_idx ON public.raid_compensations USING btree (created_by);
 CREATE INDEX record_extraction_facts_account_idx ON public.record_extraction_facts USING btree (linked_account_id) WHERE (linked_account_id IS NOT NULL);
@@ -3353,6 +3398,20 @@ begin
        new.bureau              is distinct from old.bureau or
        new.originating_bureau  is distinct from old.originating_bureau) then
     raise exception 'case bureau can only be changed via case_reassign_bureau()';
+  end if;
+  return new;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION private.block_direct_case_stage()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if current_user in ('authenticated', 'anon')
+     and new.investigative_stage is distinct from old.investigative_stage then
+    raise exception 'the investigative stage can only be changed via case_set_stage()';
   end if;
   return new;
 end $function$
@@ -5522,6 +5581,868 @@ begin
 end $function$
 ;
 
+-- ── 20260818120000_bureau_queues_stages — re-emitted / new public RPC bodies
+-- (verbatim from the migration; all SECURITY DEFINER, search_path='', revoked
+-- from public/anon, granted authenticated + service_role). The private SQL
+-- helpers this wave touched (prosecutor_bureaus_of, can_view_legal_request,
+-- can_approve_legal, transfer_doj_set_membership) are comment-tracked in the
+-- trailing 20260818120000 note. ──
+
+create or replace function public.justice_set_coverage(
+  p_user uuid, p_bureau public.bureau, p_reason text, p_expires_at timestamptz default null)
+returns public.prosecutor_coverage
+language plpgsql security definer set search_path to '' as $$
+declare v_uid uuid := (select auth.uid()); c public.prosecutor_coverage;
+begin
+  if not (coalesce(private.justice_role_effective(v_uid) = 'attorney_general', false)
+          or private.owner_flag(v_uid)) then
+    raise exception 'only the Attorney General or Owner may manage coverage';
+  end if;
+  if btrim(coalesce(p_reason, '')) = '' then raise exception 'a reason is required'; end if;
+  if p_bureau not in ('LSB', 'BCB', 'SAB') then raise exception 'coverage bureau must be LSB, BCB, or SAB'; end if;
+  if coalesce(private.justice_role_effective(p_user) = 'prosecutor', false) is not true then
+    raise exception 'coverage can only be granted to an active Prosecutor';
+  end if;
+  if p_expires_at is not null and p_expires_at <= now() then
+    raise exception 'the expiry must be in the future';
+  end if;
+  insert into public.prosecutor_coverage (prosecutor_id, bureau, reason, authorized_by, expires_at)
+  values (p_user, p_bureau, btrim(p_reason), v_uid, p_expires_at)
+  returning * into c;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'PROSECUTOR_COVERAGE_GRANTED', 'prosecutor_coverage', c.id,
+          jsonb_build_object('prosecutor', p_user, 'bureau', p_bureau,
+                             'expires_at', p_expires_at, 'reason', left(p_reason, 300)));
+  insert into public.notifications (user_id, type, payload)
+  values (p_user, 'justice_membership_update', jsonb_build_object(
+    'reason', 'You were granted temporary prosecutor coverage for ' || p_bureau
+      || coalesce(' until ' || to_char(p_expires_at, 'YYYY-MM-DD HH24:MI'), '') || '.'));
+  return c;
+end $$;
+
+create or replace function public.justice_end_coverage(p_coverage uuid, p_reason text default null)
+returns public.prosecutor_coverage
+language plpgsql security definer set search_path to '' as $$
+declare v_uid uuid := (select auth.uid()); c public.prosecutor_coverage;
+begin
+  if not (coalesce(private.justice_role_effective(v_uid) = 'attorney_general', false)
+          or private.owner_flag(v_uid)) then
+    raise exception 'only the Attorney General or Owner may manage coverage';
+  end if;
+  select * into c from public.prosecutor_coverage where id = p_coverage for update;
+  if not found then raise exception 'coverage not found'; end if;
+  if c.ended_at is not null then raise exception 'coverage already ended'; end if;
+  update public.prosecutor_coverage
+     set ended_at = now(), ended_by = v_uid where id = p_coverage returning * into c;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'PROSECUTOR_COVERAGE_ENDED', 'prosecutor_coverage', c.id,
+          jsonb_build_object('prosecutor', c.prosecutor_id, 'bureau', c.bureau,
+                             'reason', left(coalesce(p_reason, ''), 300)));
+  return c;
+end $$;
+
+create or replace function public.legal_claim_prosecutor(p_request uuid)
+returns public.legal_requests
+language plpgsql security definer set search_path to '' as $$
+declare v_uid uuid := (select auth.uid()); r public.legal_requests; v_cap text;
+begin
+  if private.justice_role_effective(v_uid) is distinct from 'prosecutor' then
+    raise exception 'only an active Prosecutor may claim from the queue';
+  end if;
+  select * into r from public.legal_requests where id = p_request for update;
+  if not found then raise exception 'request not found'; end if;
+  if r.review_status <> 'prosecutor_queue' then
+    raise exception 'request is no longer in the prosecutor queue';
+  end if;
+  if not (r.responsible_bureau = any (private.prosecutor_bureaus_of(v_uid))) then
+    raise exception 'this request belongs to the % queue — outside your bureau (the Attorney General can grant temporary coverage)', r.responsible_bureau;
+  end if;
+  if r.classification = 'sealed' then
+    raise exception 'sealed requests require formal assignment by the Attorney General';
+  end if;
+  if r.created_by = v_uid then
+    raise exception 'conflict of interest: you created this request';
+  end if;
+  if private.legal_is_conflicted(p_request, v_uid) then
+    raise exception 'conflict of interest: you participated in this case as an investigator — recusal required';
+  end if;
+  v_cap := private.legal_capacity(v_uid, 'doj');
+  update public.legal_requests
+     set review_status = 'prosecutor_review',
+         assigned_prosecutor_id = v_uid, prosecutor_claimed_at = now()
+   where id = p_request returning * into r;
+  perform private.legal_add_participant(p_request, v_uid, 'prosecutor');
+  perform private.legal_log(p_request, r.current_version_id, 'prosecutor_claimed',
+    'prosecutor_queue', 'prosecutor_review', null, 'capacity: ' || v_cap);
+  perform private.legal_audit(p_request, 'LEGAL_PROSECUTOR_CLAIMED',
+    jsonb_build_object('capacity', v_cap, 'bureau', r.responsible_bureau));
+  perform private.legal_notify(r.created_by, p_request, 'legal_update',
+    'A prosecutor claimed your ' || r.request_type || ' request for review.');
+  return r;
+end $$;
+
+create or replace function public.legal_assign_prosecutor(
+  p_request uuid, p_prosecutor uuid, p_reason text default null)
+returns public.legal_requests
+language plpgsql security definer set search_path to '' as $$
+declare v_uid uuid := (select auth.uid()); r public.legal_requests; v_cap text;
+begin
+  if not (coalesce(private.justice_role_effective(v_uid) = 'attorney_general', false)
+          or private.owner_flag(v_uid)) then
+    raise exception 'only the Attorney General may assign prosecutors';
+  end if;
+  if private.justice_role_effective(p_prosecutor) is distinct from 'prosecutor' then
+    raise exception 'the assignee must be an active Prosecutor';
+  end if;
+  select * into r from public.legal_requests where id = p_request for update;
+  if not found then raise exception 'request not found'; end if;
+  if r.review_status not in ('prosecutor_queue', 'prosecutor_review') then
+    raise exception 'request is not at the prosecutorial stage';
+  end if;
+  if not (r.responsible_bureau = any (private.prosecutor_bureaus_of(p_prosecutor))) then
+    raise exception 'the assignee does not cover the % queue — grant temporary coverage first (justice_set_coverage)', r.responsible_bureau;
+  end if;
+  if p_prosecutor = r.created_by then
+    raise exception 'conflict of interest: the assignee created this request';
+  end if;
+  if private.legal_is_conflicted(p_request, p_prosecutor) then
+    raise exception 'conflict of interest: the assignee participated in this case as an investigator — recusal required';
+  end if;
+  if r.assigned_prosecutor_id = p_prosecutor then
+    raise exception 'this prosecutor already holds the request';
+  end if;
+  if r.assigned_prosecutor_id is not null and btrim(coalesce(p_reason, '')) = '' then
+    raise exception 'a reason is required to reassign a claimed request';
+  end if;
+  v_cap := private.legal_capacity(v_uid, 'doj');
+  if r.assigned_prosecutor_id is not null then
+    perform private.legal_end_participant(p_request, r.assigned_prosecutor_id, 'prosecutor');
+  end if;
+  update public.legal_requests
+     set review_status = 'prosecutor_review',
+         assigned_prosecutor_id = p_prosecutor, prosecutor_claimed_at = now()
+   where id = p_request returning * into r;
+  perform private.legal_add_participant(p_request, p_prosecutor, 'prosecutor');
+  perform private.legal_log(p_request, r.current_version_id, 'prosecutor_assigned',
+    null, 'prosecutor_review', p_reason, 'capacity: ' || v_cap);
+  perform private.legal_audit(p_request, 'LEGAL_PROSECUTOR_ASSIGNED',
+    jsonb_build_object('prosecutor', p_prosecutor, 'reason', left(coalesce(p_reason, ''), 300),
+                       'capacity', v_cap, 'bureau', r.responsible_bureau));
+  perform private.legal_notify(p_prosecutor, p_request, 'legal_request',
+    'The Attorney General assigned you a ' || r.request_type || ' request for review.');
+  return r;
+end $$;
+
+create or replace function public.review_legal_request_as_cid(
+  p_request uuid, p_decision text, p_note text default null,
+  p_override_reason text default null, p_signature text default null)
+returns public.legal_requests
+language plpgsql security definer set search_path to ''
+as $function$
+declare v_uid uuid := (select auth.uid()); r public.legal_requests; v_ver uuid;
+        v_exhibits integer; v_prosecutors integer := 0; rec record;
+        me public.profiles; c public.cases; v_fallback boolean; v_jtf_any boolean;
+begin
+  select * into r from public.legal_requests where id = p_request for update;
+  if not found then raise exception 'request not found'; end if;
+  if r.review_status <> 'cid_supervisor_review' then
+    raise exception 'request is not awaiting CID review';
+  end if;
+  if not private.can_approve_legal(p_request, v_uid) then
+    raise exception 'only Bureau Lead or above may decide this request';
+  end if;
+  if p_decision not in ('approve', 'deny', 'return') then raise exception 'invalid decision'; end if;
+  select * into me from public.profiles where id = v_uid;
+  select * into c from public.cases where id = r.case_id;
+  v_jtf_any := (me.role = 'bureau_lead' and c.bureau = 'JTF' and me.division <> r.responsible_bureau);
+  v_fallback := not (me.role = 'bureau_lead' and me.division = r.responsible_bureau) and not v_jtf_any;
+
+  if p_decision = 'return' then
+    if btrim(coalesce(p_note, '')) = '' then raise exception 'a return requires a note'; end if;
+    update public.legal_requests
+       set review_status = 'returned_by_cid', document_status = 'reopened'
+     where id = p_request returning * into r;
+    perform private.legal_log(p_request, r.current_version_id, 'returned_by_cid',
+      'cid_supervisor_review', 'returned_by_cid', p_note, null);
+    perform private.legal_audit(p_request, 'LEGAL_RETURNED_BY_CID',
+      jsonb_build_object('note', left(p_note, 200), 'fallback', v_fallback, 'jtf_any_lead', v_jtf_any));
+    perform private.legal_notify(r.created_by, p_request, 'legal_update',
+      'Your ' || r.request_type || ' request was returned by CID review.');
+    return r;
+  end if;
+
+  if p_decision = 'deny' then
+    if btrim(coalesce(p_note, '')) = '' then raise exception 'a denial requires a note'; end if;
+    update public.legal_requests
+       set decision = 'denied', decision_note = p_note,
+           decided_by = v_uid, decided_at = now(),
+           review_status = 'denied'
+     where id = p_request returning * into r;
+    v_ver := private.legal_freeze_version(p_request, 'denied');
+    select * into r from public.legal_requests where id = p_request;
+    perform private.legal_log(p_request, v_ver, 'denied',
+      'cid_supervisor_review', 'denied', p_note, null);
+    perform private.legal_audit(p_request, 'LEGAL_DENIED_BY_COMMAND',
+      jsonb_build_object('version', v_ver, 'note', left(p_note, 200),
+                         'fallback', v_fallback, 'jtf_any_lead', v_jtf_any));
+    perform private.legal_notify(r.created_by, p_request, 'legal_decision',
+      'Your ' || r.request_type || ' request was denied by command.');
+    return r;
+  end if;
+
+  -- approve → the responsible bureau's shared prosecutor queue
+  if r.source_report_id is not null
+     and not exists (select 1 from public.reports rp where rp.id = r.source_report_id and rp.finalized) then
+    raise exception 'the source report must be finalized before approval';
+  end if;
+  select count(*) into v_exhibits from public.legal_request_exhibits where legal_request_id = p_request;
+  if v_exhibits = 0 and btrim(coalesce(p_override_reason, '')) = '' then
+    raise exception 'at least one supporting item is required (or record an override reason)';
+  end if;
+
+  update public.legal_requests
+     set cid_reviewed_by = v_uid, cid_reviewed_at = now(),
+         review_status = 'prosecutor_queue',
+         submitted_to_doj_at = coalesce(submitted_to_doj_at, now()),
+         queue_entered_at = now(),
+         assigned_prosecutor_id = null, prosecutor_claimed_at = null
+   where id = p_request returning * into r;
+  v_ver := private.legal_freeze_version(p_request, 'cid_approved');
+  select * into r from public.legal_requests where id = p_request;
+  perform private.legal_sign(p_request, v_ver, 'cid_supervisor_approval', p_signature);
+  perform private.legal_add_participant(p_request, v_uid, 'cid_supervisor');
+  perform private.legal_log(p_request, v_ver, 'cid_approved',
+    'cid_supervisor_review', 'prosecutor_queue', p_note,
+    nullif(btrim(coalesce(p_override_reason, '')), ''));
+  if v_exhibits = 0 then
+    perform private.legal_log(p_request, v_ver, 'packet_override', null, null,
+      'Approved without supporting items: ' || p_override_reason, null);
+  end if;
+  perform private.legal_audit(p_request, 'LEGAL_APPROVED_BY_COMMAND',
+    jsonb_build_object('version', v_ver, 'bureau', r.responsible_bureau,
+                       'packet_override', v_exhibits = 0, 'to', 'prosecutor_queue',
+                       'fallback', v_fallback, 'jtf_any_lead', v_jtf_any));
+  perform private.legal_notify(r.created_by, p_request, 'legal_update',
+    'Your ' || r.request_type || ' request passed CID review and entered the ' || r.responsible_bureau || ' prosecutor queue.');
+  -- Fan out to the BUREAU bench (home + live coverage; non-sealed only).
+  if r.classification <> 'sealed' then
+    for rec in
+      select m.user_id from public.justice_memberships m
+       where m.active and (m.expires_at is null or m.expires_at > now())
+         and m.justice_role in ('prosecutor', 'assistant_district_attorney', 'district_attorney')
+         and r.responsible_bureau = any (private.prosecutor_bureaus_of(m.user_id))
+    loop
+      v_prosecutors := v_prosecutors + 1;
+      perform private.legal_notify(rec.user_id, p_request, 'legal_request',
+        'A ' || r.request_type || ' request entered the ' || r.responsible_bureau || ' prosecutor queue.');
+    end loop;
+  end if;
+  if v_prosecutors = 0 then
+    for rec in
+      select p.id from public.profiles p
+       where (p.is_owner and p.removed_at is null)
+          or coalesce(private.justice_role_effective(p.id) = 'attorney_general', false)
+    loop
+      perform private.legal_notify(rec.id, p_request, 'legal_coverage',
+        'The ' || r.responsible_bureau || ' prosecutor queue has no covering prosecutor.');
+    end loop;
+  end if;
+  return r;
+end $function$;
+
+create or replace function public.submit_legal_request_to_cid(
+  p_request uuid, p_change_summary text default null, p_material_change boolean default false)
+returns public.legal_requests
+language plpgsql security definer set search_path to '' as $$
+declare v_uid uuid := (select auth.uid()); r public.legal_requests; v_ver uuid; sup record;
+        v_fast boolean; v_from text; v_n int := 0;
+begin
+  select * into r from public.legal_requests where id = p_request for update;
+  if not found then raise exception 'request not found'; end if;
+  if r.created_by <> v_uid then raise exception 'only the requesting investigator may submit'; end if;
+  if not private.can_edit_legal_draft(p_request, v_uid) then
+    raise exception 'this request is not in an editable state';
+  end if;
+  if btrim(coalesce(r.title, '')) = '' or btrim(coalesce(r.narrative, '')) = '' then
+    raise exception 'a title and a description/justification are required';
+  end if;
+  if r.request_type = 'warrant' then
+    if r.priority is null then raise exception 'a warrant requires a priority'; end if;
+    if r.subtype = 'arrest_warrant' and r.person_id is null then
+      raise exception 'an arrest warrant requires a linked suspect';
+    end if;
+    if r.subtype = 'search_warrant'
+       and r.person_id is null
+       and nullif(btrim(coalesce(r.form_data->>'search_targets', '')), '') is null then
+      raise exception 'a search warrant requires a subject or at least one search target';
+    end if;
+  end if;
+  if r.request_type = 'subpoena' and r.recipient_type = 'entity'
+     and btrim(coalesce(r.recipient_name, '')) = '' then
+    raise exception 'a recipient is required';
+  end if;
+
+  v_from := r.review_status;
+  v_fast := v_from in ('returned_by_judge', 'returned_by_prosecutor')
+            and not coalesce(p_material_change, false);
+
+  -- A resubmission after any return clears the prior judicial assignment.
+  if r.review_status like 'returned_by_%' and r.assigned_judge_id is not null then
+    update public.legal_request_participants
+       set removed_at = now(), removed_by = v_uid
+     where legal_request_id = p_request and participant_role = 'judicial_reviewer'
+       and user_id = r.assigned_judge_id and removed_at is null;
+    update public.legal_requests set assigned_judge_id = null where id = p_request;
+  end if;
+
+  update public.legal_requests
+     set responsible_bureau = private.legal_resolve_bureau(r.case_id)
+   where id = p_request;
+
+  if v_fast then
+    -- Corrected work re-enters PROSECUTOR review directly.
+    v_ver := private.legal_freeze_version(p_request, 'prosecutor_queue', p_change_summary);
+    update public.legal_requests
+       set document_status = 'finalized', review_status = 'prosecutor_queue',
+           queue_entered_at = now(),
+           assigned_prosecutor_id = null, prosecutor_claimed_at = null,
+           submitted_to_cid_at = coalesce(submitted_to_cid_at, now())
+     where id = p_request returning * into r;
+    perform private.legal_log(p_request, v_ver, 'resubmitted_to_prosecutor',
+      v_from, 'prosecutor_queue', p_change_summary, null);
+    perform private.legal_audit(p_request, 'LEGAL_RESUBMITTED_TO_PROSECUTOR',
+      jsonb_build_object('version', v_ver, 'from', v_from));
+    for sup in
+      select m.user_id from public.justice_memberships m
+       where m.active and (m.expires_at is null or m.expires_at > now())
+         and m.justice_role in ('prosecutor', 'assistant_district_attorney', 'district_attorney')
+         and r.responsible_bureau = any (private.prosecutor_bureaus_of(m.user_id))
+         and r.classification <> 'sealed'
+    loop
+      v_n := v_n + 1;
+      perform private.legal_notify(sup.user_id, p_request, 'legal_request',
+        'A corrected ' || r.request_type || ' request re-entered the ' || r.responsible_bureau || ' prosecutor queue.');
+    end loop;
+    return r;
+  end if;
+
+  if coalesce(p_material_change, false) then
+    perform private.legal_log(p_request, null, 'material_change_declared',
+      v_from, null, 'The investigator declared a material change — renewed CID review required.', null);
+  end if;
+
+  v_ver := private.legal_freeze_version(p_request, 'cid_supervisor_review', p_change_summary);
+  update public.legal_requests
+     set document_status = 'finalized', review_status = 'cid_supervisor_review',
+         submitted_to_cid_at = now()
+   where id = p_request returning * into r;
+  perform private.legal_log(p_request, v_ver, 'submitted_to_cid', v_from, 'cid_supervisor_review', null, null);
+  perform private.legal_audit(p_request, 'LEGAL_SUBMITTED_TO_CID',
+    jsonb_build_object('version', v_ver, 'material_change', coalesce(p_material_change, false)));
+  for sup in
+    select p.id from public.profiles p
+    where p.active and p.removed_at is null and p.id <> v_uid
+      and ((p.role in ('senior_detective', 'bureau_lead') and p.division = r.responsible_bureau)
+           or p.role in ('deputy_director', 'director'))
+  loop
+    perform private.legal_notify(sup.id, p_request, 'legal_request',
+      'A ' || r.request_type || ' request awaits CID supervisor review.');
+  end loop;
+  return r;
+end $$;
+
+create or replace function public.legal_request_case_brief(p_request uuid)
+returns jsonb language sql stable security definer set search_path to '' as $$
+  select case
+    when not private.can_view_legal_request(p_request, (select auth.uid()))
+    then jsonb_build_object('error', 'request not found or not accessible')
+    else (
+      select jsonb_build_object(
+        'case', jsonb_build_object(
+          'number', c.case_number, 'title', c.title, 'status', c.status,
+          'stage', c.investigative_stage, 'assigned_unit', c.bureau,
+          'responsible_bureau', r.responsible_bureau),
+        'exhibits', (
+          select coalesce(jsonb_agg(jsonb_build_object(
+            'id', e.id, 'type', e.exhibit_type, 'title', e.display_title,
+            'rationale', e.rationale) order by e.created_at), '[]')
+          from public.legal_request_exhibits e where e.legal_request_id = r.id),
+        'referenced_reports', (
+          select coalesce(jsonb_agg(jsonb_build_object(
+            'id', rp.id, 'template', rp.template, 'finalized', rp.finalized,
+            'author_id', rp.author_id, 'fields', rp.fields) order by rp.created_at), '[]')
+          from public.legal_request_exhibits e
+          join public.reports rp on rp.id = e.source_id
+          where e.legal_request_id = r.id and e.exhibit_type = 'finalized_report'),
+        'referenced_media', (
+          select coalesce(jsonb_agg(jsonb_build_object(
+            'id', m.id, 'title', m.title, 'type', m.type,
+            'external_url', m.external_url, 'uploaded_by', m.uploaded_by,
+            'evidence_ref', m.evidence_ref) order by m.created_at), '[]')
+          from public.legal_request_exhibits e
+          join public.media m on m.id = e.source_id
+          where e.legal_request_id = r.id and e.exhibit_type in ('case_media', 'evidence')))
+      from public.legal_requests r
+      join public.cases c on c.id = r.case_id
+      where r.id = p_request)
+  end
+$$;
+
+create or replace function public.case_set_stage(p_case uuid, p_stage text, p_reason text)
+returns public.cases
+language plpgsql security definer set search_path to '' as $$
+declare v_uid uuid := (select auth.uid()); c public.cases; me public.profiles; v_prev text;
+begin
+  if p_stage not in ('intake', 'active_investigation', 'legal_process',
+                     'enforcement_ready', 'pending_closure', 'closed') then
+    raise exception 'invalid investigative stage';
+  end if;
+  if btrim(coalesce(p_reason, '')) = '' then raise exception 'a reason is required'; end if;
+  select * into me from public.profiles where id = v_uid;
+  select * into c from public.cases where id = p_case for update;
+  if not found or not private.can_access_case(p_case) then
+    raise exception 'case not found or not accessible';
+  end if;
+  if not (coalesce(me.is_owner, false)
+          or (coalesce(me.active, false)
+              and (me.role in ('senior_detective', 'bureau_lead', 'deputy_director', 'director')
+                   or c.lead_detective_id = v_uid))) then
+    raise exception 'only the case lead or a supervisor may change the investigative stage';
+  end if;
+  if c.investigative_stage = p_stage then
+    raise exception 'the case is already at that stage';
+  end if;
+  v_prev := c.investigative_stage;
+  update public.cases set investigative_stage = p_stage where id = p_case returning * into c;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'CASE_STAGE_CHANGED', 'cases', p_case,
+          jsonb_build_object('from', v_prev, 'to', p_stage, 'reason', left(btrim(p_reason), 500)));
+  return c;
+end $$;
+
+create or replace function public.media_designate_evidence(
+  p_media uuid, p_ref text default null, p_clear boolean default false)
+returns public.media
+language plpgsql security definer set search_path to '' as $$
+declare v_uid uuid := (select auth.uid()); m public.media; me public.profiles;
+begin
+  select * into m from public.media where id = p_media for update;
+  if not found then raise exception 'media not found'; end if;
+  if m.case_id is null or not private.can_access_case(m.case_id) then
+    raise exception 'media not found or not accessible';
+  end if;
+  select * into me from public.profiles where id = v_uid;
+  if not (coalesce(me.is_owner, false)
+          or (coalesce(me.active, false)
+              and (me.role in ('senior_detective', 'bureau_lead', 'deputy_director', 'director')
+                   or m.uploaded_by = v_uid))) then
+    raise exception 'only the uploader or a supervisor may designate evidence';
+  end if;
+  if p_clear then
+    update public.media
+       set evidence_ref = null, evidence_designated_by = null, evidence_designated_at = null
+     where id = p_media returning * into m;
+    insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+    values (v_uid, 'MEDIA_EVIDENCE_CLEARED', 'media', p_media,
+            jsonb_build_object('case_id', m.case_id));
+    return m;
+  end if;
+  update public.media
+     set evidence_ref = coalesce(nullif(btrim(coalesce(p_ref, '')), ''),
+                                 'EV-' || upper(substr(p_media::text, 1, 8))),
+         evidence_designated_by = v_uid, evidence_designated_at = now()
+   where id = p_media returning * into m;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'MEDIA_EVIDENCE_DESIGNATED', 'media', p_media,
+          jsonb_build_object('case_id', m.case_id, 'evidence_ref', m.evidence_ref));
+  return m;
+end $$;
+
+create or replace function public.justice_appoint(
+  p_user uuid, p_role text, p_reason text default null, p_bureau public.bureau default null)
+returns public.justice_memberships
+language plpgsql security definer set search_path to '' as $$
+declare v_uid uuid := (select auth.uid()); m public.justice_memberships;
+        me public.profiles; t public.profiles; v_cid_authority boolean;
+        v_ag boolean; v_tr uuid; v_led int := 0; v_is_test boolean; rec record;
+begin
+  if p_role not in ('prosecutor', 'judge', 'attorney_general') then
+    raise exception 'role must be prosecutor, judge, or attorney_general';
+  end if;
+  if p_role = 'prosecutor' and (p_bureau is null or p_bureau not in ('LSB', 'BCB', 'SAB')) then
+    raise exception 'a prosecutor needs a home bureau: LSB, BCB, or SAB';
+  end if;
+  if p_role <> 'prosecutor' and p_bureau is not null then
+    raise exception 'only prosecutors carry a home bureau';
+  end if;
+  select * into me from public.profiles where id = v_uid;
+  v_ag := coalesce(private.justice_role_effective(v_uid) = 'attorney_general', false);
+  v_cid_authority := coalesce(me.is_owner, false)
+    or (coalesce(me.active, false) and me.role in ('deputy_director', 'director'));
+  if p_role = 'attorney_general' then
+    if not coalesce(me.is_owner, false) then
+      raise exception 'only the Owner may appoint an Attorney General';
+    end if;
+  elsif not (v_ag or v_cid_authority) then
+    raise exception 'only the Attorney General, Deputy Director+, or Owner may appoint DOJ members';
+  end if;
+  if p_user = v_uid and not coalesce(me.is_owner, false) then
+    raise exception 'you cannot appoint yourself';
+  end if;
+  select * into t from public.profiles where id = p_user;
+  if t.id is null or t.removed_at is not null or coalesce(t.login_denied, false)
+     or coalesce(t.is_test, false) or coalesce(t.is_system, false) then
+    raise exception 'target account is not eligible for a DOJ appointment';
+  end if;
+
+  if coalesce(t.active, false) then
+    if not v_cid_authority then
+      raise exception 'moving an active CID member into the DOJ requires Deputy Director+ or Owner';
+    end if;
+    select count(*) into v_led from public.cases c
+     where c.lead_detective_id = p_user and c.status <> 'closed' and c.archived_at is null;
+    insert into public.member_transfers
+      (user_id, direction, status, requested_role, target_bureau, from_role, from_division,
+       reason, requested_by, cid_decided_by, cid_decided_at,
+       doj_decided_by, doj_decided_at, effective_by, effective_at,
+       handover)
+    values (p_user, 'cid_to_doj', 'effective', p_role, p_bureau, t.role::text, t.division::text,
+            coalesce(nullif(btrim(coalesce(p_reason, '')), ''), 'Direct DOJ assignment'),
+            v_uid, v_uid, now(), v_uid, now(), v_uid, now(),
+            jsonb_build_object('direct', true, 'led_cases_open', v_led,
+                               'led_cases_interim_lead', case when v_led > 0 then v_uid end))
+    returning id into v_tr;
+    update public.profiles set active = false where id = p_user;
+    insert into public.role_events
+      (target_id, actor_id, old_role, new_role, old_division, new_division,
+       old_active, new_active, reason, source, source_id)
+    values (p_user, v_uid, t.role, t.role, t.division, t.division,
+            true, false, 'Assigned to DOJ: ' || p_role, 'doj_transfer', v_tr);
+    update public.case_assignments
+       set removed_at = now(), removed_by = v_uid, removal_reason = 'Assigned to DOJ'
+     where officer_id = p_user and removed_at is null;
+    -- Handover: led cases move to the acting authority as INTERIM lead
+    -- (reassigned, never stranded); each is audited and command is notified.
+    if v_led > 0 then
+      select u.email like 'rls-test-%@cidportal.test' into v_is_test
+        from auth.users u where u.id = v_uid;
+      for rec in select c.id, c.case_number from public.cases c
+                  where c.lead_detective_id = p_user and c.status <> 'closed' and c.archived_at is null
+      loop
+        update public.cases set lead_detective_id = v_uid where id = rec.id;
+        insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+        values (v_uid, 'CASE_LEAD_INTERIM', 'cases', rec.id,
+                jsonb_build_object('from', p_user, 'to', v_uid, 'transfer', v_tr,
+                                   'reason', 'Previous lead assigned to DOJ'));
+      end loop;
+      insert into public.notifications (user_id, type, payload)
+      select p.id, 'membership_update', jsonb_build_object(
+        'reason', coalesce(t.display_name, 'A member') || ' was assigned to the DOJ — '
+          || v_led || ' open case(s) they led were handed to '
+          || coalesce(me.display_name, 'the assigning authority') || ' as interim lead.')
+        from public.profiles p
+       where p.active and p.removed_at is null and p.id <> v_uid
+         and p.role in ('deputy_director', 'director')
+         and (not coalesce(v_is_test, false)
+              or exists (select 1 from auth.users u
+                          where u.id = p.id and u.email like 'rls-test-%@cidportal.test'));
+    end if;
+  end if;
+
+  insert into public.justice_memberships
+    (user_id, agency, justice_role, active, approved_by, approved_at,
+     ended_at, expires_at, prosecutor_bureau)
+  values (p_user, case when p_role = 'judge' then 'judiciary' else 'doj' end,
+          p_role, true, v_uid, now(), null, null,
+          case when p_role = 'prosecutor' then p_bureau end)
+  on conflict (user_id) do update
+    set agency = excluded.agency, justice_role = excluded.justice_role,
+        active = true, approved_by = excluded.approved_by, approved_at = excluded.approved_at,
+        ended_at = null, expires_at = null,
+        prosecutor_bureau = excluded.prosecutor_bureau;
+  select * into m from public.justice_memberships where user_id = p_user;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'JUSTICE_APPOINTED', 'justice_memberships', p_user,
+          jsonb_build_object('role', p_role, 'bureau', p_bureau,
+                             'direct', coalesce(t.active, false),
+                             'transfer', v_tr, 'led_cases_open', v_led,
+                             'reason', left(coalesce(p_reason, ''), 300)));
+  insert into public.notifications (user_id, type, payload)
+  values (p_user, 'justice_membership_update', jsonb_build_object(
+    'reason', 'You were appointed ' || replace(p_role, '_', ' ')
+      || coalesce(' (' || p_bureau || ' queue)', '')
+      || case when coalesce(t.active, false)
+              then ' — your CID membership has ended and your DOJ access is active now.'
+              else ' in the DOJ legal-review workspace.' end));
+  return m;
+end $$;
+
+create or replace function public.transfer_doj_request(
+  p_user uuid, p_direction text, p_role text, p_reason text,
+  p_bureau public.bureau default null)
+returns public.member_transfers
+language plpgsql security definer set search_path to '' as $$
+declare v_uid uuid := (select auth.uid()); t public.profiles; tr public.member_transfers;
+        v_jrole text;
+begin
+  if btrim(coalesce(p_reason, '')) = '' then raise exception 'a reason is required'; end if;
+  if p_user = v_uid then raise exception 'you cannot propose your own transfer'; end if;
+  select * into t from public.profiles where id = p_user;
+  if t.id is null or t.removed_at is not null or coalesce(t.is_system, false) or coalesce(t.is_test, false) then
+    raise exception 'target account is not eligible for a transfer';
+  end if;
+  v_jrole := (select justice_role from public.justice_memberships
+               where user_id = p_user and active);
+  if p_direction = 'cid_to_doj' then
+    if not (private.is_command() or private.owner_flag(v_uid)) then
+      raise exception 'only CID Command may propose a CID-to-DOJ transfer';
+    end if;
+    if not coalesce(t.active, false) then
+      raise exception 'target is not an active CID member';
+    end if;
+    if p_role = 'prosecutor' and (p_bureau is null or p_bureau not in ('LSB', 'BCB', 'SAB')) then
+      raise exception 'a prosecutor transfer needs a home bureau: LSB, BCB, or SAB';
+    end if;
+  elsif p_direction = 'doj_to_cid' then
+    if not (coalesce(private.justice_role_effective(v_uid) = 'attorney_general', false)
+            or private.owner_flag(v_uid)) then
+      raise exception 'only the Attorney General or Owner may propose a DOJ-to-CID transfer';
+    end if;
+    if v_jrole is null then raise exception 'target holds no active DOJ membership'; end if;
+  else
+    raise exception 'invalid direction';
+  end if;
+  insert into public.member_transfers
+    (user_id, direction, requested_role, target_bureau, from_role, from_division,
+     from_justice_role, reason, requested_by)
+  values (p_user, p_direction, p_role, p_bureau, t.role::text, t.division::text,
+          v_jrole, btrim(p_reason), v_uid)
+  returning * into tr;
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'TRANSFER_DOJ_REQUESTED', 'member_transfers', tr.id,
+          jsonb_build_object('member', p_user, 'direction', p_direction,
+                             'role', p_role, 'bureau', p_bureau, 'reason', left(p_reason, 300)));
+  insert into public.notifications (user_id, type, payload)
+  values (p_user, 'membership_update', jsonb_build_object(
+    'reason', 'An organizational transfer was proposed for you ('
+      || replace(p_direction, '_', '-') || ', ' || replace(p_role, '_', ' ') || ').'));
+  return tr;
+end $$;
+
+create or replace function public.transfer_doj_activate(
+  p_transfer uuid, p_reassignments jsonb default '{}'::jsonb)
+returns public.member_transfers
+language plpgsql security definer set search_path to '' as $$
+declare v_uid uuid := (select auth.uid()); tr public.member_transfers; me public.profiles;
+        t public.profiles; rec record; v_new uuid; v_n int := 0; v_handover jsonb;
+begin
+  select * into me from public.profiles where id = v_uid;
+  select * into tr from public.member_transfers where id = p_transfer for update;
+  if not found then raise exception 'transfer not found'; end if;
+  if tr.status <> 'doj_accepted' then raise exception 'transfer is not ready for activation'; end if;
+  if tr.user_id = v_uid then raise exception 'you cannot activate your own transfer'; end if;
+  if not (coalesce(me.active, false) and me.role in ('deputy_director', 'director')
+          or coalesce(me.is_owner, false)
+          or coalesce(private.justice_role_effective(v_uid) = 'attorney_general', false)) then
+    raise exception 'only Deputy Director+, the Attorney General, or the Owner may activate a transfer';
+  end if;
+  select * into t from public.profiles where id = tr.user_id for update;
+
+  v_handover := public.transfer_handover(p_transfer);
+
+  if tr.direction = 'cid_to_doj' then
+    -- A prosecutor must land in exactly one home bureau; older pending rows
+    -- created before bureau queues carry none — refuse rather than guess.
+    if tr.requested_role = 'prosecutor'
+       and (tr.target_bureau is null or tr.target_bureau not in ('LSB', 'BCB', 'SAB')) then
+      raise exception 'this prosecutor transfer has no home bureau — file a new transfer naming LSB, BCB, or SAB';
+    end if;
+    -- Every open led case must have a resolution: a named new lead, or an
+    -- approved dual-membership retention.
+    for rec in select c.id, c.case_number from public.cases c
+                where c.lead_detective_id = tr.user_id and c.status <> 'closed' and c.archived_at is null
+    loop
+      v_new := nullif(p_reassignments->'cases'->>rec.id::text, '')::uuid;
+      if v_new is null and tr.retain_cid
+         and (p_reassignments->'retain_case_ids') ? rec.id::text then
+        continue;  -- explicitly retained under approved dual membership
+      end if;
+      if v_new is null then
+        raise exception 'case % still needs a new lead detective before activation', rec.case_number;
+      end if;
+      if not exists (select 1 from public.profiles p
+                      where p.id = v_new and p.active and p.removed_at is null and p.id <> tr.user_id) then
+        raise exception 'proposed lead for case % is not an active member', rec.case_number;
+      end if;
+      update public.cases set lead_detective_id = v_new where id = rec.id;
+      insert into public.notifications (user_id, type, payload)
+      values (v_new, 'case_assigned', jsonb_build_object(
+        'case_id', rec.id, 'case_number', rec.case_number,
+        'reason', 'Case ' || rec.case_number || ' was handed to you during an organizational transfer.'));
+      v_n := v_n + 1;
+    end loop;
+    -- Pending sign-offs routed to this member move to the named substitute.
+    v_new := nullif(p_reassignments->>'signoffs_to', '')::uuid;
+    if v_new is not null then
+      update public.cases set signoff_assignee_id = v_new
+       where signoff_assignee_id = tr.user_id and signoff_status like 'awaiting_%';
+    elsif exists (select 1 from public.cases c
+                   where c.signoff_assignee_id = tr.user_id and c.signoff_status like 'awaiting_%')
+          and not tr.retain_cid then
+      raise exception 'pending sign-offs still route to this member — name a substitute (signoffs_to)';
+    end if;
+
+    if not tr.retain_cid then
+      -- End the CID membership (dated event, identity preserved).
+      update public.profiles set active = false where id = tr.user_id;
+      insert into public.role_events
+        (target_id, actor_id, old_role, new_role, old_division, new_division,
+         old_active, new_active, reason, source, source_id)
+      values (tr.user_id, v_uid, t.role, t.role, t.division, t.division,
+              true, false, 'Transferred to DOJ: ' || tr.requested_role, 'doj_transfer', tr.id);
+      -- End active operational assignments (history rows preserved).
+      update public.case_assignments
+         set removed_at = now(), removed_by = v_uid,
+             removal_reason = 'Transferred to DOJ'
+       where officer_id = tr.user_id and removed_at is null;
+    end if;
+
+    -- Activate the DOJ membership through the transfer (never a fresh
+    -- account); a prosecutor's home bureau rides in on target_bureau.
+    perform private.transfer_doj_set_membership(
+      tr.user_id, tr.requested_role, v_uid,
+      case when tr.retain_cid then tr.dual_expires_at else null end,
+      tr.target_bureau);
+  else
+    -- DOJ → CID. Unfinished DOJ work is requeued first (never stranded).
+    for rec in select id from public.legal_requests
+                where assigned_prosecutor_id = tr.user_id and review_status = 'prosecutor_review'
+    loop
+      perform private.legal_end_participant(rec.id, tr.user_id, 'prosecutor');
+      update public.legal_requests
+         set review_status = 'prosecutor_queue', assigned_prosecutor_id = null,
+             prosecutor_claimed_at = null, queue_entered_at = now()
+       where id = rec.id;
+      perform private.legal_log(rec.id, null, 'prosecutor_unassigned',
+        'prosecutor_review', 'prosecutor_queue', 'Holder transferred to CID.', null);
+    end loop;
+    for rec in select id from public.legal_requests
+                where assigned_judge_id = tr.user_id and review_status = 'judicial_review'
+    loop
+      perform private.legal_end_participant(rec.id, tr.user_id, 'judicial_reviewer');
+      update public.legal_requests
+         set review_status = 'submitted_to_judge', assigned_judge_id = null
+       where id = rec.id;
+      perform private.legal_log(rec.id, null, 'judge_unassigned',
+        'judicial_review', 'submitted_to_judge', 'Holder transferred to CID.', null);
+    end loop;
+    -- End the DOJ membership (dated; decisions + attribution stay).
+    update public.justice_memberships
+       set active = false, ended_at = now()
+     where user_id = tr.user_id;
+    -- Re-enter CID at the explicitly approved NEW bureau and rank.
+    update public.profiles
+       set active = true, role = tr.requested_role::public.app_role,
+           division = tr.target_bureau
+     where id = tr.user_id;
+    insert into public.role_events
+      (target_id, actor_id, old_role, new_role, old_division, new_division,
+       old_active, new_active, reason, source, source_id)
+    values (tr.user_id, v_uid, t.role, tr.requested_role::public.app_role,
+            t.division, tr.target_bureau,
+            coalesce(t.active, false), true,
+            'Returned from DOJ as ' || tr.requested_role, 'doj_transfer', tr.id);
+  end if;
+
+  update public.member_transfers
+     set status = 'effective', effective_by = v_uid, effective_at = now(),
+         handover = v_handover, updated_at = now()
+   where id = p_transfer returning * into tr;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, detail)
+  values (v_uid, 'TRANSFER_DOJ_EFFECTIVE', 'member_transfers', p_transfer,
+          jsonb_build_object('member', tr.user_id, 'direction', tr.direction,
+                             'role', tr.requested_role, 'cases_reassigned', v_n,
+                             'retain_cid', tr.retain_cid,
+                             'same_actor_stages', tr.cid_decided_by = tr.doj_decided_by));
+  insert into public.notifications (user_id, type, payload)
+  values (tr.user_id, 'membership_update', jsonb_build_object(
+    'reason', 'Your organizational transfer is now effective ('
+      || replace(tr.requested_role, '_', ' ') || ').'));
+  -- CID Command + AG visibility of the completed move.
+  insert into public.notifications (user_id, type, payload)
+  select p.id, 'membership_update', jsonb_build_object(
+    'reason', coalesce((select display_name from public.profiles where id = tr.user_id), 'A member')
+      || ' transferred ' || replace(tr.direction, '_', '-') || ' (' || tr.requested_role || ').')
+    from public.profiles p
+   where p.active and p.removed_at is null and p.id <> v_uid and p.id <> tr.user_id
+     and (p.role in ('deputy_director', 'director')
+          or coalesce(private.justice_role_effective(p.id) = 'attorney_general', false))
+     and not coalesce(p.is_test, false);
+  return tr;
+end $$;
+
+create or replace function public.justice_migration_review()
+returns jsonb language sql stable security definer set search_path to '' as $$
+  select case
+    when not (private.owner_flag((select auth.uid()))
+              or coalesce(private.justice_role_effective((select auth.uid())) = 'attorney_general', false))
+    then jsonb_build_object('error', 'owner or attorney general only')
+    else jsonb_build_object(
+      'legacy_roles', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'user_id', m.user_id, 'name', p.display_name, 'role', m.justice_role,
+          'active', m.active, 'effective', case m.justice_role
+            when 'assistant_district_attorney' then 'prosecutor'
+            when 'district_attorney' then 'prosecutor' else m.justice_role end)), '[]')
+        from public.justice_memberships m
+        left join public.profiles p on p.id = m.user_id
+        where m.justice_role in ('assistant_district_attorney', 'district_attorney')),
+      'prosecutors_without_bureau', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'user_id', m.user_id, 'name', p.display_name, 'role', m.justice_role)), '[]')
+        from public.justice_memberships m
+        left join public.profiles p on p.id = m.user_id
+        where m.active and m.prosecutor_bureau is null
+          and m.justice_role in ('prosecutor', 'assistant_district_attorney', 'district_attorney')),
+      'dual_identity', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'user_id', m.user_id, 'name', p.display_name,
+          'justice_role', m.justice_role, 'cid_role', p.role, 'cid_active', p.active)), '[]')
+        from public.justice_memberships m
+        join public.profiles p on p.id = m.user_id
+        where m.active and coalesce(p.active, false)),
+      'requests_in_retired_states', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'id', r.id, 'number', r.request_number, 'status', r.review_status)), '[]')
+        from public.legal_requests r
+        where r.review_status in ('submitted_to_doj', 'ada_review', 'da_review', 'ag_review')),
+      'requests_assigned_to_inactive', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'id', r.id, 'number', r.request_number, 'status', r.review_status)), '[]')
+        from public.legal_requests r
+        where (r.assigned_prosecutor_id is not null
+               and not private.is_justice_active(r.assigned_prosecutor_id)
+               and r.review_status = 'prosecutor_review')
+           or (r.assigned_judge_id is not null
+               and not private.is_justice_active(r.assigned_judge_id)
+               and r.review_status = 'judicial_review')),
+      'cases_missing_responsible_bureau', (
+        select coalesce(jsonb_agg(jsonb_build_object('id', c.id, 'number', c.case_number)), '[]')
+        from public.cases c
+        where c.bureau = 'JTF' and c.originating_bureau is null),
+      'self_review_conflicts', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'id', r.id, 'number', r.request_number,
+          'holder', coalesce(r.assigned_prosecutor_id, r.assigned_judge_id))), '[]')
+        from public.legal_requests r
+        where (r.assigned_prosecutor_id is not null
+               and private.legal_is_conflicted(r.id, r.assigned_prosecutor_id))
+           or (r.assigned_judge_id is not null
+               and private.legal_is_conflicted(r.id, r.assigned_judge_id))))
+  end
+$$;
+
 -- ============================================================
 -- Triggers (non-internal)
 -- ============================================================
@@ -5547,6 +6468,7 @@ CREATE TRIGGER cases_audit AFTER INSERT OR DELETE OR UPDATE ON public.cases FOR 
 CREATE TRIGGER cases_touch BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.touch_cases();
 CREATE TRIGGER trg_block_direct_signoff BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_signoff();
 CREATE TRIGGER trg_block_direct_case_bureau BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_bureau();
+CREATE TRIGGER trg_block_direct_case_stage BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_stage();
 CREATE TRIGGER trg_default_case_originating_bureau BEFORE INSERT ON public.cases FOR EACH ROW EXECUTE FUNCTION private.default_case_originating_bureau();
 CREATE TRIGGER trg_case_closed_at BEFORE UPDATE OF status ON public.cases FOR EACH ROW EXECUTE FUNCTION public.set_case_closed_at();
 CREATE TRIGGER cases_block_archive_cols BEFORE UPDATE ON public.cases FOR EACH ROW EXECUTE FUNCTION private.block_direct_case_archive();
@@ -6803,6 +7725,10 @@ create policy profiles_upd_self on public.profiles
 create policy pba_sel on public.prosecutor_bureau_assignments
   as permissive for select to authenticated
   using (((private.justice_role() IS NOT NULL) OR private.is_active() OR (prosecutor_id = ( SELECT auth.uid() AS uid))));
+
+create policy prosecutor_coverage_sel on public.prosecutor_coverage
+  as permissive for select to authenticated
+  using (((prosecutor_id = ( SELECT auth.uid() AS uid)) OR COALESCE((private.justice_role_effective(( SELECT auth.uid() AS uid)) IS NOT NULL), false) OR private.is_command() OR private.owner_flag(( SELECT auth.uid() AS uid))));
 
 create policy rag_sel on public.restricted_access_grants
   as permissive for select to authenticated
@@ -8723,3 +9649,77 @@ create policy wl_sel on public.watchlist
 -- refused (Owner excepted); conflict recusal (private.legal_is_conflicted)
 -- untouched. Grants unchanged (authenticated + service_role; anon revoked).
 -- Definitive SQL in supabase/migrations/20260817120000_doj_direct_assignment.sql.
+
+-- Bureau prosecutor queues, review routing, investigative stages, referenced-
+-- material DOJ access, and evidence designation (20260818120000). ADDITIVE
+-- ONLY. NEW TABLE public.prosecutor_coverage (block above): TEMPORARY
+-- cross-bureau coverage the AG/Owner grants when a bureau has no active
+-- prosecutor — explicit, dated, expiring, endable, audited; SELECT-only
+-- policy prosecutor_coverage_sel, writes RPC-only (justice_set_coverage /
+-- justice_end_coverage, rendered above), indexes
+-- prosecutor_coverage_prosecutor_idx (partial, ended_at is null) +
+-- prosecutor_coverage_authorized_by_fkey_idx +
+-- prosecutor_coverage_ended_by_fkey_idx. NEW COLUMNS:
+-- justice_memberships.prosecutor_bureau (home bureau; CHECK null or
+-- LSB/BCB/SAB), cases.investigative_stage (not null default 'intake'; CHECK
+-- intake/active_investigation/legal_process/enforcement_ready/
+-- pending_closure/closed; frozen for direct writers by NEW trigger
+-- trg_block_direct_case_stage → private.block_direct_case_stage(), both
+-- rendered above — case_set_stage(uuid, text, text) with a required reason +
+-- CASE_STAGE_CHANGED audit is the only path), and media.evidence_ref /
+-- evidence_designated_by (FK → profiles; partial covering index
+-- media_evidence_designated_by_fkey_idx) / evidence_designated_at — set and
+-- cleared only via media_designate_evidence(uuid, text, boolean) (rendered
+-- above; uploader or Senior Detective+ / Owner; MEDIA_EVIDENCE_DESIGNATED /
+-- _CLEARED audit; uploader identity untouched). member_transfers_check was
+-- re-emitted allowing target_bureau on cid_to_doj prosecutor rows (the
+-- rendered constraint above already carries the final form — target_bureau
+-- doubles as the DOJ home bureau on cid_to_doj rows). PRIVATE HELPERS
+-- (comment-tracked here, like the rest of the legal_* private family):
+-- NEW private.prosecutor_bureaus_of(uuid) returns public.bureau[] — the
+-- bureaus a prosecutor may work RIGHT NOW (home bureau + live unexpired
+-- coverage; SQL stable definer, granted authenticated);
+-- NEW private.transfer_doj_set_membership(uuid, text, uuid, timestamptz,
+-- public.bureau) — the single justice_memberships upsert both appointment
+-- paths share (stamps prosecutor_bureau for prosecutors);
+-- private.can_view_legal_request(uuid, uuid) re-emitted — the prosecutor
+-- lane branch narrows to r.responsible_bureau = any(prosecutor_bureaus_of),
+-- AG oversight/participants/sealed rules unchanged, legacy branches
+-- verbatim; private.can_approve_legal(uuid, uuid) re-emitted — ordinary
+-- bureau case: the responsible bureau's Bureau Lead; JTF-assigned case: ANY
+-- eligible Bureau Lead; Deputy Director/Director keep cross-bureau
+-- authority, Owner joins the fallback. RE-EMITTED / NEW PUBLIC RPCs (bodies
+-- rendered above, verbatim from the migration): justice_set_coverage /
+-- justice_end_coverage (AG/Owner-only coverage lifecycle,
+-- PROSECUTOR_COVERAGE_GRANTED/_ENDED audit); legal_claim_prosecutor +
+-- legal_assign_prosecutor now enforce bureau eligibility (AG authority
+-- cannot bypass it — coverage is the path); review_legal_request_as_cid
+-- audits fallback=true / jtf_any_lead reviews and fans approval out to the
+-- responsible bureau's bench only (AG/Owner notified when a queue has no
+-- covering prosecutor); submit_legal_request_to_cid DROPPED its (uuid, text)
+-- signature and is now (p_request uuid, p_change_summary text default null,
+-- p_material_change boolean default false) — a judge/prosecutor-returned
+-- request resubmits STRAIGHT to the prosecutor queue unless the investigator
+-- explicitly declares a material change (never inferred; declared changes
+-- log material_change_declared and re-enter CID review);
+-- NEW legal_request_case_brief(uuid) returns jsonb — prosecutors/judges get
+-- a concise case summary + ONLY the referenced material (exhibits,
+-- finalized-report content, media metadata), never full case access,
+-- database-enforced via can_view_legal_request; NEW case_set_stage(uuid,
+-- text, text); NEW media_designate_evidence(uuid, text, boolean);
+-- justice_appoint DROPPED its (uuid, text, text) signature and is now
+-- (p_user, p_role, p_reason default null, p_bureau public.bureau default
+-- null) — a prosecutor appointment REQUIRES a home bureau, and direct
+-- assignment of an active member now hands their open led cases to the
+-- acting authority as INTERIM lead (CASE_LEAD_INTERIM audit + DD+
+-- notification — work is never left owned by someone who can no longer
+-- access it); transfer_doj_request carries p_bureau (required for prosecutor
+-- destinations); transfer_doj_activate refuses a bureau-less prosecutor
+-- activation and stamps the home bureau via transfer_doj_set_membership;
+-- justice_migration_review() gained the prosecutors_without_bureau list
+-- (legacy prosecutor rows surface for manual assignment — no data
+-- rewritten). Grants: all five new RPCs revoked from public/anon, granted
+-- authenticated + service_role; re-emitted RPCs unchanged in audience.
+-- database.types.ts updated (prosecutor_coverage table, new columns, new/
+-- changed RPC signatures). Definitive SQL in
+-- supabase/migrations/20260818120000_bureau_queues_stages.sql.

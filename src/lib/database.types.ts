@@ -1072,6 +1072,7 @@ export type Database = {
           created_by: string | null
           follow_up_at: string | null
           id: string
+          investigative_stage: string
           is_joint_case: boolean
           joint_case_created_at: string | null
           joint_case_created_by: string | null
@@ -1105,6 +1106,7 @@ export type Database = {
           created_by?: string | null
           follow_up_at?: string | null
           id?: string
+          investigative_stage?: string
           is_joint_case?: boolean
           joint_case_created_at?: string | null
           joint_case_created_by?: string | null
@@ -1138,6 +1140,7 @@ export type Database = {
           created_by?: string | null
           follow_up_at?: string | null
           id?: string
+          investigative_stage?: string
           is_joint_case?: boolean
           joint_case_created_at?: string | null
           joint_case_created_by?: string | null
@@ -3067,6 +3070,7 @@ export type Database = {
           expires_at: string | null
           justice_identifier: string | null
           justice_role: string
+          prosecutor_bureau: Database["public"]["Enums"]["bureau"] | null
           updated_at: string
           user_id: string
         }
@@ -3080,6 +3084,7 @@ export type Database = {
           expires_at?: string | null
           justice_identifier?: string | null
           justice_role: string
+          prosecutor_bureau?: Database["public"]["Enums"]["bureau"] | null
           updated_at?: string
           user_id: string
         }
@@ -3093,6 +3098,7 @@ export type Database = {
           expires_at?: string | null
           justice_identifier?: string | null
           justice_role?: string
+          prosecutor_bureau?: Database["public"]["Enums"]["bureau"] | null
           updated_at?: string
           user_id?: string
         }
@@ -4172,12 +4178,76 @@ export type Database = {
           },
         ]
       }
+      prosecutor_coverage: {
+        Row: {
+          authorized_by: string
+          bureau: Database["public"]["Enums"]["bureau"]
+          created_at: string
+          ended_at: string | null
+          ended_by: string | null
+          expires_at: string | null
+          id: string
+          prosecutor_id: string
+          reason: string
+          starts_at: string
+        }
+        Insert: {
+          authorized_by: string
+          bureau: Database["public"]["Enums"]["bureau"]
+          created_at?: string
+          ended_at?: string | null
+          ended_by?: string | null
+          expires_at?: string | null
+          id?: string
+          prosecutor_id: string
+          reason: string
+          starts_at?: string
+        }
+        Update: {
+          authorized_by?: string
+          bureau?: Database["public"]["Enums"]["bureau"]
+          created_at?: string
+          ended_at?: string | null
+          ended_by?: string | null
+          expires_at?: string | null
+          id?: string
+          prosecutor_id?: string
+          reason?: string
+          starts_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prosecutor_coverage_prosecutor_id_fkey"
+            columns: ["prosecutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prosecutor_coverage_authorized_by_fkey"
+            columns: ["authorized_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prosecutor_coverage_ended_by_fkey"
+            columns: ["ended_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       media: {
         Row: {
           archived_at: string | null
           case_id: string | null
           category: string | null
           created_at: string
+          evidence_designated_at: string | null
+          evidence_designated_by: string | null
+          evidence_ref: string | null
           external_url: string | null
           featured: boolean
           gang_id: string | null
@@ -4202,6 +4272,9 @@ export type Database = {
           case_id?: string | null
           category?: string | null
           created_at?: string
+          evidence_designated_at?: string | null
+          evidence_designated_by?: string | null
+          evidence_ref?: string | null
           external_url?: string | null
           featured?: boolean
           gang_id?: string | null
@@ -4226,6 +4299,9 @@ export type Database = {
           case_id?: string | null
           category?: string | null
           created_at?: string
+          evidence_designated_at?: string | null
+          evidence_designated_by?: string | null
+          evidence_ref?: string | null
           external_url?: string | null
           featured?: boolean
           gang_id?: string | null
@@ -4251,6 +4327,13 @@ export type Database = {
             columns: ["case_id"]
             isOneToOne: false
             referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_evidence_designated_by_fkey"
+            columns: ["evidence_designated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -8467,7 +8550,12 @@ export type Database = {
         }[]
       }
       justice_appoint: {
-        Args: { p_reason?: string; p_role: string; p_user: string }
+        Args: {
+          p_bureau?: Database["public"]["Enums"]["bureau"]
+          p_reason?: string
+          p_role: string
+          p_user: string
+        }
         Returns: Database["public"]["Tables"]["justice_memberships"]["Row"]
       }
       justice_migration_review: {
@@ -8784,7 +8872,11 @@ export type Database = {
         Returns: Database["public"]["Tables"]["prosecutor_bureau_assignments"]["Row"]
       }
       submit_legal_request_to_cid: {
-        Args: { p_change_summary?: string; p_request: string }
+        Args: {
+          p_change_summary?: string
+          p_material_change?: boolean
+          p_request: string
+        }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
       }
       submit_legal_request_to_doj: {
@@ -9550,6 +9642,31 @@ export type Database = {
           p_tip: string
         }
         Returns: Database["public"]["Tables"]["intelligence_tips"]["Row"]
+      }
+      case_set_stage: {
+        Args: { p_case: string; p_reason: string; p_stage: string }
+        Returns: Database["public"]["Tables"]["cases"]["Row"]
+      }
+      justice_end_coverage: {
+        Args: { p_coverage: string; p_reason?: string }
+        Returns: Database["public"]["Tables"]["prosecutor_coverage"]["Row"]
+      }
+      justice_set_coverage: {
+        Args: {
+          p_bureau: Database["public"]["Enums"]["bureau"]
+          p_expires_at?: string
+          p_reason: string
+          p_user: string
+        }
+        Returns: Database["public"]["Tables"]["prosecutor_coverage"]["Row"]
+      }
+      legal_request_case_brief: {
+        Args: { p_request: string }
+        Returns: Json
+      }
+      media_designate_evidence: {
+        Args: { p_clear?: boolean; p_media: string; p_ref?: string }
+        Returns: Database["public"]["Tables"]["media"]["Row"]
       }
     }
     Enums: {
