@@ -26,7 +26,10 @@ for (const m of snapshot.matchAll(tableRe)) {
 const typeTables = new Map()
 {
   const tablesStart = types.indexOf('Tables: {')
-  const src = types.slice(tablesStart)
+  // Stop before the Views section — views (e.g. membership_history) are typed
+  // like tables but are not snapshot `create table` statements.
+  const viewsStart = types.indexOf('\n    Views: {')
+  const src = types.slice(tablesStart, viewsStart > tablesStart ? viewsStart : undefined)
   // Each table: "      name: {\n        Row: { ... }\n        Insert: ..."
   const tblRe = /\n {6}([a-z0-9_]+): \{\n {8}Row: \{([\s\S]*?)\n {8}\}/g
   for (const m of src.matchAll(tblRe)) {

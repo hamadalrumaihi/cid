@@ -38,15 +38,29 @@ Invariants enforced inside the RPCs (not the UI):
 > preserved for history), the justice-review and justice-membership RPCs are
 > EXECUTE-revoked, and the DOJ/Judiciary signup path is removed (migration
 > [`20260808140000`](../supabase/migrations/20260808140000_legal_lead_approval.sql)).
-> **Legal-request approval is now Bureau Lead+, routed through the responsible
-> bureau** ([`20260815120000`](../supabase/migrations/20260815120000_jtf_legal_routing.sql)):
-> a Bureau Lead decides only requests whose `responsible_bureau` is their own
-> division; Deputy Director / Director decide cross-bureau. A JTF-assigned case
-> routes through its responsible bureau (`cases.originating_bureau` — derived
-> from the case-number prefix, lead detective's division, or creator's division
-> and persisted; Senior Detective+ set a missing value, DD+ change one with a
-> reason, via `resolve_case_originating_bureau`). JTF is an operational
-> designation, never a routing lane. The
+> **The minimal DOJ is live again**
+> ([`20260816120000`](../supabase/migrations/20260816120000_minimal_doj_revival.sql)):
+> Bureau Lead+ approval is the CID GATE (routed through the responsible bureau,
+> [`20260815120000`](../supabase/migrations/20260815120000_jtf_legal_routing.sql) —
+> a Bureau Lead gates only requests whose `responsible_bureau` is their own
+> division; DD+/Director cross-bureau), and the LEGAL decision belongs to DOJ:
+> approve → shared `prosecutor_queue` → prosecutorial review → judicial review
+> → approved/denied. Active justice roles are exactly `attorney_general`
+> (membership + assignment administration, never decisions), `prosecutor`, and
+> `judge` (legacy ADA/DA rows map to `prosecutor` via
+> `private.justice_role_effective`, history unmutated). Appointment:
+> `justice_appoint` (AG/Owner; AG appointments Owner-only) or the audited
+> CID↔DOJ transfer workflow (`member_transfers`,
+> [`20260816130000`](../supabase/migrations/20260816130000_doj_transfers.sql) —
+> DD+ authorizes, AG/Owner accepts, transactional activation with enforced
+> handover; identity and attribution preserved; dual membership temporary-only
+> with automatic expiry and mandatory acting-capacity recording). Conflicts
+> recuse on permanent user IDs (`private.legal_is_conflicted`) and are not
+> AG-overridable. A JTF-assigned case routes through its responsible bureau
+> (`cases.originating_bureau` — derived and persisted; Senior Detective+ set a
+> missing value, DD+ change one with a reason, via
+> `resolve_case_originating_bureau`). JTF is an operational designation, never
+> a routing lane. The
 > correction below — "CID Command holds no judiciary/DOJ approval authority" —
 > described the *legacy* pipeline; **in the new model CID Command (Bureau Lead+)
 > IS the legal approval authority** (it approves/denies/returns legal requests via

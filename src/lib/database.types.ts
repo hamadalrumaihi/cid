@@ -3063,6 +3063,8 @@ export type Database = {
           approved_at: string | null
           approved_by: string | null
           created_at: string
+          ended_at: string | null
+          expires_at: string | null
           justice_identifier: string | null
           justice_role: string
           updated_at: string
@@ -3074,6 +3076,8 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           created_at?: string
+          ended_at?: string | null
+          expires_at?: string | null
           justice_identifier?: string | null
           justice_role: string
           updated_at?: string
@@ -3085,6 +3089,8 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           created_at?: string
+          ended_at?: string | null
+          expires_at?: string | null
           justice_identifier?: string | null
           justice_role?: string
           updated_at?: string
@@ -3473,9 +3479,11 @@ export type Database = {
       }
       legal_requests: {
         Row: {
+          amends_request_id: string | null
           approval_route: string | null
           assigned_ada_id: string | null
           assigned_judge_id: string | null
+          assigned_prosecutor_id: string | null
           case_id: string
           case_number_snapshot: string | null
           case_title_snapshot: string | null
@@ -3516,6 +3524,8 @@ export type Database = {
           person_id: string | null
           person_name_snapshot: string | null
           priority: string | null
+          prosecutor_claimed_at: string | null
+          queue_entered_at: string | null
           recipient_acknowledged: boolean | null
           recipient_name: string | null
           recipient_type: string | null
@@ -3542,6 +3552,7 @@ export type Database = {
           submitted_to_doj_at: string | null
           submitted_to_judge_at: string | null
           subtype: string
+          superseded_by_id: string | null
           title: string
           updated_at: string
           source_system: string | null
@@ -3552,9 +3563,11 @@ export type Database = {
           import_key: string | null
         }
         Insert: {
+          amends_request_id?: string | null
           approval_route?: string | null
           assigned_ada_id?: string | null
           assigned_judge_id?: string | null
+          assigned_prosecutor_id?: string | null
           case_id: string
           case_number_snapshot?: string | null
           case_title_snapshot?: string | null
@@ -3595,6 +3608,8 @@ export type Database = {
           person_id?: string | null
           person_name_snapshot?: string | null
           priority?: string | null
+          prosecutor_claimed_at?: string | null
+          queue_entered_at?: string | null
           recipient_acknowledged?: boolean | null
           recipient_name?: string | null
           recipient_type?: string | null
@@ -3621,6 +3636,7 @@ export type Database = {
           submitted_to_doj_at?: string | null
           submitted_to_judge_at?: string | null
           subtype: string
+          superseded_by_id?: string | null
           title: string
           updated_at?: string
           source_system?: string | null
@@ -3631,9 +3647,11 @@ export type Database = {
           import_key?: string | null
         }
         Update: {
+          amends_request_id?: string | null
           approval_route?: string | null
           assigned_ada_id?: string | null
           assigned_judge_id?: string | null
+          assigned_prosecutor_id?: string | null
           case_id?: string
           case_number_snapshot?: string | null
           case_title_snapshot?: string | null
@@ -3674,6 +3692,8 @@ export type Database = {
           person_id?: string | null
           person_name_snapshot?: string | null
           priority?: string | null
+          prosecutor_claimed_at?: string | null
+          queue_entered_at?: string | null
           recipient_acknowledged?: boolean | null
           recipient_name?: string | null
           recipient_type?: string | null
@@ -3700,6 +3720,7 @@ export type Database = {
           submitted_to_doj_at?: string | null
           submitted_to_judge_at?: string | null
           subtype?: string
+          superseded_by_id?: string | null
           title?: string
           updated_at?: string
           source_system?: string | null
@@ -5381,6 +5402,126 @@ export type Database = {
             columns: ["vehicle_id"]
             isOneToOne: false
             referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      member_transfers: {
+        Row: {
+          cid_decided_at: string | null
+          cid_decided_by: string | null
+          cid_note: string | null
+          created_at: string
+          direction: string
+          doj_decided_at: string | null
+          doj_decided_by: string | null
+          doj_note: string | null
+          dual_expires_at: string | null
+          effective_at: string | null
+          effective_by: string | null
+          from_division: string | null
+          from_justice_role: string | null
+          from_role: string | null
+          handover: Json | null
+          id: string
+          reason: string
+          requested_by: string
+          requested_role: string
+          retain_cid: boolean
+          return_note: string | null
+          status: string
+          target_bureau: Database["public"]["Enums"]["bureau"] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cid_decided_at?: string | null
+          cid_decided_by?: string | null
+          cid_note?: string | null
+          created_at?: string
+          direction: string
+          doj_decided_at?: string | null
+          doj_decided_by?: string | null
+          doj_note?: string | null
+          dual_expires_at?: string | null
+          effective_at?: string | null
+          effective_by?: string | null
+          from_division?: string | null
+          from_justice_role?: string | null
+          from_role?: string | null
+          handover?: Json | null
+          id?: string
+          reason: string
+          requested_by: string
+          requested_role: string
+          retain_cid?: boolean
+          return_note?: string | null
+          status?: string
+          target_bureau?: Database["public"]["Enums"]["bureau"] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cid_decided_at?: string | null
+          cid_decided_by?: string | null
+          cid_note?: string | null
+          created_at?: string
+          direction?: string
+          doj_decided_at?: string | null
+          doj_decided_by?: string | null
+          doj_note?: string | null
+          dual_expires_at?: string | null
+          effective_at?: string | null
+          effective_by?: string | null
+          from_division?: string | null
+          from_justice_role?: string | null
+          from_role?: string | null
+          handover?: Json | null
+          id?: string
+          reason?: string
+          requested_by?: string
+          requested_role?: string
+          retain_cid?: boolean
+          return_note?: string | null
+          status?: string
+          target_bureau?: Database["public"]["Enums"]["bureau"] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_transfers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_transfers_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_transfers_cid_decided_by_fkey"
+            columns: ["cid_decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_transfers_doj_decided_by_fkey"
+            columns: ["doj_decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_transfers_effective_by_fkey"
+            columns: ["effective_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -8101,7 +8242,19 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      membership_history: {
+        Row: {
+          organization: string | null
+          recorded_at: string | null
+          reason: string | null
+          reference_id: string | null
+          role: string | null
+          source: string | null
+          status: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       account_merge: {
@@ -8312,6 +8465,34 @@ export type Database = {
           id: string
           internal_note: string
         }[]
+      }
+      justice_appoint: {
+        Args: { p_reason?: string; p_role: string; p_user: string }
+        Returns: Database["public"]["Tables"]["justice_memberships"]["Row"]
+      }
+      justice_migration_review: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      legal_admin_cancel: {
+        Args: { p_reason: string; p_request: string }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      legal_assign_prosecutor: {
+        Args: { p_prosecutor: string; p_reason?: string; p_request: string }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      legal_claim_prosecutor: {
+        Args: { p_request: string }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      legal_mark_superseded: {
+        Args: { p_new: string; p_old: string; p_reason: string }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      legal_return_to_prosecutor_queue: {
+        Args: { p_reason?: string; p_request: string }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
       }
       legal_search: {
         Args: { q: string }
@@ -8525,6 +8706,49 @@ export type Database = {
           p_signature?: string
         }
         Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      review_legal_request_as_prosecutor: {
+        Args: {
+          p_capacity?: string
+          p_decision: string
+          p_note?: string
+          p_request: string
+          p_signature?: string
+        }
+        Returns: Database["public"]["Tables"]["legal_requests"]["Row"]
+      }
+      transfer_doj_activate: {
+        Args: { p_reassignments?: Json; p_transfer: string }
+        Returns: Database["public"]["Tables"]["member_transfers"]["Row"]
+      }
+      transfer_doj_cancel: {
+        Args: { p_reason?: string; p_transfer: string }
+        Returns: Database["public"]["Tables"]["member_transfers"]["Row"]
+      }
+      transfer_doj_decide: {
+        Args: {
+          p_decision: string
+          p_dual_expires_at?: string
+          p_note?: string
+          p_retain_cid?: boolean
+          p_stage: string
+          p_transfer: string
+        }
+        Returns: Database["public"]["Tables"]["member_transfers"]["Row"]
+      }
+      transfer_doj_request: {
+        Args: {
+          p_bureau?: Database["public"]["Enums"]["bureau"]
+          p_direction: string
+          p_reason: string
+          p_role: string
+          p_user: string
+        }
+        Returns: Database["public"]["Tables"]["member_transfers"]["Row"]
+      }
+      transfer_handover: {
+        Args: { p_transfer: string }
+        Returns: Json
       }
       review_legal_request_as_da: {
         Args: {
