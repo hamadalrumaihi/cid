@@ -8703,3 +8703,23 @@ create policy wl_sel on public.watchlist
 -- All function grants unchanged in audience (revoked from public/anon; the
 -- two public RPCs granted authenticated + service_role). Definitive SQL in
 -- supabase/migrations/20260815120000_jtf_legal_routing.sql.
+
+-- Direct DOJ / judiciary assignment (20260817120000): public.justice_appoint
+-- (comment-tracked here at the same fidelity as its 20260816120000
+-- introduction) is re-emitted as the single-step, EFFECTIVE-IMMEDIATELY
+-- appointment path. Authority: prosecutor/judge — active Attorney General,
+-- Deputy Director+, or Owner; attorney_general — Owner ONLY (unchanged).
+-- An ACTIVE CID member of any rank/bureau (JTF included) is now accepted and
+-- transferred inline in the same transaction (DD+/Owner only — a pure-AG
+-- actor may appoint only non-CID accounts): a member_transfers history row is
+-- written already status='effective' with every stage stamp on the single
+-- acting authority (single-step officer-transfer precedent, 20260807040000),
+-- profiles.active flips false with a dated role_events row (source
+-- 'doj_transfer'), active case_assignments end with reason 'Assigned to DOJ',
+-- led cases keep their lead pointer and DD+ are notified of how many need a
+-- hand-over, then the justice membership upserts active (ended_at/expires_at
+-- cleared). Inactive/unassigned accounts appoint directly as before. Walls
+-- unchanged: removed/login-denied/system/test refused; self-appointment
+-- refused (Owner excepted); conflict recusal (private.legal_is_conflicted)
+-- untouched. Grants unchanged (authenticated + service_role; anon revoked).
+-- Definitive SQL in supabase/migrations/20260817120000_doj_direct_assignment.sql.

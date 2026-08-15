@@ -12,11 +12,15 @@
 > **Active roles (exactly three):** `attorney_general` · `prosecutor` · `judge`.
 > Legacy ADA/DA membership rows are preserved untouched as history; the
 > authority helpers map them to the effective role `prosecutor`
-> (`private.justice_role_effective`). Membership is by appointment only
-> (`justice_appoint`: AG/Owner appoint prosecutors and judges; **the Owner
-> alone appoints an Attorney General**) or by the CID↔DOJ transfer workflow
-> (`member_transfers` — identity and attribution preserved, handover enforced,
-> transactional activation).
+> (`private.justice_role_effective`). Membership is by appointment —
+> **direct and immediate** via `justice_appoint` (AG/DD+/Owner appoint
+> prosecutors and judges; **the Owner alone appoints an Attorney General**;
+> an active CID member — any rank or bureau — is moved inline by DD+/Owner:
+> CID membership ends, a settled `member_transfers` row is written, and the
+> justice membership activates in one transaction) — with the staged CID↔DOJ
+> transfer workflow (`member_transfers` — identity and attribution preserved,
+> handover enforced, transactional activation) remaining as the deliberate
+> hand-over-first alternative.
 >
 > **The pipeline (authoritative):**
 > `not_submitted` → `cid_supervisor_review` (Bureau Lead+ of the responsible
