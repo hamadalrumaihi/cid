@@ -1,28 +1,35 @@
 /** Legal-request security-wall tests — LIVE project, rls-test accounts.
  *
- *  Reworked for the retired-DOJ / Bureau-Lead+ legal model (migration
- *  20260808140000_legal_lead_approval). Legal-request approval is now a single
- *  Bureau Lead+ decision via review_legal_request_as_cid — there is NO
- *  ADA/DA/AG/Judge stage, no prosecutor bureau routing, and no judicial hop.
- *  The retired workflow RPCs are EXECUTE-revoked and all justice memberships
- *  are inactive; that lockdown is asserted by tests/rls/v152.test.ts and is NOT
- *  re-tested here.
+ *  Reworked for the MINIMAL-DOJ REVIVAL (migrations
+ *  20260816120000_minimal_doj_revival + 20260816130000_doj_transfers).
+ *  A Bureau Lead+ 'approve' via review_legal_request_as_cid is no longer
+ *  terminal: it hands the request to the shared PROSECUTOR QUEUE
+ *  (review_status='prosecutor_queue'), after which the pipeline runs
+ *  prosecutor_review → submitted_to_judge → judicial_review → approved,
+ *  and only THEN can CID issue (issue_legal_request still gates on
+ *  review_status='approved' + can_fulfil_legal).
  *
- *  This suite covers the still-live CID-side contract:
+ *  This suite covers the CID-side contract with the CID fixtures only:
  *    - drafting a legal request (create_legal_request) with case-access rules,
  *      draft-ownership, and the direct-write revoke;
  *    - exhibit rules (add_legal_exhibit from accessible sources only);
  *    - submit_legal_request_to_cid → cid_supervisor_review with a frozen,
  *      immutable v1;
- *    - a Bureau Lead+ approval (review_legal_request_as_cid p_decision:'approve')
- *      terminating at `approved` with no ADA/DOJ hop;
- *    - RLS READ visibility of legal_requests + versions/actions/exhibits/
- *      signatures across roles (creator, same-bureau CID command, other-bureau
- *      denial, owner, anon);
- *    - the CID-side fulfilment chain after a Lead+ approval — issue →
- *      execution/expiry (warrant) and service → compliance (subpoena) → close,
- *      gated to can_fulfil_legal;
+ *    - a Bureau Lead+ approval landing in `prosecutor_queue` (NOT `approved`)
+ *      with queue_entered_at/submitted_to_doj_at stamped and no decision;
+ *    - RLS READ visibility of the queued (classified) request across roles
+ *      (creator, same-bureau CID command, other-bureau denial, owner, anon);
+ *    - the issuance gate: a queued request cannot be issued, escalated by
+ *      direct UPDATE, or claimed by CID actors posing as prosecutor/judge;
  *    - sealed-request undiscoverability and hard-delete resistance.
+ *
+ *  The post-approval fulfilment chains (issue → execution/expiry for warrants,
+ *  service → compliance for subpoenas) can no longer be REACHED by CID
+ *  fixtures alone — reaching review_status='approved' now requires an active
+ *  prosecutor + judge, and justice_appoint refuses is_test accounts by design.
+ *  Those blocks are it.skip'd here with the original bodies preserved and are
+ *  covered by tests/rls/v163.test.ts once the DOJ fixture accounts
+ *  (rls-test-prosecutor / -prosecutor2 / -judge / -ag) are provisioned.
  *
  *  Fixtures reused from the CID build: lsb (detective, LSB — the creator),
  *  bcb (detective, BCB — other-bureau), lead (bureau_lead, LSB — command,
@@ -49,7 +56,7 @@ if (!enabled) console.warn('[rls:legal] CID fixture passwords not set — suite 
 const mk = () => createClient(URL, ANON, { auth: { persistSession: false, autoRefreshToken: false } })
 type C = SupabaseClient
 
-describe.skipIf(!enabled)('Legal requests — RLS/RPC security wall (Bureau Lead+ model, live)', () => {
+describe.skipIf(!enabled)('Legal requests — RLS/RPC security wall (minimal-DOJ model, live)', () => {
   let lsb: C, bcb: C, lead: C, owner: C
   const ids: Record<string, string> = {}
   let caseId = ''       // LSB case owned by the lsb detective
@@ -141,9 +148,9 @@ describe.skipIf(!enabled)('Legal requests — RLS/RPC security wall (Bureau Lead
     expect(tamper.error).not.toBeNull()
   })
 
-  /* ================= Bureau Lead+ approval + read visibility ================= */
+  /* ================= Bureau Lead+ approval → prosecutor queue + read visibility ================= */
 
-  it('CID supervisor return → creator edits → resubmit; then a Bureau Lead approves straight to `approved` (no DOJ/ADA hop)', async () => {
+  it('CID supervisor return → creator edits → resubmit; then a Bureau Lead approve hands off to the PROSECUTOR QUEUE (not terminal)', async () => {
     const ret = await lead.rpc('review_legal_request_as_cid', { p_request: warrantId, p_decision: 'return', p_note: 'tighten the PC statement' })
     expect(ret.error).toBeNull()
     expect(ret.data).toMatchObject({ review_status: 'returned_by_cid', document_status: 'reopened' })
@@ -152,16 +159,23 @@ describe.skipIf(!enabled)('Legal requests — RLS/RPC security wall (Bureau Lead
     const resub = await lsb.rpc('submit_legal_request_to_cid', { p_request: warrantId })
     expect(resub.error).toBeNull()
 
-    // terminal at `approved`; no assigned ADA, still unissued (fulfilment is a separate step)
+    // minimal-DOJ: the Lead+ decision is the CID gate — 'approve' moves the
+    // request into the shared prosecutor queue; the LEGAL decision now belongs
+    // to the prosecutor + judge (no decision/decided_by is recorded here).
     const ok = await lead.rpc('review_legal_request_as_cid', { p_request: warrantId, p_decision: 'approve', p_signature: 'RLS Lead' })
     expect(ok.error).toBeNull()
     expect(ok.data).toMatchObject({
-      review_status: 'approved', decision: 'approved',
-      decided_by: ids.lead, assigned_ada_id: null, fulfilment_status: 'unissued',
+      review_status: 'prosecutor_queue',
+      decision: null, decided_by: null,
+      cid_reviewed_by: ids.lead,
+      assigned_ada_id: null, assigned_prosecutor_id: null,
+      fulfilment_status: 'unissued',
     })
+    expect((ok.data as { queue_entered_at?: string }).queue_entered_at).toBeTruthy()
+    expect((ok.data as { submitted_to_doj_at?: string }).submitted_to_doj_at).toBeTruthy()
   })
 
-  it('RLS read visibility of the approved (classified) request holds across roles', async () => {
+  it('RLS read visibility of the queued (classified) request holds across roles', async () => {
     // creator sees the request AND its full packet (versions / actions / exhibits / signatures)
     const creatorReq = await lsb.from('legal_requests').select('id').eq('id', warrantId)
     expect(creatorReq.data).toHaveLength(1)
@@ -191,9 +205,38 @@ describe.skipIf(!enabled)('Legal requests — RLS/RPC security wall (Bureau Lead
     expect((anonReq.data ?? []).length).toBe(0)
   })
 
+  /* ================= issuance gate (pre-approval) ================= */
+
+  it('a queued request cannot be issued, escalated, or claimed by CID actors — issuance stays gated on judicial approval', async () => {
+    // issue_legal_request still requires review_status='approved' — a request
+    // sitting in the prosecutor queue is not issuable by anyone.
+    const early = await lsb.rpc('issue_legal_request', { p_request: warrantId })
+    expect(early.error).not.toBeNull()
+    expect(early.error!.message).toMatch(/only an approved request can be issued/i)
+    // direct escalation to 'approved' stays impossible (no client UPDATE grant)
+    const direct = await lsb.from('legal_requests').update({ review_status: 'approved' }).eq('id', warrantId).select('id')
+    expect(direct.error).not.toBeNull()
+    // CID actors hold no DOJ authority: neither the creator nor command can
+    // claim the request as prosecutor or judge.
+    const claimP = await lead.rpc('legal_claim_prosecutor', { p_request: warrantId })
+    expect(claimP.error).not.toBeNull()
+    expect(claimP.error!.message).toMatch(/only an active Prosecutor/i)
+    const claimJ = await lead.rpc('claim_legal_request_as_judge', { p_request: warrantId })
+    expect(claimJ.error).not.toBeNull()
+    expect(claimJ.error!.message).toMatch(/only an active Judge/i)
+    // the request is still exactly where the Lead left it
+    const still = await lsb.from('legal_requests').select('review_status,fulfilment_status').eq('id', warrantId).single()
+    expect(still.data).toMatchObject({ review_status: 'prosecutor_queue', fulfilment_status: 'unissued' })
+  })
+
   /* ================= CID-side fulfilment (warrant) ================= */
 
-  it('issue is CID-side and case-scoped; execution respects expiry; the projection never stays wanted past expiration', async () => {
+  // Requires review_status='approved', which is now only reachable through the
+  // prosecutor → judge pipeline. The CID fixtures cannot ride it (justice_appoint
+  // refuses is_test accounts by design) — covered by tests/rls/v163.test.ts once
+  // the rls-test-prosecutor / -prosecutor2 / -judge / -ag fixtures are
+  // provisioned. Body preserved verbatim for re-enablement.
+  it.skip('issue is CID-side and case-scoped; execution respects expiry; the projection never stays wanted past expiration [requires DOJ fixture accounts — v163]', async () => {
     // an off-case detective cannot issue
     const foreignIssue = await bcb.rpc('issue_legal_request', { p_request: warrantId })
     expect(foreignIssue.error).not.toBeNull()
@@ -224,7 +267,7 @@ describe.skipIf(!enabled)('Legal requests — RLS/RPC security wall (Bureau Lead
 
   /* ================= CID-side fulfilment (subpoena) ================= */
 
-  it('a document subpoena reaches Lead approval, then service + compliance are CID-side and case-scoped', async () => {
+  it('a document subpoena rides the same chain: Lead approval hands it to the prosecutor queue, unissued', async () => {
     const r = await lsb.rpc('create_legal_request', {
       p_case: caseId, p_request_type: 'subpoena', p_subtype: 'document_production',
       p_title: `RLS Subpoena ${tag}`, p_recipient_type: 'entity', p_recipient_name: 'Maze Bank',
@@ -237,13 +280,28 @@ describe.skipIf(!enabled)('Legal requests — RLS/RPC security wall (Bureau Lead
     await lsb.rpc('add_legal_exhibit', { p_request: subpoenaId, p_type: 'external_link', p_meta: { url: 'https://x/docs' } })
     const sub = await lsb.rpc('submit_legal_request_to_cid', { p_request: subpoenaId })
     expect(sub.error).toBeNull()
-    // subpoenas terminate at Lead+ approval too (no DA/AG route)
+    // subpoenas enter the shared prosecutor queue on Lead+ approval too
+    // (no bureau-ADA / DA / AG routing — one queue for everything)
     const ap = await lead.rpc('review_legal_request_as_cid', { p_request: subpoenaId, p_decision: 'approve', p_signature: 'RLS Lead' })
     expect(ap.error).toBeNull()
-    expect(ap.data).toMatchObject({ review_status: 'approved', assigned_ada_id: null })
-    // fulfilment: an off-case detective cannot serve; CID records service + compliance
+    expect(ap.data).toMatchObject({
+      review_status: 'prosecutor_queue',
+      assigned_ada_id: null, assigned_prosecutor_id: null,
+      decision: null, fulfilment_status: 'unissued',
+    })
+    // the fulfilment RPCs refuse a queued subpoena — nothing can be served
+    // before the pipeline reaches 'approved' and CID issues it
     const issue = await lsb.rpc('issue_legal_request', { p_request: subpoenaId, p_response_deadline: new Date(Date.now() + 86_400_000).toISOString() })
-    expect(issue.error).toBeNull()
+    expect(issue.error).not.toBeNull()
+    expect(issue.error!.message).toMatch(/only an approved request can be issued/i)
+    const serve = await lsb.rpc('record_subpoena_service', { p_request: subpoenaId, p_status: 'served', p_method: 'in person' })
+    expect(serve.error).not.toBeNull()
+  })
+
+  // Post-approval subpoena fulfilment (issue → service → compliance) needs the
+  // prosecutor + judge stages to reach 'approved' first — covered by
+  // tests/rls/v163.test.ts once the DOJ fixture accounts are provisioned.
+  it.skip('after judicial approval, service + compliance are CID-side and case-scoped [requires DOJ fixture accounts — v163]', async () => {
     const foreignServe = await bcb.rpc('record_subpoena_service', { p_request: subpoenaId, p_status: 'served' })
     expect(foreignServe.error).not.toBeNull()
     const serve = await lsb.rpc('record_subpoena_service', { p_request: subpoenaId, p_status: 'served', p_method: 'in person' })

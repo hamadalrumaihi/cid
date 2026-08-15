@@ -175,9 +175,10 @@ describe.skipIf(!enabled)('v1.62 — JTF legal routing: responsible-bureau wall 
       p_request: jtfRequestId, p_decision: 'approve', p_signature: 'RLS Director',
     })
     expect(ok.error).toBeNull()
+    // minimal-DOJ revival (20260816120000): approve queues rather than decides.
     expect(ok.data).toMatchObject({
-      review_status: 'approved', decision: 'approved',
-      decided_by: ids.director, responsible_bureau: 'SAB',
+      review_status: 'prosecutor_queue', decision: null,
+      cid_reviewed_by: ids.director, responsible_bureau: 'SAB',
     })
   })
 
@@ -230,7 +231,8 @@ describe.skipIf(!enabled)('v1.62 — JTF legal routing: responsible-bureau wall 
       p_request: lsbRequestId, p_decision: 'approve', p_signature: 'RLS Lead',
     })
     expect(ok.error).toBeNull()
-    expect(ok.data).toMatchObject({ review_status: 'approved', decided_by: ids.lead })
+    // minimal-DOJ revival: the gate passes into the shared prosecutor queue.
+    expect(ok.data).toMatchObject({ review_status: 'prosecutor_queue', cid_reviewed_by: ids.lead })
   })
 
   /* ============ 7. unrelated-case protection ============ */

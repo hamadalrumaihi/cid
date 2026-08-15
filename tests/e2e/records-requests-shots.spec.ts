@@ -7,9 +7,11 @@
  *    RR_SHOTS=1 PW_SUPABASE_SHIM=1 npx playwright test \
  *      tests/e2e/records-requests-shots.spec.ts --workers=1
  *
- *  Fixtures ride on legalFixtures (a real LSB case + person + an issued
- *  warrant via the post-Phase-1 Bureau Lead approval path — see
- *  20260808140000_legal_lead_approval) and add, as the fixture users through
+ *  Fixtures ride on legalFixtures (a real LSB case + person + a warrant in
+ *  the shared prosecutor queue — the minimal-DOJ revival, migration
+ *  20260816120000, means no ISSUED warrant is reachable without the DOJ
+ *  fixture accounts; the D3 execution/seized-items shot is skipped until they
+ *  exist — see tests/rls/v163.test.ts) and add, as the fixture users through
  *  the SAME shipped RPCs/policies: an account+link (D1/D2), a restricted media
  *  row (D6), a legal hold (D7) and an approved MDT export (D4). Everything is
  *  swept in afterAll (rls_test_cleanup + the legalFixtures registry deletes +
@@ -144,12 +146,10 @@ test.describe('Records & Requests — Phase-0 screenshot verification', () => {
       if (exportId) { await rpcOk(lead, 'mdt_export_approve', { p_export: exportId }); ex.mdtApproved = true }
     } catch (e) { ex.mdtError = e instanceof Error ? e.message : String(e) }
 
-    // D3 — a seized item on the issued (Lead-approved) warrant.
-    try {
-      await rpcOk(lsb, 'legal_seized_item_add', {
-        p_request: f.leadApproved.id, p_item: 'Glock 19', p_quantity: '1', p_category: 'weapon', p_notes: `[rls-test] ${tag}`,
-      })
-    } catch (e) { console.warn('[rr-shots] seized_item_add failed:', e) }
+    // D3 — needs an ISSUED warrant, which the minimal-DOJ pipeline
+    // (20260816120000) makes unreachable for CID fixtures: queuedWarrant stops
+    // at prosecutor_queue. The seized-item add and the D3 shot are skipped
+    // until the DOJ fixture accounts are provisioned (tests/rls/v163.test.ts).
 
     x = ex
     console.info('[rr-shots] extras:', JSON.stringify(ex))
@@ -198,13 +198,20 @@ test.describe('Records & Requests — Phase-0 screenshot verification', () => {
   })
 
   test('D3 · warrant execution controls + seized-items panel', async ({ page }) => {
+    // Requires an ISSUED warrant. Under the minimal-DOJ revival
+    // (20260816120000) issuance needs the prosecutor → judge pipeline, which
+    // the CID fixtures cannot ride (justice_appoint refuses is_test accounts).
+    // Re-enable once the rls-test-prosecutor/-prosecutor2/-judge/-ag fixtures
+    // are provisioned (contract: tests/rls/v163.test.ts) and the fixture
+    // builder can produce an issued warrant again.
+    test.skip(true, 'needs an issued warrant — blocked on DOJ fixture accounts (see tests/rls/v163.test.ts)')
     test.setTimeout(120_000)
     const errs = watch(page)
     await inject(page, fx().actors.lsb)
     // The seized-items panel lives in the Service & Return section; the
     // execution-outcome controls (DecisionPanel) render on every section.
-    await page.goto(`/legal?request=${fx().leadApproved.id}&section=service`)
-    await expect(page.getByRole('heading', { name: fx().leadApproved.title })).toBeVisible({ timeout: 30_000 })
+    await page.goto(`/legal?request=${fx().queuedWarrant.id}&section=service`)
+    await expect(page.getByRole('heading', { name: fx().queuedWarrant.title })).toBeVisible({ timeout: 30_000 })
     // Execution outcome controls (D3): full / partial / unable.
     await expect(page.getByRole('button', { name: 'Unable to execute' })).toBeVisible({ timeout: 20_000 })
     await expect(page.getByRole('button', { name: 'Partial execution' })).toBeVisible()
