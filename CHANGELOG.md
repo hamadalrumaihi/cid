@@ -62,6 +62,12 @@ workflow and the case workspace:
   promotion; a dedicated destructive case-deletion screen (exact case-number
   confirmation + dependency summary + reason); and the Action Center as the
   portal's default landing page.
+- **Stage history in the Record tab.** `case_stage_history(p_case)`
+  (migration `20260819120000_case_stage_history`) exposes a case's
+  `CASE_STAGE_CHANGED` audit rows — when, who, from → to, reason — to
+  members with case access (the audit log itself stays Owner-only), rendered
+  as a timeline card in the case Record area that refreshes when the stage
+  moves.
 
 ### Minimal DOJ, member transfers, and the investigative-workspace redesign
 

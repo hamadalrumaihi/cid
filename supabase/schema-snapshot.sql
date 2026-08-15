@@ -6020,6 +6020,27 @@ begin
   return c;
 end $$;
 
+create or replace function public.case_stage_history(p_case uuid)
+returns table (
+  changed_at timestamptz,
+  actor_id uuid,
+  actor_name text,
+  from_stage text,
+  to_stage text,
+  reason text
+)
+language sql stable security definer set search_path to '' as $$
+  select a.created_at, a.actor_id, p.display_name,
+         a.detail->>'from', a.detail->>'to', a.detail->>'reason'
+    from public.audit_log a
+    left join public.profiles p on p.id = a.actor_id
+   where a.entity = 'cases'
+     and a.entity_id = p_case
+     and a.action = 'CASE_STAGE_CHANGED'
+     and private.can_access_case(p_case)
+   order by a.created_at desc
+$$;
+
 create or replace function public.media_designate_evidence(
   p_media uuid, p_ref text default null, p_clear boolean default false)
 returns public.media
@@ -9723,3 +9744,13 @@ create policy wl_sel on public.watchlist
 -- database.types.ts updated (prosecutor_coverage table, new columns, new/
 -- changed RPC signatures). Definitive SQL in
 -- supabase/migrations/20260818120000_bureau_queues_stages.sql.
+
+-- 20260819120000_case_stage_history: member-visible investigative-stage
+-- history. NEW definer RPC case_stage_history(p_case uuid) returns table
+-- (changed_at, actor_id, actor_name, from_stage, to_stage, reason) — reads
+-- ONLY the CASE_STAGE_CHANGED audit rows of one case, gated in the WHERE
+-- clause on private.can_access_case (inaccessible/unknown cases return zero
+-- rows, no probing signal); SECURITY DEFINER because audit_log SELECT is
+-- Owner-only; STABLE, revoked from public/anon, granted authenticated +
+-- service_role. No tables, columns, or policies changed. Definitive SQL in
+-- supabase/migrations/20260819120000_case_stage_history.sql.
