@@ -18,7 +18,7 @@ import { assessCase, ricoTabVisible } from '@/lib/caseWorkflow'
 import { normalizeCaseTab } from '@/lib/caseLinks'
 import type { Tables } from '@/lib/database.types'
 import type { LegalRequest } from '@/lib/justice'
-import { countViewerActionable } from '@/lib/legalWorkflow'
+import { canChangeResponsibleBureau, canSetResponsibleBureau, countViewerActionable, isJtfAssigned, isRoutingBureau } from '@/lib/legalWorkflow'
 import { parseCharges } from '@/lib/jsonShapes'
 import { officerName, activeProfiles } from '@/lib/profiles'
 import { notify } from '@/lib/notify'
@@ -30,6 +30,7 @@ import { confirmCaseClose, enableRicoSession, isPinnedCase, pushRecentCase, rico
 import { CaseModal } from './CaseModal'
 import { CaseCommandHeader } from './CaseCommandHeader'
 import { ReassignBureauModal } from './ReassignBureauModal'
+import { ResponsibleBureauModal } from './ResponsibleBureauModal'
 import { OverviewTab } from './tabs/OverviewTab'
 import { MediaTab } from './tabs/MediaTab'
 import type { BlockerRow } from './tabs/CaseBlockersPanel'
@@ -108,6 +109,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const [edit, setEdit] = useState(false)
   const [handover, setHandover] = useState(false)
   const [reassign, setReassign] = useState(false)
+  const [respBureau, setRespBureau] = useState(false)
   const casesV = useTableVersion('cases')
   // Legacy ?tab=evidence (old links/notifications/search hits) maps to media.
   const requestedTab = normalizeCaseTab(sp.get('tab'))
@@ -277,6 +279,15 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   // cosmetic mirror of case_reassign_bureau's server rule; RLS + the freeze
   // trigger enforce the real one.
   const canReassignBureau = isOwner || (isCommand && (profile?.role === 'deputy_director' || profile?.role === 'director'))
+  // Responsible-bureau action (JTF-assigned cases only — legal routing rides
+  // originating_bureau): SETTING a missing value is Senior Detective+;
+  // CHANGING an already-set one is Deputy Director+/Owner with a reason.
+  // Cosmetic mirror of resolve_case_originating_bureau — the RPC re-validates.
+  const responsibleBureauAction: 'set' | 'change' | null = !isJtfAssigned(c)
+    ? null
+    : isRoutingBureau(c.originating_bureau)
+      ? (canChangeResponsibleBureau(profile?.role, isOwner) ? 'change' : null)
+      : (canSetResponsibleBureau(profile?.role, isOwner) ? 'set' : null)
   // "Awaiting a decision" reuses the established sign-off vocabulary: every
   // awaiting state is prefixed awaiting_ (lib/signoff), same set caseCourtHint
   // keys off. No new states invented.
@@ -431,6 +442,8 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         onPlaceHold={() => void placeHold()}
         canHandover={canHandover}
         canReassignBureau={canReassignBureau}
+        responsibleBureauAction={responsibleBureauAction}
+        onResponsibleBureau={() => setRespBureau(true)}
         onStatusChange={(s) => void quickStatus(s)}
         onPinToggle={() => { togglePinCase(c.id); setCase({ ...c }) }}
         onEdit={() => setEdit(true)}
@@ -486,6 +499,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       <CaseModal open={edit} record={c} onClose={() => setEdit(false)} onSaved={() => { setEdit(false); onChanged(); void fetchCase() }} />
       <HandoverModal open={handover} c={c} onClose={() => setHandover(false)} onDone={() => { setHandover(false); onChanged(); void fetchCase() }} />
       <ReassignBureauModal open={reassign} c={c} onClose={() => setReassign(false)} onDone={() => { setReassign(false); onChanged(); void fetchCase() }} />
+      <ResponsibleBureauModal open={respBureau} c={c} onClose={() => setRespBureau(false)} onDone={(updated) => { setRespBureau(false); setCase(updated); onChanged(); void fetchCase() }} />
     </div>
   )
 }

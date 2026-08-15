@@ -589,6 +589,64 @@ export function subtypeSupportsStructuredTargets(requestType: string, subtype: s
   return requestType === 'warrant' && subtype === 'search_warrant'
 }
 
+/* ── Responsible-bureau resolution — the client mirror of the server chain ────
+ * private.legal_resolve_bureau (migration 20260815120000) resolves the bureau
+ * that routes a case's legal work: operational assignment (cases.bureau='JTF')
+ * is NOT a prosecutorial lane, so a JTF case routes through its RESPONSIBLE
+ * bureau. One chain, everywhere: bureau (when permanent) → originating_bureau →
+ * case-number prefix → lead detective's division → creator's division. The
+ * server persists a successful derivation to cases.originating_bureau; this
+ * mirror only explains and previews — RLS and definer RPCs stay the authority. */
+export const CID_ROUTING_BUREAUS = ['LSB', 'BCB', 'SAB'] as const
+export type RoutingBureau = (typeof CID_ROUTING_BUREAUS)[number]
+
+export const isRoutingBureau = (b: string | null | undefined): b is RoutingBureau =>
+  (CID_ROUTING_BUREAUS as readonly string[]).includes(b ?? '')
+
+export interface CaseRoutingLike {
+  bureau: string
+  originating_bureau: string | null
+  case_number: string
+  /** profiles.division of lead_detective_id / created_by, when loaded. */
+  leadDivision?: string | null
+  creatorDivision?: string | null
+}
+
+export type RoutingSource = 'bureau' | 'originating' | 'case_number' | 'lead_detective' | 'creator'
+
+export const ROUTING_SOURCE_LABEL: Record<RoutingSource, string> = {
+  bureau: 'the case bureau',
+  originating: 'the recorded responsible bureau',
+  case_number: 'the case-number prefix',
+  lead_detective: 'the lead detective’s bureau',
+  creator: 'the case creator’s bureau',
+}
+
+/** The exact client mirror of private.legal_resolve_bureau. `bureau: null`
+ *  means legal routing is blocked until a supervisor records a responsible
+ *  bureau (resolve_case_originating_bureau). */
+export function resolveResponsibleBureau(c: CaseRoutingLike): { bureau: RoutingBureau | null; source: RoutingSource | null } {
+  if (isRoutingBureau(c.bureau)) return { bureau: c.bureau, source: 'bureau' }
+  if (isRoutingBureau(c.originating_bureau)) return { bureau: c.originating_bureau, source: 'originating' }
+  const prefix = (c.case_number ?? '').split('-')[0]
+  if (isRoutingBureau(prefix)) return { bureau: prefix, source: 'case_number' }
+  if (isRoutingBureau(c.leadDivision)) return { bureau: c.leadDivision, source: 'lead_detective' }
+  if (isRoutingBureau(c.creatorDivision)) return { bureau: c.creatorDivision, source: 'creator' }
+  return { bureau: null, source: null }
+}
+
+/** True when the case is operationally JTF-assigned (or otherwise without a
+ *  permanent bureau) — the shapes whose legal routing rides originating_bureau. */
+export const isJtfAssigned = (c: Pick<CaseRoutingLike, 'bureau'>): boolean => !isRoutingBureau(c.bureau)
+
+/** Roles allowed to SET a missing responsible bureau (server bar of
+ *  resolve_case_originating_bureau); changing an already-set value is
+ *  Deputy Director+ / Owner with a reason. */
+export const canSetResponsibleBureau = (role: string | null | undefined, isOwner?: boolean | null): boolean =>
+  !!isOwner || ['senior_detective', 'bureau_lead', 'deputy_director', 'director'].includes(role ?? '')
+export const canChangeResponsibleBureau = (role: string | null | undefined, isOwner?: boolean | null): boolean =>
+  !!isOwner || ['deputy_director', 'director'].includes(role ?? '')
+
 /* ── Guided create wizard — pure step model ───────────────────────────────────
  * The wizard component owns the UI; this owns the DERIVATION: which steps
  * exist, what each step still needs, and the exact client mirror of the
@@ -617,6 +675,11 @@ export interface LegalWizardInput {
   priority: string
   narrative: string
   form: Record<string, string>
+  /** Responsible-bureau resolution for the selected case:
+   *  a RoutingBureau = resolved; null = definitively unresolved (blocks with a
+   *  clear fix path); undefined = not evaluated (legacy callers — no issue,
+   *  the server still enforces). */
+  routingBureau?: RoutingBureau | null
 }
 
 /** Outstanding issues for one wizard step. `review` is the union of every
@@ -631,6 +694,11 @@ export function legalWizardIssues(step: LegalWizardStepId, w: LegalWizardInput):
   }
   if (step === 'case_target') {
     if (!w.caseId) issues.push('Select a case.')
+    // Mirror of private.legal_resolve_bureau's terminal error: a case with no
+    // resolvable responsible bureau cannot create or submit legal requests.
+    if (w.caseId && w.routingBureau === null) {
+      issues.push('This case needs a responsible bureau for legal routing — select LSB, BCB, or SAB.')
+    }
     if (subtypeRequiresPerson(w.requestType, w.subtype) && !w.personId) {
       issues.push('An arrest warrant requires a suspect from the Persons registry.')
     }
