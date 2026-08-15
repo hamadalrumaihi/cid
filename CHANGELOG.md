@@ -8,6 +8,31 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### JTF legal routing
+
+Legal requests on JTF cases no longer dead-end at draft creation. Root
+cause: `cases.bureau = 'JTF'` is an *operational* assignment, but the
+legal-routing resolver only consulted `bureau`/`originating_bureau`, so a
+JTF case with a null (or `'JTF'`-poisoned) responsible bureau failed with
+no fix path in the UI. Legal routing now rides the case's **responsible
+bureau** (`cases.originating_bureau`, always LSB/BCB/SAB or null): the
+server chain `private.legal_resolve_bureau` resolves bureau (permanent) →
+originating bureau → case-number prefix → lead detective's division →
+creator's division, persists (and audits) successful derivations onto the
+case, and existing JTF/poisoned rows were **backfilled** through the same
+chain (unresolvable rows normalized to null and flagged, never guessed).
+Routed approval is **narrowed**: a bureau lead now approves only requests
+routed to their own bureau; Deputy Director+ keep cross-bureau authority.
+New UI surfaces: the legal create wizard previews a derived routing (with
+its source) and lets a Senior Detective+ set a missing responsible bureau
+inline; the case command header shows a `Routing: <bureau>` badge (or an
+amber `Needs routing bureau`); case Overview lists "Assigned unit: JTF
+(operational)" vs the responsible bureau; and a Set/Change responsible
+bureau action joins the case action menu (change is Deputy Director+/Owner
+with a recorded reason) — all through `resolve_case_originating_bureau`;
+the bureau columns stay frozen against direct writes. Migration
+`20260815120000_jtf_legal_routing`.
+
 ### Surveillance & Intelligence domain
 
 The portal-side surveillance pipeline (SOP Title 7): **surveillance

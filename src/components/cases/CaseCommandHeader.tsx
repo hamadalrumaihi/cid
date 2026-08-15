@@ -23,6 +23,7 @@ import { bureauLabel } from '@/lib/roles'
 import { officerName } from '@/lib/profiles'
 import { useWatchlistStore } from '@/lib/watchlist'
 import { caseCourtHint, caseStatusTint, CASE_STATUSES, signoffLabel, signoffTint } from '@/lib/signoff'
+import { isJtfAssigned, isRoutingBureau } from '@/lib/legalWorkflow'
 import type { CaseAssessment, CaseStage } from '@/lib/caseWorkflow'
 import { jointReasonText, type CaseJointInfo } from '@/lib/opsJoint'
 import { gatherCasePacket, packetDocx, packetMarkdown, packetPdfSpec, type PacketData } from '@/lib/packet'
@@ -59,6 +60,8 @@ export function CaseCommandHeader({
   onPlaceHold,
   canHandover,
   canReassignBureau,
+  responsibleBureauAction,
+  onResponsibleBureau,
   onStatusChange,
   onPinToggle,
   onEdit,
@@ -85,6 +88,11 @@ export function CaseCommandHeader({
   onPlaceHold: () => void
   canHandover: boolean
   canReassignBureau: boolean
+  /** JTF-assigned cases: 'set' when no responsible bureau is recorded (Senior
+   *  Detective+), 'change' when one is (Deputy Director+); null hides the
+   *  action. Cosmetic — resolve_case_originating_bureau re-validates. */
+  responsibleBureauAction: 'set' | 'change' | null
+  onResponsibleBureau: () => void
   onStatusChange: (s: CaseRow['status']) => void
   onPinToggle: () => void
   onEdit: () => void
@@ -153,6 +161,12 @@ export function CaseCommandHeader({
   const admin: ActionItem[] = []
   if (canHandover) admin.push({ label: 'Hand over case…', onClick: onHandover })
   if (canReassignBureau) admin.push({ label: 'Reassign bureau…', onClick: onReassign })
+  if (responsibleBureauAction) {
+    admin.push({
+      label: responsibleBureauAction === 'change' ? 'Change responsible bureau…' : 'Set responsible bureau…',
+      onClick: onResponsibleBureau,
+    })
+  }
   if (admin.length) { admin[0].separatorBefore = true; items.push(...admin) }
   // Archiving is blocked while a legal hold is active (server RLS is the real
   // block); restoring an already-archived case is never blocked by a hold.
@@ -187,6 +201,19 @@ export function CaseCommandHeader({
             {/* Identity group — what the case is. */}
             <button onClick={() => copyText(c.case_number, 'Case number')} title="Copy case number" className="inline-flex items-center rounded-full bg-white/5 px-2.5 py-0.5 font-mono text-[11px] font-bold text-badge-200 hover:bg-white/10">{c.case_number}</button>
             <Badge>{c.bureau}</Badge>
+            {/* JTF is an operational assignment — legal routing rides the
+                responsible bureau (originating_bureau). Surface it (or its
+                absence) right next to the unit badge. */}
+            {isJtfAssigned(c) && (isRoutingBureau(c.originating_bureau) ? (
+              <Badge title="Responsible bureau for legal routing">Routing: {c.originating_bureau}</Badge>
+            ) : (
+              <Badge
+                tint="bg-amber-500/15 text-amber-300"
+                title="No responsible bureau is set — a CID supervisor (Senior Detective or above) must select LSB, BCB, or SAB before legal requests can route."
+              >
+                Needs routing bureau
+              </Badge>
+            ))}
             {c.is_joint_case && (
               <Badge
                 tint="bg-violet-500/15 text-violet-300"

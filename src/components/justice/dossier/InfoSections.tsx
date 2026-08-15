@@ -41,6 +41,11 @@ export function SummarySection({ r, name, viewer, disposition, caseLinkable }: {
           )}
         </Row>
         <Row label="Responsible bureau">{r.responsible_bureau}</Row>
+        {/* A JTF case number marks an OPERATIONAL assignment, not a routing
+            lane — make explicit that the bureau above is what routes review. */}
+        {(r.case_number_snapshot ?? '').startsWith('JTF-') && (
+          <Row label="Investigative assignment">JTF (operational)</Row>
+        )}
         <Row label="Approval route">{(r.approval_route ?? '—').toUpperCase()}</Row>
         <Row label="Priority">{r.priority ?? '—'}</Row>
         <Row label={r.request_type === 'warrant' ? 'Suspect' : 'Recipient'}>

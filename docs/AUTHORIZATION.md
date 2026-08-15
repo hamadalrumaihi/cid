@@ -38,7 +38,15 @@ Invariants enforced inside the RPCs (not the UI):
 > preserved for history), the justice-review and justice-membership RPCs are
 > EXECUTE-revoked, and the DOJ/Judiciary signup path is removed (migration
 > [`20260808140000`](../supabase/migrations/20260808140000_legal_lead_approval.sql)).
-> **Legal-request approval is now Bureau Lead+ (`private.is_command()`).** The
+> **Legal-request approval is now Bureau Lead+, routed through the responsible
+> bureau** ([`20260815120000`](../supabase/migrations/20260815120000_jtf_legal_routing.sql)):
+> a Bureau Lead decides only requests whose `responsible_bureau` is their own
+> division; Deputy Director / Director decide cross-bureau. A JTF-assigned case
+> routes through its responsible bureau (`cases.originating_bureau` — derived
+> from the case-number prefix, lead detective's division, or creator's division
+> and persisted; Senior Detective+ set a missing value, DD+ change one with a
+> reason, via `resolve_case_originating_bureau`). JTF is an operational
+> designation, never a routing lane. The
 > correction below — "CID Command holds no judiciary/DOJ approval authority" —
 > described the *legacy* pipeline; **in the new model CID Command (Bureau Lead+)
 > IS the legal approval authority** (it approves/denies/returns legal requests via

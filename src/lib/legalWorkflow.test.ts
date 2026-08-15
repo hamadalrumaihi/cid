@@ -9,6 +9,9 @@ import {
   subtypeRequiresPerson, subtypeSupportsStructuredTargets, fulfilmentEvents,
   LEGAL_WIZARD_STEPS, legalWizardIssues, legalWizardDraftIssues,
   structuredTargetLine, appendSearchTargetLine,
+  CID_ROUTING_BUREAUS, ROUTING_SOURCE_LABEL, resolveResponsibleBureau,
+  isJtfAssigned, canSetResponsibleBureau, canChangeResponsibleBureau,
+  type CaseRoutingLike,
   type LegalFulfilmentLike, type LegalReqLike, type LegalViewer, type LegalWizardInput,
 } from './legalWorkflow'
 
@@ -382,6 +385,110 @@ describe('guided create wizard (pure step model)', () => {
     // idempotent — re-adding an existing line never duplicates it
     expect(appendSearchTargetLine('Vehicle: ABC123', 'Vehicle: ABC123')).toBe('Vehicle: ABC123')
     expect(appendSearchTargetLine('kept text', '')).toBe('kept text')
+  })
+})
+
+describe('responsible-bureau resolution (mirror of private.legal_resolve_bureau)', () => {
+  // Minimal case factory — a JTF-assigned case that resolves nothing by default.
+  function kase(over: Partial<CaseRoutingLike> = {}): CaseRoutingLike {
+    return { bureau: 'JTF', originating_bureau: null, case_number: 'JTF-9000001', leadDivision: null, creatorDivision: null, ...over }
+  }
+
+  it('a permanent bureau wins over everything', () => {
+    const c = kase({ bureau: 'LSB', originating_bureau: 'BCB', case_number: 'SAB-9000034', leadDivision: 'BCB', creatorDivision: 'SAB' })
+    expect(resolveResponsibleBureau(c)).toEqual({ bureau: 'LSB', source: 'bureau' })
+  })
+
+  it('originating_bureau wins for JTF cases', () => {
+    const c = kase({ originating_bureau: 'BCB', case_number: 'SAB-9000034', leadDivision: 'SAB', creatorDivision: 'SAB' })
+    expect(resolveResponsibleBureau(c)).toEqual({ bureau: 'BCB', source: 'originating' })
+  })
+
+  it('falls back to the case-number prefix (numbers never change on reassignment)', () => {
+    expect(resolveResponsibleBureau(kase({ case_number: 'SAB-9000034' })))
+      .toEqual({ bureau: 'SAB', source: 'case_number' })
+  })
+
+  it('falls back to the lead detective’s division when the prefix is JTF-', () => {
+    expect(resolveResponsibleBureau(kase({ case_number: 'JTF-9000034', leadDivision: 'BCB', creatorDivision: 'SAB' })))
+      .toEqual({ bureau: 'BCB', source: 'lead_detective' })
+  })
+
+  it('falls back to the creator’s division when the lead is JTF', () => {
+    expect(resolveResponsibleBureau(kase({ case_number: 'JTF-9000034', leadDivision: 'JTF', creatorDivision: 'SAB' })))
+      .toEqual({ bureau: 'SAB', source: 'creator' })
+  })
+
+  it('resolves null when nothing in the chain is a permanent bureau', () => {
+    expect(resolveResponsibleBureau(kase({ case_number: 'JTF-9000034', leadDivision: 'JTF', creatorDivision: 'JTF' })))
+      .toEqual({ bureau: null, source: null })
+    expect(resolveResponsibleBureau(kase({ case_number: '' }))).toEqual({ bureau: null, source: null })
+  })
+
+  it('never returns JTF as a resolution, wherever it is planted', () => {
+    const shapes = [
+      kase({ originating_bureau: 'JTF' }),
+      kase({ case_number: 'JTF-9000034' }),
+      kase({ leadDivision: 'JTF' }),
+      kase({ creatorDivision: 'JTF' }),
+      kase({ originating_bureau: 'JTF', case_number: 'JTF-1', leadDivision: 'JTF', creatorDivision: 'JTF' }),
+      kase({ originating_bureau: 'JTF', case_number: 'BCB-9000002' }),
+    ]
+    for (const c of shapes) {
+      const { bureau, source } = resolveResponsibleBureau(c)
+      expect(bureau).not.toBe('JTF')
+      if (bureau !== null) {
+        expect(CID_ROUTING_BUREAUS).toContain(bureau)
+        expect(ROUTING_SOURCE_LABEL[source!]).toBeTruthy() // every resolution is explainable
+      }
+    }
+  })
+
+  it('isJtfAssigned flags exactly the non-permanent operational assignment', () => {
+    expect(isJtfAssigned({ bureau: 'JTF' })).toBe(true)
+    for (const b of CID_ROUTING_BUREAUS) expect(isJtfAssigned({ bureau: b })).toBe(false)
+  })
+
+  it('set vs change bars mirror resolve_case_originating_bureau', () => {
+    // SET a missing bureau: Senior Detective+ or Owner-flag; never a plain detective.
+    for (const r of ['senior_detective', 'bureau_lead', 'deputy_director', 'director']) {
+      expect(canSetResponsibleBureau(r), r).toBe(true)
+    }
+    expect(canSetResponsibleBureau(null, true)).toBe(true) // owner flag alone
+    expect(canSetResponsibleBureau('detective')).toBe(false)
+    expect(canSetResponsibleBureau(null)).toBe(false)
+    // CHANGE an already-set bureau: Deputy Director+ or Owner only.
+    expect(canChangeResponsibleBureau('deputy_director')).toBe(true)
+    expect(canChangeResponsibleBureau('director')).toBe(true)
+    expect(canChangeResponsibleBureau(null, true)).toBe(true)
+    expect(canChangeResponsibleBureau('bureau_lead')).toBe(false)
+    expect(canChangeResponsibleBureau('senior_detective')).toBe(false)
+    expect(canChangeResponsibleBureau('detective')).toBe(false)
+  })
+
+  it('wizard: routingBureau null blocks case_target and review; SAB or undefined add nothing', () => {
+    // Same valid search-warrant factory shape as the wizard suite above.
+    function wiz(over: Partial<LegalWizardInput> = {}): LegalWizardInput {
+      return {
+        requestType: 'warrant', subtype: 'search_warrant', caseId: 'c-1', personId: '',
+        recipientType: 'player', recipientName: '', title: 'Search Warrant — stash house',
+        priority: 'High', narrative: 'Probable cause narrative.',
+        form: { search_targets: 'Place: The stash house', items_sought: 'Contraband' },
+        ...over,
+      }
+    }
+    const blocked = 'This case needs a responsible bureau for legal routing — select LSB, BCB, or SAB.'
+    expect(legalWizardIssues('case_target', wiz({ routingBureau: null }))).toEqual([blocked])
+    expect(legalWizardIssues('review', wiz({ routingBureau: null }))).toContain(blocked)
+    // no case selected yet → the missing-case issue, never the routing issue
+    expect(legalWizardIssues('case_target', wiz({ caseId: '', routingBureau: null }))).toEqual(['Select a case.'])
+    // resolved and legacy (unevaluated) callers are unaffected
+    expect(legalWizardIssues('case_target', wiz({ routingBureau: 'SAB' }))).toEqual([])
+    expect(legalWizardIssues('review', wiz({ routingBureau: 'SAB' }))).toEqual([])
+    expect(legalWizardIssues('case_target', wiz())).toEqual([])
+    expect(legalWizardIssues('review', wiz({ routingBureau: undefined }))).toEqual([])
+    // drafts ride the same case_target mirror (create_legal_request also resolves)
+    expect(legalWizardDraftIssues(wiz({ routingBureau: null }))).toContain(blocked)
   })
 })
 

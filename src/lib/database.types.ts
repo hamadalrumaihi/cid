@@ -8482,6 +8482,7 @@ export type Database = {
         Args: {
           p_bureau: Database["public"]["Enums"]["bureau"]
           p_case: string
+          p_reason?: string | null
         }
         Returns: Database["public"]["Tables"]["cases"]["Row"]
       }

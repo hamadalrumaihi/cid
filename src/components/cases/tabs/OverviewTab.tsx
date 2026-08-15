@@ -15,6 +15,7 @@ import { useAction } from '@/lib/useAction'
 import { bureauLabel, roleLabel } from '@/lib/roles'
 import { useTableVersion } from '@/lib/realtime'
 import type { CaseAssessment, ClosureChecklistItem, NextAction } from '@/lib/caseWorkflow'
+import { isJtfAssigned, isRoutingBureau } from '@/lib/legalWorkflow'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import type { WorkflowRows } from '../CaseDetail'
@@ -109,6 +110,22 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
             <Stat label="Opened" value={fmtDate(c.created_at)} />
             <Stat label="Updated" value={timeAgo(c.updated_at).toUpperCase()} />
           </div>
+          {/* JTF-assigned cases: the operational unit vs the responsible bureau
+              that routes legal requests (originating_bureau — RPC-managed). */}
+          {isJtfAssigned(c) && (
+            <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+              <div className="flex items-start justify-between gap-3 py-0.5">
+                <span className="text-xs uppercase tracking-[0.16em] text-slate-500">Assigned unit</span>
+                <span className="text-right text-sm text-slate-200">JTF (operational)</span>
+              </div>
+              <div className="flex items-start justify-between gap-3 py-0.5">
+                <span className="text-xs uppercase tracking-[0.16em] text-slate-500">Responsible bureau</span>
+                {isRoutingBureau(c.originating_bureau)
+                  ? <span className="text-right text-sm text-slate-200">{c.originating_bureau} — routes legal requests</span>
+                  : <span className="text-right text-sm text-amber-300">Not set — required for legal routing</span>}
+              </div>
+            </div>
+          )}
           <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-bold text-white">Assigned Officers</h3>

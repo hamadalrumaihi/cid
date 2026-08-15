@@ -31,10 +31,12 @@ import {
   type LegalRequest, type SubpoenaType, type WarrantType,
 } from '@/lib/justice'
 import {
-  LEGAL_WIZARD_STEPS, STRUCTURED_TARGET_KINDS, STRUCTURED_TARGET_KIND_LABEL,
-  appendSearchTargetLine, humanize, legalWizardDraftIssues, legalWizardIssues,
+  CID_ROUTING_BUREAUS, LEGAL_WIZARD_STEPS, ROUTING_SOURCE_LABEL,
+  STRUCTURED_TARGET_KINDS, STRUCTURED_TARGET_KIND_LABEL,
+  appendSearchTargetLine, canSetResponsibleBureau, humanize, isRoutingBureau,
+  legalWizardDraftIssues, legalWizardIssues, resolveResponsibleBureau,
   structuredTargetLine, subtypeRequiresPerson, subtypeSupportsStructuredTargets,
-  type LegalWizardInput, type StructuredTargetKind,
+  type LegalWizardInput, type RoutingBureau, type RoutingSource, type StructuredTargetKind,
 } from '@/lib/legalWorkflow'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
@@ -74,11 +76,21 @@ const SUBPOENA_GROUPS: { label: string; types: SubpoenaType[] }[] = [
 const subpoenaLabel = (t: SubpoenaType): string => SUBPOENA_TYPES.find(([v]) => v === t)?.[1] ?? humanize(t)
 
 /* ── Local shapes ─────────────────────────────────────────────────────────── */
-const CID_BUREAUS = ['LSB', 'BCB', 'SAB']
+/** Responsible-bureau resolution snapshot (resolveResponsibleBureau). */
+interface CaseRouting { bureau: RoutingBureau | null; source: RoutingSource | null }
+/** Raw case fields the second-phase (division-lookup) resolution needs. */
+interface CaseRoutingCtx {
+  bureau: string
+  originating_bureau: string | null
+  lead_detective_id: string | null
+  created_by: string | null
+}
 interface CasePick extends PickedRecord {
   number: string
-  /** JTF case with no originating bureau — a supervisor must set it before submission. */
-  bureauWarning: boolean
+  /** null = not evaluated (edit mode, legacy stash, or the division lookup is
+   *  still in flight); {bureau: null} = definitively unresolved (blocks). */
+  routing: CaseRouting | null
+  routingCtx?: CaseRoutingCtx
 }
 interface TargetDraft { kind: StructuredTargetKind; sourceId: string; label: string; rationale: string }
 type FieldSpec = { key: string; label: string; req?: boolean; kind?: 'textarea' | 'datetime' }
@@ -104,11 +116,34 @@ function asPick(v: unknown): PickedRecord | null {
   if (typeof o.id !== 'string' || typeof o.label !== 'string') return null
   return { id: o.id, label: o.label, ...(typeof o.sublabel === 'string' ? { sublabel: o.sublabel } : {}) }
 }
+function asRouting(v: unknown): CaseRouting | null {
+  if (!v || typeof v !== 'object') return null
+  const o = v as Record<string, unknown>
+  const bureau = typeof o.bureau === 'string' && isRoutingBureau(o.bureau) ? o.bureau : null
+  if (!bureau) return null // unresolved/malformed stashes re-evaluate via routingCtx
+  const source = typeof o.source === 'string' && o.source in ROUTING_SOURCE_LABEL ? (o.source as RoutingSource) : null
+  return { bureau, source }
+}
 function asCasePick(v: unknown): CasePick | null {
   const base = asPick(v)
   if (!base) return null
   const o = v as Record<string, unknown>
-  return { ...base, number: typeof o.number === 'string' ? o.number : '', bureauWarning: o.bureauWarning === true }
+  // Backward-tolerant: legacy stashes carried `bureauWarning: boolean` — they
+  // coerce to routing: null (unevaluated) and re-resolve when a ctx exists.
+  const ctx = o.routingCtx && typeof o.routingCtx === 'object' ? (o.routingCtx as Record<string, unknown>) : null
+  return {
+    ...base,
+    number: typeof o.number === 'string' ? o.number : '',
+    routing: asRouting(o.routing),
+    ...(ctx && typeof ctx.bureau === 'string' ? {
+      routingCtx: {
+        bureau: ctx.bureau,
+        originating_bureau: typeof ctx.originating_bureau === 'string' ? ctx.originating_bureau : null,
+        lead_detective_id: typeof ctx.lead_detective_id === 'string' ? ctx.lead_detective_id : null,
+        created_by: typeof ctx.created_by === 'string' ? ctx.created_by : null,
+      },
+    } : {}),
+  }
 }
 function asTargets(v: unknown): TargetDraft[] {
   if (!Array.isArray(v)) return []
@@ -211,7 +246,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
           setCaseSel({
             id: r.case_id ?? '', number: r.case_number_snapshot ?? '',
             label: `${r.case_number_snapshot ?? '—'} — ${r.case_title_snapshot ?? 'Untitled'}`,
-            bureauWarning: false,
+            routing: null, // edit mode never re-evaluates — the request carries responsible_bureau
           })
           setPersonSel(r.person_id ? { id: r.person_id, label: r.person_name_snapshot ?? 'Person' } : null)
           setRecipientType(r.recipient_type === 'entity' ? 'entity' : 'player')
@@ -286,17 +321,57 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
   const searchCases = useCallback(async (q: string): Promise<CasePick[]> => {
     const or = ilikeAny(['case_number', 'title'], q)
     const rows = (await list('cases', {
-      select: 'id,case_number,title,bureau,originating_bureau',
+      select: 'id,case_number,title,bureau,originating_bureau,lead_detective_id,created_by',
       order: 'created_at', ascending: false, limit: 20, ...(or ? { or } : {}),
-    })) as unknown as Pick<Tables<'cases'>, 'id' | 'case_number' | 'title' | 'bureau' | 'originating_bureau'>[]
-    return rows.map((c) => ({
-      id: c.id,
-      number: c.case_number,
-      label: `${c.case_number} — ${c.title ?? 'Untitled'}`,
-      sublabel: c.bureau === 'JTF' && c.originating_bureau ? `JTF · origin ${c.originating_bureau}` : c.bureau,
-      bureauWarning: !CID_BUREAUS.includes(c.bureau) && !CID_BUREAUS.includes(c.originating_bureau ?? ''),
-    }))
+    })) as unknown as Pick<Tables<'cases'>, 'id' | 'case_number' | 'title' | 'bureau' | 'originating_bureau' | 'lead_detective_id' | 'created_by'>[]
+    return rows.map((c) => {
+      // First pass on the fields already on the row (bureau → responsible
+      // bureau → case-number prefix). An unresolved pick keeps routing: null
+      // and the division-lookup effect below finishes the chain on selection.
+      const quick = resolveResponsibleBureau({ bureau: c.bureau, originating_bureau: c.originating_bureau, case_number: c.case_number })
+      return {
+        id: c.id,
+        number: c.case_number,
+        label: `${c.case_number} — ${c.title ?? 'Untitled'}`,
+        sublabel: c.bureau === 'JTF' && c.originating_bureau ? `JTF · origin ${c.originating_bureau}` : c.bureau,
+        routing: quick.bureau ? quick : null,
+        routingCtx: { bureau: c.bureau, originating_bureau: c.originating_bureau, lead_detective_id: c.lead_detective_id, created_by: c.created_by },
+      }
+    })
   }, [])
+
+  /* ── Second-phase routing resolution (CREATE mode) ─────────────────────────
+   * When bureau, responsible bureau AND case-number prefix all failed, the
+   * chain falls to the lead detective's / creator's division — fetched here
+   * (RLS allows reading member profiles), then resolveResponsibleBureau
+   * re-runs with them. Covers picker selections and restored stashes alike.
+   * UX preview only: the server chain re-derives, persists and enforces. */
+  useEffect(() => {
+    if (isEdit) return
+    const pick = caseSel
+    if (!pick || pick.routing || !pick.routingCtx) return
+    const ctx = pick.routingCtx
+    let cancelled = false
+    void (async () => {
+      let leadDivision: string | null = null
+      let creatorDivision: string | null = null
+      try {
+        const ids = [...new Set([ctx.lead_detective_id, ctx.created_by].filter((x): x is string => !!x))]
+        if (ids.length) {
+          const profs = (await list('profiles', { select: 'id,division', in: { id: ids } })) as unknown as Pick<Tables<'profiles'>, 'id' | 'division'>[]
+          leadDivision = profs.find((p) => p.id === ctx.lead_detective_id)?.division ?? null
+          creatorDivision = profs.find((p) => p.id === ctx.created_by)?.division ?? null
+        }
+      } catch { /* unreadable roster — the chain resolves on what it has */ }
+      if (cancelled) return
+      const resolved = resolveResponsibleBureau({
+        bureau: ctx.bureau, originating_bureau: ctx.originating_bureau,
+        case_number: pick.number, leadDivision, creatorDivision,
+      })
+      setCaseSel((cur) => (cur && cur.id === pick.id ? { ...cur, routing: resolved } : cur))
+    })()
+    return () => { cancelled = true }
+  }, [isEdit, caseSel])
   const searchPersons = useCallback(async (q: string): Promise<PickedRecord[]> => {
     const or = ilikeAny(['name', 'alias'], q)
     const rows = (await list('persons', {
@@ -389,6 +464,9 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     caseId: caseSel?.id ?? '',
     personId: personSel?.id ?? '',
     recipientType, recipientName, title, priority, narrative, form,
+    // Resolution ran (create mode): a bureau permits, null blocks with a clear
+    // fix path. Absent while unknown / in edit mode — the server still enforces.
+    ...(!isEdit && caseSel?.routing ? { routingBureau: caseSel.routing.bureau } : {}),
   }
   const currentIssues = legalWizardIssues(step.id, input)
   const reviewIssues = legalWizardIssues('review', input)
@@ -400,6 +478,36 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     ? WARRANT_FIELDS[subtype as WarrantType] ?? []
     : requestType === 'subpoena' ? SUBPOENA_FIELDS[subtype as SubpoenaType] ?? [] : []
   const isReturned = !!row && row.review_status.startsWith('returned_by')
+  // Review readout: the resolved responsible bureau (permanent-bureau cases
+  // resolve with source 'bureau'); while revising, the stamped column.
+  const editRoutingRaw = row?.responsible_bureau ?? null
+  const reviewRouting: RoutingBureau | null = !isEdit
+    ? (caseSel?.routing?.bureau ?? null)
+    : (isRoutingBureau(editRoutingRaw) ? editRoutingRaw : null)
+
+  /* ── Inline responsible-bureau repair (unresolved case, supervisor viewer) ──
+   * Cosmetic gate only — resolve_case_originating_bureau re-validates the
+   * caller (Senior Detective+ sets; DD+ changes with a reason). */
+  const [routingPick, setRoutingPick] = useState('')
+  const [routingBusy, setRoutingBusy] = useState(false)
+  const setResponsibleBureau = async () => {
+    if (!caseSel || routingBusy) return
+    if (!isRoutingBureau(routingPick)) { toast('Choose LSB, BCB, or SAB.', 'warn'); return }
+    const bureau: RoutingBureau = routingPick
+    setRoutingBusy(true)
+    const res = await rpc('resolve_case_originating_bureau', { p_case: caseSel.id, p_bureau: bureau })
+    setRoutingBusy(false)
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    setCaseSel((cur) => (cur && cur.id === caseSel.id
+      ? {
+          ...cur,
+          routing: { bureau, source: 'originating' },
+          ...(cur.routingCtx ? { routingCtx: { ...cur.routingCtx, originating_bureau: bureau } } : {}),
+        }
+      : cur))
+    setRoutingPick('')
+    toast(`Responsible bureau set to ${bureau} — legal requests on this case route there.`, 'success')
+  }
 
   /* ── Step navigation (focus moves to the step heading on change) ──────────── */
   const headingRef = useRef<HTMLHeadingElement>(null)
@@ -656,11 +764,46 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
                 hint="Only cases you can already access are offered."
               />
             )}
-            {caseSel?.bureauWarning && (
-              <p className="rounded border border-amber-500/20 bg-amber-500/5 p-2 text-xs text-amber-200">
-                This JTF case has no originating bureau on record — a CID supervisor must set it (case Overview)
-                before this request can be submitted to DOJ.
+            {/* Responsible-bureau readout for JTF-assigned cases: a derived
+                resolution is informational (the server persists it on create);
+                an unresolved one offers the supervisor the inline fix — the
+                issues model already blocks Continue until it is set. */}
+            {!isEdit && caseSel?.routing?.bureau
+              && (caseSel.routing.source === 'case_number' || caseSel.routing.source === 'lead_detective' || caseSel.routing.source === 'creator') && (
+              <p className="text-xs text-slate-400">
+                Legal routing: <span className="font-semibold text-slate-200">{caseSel.routing.bureau}</span> — derived
+                from {ROUTING_SOURCE_LABEL[caseSel.routing.source]}. It is recorded on the case when the request is created.
               </p>
+            )}
+            {!isEdit && caseSel?.routing && caseSel.routing.bureau === null && (
+              canSetResponsibleBureau(profile?.role, profile?.is_owner) ? (
+                <div className="space-y-2 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
+                  <p className="text-xs text-amber-200">
+                    This case needs a responsible bureau for legal routing — select the bureau whose
+                    leadership reviews its legal requests.
+                  </p>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="w-44">
+                      <Field label="Responsible bureau">
+                        {(id) => (
+                          <Select id={id} value={routingPick} onChange={(e) => setRoutingPick(e.target.value)}>
+                            <option value="">Choose…</option>
+                            {CID_ROUTING_BUREAUS.map((b) => <option key={b} value={b}>{b}</option>)}
+                          </Select>
+                        )}
+                      </Field>
+                    </div>
+                    <Button disabled={routingBusy || !routingPick} onClick={() => void setResponsibleBureau()}>
+                      {routingBusy ? 'Setting…' : 'Set responsible bureau'}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="rounded-lg border border-amber-500/25 bg-amber-500/5 p-2 text-xs text-amber-200">
+                  This case needs a responsible bureau for legal routing. A CID supervisor (Senior Detective
+                  or above) must select LSB, BCB, or SAB before legal requests can proceed.
+                </p>
+              )
             )}
             {requestType === 'subpoena' && (
               <Field label="Recipient type" required>
@@ -804,6 +947,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
             <Card pad="sm" className="space-y-2">
               <Row label="Type">{humanize(requestType)} · {humanize(subtype)}</Row>
               <Row label="Case">{caseSel?.label ?? '—'}</Row>
+              {reviewRouting && <Row label="Legal routing">{reviewRouting} — Bureau Lead review</Row>}
               <Row label={requestType === 'warrant' ? 'Subject' : 'Recipient'}>
                 {requestType === 'subpoena' && recipientType === 'entity'
                   ? (recipientName.trim() || '—')
