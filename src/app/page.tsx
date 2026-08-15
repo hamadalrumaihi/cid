@@ -4,8 +4,8 @@
  *    #case=<id>  → /cases?case=<id>   (case detail — contract for the Cases slice)
  *    #reports    → /cases             (legacy leaf, vanilla folds it into cases)
  *    #<tab>      → /<tab>
- *  otherwise the last-used tab from the shared Store blob (vanilla
- *  Store('tab')), defaulting to /command like the vanilla router.
+ *  otherwise the Action Center (/action) — the prioritized work queue is the
+ *  default landing surface.
  *
  *  Auth-callback safety: if Supabase lands an OAuth/magic-link response on '/'
  *  (hash tokens or ?code=), do NOT strip it — let supabase-js consume it via
@@ -29,7 +29,7 @@ export default function RootRedirect() {
       const { data: sub } = supabase().auth.onAuthStateChange((event) => {
         if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
           sub.subscription.unsubscribe()
-          router.replace('/inbox')
+          router.replace('/action')
         }
       })
       return () => sub.subscription.unsubscribe()
@@ -40,10 +40,10 @@ export default function RootRedirect() {
     if (caseLink) { router.replace(`/cases?case=${encodeURIComponent(caseLink[1])}`); return }
     if (hash === 'reports') { router.replace('/cases'); return }
     if (hash && isValidTab(hash)) { router.replace(`/${hash}`); return }
-    // Default landing is My Desk (the personal home) — an explicit hash
-    // deep-link above still wins, so shared links and auth callbacks are
-    // unaffected; only a bare app open lands here.
-    router.replace('/inbox')
+    // Default landing is the Action Center (the prioritized work queue) — an
+    // explicit hash deep-link above still wins, so shared links and auth
+    // callbacks are unaffected; only a bare app open lands here.
+    router.replace('/action')
   }, [router])
 
   // Rendered for at most a frame on plain loads; visible only while an

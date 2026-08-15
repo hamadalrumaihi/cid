@@ -23,19 +23,38 @@
 > hand-over-first alternative.
 >
 > **The pipeline (authoritative):**
-> `not_submitted` → `cid_supervisor_review` (Bureau Lead+ of the responsible
-> bureau gates the packet) → **`prosecutor_queue`** (ONE shared queue — no
-> bureau slots; atomic claim via `legal_claim_prosecutor`, AG assignment via
-> `legal_assign_prosecutor`) → `prosecutor_review`
+> `not_submitted` → `cid_supervisor_review` (the responsible bureau's Bureau
+> Lead gates the packet; a **JTF-assigned case may be gated by ANY eligible
+> Bureau Lead**; DD/Director/Owner are the audited fallback —
+> `fallback`/`jtf_any_lead` flags on every decision,
+> [`20260818120000_bureau_queues_stages.sql`](../supabase/migrations/20260818120000_bureau_queues_stages.sql))
+> → **`prosecutor_queue`** (**bureau-scoped** since `20260818120000`: three
+> shared queues, one per bureau — a prosecutor holds exactly ONE home bureau
+> (`justice_memberships.prosecutor_bureau`, set at appointment/transfer) and
+> claims only their own queue via `legal_claim_prosecutor`; the AG sees all
+> three, assigns via `legal_assign_prosecutor` to a covering prosecutor only,
+> and grants **temporary coverage** — explicit, dated, expiring, audited,
+> endable, never permanent — via `justice_set_coverage`/`justice_end_coverage`
+> (`prosecutor_coverage`; `private.prosecutor_bureaus_of` = home + live
+> coverage). AG status alone never authorizes prosecutorial work) →
+> `prosecutor_review`
 > (`review_legal_request_as_prosecutor`: approve / return / decline / note) →
 > `submitted_to_judge` (judicial queue; `claim_legal_request_as_judge` or
 > AG/prosecutor `assign_judge`) → `judicial_review`
 > (`decide_legal_request_as_judge`: approve with reasoning + conditions / deny
 > / return) → `approved` | `denied` → CID fulfilment (`issue_legal_request` —
 > unchanged; **a prosecutor or judge can never issue**) → executed/served →
-> return → closed. Returns (`returned_by_cid` / `_prosecutor` / `_judge`)
-> reopen the draft for the investigator; resubmission re-enters CID review.
-> Admin terminals: `declined` (prosecutor), `cancelled`
+> return → closed. Returns reopen the draft for the investigator:
+> `returned_by_cid` resubmits into CID review as always, while
+> `returned_by_judge`/`returned_by_prosecutor` resubmit **straight back to the
+> bureau's prosecutor queue** — renewed CID review happens ONLY when the
+> investigator explicitly declares a material change
+> (`submit_legal_request_to_cid(p_request, p_change_summary,
+> p_material_change)`; the declaration is logged, never inferred).
+> Prosecutors and judges work from the request plus
+> `legal_request_case_brief()` — a database-enforced brief of the case summary
+> and ONLY the referenced exhibits/report content/media metadata; they never
+> hold case access. Admin terminals: `declined` (prosecutor), `cancelled`
 > (`legal_admin_cancel`), `withdrawn`, `superseded` (`legal_mark_superseded` —
 > the ONLY path to correct an issued instrument; issued snapshots are
 > immutable).

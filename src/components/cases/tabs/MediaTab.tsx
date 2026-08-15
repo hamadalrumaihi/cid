@@ -7,7 +7,10 @@
  *  photos" runs the Uppy → FiveManage upload pilot (lazy-loaded queue with
  *  byte progress + per-file retry; multi-file, edit metadata after upload).
  *  Archive never deletes — archived_at only; hard
- *  delete stays command-only via the shared delete/undo path. The three
+ *  delete stays command-only via the shared delete/undo path. Formal evidence
+ *  (media_designate_evidence: uploader or Senior Detective+/Owner; audited,
+ *  uploader identity untouched) lists in its own section above general
+ *  uploads, carrying its EV reference and designation provenance. The three
  *  frozen legacy `evidence` rows render read-only at the bottom (writes are
  *  revoked server-side; custody UI is gone — the table never held a row). */
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -22,7 +25,7 @@ import { Field, Input, Select } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { CardGridSkeleton, Skeleton } from '@/components/ui/Skeleton'
-import { uiPrompt } from '@/components/ui/dialog'
+import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
 import { caseLink } from '@/lib/caseLinks'
 import { CASE_MEDIA_CATEGORIES, caseMediaCategoryLabel, filterCaseMedia, legacyEvidenceRef } from '@/lib/caseMedia'
@@ -211,8 +214,13 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
   }
 
   const filtered = filterCaseMedia(rows, { category, showArchived })
-  const visible = filtered.slice(0, PAGE * page)
-  const hasMore = filtered.length > visible.length || rows.length >= fetchLimit
+  // Evidence split: formally designated items (evidence_ref) separate from
+  // general uploads. The curated evidence set renders in full; pagination
+  // applies to the general remainder.
+  const evidenceRows = filtered.filter((m) => m.evidence_ref != null)
+  const generalRows = filtered.filter((m) => m.evidence_ref == null)
+  const visibleGeneral = generalRows.slice(0, PAGE * page)
+  const hasMore = generalRows.length > visibleGeneral.length || rows.length >= fetchLimit
   const loadMore = () => {
     setPage((p) => p + 1)
     if (rows.length >= fetchLimit) setFetchLimit((f) => f + FETCH_STEP)
@@ -340,15 +348,38 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
         <CardGridSkeleton count={8} cols="sm:grid-cols-3 xl:grid-cols-4" />
       ) : !rows.length && loadError ? (
         <ErrorNotice message="Could not load case media." onRetry={() => { void refresh() }} />
-      ) : visible.length ? (
+      ) : evidenceRows.length || visibleGeneral.length ? (
         <>
-          <ul className="grid list-none grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-            {visible.map((m) => (
-              <li key={m.id} className="min-w-0">
-                <MediaCard m={m} names={names} vehicles={vehicles} reportLabel={reportLabel} onOpen={() => setDetailId(m.id)} />
-              </li>
-            ))}
-          </ul>
+          {evidenceRows.length > 0 && (
+            <section aria-label="Evidence" className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                Evidence <span className="tabular-nums">({evidenceRows.length})</span>
+              </h3>
+              <ul className="grid list-none grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                {evidenceRows.map((m) => (
+                  <li key={m.id} className="min-w-0">
+                    <MediaCard m={m} names={names} vehicles={vehicles} reportLabel={reportLabel} onOpen={() => setDetailId(m.id)} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {visibleGeneral.length > 0 && (
+            <section aria-label="General uploads" className="space-y-2">
+              {evidenceRows.length > 0 && (
+                <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                  General uploads <span className="tabular-nums">({generalRows.length})</span>
+                </h3>
+              )}
+              <ul className="grid list-none grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                {visibleGeneral.map((m) => (
+                  <li key={m.id} className="min-w-0">
+                    <MediaCard m={m} names={names} vehicles={vehicles} reportLabel={reportLabel} onOpen={() => setDetailId(m.id)} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {hasMore && (
             <div className="flex justify-center">
               <Button onClick={loadMore}>Load more</Button>
@@ -530,8 +561,19 @@ function MediaCard({ m, names, vehicles, reportLabel, onOpen }: {
           {caseMediaCategoryLabel(m.category)} · {fmtDate(m.created_at)}
           {officerName(m.uploaded_by) ? ` · ${officerName(m.uploaded_by)}` : ''}
         </span>
-        {(linkedReport || m.restricted || m.featured || m.archived_at) && (
+        {m.evidence_ref && (
+          <span className="mt-0.5 block truncate text-xs text-emerald-300/90">
+            Designated {officerName(m.evidence_designated_by) ? `by ${officerName(m.evidence_designated_by)} ` : ''}
+            {m.evidence_designated_at ? `· ${fmtDate(m.evidence_designated_at)}` : ''}
+          </span>
+        )}
+        {(m.evidence_ref || linkedReport || m.restricted || m.featured || m.archived_at) && (
           <span className="mt-1.5 flex flex-wrap gap-1">
+            {m.evidence_ref && (
+              <Badge tint="bg-emerald-500/15 text-emerald-300" className="font-mono" title="Designated evidence">
+                {m.evidence_ref}
+              </Badge>
+            )}
             {linkedReport && <Badge tone="accent" title={linkedReport}>Report media</Badge>}
             {m.restricted && <Badge tone="danger">Restricted</Badge>}
             {m.featured && <Badge tone="warn">Featured</Badge>}
@@ -565,6 +607,7 @@ function MediaDetailModal({ m, c, canEdit, canDelete, holdActive, names, vehicle
   onChanged: () => void
   onDeleted: () => void
 }) {
+  const { profile, isOwner } = useAuth()
   const [title, setTitle] = useState(m.title)
   const [cat, setCat] = useState(m.category ?? '')
   // Dirty-tracking baseline: advances on save so a successful save doesn't
@@ -590,6 +633,34 @@ function MediaDetailModal({ m, c, canEdit, canDelete, holdActive, names, vehicle
     if (res.error) { toast(res.error.message, 'danger'); return }
     setSaved({ title: title.trim(), category: cat || null })
     toast('Details saved.', 'success')
+    onChanged()
+  }
+  // Evidence designation — client mirror of media_designate_evidence's bar
+  // (owner, Senior Detective+, or the uploader); the server re-validates and
+  // is the real boundary. Uploader identity/timestamps stay untouched.
+  const canDesignate = isOwner
+    || m.uploaded_by === profile?.id
+    || ['senior_detective', 'bureau_lead', 'deputy_director', 'director'].includes(profile?.role ?? '')
+  const designateEvidence = async () => {
+    const ref = await uiPrompt(
+      'Optional evidence reference — leave blank to auto-generate one (EV-XXXXXXXX).',
+      { title: 'Designate as evidence', placeholder: 'e.g. EV-2024-0113 (optional)', confirmText: 'Designate' },
+    )
+    if (ref === null) return
+    const res = await rpc('media_designate_evidence', { p_media: m.id, ...(ref.trim() ? { p_ref: ref.trim() } : {}) })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Designated as evidence.', 'success')
+    onChanged()
+  }
+  const clearEvidence = async () => {
+    const ok = await uiConfirm(
+      `Remove the evidence designation (${m.evidence_ref})? The item stays in the case as a general upload; the removal is audited.`,
+      { title: 'Remove evidence designation', confirmText: 'Remove designation' },
+    )
+    if (!ok) return
+    const res = await rpc('media_designate_evidence', { p_media: m.id, p_clear: true })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Evidence designation removed.', 'success')
     onChanged()
   }
   const setReport = (id: string) => mutateThen(update('media', m.id, { report_id: id || null }), onChanged)
@@ -664,6 +735,12 @@ function MediaDetailModal({ m, c, canEdit, canDelete, holdActive, names, vehicle
           <dl className="space-y-2 text-sm">
             <MetaRow k="Case" v={c.case_number} />
             <MetaRow k="Uploaded" v={`${fmtDateTime(m.created_at)}${officerName(m.uploaded_by) ? ` · ${officerName(m.uploaded_by)}` : ''}`} />
+            {m.evidence_ref && (
+              <MetaRow
+                k="Evidence"
+                v={`${m.evidence_ref}${officerName(m.evidence_designated_by) ? ` · designated by ${officerName(m.evidence_designated_by)}` : ''}${m.evidence_designated_at ? ` · ${fmtDateTime(m.evidence_designated_at)}` : ''}`}
+              />
+            )}
             {capturedAt && <MetaRow k="Captured" v={capturedAt} />}
             {sourceName && <MetaRow k="Source" v={sourceName} />}
             {entityLines.map(([k, v]) => <MetaRow key={k} k={k} v={v} />)}
@@ -692,6 +769,11 @@ function MediaDetailModal({ m, c, canEdit, canDelete, holdActive, names, vehicle
             </a>
           )}
           <span className="flex-1" />
+          {canDesignate && (m.evidence_ref ? (
+            <Button size="sm" variant="warn" onAction={clearEvidence}>Remove designation…</Button>
+          ) : (
+            <Button size="sm" onAction={designateEvidence}>Designate as evidence…</Button>
+          ))}
           {canEdit && (
             <Button size="sm" onClick={toggleFeatured}>{m.featured ? '★ Unfeature' : '☆ Feature'}</Button>
           )}

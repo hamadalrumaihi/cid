@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { Field, Select, Textarea } from '@/components/ui/Field'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { list, rpc, update } from '@/lib/db'
@@ -38,7 +39,28 @@ import type { AssignmentRow, CaseRow } from './tabs/shared'
 
 export const CASE_PRIORITIES = ['low', 'medium', 'high', 'critical'] as const
 
-/** Stage chip follows the app's status temperatures (lib/tint). */
+/** Investigative stage — a stored, manually-moved progress marker (distinct
+ *  from case status, the record state). RPC-only: case_set_stage requires a
+ *  reason and audits every move (CASE_STAGE_CHANGED). */
+export const INVESTIGATIVE_STAGES = [
+  'intake', 'active_investigation', 'legal_process',
+  'enforcement_ready', 'pending_closure', 'closed',
+] as const
+export type InvestigativeStage = (typeof INVESTIGATIVE_STAGES)[number]
+
+const INVESTIGATIVE_STAGE_LABEL: Record<InvestigativeStage, string> = {
+  intake: 'Intake',
+  active_investigation: 'Active Investigation',
+  legal_process: 'Legal Process',
+  enforcement_ready: 'Enforcement Ready',
+  pending_closure: 'Pending Closure',
+  closed: 'Closed',
+}
+
+export const investigativeStageLabel = (s?: string | null): string =>
+  INVESTIGATIVE_STAGE_LABEL[(s ?? 'intake') as InvestigativeStage] ?? (s || 'Intake')
+
+/** Workflow chip follows the app's status temperatures (lib/tint). */
 const STAGE_TINTS: Record<CaseStage, string> = {
   investigation: 'bg-emerald-500/15 text-emerald-300',
   awaiting_signoff: 'bg-amber-500/15 text-amber-300',
@@ -121,9 +143,10 @@ export function CaseCommandHeader({
   onChanged: () => void
   onGoTab: (tab: string) => void
 }) {
-  const { profile, isCommand } = useAuth()
+  const { profile, isCommand, isOwner } = useAuth()
   const hint = caseCourtHint(c, profile?.id ?? null, officerName(c.signoff_assignee_id))
   const [followUpOpen, setFollowUpOpen] = useState(false)
+  const [stageOpen, setStageOpen] = useState(false)
   const [packetOpen, setPacketOpen] = useState(false)
   const [jointOpen, setJointOpen] = useState(false)
   const [jointAssignments, setJointAssignments] = useState<AssignmentRow[]>([])
@@ -143,6 +166,12 @@ export function CaseCommandHeader({
   // Joint-case management — client mirror of the server authority (command,
   // case lead, or creator); RLS + the RPCs enforce the real rule.
   const managesJoint = isCommand || c.lead_detective_id === profile?.id || c.created_by === profile?.id
+
+  // Investigative stage moves — client mirror of case_set_stage's bar (owner,
+  // active Senior Detective+, or the case lead); the RPC re-validates.
+  const canSetStage = isOwner
+    || c.lead_detective_id === profile?.id
+    || ['senior_detective', 'bureau_lead', 'deputy_director', 'director'].includes(profile?.role ?? '')
   const openJoint = useAction(async () => {
     // Snapshot current assignments so the picker excludes already-assigned officers.
     try { setJointAssignments(await list('case_assignments', { eq: { case_id: c.id } })) }
@@ -260,9 +289,26 @@ export function CaseCommandHeader({
             </select>
           ) : c.priority ? <Badge tint={priorityTint(c.priority)} className="uppercase">{c.priority}</Badge> : <span className="text-slate-400">—</span>}
         </DlField>
+        {/* Investigative stage — the manually-moved, audited progress marker
+            (distinct chip styling: bordered accent, never the status tints). */}
+        <DlField label="Stage">
+          {canSetStage ? (
+            <button
+              onClick={() => setStageOpen(true)}
+              title="Change investigative stage (reason required, audited)"
+              className="inline-flex min-h-[40px] items-center rounded-full border border-badge-500/40 bg-badge-500/15 px-2.5 font-semibold text-badge-200 transition hover:bg-badge-500/30 sm:min-h-0 sm:py-0.5 sm:text-[11px]"
+            >
+              {investigativeStageLabel(c.investigative_stage)}
+            </button>
+          ) : (
+            <Badge tint="border border-badge-500/40 bg-badge-500/15 text-badge-200">
+              {investigativeStageLabel(c.investigative_stage)}
+            </Badge>
+          )}
+        </DlField>
         {!canEdit && <span className="rounded-lg border border-white/10 px-2 py-0.5 text-xs text-slate-300">Read-only</span>}
         {assessment && (
-          <DlField label="Stage"><Badge tint={STAGE_TINTS[assessment.stage]}>{assessment.stageLabel}</Badge></DlField>
+          <DlField label="Workflow"><Badge tint={STAGE_TINTS[assessment.stage]}>{assessment.stageLabel}</Badge></DlField>
         )}
         <DlField label="Unit">{isJtfAssigned(c) ? 'JTF (operational)' : c.bureau}</DlField>
         <DlField label="Responsible bureau">
@@ -361,6 +407,7 @@ export function CaseCommandHeader({
       </div>
 
       <FollowUpModal open={followUpOpen} c={c} onClose={() => setFollowUpOpen(false)} onChanged={onChanged} />
+      <StageModal open={stageOpen} c={c} onClose={() => setStageOpen(false)} onChanged={onChanged} />
       <PacketModal open={packetOpen} c={c} onClose={() => setPacketOpen(false)} />
       <JointCaseModal
         open={jointOpen}
@@ -371,6 +418,64 @@ export function CaseCommandHeader({
         onDone={() => { setJointOpen(false); onChanged() }}
       />
     </section>
+  )
+}
+
+/** Move the investigative stage — RPC-only (case_set_stage), reason required,
+ *  every move audited as CASE_STAGE_CHANGED. Server errors surface verbatim. */
+function StageModal({ open, c, onClose, onChanged }: { open: boolean; c: CaseRow; onClose: () => void; onChanged: () => void }) {
+  const current = (c.investigative_stage ?? 'intake') as InvestigativeStage
+  const [stage, setStage] = useState<InvestigativeStage>(current)
+  const [reason, setReason] = useState('')
+  useEffect(() => { if (open) queueMicrotask(() => { setStage(current); setReason('') }) }, [open, current])
+  const save = useAction(async () => {
+    const res = await rpc('case_set_stage', { p_case: c.id, p_stage: stage, p_reason: reason.trim() })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast(`Stage set to ${investigativeStageLabel(stage)}.`, 'success')
+    onClose(); onChanged()
+  })
+  return (
+    <Modal open={open} onClose={onClose} dirty={() => stage !== current || !!reason.trim()}>
+      <div className="p-5">
+        <ModalHeader title="Investigative stage" onClose={onClose} />
+        <p className="mb-3 text-sm text-slate-400">
+          The stage is the investigator-facing progress marker — separate from the case status.
+          Moves are audited with your reason.
+        </p>
+        <Field label="Stage" required>
+          {(id) => (
+            <Select id={id} value={stage} onChange={(e) => setStage(e.target.value as InvestigativeStage)}>
+              {INVESTIGATIVE_STAGES.map((s) => (
+                <option key={s} value={s}>
+                  {INVESTIGATIVE_STAGE_LABEL[s]}{s === current ? ' (current)' : ''}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field label="Reason" required hint="Recorded in the audit log with the stage change." className="mt-3">
+          {(id) => (
+            <Textarea
+              id={id}
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Warrant returned — moving to enforcement preparation."
+            />
+          )}
+        </Field>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button onClick={onClose} disabled={save.busy}>Cancel</Button>
+          <Button
+            variant="primary"
+            onClick={() => void save.run()}
+            disabled={save.busy || stage === current || !reason.trim()}
+          >
+            {save.busy ? 'Saving…' : 'Set stage'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 

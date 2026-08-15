@@ -781,10 +781,16 @@ SECURITY DEFINER (run privileged, then check the caller inside) except
 ### DOJ legal-review RPCs (v1.13.0, minimal-DOJ revival 2026-08-15)
 
 > **Minimal DOJ (Phase 2) — see [DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md)
-> Phase-2 banner.** The pipeline is \`cid_supervisor_review\` → (Bureau Lead+
-> approve via \`review_legal_request_as_cid\`) → **\`prosecutor_queue\`** (one
-> shared queue) → \`prosecutor_review\` → \`submitted_to_judge\` →
-> \`judicial_review\` → approved/denied → CID fulfilment. Exactly three live
+> Phase-2 banner.** The pipeline is \`cid_supervisor_review\` → (the responsible
+> bureau's Bureau Lead — or ANY eligible Lead for a JTF-assigned case, with
+> DD/Director/Owner as the audited fallback — via
+> \`review_legal_request_as_cid\`) → **\`prosecutor_queue\`** (**bureau-scoped**
+> since 20260818120000: one queue per bureau; a prosecutor holds ONE home
+> bureau and works only their own queue, the AG sees all three and grants
+> temporary audited coverage) → \`prosecutor_review\` → \`submitted_to_judge\` →
+> \`judicial_review\` → approved/denied → CID fulfilment. Judge-/prosecutor-
+> returned requests resubmit straight back to the prosecutor queue unless the
+> investigator explicitly declares a material change. Exactly three live
 > roles (\`attorney_general\` / \`prosecutor\` / \`judge\`; legacy ADA/DA map to the
 > effective role prosecutor). The Phase-1-retired ADA/DA/AG review, DOJ-intake
 > routing (\`submit_legal_request_to_doj\`, \`reassign_legal_ada\`,
@@ -799,18 +805,22 @@ SELECT-only for clients; these definer RPCs are the only write path.
 |---|---|
 | \`create_legal_request\` / \`update_legal_draft\` | draft a warrant or subpoena on an accessible case |
 | \`add_legal_exhibit\` / \`remove_legal_exhibit\` | build the deliberate packet (source validated against caller's own access) |
-| \`submit_legal_request_to_cid\` / \`review_legal_request_as_cid\` | CID supervisor stage; **approve freezes a version and hands off to the shared \`prosecutor_queue\`** (deny/return unchanged; sealed requests skip the bench fan-out and wait for AG assignment) |
-| \`legal_claim_prosecutor(p_request)\` | atomic claim from the shared queue (active prosecutors only; sealed refused; creator/conflicted refused — \`private.legal_is_conflicted\`) |
-| \`legal_assign_prosecutor(p_request, p_prosecutor, p_reason?)\` | AG/Owner formal assignment or reassignment (reason required to take a claimed request; the ONLY path for sealed); conflicts never overridable |
+| \`submit_legal_request_to_cid(p_request, p_change_summary?, p_material_change?)\` / \`review_legal_request_as_cid\` | CID supervisor stage; **approve freezes a version and hands off to the responsible bureau's \`prosecutor_queue\`** (deny/return unchanged; sealed requests skip the bench fan-out and wait for AG assignment; a queue with no covering prosecutor alerts the AG + Owner). Resubmitting a judge-/prosecutor-returned request goes **straight back to the prosecutor queue** unless \`p_material_change=true\` — the declaration is logged (\`material_change_declared\`) and the request re-enters CID review |
+| \`legal_claim_prosecutor(p_request)\` | atomic claim from the caller's **own bureau's** queue (home bureau + live coverage — \`private.prosecutor_bureaus_of\`; out-of-lane claims are refused with a pointer to AG coverage; sealed refused; creator/conflicted refused — \`private.legal_is_conflicted\`) |
+| \`legal_assign_prosecutor(p_request, p_prosecutor, p_reason?)\` | AG/Owner formal assignment or reassignment (assignee must cover the request's bureau; reason required to take a claimed request; the ONLY path for sealed); conflicts never overridable |
+| \`justice_set_coverage(p_user, p_bureau, p_reason, p_expires_at?)\` / \`justice_end_coverage(p_coverage, p_reason?)\` | AG/Owner grant + end **temporary cross-bureau coverage** for a prosecutor — explicit, dated, expiring, audited (\`PROSECUTOR_COVERAGE_GRANTED/ENDED\`), endable, never permanent |
+| \`legal_request_case_brief(p_request)\` | the justice viewer's ONLY case surface: concise case summary (number/title/status/stage/unit/responsible bureau) + the request's referenced exhibits, finalized-report content, and media metadata — gated by \`private.can_view_legal_request\`, database-enforced |
 | \`legal_return_to_prosecutor_queue(p_request, p_reason?)\` | the holder steps back — or the AG returns abandoned work — to the shared queue |
 | \`review_legal_request_as_prosecutor(p_request, p_decision, p_note?, p_signature?, p_capacity?)\` | assigned prosecutor: approve → judicial queue / return (corrections required) / decline (terminal, reason required) / note; dual CID+DOJ members state their acting capacity |
 | \`claim_legal_request_as_judge\` / \`assign_judge\` / \`decide_legal_request_as_judge\` | judicial claim (non-sealed) or formal assignment (AG/Owner/approving prosecutor; only path for sealed), then decision — approve (reasoning required, optional conditions + expiry) / deny / return; conflict-of-role + investigator-history checked |
-| \`justice_appoint(p_user, p_role, p_reason?)\` | DIRECT, immediate DOJ/judiciary assignment — no approval chain. Authority: prosecutor/judge — active AG, DD+/Owner (**Owner only** for an Attorney General). An ACTIVE CID member (any rank/bureau, JTF included) is transferred inline in one transaction — settled \`member_transfers\` row, CID membership + assignments end, justice membership activates; led cases keep their lead until handed over — and requires DD+/Owner (a pure AG appoints only non-CID accounts). Inactive/unassigned accounts appoint directly. The staged transfer workflow below remains the deliberate hand-over-first alternative |
+| \`justice_appoint(p_user, p_role, p_reason?, p_bureau?)\` | DIRECT, immediate DOJ/judiciary assignment — no approval chain. A prosecutor appointment **requires the home bureau** (\`p_bureau\` ∈ LSB/BCB/SAB; forbidden for judge/AG). Authority: prosecutor/judge — active AG, DD+/Owner (**Owner only** for an Attorney General). An ACTIVE CID member (any rank/bureau, JTF included) is transferred inline in one transaction — settled \`member_transfers\` row, CID membership + assignments end, justice membership activates, and their open led cases are **reassigned to the acting authority as interim lead** (audited \`CASE_LEAD_INTERIM\` per case; command notified) — and requires DD+/Owner (a pure AG appoints only non-CID accounts). Inactive/unassigned accounts appoint directly. The staged transfer workflow below remains the deliberate hand-over-first alternative |
+| \`case_set_stage(p_case, p_stage, p_reason)\` | the ONLY path to move \`cases.investigative_stage\` (intake → active_investigation → legal_process → enforcement_ready → pending_closure → closed — manual, never automatic); reason required; case lead / Senior Detective+ / Owner; audited \`CASE_STAGE_CHANGED\`; direct column writes are trigger-frozen |
+| \`media_designate_evidence(p_media, p_ref?, p_clear?)\` | promote a case upload to a designated **evidence record** (reference auto-generated when omitted; designating actor + timestamp recorded; original uploader/timestamps untouched) or clear a designation; uploader / Senior Detective+ / Owner; audited |
 | \`set_justice_membership_active(p_target, p_active)\` | deactivate/reactivate a membership; deactivation auto-returns the member's unfinished work to the queues (nothing strands) |
 | \`legal_admin_cancel(p_request, p_reason)\` | command/AG/Owner cancels a stuck, undecided request (decided/issued work untouchable here) |
 | \`legal_mark_superseded(p_old, p_new, p_reason)\` | the ONLY correction path for issued instruments: links both directions, retires the old one, revokes live fulfilment; snapshots stay immutable |
-| \`justice_migration_review()\` | Owner/AG migration report: legacy roles, dual identities, requests in retired states, inactive holders, self-review conflicts |
-| \`transfer_doj_request(p_user, p_direction, p_role, p_reason, p_bureau?)\` | CID Command proposes CID→DOJ (AG/Owner proposes DOJ→CID) — an organizational transfer, never account recreation |
+| \`justice_migration_review()\` | Owner/AG migration report: legacy roles, **prosecutors without a home bureau**, dual identities, requests in retired states, inactive holders, **JTF cases missing a responsible bureau**, self-review conflicts |
+| \`transfer_doj_request(p_user, p_direction, p_role, p_reason, p_bureau?)\` | CID Command proposes CID→DOJ (AG/Owner proposes DOJ→CID) — an organizational transfer, never account recreation; a prosecutor destination **requires the home bureau** (\`p_bureau\`), which activation stamps onto the membership |
 | \`transfer_doj_decide(p_transfer, p_stage, p_decision, p_note?, p_retain_cid?, p_dual_expires_at?)\` | two-stage approval: CID stage (DD+/Owner), DOJ stage (AG/Owner; AG appointments Owner-only); temporary dual membership requires an expiry ≤ 90 days |
 | \`transfer_handover(p_transfer)\` / \`transfer_doj_activate(p_transfer, p_reassignments?)\` | handover checklist (led cases, open work), then ONE transactional activation — refused while a led case lacks a named new lead |
 | \`transfer_doj_cancel(p_transfer, p_reason?)\` | requester/command/AG/Owner cancels a pre-effective transfer |

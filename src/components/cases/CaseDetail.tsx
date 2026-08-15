@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { DetailSkeleton } from '@/components/ui/Skeleton'
 import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab, type SectionTabGroup } from '@/components/ui/SectionTabs'
+import { Field, Input, Textarea } from '@/components/ui/Field'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { countRows, list, rpc, update, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
@@ -118,6 +119,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const [handover, setHandover] = useState(false)
   const [reassign, setReassign] = useState(false)
   const [respBureau, setRespBureau] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const casesV = useTableVersion('cases')
   // Legacy ?tab=evidence (old links/notifications/search hits) maps to media.
   const requestedTab = normalizeCaseTab(sp.get('tab'))
@@ -354,30 +356,6 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     toast('Legal hold lifted.', 'success'); void fetchHold()
   }
 
-  const permanentDelete = async () => {
-    const pv = await rpc('case_delete_preview', { p_case: c.id })
-    if (pv.error) { toast(pv.error.message, 'danger'); return }
-    const preview = pv.data as { items: { table: string; rows: number; on_delete: string }[]; legal_requests: number; active_hold?: boolean; deletable: boolean }
-    if (preview.active_hold) {
-      toast('This case is under an active legal hold and cannot be deleted — lift the hold first.', 'warn')
-      return
-    }
-    if (!preview.deletable) {
-      toast(`This case has ${preview.legal_requests} legal request${preview.legal_requests === 1 ? '' : 's'} on file and cannot be deleted.`, 'warn')
-      return
-    }
-    const lines = preview.items.map((i) => `• ${i.table.replace('public.', '')}: ${i.rows} row${i.rows === 1 ? '' : 's'} ${i.on_delete}`).join('\n')
-    const reason = await uiPrompt(
-      `Permanently delete ${c.case_number}?\n\nThis cannot be undone. It will destroy:\n${lines || '• (no linked records)'}\n\nEnter the reason (recorded in the audit log):`,
-      { title: 'Permanently delete case', placeholder: 'Reason (required)', confirmText: 'Delete forever' },
-    )
-    if (reason === null) return
-    const res = await rpc('case_permanent_delete', { p_case: c.id, p_reason: reason })
-    if (res.error) { toast(res.error.message, 'danger'); return }
-    toast(`${c.case_number} permanently deleted.`, 'warn')
-    onBack(); onChanged()
-  }
-
   // Header/metric derivations — cheap, render-pure.
   const chargesCount = parseCharges(c.charges).reduce((n, x) => n + Math.max(1, x.count || 1), 0)
   const openTasks = wf ? wf.tasks.filter((t) => !t.done).length : null
@@ -463,7 +441,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         onArchive={() => void archiveCase()}
         onHandover={() => setHandover(true)}
         onReassign={() => setReassign(true)}
-        onDelete={() => void permanentDelete()}
+        onDelete={() => setDeleteOpen(true)}
         onChanged={() => { onChanged(); void fetchCase() }}
         onGoTab={(t) => setTab(TABS.includes(t as TabId) ? (t as TabId) : 'overview')}
       />
@@ -513,7 +491,135 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       <HandoverModal open={handover} c={c} onClose={() => setHandover(false)} onDone={() => { setHandover(false); onChanged(); void fetchCase() }} />
       <ReassignBureauModal open={reassign} c={c} onClose={() => setReassign(false)} onDone={() => { setReassign(false); onChanged(); void fetchCase() }} />
       <ResponsibleBureauModal open={respBureau} c={c} onClose={() => setRespBureau(false)} onDone={(updated) => { setRespBureau(false); setCase(updated); onChanged(); void fetchCase() }} />
+      <DeleteCaseModal open={deleteOpen} c={c} onClose={() => setDeleteOpen(false)} onDeleted={() => { setDeleteOpen(false); onBack(); onChanged() }} />
     </div>
+  )
+}
+
+/* ── Permanent case deletion (owner-only) ───────────────────────────────────
+ * A dedicated destructive-action modal replaces the old prompt chain: it loads
+ * the server's destruction manifest (case_delete_preview), demands the EXACT
+ * case number typed back plus a reason, and only then calls the unchanged
+ * case_permanent_delete RPC. Archiving stays the signposted normal path. */
+interface DeletePreview {
+  items: { table: string; rows: number; on_delete: string }[]
+  legal_requests: number
+  active_hold?: boolean
+  deletable: boolean
+}
+
+function DeleteCaseModal({ open, c, onClose, onDeleted }: { open: boolean; c: CaseRow; onClose: () => void; onDeleted: () => void }) {
+  const [preview, setPreview] = useState<DeletePreview | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [confirmNumber, setConfirmNumber] = useState('')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    queueMicrotask(() => {
+      setPreview(null); setPreviewError(null); setConfirmNumber(''); setReason(''); setBusy(false)
+      void rpc('case_delete_preview', { p_case: c.id }).then((pv) => {
+        if (pv.error) setPreviewError(pv.error.message)
+        else setPreview(pv.data as unknown as DeletePreview)
+      })
+    })
+  }, [open, c.id])
+
+  const blocked = preview
+    ? preview.active_hold
+      ? 'This case is under an active legal hold and cannot be deleted — lift the hold first.'
+      : !preview.deletable
+        ? `This case has ${preview.legal_requests} legal request${preview.legal_requests === 1 ? '' : 's'} on file and cannot be deleted.`
+        : null
+    : null
+  const numberMatches = confirmNumber.trim() === c.case_number
+  const canDelete = !!preview && !blocked && numberMatches && !!reason.trim() && !busy
+
+  const run = async () => {
+    if (!canDelete) return
+    setBusy(true)
+    const res = await rpc('case_permanent_delete', { p_case: c.id, p_reason: reason.trim() })
+    setBusy(false)
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast(`${c.case_number} permanently deleted.`, 'warn')
+    onDeleted()
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} dirty={() => !!confirmNumber.trim() || !!reason.trim()}>
+      <div className="p-5">
+        <ModalHeader title="Permanently delete case" onClose={onClose} />
+        <div className="space-y-3">
+          <p className="rounded-lg border border-rose-400/30 bg-rose-500/[0.07] p-3 text-sm text-rose-100">
+            This destroys <span className="font-mono font-bold">{c.case_number}</span> and every linked record listed
+            below. It cannot be undone. <strong>Archiving hides a case without destroying history</strong> — it is the
+            normal path; deletion is for records that must not exist.
+          </p>
+
+          {previewError ? (
+            <p className="rounded-lg border border-rose-400/30 bg-rose-500/[0.07] p-3 text-sm text-rose-100">{previewError}</p>
+          ) : !preview ? (
+            <p className="text-sm text-slate-400">Loading the destruction manifest…</p>
+          ) : blocked ? (
+            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">{blocked}</p>
+          ) : (
+            <div className="rounded-lg border border-white/10 bg-ink-950/60 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Will be destroyed</p>
+              {preview.items.length ? (
+                <ul className="mt-1.5 space-y-1 text-sm text-slate-200">
+                  {preview.items.map((i) => (
+                    <li key={i.table} className="flex items-baseline justify-between gap-3">
+                      <span className="min-w-0 truncate font-mono text-xs">{i.table.replace('public.', '')}</span>
+                      <span className="flex-shrink-0 tabular-nums text-slate-300">
+                        {i.rows} row{i.rows === 1 ? '' : 's'} <span className="text-xs text-slate-400">{i.on_delete}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-1.5 text-sm text-slate-400">No linked records — only the case row itself.</p>
+              )}
+            </div>
+          )}
+
+          {preview && !blocked && (
+            <>
+              <Field label={`Type the case number to confirm (${c.case_number})`} required>
+                {(id) => (
+                  <Input
+                    id={id}
+                    value={confirmNumber}
+                    onChange={(e) => setConfirmNumber(e.target.value)}
+                    placeholder={c.case_number}
+                    autoComplete="off"
+                    className="font-mono"
+                  />
+                )}
+              </Field>
+              <Field label="Reason" required hint="Recorded in the audit log with the deletion.">
+                {(id) => (
+                  <Textarea
+                    id={id}
+                    rows={2}
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Why this record must be destroyed rather than archived"
+                  />
+                )}
+              </Field>
+            </>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button onClick={onClose} disabled={busy}>Cancel</Button>
+            <Button variant="danger" onClick={() => void run()} disabled={!canDelete}>
+              {busy ? 'Deleting…' : 'Delete forever'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
