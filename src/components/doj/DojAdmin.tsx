@@ -4,18 +4,23 @@
  *   - Memberships: the three live roles (prosecutor / judge / attorney
  *     general) with activate/deactivate (deactivation auto-returns unfinished
  *     work to the queues server-side) and explicit appointment
- *     (justice_appoint — active CID members are refused; the transfer
- *     workflow is their path).
+ *     (justice_appoint — direct and effective immediately; an active CID
+ *     member is transferred inline, which takes DD+/Owner authority).
  *   - Transfers: the CID↔DOJ transfer queue (member_transfers) — DOJ-stage
  *     decisions, the handover checklist, and transactional activation.
  *   - Held work: claimed prosecutorial reviews with reassign / return-to-queue
  *     (a request can never be stranded).
  *  Every write is a definer RPC; RLS scopes every read. Names come from
- *  justice_directory() — the AG has no CID roster access. */
+ *  justice_directory() — a pure AG has no CID roster access (the appoint form
+ *  falls back to a raw account-ID input for them); command/owner viewers get
+ *  a real member picker from the shared roster cache. */
 import { useCallback, useEffect, useState } from 'react'
 import { useNow } from '@/lib/useNow'
 import { list, rpc } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
+import { useAuth } from '@/lib/auth'
+import { useProfilesStore } from '@/lib/profiles'
+import { ROLE_LABEL } from '@/lib/roles'
 import { fmtDateTime, timeAgo } from '@/lib/format'
 import { justiceRoleLabel, type LegalRequest } from '@/lib/justice'
 import { humanize } from '@/lib/legalWorkflow'
@@ -44,6 +49,19 @@ function AppointModal({ busy, onSubmit, onClose }: {
   onSubmit: (v: { userId: string; role: string; reason: string }) => void
   onClose: () => void
 }) {
+  const { isCommand, isOwner } = useAuth()
+  // Command/owner viewers can read the CID roster (RLS) — give them a real
+  // member picker. A pure AG cannot, so the raw account-ID input remains
+  // their path (the server enforces eligibility either way).
+  const canRoster = isCommand || isOwner
+  const profiles = useProfilesStore((s) => s.profiles)
+  const fetchProfiles = useProfilesStore((s) => s.fetch)
+  useEffect(() => { if (canRoster) void fetchProfiles() }, [canRoster, fetchProfiles])
+  const members = profiles
+    .filter((p) => !p.removed_at && !p.is_system && !p.login_denied)
+    .slice()
+    .sort((a, b) => Number(b.active) - Number(a.active)
+      || (a.display_name || '').localeCompare(b.display_name || ''))
   const [userId, setUserId] = useState('')
   const [role, setRole] = useState('prosecutor')
   const [reason, setReason] = useState('')
@@ -53,13 +71,32 @@ function AppointModal({ busy, onSubmit, onClose }: {
       <div className="p-5">
         <ModalHeader title="Appoint a DOJ member" onClose={onClose} />
         <p className="text-sm text-slate-400">
-          Appointment is the only direct path into the DOJ workspace. Active CID members are refused —
-          propose a CID-to-DOJ transfer for them instead. An Attorney General is appointed by the Owner only.
+          Appointment is direct and effective immediately — no approval chain. An active CID member is
+          transferred inline: their CID membership ends the moment you appoint (moving an active member
+          takes Deputy Director+ or Owner authority). Inactive or unassigned accounts are appointed
+          directly. An Attorney General is appointed by the Owner only.
         </p>
         <div className="mt-4 space-y-4">
-          <Field label="Member account ID" required hint="The account's profile ID (from their transfer record or the Owner roster).">
-            {(id) => <Input id={id} value={userId} onChange={(e) => setUserId(e.target.value)} autoComplete="off" placeholder="00000000-0000-…" />}
-          </Field>
+          {canRoster ? (
+            <Field label="Member" required hint="Active CID members are moved inline (their CID membership ends immediately); inactive accounts are appointed directly.">
+              {(id) => (
+                <Select id={id} value={userId} onChange={(e) => setUserId(e.target.value)}>
+                  <option value="">Select…</option>
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.display_name || 'Member'} — {m.active
+                        ? `${ROLE_LABEL[m.role] || m.role}${m.division ? ` · ${m.division}` : ''}`
+                        : 'inactive'}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          ) : (
+            <Field label="Member account ID" required hint="The account's profile ID (from their transfer record or the Owner roster).">
+              {(id) => <Input id={id} value={userId} onChange={(e) => setUserId(e.target.value)} autoComplete="off" placeholder="00000000-0000-…" />}
+            </Field>
+          )}
           <Field label="Role" required>
             {(id) => (
               <Select id={id} value={role} onChange={(e) => setRole(e.target.value)}>

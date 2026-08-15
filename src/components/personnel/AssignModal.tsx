@@ -9,7 +9,9 @@
  *  the narrowed assign_member; danger zone: deny/restore login and permanent
  *  removal. A changed dropdown never silently changes anything — every
  *  privileged action shows a summary and needs an explicit confirm, and the
- *  database freezes profiles.role/division/active against direct writes. */
+ *  database freezes profiles.role/division/active against direct writes.
+ *  DD+/Owner additionally get direct DOJ assignment (justice_appoint) —
+ *  immediate, no approval chain; an active member is transferred inline. */
 import { useState } from 'react'
 import { rpc, updateNoSelect } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
@@ -23,7 +25,7 @@ import { toast } from '@/lib/toast'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
-import { Field, Select, Textarea } from '@/components/ui/Field'
+import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 
 type Bureau = keyof typeof BUREAUS & string
 
@@ -42,22 +44,30 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
   const [badge, setBadge] = useState(p.badge_number || '')
   const [loa, setLoa] = useState(!!p.loa)
   // Which privileged action panel is open (never more than one).
-  const [panel, setPanel] = useState<'role' | 'transfer' | 'org' | null>(null)
+  const [panel, setPanel] = useState<'role' | 'transfer' | 'org' | 'doj' | null>(null)
   const [newRole, setNewRole] = useState('')
   const [toBureau, setToBureau] = useState<Bureau | ''>('')
   const [justiceRole, setJusticeRole] = useState('')
+  const [dojRole, setDojRole] = useState('')
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
 
   const roleOptions = getAssignableRoles(actor, p)
   const transferDestinations = (Object.keys(BUREAUS) as Bureau[])
     .filter((b) => canTransfer(actor, p, p.division ?? '', b))
+  // Direct DOJ assignment (justice_appoint): DD+/Owner. A pure AG can only
+  // appoint non-CID accounts and has no CID roster access, so this modal
+  // never renders for them. Self-appointment is Owner-only server-side.
+  const dojAuthority = actor.is_owner
+    || (!!me?.active && (me.role === 'deputy_director' || me.role === 'director'))
+  const showDoj = dojAuthority && (actor.is_owner || me?.id !== p.id)
 
-  const openPanel = (which: 'role' | 'transfer' | 'org') => {
+  const openPanel = (which: 'role' | 'transfer' | 'org' | 'doj') => {
     setPanel(panel === which ? null : which)
     setNewRole('')
     setToBureau('')
     setJusticeRole('')
+    setDojRole('')
     setReason('')
   }
 
@@ -83,6 +93,30 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
     setBusy(false)
     if (res.error) { toast(`Correction failed: ${res.error.message}`, 'danger'); return }
     toast(`${p.display_name} moved out of CID — justice membership request pending approval`, 'warn')
+    onChanged(); onClose()
+  }
+
+  // Direct, immediate DOJ/judiciary assignment — no approval chain. An active
+  // member is transferred inline server-side (CID membership ends, assignments
+  // end, settled member_transfers row, justice membership activates). The
+  // server enforces the full authority/eligibility matrix; its refusals
+  // surface verbatim.
+  const assignDoj = async () => {
+    if (!dojRole) { toast('Pick the DOJ role.', 'warn'); return }
+    const ok = await uiConfirm(
+      p.active
+        ? `This ends ${p.display_name}'s CID membership immediately and activates their DOJ access. Cases they lead keep them as lead until handed over. Continue?`
+        : `Appoint ${p.display_name} as ${justiceRoleLabel(dojRole)}? Their DOJ access activates immediately.`,
+      { title: 'Assign to DOJ', confirmText: 'Assign — effective immediately', danger: p.active },
+    )
+    if (!ok) return
+    setBusy(true)
+    const res = await rpc('justice_appoint', {
+      p_user: p.id, p_role: dojRole, ...(reason.trim() ? { p_reason: reason.trim() } : {}),
+    })
+    setBusy(false)
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast(`${p.display_name} appointed ${justiceRoleLabel(dojRole)} — effective immediately`, 'success')
     onChanged(); onClose()
   }
 
@@ -246,6 +280,9 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
             {actor.is_owner && p.active && me?.id !== p.id && (
               <Button size="sm" onClick={() => openPanel('org')}>Move to DOJ / Judiciary…</Button>
             )}
+            {showDoj && (
+              <Button size="sm" onClick={() => openPanel('doj')}>Assign to DOJ…</Button>
+            )}
           </div>
 
           {panel === 'role' && (
@@ -296,6 +333,33 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
               </Field>
               <Button variant="danger" className="w-full" disabled={busy || !justiceRole || !reason.trim()} onClick={() => void orgCorrect()}>
                 Move out of CID
+              </Button>
+            </div>
+          )}
+
+          {panel === 'doj' && (
+            <div className="mt-3 space-y-3 rounded-xl border border-amber-400/20 bg-ink-950/50 p-3">
+              <p className="text-xs text-amber-200">
+                Department of Justice — direct assignment, effective immediately (no approval chain).
+                {p.active
+                  ? ' Their CID membership ends the moment you confirm; open case assignments end, and cases they lead keep them as lead until each is handed over.'
+                  : ' This account is not an active CID member — the appointment activates their DOJ access directly.'}
+              </p>
+              <Field label="DOJ role" required hint={actor.is_owner ? undefined : 'Attorney General appointments are Owner-only.'}>
+                {(id) => (
+                  <Select id={id} value={dojRole} onChange={(e) => setDojRole(e.target.value)}>
+                    <option value="">Select…</option>
+                    <option value="prosecutor">Prosecutor</option>
+                    <option value="judge">Judge</option>
+                    {actor.is_owner && <option value="attorney_general">Attorney General</option>}
+                  </Select>
+                )}
+              </Field>
+              <Field label="Reason" hint="Optional — recorded on the transfer and in the audit log.">
+                {(id) => <Input id={id} value={reason} onChange={(e) => setReason(e.target.value)} autoComplete="off" />}
+              </Field>
+              <Button variant={p.active ? 'danger' : 'primary'} className="w-full" disabled={busy || !dojRole} onClick={() => void assignDoj()}>
+                Assign to DOJ — effective immediately
               </Button>
             </div>
           )}
