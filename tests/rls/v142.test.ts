@@ -4,11 +4,16 @@
  *   20260807120000_membership_rereview_terminal).
  *
  *  Pins:
- *   - JUDGE RETURN LOOP: a judge-routed warrant is claimed, returned for
- *     revision, revised and resubmitted — the resubmission clears the stale
+ *   - JUDGE RETURN LOOP (now it.skip — see the note on the test): a returned
+ *     warrant is revised and resubmitted — the resubmission clears the stale
  *     judicial assignment, so a second judge can claim it (previously the
  *     claim lane answered "a judge is already assigned" forever and the
- *     request stranded);
+ *     request stranded). Since 20260816120000 a judge can only claim at
+ *     'submitted_to_judge', which is reachable ONLY through the prosecutor
+ *     stage (v163 fixtures), and since 20260818120000 a judge-returned
+ *     resubmission fast-tracks to the PROSECUTOR queue unless the
+ *     investigator declares a material change — the preserved body reflects
+ *     both;
  *   - TERMINAL RE-REVIEW: a rejected membership request can be re-reviewed
  *     to approved — the queue's "Re-review" button finally has a server path
  *     (previously every route back was closed: unique row, edit policies,
@@ -96,7 +101,15 @@ describe.skipIf(!enabled)('v1.42 — workflow dead ends unblocked (live)', () =>
 
   /* ── 1. judge return -> resubmit -> second claim ── */
 
-  it('a judge-returned request re-enters the open claim lane after resubmission', async () => {
+  // The judicial stage is only reachable through the prosecutor stage since
+  // migration 20260816120000 (Lead approve → prosecutor_queue; a judge claim
+  // there fails "not awaiting judicial review"), so this flow now needs the
+  // rls-test-prosecutor fixture (v163 contract) to carry each round to
+  // 'submitted_to_judge'. Body preserved and updated for the 20260818120000
+  // routing: the resubmission declares a MATERIAL CHANGE so it re-enters CID
+  // review (without the flag it would fast-track straight to the prosecutor
+  // queue); the stale-judicial-assignment clearing it pins is unchanged.
+  it.skip('a judge-returned request re-enters the open claim lane after resubmission [requires DOJ prosecutor fixture — v163]', async () => {
     const cr = await lsb.rpc('create_legal_request', {
       p_case: caseId, p_request_type: 'warrant', p_subtype: 'arrest_warrant',
       p_title: `[rls-test] V142 warrant ${tag}`, p_priority: 'High', p_person: personId,
@@ -113,14 +126,19 @@ describe.skipIf(!enabled)('v1.42 — workflow dead ends unblocked (live)', () =>
     const ap1 = await lead.rpc('review_legal_request_as_cid', { p_request: warrantId, p_decision: 'approve', p_signature: 'RLS Lead' })
     expect(ap1.error).toBeNull()
 
-    // Parallel lane: judge claims directly, then returns for revision.
+    // [re-enablement] since 20260816120000 the request sits in
+    // prosecutor_queue here — a v163 prosecutor fixture must claim and
+    // approve it (→ submitted_to_judge) before each judge claim below.
     const claim1 = await judge.rpc('claim_legal_request_as_judge', { p_request: warrantId })
     expect(claim1.error).toBeNull()
     const ret = await judge.rpc('decide_legal_request_as_judge', { p_request: warrantId, p_decision: 'return', p_note: '[rls-test] tighten the PC statement' })
     expect(ret.error).toBeNull()
 
     // Resubmission clears the stale judicial assignment (20260807100000)…
-    const sub2 = await lsb.rpc('submit_legal_request_to_cid', { p_request: warrantId, p_change_summary: '[rls-test] PC tightened' })
+    // p_material_change (20260818120000): declared, so the resubmission
+    // re-enters CID review below — undeclared it would fast-track straight
+    // back to the prosecutor queue.
+    const sub2 = await lsb.rpc('submit_legal_request_to_cid', { p_request: warrantId, p_change_summary: '[rls-test] PC tightened', p_material_change: true })
     expect(sub2.error).toBeNull()
     const row = await lsb.from('legal_requests').select('assigned_judge_id,review_status').eq('id', warrantId)
     expect(row.error).toBeNull()

@@ -19,6 +19,7 @@ export function caseRow(overrides: Partial<Tables<'cases'>> = {}): Tables<'cases
     created_by: null,
     follow_up_at: null,
     id: mockId(),
+    investigative_stage: 'intake',
     is_joint_case: false,
     joint_case_created_at: null,
     joint_case_created_by: null,
@@ -81,6 +82,9 @@ export function mediaRow(overrides: Partial<Tables<'media'>> = {}): Tables<'medi
     case_id: null,
     category: null,
     created_at: mockTimestamp(),
+    evidence_designated_at: null,
+    evidence_designated_by: null,
+    evidence_ref: null,
     external_url: 'https://r2.fivemanage.com/mock/evidence-1.png',
     featured: false,
     gang_id: null,
@@ -99,6 +103,26 @@ export function mediaRow(overrides: Partial<Tables<'media'>> = {}): Tables<'medi
     updated_at: mockTimestamp(),
     uploaded_by: null,
     vehicle_id: null,
+    ...overrides,
+  }
+}
+
+/** Temporary cross-bureau prosecutor coverage (20260818120000). Live rows are
+ *  AG/Owner-granted and audited; a fixture defaults to an open (unexpired,
+ *  unended) grant. prosecutor_id + authorized_by are NOT NULL in the schema,
+ *  so the builder demands them. */
+export function prosecutorCoverageRow(
+  overrides: Partial<Tables<'prosecutor_coverage'>> & Pick<Tables<'prosecutor_coverage'>, 'prosecutor_id' | 'authorized_by'>,
+): Tables<'prosecutor_coverage'> {
+  return {
+    bureau: 'LSB',
+    created_at: mockTimestamp(),
+    ended_at: null,
+    ended_by: null,
+    expires_at: null,
+    id: mockId(),
+    reason: 'Bureau bench empty — temporary coverage',
+    starts_at: mockTimestamp(),
     ...overrides,
   }
 }

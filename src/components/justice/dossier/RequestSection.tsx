@@ -146,7 +146,14 @@ export function RequestSection({
           </Field>
           <div className="flex gap-2">
             <Button disabled={busy} onClick={onSaveDraft}>Save draft</Button>
-            <Button variant="primary" disabled={busy} onClick={onSubmit}>Submit for CID review</Button>
+            {/* A judge/prosecutor return fast-tracks: the corrected request
+                goes straight back to the prosecutor (material changes are
+                declared in the preview), so the label stays honest. */}
+            <Button variant="primary" disabled={busy} onClick={onSubmit}>
+              {['returned_by_judge', 'returned_by_prosecutor'].includes(r.review_status)
+                ? 'Resubmit for review'
+                : 'Submit for CID review'}
+            </Button>
           </div>
         </Card>
       ) : (

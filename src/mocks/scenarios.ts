@@ -58,6 +58,6 @@ export {
   roleSession, profileRow,
   emptyCase, populatedCase, archivedCase, legalHoldCase, restrictedMediaCase,
   caseRow, caseTaskRow, legalHoldRow, legalRequestRow, mediaRow,
-  notificationRow, personRow, reportRow,
+  notificationRow, personRow, prosecutorCoverageRow, reportRow,
   type MockRole, type RoleSessionResult, type CaseBundle,
 } from './fixtures'

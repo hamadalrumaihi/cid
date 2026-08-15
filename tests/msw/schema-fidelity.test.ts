@@ -7,7 +7,10 @@
  *  calls would break exactly like the app would. */
 import { describe, expect, it } from 'vitest'
 import { countRows, ilikeAny, insert, list, rpc } from '@/lib/db'
-import { emptyCase, populatedCase, restrictedMediaCase } from '@/mocks/scenarios'
+import {
+  emptyCase, populatedCase, profileRow, prosecutorCoverageRow, restrictedMediaCase,
+} from '@/mocks/scenarios'
+import { seedRows } from '@/mocks/store'
 
 describe('PostgREST read path (db.list / db.countRows)', () => {
   it('returns seeded case rows through supabase-js exactly as fixtured', async () => {
@@ -74,6 +77,32 @@ describe('PostgREST write path (db.insert Prefer: return=representation)', () =>
     // And the row is now visible to the read path.
     const tasks = await list('case_tasks', { eq: { case_id: caseRecord.id } })
     expect(tasks).toHaveLength(1)
+  })
+})
+
+describe('bureau queues + stages fixture surface (20260818120000)', () => {
+  it('case and media fixtures carry the new stage/evidence columns and survive the wire', async () => {
+    const { caseRecord, media } = populatedCase()
+    expect(caseRecord.investigative_stage).toBe('intake')
+    expect(media[0]).toMatchObject({
+      evidence_ref: null, evidence_designated_by: null, evidence_designated_at: null,
+    })
+    const rows = await list('cases')
+    expect(rows[0].investigative_stage).toBe('intake') // full-row echo includes the new column
+  })
+
+  it('prosecutorCoverageRow round-trips through the PostgREST read path', async () => {
+    const [pros] = seedRows('profiles', [profileRow({ display_name: 'ADA Reyes' })])
+    const [granter] = seedRows('profiles', [profileRow({ display_name: 'AG Marlowe', role: 'director' })])
+    const [cov] = seedRows('prosecutor_coverage', [prosecutorCoverageRow({
+      prosecutor_id: pros.id, authorized_by: granter.id, bureau: 'BCB',
+    })])
+    // the app's live-coverage query shape: unended rows for one prosecutor
+    const live = await list('prosecutor_coverage', {
+      eq: { prosecutor_id: pros.id }, is: { ended_at: null },
+    })
+    expect(live).toHaveLength(1)
+    expect(live[0]).toEqual(cov) // full-row echo: every generated column survives
   })
 })
 

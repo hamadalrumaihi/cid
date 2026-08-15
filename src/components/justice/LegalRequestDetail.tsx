@@ -20,7 +20,7 @@ import { useAuth } from '@/lib/auth'
 import { list, rpc } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { Drafts } from '@/lib/drafts'
-import { fmtDateTime } from '@/lib/format'
+import { fmtDateTime, timeAgo } from '@/lib/format'
 import { useTableVersion } from '@/lib/realtime'
 import {
   LEGAL_ACTION_COLS, SUBPOENA_FIELDS, WARRANT_FIELDS,
@@ -44,6 +44,7 @@ import {
   useLegalPeople, useMyJusticeRole, useMyProsecutorBureaus,
 } from './legalShared'
 import { LegalStageTracker } from './LegalStageTracker'
+import { CaseBriefPanel } from './dossier/CaseBriefPanel'
 import { CourtPacketPrint } from './dossier/CourtPacketPrint'
 import { DecisionPanel } from './dossier/DecisionPanel'
 import {
@@ -302,18 +303,33 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
     setPreview(true)
   }
 
-  const confirmSubmit = async () => {
+  // Judge/prosecutor returns fast-track on resubmission (20260818120000):
+  // corrected work goes STRAIGHT back to the prosecutor queue unless the
+  // investigator explicitly declares a material change in the preview.
+  const returnedBy: 'judge' | 'prosecutor' | null =
+    status === 'returned_by_judge' ? 'judge' : status === 'returned_by_prosecutor' ? 'prosecutor' : null
+
+  const confirmSubmit = async (v: { materialChange: boolean; changeSummary: string }) => {
     const save = await rpc('update_legal_draft', {
       p_request: r.id, p_title: draft.title.trim() || undefined, p_priority: draft.priority || undefined,
       p_narrative: draft.narrative, p_classification: draft.classification || undefined, p_form: draft.form,
     })
     if (save.error) { toast(save.error.message, 'danger'); return }
     setPreview(false)
+    const fastTrack = !!returnedBy && !v.materialChange
     await act(async () => {
-      const res = await rpc('submit_legal_request_to_cid', { p_request: r.id })
+      const res = await rpc('submit_legal_request_to_cid', {
+        p_request: r.id,
+        ...(returnedBy ? {
+          p_material_change: v.materialChange,
+          ...(v.changeSummary ? { p_change_summary: v.changeSummary } : {}),
+        } : {}),
+      })
       if (!res.error) { Drafts.clear(`legal:edit:${r.id}`); setPendingDraft(null) }
       return res
-    }, 'Submitted for CID supervisor review.')
+    }, fastTrack
+      ? 'Resubmitted — the corrected request returned directly to the prosecutor queue.'
+      : 'Submitted for CID supervisor review.')
   }
 
   const withdraw = async () => {
@@ -361,9 +377,39 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
     }] : []),
   ]
 
+  // Newest judge/prosecutor return note — surfaced prominently for the
+  // investigator so the required corrections are never buried in the Review
+  // tab (actions load ascending; the last matching row is the newest).
+  const latestReturn = returnedBy
+    ? [...actions].reverse().find((a) => a.to_status === status) ?? null
+    : null
+
   return (
     <div className="space-y-4">
       <Breadcrumbs items={[{ label: 'Legal requests', onClick: back }, { label: r.request_number }]} />
+
+      {/* ── Return callout (investigator) ──────────────────────────────────── */}
+      {isCreator && returnedBy && (
+        <div role="status" className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+          <p className="text-sm font-bold text-amber-200">
+            Returned by the {returnedBy === 'judge' ? 'Judge' : 'prosecutor'}
+            {latestReturn && (
+              <span className="ml-2 font-normal text-amber-200/80">
+                {name(latestReturn.actor_id)} · {timeAgo(latestReturn.created_at)}
+              </span>
+            )}
+          </p>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-amber-100">
+            {latestReturn?.public_note
+              ? <>Reason: {latestReturn.public_note}</>
+              : 'No return note was recorded — see the Review section for the full history.'}
+          </p>
+          <p className="mt-1.5 text-xs text-amber-200/80">
+            Fix the issues and resubmit — a corrected request returns directly to the prosecutor
+            unless you declare a material change.
+          </p>
+        </div>
+      )}
 
       {/* ── Command header ─────────────────────────────────────────────────── */}
       <Card pad="lg">
@@ -430,6 +476,10 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
         </details>
       </Card>
 
+      {/* ── Case brief (justice seats only) — the referenced-material view
+          from legal_request_case_brief; never a link into /cases. */}
+      {dojRole && <CaseBriefPanel requestId={requestId} />}
+
       <MetricStrip metrics={metrics} />
 
       {/* ── Deep-linkable sections ─────────────────────────────────────────── */}
@@ -476,8 +526,8 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
       {preview && editable && (
         <SubmitPreview
           r={r} draft={draft} exhibits={exhibits} records={caseRecords}
-          checklist={submitChecklist()} busy={busy}
-          onCancel={() => setPreview(false)} onConfirm={() => void confirmSubmit()}
+          checklist={submitChecklist()} busy={busy} returnedBy={returnedBy}
+          onCancel={() => setPreview(false)} onConfirm={(v) => void confirmSubmit(v)}
         />
       )}
 

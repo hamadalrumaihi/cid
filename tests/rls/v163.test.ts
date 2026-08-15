@@ -19,17 +19,32 @@
  *      (NEVER an active CID member — dual membership would force an acting
  *      capacity on every RPC), not login_denied, not removed;
  *    - justice_memberships rows, active=true, expires_at null:
- *        prosecutor / prosecutor2 → agency 'doj',       justice_role 'prosecutor'
- *        judge                    → agency 'judiciary', justice_role 'judge'
- *        ag                       → agency 'doj',       justice_role 'attorney_general'
+ *        prosecutor  → agency 'doj', justice_role 'prosecutor',
+ *                      prosecutor_bureau 'LSB'   (home bureau — 20260818120000)
+ *        prosecutor2 → agency 'doj', justice_role 'prosecutor',
+ *                      prosecutor_bureau 'BCB'   (home bureau — 20260818120000)
+ *        judge       → agency 'judiciary', justice_role 'judge'
+ *        ag          → agency 'doj',       justice_role 'attorney_general'
  *  beforeAll verifies this shape live and fails with a provisioning message on
  *  drift, so a half-seeded project can never produce misleading green/red.
  *
+ *  BUREAU QUEUES (migration 20260818120000): prosecutors work their home
+ *  bureau's queue only. This suite's requests ride an LSB case, so the
+ *  two-prosecutor race and the AG-assignment legs need prosecutor2 (home BCB)
+ *  to COVER LSB. beforeAll ensures exactly one live, non-expiring
+ *  prosecutor_coverage row (AG-granted, reason-tagged) exists for
+ *  prosecutor2→LSB and grants it once if absent — the row is deliberately
+ *  KEPT LIVE as part of the fixture bench (idempotent across runs; ending it
+ *  each run would accumulate one dead history row per run instead). The
+ *  bureau wall itself (outside-bureau claim refused, visibility narrowed) is
+ *  pinned by tests/rls/v165.test.ts.
+ *
  *  ── What it proves ─────────────────────────────────────────────────────────
- *   1. Lead+ approve → prosecutor_queue with queue_entered_at stamped.
- *   2. The claim is ATOMIC: two prosecutors race (Promise.all) and exactly one
- *      wins; the loser (and any re-claim) gets "no longer in the prosecutor
- *      queue".
+ *   1. Lead+ approve → the responsible bureau's prosecutor_queue with
+ *      queue_entered_at stamped; every prosecutor covering that bureau sees it.
+ *   2. The claim is ATOMIC: two bureau-eligible prosecutors race (Promise.all)
+ *      and exactly one wins; the loser (and any re-claim) gets "no longer in
+ *      the prosecutor queue".
  *   3. A prosecutor can never issue (issuance is CID fulfilment, gated on
  *      review_status='approved' + can_fulfil_legal).
  *   4. The assigned prosecutor (only) approves → submitted_to_judge.
@@ -110,16 +125,20 @@ describe.skipIf(!enabled)('v1.63 — minimal-DOJ pipeline: prosecutor queue + ju
   }
 
   /** Fail loudly (with the provisioning contract) when a DOJ fixture doesn't
-   *  hold the exact membership shape the suite assumes. */
-  const assertJusticeShape = async (client: C, key: string, agency: string, role: string) => {
+   *  hold the exact membership shape the suite assumes. Since 20260818120000
+   *  a prosecutor's HOME BUREAU is part of that shape. */
+  const assertJusticeShape = async (client: C, key: string, agency: string, role: string, bureau?: string) => {
     const m = await client.from('justice_memberships')
-      .select('agency,justice_role,active,expires_at').eq('user_id', ids[key])
+      .select('agency,justice_role,active,expires_at,prosecutor_bureau').eq('user_id', ids[key])
     if (m.error) throw new Error(`v163 provisioning check (${key}): ${m.error.message}`)
     const row = (m.data ?? [])[0]
     if (!row || !row.active || row.agency !== agency || row.justice_role !== role
-        || (row.expires_at && new Date(row.expires_at as string) <= new Date())) {
+        || (row.expires_at && new Date(row.expires_at as string) <= new Date())
+        || (bureau !== undefined && row.prosecutor_bureau !== bureau)) {
       throw new Error(`v163 provisioning drift: rls-test-${key} must hold an ACTIVE `
-        + `justice_membership (agency='${agency}', justice_role='${role}', unexpired) — got ${JSON.stringify(row ?? null)}. `
+        + `justice_membership (agency='${agency}', justice_role='${role}'`
+        + (bureau !== undefined ? `, prosecutor_bureau='${bureau}'` : '')
+        + `, unexpired) — got ${JSON.stringify(row ?? null)}. `
         + 'See the fixture contract at the top of tests/rls/v163.test.ts.')
     }
     const prof = await client.from('profiles').select('active').eq('id', ids[key]).single()
@@ -145,10 +164,25 @@ describe.skipIf(!enabled)('v1.63 — minimal-DOJ pipeline: prosecutor queue + ju
       ids[key] = await signInWithRetry(client, email, pw!)
     }
     // The suite's meaning depends on the exact DOJ shape — verify it first.
-    await assertJusticeShape(p1, 'prosecutor', 'doj', 'prosecutor')
-    await assertJusticeShape(p2, 'prosecutor2', 'doj', 'prosecutor')
+    await assertJusticeShape(p1, 'prosecutor', 'doj', 'prosecutor', 'LSB')
+    await assertJusticeShape(p2, 'prosecutor2', 'doj', 'prosecutor', 'BCB')
     await assertJusticeShape(judge, 'judge', 'judiciary', 'judge')
     await assertJusticeShape(ag, 'ag', 'doj', 'attorney_general')
+    // Bureau queues (20260818120000): prosecutor2's home is BCB, but this
+    // suite's requests ride an LSB case — ensure the fixture-bench coverage
+    // row (prosecutor2 covering LSB, live, non-expiring) exists, granting it
+    // exactly once. See the header for why it is kept live across runs.
+    const cov = await p2.from('prosecutor_coverage')
+      .select('id,expires_at').eq('prosecutor_id', ids.prosecutor2).eq('bureau', 'LSB').is('ended_at', null)
+    if (cov.error) throw new Error(`v163 coverage check: ${cov.error.message}`)
+    const live = (cov.data ?? []).some((r) => !r.expires_at || new Date(r.expires_at as string) > new Date())
+    if (!live) {
+      const grant = await ag.rpc('justice_set_coverage', {
+        p_user: ids.prosecutor2, p_bureau: 'LSB',
+        p_reason: '[rls-test] v163 fixture-bench coverage — prosecutor2 works the LSB queue for the shared-bench race (kept live; see tests/rls/v163.test.ts header)',
+      })
+      if (grant.error) throw new Error(`v163 coverage grant failed: ${grant.error.message}`)
+    }
     // Purge leftovers from any crashed prior run FIRST.
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
@@ -188,7 +222,8 @@ describe.skipIf(!enabled)('v1.63 — minimal-DOJ pipeline: prosecutor queue + ju
       })
       expect((ok.data as { queue_entered_at?: string }).queue_entered_at).toBeTruthy()
     }
-    // every active prosecutor sees the non-sealed queue
+    // every prosecutor COVERING the bureau (home or live coverage) sees the
+    // non-sealed queue — p1 by home bureau, p2 via the fixture-bench coverage
     const q1 = await p1.from('legal_requests').select('id').eq('id', reqA)
     expect(q1.data).toHaveLength(1)
     const q2 = await p2.from('legal_requests').select('id').eq('id', reqA)

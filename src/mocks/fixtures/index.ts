@@ -2,7 +2,7 @@
 export { profileRow, roleSession, type MockRole, type RoleSessionResult } from './profiles'
 export {
   caseRow, caseTaskRow, legalHoldRow, legalRequestRow, mediaRow,
-  notificationRow, personRow, reportRow,
+  notificationRow, personRow, prosecutorCoverageRow, reportRow,
 } from './rows'
 export {
   emptyCase, populatedCase, archivedCase, legalHoldCase, restrictedMediaCase,
