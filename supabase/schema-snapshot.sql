@@ -9979,4 +9979,11 @@ create policy wl_sel on public.watchlist
 -- supabase_realtime — an unauthorized browser is never sent an SIU event to
 -- filter client-side. `cases` stays published and its per-subscriber RLS check
 -- now runs the SIU wall.
+-- NULL-SAFETY: siu_standing() returns NULL for an account with no SIU
+-- authority, so every standing predicate (siu_is_agent, siu_is_command,
+-- siu_can_appoint, siu_oversight_read, siu_case_access, siu_case_command) is
+-- coalesce()-pinned to a strict boolean — `NULL in (...)` is NULL, which would
+-- make `if not <predicate> then raise` a no-op and skip the plpgsql
+-- authorization guards in the write RPCs (the justice NULL-guard class,
+-- 20260714070000). Read paths were never affected.
 -- Definitive SQL in supabase/migrations/20260820120000_siu_phase1.sql.

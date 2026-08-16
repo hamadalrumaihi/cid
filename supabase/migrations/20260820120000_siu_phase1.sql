@@ -268,17 +268,28 @@ revoke all on function private.siu_operates() from public;
 grant execute on function private.siu_operates() to authenticated, service_role;
 
 -- Field standing = may run investigations (oversight-only is excluded).
+-- NOTE (hotfix f): every standing predicate is coalesce()-pinned to a strict
+-- boolean. siu_standing() returns NULL for an account with no SIU authority,
+-- and `NULL in (...)` is NULL — so an un-pinned predicate made
+-- `if not <predicate> then raise` a no-op and silently skipped the plpgsql
+-- authorization guards below. Same class as the justice NULL-guard gap
+-- (20260714070000). Read paths were never affected (siu_operates() is
+-- `is not null`; siu_case_access() branches on an explicit null check).
 create or replace function private.siu_is_agent()
 returns boolean
 language sql stable security definer set search_path to ''
-as $$ select private.siu_standing() in ('owner', 'special_agent_in_charge', 'special_agent') $$;
+as $$
+  select coalesce(private.siu_standing() in ('owner', 'special_agent_in_charge', 'special_agent'), false)
+$$;
 revoke all on function private.siu_is_agent() from public;
 
 -- SIU command = X-Ray 1 (or the owner during build phase).
 create or replace function private.siu_is_command()
 returns boolean
 language sql stable security definer set search_path to ''
-as $$ select private.siu_standing() in ('owner', 'special_agent_in_charge') $$;
+as $$
+  select coalesce(private.siu_standing() in ('owner', 'special_agent_in_charge'), false)
+$$;
 revoke all on function private.siu_is_command() from public;
 
 -- Who may appoint / remove SIU personnel: the Portal Owner, X-Ray 1, and the
@@ -287,7 +298,9 @@ revoke all on function private.siu_is_command() from public;
 create or replace function private.siu_can_appoint()
 returns boolean
 language sql stable security definer set search_path to ''
-as $$ select private.siu_standing() in ('owner', 'special_agent_in_charge', 'oversight') $$;
+as $$
+  select coalesce(private.siu_standing() in ('owner', 'special_agent_in_charge', 'oversight'), false)
+$$;
 revoke all on function private.siu_can_appoint() from public;
 grant execute on function private.siu_can_appoint() to authenticated, service_role;
 
@@ -353,7 +366,7 @@ language sql stable security definer set search_path to ''
 as $$
   with s as (select private.siu_standing() as standing,
                     (select auth.uid()) as uid)
-  select case
+  select coalesce(case
     when (select standing from s) is null then false
     when not private.is_siu_case(p_cid) then false
     else case private.siu_case_classification(p_cid)
@@ -371,7 +384,7 @@ as $$
         (select standing from s) in ('owner', 'special_agent_in_charge', 'special_agent')
         or private.siu_in_compartment(p_cid, (select uid from s))
     end
-  end
+  end, false)
 $$;
 revoke all on function private.siu_case_access(uuid) from public;
 grant execute on function private.siu_case_access(uuid) to authenticated, service_role;
@@ -385,10 +398,12 @@ create or replace function private.siu_case_command(p_cid uuid)
 returns boolean
 language sql stable security definer set search_path to ''
 as $$
-  select private.siu_case_access(p_cid)
-     and (private.siu_is_command()
-          or exists (select 1 from public.cases c
-                      where c.id = p_cid and c.lead_detective_id = (select auth.uid())))
+  select coalesce(
+    private.siu_case_access(p_cid)
+    and (private.siu_is_command()
+         or exists (select 1 from public.cases c
+                     where c.id = p_cid and c.lead_detective_id = (select auth.uid()))),
+    false)
 $$;
 revoke all on function private.siu_case_command(uuid) from public;
 grant execute on function private.siu_case_command(uuid) to authenticated, service_role;
@@ -400,7 +415,7 @@ grant execute on function private.siu_case_command(uuid) to authenticated, servi
 create or replace function private.siu_oversight_read()
 returns boolean
 language sql stable security definer set search_path to ''
-as $$ select private.siu_is_agent() $$;
+as $$ select coalesce(private.siu_is_agent(), false) $$;
 revoke all on function private.siu_oversight_read() from public;
 grant execute on function private.siu_oversight_read() to authenticated, service_role;
 

@@ -24,7 +24,11 @@
  *      division through private.is_command() — gets nothing on an SIU case.
  *      That is what makes an SIU investigation INTO CID command possible.
  *   3. Every SIU RPC refuses a non-owner while the gate is closed: create,
- *      classify, appoint, remove, assign, compartment, release.
+ *      classify, appoint, remove, assign, compartment, release. This block is
+ *      the regression guard for the NULL-guard defect fixed in hotfix f —
+ *      `siu_standing()` is nullable, and an un-pinned `standing in (...)`
+ *      predicate returned NULL, so `if not <predicate> then raise` never fired
+ *      and these RPCs ran for unauthorized callers.
  *   4. case_authority / siu_classification are RPC-only: a client cannot mint
  *      an SIU case by INSERT and cannot promote a CID case by UPDATE.
  *   5. The SIU tables carry no client write policy at all.

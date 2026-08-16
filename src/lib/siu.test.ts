@@ -104,6 +104,44 @@ describe('the build-phase release gate', () => {
   })
 })
 
+describe('strict booleans (the NULL-guard invariant)', () => {
+  // `siu_standing()` is nullable on BOTH sides of the mirror. On the server a
+  // predicate written as `standing in (...)` yields NULL for an unauthorized
+  // caller, and `if not <NULL> then raise` never fires — which silently
+  // skipped the authorization guard in every SIU write RPC until the
+  // predicates were coalesce()-pinned (hotfix f; the justice NULL-guard class,
+  // migration 20260714070000). These assertions pin the same contract on the
+  // client so the two cannot drift back apart: an unauthorized answer must be
+  // exactly `false`, never null/undefined/NaN-ish.
+  const unauthorized: SiuContext[] = [
+    { profile: profile(), release: true },
+    { profile: profile({ role: 'director' }), release: false },
+    { profile: null, release: true },
+    { profile: undefined, release: true },
+    { profile: profile({ active: false, is_owner: true }), release: true },
+  ]
+
+  it('returns strict false — never a nullish value — for every unauthorized context', () => {
+    for (const ctx of unauthorized) {
+      for (const fn of [siuOperates, siuIsAgent, siuIsCommand, siuCanAppoint, siuCanReadCid]) {
+        expect(fn(ctx)).toBe(false)
+      }
+      expect(siuCaseAccess(ctx, { siu_classification: 'siu' })).toBe(false)
+      expect(siuCaseAccess(ctx, { siu_classification: 'siu_compartmented' }, { inCompartment: true })).toBe(false)
+      expect(siuCanAppointRole(ctx, 'special_agent')).toBe(false)
+      expect(siuCanRemove(ctx, member({ user_id: 'someone-else' }))).toBe(false)
+    }
+  })
+
+  it('returns strict true — never a truthy non-boolean — when authorized', () => {
+    const owner = live({ profile: profile({ is_owner: true }) })
+    for (const fn of [siuOperates, siuIsAgent, siuIsCommand, siuCanAppoint, siuCanReadCid]) {
+      expect(fn(owner)).toBe(true)
+    }
+    expect(siuCaseAccess(owner, { siu_classification: 'siu' })).toBe(true)
+  })
+})
+
 describe('field standing vs oversight', () => {
   it('gives broad CID read to field agents only', () => {
     expect(siuCanReadCid(live({ membership: member() }))).toBe(true)

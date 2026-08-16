@@ -62,7 +62,15 @@ duplicating it.
   account SIU has no nav entry, no route, no rows, no notifications and no
   search hits. The production model above is already written and needs no
   rebuild when the flag flips.
-- Tests: `src/lib/siu.test.ts` (25 capability-mirror cases) and
+- **NULL-safe authority predicates.** `siu_standing()` is nullable, and
+  `NULL in (...)` is NULL rather than false — which made
+  `if not <predicate> then raise` a no-op and skipped the plpgsql guard in
+  every SIU write RPC (the justice NULL-guard class, `20260714070000`). Every
+  standing predicate is now `coalesce()`-pinned to a strict boolean, with the
+  same invariant asserted on the client mirror. Read paths were never
+  affected: `siu_operates()` is `is not null` and `siu_case_access()` branches
+  on an explicit null check.
+- Tests: `src/lib/siu.test.ts` (27 capability-mirror cases) and
   `tests/rls/v166.test.ts` (live wall + a post-release production lane).
   Docs: [AUTHORIZATION.md §4f](docs/AUTHORIZATION.md), handbook ch. 9,
   REVIEW-MAP, TESTING.
