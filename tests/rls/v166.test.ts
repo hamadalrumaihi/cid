@@ -118,9 +118,11 @@ describe.skipIf(!enabled)('v1.66 — SIU Phase 1 (live)', () => {
   }, 90_000)
 
   afterAll(async () => {
-    // Owner-created SIU cases + the detective's control case are all swept by
-    // rls_test_cleanup (created_by is a fixture account); delete explicitly so
-    // the run leaves nothing behind even if the global sweep is skipped.
+    // Best-effort teardown: no fixture here holds command rank, so `cases_del`
+    // (can_delete AND case access) makes these a no-op rather than a delete.
+    // The authoritative sweep is rls_test_cleanup — a definer RPC that removes
+    // every case created by an rls-test account, and which globalSetup runs
+    // both BEFORE and after the suite, so a crashed run cannot leak rows.
     await owner.from('cases').delete().in('id', [plainCase, compCase].filter(Boolean))
     await lsb.from('cases').delete().eq('id', cidCase)
     await Promise.all([owner, lsb, lead, director].map((c) => c.auth.signOut()))
@@ -162,14 +164,17 @@ describe.skipIf(!enabled)('v1.66 — SIU Phase 1 (live)', () => {
   })
 
   it('SIU records never surface through global search — by title or by case number', async () => {
+    // Assert the security property (no SIU record is reachable), not "zero
+    // hits" — search_all is trigram-fuzzy, so an unrelated CID row could
+    // legitimately score against these terms without that being a leak.
+    const siuIds = [plainCase, compCase]
     for (const [who, c] of [['detective', lsb], ['director', director]] as const) {
-      const byTitle = await c.rpc('search_all', { q: `SIU ${RUN}` })
-      expect(byTitle.error, `${who}: search must not error`).toBeNull()
-      expect(byTitle.data ?? [], `${who} must get no SIU hits by title`).toEqual([])
-
-      const byNumber = await c.rpc('search_all', { q: plainNumber })
-      expect((byNumber.data ?? []).filter((h: { kind: string }) => h.kind !== 'charge'),
-        `${who} must get no SIU hits by case number`).toEqual([])
+      for (const q of [`SIU ${RUN}`, plainNumber, RUN]) {
+        const res = await c.rpc('search_all', { q })
+        expect(res.error, `${who}: search must not error for "${q}"`).toBeNull()
+        const leaked = (res.data ?? []).filter((h: { id: string }) => siuIds.includes(h.id))
+        expect(leaked, `${who} must get no SIU hit for "${q}"`).toEqual([])
+      }
     }
   })
 
