@@ -65,6 +65,30 @@ are a separate identity domain and grant no CID assignment authority. (Retired
 Lead+ (`private.is_command()`) — see [DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md)
 Phase-1 banner.)
 
+### SIU — a second investigative authority
+
+The Special Investigation Unit is a **separate authority domain**, not another
+rank: a member operates as CID (`profiles.role` + `profiles.division`) *or* as
+SIU (`siu_memberships.siu_role` — `special_agent` / `special_agent_in_charge`,
+displayed as X-Ray 1). No SIU rule reads `profiles.role`, which is what lets
+SIU investigate CID command. One resolver answers every SIU question:
+`private.siu_standing()` server-side, mirrored by `siuStanding()` in
+`src/lib/siu.ts` and surfaced to components as `useSiu()` — never an inline
+`user.role === …` check.
+
+Visibility is deliberately **asymmetric**: SIU reads CID across every bureau
+(read only — the superset `private.can_read_case` appears in SELECT policies
+and nowhere else), while CID gets **nothing** on an SIU case at any rank, in
+any surface, with no placeholder to reveal that a record exists.
+`siu_compartmented` cases are allow-list only, with no exemption for X-1, the
+Attorney General or the owner flag. Membership is appointment-only
+(`siu_appoint` / `siu_remove`); there is no request queue anywhere.
+
+**Build-phase gate:** while `siu_settings.enabled_for_non_owner` is false,
+`siu_standing()` resolves to `owner` for the Portal Owner and NULL for
+everybody else, so SIU does not exist for any other account. Full model:
+[AUTHORIZATION.md §4f](../AUTHORIZATION.md).
+
 ## Permissions (what may you do?) — three layers
 
 ```

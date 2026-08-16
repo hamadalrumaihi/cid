@@ -197,6 +197,52 @@ Investigator-conducted controlled sales, grouped into an ongoing series (`narcot
 
 Both guard triggers are **NON-definer** and force `restricted=true` + pin `created_by`; the observation guard prevents a non-manager from self-confirming. Raw values only are stored — every $/unit, $/g, $/kg, $/lb metric is derived client-side and never written back as a raw fact; original recorded units are preserved (pounds stay pounds for the Fire-tier sale, grams are marked derived). Screenshot evidence lives in the Media Vault as `restricted=true` rows; the migration also fixes a pre-existing leak by gating `media_sel`/`media_upd` on the restricted flag. Sale payment values are never exposed through global search or graph labels — the series is reachable only through the RLS-gated dossier section, while the substance itself stays findable via its aliases (Ditch Witch / Mids / LeafOS).
 
+## 4f. Special Investigation Unit (SIU) — a separate investigative authority ([`20260820120000_siu_phase1.sql`](../supabase/migrations/20260820120000_siu_phase1.sql))
+
+SIU is **not** a bureau, **not** a CID rank, and **not** a badge attached to a detective. A member's active investigative authority is either **CID** (`profiles.role` + `profiles.division`) or **SIU** (`siu_memberships.siu_role`); no SIU rule anywhere reads `profiles.role` to answer an SIU question, which is precisely what makes an investigation *into* CID command possible. Former CID rank is preserved and displayed as **history**, never as authority.
+
+**The asymmetry is the point:**
+
+| Direction | Access |
+|---|---|
+| SIU → CID | Broad **read** across every bureau (SAB/LSB/BCB/JTF), based on SIU authority alone — never on the agent's former bureau, rank, or case assignments. **Read only.** |
+| CID → SIU | **Nothing.** Not by bureau, not by lead/creator, not by joint access, not by `is_command()`, not by Director. An unauthorized viewer does not learn the record exists. |
+
+**Standing** — one resolver, `private.siu_standing()`, answers every SIU question:
+
+| Standing | Who | Field work | Broad CID read | Appoint/remove |
+|---|---|---|---|---|
+| `owner` | Portal Owner (gate-independent) | ✅ | ✅ | ✅ |
+| `special_agent_in_charge` | X-Ray 1, operational head of SIU | ✅ | ✅ | ✅ (never an X-1) |
+| `special_agent` | Field agent (X-2, X-3, … — callsigns are free-form) | ✅ | ✅ | ❌ |
+| `oversight` | Attorney General / oversight-only appointee | ❌ | ❌ | ✅ |
+| `NULL` | **Everyone else, including the entire CID hierarchy, prosecutors and judges** | ❌ | ❌ | ❌ |
+
+**Membership is appointment-only.** There is no request table, no queue, no signup option, no promotion path, and no self-service surface anywhere in the product — `siu_appoint` is the only way in and `siu_remove` the only way out. An X-Ray 1 appointment is **Owner-only**; only the Owner or the Attorney General may end one; nobody removes their own membership. Removal revokes live access immediately and releases assignments and compartment rows while **preserving** reports, evidence, authorship, assignment history and audit.
+
+**Cases.** `cases.case_authority` (`cid` | `siu`) and `cases.siu_classification` are RPC-only (guard trigger `private.block_direct_siu_case_cols` — a client INSERT is forced back to `cid`, a client UPDATE raises). SIU cases carry their own number series (`SIU-8000001`, `public.next_siu_case_number()`) and need no bureau owner.
+
+| Classification | Who may open the investigation |
+|---|---|
+| `siu` | any field agent |
+| `siu_restricted` | assigned agents, SIU command, or an explicit allow-list row |
+| `siu_command` | SIU command, or an explicit allow-list row |
+| `siu_compartmented` | **allow-list only** — X-1, the Attorney General and the owner flag are *not* exempt |
+
+**No role is above investigation.** `siu_compartmented` has no bypass at all: the `siu_compartment_members` allow-list is managed from *inside* the compartment (`siu_compartment_add` / `siu_compartment_remove`), so someone taken off the list cannot put themselves back on, a compartment can never be emptied, and nobody removes themselves from one. The residual trust that *no* in-database rule can remove is platform-level: a Postgres superuser / `service_role` key can read any row. That is a deployment boundary (see [DEPLOYMENT.md](DEPLOYMENT.md)), deliberately separated from operational visibility.
+
+**Where it is enforced.** `private.can_access_case` / `can_access_case_row` — the read+write wall every case child already routes through — gain ONE branch: an SIU-authority case is governed by `private.siu_case_access()`, and the CID branch is byte-identical to [`20260810120000`](../supabase/migrations/20260810120000_jtf_operations.sql). Because `search_all` is SECURITY INVOKER and every child table, relationship/graph query and realtime subscription already flows through those two functions, CID denial of SIU is automatic across dashboards, lists, search, autocomplete, entity profiles, graphs, media, timelines and legal lists — returning **nothing**, never a "Restricted SIU Case" placeholder.
+
+**Read is not write.** SIU's broad CID read is a *separate, read-only superset* — `private.can_read_case` / `can_read_case_row` / `can_read_case_number` = the wall OR `siu_oversight_read()` for a CID-authority case — used **only** in the SELECT policies re-emitted by the migration (`cases_sel`, `reports_sel`, `evidence_sel`, `media_sel`, `case_tasks_sel`, `case_blockers_sel`, `case_intel_links_sel`, `case_assignments_sel`, `csh_sel`, `cag_sel`, `operation_case_links_sel`, `report_versions_sel`, `custody_sel`, `cf_read`) and **never** in an INSERT/UPDATE/DELETE policy. Oversight can read a detective's report; it cannot rewrite one or destroy CID evidence. `case_messages` (case chat) is deliberately not widened.
+
+**Legal.** SIU uses the existing DOJ pipeline — there is no second court. `private.can_review_as_cid` / `can_approve_legal` gain one SIU branch each so **SIU command** is the CID gate on its own investigation (an X-1 whose historical CID role is `detective` would otherwise fail the rank test); unrelated CID command sees nothing, because both predicates already require `private.can_access_case`.
+
+**Audit.** SIU actions land in the ordinary Owner-only `audit_log` under entity `siu`; ordinary agents cannot edit it (the table carries no client write policy). `siu_audit_feed()` serves compartment-respecting reads — a case-keyed row is returned only to someone who can access that case, so a subject under investigation never learns of the trail through any audit surface.
+
+### Build-phase release gate (temporary)
+
+Until SIU is marked production-ready, **only the Portal Owner** may see, query or act on anything SIU — this temporarily overrides the model above for the Attorney General, X-Ray 1, Special Agents, and all of CID. The gate is centralized, not scattered: `private.siu_standing()` returns `owner` for the owner unconditionally and `NULL` for everyone else while `siu_settings.enabled_for_non_owner` is `false`. For every other account SIU simply does not exist — no nav entry, no "coming soon", no route, no rows, no notifications, no realtime, no search hits. Opening the gate is one audited Owner-only call, `siu_set_release(true, reason)`; the production permissions above are already written and need no rebuild.
+
 ## 5. Permission table — major features
 
 Accurate as of the [schema snapshot](../supabase/schema-snapshot.sql) + v1.16 migrations. "Command" = `private.is_command()`; "case access" = `private.can_access_case()` (bureau match, JTF cases, lead/creator, command, explicit grant, or active joint assignment). This is the summary — the full per-table policy list is in [handbook ch. 08](handbook/08-database.md).
@@ -212,5 +258,6 @@ Accurate as of the [schema snapshot](../supabase/schema-snapshot.sql) + v1.16 mi
 | **Announcements** | audience-scoped: `all`, own division, `specific_members` mentions, author, Command/Owner oversight | command with audience authority: `all` → DD+/Owner; a bureau → that bureau's Lead or DD+/Owner | same as create | — | command (`can_announce`) | `publish_announcement` (fan-out), `announcement_recipient_count`, `announcement_notify_update` | `ann_sel/ins/upd/del` → `can_announce` + `can_post_audience` ([`20260713050000_announcement_audiences.sql`](../supabase/migrations/20260713050000_announcement_audiences.sql)) |
 | **Operations** | active member | active member | active member | — | command | — (direct writes under RLS) | `operations_sel/ins/upd/del` → `is_active` / `can_delete` |
 | **Owner surfaces** | Owner only: `audit_log`, `feedback_meta`, `client_errors`, security-test overview; `app_secrets` visible to no client role | audit rows: written only by the `private.audit()` trigger + audited RPCs; test runs: only `rls-test-*` fixtures | feedback triage: Owner | — | client_errors: Owner | `owner_security_overview` (`is_owner`), `security_test_report` (fixtures only), `import_legal_warrant` / `import_rollback_by_key` (`is_owner_maintenance`) | `audit_sel`, `feedback_meta_all`, `client_errors_owner_sel/del`; `app_secrets` = RLS on, zero policies; `security_test_runs` = all client grants revoked |
+| **SIU (Special Investigation Unit)** | `private.siu_standing()` ≠ NULL — Owner, X-Ray 1, Special Agent, or oversight (AG). While the build gate is closed: **Owner only**. Per-case: `siu_case_access` by classification, with `siu_compartmented` = allow-list only | field agents (`siu_create_case`) | SIU case access (the CID convention); `case_authority`/`siu_classification` trigger-frozen | appointments: Owner / X-Ray 1 / AG (`siu_appoint`; an X-1 appointment is Owner-only). Legal gate on an SIU case: SIU command | command with SIU case access (`cases_del` → `can_access_case_row`) | `siu_set_release`, `siu_appoint`, `siu_remove`, `siu_set_callsign`, `siu_create_case`, `siu_set_case_classification`, `siu_assign_agent`/`siu_unassign_agent`, `siu_compartment_add`/`siu_compartment_remove`, `siu_roster`, `siu_member_search`, `siu_audit_feed`, `siu_overview` | `siu_*_sel` (SELECT-only; all writes RPC-only) → `siu_operates` / `siu_case_access` / `siu_in_compartment`; chokepoints `can_access_case`(`_row`) + read-only superset `can_read_case`(`_row`/`_number`); trigger `block_direct_siu_case_cols` |
 
 Every RPC above is `SECURITY DEFINER` with a pinned empty `search_path`, revoked from `public`/`anon`, and validates the **named human caller** (`auth.uid()`) inside the function body — see [RLS.md](RLS.md) §6.

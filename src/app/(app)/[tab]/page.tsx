@@ -34,7 +34,7 @@ import { LegalView } from '@/components/legal/LegalView'
 // stay out of the page chunk every route shares. Hot paths stay static above.
 import {
   AuditView, BallisticsView, DevDocsView, FeedbackView, HeatmapView,
-  ModusView, NarcoticsView, NetworkView, OwnerView, RicoView,
+  ModusView, NarcoticsView, NetworkView, OwnerView, RicoView, SiuView,
 } from './lazyViews'
 
 /** One route per leaf tab, statically prerendered via generateStaticParams. */
@@ -298,6 +298,17 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="command-center" />}>
         <CommandCenterView />
+      </Suspense>
+    )
+  }
+  if (tab === 'siu') {
+    // The route resolves for everyone; SiuView renders the ordinary
+    // nothing-here surface unless the account holds SIU standing, and every
+    // read behind it is RLS-gated. A dedicated 404 would itself confirm that a
+    // restricted area exists.
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="siu" />}>
+        <SiuView />
       </Suspense>
     )
   }

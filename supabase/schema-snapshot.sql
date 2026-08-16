@@ -436,7 +436,9 @@ create table public.cases (
   joint_case_ended_by uuid,
   joint_case_ended_at timestamp with time zone,
   priority text,
-  investigative_stage text not null default 'intake'::text
+  investigative_stage text not null default 'intake'::text,
+  case_authority text not null default 'cid'::text,
+  siu_classification text
 );
 alter table public.cases add constraint cases_joint_case_created_by_fkey FOREIGN KEY (joint_case_created_by) REFERENCES public.profiles(id);
 alter table public.cases add constraint cases_joint_case_ended_by_fkey FOREIGN KEY (joint_case_ended_by) REFERENCES public.profiles(id);
@@ -450,10 +452,19 @@ alter table public.cases add constraint cases_signoff_submitted_by_fkey FOREIGN 
 alter table public.cases add constraint cases_priority_check CHECK (((priority IS NULL) OR (priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
 alter table public.cases add constraint cases_originating_bureau_permanent CHECK (((originating_bureau IS NULL) OR (originating_bureau = ANY (ARRAY['LSB'::public.bureau, 'BCB'::public.bureau, 'SAB'::public.bureau]))));
 alter table public.cases add constraint cases_investigative_stage_check CHECK (investigative_stage in ('intake', 'active_investigation', 'legal_process', 'enforcement_ready', 'pending_closure', 'closed'));
+alter table public.cases add constraint cases_case_authority_check CHECK (case_authority in ('cid', 'siu'));
+alter table public.cases add constraint cases_siu_classification_check CHECK ((siu_classification is null) or (siu_classification in ('siu', 'siu_restricted', 'siu_command', 'siu_compartmented')));
 alter table public.cases enable row level security;
 -- investigative_stage is a stored, manually-moved stage (distinct from status);
 -- direct writers are blocked by trg_block_direct_case_stage — case_set_stage()
 -- (reason required, audited) is the only path.
+-- case_authority ('cid' | 'siu') is the INVESTIGATIVE AUTHORITY that owns the
+-- case, and siu_classification is its SIU compartment level. Both are frozen
+-- for direct writers by trg_block_direct_siu_case_cols — siu_create_case() and
+-- siu_set_case_classification() are the only paths. An 'siu' case is governed
+-- exclusively by private.siu_case_access(): bureau, CID rank, command, lead/
+-- creator and joint access grant NOTHING on it.
+create index cases_siu_authority_idx ON public.cases USING btree (case_authority) WHERE (case_authority = 'siu'::text);
 
 create table public.cid_records (
   id uuid not null default gen_random_uuid(),
@@ -2520,6 +2531,107 @@ create table public.security_test_runs (
 alter table public.security_test_runs add constraint security_test_runs_pkey PRIMARY KEY (id);
 alter table public.security_test_runs add constraint security_test_runs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
 alter table public.security_test_runs enable row level security;
+
+create table public.siu_case_agents (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  user_id uuid not null,
+  agent_role text not null default 'agent'::text,
+  assigned_by uuid,
+  assigned_at timestamptz not null default now(),
+  removed_by uuid,
+  removed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+alter table public.siu_case_agents add constraint siu_case_agents_pkey PRIMARY KEY (id);
+alter table public.siu_case_agents add constraint siu_case_agents_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.siu_case_agents add constraint siu_case_agents_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.siu_case_agents add constraint siu_case_agents_assigned_by_fkey FOREIGN KEY (assigned_by) REFERENCES public.profiles(id);
+alter table public.siu_case_agents add constraint siu_case_agents_removed_by_fkey FOREIGN KEY (removed_by) REFERENCES public.profiles(id);
+alter table public.siu_case_agents add constraint siu_case_agents_agent_role_check CHECK (agent_role in ('lead', 'agent'));
+alter table public.siu_case_agents enable row level security;
+create unique index siu_case_agents_active_idx ON public.siu_case_agents USING btree (case_id, user_id) WHERE (removed_at IS NULL);
+create index siu_case_agents_user_idx ON public.siu_case_agents USING btree (user_id) WHERE (removed_at IS NULL);
+create index siu_case_agents_assigned_by_fkey_idx ON public.siu_case_agents USING btree (assigned_by);
+create index siu_case_agents_removed_by_fkey_idx ON public.siu_case_agents USING btree (removed_by);
+-- Per-investigation SIU staffing. Assignment is NOT a compartment key: a
+-- compartmented case additionally needs a siu_compartment_members row.
+
+create table public.siu_compartment_members (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  user_id uuid not null,
+  granted_by uuid,
+  granted_at timestamptz not null default now(),
+  revoked_by uuid,
+  revoked_at timestamptz,
+  reason text,
+  created_at timestamptz not null default now()
+);
+alter table public.siu_compartment_members add constraint siu_compartment_members_pkey PRIMARY KEY (id);
+alter table public.siu_compartment_members add constraint siu_compartment_members_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.siu_compartment_members add constraint siu_compartment_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.siu_compartment_members add constraint siu_compartment_members_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES public.profiles(id);
+alter table public.siu_compartment_members add constraint siu_compartment_members_revoked_by_fkey FOREIGN KEY (revoked_by) REFERENCES public.profiles(id);
+alter table public.siu_compartment_members enable row level security;
+create unique index siu_compartment_members_active_idx ON public.siu_compartment_members USING btree (case_id, user_id) WHERE (revoked_at IS NULL);
+create index siu_compartment_members_user_idx ON public.siu_compartment_members USING btree (user_id) WHERE (revoked_at IS NULL);
+create index siu_compartment_members_granted_by_fkey_idx ON public.siu_compartment_members USING btree (granted_by);
+create index siu_compartment_members_revoked_by_fkey_idx ON public.siu_compartment_members USING btree (revoked_by);
+-- The ONLY key to an siu_compartmented investigation. No rank, no flag and no
+-- SIU command role substitutes for a row here — X-1, the Attorney General and
+-- the owner flag are all excluded unless explicitly listed. Managed from
+-- INSIDE the compartment (siu_compartment_add / _remove), so someone taken off
+-- the list cannot put themselves back on it.
+
+create table public.siu_memberships (
+  id uuid not null default gen_random_uuid(),
+  user_id uuid not null,
+  siu_role text not null,
+  oversight_only boolean not null default false,
+  callsign text,
+  active boolean not null default true,
+  appointed_by uuid,
+  appointed_at timestamptz not null default now(),
+  ended_by uuid,
+  ended_at timestamptz,
+  end_reason text,
+  internal_note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.siu_memberships add constraint siu_memberships_pkey PRIMARY KEY (id);
+alter table public.siu_memberships add constraint siu_memberships_user_id_key UNIQUE (user_id);
+alter table public.siu_memberships add constraint siu_memberships_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.siu_memberships add constraint siu_memberships_appointed_by_fkey FOREIGN KEY (appointed_by) REFERENCES public.profiles(id);
+alter table public.siu_memberships add constraint siu_memberships_ended_by_fkey FOREIGN KEY (ended_by) REFERENCES public.profiles(id);
+alter table public.siu_memberships add constraint siu_memberships_siu_role_check CHECK (siu_role in ('special_agent', 'special_agent_in_charge'));
+alter table public.siu_memberships enable row level security;
+create unique index siu_memberships_active_callsign_idx ON public.siu_memberships USING btree (upper(callsign)) WHERE (active AND (callsign IS NOT NULL));
+create index siu_memberships_appointed_by_fkey_idx ON public.siu_memberships USING btree (appointed_by);
+create index siu_memberships_ended_by_fkey_idx ON public.siu_memberships USING btree (ended_by);
+-- The SIU identity domain — separate from profiles.role (CID) and from
+-- justice_memberships (DOJ/judiciary). APPOINTMENT-ONLY: there is no request
+-- table, no queue and no self-service path anywhere in the product.
+-- internal_note is column-revoked from authenticated/anon (the
+-- membership_requests.internal_decision_note precedent).
+
+create table public.siu_settings (
+  id boolean not null default true,
+  enabled_for_non_owner boolean not null default false,
+  updated_at timestamptz not null default now(),
+  updated_by uuid
+);
+alter table public.siu_settings add constraint siu_settings_pkey PRIMARY KEY (id);
+alter table public.siu_settings add constraint siu_settings_id_check CHECK (id);
+alter table public.siu_settings add constraint siu_settings_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id);
+alter table public.siu_settings enable row level security;
+-- Single-row build-phase release gate (a constant-true boolean primary key
+-- makes a second row structurally impossible). While enabled_for_non_owner is
+-- false, private.siu_standing() resolves to 'owner' and NULL for everyone
+-- else, so SIU effectively does not exist for any non-owner account.
+-- siu_set_release(boolean, text) — Owner-only, reason required, audited — is
+-- the one writer.
 
 create table public.shift_reports (
   id uuid not null default gen_random_uuid(),
@@ -7843,6 +7955,22 @@ create policy role_events_sel on public.role_events
   as permissive for select to authenticated
   using ((private.is_command() OR private.is_owner()));
 
+create policy siu_case_agents_sel on public.siu_case_agents
+  as permissive for select to authenticated
+  using (private.siu_case_access(case_id));
+
+create policy siu_compartment_members_sel on public.siu_compartment_members
+  as permissive for select to authenticated
+  using (private.siu_in_compartment(case_id, ( SELECT auth.uid() AS uid)));
+
+create policy siu_memberships_sel on public.siu_memberships
+  as permissive for select to authenticated
+  using (private.siu_operates());
+
+create policy siu_settings_sel on public.siu_settings
+  as permissive for select to authenticated
+  using (private.siu_operates());
+
 create policy shift_reports_del on public.shift_reports
   as permissive for delete to authenticated
   using (((author_id = ( SELECT auth.uid() AS uid)) OR private.can_delete()));
@@ -9754,3 +9882,101 @@ create policy wl_sel on public.watchlist
 -- Owner-only; STABLE, revoked from public/anon, granted authenticated +
 -- service_role. No tables, columns, or policies changed. Definitive SQL in
 -- supabase/migrations/20260819120000_case_stage_history.sql.
+
+-- Special Investigation Unit — Phase 1 (20260820120000_siu_phase1). ADDITIVE
+-- ONLY; no drops, no data rewrites, no renamed roles. NEW TABLES (blocks
+-- above): siu_settings, siu_memberships, siu_case_agents,
+-- siu_compartment_members — SELECT-only for clients (policies above), every
+-- write RPC-only. NEW COLUMNS: cases.case_authority ('cid' | 'siu', not null
+-- default 'cid') and cases.siu_classification (null | siu | siu_restricted |
+-- siu_command | siu_compartmented), frozen for direct writers by NEW trigger
+-- trg_block_direct_siu_case_cols → private.block_direct_siu_case_cols() (a
+-- non-definer guard: a client INSERT is forced back to 'cid'/null and a client
+-- UPDATE of either column raises).
+--
+-- NEW PRIVATE HELPERS (comment-tracked here, like the rest of the private
+-- family): siu_release_open() — the build-phase gate, one read in one place;
+-- siu_membership_role(uuid) / siu_membership_oversight(uuid) — raw active
+-- membership resolution (requires an active, non-removed profile);
+-- siu_standing(uuid default null) returns text — THE authority resolver
+-- ('owner' | 'special_agent_in_charge' | 'special_agent' | 'oversight' |
+-- NULL), where 'owner' is gate-independent and everything else is NULL while
+-- the release flag is false; siu_operates() / siu_is_agent() /
+-- siu_is_command() / siu_can_appoint() — the standing predicates
+-- (siu_can_appoint = Owner, X-Ray 1, or Attorney General; nobody else, and
+-- explicitly NOT the Director/Deputy Director/Bureau Lead/Prosecutor/Judge);
+-- is_siu_case(uuid), siu_case_classification(uuid), siu_case_assigned(uuid,
+-- uuid), siu_in_compartment(uuid, uuid) — case facts; siu_case_access(uuid) —
+-- THE SIU case wall, where 'siu' admits any field agent, 'siu_restricted'
+-- assigned agents + SIU command, 'siu_command' SIU command, and
+-- 'siu_compartmented' the ALLOW-LIST ONLY (X-1, the AG and the owner flag are
+-- NOT exempt — this is what makes investigating anyone, X-1 included,
+-- structurally possible); siu_case_command(uuid) — administer one SIU case
+-- (command standing WITH access to that case, or its lead agent);
+-- siu_oversight_read() — SIU's broad READ of CID, field standing only;
+-- siu_audit(text, uuid, jsonb) — the audit writer (entity 'siu' in the
+-- existing Owner-only audit_log; ordinary agents cannot edit it because
+-- audit_log carries no client write policy at all).
+-- private.siu_in_compartment is granted EXECUTE to authenticated because an
+-- RLS qual is evaluated as the QUERYING role; every other helper here is only
+-- ever reached from inside a SECURITY DEFINER function.
+--
+-- RE-EMITTED CHOKEPOINTS: private.can_access_case(uuid) and
+-- can_access_case_row(bureau, uuid, uuid, uuid) each gain ONE branch — an
+-- SIU-authority case is governed by siu_case_access() and the CID branch is
+-- byte-identical to 20260810120000_jtf_operations.sql. Because every case
+-- child table, search_all (SECURITY INVOKER), relationship/graph queries and
+-- realtime already route through these two, CID denial of SIU is automatic and
+-- returns NOTHING (no "restricted" placeholder, no count, no autocomplete
+-- entry). NEW READ-ONLY SUPERSET: private.can_read_case(uuid),
+-- can_read_case_row(bureau, uuid, uuid, uuid), can_read_case_number(text) =
+-- the wall OR siu_oversight_read() for a CID-authority case. It is used ONLY
+-- in the SELECT policies re-emitted by this migration — cases_sel, reports_sel,
+-- evidence_sel, case_tasks_sel, case_blockers_sel, case_intel_links_sel,
+-- case_assignments_sel, csh_sel, cag_sel, operation_case_links_sel,
+-- report_versions_sel, custody_sel, media_sel, cf_read (each the live
+-- expression verbatim with can_access_case → can_read_case) — and NEVER in an
+-- INSERT/UPDATE/DELETE policy, so SIU's broad read of CID can not become a
+-- write path into a detective's report or CID evidence. case_messages (case
+-- chat) is deliberately NOT widened.
+--
+-- LEGAL: private.can_review_as_cid(uuid, uuid) and can_approve_legal(uuid,
+-- uuid) re-emitted with ONE added SIU branch each — SIU command is the CID
+-- gate on its OWN investigation (an X-1 whose historical CID role is
+-- 'detective' would otherwise fail the rank test); every existing CID branch
+-- is verbatim. Unrelated CID command still sees nothing, because both already
+-- require private.can_access_case(r.case_id). No second court, no separate SIU
+-- legal pipeline: SIU uses the existing DOJ prosecutor/judge lanes unchanged.
+--
+-- NEW PUBLIC RPCs (all revoked from public/anon, granted authenticated +
+-- service_role): siu_set_release(boolean, text) — Owner-only release gate,
+-- reason required, audited; siu_appoint(uuid, text, text, boolean, text) —
+-- appointment-only membership (X-Ray 1 appointments are Owner-only; refuses
+-- system/removed/inactive targets and self-appointment); siu_remove(uuid,
+-- text) — revokes access and releases live hooks while PRESERVING history
+-- (reports, authorship, evidence, assignment rows and audit are untouched;
+-- nobody removes their own membership and only Owner/AG may end an X-Ray 1);
+-- siu_set_callsign(uuid, text); siu_create_case(text, text, text) — mints the
+-- SIU-8000000 series via NEW next_siu_case_number(), stamps authority +
+-- classification, enrols the creating agent (and seeds the compartment for a
+-- compartmented case); siu_set_case_classification(uuid, text, text) — reason
+-- required, seeds the allow-list on compartmentation so a case never locks its
+-- own team out; siu_assign_agent(uuid, uuid, text) / siu_unassign_agent(uuid,
+-- uuid, text); siu_compartment_add(uuid, uuid, text) / siu_compartment_remove(
+-- uuid, uuid, text) — gated on membership of the compartment ITSELF, never on
+-- rank or the owner flag, refusing self-removal and refusing to empty a
+-- compartment; siu_roster() — the restricted personnel page (zero rows without
+-- SIU standing; former CID role/bureau exposed as provenance, never as
+-- authority); siu_member_search(text) — invite-flow candidates, appointment
+-- authority only; siu_audit_feed(integer) — compartment-respecting audit reads
+-- (case-keyed rows require siu_case_access on that case, so a subject under
+-- investigation never learns of the trail); siu_overview() returns jsonb — the
+-- workspace dashboard, answering {"access": false} rather than throwing.
+-- public.rls_test_cleanup() re-emitted with the three SIU tables added to the
+-- fixture sweep.
+--
+-- REALTIME: the four SIU tables are DELIBERATELY absent from
+-- supabase_realtime — an unauthorized browser is never sent an SIU event to
+-- filter client-side. `cases` stays published and its per-subscriber RLS check
+-- now runs the SIU wall.
+-- Definitive SQL in supabase/migrations/20260820120000_siu_phase1.sql.

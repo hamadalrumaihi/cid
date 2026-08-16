@@ -6,6 +6,7 @@
  *  body.nav-collapsed class contract as the legacy styles.css. */
 import { useSyncExternalStore } from 'react'
 import { useAuth } from '@/lib/auth'
+import { useSiu } from '@/lib/useSiu'
 import { NAV_CATEGORIES } from '@/lib/nav'
 import { deptLabel, roleLabel } from '@/lib/roles'
 import { safeUrl } from '@/lib/safeUrl'
@@ -73,6 +74,7 @@ const readCollapsed = () => document.body.classList.contains('nav-collapsed')
 
 export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; onCloseDrawer: () => void }) {
   const { isCommand, isOwner } = useAuth()
+  const siu = useSiu()
   const { activeCategory, activeTab, navigate, navigateCategory } = useNav()
   const badges = useNavBadges()
   const collapsed = useSyncExternalStore(subscribeCollapse, readCollapsed, () => false)
@@ -176,6 +178,25 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
           >
             <span className="nav-icon flex-shrink-0" aria-hidden>🛡️</span>
             <span className="nav-label">Command Center</span>
+          </button>
+        )}
+        {/* Special Investigation Unit — a separate investigative authority, so
+            it is a standalone leaf rather than a CID category. Rendered only
+            for accounts with SIU standing; while the release gate is closed
+            that is the Portal Owner alone, and for everyone else SIU shows no
+            label, no badge and no "coming soon" — it simply is not there.
+            Hiding is cosmetic; SiuView + RLS enforce the real rule. */}
+        {siu.canAccess && (
+          <button
+            data-label="Special Investigation Unit"
+            onClick={() => go(() => navigate('siu'))}
+            title="Special Investigation Unit"
+            className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
+              activeTab === 'siu' ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-violet-400' : 'text-slate-300'
+            }`}
+          >
+            <span className="nav-icon flex-shrink-0" aria-hidden>🔍</span>
+            <span className="nav-label">SIU</span>
           </button>
         )}
         {/* Owner Portal — standalone leaf, rendered ONLY for the project
