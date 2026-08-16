@@ -1065,6 +1065,7 @@ export type Database = {
           archived_at: string | null
           archived_by: string | null
           bureau: Database["public"]["Enums"]["bureau"]
+          case_authority: string
           case_number: string
           charges: Json
           closed_at: string | null
@@ -1089,6 +1090,7 @@ export type Database = {
           signoff_status: string
           signoff_submitted_at: string | null
           signoff_submitted_by: string | null
+          siu_classification: string | null
           status: Database["public"]["Enums"]["case_status"]
           summary: string | null
           title: string | null
@@ -1099,6 +1101,7 @@ export type Database = {
           archived_at?: string | null
           archived_by?: string | null
           bureau?: Database["public"]["Enums"]["bureau"]
+          case_authority?: string
           case_number: string
           charges?: Json
           closed_at?: string | null
@@ -1123,6 +1126,7 @@ export type Database = {
           signoff_status?: string
           signoff_submitted_at?: string | null
           signoff_submitted_by?: string | null
+          siu_classification?: string | null
           status?: Database["public"]["Enums"]["case_status"]
           summary?: string | null
           title?: string | null
@@ -1133,6 +1137,7 @@ export type Database = {
           archived_at?: string | null
           archived_by?: string | null
           bureau?: Database["public"]["Enums"]["bureau"]
+          case_authority?: string
           case_number?: string
           charges?: Json
           closed_at?: string | null
@@ -1157,6 +1162,7 @@ export type Database = {
           signoff_status?: string
           signoff_submitted_at?: string | null
           signoff_submitted_by?: string | null
+          siu_classification?: string | null
           status?: Database["public"]["Enums"]["case_status"]
           summary?: string | null
           title?: string | null
@@ -7367,6 +7373,150 @@ export type Database = {
           },
         ]
       }
+      siu_case_agents: {
+        Row: {
+          agent_role: string
+          assigned_at: string
+          assigned_by: string | null
+          case_id: string
+          created_at: string
+          id: string
+          removed_at: string | null
+          removed_by: string | null
+          user_id: string
+        }
+        Insert: {
+          agent_role?: string
+          assigned_at?: string
+          assigned_by?: string | null
+          case_id: string
+          created_at?: string
+          id?: string
+          removed_at?: string | null
+          removed_by?: string | null
+          user_id: string
+        }
+        Update: {
+          agent_role?: string
+          assigned_at?: string
+          assigned_by?: string | null
+          case_id?: string
+          created_at?: string
+          id?: string
+          removed_at?: string | null
+          removed_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      siu_compartment_members: {
+        Row: {
+          case_id: string
+          created_at: string
+          granted_at: string
+          granted_by: string | null
+          id: string
+          reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          user_id: string
+        }
+        Insert: {
+          case_id: string
+          created_at?: string
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          user_id: string
+        }
+        Update: {
+          case_id?: string
+          created_at?: string
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      siu_memberships: {
+        Row: {
+          active: boolean
+          appointed_at: string
+          appointed_by: string | null
+          callsign: string | null
+          created_at: string
+          end_reason: string | null
+          ended_at: string | null
+          ended_by: string | null
+          id: string
+          internal_note: string | null
+          oversight_only: boolean
+          siu_role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          appointed_at?: string
+          appointed_by?: string | null
+          callsign?: string | null
+          created_at?: string
+          end_reason?: string | null
+          ended_at?: string | null
+          ended_by?: string | null
+          id?: string
+          internal_note?: string | null
+          oversight_only?: boolean
+          siu_role: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          appointed_at?: string
+          appointed_by?: string | null
+          callsign?: string | null
+          created_at?: string
+          end_reason?: string | null
+          ended_at?: string | null
+          ended_by?: string | null
+          id?: string
+          internal_note?: string | null
+          oversight_only?: boolean
+          siu_role?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      siu_settings: {
+        Row: {
+          enabled_for_non_owner: boolean
+          id: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          enabled_for_non_owner?: boolean
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          enabled_for_non_owner?: boolean
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       shift_reports: {
         Row: {
           arrests: number
@@ -8671,6 +8821,10 @@ export type Database = {
         Args: { p_bureau: string }
         Returns: string
       }
+      next_siu_case_number: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       operation_add_bureau: {
         Args: {
           p_bureau: Database["public"]["Enums"]["bureau"]
@@ -9216,6 +9370,98 @@ export type Database = {
           id: string
           rank: number
         }[]
+      }
+      siu_appoint: {
+        Args: {
+          p_callsign?: string
+          p_note?: string
+          p_oversight_only?: boolean
+          p_role: string
+          p_user: string
+        }
+        Returns: string
+      }
+      siu_assign_agent: {
+        Args: { p_agent_role?: string; p_case: string; p_user: string }
+        Returns: undefined
+      }
+      siu_audit_feed: {
+        Args: { p_limit?: number }
+        Returns: {
+          action: string
+          actor_id: string
+          actor_name: string
+          created_at: string
+          detail: Json
+          entity_id: string
+          id: number
+        }[]
+      }
+      siu_compartment_add: {
+        Args: { p_case: string; p_reason: string; p_user: string }
+        Returns: undefined
+      }
+      siu_compartment_remove: {
+        Args: { p_case: string; p_reason: string; p_user: string }
+        Returns: undefined
+      }
+      siu_create_case: {
+        Args: { p_classification?: string; p_summary?: string; p_title: string }
+        Returns: string
+      }
+      siu_member_search: {
+        Args: { p_q: string }
+        Returns: {
+          badge_number: string
+          cid_bureau: string
+          cid_role: string
+          display_name: string
+          id: string
+        }[]
+      }
+      siu_overview: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      siu_remove: {
+        Args: { p_reason: string; p_user: string }
+        Returns: undefined
+      }
+      siu_roster: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          active: boolean
+          appointed_at: string
+          appointed_by: string
+          appointed_by_name: string
+          badge_number: string
+          callsign: string
+          display_name: string
+          end_reason: string
+          ended_at: string
+          former_cid_bureau: string
+          former_cid_role: string
+          last_activity: string
+          oversight_only: boolean
+          siu_role: string
+          user_id: string
+        }[]
+      }
+      siu_set_callsign: {
+        Args: { p_callsign: string; p_user: string }
+        Returns: undefined
+      }
+      siu_set_case_classification: {
+        Args: { p_case: string; p_classification: string; p_reason: string }
+        Returns: undefined
+      }
+      siu_set_release: {
+        Args: { p_enabled: boolean; p_reason: string }
+        Returns: undefined
+      }
+      siu_unassign_agent: {
+        Args: { p_case: string; p_reason: string; p_user: string }
+        Returns: undefined
       }
       signoff_decide: {
         Args: { p_case: string; p_decision: string; p_note?: string }

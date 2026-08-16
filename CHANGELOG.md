@@ -8,6 +8,73 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Special Investigation Unit (SIU) — Phase 1
+
+Migration `20260820120000_siu_phase1` adds SIU to the portal as a **separate
+investigative authority** that reuses every existing CID system rather than
+duplicating it.
+
+- **Authority model, not a rank.** A member operates as CID
+  (`profiles.role` + `profiles.division`) *or* as SIU
+  (`siu_memberships.siu_role` — `special_agent` / `special_agent_in_charge`,
+  displayed as X-Ray 1, with free-form callsigns). No SIU rule reads a CID
+  role, which is what makes investigating CID command structurally possible.
+  Former CID rank is preserved and shown as history, never as authority. One
+  resolver — `private.siu_standing()`, mirrored by `siuStanding()` in
+  `src/lib/siu.ts` and surfaced as `useSiu()` — answers every SIU question, so
+  no component re-derives permissions inline.
+- **Asymmetric visibility.** `private.can_access_case` / `can_access_case_row`
+  — the wall every case child already routes through — gain ONE branch: an
+  SIU-authority case is governed by `private.siu_case_access()`, and the CID
+  branch is byte-identical to `20260810120000`. CID gets **nothing** on an SIU
+  case at any rank, in any surface (lists, search, autocomplete, entity
+  profiles, graphs, media, timelines, legal, realtime) — no rows, no counts,
+  no "restricted" placeholder. SIU's broad read of CID is a *separate,
+  read-only superset* (`can_read_case` / `_row` / `_number`) used only in
+  SELECT policies, so oversight can read a detective's report and can never
+  rewrite one or destroy CID evidence.
+- **Classification + compartments.** `cases.case_authority` (`cid`/`siu`) and
+  `cases.siu_classification` (`siu` / `siu_restricted` / `siu_command` /
+  `siu_compartmented`) are RPC-only (guard trigger
+  `block_direct_siu_case_cols`), with their own `SIU-8000001` number series.
+  **`siu_compartmented` is allow-list only, with no exemption for X-1, the
+  Attorney General or the owner flag** — the list is managed from inside the
+  compartment, cannot be emptied, and nobody re-admits themselves.
+- **Appointment-only membership.** No request table, no queue, no signup
+  option, no promotion path. `siu_appoint` / `siu_remove` are gated to the
+  Portal Owner, X-Ray 1 and the Attorney General (an X-1 appointment is
+  Owner-only; only the Owner or AG may end one; nobody removes themselves).
+  Removal revokes access immediately while preserving reports, evidence,
+  authorship, assignment history and audit. The AG holds SIU **oversight**
+  (appointment + legal oversight) without becoming a field investigator.
+- **Existing systems reused.** An SIU investigation *is* a `cases` row, so
+  reports, evidence, media, tasks, chat, timeline, graph, intel links and the
+  DOJ legal pipeline all work unchanged — `can_review_as_cid` /
+  `can_approve_legal` gain one branch each so SIU command is the CID gate on
+  its own investigation. No second court, no duplicate registries.
+- **Audit.** SIU actions land in the Owner-only `audit_log` under entity
+  `siu`; `siu_audit_feed()` serves compartment-respecting reads, so a subject
+  under investigation never learns of the trail through an audit surface.
+- **Build-phase release gate.** Until SIU is marked production-ready, only the
+  Portal Owner can see, query or act on any of it — centralized in
+  `siu_settings.enabled_for_non_owner` and one audited Owner-only RPC
+  (`siu_set_release`), not scattered through components. For every other
+  account SIU has no nav entry, no route, no rows, no notifications and no
+  search hits. The production model above is already written and needs no
+  rebuild when the flag flips.
+- **NULL-safe authority predicates.** `siu_standing()` is nullable, and
+  `NULL in (...)` is NULL rather than false — which made
+  `if not <predicate> then raise` a no-op and skipped the plpgsql guard in
+  every SIU write RPC (the justice NULL-guard class, `20260714070000`). Every
+  standing predicate is now `coalesce()`-pinned to a strict boolean, with the
+  same invariant asserted on the client mirror. Read paths were never
+  affected: `siu_operates()` is `is not null` and `siu_case_access()` branches
+  on an explicit null check.
+- Tests: `src/lib/siu.test.ts` (27 capability-mirror cases) and
+  `tests/rls/v166.test.ts` (live wall + a post-release production lane).
+  Docs: [AUTHORIZATION.md §4f](docs/AUTHORIZATION.md), handbook ch. 9,
+  REVIEW-MAP, TESTING.
+
 ### Bureau prosecutor queues, review routing, stages, and evidence designation
 
 Migration `20260818120000_bureau_queues_stages` refines the minimal-DOJ

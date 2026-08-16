@@ -1,0 +1,317 @@
+/** Special Investigation Unit — the client mirror of the server authority
+ *  model in `20260820120000_siu_phase1.sql`.
+ *
+ *  SIU is a SEPARATE investigative authority, not a CID rank and not a badge:
+ *  a member operates EITHER as CID (`profiles.role` + `profiles.division`) or
+ *  as SIU (`siu_memberships.siu_role`). Nothing in this file reads a CID role
+ *  to answer an SIU question — that separation is the whole point, and it is
+ *  what lets SIU investigate CID command.
+ *
+ *  ── This file is UX only ───────────────────────────────────────────────────
+ *  Every capability below exists so a component can decide whether to render a
+ *  control. The database is the authority: `private.siu_standing()` resolves
+ *  the same four standings server-side, and every SIU read is gated by RLS
+ *  while every SIU write goes through a `SECURITY DEFINER` RPC. Hiding a
+ *  button is never the security boundary — see docs/AUTHORIZATION.md §7.
+ *
+ *  ── Build-phase release gate ───────────────────────────────────────────────
+ *  Until SIU ships, ONLY the Portal Owner may see or use any of it. That is
+ *  not scattered through the components: `siuStanding()` returns 'owner' for
+ *  the owner unconditionally and `null` for everyone else while
+ *  `siu_settings.enabled_for_non_owner` is false. Flipping that one flag
+ *  (`siu_set_release`, owner-only, audited) turns on the production model that
+ *  is already written here and in the migration — nothing is rebuilt. */
+
+import type { Profile } from './auth'
+import { rpc } from './db'
+
+// ---------------------------------------------------------------------------
+// Vocabulary
+// ---------------------------------------------------------------------------
+
+/** Internal SIU roles. Deliberately small — SIU is not a second hierarchy. */
+export const SIU_ROLES = ['special_agent', 'special_agent_in_charge'] as const
+export type SiuRole = (typeof SIU_ROLES)[number]
+
+export const SIU_ROLE_LABEL: Record<string, string> = {
+  special_agent: 'Special Agent',
+  special_agent_in_charge: 'Special Agent in Charge',
+}
+
+/** Short form used on dense rows. X-Ray 1 is the operational head of SIU. */
+export const SIU_ROLE_SHORT: Record<string, string> = {
+  special_agent: 'Agent',
+  special_agent_in_charge: 'X-1',
+}
+
+export const siuRoleLabel = (r?: string | null) => (r && SIU_ROLE_LABEL[r]) || r || '—'
+
+/** Callsigns are free-form on purpose: X-1/X-2/X-3 today, anything tomorrow.
+ *  Nothing in the model hard-codes a callsign — it is a display identifier,
+ *  never an authority. */
+export const siuCallsign = (c?: string | null) => (c && c.trim()) || '—'
+
+/** Case classification levels, least → most restricted. */
+export const SIU_CLASSIFICATIONS = ['siu', 'siu_restricted', 'siu_command', 'siu_compartmented'] as const
+export type SiuClassification = (typeof SIU_CLASSIFICATIONS)[number]
+
+export const SIU_CLASSIFICATION_LABEL: Record<string, string> = {
+  siu: 'SIU',
+  siu_restricted: 'SIU Restricted',
+  siu_command: 'SIU Command',
+  siu_compartmented: 'SIU Compartmented',
+}
+
+export const SIU_CLASSIFICATION_HINT: Record<string, string> = {
+  siu: 'Any active SIU agent.',
+  siu_restricted: 'Assigned agents and SIU command.',
+  siu_command: 'SIU command, plus anyone explicitly allow-listed.',
+  siu_compartmented: 'Allow-list only — X-1 and the owner flag are not exempt.',
+}
+
+/** Restrained markers — a tint per level, no glow, no stamps. */
+export const SIU_CLASSIFICATION_TINT: Record<string, string> = {
+  siu: 'bg-slate-500/15 text-slate-300',
+  siu_restricted: 'bg-amber-500/15 text-amber-300',
+  siu_command: 'bg-violet-500/15 text-violet-300',
+  siu_compartmented: 'bg-rose-500/15 text-rose-300',
+}
+
+export const siuClassificationLabel = (c?: string | null) =>
+  (c && SIU_CLASSIFICATION_LABEL[c]) || SIU_CLASSIFICATION_LABEL.siu
+
+export const siuClassificationTint = (c?: string | null) =>
+  (c && SIU_CLASSIFICATION_TINT[c]) || SIU_CLASSIFICATION_TINT.siu
+
+// ---------------------------------------------------------------------------
+// Standing — the single authority resolver
+// ---------------------------------------------------------------------------
+
+/** What authority does this account hold inside SIU right now?
+ *
+ *  'owner'                   Portal Owner. Holds SIU standing unconditionally
+ *                            (this is the build-phase tester and the platform
+ *                            authority) — but NOT a compartment key.
+ *  'special_agent_in_charge' X-Ray 1, the operational head of SIU.
+ *  'special_agent'           Field agent.
+ *  'oversight'               Attorney General / oversight-only appointee:
+ *                            appointment + legal oversight, never a field
+ *                            investigator.
+ *  null                      SIU does not exist for this account.
+ */
+export type SiuStanding = 'owner' | SiuRole | 'oversight'
+
+export interface SiuMembership {
+  user_id: string
+  siu_role: SiuRole | string
+  callsign: string | null
+  oversight_only: boolean
+  active: boolean
+}
+
+/** The account context an SIU capability question is asked about. `release`
+ *  is `siu_settings.enabled_for_non_owner`; while it is false SIU resolves to
+ *  the Owner and nobody else. `justiceRole` carries the AG's ex-officio
+ *  oversight standing (see docs/AUTHORIZATION.md §2). */
+export interface SiuContext {
+  profile: Profile | null | undefined
+  membership?: SiuMembership | null
+  justiceRole?: string | null
+  release?: boolean
+}
+
+/** Mirrors `private.siu_standing()` exactly. Keep the two in lockstep. */
+export function siuStanding(ctx: SiuContext): SiuStanding | null {
+  const p = ctx.profile
+  if (!p || !p.active) return null
+  // Gate-independent: SIU is owner-only until the release flag flips.
+  if (p.is_owner) return 'owner'
+  if (!ctx.release) return null
+  const m = ctx.membership
+  if (m && m.active) {
+    if (m.oversight_only) return 'oversight'
+    if (m.siu_role === 'special_agent' || m.siu_role === 'special_agent_in_charge') return m.siu_role
+  }
+  if (ctx.justiceRole === 'attorney_general') return 'oversight'
+  return null
+}
+
+/** May this account touch SIU at all — workspace, roster, any SIU record? */
+export const siuOperates = (ctx: SiuContext) => siuStanding(ctx) !== null
+
+/** Field standing: may run investigations. Oversight-only is excluded — legal
+ *  oversight is not a licence to work cases or to read all of CID. */
+export const siuIsAgent = (ctx: SiuContext) => {
+  const s = siuStanding(ctx)
+  return s === 'owner' || s === 'special_agent_in_charge' || s === 'special_agent'
+}
+
+/** SIU command — X-Ray 1 (or the owner during build phase). */
+export const siuIsCommand = (ctx: SiuContext) => {
+  const s = siuStanding(ctx)
+  return s === 'owner' || s === 'special_agent_in_charge'
+}
+
+/** Who may appoint or remove SIU personnel: the Portal Owner, X-Ray 1, and the
+ *  Attorney General. Nobody else — not the Director, not a Deputy Director,
+ *  not a Bureau Lead, not a Prosecutor or Judge. There is no application
+ *  queue and no self-service path anywhere in the product. */
+export const siuCanAppoint = (ctx: SiuContext) => {
+  const s = siuStanding(ctx)
+  return s === 'owner' || s === 'special_agent_in_charge' || s === 'oversight'
+}
+
+/** Broad, READ-ONLY visibility of CID investigations across every bureau.
+ *  Read only: SIU never gains a write path into CID records from this. */
+export const siuCanReadCid = (ctx: SiuContext) => siuIsAgent(ctx)
+
+/** Only the Owner may name an X-Ray 1 — the head of SIU is never appointed by
+ *  the incumbent head, nor by oversight alone. */
+export const siuCanAppointRole = (ctx: SiuContext, role: string) =>
+  siuCanAppoint(ctx) && (role !== 'special_agent_in_charge' || siuStanding(ctx) === 'owner')
+
+/** Only the Owner or the Attorney General may end an X-Ray 1's membership, and
+ *  nobody ends their own — X-1 must not be able to manage their own oversight
+ *  status away. */
+export const siuCanRemove = (ctx: SiuContext, target: SiuMembership) => {
+  if (!siuCanAppoint(ctx) || !target.active) return false
+  if (target.user_id === ctx.profile?.id) return false
+  if (target.siu_role === 'special_agent_in_charge') {
+    const s = siuStanding(ctx)
+    return s === 'owner' || s === 'oversight'
+  }
+  return true
+}
+
+/** Which classifications may this account open an investigation at? Compartmented
+ *  is available to any field agent — the point of a compartment is that the
+ *  agent who opens it decides who else is ever on the list. */
+export const siuAssignableClassifications = (ctx: SiuContext): readonly SiuClassification[] =>
+  siuIsAgent(ctx) ? SIU_CLASSIFICATIONS : []
+
+/** Can this account SEE this SIU investigation, given the classification and
+ *  the caller's assignment/compartment facts? Mirrors
+ *  `private.siu_case_access()`. Note the compartmented branch: no standing —
+ *  owner included — substitutes for an allow-list row. */
+export function siuCaseAccess(
+  ctx: SiuContext,
+  caseRow: { siu_classification?: string | null },
+  facts: { assigned?: boolean; inCompartment?: boolean } = {},
+): boolean {
+  const s = siuStanding(ctx)
+  if (!s) return false
+  const command = s === 'owner' || s === 'special_agent_in_charge'
+  switch (caseRow.siu_classification ?? 'siu') {
+    case 'siu_compartmented':
+      return !!facts.inCompartment
+    case 'siu_command':
+      return command || !!facts.inCompartment
+    case 'siu_restricted':
+      return command || (s === 'special_agent' && !!facts.assigned) || !!facts.inCompartment
+    default:
+      return command || s === 'special_agent' || !!facts.inCompartment
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Data access — every SIU read/write goes through a gated RPC
+// ---------------------------------------------------------------------------
+
+/** Dashboard payload from `siu_overview()`. An unauthorized caller gets
+ *  `{ access: false }` rather than an error, so the workspace can render the
+ *  standard not-found behavior without the response itself confirming that
+ *  anything exists. */
+export interface SiuOverview {
+  access: boolean
+  standing?: SiuStanding
+  release_open?: boolean
+  investigations?: number
+  open_investigations?: number
+  assigned?: number
+  compartmented?: number
+  agents?: number
+  legal_pending?: number
+  /** null for oversight-only standing — no broad CID read. */
+  cid_recent_cases?: number | null
+  cid_open_cases?: number | null
+}
+
+export async function fetchSiuOverview(): Promise<SiuOverview> {
+  const res = await rpc('siu_overview', {})
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuOverview | null) ?? { access: false }
+}
+
+export interface SiuRosterRow {
+  user_id: string
+  display_name: string | null
+  badge_number: string | null
+  siu_role: string
+  callsign: string | null
+  oversight_only: boolean
+  active: boolean
+  appointed_by: string | null
+  appointed_by_name: string | null
+  appointed_at: string
+  ended_at: string | null
+  end_reason: string | null
+  /** Historical CID rank/bureau. Shown as provenance, never as authority —
+   *  no SIU rule anywhere reads it. */
+  former_cid_role: string | null
+  former_cid_bureau: string | null
+  last_activity: string | null
+}
+
+export async function fetchSiuRoster(): Promise<SiuRosterRow[]> {
+  const res = await rpc('siu_roster', {})
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuRosterRow[] | null) ?? []
+}
+
+export interface SiuCandidate {
+  id: string
+  display_name: string | null
+  badge_number: string | null
+  cid_role: string | null
+  cid_bureau: string | null
+}
+
+export async function searchSiuCandidates(q: string): Promise<SiuCandidate[]> {
+  const res = await rpc('siu_member_search', { p_q: q })
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuCandidate[] | null) ?? []
+}
+
+export interface SiuAuditRow {
+  id: number
+  created_at: string
+  action: string
+  entity_id: string | null
+  actor_id: string | null
+  actor_name: string | null
+  detail: Record<string, unknown> | null
+}
+
+export async function fetchSiuAudit(limit = 100): Promise<SiuAuditRow[]> {
+  const res = await rpc('siu_audit_feed', { p_limit: limit })
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuAuditRow[] | null) ?? []
+}
+
+/** Human wording for the SIU audit actions. Unknown actions fall back to the
+ *  raw token rather than being hidden — an audit surface never silently drops
+ *  a row it doesn't recognise. */
+export const SIU_AUDIT_LABEL: Record<string, string> = {
+  SIU_APPOINTED: 'Agent appointed',
+  SIU_REMOVED: 'Agent removed',
+  SIU_CALLSIGN_CHANGED: 'Callsign changed',
+  SIU_RELEASE_SET: 'Release gate changed',
+  SIU_CASE_CREATED: 'Investigation opened',
+  SIU_CLASSIFICATION_CHANGED: 'Classification changed',
+  SIU_AGENT_ASSIGNED: 'Agent assigned',
+  SIU_AGENT_UNASSIGNED: 'Agent unassigned',
+  SIU_COMPARTMENT_GRANTED: 'Compartment access granted',
+  SIU_COMPARTMENT_REVOKED: 'Compartment access revoked',
+}
+
+export const siuAuditLabel = (a: string) => SIU_AUDIT_LABEL[a] ?? a

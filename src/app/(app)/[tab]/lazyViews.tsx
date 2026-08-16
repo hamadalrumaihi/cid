@@ -15,6 +15,7 @@ import { ViewPlaceholder } from '@/components/ViewPlaceholder'
 const lazy = (tab: string, load: () => Promise<React.ComponentType>) =>
   dynamic(load, { ssr: false, loading: () => <ViewPlaceholder tab={tab} /> })
 
+export const SiuView = lazy('siu', () => import('@/components/siu/SiuView').then((m) => m.SiuView))
 export const AuditView = lazy('audit', () => import('@/components/audit/AuditView').then((m) => m.AuditView))
 export const FeedbackView = lazy('feedback', () => import('@/components/feedback/FeedbackView').then((m) => m.FeedbackView))
 export const NarcoticsView = lazy('narcotics', () => import('@/components/narcotics/NarcoticsView').then((m) => m.NarcoticsView))

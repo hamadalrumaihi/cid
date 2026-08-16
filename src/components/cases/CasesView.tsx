@@ -79,7 +79,13 @@ function CasesViewInner() {
   const fetchCases = useCallback(async () => {
     setLoading(true)
     try {
-      const rows = await withRetry(() => list('cases', { order: 'updated_at', ascending: false }))
+      // CID Case Files lists CID investigations. SIU-authority cases live in
+      // the SIU workspace, so an SIU agent's own investigations don't clutter
+      // (or confuse) the ordinary detective screen. This is presentation, not
+      // security: RLS already denies SIU rows to anyone without SIU standing.
+      const rows = await withRetry(() => list('cases', {
+        order: 'updated_at', ascending: false, eq: { case_authority: 'cid' },
+      }))
       setCases(rows)
       maybeEscalateStale(rows, profile?.id ?? null)
     } catch (e) {

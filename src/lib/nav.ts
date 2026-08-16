@@ -46,6 +46,12 @@ export const PAGE_META: Record<string, PageMeta> = {
   accounts:   { title: 'Account Registry', sub: 'Social-media & online accounts, handle history & ownership' },
   guide:      { title: 'User Guide', sub: 'How to sign in, navigate & work a case — new member orientation' },
   calendar:   { title: 'Division Calendar', sub: 'Follow-ups, task deadlines & shift weeks at a glance' },
+  // Special Investigation Unit — a SEPARATE investigative authority, not a CID
+  // category. It is deliberately absent from NAV_CATEGORIES: the sidebar
+  // renders it as a standalone leaf only for accounts with SIU standing
+  // (useSiu()), and the view itself renders the ordinary nothing-here surface
+  // for everyone else. RLS is the real wall.
+  siu:        { title: 'Special Investigation Unit', sub: 'SIU investigations, personnel & oversight of CID activity' },
 }
 // NOTE: vanilla PAGE_META also declares a legacy 'reports' route with no view
 // (authoring lives in the case-detail Reports tab); its fallback-to-cases
@@ -74,7 +80,7 @@ export const TAB_LABEL: Record<string, string> = {
   persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', accounts: 'Accounts', indicators: 'Indicators', tips: 'Intel Tips',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
   media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide', devdocs: 'Developer Handbook',
-  inbox: 'My Desk', action: 'Action Center', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', owner: 'Owner Portal', profile: 'My Profile', 'command-center': 'Command Center',
+  inbox: 'My Desk', action: 'Action Center', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', owner: 'Owner Portal', profile: 'My Profile', 'command-center': 'Command Center', siu: 'Special Investigation Unit',
 }
 
 /** Presentational sub-grouping for crowded categories — a visual layer over

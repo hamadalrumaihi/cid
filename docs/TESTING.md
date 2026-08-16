@@ -45,6 +45,7 @@ per-release `v1xx.test.ts` file for each new security surface. Key files
 | `tests/rls/v114.test.ts` | report-version immutability, sealed-safe `search_all`, security-testing RPC gates |
 | `tests/rls/v115.test.ts` | search-warrant subtype rules, owner-only warrant import + idempotent rollback |
 | `tests/rls/v116.test.ts` | unified role/department matrix: requestable roles, approval authority per rank, frozen privileged profile columns, justice-identity separation from CID rank |
+| `tests/rls/v166.test.ts` | SIU Phase 1: CID→SIU denial at every rank (rows, counts, children, search, roster, audit), RPC refusal under the build gate, RPC-only case-authority columns, compartment mechanics, and a CID regression guard on the re-emitted `can_access_case` chokepoints. A second lane (`RLS_TEST_SIU_RELEASED=1` + two SIU agent fixtures) asserts the post-release production model — SIU reading CID read-only, and compartment exclusion between agents |
 
 Non-negotiable conventions (every file in the suite):
 
