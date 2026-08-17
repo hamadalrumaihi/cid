@@ -10697,3 +10697,25 @@ create policy wl_sel on public.watchlist
 -- an unauthorized caller gets {"access": false}. Definitive SQL in
 -- supabase/migrations/20260825120000_siu_phase3.sql and
 -- supabase/migrations/20260825130000_siu_phase3_rpcs.sql.
+
+-- rls_test_cleanup SIU coverage (20260826120000_rls_cleanup_siu_coverage) —
+-- RE-EMITTED public.rls_test_cleanup(). Found during the pre-enablement safety
+-- review of the RLS suites (docs/TEST-ENVIRONMENT.md): the sweep covered only
+-- the three SIU Phase 1 tables, while ten more have shipped since. All of them
+-- cascade from public.cases, so a row on a FIXTURE-CREATED case was already
+-- removed — the gap was a row attached to a case the fixture did NOT create,
+-- which §12/§15 make possible by design (siu_case_notes keys to any case, and
+-- siu_disclosures.target_case_id points AT a CID case; an audience='cid'
+-- release is visible division-wide).
+--
+-- The new branches key on AUTHORSHIP BY A FIXTURE ACCOUNT (created_by /
+-- released_by / handler_id / agent_id / exported_by = any(ids)), never on a
+-- case id alone, so the function's blast radius stays inside the fixture
+-- namespace by construction and a real agent's row is never caught.
+-- Tables swept: siu_exports, siu_disclosures, siu_integrity_reviews,
+-- siu_comms_intel, siu_financial_intel, siu_undercover_operations,
+-- siu_sources, siu_case_notes, siu_targets. The caller gate
+-- (auth.uid() must be an rls-test-%@cidportal.test account) is verbatim and
+-- was re-verified live: a real member and a null uid are both refused.
+-- Definitive SQL in
+-- supabase/migrations/20260826120000_rls_cleanup_siu_coverage.sql.

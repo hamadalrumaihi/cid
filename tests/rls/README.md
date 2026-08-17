@@ -3,6 +3,22 @@
 Integration tests that hit the **live Supabase project** as several dedicated,
 low-privilege test accounts and assert that the security wall holds:
 
+> **These run against PRODUCTION.** That is safe only while every write stays
+> inside the `rls-test-*@cidportal.test` namespace. Before adding a test:
+>
+> - never `.delete()` without an `.eq` / `.in` / `.match` filter;
+> - never `TRUNCATE`, and never touch a case, report, member or record your
+>   fixture did not create;
+> - if your test needs a case, **create one** — do not borrow a real one;
+> - anything attached to a real CID record will survive `rls_test_cleanup()`
+>   and become live data. An `audience='cid'` SIU disclosure, for instance, is
+>   visible division-wide.
+>
+> `rls_test_cleanup()` is `SECURITY DEFINER` and bypasses RLS. Its known
+> namespace escapes (author-keyed branches, F1–F5) are catalogued in
+> [`docs/TEST-ENVIRONMENT.md`](../../docs/TEST-ENVIRONMENT.md#safety-review-of-the-rls-suites-2026-08-17)
+> — read that before extending it.
+
 | Account | State | Used to prove |
 | --- | --- | --- |
 | `rls-test-lsb@cidportal.test` | detective, LSB, active | baseline member behavior |

@@ -1,6 +1,8 @@
 # Testing & Release Gates
 
-How the CID Portal is tested, what each suite proves, and what "green" must mean before a release — consolidating [`docs/TEST-ENVIRONMENT.md`](TEST-ENVIRONMENT.md) (the dedicated E2E/visual project) and [`tests/rls/README.md`](../tests/rls/README.md) (the live security-wall suite) by reference.
+How the CID Portal is tested, what each suite proves, and what "green" must mean before a release — consolidating [`docs/TEST-ENVIRONMENT.md`](TEST-ENVIRONMENT.md) (isolation policy) and [`tests/rls/README.md`](../tests/rls/README.md) (the live security-wall suite) by reference.
+
+> **Isolation, in one line.** The RLS suites run against **production** with namespaced `rls-test-*` fixtures. The seeded E2E and visual suites `TRUNCATE`, so they need their own database — which **does not exist yet**, and which shipping a feature to production never obliges anyone to build. See [TEST-ENVIRONMENT.md](TEST-ENVIRONMENT.md), including the safety review that must clear before `RLS_TEST_PASSWORD_*` is enabled.
 
 The suites verify **server-enforced rules**: every RLS policy, RPC caller check, and approval-matrix decision under test is deterministic, database-driven logic — the tests assert that the security wall holds for every actor.
 
@@ -11,8 +13,8 @@ The suites verify **server-enforced rules**: every RLS policy, RPC caller check,
 | Unit | vitest (`unit` project), [`vitest.config.ts`](../vitest.config.ts), `src/**/*.test.{ts,tsx}` | pure functions, offline | `npm test` |
 | MSW integration | vitest (`msw` project, happy-dom), `tests/msw/**` | real supabase-js/db.ts against the offline mock layer — [TESTING-MOCKS.md](TESTING-MOCKS.md) | `npm test` |
 | Live RLS / RPC | vitest, [`vitest.rls.config.ts`](../vitest.rls.config.ts), `tests/rls/*.test.ts` | **production project**, `rls-test-*` fixtures | `npm run test:rls` |
-| E2E (functional) | Playwright, [`playwright.config.ts`](../playwright.config.ts), `tests/e2e/*.spec.ts` | live fixtures (+ `roles.spec.ts` on the dedicated test project) | `npm run build && npm run test:e2e` |
-| Visual regression | Playwright, `playwright.visual.config.ts`, `tests/visual/*` | dedicated test project ([TEST-ENVIRONMENT.md](TEST-ENVIRONMENT.md)) | `npm run test:visual` |
+| E2E (functional) | Playwright, [`playwright.config.ts`](../playwright.config.ts), `tests/e2e/*.spec.ts` | live fixtures (+ `roles.spec.ts` on an isolated project — **unprovisioned**) | `npm run build && npm run test:e2e` |
+| Visual regression | Playwright, `playwright.visual.config.ts`, `tests/visual/*` | isolated deterministic project — **unprovisioned** ([TEST-ENVIRONMENT.md](TEST-ENVIRONMENT.md)) | `npm run test:visual` |
 
 ## Unit tests (vitest)
 
@@ -107,8 +109,8 @@ The vitest RLS config and Playwright config both auto-load a git-ignored `.env.r
 | `npm run check:schema` | fails if `supabase/schema-snapshot.sql` disagrees with production-generated types (drift gate) |
 | `npm run test:rls` | live RLS/RPC suite (needs `RLS_TEST_PASSWORD_*`) |
 | `npm run test:e2e` | Playwright functional E2E (needs the same env; build first) |
-| `npm run test:visual` / `:update` | visual regression against the dedicated test project |
-| `npm run test:seed` | reset + seed the dedicated test project (prod-ref hard-blocked) |
+| `npm run test:visual` / `:update` | visual regression against an isolated project (unprovisioned) |
+| `npm run test:seed` | **destructive** (`TRUNCATE`) reset + seed of an isolated project; the production ref is hard-blocked |
 
 ## What a passing release requires
 
