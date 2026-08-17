@@ -18,6 +18,7 @@ const lazy = (tab: string, load: () => Promise<React.ComponentType>) =>
 export const SiuView = lazy('siu', () => import('@/components/siu/SiuView').then((m) => m.SiuView))
 export const AuditView = lazy('audit', () => import('@/components/audit/AuditView').then((m) => m.AuditView))
 export const FeedbackView = lazy('feedback', () => import('@/components/feedback/FeedbackView').then((m) => m.FeedbackView))
+export const ConcernView = lazy('concern', () => import('@/components/concern/ConcernView').then((m) => m.ConcernView))
 export const NarcoticsView = lazy('narcotics', () => import('@/components/narcotics/NarcoticsView').then((m) => m.NarcoticsView))
 export const BallisticsView = lazy('ballistics', () => import('@/components/ballistics/BallisticsView').then((m) => m.BallisticsView))
 export const RicoView = lazy('rico', () => import('@/components/rico/RicoView').then((m) => m.RicoView))

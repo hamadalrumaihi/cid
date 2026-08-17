@@ -219,6 +219,20 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
           <span className="nav-icon flex-shrink-0"><CategoryIcon cat="feedback" /></span>
           <span className="nav-label">Feedback</span>
         </button>}
+        {/* §14 intake, from the reporter's side. Shown to every CID member —
+            the channel is only useful if the people most likely to notice
+            misconduct can find it. It never names SIU; see ConcernView. */}
+        {!inSiu && <button
+          data-label="Report a Concern"
+          onClick={() => go(() => navigate('concern'))}
+          title="Confidential reporting outside the ordinary chain of command"
+          className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
+            activeTab === 'concern' ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-badge-500' : 'text-slate-300'
+          }`}
+        >
+          <span className="nav-icon flex-shrink-0"><CategoryIcon cat="concern" /></span>
+          <span className="nav-label">Report a Concern</span>
+        </button>}
         {/* Command Center — standalone leaf for command staff + owner.
             Hiding is cosmetic; the view gate + RLS/RPCs are the real rule. */}
         {!inSiu && (isCommand || isOwner) && (

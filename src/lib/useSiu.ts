@@ -23,7 +23,7 @@ import { rpc } from './db'
 import { Store } from './store'
 import {
   maySwitchDepartment, siuCanAppoint, siuCanReadCid, siuIsAgent, siuIsCommand,
-  siuOperates, siuStanding, userDepartment,
+  siuOperates, siuStanding, userDepartment, mayCreateCidCase, siuCaseReadOnly,
   type Department, type SiuContext, type SiuMembership, type SiuStanding,
 } from './siu'
 
@@ -87,6 +87,12 @@ export interface SiuAccess {
   loading: boolean
   /** Switch the rendered workspace. No-op unless `maySwitch`. */
   setViewing: (d: Department) => void
+  /** Is this case read-only for me purely because of the departmental split?
+   *  Narrows `useAuth().canEdit` — never widens it. See `siuCaseReadOnly`. */
+  caseReadOnly: (caseRow: { case_authority?: string | null }) => boolean
+  /** May I create a CID case? False for SIU department members, who would
+   *  create one and immediately lose access to it. */
+  mayCreateCase: boolean
 }
 
 const NO_ACCESS: SiuAccess = {
@@ -95,6 +101,8 @@ const NO_ACCESS: SiuAccess = {
   canAppoint: false, canReadCid: false, maySwitch: false, releaseOpen: false,
   callsign: null, membership: null, loading: false,
   setViewing: () => {},
+  caseReadOnly: () => false,
+  mayCreateCase: true,
 }
 
 export function useSiu(): SiuAccess {
@@ -165,12 +173,13 @@ export function useSiu(): SiuAccess {
   // A stored SIU view only applies to someone who may actually switch; every
   // other account renders their own department, always.
   const viewing: Department = maySwitch && view && canAccess ? view : department
+  const standing = ctx?.siu_standing ?? siuStanding(capCtx)
 
   return {
     department,
     viewing,
     inSiu: viewing === 'siu',
-    standing: ctx?.siu_standing ?? siuStanding(capCtx),
+    standing,
     canAccess,
     isAgent: siuIsAgent(capCtx),
     isCommand: siuIsCommand(capCtx),
@@ -182,5 +191,10 @@ export function useSiu(): SiuAccess {
     membership,
     loading,
     setViewing,
+    // Bound to the viewer's HOME department, not the workspace they happen to
+    // be looking at: an Owner browsing the SIU workspace is still CID by
+    // department and keeps their CID write rights.
+    caseReadOnly: (caseRow) => siuCaseReadOnly({ department, standing }, caseRow),
+    mayCreateCase: mayCreateCidCase(department),
   }
 }

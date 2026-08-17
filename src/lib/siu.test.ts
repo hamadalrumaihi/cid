@@ -17,11 +17,24 @@ import {
   SIU_OPERATION_CATEGORIES, SIU_PRIORITY_DESIGNATIONS,
   siuDesignationLabel, siuNoteTypeLabel, siuOperationCategoryLabel,
   siuAssignableClassifications, siuCanAppoint, siuCanAppointRole, siuCanReadCid,
-  siuCanRemove, siuCaseAccess, siuIsAgent, siuIsCommand, siuOperates, siuStanding,
+  siuCanRemove, siuCaseAccess, siuCaseReadOnly, mayCreateCidCase, siuIsAgent, siuIsCommand, siuOperates, siuStanding,
   siuAuditLabel, siuCallsign, siuClassificationLabel, siuRoleLabel,
   SIU_AUDIENCES, SIU_AUDIENCE_LABEL, SIU_AUDIENCE_SHORT, SIU_HANDLING,
   SIU_HANDLING_LABEL, SIU_RELEASE_ITEM_TYPES, SIU_RELEASE_ITEM_LABEL,
   siuAudienceLabel, siuHandlingLabel, siuReleaseItemLabel,
+  SIU_CASE_CATEGORIES, SIU_CASE_CATEGORY_LABEL, SIU_CLOSURE_REASONS,
+  SIU_CLOSURE_REASON_LABEL, SIU_CONFLICT_RESOLUTIONS, SIU_CONFLICT_STATUSES,
+  SIU_CONFLICT_STATUS_LABEL, SIU_REFERRAL_CATEGORIES, SIU_REFERRAL_CATEGORY_LABEL,
+  SIU_REFERRAL_DISPOSITIONS, SIU_REFERRAL_STATUSES, SIU_REFERRAL_STATUS_LABEL,
+  SIU_STAGES, SIU_STAGE_HINT, SIU_STAGE_LABEL,
+  isPreliminaryInquiry, siuCanResolveConflict, siuCanReviewReferrals,
+  siuCaseCategoryLabel, siuClosureReasonLabel, siuConflictStatusLabel,
+  siuRecusesAccess, siuReferralCategoryLabel, siuReferralStatusLabel, siuStageLabel,
+  SIU_CREDIBILITY, SIU_CREDIBILITY_LABEL, SIU_SOURCE_TYPES, SIU_SOURCE_TYPE_LABEL,
+  SIU_REVIEW_OUTCOME_LABEL, SIU_TEMP_ACCESS_MAX_DAYS, SIU_WATCH_MAX_DAYS,
+  SIU_WATCH_ENTITY_TYPES, SIU_WATCH_ENTITY_LABEL, SIU_WATCH_PRIORITIES,
+  SIU_WATCH_PRIORITY_LABEL, isUngraded, reviewOverdue, siuCredibilityLabel,
+  siuSourceTypeLabel, siuWatchEntityLabel, tempAccessLive, watchExpiringWithin, watchLive,
   SIU_SOURCE_STATUSES, SIU_SOURCE_STATUS_LABEL, SIU_RELIABILITY,
   SIU_RELIABILITY_LABEL, siuReliabilityLabel,
   SIU_UNDERCOVER_STATUSES, SIU_UNDERCOVER_STATUS_LABEL, siuUndercoverStatusLabel,
@@ -582,5 +595,329 @@ describe('§14/§15 audit vocabulary', () => {
     }
     // …and an action the client has never heard of still shows, unhidden.
     expect(siuAuditLabel('SIU_FUTURE_THING')).toBe('SIU_FUTURE_THING')
+  })
+})
+
+describe('§15 — a preliminary inquiry is invisible to oversight', () => {
+  const agent = live({ membership: member() })
+  const sac = live({ membership: member({ siu_role: 'special_agent_in_charge', callsign: 'X-1' }) })
+  const director = live({ profile: profile({ role: 'director' }) })
+  const ag = live({ justiceRole: 'attorney_general' })
+
+  it('hides an inquiry from BOTH oversight holders, at standard classification', () => {
+    // Standard 'siu' classification is the weakest there is — the one an
+    // oversight holder normally reads. The stage alone is what closes it.
+    const inquiry = { siu_classification: 'siu', siu_stage: 'preliminary_inquiry' }
+    expect(siuCaseAccess(director, inquiry)).toBe(false)
+    expect(siuCaseAccess(ag, inquiry)).toBe(false)
+    // …while field access is completely unaffected. An inquiry is a normal
+    // piece of work for the people doing it.
+    expect(siuCaseAccess(agent, inquiry)).toBe(true)
+    expect(siuCaseAccess(sac, inquiry)).toBe(true)
+  })
+
+  it('opens to oversight the moment it is promoted', () => {
+    // Promotion is the ONE thing that changes, and it changes exactly this.
+    for (const ctx of [director, ag]) {
+      expect(siuCaseAccess(ctx, { siu_classification: 'siu', siu_stage: 'investigation' })).toBe(true)
+      // A case with no stage recorded at all is an ordinary investigation —
+      // never accidentally treated as an inquiry.
+      expect(siuCaseAccess(ctx, { siu_classification: 'siu' })).toBe(true)
+    }
+  })
+
+  it('does not let the stage widen anything above standard classification', () => {
+    // Promoting must never become a back door: a restricted/command/
+    // compartmented case stays shut to oversight at EITHER stage.
+    for (const cls of ['siu_restricted', 'siu_command', 'siu_compartmented']) {
+      for (const stage of ['preliminary_inquiry', 'investigation']) {
+        expect(siuCaseAccess(director, { siu_classification: cls, siu_stage: stage })).toBe(false)
+      }
+    }
+  })
+
+  it('reads a missing stage as a full investigation', () => {
+    expect(isPreliminaryInquiry({})).toBe(false)
+    expect(isPreliminaryInquiry({ siu_stage: null })).toBe(false)
+    expect(isPreliminaryInquiry({ siu_stage: 'preliminary_inquiry' })).toBe(true)
+    expect(siuStageLabel(null)).toBe('Full investigation')
+    for (const s of SIU_STAGES) {
+      expect(SIU_STAGE_LABEL[s], `${s} needs a label`).toBeTruthy()
+      expect(SIU_STAGE_HINT[s], `${s} needs a hint`).toBeTruthy()
+    }
+  })
+})
+
+describe('§17 — a declared conflict beats every grant', () => {
+  it('vetoes access at every standing and classification, owner included', () => {
+    // This is the property the server probe caught the first implementation
+    // failing: rank-based access ignored the declaration entirely. If the
+    // mirror ever regains a branch that outranks the veto, this fails.
+    const everyone = [
+      live({ profile: profile({ is_owner: true }) }),
+      live({ membership: member({ siu_role: 'special_agent_in_charge' }) }),
+      live({ membership: member({ siu_role: 'senior_special_agent' }) }),
+      live({ membership: member() }),
+      live({ profile: profile({ role: 'director' }) }),
+      live({ justiceRole: 'attorney_general' }),
+    ]
+    for (const ctx of everyone) {
+      for (const cls of ['siu', 'siu_restricted', 'siu_command', 'siu_compartmented']) {
+        expect(
+          siuCaseAccess(ctx, { siu_classification: cls }, { assigned: true, inCompartment: true, recused: true }),
+          `${cls} must stay shut to a recused account`,
+        ).toBe(false)
+      }
+    }
+  })
+
+  it('only "cleared" lifts the recusal', () => {
+    // 'reassigned' means the conflict was real and the case moved on — that is
+    // not a reason to hand the file back.
+    expect(siuRecusesAccess('declared')).toBe(true)
+    expect(siuRecusesAccess('acknowledged')).toBe(true)
+    expect(siuRecusesAccess('reassigned')).toBe(true)
+    expect(siuRecusesAccess('cleared')).toBe(false)
+  })
+
+  it('refuses to let an agent clear their own conflict', () => {
+    const sac = live({
+      profile: profile({ id: 'x1' }),
+      membership: member({ user_id: 'x1', siu_role: 'special_agent_in_charge' }),
+    })
+    expect(siuCanResolveConflict(sac, { agent_id: 'someone-else' })).toBe(true)
+    expect(siuCanResolveConflict(sac, { agent_id: 'x1' })).toBe(false)
+    // …and resolving is a command act regardless of whose conflict it is.
+    expect(siuCanResolveConflict(live({ membership: member() }), { agent_id: 'other' })).toBe(false)
+  })
+
+  it('offers every resolution except the declaring state itself', () => {
+    expect(SIU_CONFLICT_RESOLUTIONS).not.toContain('declared')
+    expect([...SIU_CONFLICT_RESOLUTIONS]).toEqual(['acknowledged', 'reassigned', 'cleared'])
+    for (const s of SIU_CONFLICT_STATUSES) expect(SIU_CONFLICT_STATUS_LABEL[s]).toBeTruthy()
+    expect(siuConflictStatusLabel('mystery')).toBe('mystery')
+  })
+})
+
+describe('§14 — the intake queue is a field function', () => {
+  it('is closed to oversight standing, which may name its own subject', () => {
+    // The sharp case: a referral can be ABOUT the Director. Giving the
+    // Director the queue would hand a subject the allegations against them.
+    expect(siuCanReviewReferrals(live({ profile: profile({ role: 'director' }) }))).toBe(false)
+    expect(siuCanReviewReferrals(live({ justiceRole: 'attorney_general' }))).toBe(false)
+    // Field standing at every rank may work it.
+    for (const r of ['special_agent', 'senior_special_agent', 'special_agent_in_charge']) {
+      expect(siuCanReviewReferrals(live({ membership: member({ siu_role: r }) }))).toBe(true)
+    }
+    expect(siuCanReviewReferrals(live({ profile: profile({ is_owner: true }) }))).toBe(true)
+    expect(siuCanReviewReferrals(live())).toBe(false)
+  })
+
+  it('cannot set a referral back to the arrival state by reviewing it', () => {
+    expect(SIU_REFERRAL_DISPOSITIONS).not.toContain('submitted')
+    expect(SIU_REFERRAL_STATUSES).toContain('submitted')
+  })
+
+  it('labels every referral category and status', () => {
+    for (const c of SIU_REFERRAL_CATEGORIES) expect(SIU_REFERRAL_CATEGORY_LABEL[c]).toBeTruthy()
+    for (const s of SIU_REFERRAL_STATUSES) expect(SIU_REFERRAL_STATUS_LABEL[s]).toBeTruthy()
+    expect(siuReferralCategoryLabel('mystery')).toBe('mystery')
+    expect(siuReferralStatusLabel(null)).toBe('—')
+  })
+})
+
+describe('§32/§33 — category and closure', () => {
+  it('keeps subject matter separate from sensitivity', () => {
+    // The two lists must not overlap. The moment a "category" doubles as a
+    // classification, units start over-classifying by subject.
+    const classifications = ['siu', 'siu_restricted', 'siu_command', 'siu_compartmented']
+    for (const c of SIU_CASE_CATEGORIES) expect(classifications).not.toContain(c)
+    for (const c of SIU_CASE_CATEGORIES) expect(SIU_CASE_CATEGORY_LABEL[c]).toBeTruthy()
+    expect(siuCaseCategoryLabel(null)).toBe('—')
+  })
+
+  it('offers a closure reason for the outcomes that are not wins', () => {
+    // A list that only describes successes pushes people to mislabel; these
+    // three are the ones that keep the register honest.
+    for (const r of ['unfounded', 'insufficient_evidence', 'inactive']) {
+      expect(SIU_CLOSURE_REASONS).toContain(r)
+    }
+    for (const r of SIU_CLOSURE_REASONS) expect(SIU_CLOSURE_REASON_LABEL[r]).toBeTruthy()
+    expect(siuClosureReasonLabel('mystery')).toBe('mystery')
+  })
+})
+
+describe('Delivery A audit vocabulary', () => {
+  it('names every lifecycle action rather than echoing the raw token', () => {
+    for (const a of [
+      'SIU_REFERRAL_SUBMITTED', 'SIU_REFERRAL_REVIEWED', 'SIU_INQUIRY_PROMOTED',
+      'SIU_CATEGORY_SET', 'SIU_CASE_CLOSED', 'SIU_CONFLICT_DECLARED',
+      'SIU_CONFLICT_RESOLVED',
+    ]) {
+      expect(siuAuditLabel(a), `${a} needs human wording`).not.toBe(a)
+    }
+  })
+})
+
+describe('§20/§21 — grading asks two questions, not one', () => {
+  it('keeps source reliability and information credibility as separate scales', () => {
+    // The whole point of the Admiralty pairing. If these two ever merge into
+    // one "confidence" value, a reliable source passing on a rumour starts
+    // reading as trustworthy — which is the classic way an assessment gets
+    // over-trusted.
+    for (const r of SIU_RELIABILITY) expect(SIU_CREDIBILITY).not.toContain(r)
+    for (const c of SIU_CREDIBILITY) expect(SIU_RELIABILITY).not.toContain(c)
+    for (const c of SIU_CREDIBILITY) expect(SIU_CREDIBILITY_LABEL[c]).toBeTruthy()
+    for (const t of SIU_SOURCE_TYPES) expect(SIU_SOURCE_TYPE_LABEL[t]).toBeTruthy()
+    expect(siuSourceTypeLabel(null)).toBe('—')
+  })
+
+  it('treats ungraded as ungraded, never as neutral-good', () => {
+    // A missing grade must never read as a pass. This is the client half of
+    // the server rule that the columns are nullable with no default.
+    expect(isUngraded({})).toBe(true)
+    expect(isUngraded({ info_credibility: null })).toBe(true)
+    expect(isUngraded({ info_credibility: 'cannot_judge' })).toBe(false)
+    expect(siuCredibilityLabel(null)).toBe('Ungraded')
+    expect(siuCredibilityLabel(undefined)).toBe('Ungraded')
+    // …and 'cannot_judge' is a DELIBERATE grade, distinct from never assessed.
+    expect(SIU_CREDIBILITY).toContain('cannot_judge')
+    expect(siuCredibilityLabel('cannot_judge')).not.toBe('Ungraded')
+  })
+
+  it('offers the downgrade outcomes, not just revalidation', () => {
+    for (const o of ['revalidated', 'downgraded', 'superseded', 'withdrawn']) {
+      expect(SIU_REVIEW_OUTCOME_LABEL[o], `${o} needs a label`).toBeTruthy()
+    }
+  })
+})
+
+describe('§23 — review dates', () => {
+  const iso = (msFromNow: number) => new Date(Date.now() + msFromNow).toISOString()
+
+  it('counts a past due date as overdue, and a resolved note as not', () => {
+    expect(reviewOverdue({ review_due_at: iso(-86_400_000) })).toBe(true)
+    expect(reviewOverdue({ review_due_at: iso(86_400_000) })).toBe(false)
+    // Resolved wins: a withdrawn note is not an outstanding chore.
+    expect(reviewOverdue({ review_due_at: iso(-86_400_000), resolved_at: iso(-1000) })).toBe(false)
+    // No date at all is "never graded", which the UI surfaces separately via
+    // isUngraded rather than pretending it is a scheduled review.
+    expect(reviewOverdue({})).toBe(false)
+  })
+})
+
+describe('§25 — a watch always ends', () => {
+  const iso = (msFromNow: number) => new Date(Date.now() + msFromNow).toISOString()
+  const entry = (over: Record<string, unknown> = {}) => ({
+    id: 'w1', entity_type: 'person', entity_id: null, label: 'Subject',
+    reason: 'r', case_id: null, priority: 'routine',
+    expires_at: iso(30 * 86_400_000), review_due_at: null, status: 'active',
+    removed_at: null, removed_by: null, removal_reason: null,
+    created_by: null, created_at: iso(0), ...over,
+  })
+
+  it('reads expiry off the CLOCK, not off the status column', () => {
+    // A stale 'active' row must never keep a watch alive past its end date —
+    // mirrors private.siu_watch_live(), which is deliberately time-based so no
+    // sweeper job has to run for expiry to bite.
+    expect(watchLive(entry())).toBe(true)
+    expect(watchLive(entry({ expires_at: iso(-1000) }))).toBe(false)
+    expect(watchLive(entry({ status: 'removed' }))).toBe(false)
+    expect(watchLive({ status: 'active' })).toBe(false)
+  })
+
+  it('flags an entry about to lapse', () => {
+    expect(watchExpiringWithin(entry({ expires_at: iso(3 * 86_400_000) }), 14)).toBe(true)
+    expect(watchExpiringWithin(entry({ expires_at: iso(30 * 86_400_000) }), 14)).toBe(false)
+    // An already-dead watch is not "expiring" — it has expired.
+    expect(watchExpiringWithin(entry({ expires_at: iso(-1000) }), 14)).toBe(false)
+  })
+
+  it('caps a single grant at a year, and mirrors the server exactly', () => {
+    expect(SIU_WATCH_MAX_DAYS).toBe(365)
+    for (const t of SIU_WATCH_ENTITY_TYPES) expect(SIU_WATCH_ENTITY_LABEL[t]).toBeTruthy()
+    for (const p of SIU_WATCH_PRIORITIES) expect(SIU_WATCH_PRIORITY_LABEL[p]).toBeTruthy()
+    expect(siuWatchEntityLabel('mystery')).toBe('mystery')
+  })
+})
+
+describe('§30 — supporting access is time-boxed', () => {
+  const iso = (msFromNow: number) => new Date(Date.now() + msFromNow).toISOString()
+
+  it('is dead once expired or revoked, whatever else is true', () => {
+    expect(tempAccessLive({ expires_at: iso(86_400_000) })).toBe(true)
+    expect(tempAccessLive({ expires_at: iso(-1000) })).toBe(false)
+    expect(tempAccessLive({ expires_at: iso(86_400_000), revoked_at: iso(-1000) })).toBe(false)
+    expect(tempAccessLive({})).toBe(false)
+  })
+
+  it('caps a grant at 30 days — much shorter than a watch, deliberately', () => {
+    // A supporting officer is borrowed for a task, not seconded to the unit.
+    expect(SIU_TEMP_ACCESS_MAX_DAYS).toBe(30)
+    expect(SIU_TEMP_ACCESS_MAX_DAYS).toBeLessThan(SIU_WATCH_MAX_DAYS)
+  })
+})
+
+describe('Delivery B audit vocabulary', () => {
+  it('names every new action rather than echoing the raw token', () => {
+    for (const a of [
+      'SIU_INTEL_GRADED', 'SIU_INTEL_REVIEWED', 'SIU_WATCH_ADDED',
+      'SIU_WATCH_EXTENDED', 'SIU_WATCH_REMOVED',
+      'SIU_TEMP_ACCESS_GRANTED', 'SIU_TEMP_ACCESS_REVOKED',
+    ]) {
+      expect(siuAuditLabel(a), `${a} needs human wording`).not.toBe(a)
+    }
+  })
+})
+
+describe('cross-department write gates — read is not write', () => {
+  const cidCase = { case_authority: 'cid' }
+  const siuCase = { case_authority: 'siu' }
+
+  it('makes every CID case read-only for an SIU department member', () => {
+    // The server refuses these by matching ZERO ROWS, not by erroring — so an
+    // Edit control left visible would appear to save and change nothing. This
+    // is the client half of can_access_case()'s `not is_siu_department()`.
+    const agent = { department: 'siu' as const, standing: 'special_agent' as const }
+    expect(siuCaseReadOnly(agent, cidCase)).toBe(true)
+    // …and their OWN department's work is untouched.
+    expect(siuCaseReadOnly(agent, siuCase)).toBe(false)
+  })
+
+  it('makes every SIU investigation read-only for oversight', () => {
+    // The Director of CID and the AG read the unit's standard investigations
+    // and work none of them — siu_case_access() admits only owner/field.
+    const oversight = { department: 'cid' as const, standing: 'oversight' as const }
+    expect(siuCaseReadOnly(oversight, siuCase)).toBe(true)
+    // Oversight standing is a CID role holder: their CID rights are unchanged.
+    expect(siuCaseReadOnly(oversight, cidCase)).toBe(false)
+  })
+
+  it('leaves an ordinary CID member entirely alone', () => {
+    // The gate must NARROW, never widen, and must be inert for the 99% case.
+    const cid = { department: 'cid' as const, standing: null }
+    expect(siuCaseReadOnly(cid, cidCase)).toBe(false)
+    expect(siuCaseReadOnly(cid, siuCase)).toBe(false)
+    // A missing authority reads as CID, like caseDepartment() everywhere else.
+    expect(siuCaseReadOnly(cid, {})).toBe(false)
+    expect(siuCaseReadOnly({ department: 'siu', standing: 'special_agent' }, {})).toBe(true)
+  })
+
+  it('keeps the owner writing CID cases while they browse the SIU workspace', () => {
+    // The owner holds SIU 'owner' standing but their DEPARTMENT is still cid
+    // (userDepartment excludes oversight-only and unappointed accounts), so
+    // switching workspace must not cost them their CID write rights.
+    const owner = { department: 'cid' as const, standing: 'owner' as const }
+    expect(siuCaseReadOnly(owner, cidCase)).toBe(false)
+    expect(siuCaseReadOnly(owner, siuCase)).toBe(false)
+    expect(mayCreateCidCase('cid')).toBe(true)
+  })
+
+  it('withholds CID case creation from SIU department members', () => {
+    // can_create_case() never excluded them, but the guard trigger forces
+    // case_authority='cid' and can_access_case() then locks them out of what
+    // they just made. Creating a case that vanishes is worse than no button.
+    expect(mayCreateCidCase('siu')).toBe(false)
+    expect(mayCreateCidCase('cid')).toBe(true)
   })
 })

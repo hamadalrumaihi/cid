@@ -1093,8 +1093,12 @@ export type Database = {
           siu_assumed_at: string | null
           siu_assumed_by: string | null
           siu_assumption_reason: string | null
+          siu_category: string | null
           siu_classification: string | null
+          siu_closure_note: string | null
+          siu_closure_reason: string | null
           siu_returned_at: string | null
+          siu_stage: string | null
           status: Database["public"]["Enums"]["case_status"]
           summary: string | null
           title: string | null
@@ -1133,8 +1137,12 @@ export type Database = {
           siu_assumed_at?: string | null
           siu_assumed_by?: string | null
           siu_assumption_reason?: string | null
+          siu_category?: string | null
           siu_classification?: string | null
+          siu_closure_note?: string | null
+          siu_closure_reason?: string | null
           siu_returned_at?: string | null
+          siu_stage?: string | null
           status?: Database["public"]["Enums"]["case_status"]
           summary?: string | null
           title?: string | null
@@ -1173,8 +1181,12 @@ export type Database = {
           siu_assumed_at?: string | null
           siu_assumed_by?: string | null
           siu_assumption_reason?: string | null
+          siu_category?: string | null
           siu_classification?: string | null
+          siu_closure_note?: string | null
+          siu_closure_reason?: string | null
           siu_returned_at?: string | null
+          siu_stage?: string | null
           status?: Database["public"]["Enums"]["case_status"]
           summary?: string | null
           title?: string | null
@@ -7415,6 +7427,13 @@ export type Database = {
           case_id: string
           created_at: string
           created_by: string | null
+          info_credibility: string | null
+          last_reviewed_at: string | null
+          last_reviewed_by: string | null
+          review_due_at: string | null
+          review_outcome: string | null
+          source_reliability: string | null
+          source_type: string | null
           id: string
           note_type: string
           resolution: string | null
@@ -7430,6 +7449,13 @@ export type Database = {
           case_id: string
           created_at?: string
           created_by?: string | null
+          info_credibility?: string | null
+          last_reviewed_at?: string | null
+          last_reviewed_by?: string | null
+          review_due_at?: string | null
+          review_outcome?: string | null
+          source_reliability?: string | null
+          source_type?: string | null
           id?: string
           note_type?: string
           resolution?: string | null
@@ -7445,6 +7471,13 @@ export type Database = {
           case_id?: string
           created_at?: string
           created_by?: string | null
+          info_credibility?: string | null
+          last_reviewed_at?: string | null
+          last_reviewed_by?: string | null
+          review_due_at?: string | null
+          review_outcome?: string | null
+          source_reliability?: string | null
+          source_type?: string | null
           id?: string
           note_type?: string
           resolution?: string | null
@@ -8069,6 +8102,207 @@ export type Database = {
           id?: boolean
           updated_at?: string
           updated_by?: string | null
+        }
+        Relationships: []
+      }
+      siu_watchlist: {
+        Row: {
+          case_id: string | null
+          created_at: string
+          created_by: string | null
+          entity_id: string | null
+          entity_type: string
+          expires_at: string
+          id: string
+          label: string
+          priority: string
+          reason: string
+          removal_reason: string | null
+          removed_at: string | null
+          removed_by: string | null
+          review_due_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          case_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          entity_id?: string | null
+          entity_type: string
+          expires_at: string
+          id?: string
+          label: string
+          priority?: string
+          reason: string
+          removal_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          review_due_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          case_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          entity_id?: string | null
+          entity_type?: string
+          expires_at?: string
+          id?: string
+          label?: string
+          priority?: string
+          reason?: string
+          removal_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          review_due_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      siu_temporary_access: {
+        Row: {
+          case_id: string
+          created_at: string
+          expires_at: string
+          granted_at: string
+          granted_by: string | null
+          id: string
+          reason: string
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          case_id: string
+          created_at?: string
+          expires_at: string
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          reason: string
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          case_id?: string
+          created_at?: string
+          expires_at?: string
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          reason?: string
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      siu_referrals: {
+        Row: {
+          category: string
+          created_at: string
+          detail: string | null
+          id: string
+          opened_case_id: string | null
+          related_case_id: string | null
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          subject_description: string | null
+          subject_user_id: string | null
+          submitted_at: string
+          submitted_by: string | null
+          summary: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          detail?: string | null
+          id?: string
+          opened_case_id?: string | null
+          related_case_id?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          subject_description?: string | null
+          subject_user_id?: string | null
+          submitted_at?: string
+          submitted_by?: string | null
+          summary: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          detail?: string | null
+          id?: string
+          opened_case_id?: string | null
+          related_case_id?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          subject_description?: string | null
+          subject_user_id?: string | null
+          submitted_at?: string
+          submitted_by?: string | null
+          summary?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      siu_conflicts: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          agent_id: string
+          case_id: string
+          created_at: string
+          declared_at: string
+          id: string
+          reason: string
+          resolution_note: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          agent_id: string
+          case_id: string
+          created_at?: string
+          declared_at?: string
+          id?: string
+          reason: string
+          resolution_note?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          agent_id?: string
+          case_id?: string
+          created_at?: string
+          declared_at?: string
+          id?: string
+          reason?: string
+          resolution_note?: string | null
+          status?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -10071,6 +10305,121 @@ export type Database = {
       }
       siu_set_callsign: {
         Args: { p_callsign: string; p_user: string }
+        Returns: undefined
+      }
+      siu_grade_note: {
+        Args: {
+          p_credibility: string
+          p_note: string
+          p_reliability: string
+          p_review_due?: string
+          p_source_type: string
+        }
+        Returns: undefined
+      }
+      siu_review_note: {
+        Args: {
+          p_next_review?: string
+          p_note: string
+          p_note_text: string
+          p_outcome: string
+        }
+        Returns: undefined
+      }
+      siu_intel_quality: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      siu_watch_add: {
+        Args: {
+          p_case?: string
+          p_days?: number
+          p_entity_id?: string
+          p_entity_type: string
+          p_label: string
+          p_priority?: string
+          p_reason: string
+        }
+        Returns: string
+      }
+      siu_watch_extend: {
+        Args: { p_days: number; p_id: string; p_reason: string }
+        Returns: undefined
+      }
+      siu_watch_remove: {
+        Args: { p_id: string; p_reason: string }
+        Returns: undefined
+      }
+      siu_deconflict: {
+        Args: { p_entity_id?: string; p_entity_type: string; p_label?: string }
+        Returns: Json
+      }
+      siu_grant_temp_access: {
+        Args: { p_case: string; p_days?: number; p_reason: string; p_user: string }
+        Returns: string
+      }
+      siu_revoke_temp_access: {
+        Args: { p_id: string; p_reason: string }
+        Returns: undefined
+      }
+      siu_command_dashboard: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      siu_oversight_supplement: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      siu_submit_referral: {
+        Args: {
+          p_category: string
+          p_detail?: string
+          p_related_case?: string
+          p_subject_description?: string
+          p_subject_user?: string
+          p_summary: string
+        }
+        Returns: string
+      }
+      siu_my_referrals: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          acknowledged: boolean
+          category: string
+          id: string
+          submitted_at: string
+          summary: string
+        }[]
+      }
+      siu_review_referral: {
+        Args: {
+          p_category?: string
+          p_classification?: string
+          p_disposition: string
+          p_note: string
+          p_open_as?: string
+          p_referral: string
+        }
+        Returns: string
+      }
+      siu_promote_inquiry: {
+        Args: { p_case: string; p_reason: string }
+        Returns: undefined
+      }
+      siu_set_case_category: {
+        Args: { p_case: string; p_category: string }
+        Returns: undefined
+      }
+      siu_close_case: {
+        Args: { p_case: string; p_note: string; p_reason: string }
+        Returns: undefined
+      }
+      siu_declare_conflict: {
+        Args: { p_case: string; p_reason: string }
+        Returns: string
+      }
+      siu_resolve_conflict: {
+        Args: { p_conflict: string; p_note: string; p_status: string }
         Returns: undefined
       }
       siu_set_case_classification: {

@@ -38,6 +38,8 @@ export const CategoryIcon = ({ cat, size }: { cat: string; size?: number }) => {
       return <T size={size}><path d="M12 3.5l7.5 2.8v5.4c0 4.2-3 7.3-7.5 8.8-4.5-1.5-7.5-4.6-7.5-8.8V6.3z" /><path d="M9 12l2 2 4-4" /></T>
     case 'feedback':
       return <T size={size}><path d="M20.5 12a8.5 8.5 0 1 0-3.3 6.7l3.3 1.3-1-3.4a8.4 8.4 0 0 0 1-4.6z" /></T>
+    case 'concern':
+      return <T size={size}><path d="M12 3.5l8.5 15H3.5z" /><path d="M12 9.5v4" /><path d="M12 16.5h.01" /></T>
     default:
       return null
   }

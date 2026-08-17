@@ -16,7 +16,7 @@ import { useAuth } from '@/lib/auth'
 import { useSiu } from '@/lib/useSiu'
 import { caseDepartment, siuClassificationLabel, siuClassificationTint, termsFor } from '@/lib/siu'
 import { ReleasedIntelligence } from './ReleasedIntelligence'
-import { SiuControlBar } from './SiuControlBar'
+import { SiuCaseLifecycle, SiuControlBar } from './SiuControlBar'
 import { Badge } from '@/components/ui/Badge'
 import { useOperationsStore } from '@/lib/operations'
 import { caseJointInfo, type OpCaseLinkRow } from '@/lib/opsJoint'
@@ -112,7 +112,7 @@ export interface WorkflowRows {
 export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () => void; onChanged: () => void }) {
   const sp = useSearchParams()
   const auth = useAuth()
-  const { profile, canEdit, canDelete, isCommand, isOwner } = auth
+  const { profile, canEdit: authCanEdit, canDelete: authCanDelete, isCommand, isOwner } = auth
   const siu = useSiu()
   const operations = useOperationsStore((s) => s.operations)
   const [c, setCase] = useState<CaseRow | null>(null)
@@ -390,6 +390,14 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   // investigation says "Lead Agent", a CID case says "Lead Detective" — while
   // the viewer's own context (siu.inSiu) decides whether the external-access
   // banner is shown. The two are deliberately separate (§12, §20).
+  // Narrow the write gates to what the server will actually accept. RLS
+  // refuses a cross-department write by matching ZERO ROWS rather than
+  // erroring, so leaving Edit visible would let it appear to save and change
+  // nothing. See siuCaseReadOnly().
+  const readOnly = siu.caseReadOnly(c)
+  const canEdit = authCanEdit && !readOnly
+  const canDelete = authCanDelete && !readOnly
+
   const caseDept = caseDepartment(c)
   const caseTerms = termsFor(caseDept)
 
@@ -454,6 +462,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
           and ReleasedIntelligence renders nothing when nothing was released —
           a CID case untouched by SIU looks exactly as it always did. */}
       <SiuControlBar caseRow={c} onChanged={() => { void fetchCase(); onChanged() }} />
+      <SiuCaseLifecycle caseRow={c} onChanged={() => { void fetchCase(); onChanged() }} />
       {caseDept === 'cid' && <ReleasedIntelligence caseId={c.id} />}
       {c.archived_at && (
         <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">

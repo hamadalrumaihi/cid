@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { list, rpc, updateWhere, withRetry } from '@/lib/db'
 import { timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
+import { useSiu } from '@/lib/useSiu'
+import { caseDepartment } from '@/lib/siu'
 import { useOperationsStore } from '@/lib/operations'
 import { notify } from '@/lib/notify'
 import { activeProfiles, officerName, useProfilesStore } from '@/lib/profiles'
@@ -44,7 +46,15 @@ export function CasesView() {
 function CasesViewInner() {
   const router = useRouter()
   const sp = useSearchParams()
-  const { profile, canEdit, canDelete } = useAuth()
+  const { profile, canEdit: authCanEdit, canDelete: authCanDelete } = useAuth()
+  const siu = useSiu()
+  // An SIU department member reads CID cases and writes none of them
+  // (can_access_case()'s CID branch ends with `not is_siu_department()`), and
+  // a CID case they created would immediately become invisible to them. So the
+  // create and bulk-archive controls are withdrawn wholesale in the SIU
+  // workspace rather than left to fail silently per row.
+  const canEdit = authCanEdit && siu.mayCreateCase
+  const canDelete = authCanDelete && !siu.inSiu
   const [showArchived, setShowArchived] = useState(false)
   const [cases, setCases] = useState<CaseRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -134,7 +144,10 @@ function CasesViewInner() {
     <div className="space-y-4">
       <PageHeader
         title="Case Files"
-        eyebrow="Live Cases"
+        eyebrow={siu.inSiu ? 'SIU + Division cases' : 'Live Cases'}
+        subtitle={siu.inSiu
+          ? 'Your unit\u2019s investigations and every Division case, in one list. Division cases are read-only under SIU authority.'
+          : undefined}
         actions={
           <>
             {canDelete && <Button onClick={setAllSelected}>{selected.length === filtered.length && filtered.length ? 'Deselect all' : `Select all (${filtered.length})`}</Button>}
@@ -161,7 +174,7 @@ function CasesViewInner() {
       {loading ? <CardGridSkeleton />
         : view === 'board' ? <CaseBoard items={filtered} canEdit={canEdit} onOpen={openCase} onMoved={fetchCases} />
         : view === 'grid' ? <div className={CASE_GRID_CLASS}>{filtered.map((c, i) => <CaseCard key={c.id} c={c} index={i} selected={selected.includes(c.id)} canDelete={canDelete} onSelect={(on) => setSelected((s) => on ? [...s, c.id] : s.filter((x) => x !== c.id))} onOpen={() => openCase(c.id)} />)}</div>
-        : <CaseTable items={filtered} canDelete={canDelete} selected={selected} onSelect={(id, on) => setSelected((s) => on ? [...s, id] : s.filter((x) => x !== id))} onOpen={openCase} />}
+        : <CaseTable items={filtered} canDelete={canDelete} showDept={siu.inSiu} selected={selected} onSelect={(id, on) => setSelected((s) => on ? [...s, id] : s.filter((x) => x !== id))} onOpen={openCase} />}
       {!loading && !filtered.length && view !== 'table' && <Notice text="No cases match this view." />}
 
       {selected.length > 0 && <div className="sticky bottom-4 z-20 flex items-center justify-between rounded-2xl border border-white/10 bg-ink-850 p-3 shadow-glow">
@@ -178,9 +191,12 @@ function CasesViewInner() {
  * the grid/board (search, filters, saved views and scope all apply), row
  * click opens the case, the mono case number is the keyboard path, and the
  * canDelete checkbox column feeds the same bulk-action bar. ── */
-function CaseTable({ items, canDelete, selected, onSelect, onOpen }: {
+function CaseTable({ items, canDelete, showDept, selected, onSelect, onOpen }: {
   items: CaseRow[]
   canDelete: boolean
+  /** Only in the SIU workspace, where the list mixes both departments and the
+   *  difference decides whether the viewer can do anything with a row. */
+  showDept?: boolean
   selected: string[]
   onSelect: (id: string, on: boolean) => void
   onOpen: (id: string) => void
@@ -208,6 +224,14 @@ function CaseTable({ items, canDelete, selected, onSelect, onOpen }: {
       ),
       className: 'px-3 py-1.5 whitespace-nowrap',
     },
+    ...(showDept ? [{
+      key: 'dept', label: 'Authority',
+      value: (c: CaseRow) => caseDepartment(c) === 'siu' ? 'SIU' : 'CID',
+      render: (c: CaseRow) => caseDepartment(c) === 'siu'
+        ? <span className="rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide bg-violet-500/15 text-violet-300">SIU</span>
+        : <span className="rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide bg-white/5 text-slate-400">CID</span>,
+      className: 'px-3 py-1.5 whitespace-nowrap',
+    } satisfies DataColumn<CaseRow>] : []),
     {
       key: 'title', label: 'Title', value: (c) => c.title || 'Untitled case',
       render: (c) => <span className="line-clamp-1 font-semibold text-white">{c.title || 'Untitled case'}</span>,

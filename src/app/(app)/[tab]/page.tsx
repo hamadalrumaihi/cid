@@ -33,7 +33,7 @@ import { LegalView } from '@/components/legal/LegalView'
 // heavy/rare views — owner tooling, the handbook, chart-heavy analysis tabs —
 // stay out of the page chunk every route shares. Hot paths stay static above.
 import {
-  AuditView, BallisticsView, DevDocsView, FeedbackView, HeatmapView,
+  AuditView, BallisticsView, ConcernView, DevDocsView, FeedbackView, HeatmapView,
   ModusView, NarcoticsView, NetworkView, OwnerView, RicoView, SiuView,
 } from './lazyViews'
 
@@ -172,6 +172,13 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="feedback" />}>
         <FeedbackView />
+      </Suspense>
+    )
+  }
+  if (tab === 'concern') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="concern" />}>
+        <ConcernView />
       </Suspense>
     )
   }

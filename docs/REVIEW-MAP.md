@@ -81,4 +81,22 @@ Notes kept accurate to the RLS/RPC reality:
 - **No self-decisions anywhere**: membership self-review, transfer self-approval, sign-off deciding your own submission stage, reviewing your own legal request, and removing yourself are all rejected server-side.
 - **Justice ↔ CID separation**: an ADA/DA/AG/Judge gets no CID case, roster, or evidence access — legal reviewers see only the request and its deliberately-selected exhibit packet (`tests/rls/legal.test.ts` packet-isolation assertions). A Judge never outranks a Director; a DA is not CID command.
 - **Conflict-of-role**: whoever acted on the prosecution side of a legal request can never be its Judge (`private.legal_is_prosecution_side`); prosecutor signatures never satisfy judicial approval.
+- **Self-recusal beats seniority (SIU §17)**: `siu_declare_conflict()` inserts a
+  row that `private.siu_recused()` reads as a hard veto, checked *first* in
+  `siu_case_access()` — above rank, above SIU command, above `owner`. Only a
+  different member of SIU command can lift it (`siu_resolve_conflict()` refuses
+  the declarer), and only the `cleared` status restores access.
+- **The SIU intake queue is closed to oversight**: `siu_referrals` is gated on
+  `siu_is_agent()`, not on SIU standing generally, because a referral can name
+  the Director of CID or the Attorney General. Submitting is open to every
+  active member; the submitter's receipt carries no review column.
+- **§30 supporting access is not SIU standing**: a grant opens ONE investigation's
+  case file and no `siu_*` table at all — it is spliced into
+  `can_access_case()`/`_row()`, never into `siu_case_access()`. Standard
+  classification only, 30 days maximum, and the classification test lives in the
+  predicate so reclassifying upward closes every outstanding grant at once.
+- **Deconfliction does not pierce a compartment**: `siu_deconflict()` excludes
+  compartmented investigations from its hit count entirely, so a clean result is
+  not proof nobody else is interested. Deliberate — a hit count is an existence
+  oracle. Compartment members deconflict through command.
 - **Client UI mirrors, server decides**: the matrix above is enforced in SQL; `src/lib/roles.ts` mirrors it for option filtering only, pinned by `src/lib/roles.test.ts`.

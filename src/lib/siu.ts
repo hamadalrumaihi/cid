@@ -414,7 +414,9 @@ export function siuStanding(ctx: SiuContext): SiuStanding | null {
   // Director of CID — SIU's command authority per the unit's SOP. Oversight
   // standing only: departmental administration and standard investigations,
   // never restricted/command/compartmented ones, so an investigation INTO the
-  // Director stays possible by classifying it above 'siu'.
+  // Director stays possible by classifying it above 'siu' — or, before the unit
+  // is even sure, by keeping it a preliminary inquiry (§15), which oversight
+  // cannot see at ANY classification. See siuCaseAccess().
   if (p.role === 'director') return 'oversight'
   return null
 }
@@ -502,11 +504,14 @@ export const siuAssignableClassifications = (ctx: SiuContext): readonly SiuClass
  *  owner included — substitutes for an allow-list row. */
 export function siuCaseAccess(
   ctx: SiuContext,
-  caseRow: { siu_classification?: string | null },
-  facts: { assigned?: boolean; inCompartment?: boolean } = {},
+  caseRow: { siu_classification?: string | null; siu_stage?: string | null },
+  facts: { assigned?: boolean; inCompartment?: boolean; recused?: boolean } = {},
 ): boolean {
   const s = siuStanding(ctx)
   if (!s) return false
+  // §17. A live conflict beats every grant below, rank and owner included —
+  // mirrors the recusal branch at the top of `private.siu_case_access()`.
+  if (facts.recused) return false
   const command = s === 'owner' || s === 'special_agent_in_charge'
   switch (caseRow.siu_classification ?? 'siu') {
     case 'siu_compartmented':
@@ -519,11 +524,71 @@ export function siuCaseAccess(
         || !!facts.inCompartment
     default:
       // Standard investigations are visible to field agents AND to oversight
-      // authority (Director of CID, Attorney General) per the SOP.
-      return command || s === 'special_agent' || s === 'senior_special_agent'
-        || s === 'oversight' || !!facts.inCompartment
+      // authority (Director of CID, Attorney General) per the SOP — except
+      // while the case is a PRELIMINARY INQUIRY (§15), which oversight cannot
+      // see at any classification. Field access is unaffected.
+      if (command || s === 'special_agent' || s === 'senior_special_agent') return true
+      if (facts.inCompartment) return true
+      return s === 'oversight' && caseRow.siu_stage !== 'preliminary_inquiry'
   }
 }
+
+/** Is this case READ-ONLY for this viewer because of the departmental split?
+ *
+ *  Mirrors the two places the server refuses a write outright, and nothing
+ *  else — it narrows `useAuth().canEdit`, never widens it:
+ *
+ *   * An SIU DEPARTMENT member looking at a CID case. `private.can_access_case()`
+ *     ends its CID branch with `not private.is_siu_department()`, so every
+ *     write is refused. SIU's broad CID visibility is a READ grant
+ *     (`siu_oversight_read()` feeding `can_read_case`) and always was.
+ *   * OVERSIGHT standing looking at an SIU investigation. `siu_case_access()`
+ *     admits only owner/field standing, so the Director of CID and the AG read
+ *     the unit's standard investigations and work none of them.
+ *
+ *  This exists because the alternative is worse than a missing button. RLS
+ *  refuses those writes by returning ZERO ROWS, not by erroring — so an Edit
+ *  control left visible would appear to save and change nothing, with no way
+ *  for the user to tell. A control that appears to work is a lie; an absent
+ *  control is just a boundary.
+ *
+ *  Takes RESOLVED viewer facts rather than a SiuContext, so it consumes the
+ *  server's answer from `siu_department_context()` instead of re-deriving one
+ *  that could disagree with it.
+ *
+ *  Per-case membership facts (assignment, compartment) are deliberately NOT
+ *  modelled: the client cannot know them for a CID case, and guessing would
+ *  either hide a control someone legitimately has or show one they do not.
+ *  Those cases keep the existing behaviour and the server decides. */
+export function siuCaseReadOnly(
+  viewer: { department: Department; standing: SiuStanding | null },
+  caseRow: { case_authority?: string | null },
+): boolean {
+  if (caseDepartment(caseRow) === 'cid') return viewer.department === 'siu'
+  return viewer.standing === 'oversight'
+}
+
+/** May this viewer create a CID case? An SIU department member technically
+ *  can — `private.can_create_case()` never excluded them — but the case is
+ *  forced to `case_authority = 'cid'` by the guard trigger, and
+ *  `can_access_case()` then refuses them access to it. They would create a
+ *  case and watch it vanish. Offering the control is worse than not.
+ *
+ *  NOTE this is a UX guard over a real server-side oddity, not a fix for it:
+ *  the INSERT itself is still permitted. Recorded rather than quietly patched,
+ *  because changing `can_create_case()` touches CID's own create path. */
+export const mayCreateCidCase = (department: Department) => department !== 'siu'
+
+/** §14. Who may work the intake queue. Field standing only, NOT oversight: a
+ *  referral may name the Director of CID, and reading the queue would hand its
+ *  subject the allegations against them. Oversight sees referral VOLUME through
+ *  `siu_oversight_report()` and never contents. */
+export const siuCanReviewReferrals = (ctx: SiuContext) => siuIsAgent(ctx)
+
+/** §17. Resolving a conflict is a command act, and never one's own — the
+ *  not-self rule lives in `public.siu_resolve_conflict()`. */
+export const siuCanResolveConflict = (ctx: SiuContext, conflict: { agent_id: string }) =>
+  siuIsCommand(ctx) && conflict.agent_id !== ctx.profile?.id
 
 // ---------------------------------------------------------------------------
 // Data access — every SIU read/write goes through a gated RPC
@@ -718,6 +783,540 @@ export async function fetchSiuExports(caseId?: string): Promise<SiuExportRow[]> 
   return rows as unknown as SiuExportRow[]
 }
 
+// ---------------------------------------------------------------------------
+// §20/§21/§23 Intelligence quality — TWO questions, not one
+// ---------------------------------------------------------------------------
+
+/** HOW the information was obtained. Distinct from who said it and from
+ *  whether it is true — those are the two grades below. */
+export const SIU_SOURCE_TYPES = [
+  'human_source', 'officer_observation', 'surveillance', 'technical',
+  'documentary', 'open_source', 'anonymous', 'partner_agency', 'other',
+] as const
+
+export const SIU_SOURCE_TYPE_LABEL: Record<string, string> = {
+  human_source: 'Human source',
+  officer_observation: 'Officer observation',
+  surveillance: 'Surveillance',
+  technical: 'Technical',
+  documentary: 'Documentary',
+  open_source: 'Open source',
+  anonymous: 'Anonymous',
+  partner_agency: 'Partner agency',
+  other: 'Other',
+}
+
+/** The second half of the Admiralty pairing. SIU_RELIABILITY grades the
+ *  SOURCE; this grades the INFORMATION. Keeping them apart is the whole point:
+ *  a reliable source can pass on a rumour, and an untested source can be
+ *  right. Collapsing the two into one "confidence" number is the classic way
+ *  an assessment gets over-trusted. */
+export const SIU_CREDIBILITY = [
+  'confirmed', 'probably_true', 'possibly_true',
+  'doubtful', 'improbable', 'cannot_judge',
+] as const
+
+export const SIU_CREDIBILITY_LABEL: Record<string, string> = {
+  confirmed: 'Confirmed by other sources',
+  probably_true: 'Probably true',
+  possibly_true: 'Possibly true',
+  doubtful: 'Doubtful',
+  improbable: 'Improbable',
+  cannot_judge: 'Cannot be judged',
+}
+
+export const SIU_REVIEW_OUTCOME_LABEL: Record<string, string> = {
+  revalidated: 'Revalidated',
+  downgraded: 'Downgraded',
+  superseded: 'Superseded',
+  withdrawn: 'Withdrawn',
+}
+
+export const siuSourceTypeLabel = (t?: string | null) =>
+  (t && SIU_SOURCE_TYPE_LABEL[t]) || t || '—'
+export const siuCredibilityLabel = (c?: string | null) =>
+  (c && SIU_CREDIBILITY_LABEL[c]) || 'Ungraded'
+export const siuReviewOutcomeLabel = (o?: string | null) =>
+  (o && SIU_REVIEW_OUTCOME_LABEL[o]) || o || '—'
+
+/** Ungraded is a REAL state, never a silent pass. Nothing anywhere treats a
+ *  missing grade as good — mirrors the server, where the columns are nullable
+ *  with no default precisely so that "nobody has assessed this" stays visible. */
+export const isUngraded = (n: { info_credibility?: string | null }) => !n.info_credibility
+
+export const siuCredibilityTint = (c?: string | null): string =>
+  c === 'confirmed' ? 'bg-emerald-500/15 text-emerald-300'
+  : c === 'probably_true' ? 'bg-blue-500/15 text-blue-300'
+  : c === 'doubtful' || c === 'improbable' ? 'bg-rose-500/15 text-rose-300'
+  : c === 'possibly_true' ? 'bg-amber-500/15 text-amber-300'
+  : 'bg-white/5 text-slate-300'
+
+/** §23. Intelligence rots, so a review date is a first-class fact. A null date
+ *  means never graded — which is overdue in spirit, and the UI says so. */
+export const reviewOverdue = (n: { review_due_at?: string | null; resolved_at?: string | null }) =>
+  !n.resolved_at && !!n.review_due_at && new Date(n.review_due_at) < new Date()
+
+export interface SiuIntelQuality {
+  access: boolean
+  notes?: number
+  ungraded?: number
+  confirmed?: number
+  doubtful?: number
+  untested_source?: number
+  review_overdue?: number
+  review_due_30d?: number
+  withdrawn?: number
+}
+
+export async function fetchSiuIntelQuality(): Promise<SiuIntelQuality> {
+  const res = await rpc('siu_intel_quality', {})
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuIntelQuality | null) ?? { access: false }
+}
+
+// ---------------------------------------------------------------------------
+// §25 Watchlist
+// ---------------------------------------------------------------------------
+
+export const SIU_WATCH_ENTITY_TYPES = [
+  'person', 'vehicle', 'gang', 'place', 'organization', 'account', 'indicator', 'unknown',
+] as const
+
+export const SIU_WATCH_ENTITY_LABEL: Record<string, string> = {
+  person: 'Person', vehicle: 'Vehicle', gang: 'Gang', place: 'Place',
+  organization: 'Organization', account: 'Account', indicator: 'Indicator',
+  unknown: 'Unknown',
+}
+
+export const SIU_WATCH_PRIORITIES = ['routine', 'elevated', 'urgent'] as const
+
+export const SIU_WATCH_PRIORITY_LABEL: Record<string, string> = {
+  routine: 'Routine', elevated: 'Elevated', urgent: 'Urgent',
+}
+
+export const siuWatchEntityLabel = (t?: string | null) =>
+  (t && SIU_WATCH_ENTITY_LABEL[t]) || t || '—'
+export const siuWatchPriorityTint = (p?: string | null): string =>
+  p === 'urgent' ? 'bg-rose-500/15 text-rose-300'
+  : p === 'elevated' ? 'bg-amber-500/15 text-amber-300'
+  : 'bg-white/5 text-slate-300'
+
+export interface SiuWatchEntry {
+  id: string
+  entity_type: string
+  entity_id: string | null
+  label: string
+  reason: string
+  case_id: string | null
+  priority: string
+  expires_at: string
+  review_due_at: string | null
+  status: string
+  removed_at: string | null
+  removed_by: string | null
+  removal_reason: string | null
+  created_by: string | null
+  created_at: string
+}
+
+/** Mirrors `private.siu_watch_live()`. Expiry is read off the CLOCK, not off
+ *  the status column — a stale 'active' row must never keep a watch alive past
+ *  its end date, on the server or on screen. */
+export const watchLive = (w: { status?: string | null; expires_at?: string | null }) =>
+  w.status === 'active' && !!w.expires_at && new Date(w.expires_at) > new Date()
+
+export const watchExpiringWithin = (w: SiuWatchEntry, days: number) =>
+  watchLive(w) && new Date(w.expires_at).getTime() - Date.now() < days * 86_400_000
+
+export async function fetchSiuWatchlist(): Promise<SiuWatchEntry[]> {
+  const rows = await list('siu_watchlist', { order: 'created_at', ascending: false, limit: 300 })
+  return rows as unknown as SiuWatchEntry[]
+}
+
+// ---------------------------------------------------------------------------
+// §19 Deconfliction
+// ---------------------------------------------------------------------------
+
+/** What `siu_deconflict()` will and will not tell you.
+ *
+ *  `investigations` are cases the caller can ALREADY open, so naming them
+ *  discloses nothing. Everything else collapses to `other_interest` — a count
+ *  and a pointer to SIU command. There is no case number and no agent name in
+ *  it, because naming the agent on a restricted investigation discloses the
+ *  investigation AND a participant.
+ *
+ *  COMPARTMENTED INVESTIGATIONS ARE NOT COUNTED AT ALL. A clean deconfliction
+ *  result therefore does NOT prove nobody else is interested — see the header
+ *  of migration 20260831120000 for why that cost is accepted. Any UI built on
+ *  this must not word a zero result as "no other interest". */
+export interface SiuDeconflictHit {
+  case_id: string
+  case_number: string
+  title: string | null
+  designation: string | null
+  stage: string | null
+}
+
+export interface SiuDeconflictResult {
+  access: boolean
+  investigations?: SiuDeconflictHit[]
+  other_interest?: number
+  coordinate_with?: string | null
+  watchlist?: { id: string; label: string; priority: string; expires_at: string }[]
+}
+
+export async function siuDeconflict(
+  entityType: string,
+  entityId?: string | null,
+  label?: string | null,
+): Promise<SiuDeconflictResult> {
+  const res = await rpc('siu_deconflict', {
+    p_entity_type: entityType,
+    ...(entityId ? { p_entity_id: entityId } : {}),
+    ...(label ? { p_label: label } : {}),
+  })
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuDeconflictResult | null) ?? { access: false }
+}
+
+// ---------------------------------------------------------------------------
+// §30 Temporary supporting-officer access
+// ---------------------------------------------------------------------------
+
+/** A §30 grant opens ONE investigation's case file — reports, evidence, media,
+ *  tasks — and nothing else. It is spliced into `can_access_case()`, never into
+ *  `siu_case_access()`, so every siu_* table (sources, legends, intercepts,
+ *  targets, the SIU-only note layer) stays shut to the holder. It confers no
+ *  SIU standing and no workspace. */
+export interface SiuTempAccess {
+  id: string
+  case_id: string
+  user_id: string
+  reason: string
+  granted_by: string | null
+  granted_at: string
+  expires_at: string
+  revoked_at: string | null
+  revoked_by: string | null
+  revoke_reason: string | null
+}
+
+export const tempAccessLive = (t: { revoked_at?: string | null; expires_at?: string | null }) =>
+  !t.revoked_at && !!t.expires_at && new Date(t.expires_at) > new Date()
+
+/** The cap the server enforces (`siu_grant_temp_access`). Mirrored so the form
+ *  cannot offer a value the RPC will refuse. */
+export const SIU_TEMP_ACCESS_MAX_DAYS = 30
+/** The cap on a single watch grant (`siu_watch_add` / `siu_watch_extend`). */
+export const SIU_WATCH_MAX_DAYS = 365
+
+export async function fetchSiuTempAccess(caseId?: string): Promise<SiuTempAccess[]> {
+  const rows = await list('siu_temporary_access', {
+    order: 'granted_at', ascending: false, limit: 200,
+    ...(caseId ? { eq: { case_id: caseId } } : {}),
+  })
+  return rows as unknown as SiuTempAccess[]
+}
+
+// ---------------------------------------------------------------------------
+// §35/§36/§53 Dashboards
+// ---------------------------------------------------------------------------
+
+export interface SiuWorkloadRow {
+  user_id: string
+  display_name: string | null
+  siu_role: string
+  callsign: string | null
+  open_cases: number
+  inquiries: number
+  leads: number
+  overdue_reviews: number
+  recused_from: number
+}
+
+export interface SiuAgingCase {
+  case_id: string
+  case_number: string
+  title: string | null
+  stage: string
+  category: string | null
+  classification: string
+  opened_at: string
+  days_open: number
+  agents: number
+}
+
+export interface SiuCommandDashboard {
+  access: boolean
+  workload?: SiuWorkloadRow[]
+  aging?: SiuAgingCase[]
+  queues?: {
+    referrals_awaiting: number
+    inquiries_open: number
+    conflicts_standing: number
+    watch_expiring_14d: number
+    watch_active: number
+    temp_access_live: number
+  }
+}
+
+export async function fetchSiuCommandDashboard(): Promise<SiuCommandDashboard> {
+  const res = await rpc('siu_command_dashboard', {})
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuCommandDashboard | null) ?? { access: false }
+}
+
+/** §53. Counts only — no case id, no title, no name, no label. Oversight
+ *  supervises the unit's SHAPE, never its contents. */
+export interface SiuOversightSupplement {
+  access: boolean
+  referrals_total?: number
+  referrals_awaiting?: number
+  referrals_accepted?: number
+  referrals_declined?: number
+  inquiries_open?: number
+  closed_by_reason?: Record<string, number>
+  open_by_category?: Record<string, number>
+  conflicts_declared?: number
+  conflicts_standing?: number
+  intel_ungraded?: number
+  intel_review_overdue?: number
+  watch_active?: number
+  temp_access_live?: number
+  temp_access_granted_total?: number
+}
+
+export async function fetchSiuOversightSupplement(): Promise<SiuOversightSupplement> {
+  const res = await rpc('siu_oversight_supplement', {})
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuOversightSupplement | null) ?? { access: false }
+}
+
+// ---------------------------------------------------------------------------
+// §14 Intake — the referral queue
+// ---------------------------------------------------------------------------
+
+/** What a referral is ABOUT. Distinct from SIU_CASE_CATEGORIES: a referral is
+ *  an untested allegation and is categorised by the reporter, who is usually
+ *  not an investigator. The case category is assigned later, by SIU, once the
+ *  unit knows what it actually has. */
+export const SIU_REFERRAL_CATEGORIES = [
+  'corruption', 'misconduct', 'organized_crime', 'narcotics_trafficking',
+  'firearms_trafficking', 'criminal_conspiracy', 'fugitive', 'internal_leak',
+  'compromised_investigation', 'other',
+] as const
+
+export const SIU_REFERRAL_CATEGORY_LABEL: Record<string, string> = {
+  corruption: 'Corruption',
+  misconduct: 'Misconduct',
+  organized_crime: 'Organized crime',
+  narcotics_trafficking: 'Narcotics trafficking',
+  firearms_trafficking: 'Firearms trafficking',
+  criminal_conspiracy: 'Criminal conspiracy',
+  fugitive: 'Fugitive',
+  internal_leak: 'Internal leak',
+  compromised_investigation: 'Compromised investigation',
+  other: 'Other',
+}
+
+export const SIU_REFERRAL_STATUSES = [
+  'submitted', 'under_review', 'accepted', 'declined',
+  'referred_to_cid', 'info_requested', 'withdrawn',
+] as const
+export type SiuReferralStatus = (typeof SIU_REFERRAL_STATUSES)[number]
+
+export const SIU_REFERRAL_STATUS_LABEL: Record<string, string> = {
+  submitted: 'Submitted',
+  under_review: 'Under review',
+  accepted: 'Accepted',
+  declined: 'Declined',
+  referred_to_cid: 'Referred to CID',
+  info_requested: 'More information requested',
+  withdrawn: 'Withdrawn',
+}
+
+/** Dispositions a reviewer may choose. `submitted` is absent deliberately — it
+ *  is the arrival state, not something a review can set. */
+export const SIU_REFERRAL_DISPOSITIONS: readonly SiuReferralStatus[] =
+  SIU_REFERRAL_STATUSES.filter((s) => s !== 'submitted')
+
+export const siuReferralCategoryLabel = (c?: string | null) =>
+  (c && SIU_REFERRAL_CATEGORY_LABEL[c]) || c || '—'
+export const siuReferralStatusLabel = (s?: string | null) =>
+  (s && SIU_REFERRAL_STATUS_LABEL[s]) || s || '—'
+
+export const siuReferralStatusTint = (s?: string | null): string =>
+  s === 'accepted' ? 'bg-emerald-500/15 text-emerald-300'
+  : s === 'declined' || s === 'withdrawn' ? 'bg-slate-500/15 text-slate-300'
+  : s === 'submitted' ? 'bg-amber-500/15 text-amber-300'
+  : 'bg-blue-500/15 text-blue-300'
+
+/** A referral, as a FIELD AGENT sees it. Oversight standing never reads this
+ *  shape at all — a referral can name the Director of CID, so the intake queue
+ *  is gated on `private.siu_is_agent()` and not on standing generally. */
+export interface SiuReferral {
+  id: string
+  category: string
+  summary: string
+  detail: string | null
+  subject_user_id: string | null
+  subject_description: string | null
+  related_case_id: string | null
+  submitted_by: string | null
+  submitted_at: string
+  status: string
+  review_note: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
+  opened_case_id: string | null
+}
+
+/** The SUBMITTER's view: a receipt, and deliberately nothing else. Whether SIU
+ *  acted, declined, or opened an investigation is not disclosed — otherwise a
+ *  referral becomes a way to probe what SIU is doing. */
+export interface SiuMyReferral {
+  id: string
+  category: string
+  summary: string
+  submitted_at: string
+  acknowledged: boolean
+}
+
+export async function fetchSiuReferrals(): Promise<SiuReferral[]> {
+  const rows = await list('siu_referrals', {
+    order: 'submitted_at', ascending: false, limit: 200,
+  })
+  return rows as unknown as SiuReferral[]
+}
+
+export async function fetchMySiuReferrals(): Promise<SiuMyReferral[]> {
+  const res = await rpc('siu_my_referrals', {})
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuMyReferral[] | null) ?? []
+}
+
+// ---------------------------------------------------------------------------
+// §15/§32/§33 Case lifecycle
+// ---------------------------------------------------------------------------
+
+/** §15. A preliminary inquiry is SIU deciding whether an allegation is real.
+ *  It carries TIGHTER visibility than a full investigation: oversight cannot
+ *  see one at all, at any classification. Promotion is the moment it becomes
+ *  visible to the Director and the Attorney General. */
+export const SIU_STAGES = ['preliminary_inquiry', 'investigation'] as const
+
+export const SIU_STAGE_LABEL: Record<string, string> = {
+  preliminary_inquiry: 'Preliminary inquiry',
+  investigation: 'Full investigation',
+}
+
+export const SIU_STAGE_HINT: Record<string, string> = {
+  preliminary_inquiry:
+    'Assessing whether the allegation is real. Not visible to oversight — the Director and the Attorney General see it only once it is promoted.',
+  investigation: 'A committed investigation. Visible to oversight at standard classification.',
+}
+
+export const siuStageLabel = (s?: string | null) =>
+  (s && SIU_STAGE_LABEL[s]) || 'Full investigation'
+export const siuStageTint = (s?: string | null): string =>
+  s === 'preliminary_inquiry' ? 'bg-amber-500/15 text-amber-300' : 'bg-white/5 text-slate-300'
+export const isPreliminaryInquiry = (row: { siu_stage?: string | null }) =>
+  row.siu_stage === 'preliminary_inquiry'
+
+/** §32. SUBJECT MATTER, deliberately orthogonal to classification, which is
+ *  SENSITIVITY. An organized-crime case can be routine; a narcotics case can be
+ *  compartmented. Conflating the two is how a unit ends up classifying
+ *  everything at the top level because the subject sounds serious. */
+export const SIU_CASE_CATEGORIES = [
+  'public_corruption', 'law_enforcement_integrity', 'organized_crime', 'gang',
+  'narcotics', 'firearms', 'fugitive', 'major_crime', 'internal_leak', 'other',
+] as const
+
+export const SIU_CASE_CATEGORY_LABEL: Record<string, string> = {
+  public_corruption: 'Public corruption',
+  law_enforcement_integrity: 'Law enforcement integrity',
+  organized_crime: 'Organized crime',
+  gang: 'Gang',
+  narcotics: 'Narcotics',
+  firearms: 'Firearms',
+  fugitive: 'Fugitive',
+  major_crime: 'Major crime',
+  internal_leak: 'Internal leak',
+  other: 'Other',
+}
+
+export const siuCaseCategoryLabel = (c?: string | null) =>
+  (c && SIU_CASE_CATEGORY_LABEL[c]) || c || '—'
+
+/** §33. Closing always carries WHY, from a fixed list, plus a free note. */
+export const SIU_CLOSURE_REASONS = [
+  'arrest_prosecution', 'referred_to_cid', 'referred_to_doj', 'administrative_action',
+  'unfounded', 'insufficient_evidence', 'intelligence_only', 'merged', 'inactive', 'other',
+] as const
+
+export const SIU_CLOSURE_REASON_LABEL: Record<string, string> = {
+  arrest_prosecution: 'Arrest / prosecution',
+  referred_to_cid: 'Referred to CID',
+  referred_to_doj: 'Referred to the Department of Justice',
+  administrative_action: 'Administrative action',
+  unfounded: 'Unfounded',
+  insufficient_evidence: 'Insufficient evidence',
+  intelligence_only: 'Intelligence only',
+  merged: 'Merged into another investigation',
+  inactive: 'Inactive',
+  other: 'Other',
+}
+
+export const siuClosureReasonLabel = (r?: string | null) =>
+  (r && SIU_CLOSURE_REASON_LABEL[r]) || r || '—'
+
+// ---------------------------------------------------------------------------
+// §17 Conflict of interest
+// ---------------------------------------------------------------------------
+
+export const SIU_CONFLICT_STATUSES = ['declared', 'acknowledged', 'reassigned', 'cleared'] as const
+export type SiuConflictStatus = (typeof SIU_CONFLICT_STATUSES)[number]
+
+export const SIU_CONFLICT_STATUS_LABEL: Record<string, string> = {
+  declared: 'Declared',
+  acknowledged: 'Acknowledged',
+  reassigned: 'Reassigned',
+  cleared: 'Cleared',
+}
+
+/** Resolutions a reviewer may set. `declared` is absent — it is the arrival
+ *  state, set by the agent stepping back, not something command assigns. */
+export const SIU_CONFLICT_RESOLUTIONS: readonly SiuConflictStatus[] =
+  SIU_CONFLICT_STATUSES.filter((s) => s !== 'declared')
+
+export const siuConflictStatusLabel = (s?: string | null) =>
+  (s && SIU_CONFLICT_STATUS_LABEL[s]) || s || '—'
+
+/** Mirrors `private.siu_recused()`. ONLY `cleared` lifts the veto:
+ *  `reassigned` means the conflict was real and the case moved on, which is not
+ *  a reason to hand the file back. */
+export const siuRecusesAccess = (status?: string | null) => status !== 'cleared'
+
+export interface SiuConflict {
+  id: string
+  case_id: string
+  agent_id: string
+  reason: string
+  status: string
+  declared_at: string
+  acknowledged_by: string | null
+  acknowledged_at: string | null
+  resolution_note: string | null
+}
+
+export async function fetchSiuConflicts(caseId?: string): Promise<SiuConflict[]> {
+  const rows = await list('siu_conflicts', {
+    order: 'declared_at', ascending: false, limit: 100,
+    ...(caseId ? { eq: { case_id: caseId } } : {}),
+  })
+  return rows as unknown as SiuConflict[]
+}
+
 /** Human wording for the SIU audit actions. Unknown actions fall back to the
  *  raw token rather than being hidden — an audit surface never silently drops
  *  a row it doesn't recognise. */
@@ -739,6 +1338,20 @@ export const SIU_AUDIT_LABEL: Record<string, string> = {
   SIU_INTEL_REVOKED: 'Release revoked',
   SIU_INTEL_ACKNOWLEDGED: 'Release acknowledged',
   SIU_EXPORTED: 'Investigation exported',
+  SIU_REFERRAL_SUBMITTED: 'Referral submitted',
+  SIU_REFERRAL_REVIEWED: 'Referral reviewed',
+  SIU_INQUIRY_PROMOTED: 'Inquiry promoted to investigation',
+  SIU_CATEGORY_SET: 'Case category set',
+  SIU_CASE_CLOSED: 'Investigation closed',
+  SIU_CONFLICT_DECLARED: 'Conflict of interest declared',
+  SIU_CONFLICT_RESOLVED: 'Conflict of interest resolved',
+  SIU_INTEL_GRADED: 'Intelligence graded',
+  SIU_INTEL_REVIEWED: 'Intelligence reviewed',
+  SIU_WATCH_ADDED: 'Added to the watchlist',
+  SIU_WATCH_EXTENDED: 'Watch extended',
+  SIU_WATCH_REMOVED: 'Removed from the watchlist',
+  SIU_TEMP_ACCESS_GRANTED: 'Supporting access granted',
+  SIU_TEMP_ACCESS_REVOKED: 'Supporting access ended',
 }
 
 export const siuAuditLabel = (a: string) => SIU_AUDIT_LABEL[a] ?? a

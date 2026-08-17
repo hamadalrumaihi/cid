@@ -8,6 +8,191 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### SIU can reach CID cases without switching department
+
+SIU's broad read of CID has existed in RLS since Phase 1 —
+`private.siu_oversight_read()` feeds `can_read_case`, and an SIU agent could
+already see every CID case, report, evidence item, media file and task. There
+was simply **no route to it**: the SIU navigation had no Cases entry, so an
+agent had to switch department to look at a Division case, and only the Owner
+and the Attorney General can even do that.
+
+The SIU workspace now has a **Cases** category (`cases`, `case-files`). This
+adds navigation, not access — verified live: an SIU agent sees 21 cases (their
+own investigation plus all 20 CID ones) while a plain CID detective still sees
+7 and **zero** SIU cases. `operations` is deliberately left out: the SIU
+workspace has its own Operations section, and two routes to two different
+operation concepts under one label is how a workspace stops being legible.
+
+**The part that mattered more than the nav.** Every write an SIU member
+attempts against a CID case is refused by RLS matching **zero rows**, not by
+erroring — `can_access_case()`'s CID branch ends with
+`not private.is_siu_department()`. So the Edit, Archive and New Case controls
+were rendering and *silently doing nothing*. A control that appears to work is
+worse than an absent one, and adding the nav entry would have exposed that to
+every agent.
+
+`useSiu().caseReadOnly(caseRow)` now narrows `canEdit`/`canDelete` in the case
+screen, and the cases list withdraws create and bulk-archive in the SIU
+workspace. It mirrors exactly the two places the server refuses outright — an
+SIU department member on a CID case, and oversight standing on an SIU
+investigation — and nothing else: it narrows, never widens, and is inert for an
+ordinary CID member. Per-case membership facts are deliberately not modelled,
+because the client cannot know them and guessing would either hide a control
+someone has or show one they do not.
+
+In the SIU workspace the list also carries an **Authority** column, since the
+two departments now appear together and the difference decides whether the
+viewer can do anything with a row.
+
+*Recorded, not fixed:* `private.can_create_case()` never excluded SIU
+department members, so the INSERT itself is still permitted — the case is
+forced to `case_authority = 'cid'` by the guard trigger and its creator then
+loses access to it. The UI withholds the control; changing the function touches
+CID's own create path and is a separate decision.
+
+### SIU intelligence quality, watchlist, deconfliction and supporting access (§19, §20, §21, §23, §25, §30, §35, §36, §53)
+
+**§20/§21 — grading asks two questions.** The unit already graded SOURCES; it
+never graded the INFORMATION. Those are different questions, and collapsing
+them is the classic intelligence failure — a reliable source can pass on a
+rumour, and an untested source can be right. A note now carries both halves of
+the Admiralty pairing plus how it was obtained.
+
+**Ungraded is a real state.** All the new columns are nullable with no default,
+and `review_due_at` deliberately has none: `add column … default` backfills
+existing rows in modern Postgres, which would have stamped a review date on
+every note already written and made it look assessed when nobody had looked.
+Nothing anywhere treats a missing grade as good.
+
+**§23 — intelligence rots.** `siu_review_note()` records revalidated,
+downgraded, superseded or withdrawn against a named agent at a time. Withdrawal
+resolves a note and never deletes it: what the unit believed, and when, is the
+record.
+
+**§25 — the watchlist always ends.** `expires_at` is mandatory, capped at a year
+per grant, and read off the clock rather than a status column, so no sweeper
+job has to run for expiry to bite. Field agents only — the same call as the
+referral queue, because the list can name the Director. Removal keeps the row.
+
+**§19 — deconfliction, and what it will not say.** `siu_deconflict()` returns
+investigations the caller can already open, and for everything else a count plus
+"coordinate through SIU command" — never the case, never the agent.
+**Compartmented investigations are excluded from the count entirely**, which is
+a real cost and is documented as one: a clean result does not prove nobody else
+is looking. A hit count is an existence oracle, and a compartmented case exists
+because its existence is restricted. The UI says "no other interest *recorded*"
+and never "nobody else is interested".
+
+**§30 — the one deliberate hole in the CID→SIU wall.** An investigation
+sometimes needs an officer's expertise without appointing them to the unit. The
+grant is cut as small as it goes: one case, standard classification only,
+30 days maximum, revocable, audited — and spliced into `can_access_case()` and
+`can_access_case_row()` but **never** into `siu_case_access()`, so the holder
+gets the case file (reports, evidence, media, tasks) and not one row of
+tradecraft. The classification test lives in the predicate, so reclassifying a
+case upward closes every outstanding grant at once. The §17 recusal veto still
+beats it.
+
+*Found by the live probe:* the first cut patched only `can_access_case()` and
+not its row-form twin, and the symptom was exactly what half a chokepoint
+produces — the supporting officer could read the investigation's reports but not
+the case row. The two are a pair and are now documented as one.
+
+**§35/§36/§53 — two dashboards, two audiences.** `siu_command_dashboard()` names
+people, because workload cannot be managed without names, but every count runs
+under the caller's own visibility so a compartment contributes nothing to
+anyone's total. `siu_oversight_supplement()` is counts only — no case, title,
+name or label — and reports the numbers that make a unit legible: referral
+volume and disposition, open inquiries, closures by reason, ungraded
+intelligence, overdue reviews, live watches and live supporting grants.
+
+`rls_test_cleanup()` gained a Delivery B branch. The temporary-access row is the
+one that matters: a §30 grant is a live key into an investigation, and a fixture
+holding one on a real case would keep reading that file every run — with its
+password sitting in a GitHub secret. Removed and reported, without exception.
+Each delete now carries its own counter, after the first cut shared one and
+swept the grants silently.
+
+Verified live in rolled-back transactions across five roles: 20 assertions on
+grading, review, the watchlist, deconfliction (including the compartment
+exclusion), the §30 containment boundary, expiry, reclassification, revocation
+and both dashboards. Advisors: zero ERROR-level findings. Migrations
+`20260831120000`, `20260831130000`, `20260831140000`; suite
+`tests/rls/v169.test.ts`.
+
+### SIU intake, case lifecycle and conflict of interest (§14, §15, §17, §32, §33)
+
+The front of the SIU workflow: how work **enters** the unit, how it is graded
+while SIU decides whether it is real, and how it is disposed of. Until now an
+SIU investigation could only be opened directly, so every allegation became a
+full investigation the moment anyone typed it in.
+
+**§14 — the door is wide, the queue is narrow.** Any active member can submit a
+referral; almost nobody can read one. `siu_referrals` is gated on
+`private.siu_is_agent()` — SIU **field agents only**, deliberately not oversight
+standing, because a referral can name the Director of CID. The submitter's own
+view (`siu_my_referrals()`) strips every review column, so a referral confirms
+receipt and never reveals whether SIU acted, declined, or opened an
+investigation. Without that, filing a referral about yourself would tell you
+whether you are a subject.
+
+The CID-facing surface is a new **Report a Concern** page that never says "SIU".
+That is the design, not decoration: a button naming the unit would disclose it to
+every detective, and to the people it investigates.
+
+**§15 — preliminary inquiries.** `cases.siu_stage` marks an investigation as an
+inquiry, and an inquiry is invisible to oversight at *every* classification —
+including the standard level the Director and the AG normally read. Field access
+is unchanged. `siu_promote_inquiry()` is the deliberate, reasoned, one-way act
+that opens it. This is what lets the unit examine a senior allegation before it
+is sure, which is the usual reason to open an inquiry rather than a case.
+
+**§17 — a conflict is a veto, and the first version wasn't.** `siu_declare_conflict()`
+originally cleared the agent's assignment and read them out of any compartment.
+A live probe showed the declaring agent still holding full read and write, and
+still able to close the case. Two independent reasons:
+
+1. `siu_case_access()` grants on **rank** — a Special Agent in Charge reaches
+   every non-compartmented case with no assignment, so clearing an assignment
+   cleared nothing. The conflicted officer the rule most needs to bind was the
+   one it did not touch.
+2. `siu_case_assigned()` is also satisfied by `cases.lead_detective_id`, which
+   the new referral-acceptance path sets — so even a line agent who declared a
+   conflict on a case they lead kept access.
+
+Chasing each positive grant and subtracting from it is the wrong shape. A
+recusal is a **negative fact**, so `private.siu_recused()` is now checked *first*
+in `siu_case_access()`, above every grant including rank and `owner`, and
+propagates for free to `siu_case_command()`, `siu_case_read()`,
+`can_access_case()` and the ~115 policies routed through it. Same principle as
+§37: a rule that exempts the top of the organisation is not a rule.
+
+Declaring is gated on `siu_case_read()` rather than `siu_case_access()` — the
+first probe found an oversight holder could not recuse themselves at all, which
+is exactly backwards. Lifting requires `siu_resolve_conflict()`, which refuses
+the agent who declared it; only `cleared` restores access, since `reassigned`
+means the conflict was real and the work moved on.
+
+**§32/§33 — category and closure.** `siu_category` is subject matter,
+deliberately orthogonal to `siu_classification`, which is sensitivity —
+conflating them is how a unit over-classifies everything whose subject sounds
+serious. Closing requires a reason from a fixed list plus a note, and the list
+includes `unfounded`, `insufficient_evidence` and `inactive`, because a list of
+only successes pushes people to mislabel.
+
+All four new `cases` columns are RPC-only, frozen by
+`private.block_direct_siu_case_cols()`. `rls_test_cleanup()` gained an intake
+branch (`20260830140000`) so fixture referrals cannot accumulate in the live
+queue — a fixture referral naming a real officer is removed *and* reported as a
+namespace escape.
+
+Verified live in rolled-back transactions across five roles (CID detective,
+Director/oversight, SIU field agent, SIU command, owner): 22 assertions covering
+queue visibility, receipt shape, inquiry invisibility, promotion, the recusal
+veto at command rank, self-resolve refusal, and closure validation. Migrations
+`20260830120000`, `20260830130000`, `20260830140000`; suite `tests/rls/v168.test.ts`.
+
 ### SIU release gate OPENED — and a fixture privilege escalation closed first
 
 The build-phase gate (`siu_settings.enabled_for_non_owner`) is now **open**. SIU
