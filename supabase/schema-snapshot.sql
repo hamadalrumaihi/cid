@@ -10738,17 +10738,24 @@ create policy wl_sel on public.watchlist
 -- the whole surveillance domain and its records are automatically invisible to
 -- CID. Definitive SQL in supabase/migrations/20260822120000_siu_phase2.sql.
 
--- SIU chain of command (20260823120000_siu_sop_chain_of_command) — the unit's
--- own SOP made authoritative over the earlier architecture amendment.
--- Commissioner's Office -> Director of CID -> Special Agent in Charge (X-1) ->
--- SIU Special Agents. ADDITIVE ONLY; still a complete no-op for every account
--- while the release gate is closed.
+-- SIU CHAIN OF COMMAND (20260902120000, REVERSING 20260823120000):
+--   Attorney General -> Special Agent in Charge (X-1) -> Senior Special Agent
+--   -> Special Agent.  The Portal Owner sits above during the build phase.
 --
--- RE-EMITTED private.siu_standing(uuid): ONE new branch — an active profile
--- with role = 'director' resolves to 'oversight', the same standing the
--- Attorney General already held. An appointed SIU role still wins, so a
--- Director who is also X-1 is X-1. The Commissioner's Office has no portal
--- identity; the Portal Owner is the platform's equivalent top authority.
+-- 20260823120000 read the unit's SOP as seating the DIRECTOR OF CID in the SIU
+-- chain and gave every active role = 'director' profile oversight standing ex
+-- officio. That branch is DELETED. Oversight standing is not passive --
+-- siu_can_appoint() includes it and siu_remove() lets it end an X-1's
+-- membership -- so the Director of CID could have dissolved the unit
+-- investigating CID. CID command is powerful inside CID and does not command
+-- SIU.
+--
+-- private.siu_standing(uuid) now resolves, in order: profiles.is_owner ->
+-- 'owner' (gate-independent); then, only while the gate is open, an appointed
+-- siu_memberships role; an oversight-only appointment; and the ATTORNEY
+-- GENERAL ex officio (never a fixture, 20260829120000). Nothing else. A
+-- Director appointed to SIU keeps standing through the membership branch --
+-- appointment is the only route in for any CID rank.
 --
 -- NEW PRIVATE HELPER private.siu_case_read(uuid): the READ superset for an SIU
 -- investigation — siu_case_access() OR "base 'siu' classification and the
@@ -10881,7 +10888,7 @@ create policy wl_sel on public.watchlist
 -- Every one is gated on private.siu_case_access() — the WRITE wall — and never
 -- on private.siu_case_read(). That is deliberate: the SOP chain change let
 -- oversight standing read a standard investigation's case file, and oversight
--- must not extend to raw tradecraft, because the Director of CID may be the
+-- must not extend to raw tradecraft, because an oversight holder may be the
 -- SUBJECT of a source report, a legend, an intercept or an allegation.
 -- siu_exports is the single exception and rides siu_case_read, because an
 -- export log is an accountability record rather than tradecraft.

@@ -246,7 +246,7 @@ Phase 1 modelled SIU as a separate *authority*. The architecture amendment compl
 ```
 INVESTIGATIVE PORTAL
 ├── Criminal Investigation Division   detective → … → director, bureaus
-└── Special Investigation Unit        Director of CID / AG → X-1 → agents
+└── Special Investigation Unit        Attorney General → X-1 → agents
 ```
 
 - **Active department.** `private.user_department()` resolves `cid` | `siu` from SIU membership — one portal identity, one active department, no duplicate accounts and no column that can drift from the roster. It is **gate-aware**: while the release gate is closed *everybody* resolves to `cid`, so CID keeps operating exactly as it does today and appointing agents early cannot strand them between departments.
@@ -255,23 +255,26 @@ INVESTIGATIVE PORTAL
 - **Separate SOP.** Classification `siu` on `documents`, visible to SIU standing only (CID at every rank, Director included, sees nothing) and editable by SIU command, never CID command. The unit's own SOP is seeded as its own document; the CID SOP is never presented as the SIU SOP.
 - **Separate workspace.** `siu_department_context()` is the one authoritative answer for which departmental shell to render. A deliberate department switch exists **only** for accounts that legitimately hold both contexts (Owner, AG oversight) — a normal CID member is never offered one, and the flag grants no data access on its own.
 
-### Chain of command — the SOP is authoritative ([`20260823120000_siu_sop_chain_of_command.sql`](../supabase/migrations/20260823120000_siu_sop_chain_of_command.sql))
-
-The amendment and the unit's own SOP disagreed on who commands SIU. The SOP was ruled authoritative, and the portal now enforces it:
+### Chain of command — the Attorney General, not CID ([`20260902120000`](../supabase/migrations/20260902120000_cid_director_has_no_siu_authority.sql))
 
 ```
-Commissioner's Office   → Portal Owner (no separate portal identity)
-Director of CID         → oversight standing (with the Attorney General)
+Attorney General        → oversight standing, SIU's reporting line
 Special Agent in Charge → X-Ray 1, day-to-day command
-SIU Special Agents      → X-2, X-3 …
+Senior Special Agent    → field tier
+Special Agent           → X-2, X-3 …
 ```
 
-- **The Director resolves to `oversight`.** One new branch in `private.siu_standing()`: an active profile with `role = 'director'` gets the same standing the Attorney General already held. An appointed SIU role always wins, so a Director who is *also* X-1 is X-1.
-- **Oversight is a READ standing.** `private.siu_case_access()` is the write/command wall — it feeds `can_access_case()` and every `siu_case_command()` check — and it is **unchanged**. The new `private.siu_case_read()` = the wall OR "base `siu` classification and the caller holds oversight standing", and it is spliced only into read surfaces: `can_read_case`/`_row`, `siu_case_agents_sel`, `siu_targets_sel`, `siu_can_read_case_note` (SIU-case branch only), `siu_audit_feed`, `siu_overview` counts, and `operations_sel`. Oversight therefore cannot open an investigation, assign an agent, reclassify a case, author intelligence, designate a target, run an operation, or delete a single row.
-- **On a CID case the SIU-only layer stays field-agent only.** `siu_can_read_case_note`'s CID branch is still `siu_oversight_read()` (= `siu_is_agent()`), because the Director is a plausible *subject* of an integrity flag.
-- **The escape hatch is intact.** Oversight reads only the base `siu` level. `siu_restricted`, `siu_command` and `siu_compartmented` still require assignment, SIU command or an allow-list row — so an investigation *into* the Director, the Attorney General or X-1 remains possible by classifying it above `siu`. §37 survives naming the Director as SIU's command authority.
+The Portal Owner sits above all of it during the build phase and has no operational role in the chain.
 
-> **Operational consequence.** A standard `siu` investigation is now readable by the Director of CID and the Attorney General. Any investigation concerning either of them must be opened at `siu_restricted` or higher — `siu_compartmented` if it also concerns X-1.
+> **This REVERSES [`20260823120000_siu_sop_chain_of_command.sql`](../supabase/migrations/20260823120000_siu_sop_chain_of_command.sql)**, which read the unit's SOP as seating the Director of CID in the SIU chain and gave every active `role = 'director'` profile oversight standing ex officio. That branch is deleted. **CID command is powerful inside CID and does not command SIU.**
+
+- **Why it mattered more than a label.** Oversight standing is not passive: `private.siu_can_appoint()` includes it, and `public.siu_remove()` lets an oversight holder **end an X-1's membership**. Under the old rule the Director of CID could dissolve the unit investigating CID. No amount of read-side compartmenting fixes an inversion at the appointment layer.
+- **The only route in for a CID rank is appointment.** A Director who is genuinely appointed to SIU keeps standing through the membership branch; the CID role alone confers nothing. `profiles.is_owner` still resolves to `owner` (the build gate), and the **Attorney General** keeps ex-officio oversight because the AG *is* the reporting line — with the fixture exclusion from [`20260829120000`](../supabase/migrations/20260829120000_siu_exofficio_excludes_fixtures.sql) intact.
+- **Oversight is still a READ standing.** `private.siu_case_access()` remains the write/command wall, unchanged. `private.siu_case_read()` = the wall OR "base `siu` classification, not a preliminary inquiry, and the caller holds oversight standing", spliced only into read surfaces. Oversight cannot open an investigation, assign an agent, reclassify a case, author intelligence, designate a target, run an operation, or delete a row.
+- **On a CID case the SIU-only layer stays field-agent only** (`siu_oversight_read()` = `siu_is_agent()`), because an oversight holder is a plausible *subject* of an integrity flag.
+- **The escape hatch is intact.** Oversight reads only the base `siu` level, and never a preliminary inquiry. An investigation *into* the Attorney General or X-1 remains possible by classifying above `siu` — or by keeping it an inquiry while the unit is still deciding.
+
+> **Operational consequence.** A standard `siu` investigation is readable by the **Attorney General**. Any investigation concerning the AG must be opened at `siu_restricted` or higher — `siu_compartmented` if it also concerns X-1. The Director of CID reads nothing at any level.
 
 ### Hidden is not enough — the case-child delete wall ([`20260823130000_siu_case_delete_wall.sql`](../supabase/migrations/20260823130000_siu_case_delete_wall.sql))
 
@@ -323,7 +326,7 @@ Release requires `siu_case_access` **and** `siu_is_agent`: oversight standing ca
 | `siu_integrity_reviews` | `siu_case_access` | + `siu_is_agent` | `siu_case_command` |
 | `siu_exports` | `siu_case_read` (oversight included — a log is accountability, not tradecraft) | RPC-only | — |
 
-Every one rides `private.siu_case_access()` — the **write wall** — and never the read superset. That is the point: the SOP chain change let oversight read a standard investigation's case file, and oversight must not extend to raw tradecraft, because the Director of CID may be the *subject* of a source report, a legend, an intercept or an allegation. Sources and legends go one step further with `private.siu_handler_access(case, handler)` = `siu_case_access` **and** (handler = me **or** SIU command), so an agent with full access to an investigation still cannot read another agent's source — and a leak inside SIU costs one source rather than the register. Compartmentation composes: on a `siu_compartmented` case `siu_case_access` is allow-list-only, so all six inherit the allow-list.
+Every one rides `private.siu_case_access()` — the **write wall** — and never the read superset. That is the point: oversight reads a standard investigation's case file, and must not extend to raw tradecraft, because an oversight holder may themselves be the *subject* of a source report, a legend, an intercept or an allegation. Sources and legends go one step further with `private.siu_handler_access(case, handler)` = `siu_case_access` **and** (handler = me **or** SIU command), so an agent with full access to an investigation still cannot read another agent's source — and a leak inside SIU costs one source rather than the register. Compartmentation composes: on a `siu_compartmented` case `siu_case_access` is allow-list-only, so all six inherit the allow-list.
 
 Two constraints carry policy rather than shape: `siu_comms_content_requires_authority` (content cannot be recorded without a named `legal_authority`, and the row can cite the `legal_requests` row that granted it) and `siu_integrity_closed_needs_disposition` (a review cannot close without a recorded disposition).
 
@@ -431,7 +434,7 @@ The **one deliberate hole** in the CID→SIU wall, cut as small as it goes. An i
 | Revocable | By command, or by the holder handing it back. Audited either way |
 | §17 still wins | `siu_temp_access()` checks `siu_recused()` first, so a supporting officer who declares a conflict loses the case exactly like an agent |
 
-Granting is a **command** act, never oversight: the Director of CID handing CID officers access to SIU files is the precise inversion this architecture exists to prevent.
+Granting is a **command** act, never oversight: an oversight holder handing outside officers access to SIU files is the precise inversion this architecture exists to prevent.
 
 > **`can_access_case` and `can_access_case_row` are a pair.** The row form exists so `cases_sel` can evaluate without a self-join, and the two must always agree. The first cut of this migration patched only the id form; the live probe caught it at once, with exactly the symptom half a chokepoint produces — the supporting officer could read the investigation's *reports* but not the case row. Never change one without the other.
 

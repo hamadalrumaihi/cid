@@ -410,14 +410,15 @@ export function siuStanding(ctx: SiuContext): SiuStanding | null {
   // Profile type does not carry is_test and deliberately does not model it:
   // fixtures never render the UI, and useSiu() prefers the server-resolved
   // standing from siu_department_context() anyway.
+  // The Attorney General is SIU's reporting line, so oversight is ex officio.
   if (ctx.justiceRole === 'attorney_general') return 'oversight'
-  // Director of CID — SIU's command authority per the unit's SOP. Oversight
-  // standing only: departmental administration and standard investigations,
-  // never restricted/command/compartmented ones, so an investigation INTO the
-  // Director stays possible by classifying it above 'siu' — or, before the unit
-  // is even sure, by keeping it a preliminary inquiry (§15), which oversight
-  // cannot see at ANY classification. See siuCaseAccess().
-  if (p.role === 'director') return 'oversight'
+  // NOTE: there is deliberately NO branch for `p.role === 'director'`.
+  // CID command is powerful inside CID and does not command SIU. Oversight
+  // standing carries appointment authority (siuCanAppoint) and siu_remove()
+  // lets it end an X-1's membership — so a CID Director holding it could
+  // dissolve the unit investigating CID. Removed in migration 20260902120000.
+  // A Director who is genuinely appointed to SIU still holds standing through
+  // the membership branch above; the CID role alone confers nothing.
   return null
 }
 
