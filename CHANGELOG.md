@@ -8,6 +8,70 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### The penal code stops being compiled into the app
+
+`src/lib/penal.ts` *was* the penal code: a 162-entry array converted from the
+vanilla `penal.js`. That array is gone. The statutes now come from
+`penal_current_charges()` — the published version, whatever it is — and the file
+is a cache over it. Verified: the statute text no longer appears anywhere in the
+built client bundle.
+
+A constant in a JS bundle has no version, no audit and no RLS. Amending a fine
+meant a deploy, every unit ran whatever build it was served, and a case could
+not record which code it was charged under. Keeping a fallback copy would just
+be a second penal code that silently disagrees with the first, so there isn't
+one.
+
+**The `PENAL_CODE` export is gone deliberately.** A module-level array that
+fills in later is a trap: anything reading it at import time captures it while
+empty and stays empty forever. `narcoticsDossier.ts` did exactly that —
+`new Map(PENAL_CODE.map(...))` at module scope — and would have resolved every
+charge code to null for the life of the page. Every read now goes through
+`penalCatalog()` or `penalByCode()` at call time, so that mistake is no longer
+available to make.
+
+**Nothing is rendered before the catalog arrives.** Until it loads,
+`penalByCode()` returns null and `penalTotals()` sums to zero — so a case
+carrying 60 months would read "0mo / $0" and a RICO case would show no
+predicates. Those are lies, not approximations. `usePenalCode()` reports
+readiness, PenalView says it is loading rather than showing an empty statute
+book, ChargesTab withholds the sentence, fine and predicate figures behind a
+dash, and `gatherCasePacket()` awaits the catalog outright — a packet is filed
+and disclosed, so it must never go out with bare codes and no penalties.
+
+### The code that was already in force is recorded as in force
+
+The database said no version was published while the application served 162
+statutes to everyone. Those cannot both be true. The legacy code was imported as
+`superseded` when it existed only to give historical charges something to
+resolve against, but nothing had superseded it.
+
+Publishing it corrects the record and changes nothing any user sees: the
+statutes now served by `penal_current_charges()` were verified byte-identical to
+the array they replace, by an md5 over every field computed against
+`src/lib/penal.ts` and again in the database. It also had to happen before the
+selectors could move at all — `penal_current_charges()` reads
+`where status = 'published'`, so with none published, pointing the UI at it
+would have emptied the penal code rather than moved it. Teaching the query to
+fall back to the newest non-draft version was rejected: that hides the absence
+of an enacted code, which is the one thing the status column exists to show.
+
+The 2026 code stays a draft. Publishing it changes the law in force and is a
+decision for an administrator, not a side effect of a deployment.
+
+### The RICO predicate picker nearly lost 18 of its 24 entries
+
+`penal_current_charges()` returned `is_rico` only. The old array carried a
+single `rico` flag covering 24 charges, and three surfaces read it: the
+predicate-act picker, the catalog badge, and the per-case predicate count.
+Splitting that flag into `is_rico` (6 modifiers) and `is_rico_predicate` (18
+predicate-eligible offenses) was correct — they are opposite ends of the same
+statute — but the read surface only ever exposed one half. Cutting the client
+over as-is would have shrunk the picker to 6 and quietly stopped counting
+Murder, Kidnapping, Robbery, Arson and Bribery as predicates on every RICO case.
+The UI would have looked fine. Both columns are now returned and the client flag
+is their union, which is what those three surfaces have always meant.
+
 ### A charge on a case becomes a record, with a snapshot and a status
 
 `cases.charges` was a jsonb array of `{code, count}`. Five things were wrong

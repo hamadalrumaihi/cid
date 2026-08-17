@@ -11323,6 +11323,24 @@ create index penal_charges_created_by_idx ON public.penal_charges USING btree (c
 -- that cited one can always resolve it. Writers: penal_publish_version(),
 -- penal_rollback_to(), penal_archive_charge(), penal_restore_charge().
 -- Readers: penal_current_charges(), penal_current_reference().
+--
+-- IN FORCE: 'San Andreas Penal Code (legacy)', 162 charges, published by
+-- 20260906120000. It was imported as 'superseded' when it existed only to give
+-- historical case charges a version to resolve against, but nothing had
+-- superseded it -- the portal was serving exactly those statutes from a
+-- hard-coded array while the database claimed no version was in force. The
+-- 2026 code remains a DRAFT: publishing it changes the law and is a deliberate,
+-- audited act through penal_publish_version(), not a deployment side effect.
+--
+-- penal_current_charges() returns is_rico_predicate and arrest_required as well
+-- as is_rico (20260906130000). The client's single `rico` flag is the UNION of
+-- is_rico and is_rico_predicate, because that union -- 6 modifiers plus 18
+-- predicate-eligible offenses -- is what the RICO predicate picker, the catalog
+-- badge and the per-case predicate count have always displayed. Returning only
+-- is_rico would silently shrink all three from 24 entries to 6.
+--
+-- This function is the ONLY source of statutes for the client: src/lib/penal.ts
+-- is a cache over it and no longer carries a copy of the code.
 
 create table public.penal_substance_schedules (
   id uuid not null default gen_random_uuid(),

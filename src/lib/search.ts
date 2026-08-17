@@ -5,7 +5,7 @@
  *  are matched client-side against the penal catalog, exactly like vanilla. */
 import { rpc } from './db'
 import { REVIEW_STATUS_LABEL } from './legalWorkflow'
-import { PENAL_CODE, penalSentence, type PenalCharge } from './penal'
+import { penalCatalog, penalSentence, type PenalCharge } from './penal'
 import { Store } from './store'
 
 export interface SearchHit {
@@ -40,13 +40,15 @@ export const SEARCH_KINDS: Record<string, { title: string; icon: string; tab: st
 
 export const SEARCH_SECTION_ORDER = ['case', 'report', 'evidence', 'operation', 'legal', 'person', 'gang', 'place', 'vehicle', 'account', 'narcotic', 'bench', 'document', 'charge'] as const
 
-/** Charges matched client-side from the in-memory penal catalog (vanilla
- *  app.js:330) — they are static reference data, not RLS-scoped rows. */
+/** Charges matched client-side from the cached penal catalog. The catalog is
+ *  the PUBLISHED penal code, fetched once by `ensurePenalCode()`; before it
+ *  arrives this returns nothing, which is right — a search should surface no
+ *  charge rather than guess at one. */
 export function chargeHits(q: string, max = 6): SearchHit[] {
   const ql = q.trim().toLowerCase()
   if (!ql) return []
   const hay = (c: PenalCharge) => `${c.code} ${c.title} ${c.level} ${c.desc ?? ''}`.toLowerCase()
-  return PENAL_CODE.filter((c) => hay(c).includes(ql))
+  return penalCatalog().filter((c) => hay(c).includes(ql))
     .slice(0, max)
     .map((c) => ({
       kind: 'charge',

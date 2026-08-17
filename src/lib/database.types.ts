@@ -10869,8 +10869,10 @@ export type Database = {
           definition: string | null
           fine: number | null
           id: string
+          arrest_required: boolean | null
           is_modifier: boolean
           is_rico: boolean
+          is_rico_predicate: boolean | null
           jail_months: number | null
           judge_set_fine: boolean
           judge_set_jail: boolean

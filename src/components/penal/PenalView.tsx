@@ -1,19 +1,29 @@
 'use client'
 
-/** Penal Code catalog — port of vanilla penal.js renderPenalView. Read-only,
- *  searchable list of all 162 statutes with level tint, sentence, fine and
- *  RICO predicate badge. Same dataset as the case-detail charge picker. */
+/** Penal Code catalog — read-only, searchable list of the statutes in the
+ *  PUBLISHED penal code, with level tint, sentence, fine and RICO badge. Same
+ *  dataset as the case-detail charge picker, because both now read the one
+ *  shared version in the database rather than a compiled-in copy.
+ *
+ *  The count in the header is the size of the published code, not a constant:
+ *  it moves when a new version is published, which is the point. And an empty
+ *  list is only ever shown once the catalog has actually arrived — before that
+ *  the view says it is loading, because "no statutes" and "not yet fetched"
+ *  look identical and mean opposite things. */
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { fmtUSD } from '@/lib/format'
-import { PENAL_CODE, PENAL_LEVEL_TINT, penalSearch, penalSentence } from '@/lib/penal'
+import { PENAL_LEVEL_TINT, penalSearch, penalSentence } from '@/lib/penal'
+import { usePenalCode } from '@/lib/usePenalCode'
 import { SearchIcon } from '@/components/shell/icons'
 
 export function PenalView() {
   const sp = useSearchParams()
   // `?q=` seeds the filter — how global-search charge results land here.
   const [query, setQuery] = useState(() => sp.get('q') ?? '')
-  const rows = useMemo(() => penalSearch(query.trim()), [query])
+  const { charges, ready, error, version } = usePenalCode()
+  // `ready` is in the dep list so the list re-filters once the catalog lands.
+  const rows = useMemo(() => (ready ? penalSearch(query.trim()) : []), [query, ready])
 
   return (
     <div>
@@ -29,7 +39,9 @@ export function PenalView() {
             className="w-full rounded-lg border border-white/10 bg-ink-850 py-2 pl-9 pr-3 text-sm text-slate-200 outline-none transition focus:border-badge-500"
           />
         </div>
-        <span className="t-readout text-[11px] text-slate-500">{rows.length} / {PENAL_CODE.length} STATUTES</span>
+        <span className="t-readout text-[11px] text-slate-500">
+          {ready ? `${rows.length} / ${charges.length} STATUTES` : 'LOADING PENAL CODE…'}
+        </span>
       </div>
       <div className="space-y-1.5">
         {rows.length ? rows.map((c) => (
@@ -46,8 +58,17 @@ export function PenalView() {
             </div>
             {c.desc && <p className="mt-1 text-xs text-slate-500">{c.desc}</p>}
           </div>
-        )) : <p className="t-readout p-6 text-center text-sm text-slate-500">NO STATUTE MATCH // REFINE SEARCH.</p>}
+        )) : (
+          <p className="t-readout p-6 text-center text-sm text-slate-500">
+            {error ? `PENAL CODE UNAVAILABLE // ${error}`
+              : !ready ? 'LOADING PENAL CODE…'
+              : 'NO STATUTE MATCH // REFINE SEARCH.'}
+          </p>
+        )}
       </div>
+      {version && (
+        <p className="t-readout mt-4 text-[11px] text-slate-600">IN FORCE: {version.toUpperCase()}</p>
+      )}
     </div>
   )
 }
