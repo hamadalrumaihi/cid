@@ -23,7 +23,7 @@ run becomes a production incident.
 
 | | Suite | May run against production? | Why |
 |---|---|---|---|
-| **1** | **RLS / security integration** (`tests/rls/*.test.ts`) | **Yes, conditionally** | Non-destructive by construction: every write is namespaced to `rls-test-*@cidportal.test` fixture accounts and cleanup runs through one audited RPC. See "Safety review" below — the conditions are not all met today. |
+| **1** | **RLS / security integration** (`tests/rls/*.test.ts`) | **Yes, conditionally** | Non-destructive by construction: every write is namespaced to `rls-test-*@cidportal.test` fixture accounts and cleanup runs through one audited RPC. See "Safety review" below — the conditions are met as of migration 20260827120000. |
 | **2** | **Seeded E2E** (`tests/e2e/*`, `npm run test:seed`) | **Never** | [`scripts/test-seed.sql`](../scripts/test-seed.sql) runs `truncate table … cascade` over `cases`, `persons`, `gangs`, `operations`, `notifications`, `role_events`, `audit_log`. Needs its own database, unconditionally. |
 | **3** | **Visual regression** (`tests/visual/*`) | **Never in practice** | Needs frozen, deterministic data; production data changes constantly, so baselines could never match. Also depends on the §2 seed. |
 
@@ -59,28 +59,48 @@ namespace.*
   ref (`exit 2`), so the destructive §2 seed cannot reach `cid` even by
   misconfiguration.
 
-**Findings — the bar is NOT met yet.** `rls_test_cleanup()` is
-`SECURITY DEFINER`, so it bypasses RLS entirely and several branches key on
-*authorship* rather than on test-created cases. Each of these can reach a real
-CID record:
+**Findings F1–F5 — CLOSED** by migration `20260827120000_rls_cleanup_namespace_wall`.
 
-| # | Statement | Escape |
+`rls_test_cleanup()` previously keyed five branches on *authorship* rather than
+on test-created cases, so each could reach a real CID record. A live scan found
+**zero rows** on all eight escape surfaces — those branches were collecting
+nothing, so removing them cost nothing.
+
+| # | Was | Now |
 |---|---|---|
-| F1 | `delete from reports where case_id = any(case_ids) **or author_id = any(ids)**` | a report a fixture account authored on a **real** case |
-| F2 | `delete from operations where created_by = any(ids)` | any operation a fixture account created, on any case |
-| F3 | `delete from role_events where target_id = any(ids) **or actor_id = any(ids)**` | destroys assignment **provenance** for a real member a fixture account acted on |
-| F4 | `update cases set lead_detective_id = null where lead_detective_id = any(disp_ids)` (and the same on `gangs`) | **writes to real production rows** |
-| F5 | `surveillance_observations` / `surveillance_targets` / `intelligence_tips` author branches | same shape as F1 |
+| F1 | `delete reports … or author_id = any(ids)` | case-scoped; a fixture-authored report on a real case is **reported, not deleted** |
+| F2 | `delete operations where created_by = any(ids)` | same, except one linked to a non-fixture case — skipped and reported, since the cascade would strip that case's joint access |
+| F3 | `delete role_events … or actor_id = any(ids)` | `target_id` only. An event a fixture *acted on* for a real member is that member's assignment provenance and is never deleted |
+| F4 | `update cases/gangs set lead_detective_id = null` | test-created rows only. A disposable leading a real case leaves it untouched and is simply not deleted |
+| F5 | `surveillance_*` / `intelligence_tips` author branches | case-scoped; escapes reported |
 
-None of these fires today, because the fixtures only ever work on cases they
-created. All five become live the moment a future test author has a fixture
-account touch a real record — which nothing currently prevents.
+**The rule.** A row is deleted only if it is fixture-owned **and** deleting it
+cannot alter a record belonging to someone else. Reports and surveillance rows
+live *inside* a case, so they are case-scoped. Operations are top-level and
+fixture-created, so they are cleanup's. SIU rows go the other way deliberately:
+a fixture-authored `siu_case_note` or `siu_disclosure` on a real case is
+invisible to CID, so leaving it means live, division-visible test intelligence —
+strictly worse than removing it, and it has no real co-author. Those are deleted
+*and* reported.
 
-**Recommendation:** tighten the author-keyed branches to intersect with
-`case_ids` (or with a test-run marker) before the secrets are added. F4 in
-particular writes to production `cases`/`gangs` rows and should be scoped or
-removed. Until then, treat "RLS suites run against production" as a known
-accepted risk rather than the intended end state.
+**Escapes are loud.** Cleanup returns a `leaked` array naming anything a fixture
+authored outside the namespace. `tests/rls/globalSetup.ts` warns on it pre-run
+(residue from a crashed run must not wedge the suite) and **throws** post-run, so
+an escaping test turns the build red. The cost, stated plainly: cleanup will not
+tidy up after such a test, and the row must be removed by hand. That is the
+correct incentive.
+
+Verified live, in rolled-back transactions:
+
+| probe | result |
+|---|---|
+| fixture-authored report on a **real** case | survives cleanup, reported as leaked |
+| `role_events` where a fixture acted on a **real** member | survives, reported |
+| the real case itself | untouched |
+| fixture's own case + report + target + operation | all removed, `leaked: []` |
+| real member / null uid calling cleanup | refused by the caller gate |
+
+**`RLS_TEST_PASSWORD_*` can now be enabled.**
 
 ---
 

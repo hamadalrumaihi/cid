@@ -14,10 +14,14 @@ low-privilege test accounts and assert that the security wall holds:
 >   and become live data. An `audience='cid'` SIU disclosure, for instance, is
 >   visible division-wide.
 >
-> `rls_test_cleanup()` is `SECURITY DEFINER` and bypasses RLS. Its known
-> namespace escapes (author-keyed branches, F1–F5) are catalogued in
+> `rls_test_cleanup()` is `SECURITY DEFINER` and bypasses RLS, so it is
+> confined to the fixture namespace by construction (migration
+> `20260827120000`): it deletes only what a fixture owns *and* whose removal
+> cannot alter someone else's record. Anything you author outside that
+> namespace is **reported, not cleaned** — and fails the run post-suite. You
+> will have to remove it by hand. See
 > [`docs/TEST-ENVIRONMENT.md`](../../docs/TEST-ENVIRONMENT.md#safety-review-of-the-rls-suites-2026-08-17)
-> — read that before extending it.
+> before extending cleanup.
 
 | Account | State | Used to prove |
 | --- | --- | --- |

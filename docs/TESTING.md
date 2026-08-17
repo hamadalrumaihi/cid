@@ -2,7 +2,7 @@
 
 How the CID Portal is tested, what each suite proves, and what "green" must mean before a release — consolidating [`docs/TEST-ENVIRONMENT.md`](TEST-ENVIRONMENT.md) (isolation policy) and [`tests/rls/README.md`](../tests/rls/README.md) (the live security-wall suite) by reference.
 
-> **Isolation, in one line.** The RLS suites run against **production** with namespaced `rls-test-*` fixtures. The seeded E2E and visual suites `TRUNCATE`, so they need their own database — which **does not exist yet**, and which shipping a feature to production never obliges anyone to build. See [TEST-ENVIRONMENT.md](TEST-ENVIRONMENT.md), including the safety review that must clear before `RLS_TEST_PASSWORD_*` is enabled.
+> **Isolation, in one line.** The RLS suites run against **production** with namespaced `rls-test-*` fixtures. The seeded E2E and visual suites `TRUNCATE`, so they need their own database — which **does not exist yet**, and which shipping a feature to production never obliges anyone to build. See [TEST-ENVIRONMENT.md](TEST-ENVIRONMENT.md), including the safety review, whose findings are closed as of migration `20260827120000` — `RLS_TEST_PASSWORD_*` can now be enabled.
 
 The suites verify **server-enforced rules**: every RLS policy, RPC caller check, and approval-matrix decision under test is deterministic, database-driven logic — the tests assert that the security wall holds for every actor.
 
