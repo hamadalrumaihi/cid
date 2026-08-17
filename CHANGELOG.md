@@ -8,6 +8,50 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Test isolation policy, and a safety review of the RLS suites
+
+No test database was created, and none was needed. Shipping SIU to production
+never obliged anyone to build or rebuild one — a claim that had been repeated in
+the SIU deployment notes and is now removed. `sahp-rbac`, the superseded legacy
+project that predates `cid`, is explicitly **not** the test project and is left
+alone.
+
+The three test tiers are now documented as the distinct things they are, because
+conflating them is how a test run becomes a production incident:
+
+- **RLS/security integration** may run against production *conditionally* — every
+  write namespaced to `rls-test-*` fixtures, cleanup through one audited RPC.
+- **Seeded E2E** never may: `scripts/test-seed.sql` runs `truncate table … cascade`.
+- **Visual regression** needs deterministic data, so it needs the same isolated
+  database — but only once someone intends to run it in CI.
+
+**`supabase/schema-snapshot.sql` is no longer documented as a rebuild method.**
+It could never have worked: it carries none of the ten `private.siu_*` predicate
+bodies or any `public.siu_*` RPC, only the policies that call them, so a snapshot
+rebuild fails at the first SIU policy. Migrations are the source of truth, and
+`docs/TEST-ENVIRONMENT.md` now gives the replay loop.
+
+**Safety review before enabling `RLS_TEST_PASSWORD_*`.** No `TRUNCATE` or `DROP`
+in `tests/rls/`, zero unfiltered `.delete()` calls, a correct caller gate on
+`rls_test_cleanup()` with no NULL-guard hole, and a hard block on the production
+ref in the seed script. But five branches of `rls_test_cleanup()` key on
+*authorship* rather than on test-created cases and can therefore reach a real CID
+record — including one that writes to production `cases`/`gangs` rows. They are
+catalogued as F1–F5 in `docs/TEST-ENVIRONMENT.md`; the secrets should not be
+enabled until they are tightened.
+
+### Fix — rls_test_cleanup did not sweep ten SIU tables
+
+Found by that review. The cleanup RPC covered the three SIU Phase 1 tables while
+ten more had shipped since. All cascade from `cases`, so a row on a
+fixture-created case was already removed; the gap was a row attached to a case
+the fixture did **not** create — which §12 and §15 make possible by design, since
+`siu_case_notes` keys to any case and `siu_disclosures.target_case_id` points at
+a CID case. A future test releasing intelligence against a real case would have
+left live, division-visible rows behind. Every new branch keys on fixture
+authorship, never on a case id alone, so the blast radius stays inside the
+fixture namespace by construction.
+
 ### SIU §14 — Assume SIU Control of a CID case
 
 SIU can take over a live CID investigation. The requirement was preservation,
