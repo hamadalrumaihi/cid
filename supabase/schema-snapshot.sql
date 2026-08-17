@@ -10719,3 +10719,34 @@ create policy wl_sel on public.watchlist
 -- was re-verified live: a real member and a null uid are both refused.
 -- Definitive SQL in
 -- supabase/migrations/20260826120000_rls_cleanup_siu_coverage.sql.
+
+-- RLS cleanup namespace wall (20260827120000_rls_cleanup_namespace_wall) —
+-- closes findings F1–F5 of the pre-enablement safety review, so
+-- RLS_TEST_PASSWORD_* can be enabled. RE-EMITTED public.rls_test_cleanup() and
+-- private.rls_test_cleanup_surveillance() (whose return type changes void →
+-- jsonb, so a rollback must DROP it first).
+--
+-- Five branches previously keyed on AUTHORSHIP rather than on test-created
+-- cases and could therefore reach a real CID record. A live scan returned ZERO
+-- rows on all eight escape surfaces, so those branches were collecting nothing
+-- and removing them cost nothing.
+--
+-- THE RULE: a row is deleted only if it is fixture-OWNED and deleting it
+-- cannot alter a record belonging to someone else. reports / surveillance_* /
+-- intelligence_tips live INSIDE a case and are now case-scoped; operations are
+-- top-level and fixture-created so they remain cleanup's, except one linked to
+-- a non-fixture case (skipped — the cascade would strip that case's joint
+-- access); role_events keeps target_id = any(ids) only, because an event a
+-- fixture ACTED on for a real member is that member's assignment provenance;
+-- cases/gangs.lead_detective_id is nulled on TEST rows only, and a disposable
+-- leading a real case is simply not deleted.
+--
+-- SIU rows go the other way deliberately: a fixture-authored siu_case_note or
+-- siu_disclosure on a real case is invisible to CID, so leaving it would mean
+-- live division-visible test intelligence — they are deleted AND reported.
+--
+-- ESCAPES ARE LOUD: cleanup returns a `leaked` array naming anything a fixture
+-- authored outside the namespace. tests/rls/globalSetup.ts warns pre-run and
+-- THROWS post-run, so an escaping test turns the build red instead of being
+-- quietly swept. Definitive SQL in
+-- supabase/migrations/20260827120000_rls_cleanup_namespace_wall.sql.

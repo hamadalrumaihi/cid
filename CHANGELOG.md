@@ -8,6 +8,51 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### RLS cleanup confined to the fixture namespace — F1–F5 closed
+
+`rls_test_cleanup()` is `SECURITY DEFINER` and bypasses RLS; five of its
+branches keyed on *authorship* rather than on test-created cases, so each could
+reach a real CID record — including one that wrote to production `cases`/`gangs`
+rows. Those were the blocker on enabling `RLS_TEST_PASSWORD_*`.
+
+The branches existed to collect orphans, which looked like a trade: narrowing
+them would leave test rows on production forever. A live scan settled it —
+**zero rows on all eight escape surfaces**. They were collecting nothing, so
+removing them costs nothing.
+
+**The rule now:** a row is deleted only if it is fixture-owned *and* deleting it
+cannot alter a record belonging to someone else.
+
+- `reports`, `surveillance_*` and `intelligence_tips` live *inside* a case, so
+  they are case-scoped. A fixture-authored report on a real case is reported,
+  not deleted — it changes what that case contains and may be interleaved with
+  real work.
+- `operations` are top-level and fixture-created, so they stay cleanup's —
+  except one linked to a non-fixture case, where the cascade would strip that
+  case's joint access.
+- `role_events` keeps `target_id = any(ids)` only. An event a fixture *acted on*
+  for a real member is that member's assignment-provenance record.
+- `cases`/`gangs.lead_detective_id` is nulled on test rows only. A disposable
+  fixture leading a real case leaves it untouched and is simply not deleted — an
+  inactive stray profile beats a mutated production case.
+
+SIU rows go the other way on purpose: a fixture-authored `siu_case_note` or
+`siu_disclosure` on a real case is invisible to CID, so leaving it would mean
+live, division-visible test intelligence. Those are deleted *and* reported.
+
+**Escapes are now loud.** Cleanup returns a `leaked` array naming anything a
+fixture authored outside the namespace; `globalSetup` warns pre-run and throws
+post-run, so a test that escapes turns the build red instead of being quietly
+swept. The cost is deliberate: cleanup no longer tidies up after such a test, and
+the row must be removed by hand.
+
+Verified live in rolled-back transactions: a fixture-authored report on a real
+case and a `role_events` row where a fixture acted on a real member both
+**survive** cleanup and are reported, the real case is untouched, and a fixture's
+own case + report + target + operation are all still swept with `leaked: []`.
+
+**`RLS_TEST_PASSWORD_*` can now be enabled.**
+
 ### Test isolation policy, and a safety review of the RLS suites
 
 No test database was created, and none was needed. Shipping SIU to production
