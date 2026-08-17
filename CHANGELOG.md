@@ -8,6 +8,38 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Roadmap reconciliation + post-SIU advisor sweep
+
+`docs/CID-FUTURE-STATE-SPEC.md` still described Phase 10 as "in progress on the
+current branch (not yet merged)" — it merged as **PR #209**. The header also
+claimed the roadmap ran "in full through Phase 9." Both corrected, and the same
+stale line fixed in this file. The next audit would otherwise have read a
+roadmap that was wrong about its own completion.
+
+**SIU was absent from the roadmap entirely** — zero mentions, so a reader
+working through it end-to-end would not learn that a second investigative
+department exists. Added as a "Post-roadmap work" section with the full PR trail
+(#235–#241) and a pointer to the authority model, explicitly marked as *not*
+part of Phases 0–10.
+
+**Phase 9's reliability sub-track is now the only open item in the roadmap**, and
+its three parts have diverged rather than being uniformly "deferred":
+
+- *Live-verifying CI secrets* — **unblocked** by PR #241. The one remaining
+  action across the whole roadmap.
+- *Staging/seed Supabase project* — deliberately not built; required only for
+  the destructive seeded E2E suite and deterministic visual regression.
+- *Playwright E2E + visual baselines* — still deferred, conditional on the above.
+
+**Advisor sweep after the SIU build.** Security: **zero ERROR-level findings**.
+The 176 `authenticated_security_definer_function_executable` WARNs are the
+definer-RPC pattern the portal is built on, and the 3 `rls_enabled_no_policy`
+INFOs are the intentional deny-all tables (`app_secrets`, `deletion_tokens`,
+`security_test_runs`). Performance: one real item — `siu_settings_updated_by_fkey`
+was the single FK across the whole SIU surface without a covering index, now
+added. The 199 `unused_index` notices are expected while the release gate is
+shut and the SIU tables hold no rows.
+
 ### RLS cleanup confined to the fixture namespace — F1–F5 closed
 
 `rls_test_cleanup()` is `SECURITY DEFINER` and bypasses RLS; five of its
@@ -620,7 +652,7 @@ Each phase → PR number(s) → backing migration(s). Phases 7 and 8 are UI-only
 - **Phase 9 — advisor hardening** (PR #208):
   `20260808360000_advisor_hardening` (anon-EXECUTE drift, search_path pin, one
   policy fix, FK indexes).
-- **Phase 10 — historical cleanup & documentation** (current branch, unmerged):
+- **Phase 10 — historical cleanup & documentation** (PR #209):
   `20260808380000_historical_cleanup` (~5 non-judicial rows via idempotent
   predicates; this reconciliation of `CHANGELOG.md`, `supabase/README.md`, and
   `supabase/MIGRATION-HISTORY.md`).
