@@ -3095,6 +3095,46 @@ create index siu_watchlist_removed_by_idx ON public.siu_watchlist USING btree (r
 -- row: who was watched, why, and who stopped it is what makes it accountable.
 -- Writers: siu_watch_add(), siu_watch_extend(), siu_watch_remove().
 
+create table public.siu_access_requests (
+  id uuid not null default gen_random_uuid(),
+  case_number_requested text not null,
+  reason text not null,
+  requested_by uuid not null,
+  requested_at timestamptz not null default now(),
+  status text not null default 'pending'::text,
+  decided_by uuid,
+  decided_at timestamptz,
+  decision_note text,
+  granted_access_id uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.siu_access_requests add constraint siu_access_requests_pkey PRIMARY KEY (id);
+alter table public.siu_access_requests add constraint siu_access_requests_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.siu_access_requests add constraint siu_access_requests_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id);
+alter table public.siu_access_requests add constraint siu_access_requests_granted_access_id_fkey FOREIGN KEY (granted_access_id) REFERENCES public.siu_temporary_access(id) ON DELETE SET NULL;
+alter table public.siu_access_requests add constraint siu_access_requests_status_check CHECK (status in ('pending', 'approved', 'denied', 'withdrawn'));
+alter table public.siu_access_requests enable row level security;
+create index siu_access_requests_pending_idx ON public.siu_access_requests USING btree (requested_at) WHERE (status = 'pending'::text);
+create index siu_access_requests_requester_idx ON public.siu_access_requests USING btree (requested_by);
+create index siu_access_requests_decided_by_idx ON public.siu_access_requests USING btree (decided_by);
+create index siu_access_requests_grant_idx ON public.siu_access_requests USING btree (granted_access_id);
+-- The Director of CID asks X-1 to see ONE investigation (20260902130000).
+-- case_number_requested is FREE TEXT and is deliberately NEVER resolved at
+-- request time: the Director sees none of SIU's caseload, so answering "no such
+-- investigation" for a bad number and "submitted" for a good one would let him
+-- walk the case-number space and learn how many investigations exist and when.
+-- Resolution happens at DECISION time, in front of X-1, who can already see the
+-- caseload. A request for a case that does not exist ends as 'denied', which is
+-- what a real case X-1 refuses also looks like.
+-- Approval issues a public.siu_temporary_access grant, so it inherits the \xc2\xa730
+-- bounds unchanged: one case, CASE FILE ONLY (never a siu_* table), standard
+-- classification only, time-boxed, revocable, audited, and beaten by the
+-- \xc2\xa717 recusal veto. A compartmented investigation cannot be opened this way
+-- even by X-1 approving -- siu_compartment_add() is the deliberate route.
+-- Writers: siu_request_case_access(), siu_withdraw_access_request(),
+-- siu_decide_access_request().
+
 create table public.siu_temporary_access (
   id uuid not null default gen_random_uuid(),
   case_id uuid not null,
@@ -8610,6 +8650,10 @@ create policy siu_conflicts_sel on public.siu_conflicts
 create policy siu_watchlist_sel on public.siu_watchlist
   as permissive for select to authenticated
   using (private.siu_is_agent());
+
+create policy siu_access_requests_sel on public.siu_access_requests
+  as permissive for select to authenticated
+  using (((requested_by = ( SELECT auth.uid() AS uid)) OR private.siu_is_command()));
 
 create policy siu_temp_access_sel on public.siu_temporary_access
   as permissive for select to authenticated

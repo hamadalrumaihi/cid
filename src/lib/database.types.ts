@@ -8162,6 +8162,51 @@ export type Database = {
         }
         Relationships: []
       }
+      siu_access_requests: {
+        Row: {
+          case_number_requested: string
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          granted_access_id: string | null
+          id: string
+          reason: string
+          requested_at: string
+          requested_by: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          case_number_requested: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          granted_access_id?: string | null
+          id?: string
+          reason: string
+          requested_at?: string
+          requested_by: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          case_number_requested?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          granted_access_id?: string | null
+          id?: string
+          reason?: string
+          requested_at?: string
+          requested_by?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       siu_temporary_access: {
         Row: {
           case_id: string
@@ -10353,6 +10398,31 @@ export type Database = {
       siu_deconflict: {
         Args: { p_entity_id?: string; p_entity_type: string; p_label?: string }
         Returns: Json
+      }
+      siu_request_case_access: {
+        Args: { p_case_number: string; p_reason: string }
+        Returns: string
+      }
+      siu_my_access_requests: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          access_expires_at: string | null
+          case_number: string
+          decided_at: string | null
+          decision_note: string | null
+          id: string
+          reason: string
+          requested_at: string
+          status: string
+        }[]
+      }
+      siu_withdraw_access_request: {
+        Args: { p_request: string }
+        Returns: undefined
+      }
+      siu_decide_access_request: {
+        Args: { p_days?: number; p_decision: string; p_note: string; p_request: string }
+        Returns: string
       }
       siu_grant_temp_access: {
         Args: { p_case: string; p_days?: number; p_reason: string; p_user: string }

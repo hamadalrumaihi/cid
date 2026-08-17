@@ -8,6 +8,34 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### The Director of CID can ask X-1 to see one investigation
+
+He is the unit's nominal boss and hands-off: no standing, no caseload, no
+appointment authority. When he needs sight of a specific investigation he
+requests it **by case number** and X-1 decides.
+
+The hard part is enumeration. Because he sees no caseload, the form cannot
+validate the number — "unknown case" versus "submitted" would let him walk the
+case-number space and learn how many investigations exist and when each opened.
+So the number is stored as free text and never resolved at request time; X-1
+resolves it at decision time, and a request for a case that does not exist ends
+`denied`, worded identically to a real case being refused. He learns nothing
+from a refusal.
+
+Approval issues a §30 `siu_temporary_access` grant, so it inherits those bounds
+unchanged: one case, case file only, standard classification only, time-boxed,
+revocable, audited, and beaten by the §17 recusal veto. A compartmented
+investigation cannot be opened this way even by X-1 approving.
+
+Verified live: real and fabricated case numbers accepted identically; after
+approval he sees the granted case and its reports, and **zero** rows from
+`siu_case_notes`, `siu_targets` and the watchlist; standing stays `null`
+throughout; total visible SIU caseload is exactly the one granted case.
+
+The request card lives on his own My Desk, because with no standing he cannot
+reach the SIU workspace at all. X-1's decision queue sits in the SIU Intake
+section.
+
 ### CID Director no longer holds SIU authority — reversing the SOP chain change
 
 Migration `20260823120000` read the unit's SOP as seating the **Director of

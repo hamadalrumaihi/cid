@@ -18,6 +18,8 @@ import {
   siuDesignationLabel, siuNoteTypeLabel, siuOperationCategoryLabel,
   siuAssignableClassifications, siuCanAppoint, siuCanAppointRole, siuCanReadCid,
   siuCanRemove, siuCaseAccess, siuCaseReadOnly, mayCreateCidCase, siuIsAgent, siuIsCommand, siuOperates, siuStanding,
+  siuMayRequestAccess, siuAccessStatusLabel,
+  SIU_ACCESS_REQUEST_STATUSES, SIU_ACCESS_REQUEST_STATUS_LABEL,
   siuAuditLabel, siuCallsign, siuClassificationLabel, siuRoleLabel,
   SIU_AUDIENCES, SIU_AUDIENCE_LABEL, SIU_AUDIENCE_SHORT, SIU_HANDLING,
   SIU_HANDLING_LABEL, SIU_RELEASE_ITEM_TYPES, SIU_RELEASE_ITEM_LABEL,
@@ -949,5 +951,45 @@ describe('cross-department write gates — read is not write', () => {
     // they just made. Creating a case that vanishes is worse than no button.
     expect(mayCreateCidCase('siu')).toBe(false)
     expect(mayCreateCidCase('cid')).toBe(true)
+  })
+})
+
+describe('Director access requests — the right to ASK, not to see', () => {
+  const director = live({ profile: profile({ role: 'director' }) })
+
+  it('gives the Director the ask, and nothing else', () => {
+    // This is the ONE place a CID role confers something in the SIU model, and
+    // what it confers is a request. It must not leak back into standing.
+    expect(siuMayRequestAccess(director)).toBe(true)
+    expect(siuStanding(director)).toBeNull()
+    expect(siuOperates(director)).toBe(false)
+    expect(siuCanAppoint(director)).toBe(false)
+    expect(siuCaseAccess(director, { siu_classification: 'siu' })).toBe(false)
+  })
+
+  it('is offered to nobody else', () => {
+    for (const role of ROLE_ORDER.filter((r) => r !== 'director')) {
+      expect(siuMayRequestAccess(live({ profile: profile({ role }) })), `${role}`).toBe(false)
+    }
+    // Not to SIU's own people either — they reach investigations directly.
+    expect(siuMayRequestAccess(live({ membership: member() }))).toBe(false)
+    expect(siuMayRequestAccess(live({ justiceRole: 'attorney_general' }))).toBe(false)
+    // An inactive Director asks for nothing.
+    expect(siuMayRequestAccess(live({ profile: profile({ role: 'director', active: false }) }))).toBe(false)
+  })
+
+  it('labels every request state', () => {
+    for (const st of SIU_ACCESS_REQUEST_STATUSES) {
+      expect(SIU_ACCESS_REQUEST_STATUS_LABEL[st], `${st} needs a label`).toBeTruthy()
+    }
+    // "Awaiting X-1" names who is actually holding it — the §38 principle.
+    expect(siuAccessStatusLabel('pending')).toBe('Awaiting X-1')
+    expect(siuAccessStatusLabel(null)).toBe('—')
+  })
+
+  it('names the new audit actions', () => {
+    for (const a of ['SIU_ACCESS_REQUESTED', 'SIU_ACCESS_DECIDED', 'SIU_ACCESS_WITHDRAWN']) {
+      expect(siuAuditLabel(a), `${a} needs human wording`).not.toBe(a)
+    }
   })
 })

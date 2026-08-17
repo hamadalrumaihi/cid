@@ -357,6 +357,23 @@ Chasing each positive branch and subtracting from it is the wrong shape. A recus
 
 **Lifting** needs someone else. `siu_resolve_conflict()` refuses the agent who declared it, and only the `cleared` status restores access — `reassigned` records that the conflict was real and the case moved on, which is not a reason to hand the file back. The resolver is gated on **standing** (`siu_is_command()`, or owner) rather than case access, because `siu_case_command()` now inherits the veto and a case-scoped gate would wedge a unit whose only command-rank member recused.
 
+### The Director of CID asks X-1 to see one investigation ([`20260902130000`](../supabase/migrations/20260902130000_siu_access_requests.sql))
+
+The Director holds no SIU standing and sees none of the caseload. That is the standing rule; this is the narrow exception, and the design problem it solves is **enumeration**.
+
+If the request form validated the case number — "no such investigation" for a bad one, "submitted" for a good one — he could walk the case-number space and learn how many investigations exist and when each opened. Against a calendar that is most of what he would want and none of what he is entitled to. So `case_number_requested` is **free text, never resolved at request time**. Every well-formed request is accepted identically. Resolution happens at **decision** time, in front of X-1, who can already see the caseload, so telling *them* the number is unknown discloses nothing. A request for a non-existent case ends `denied` — exactly what a real case X-1 refuses also looks like.
+
+| | |
+|---|---|
+| **Ask** | `private.siu_may_request_access()` — an active Director of CID, fixtures excluded. The one place a CID role confers anything in the SIU model, and what it confers is a *request* |
+| **Decide** | `private.siu_is_command()` — X-1, or the Owner during the build phase. Not oversight: whether CID's Director reads an investigation is X-1's operational call |
+| **Grant** | a `siu_temporary_access` row, so it inherits every §30 bound unchanged — one case, **case file only** (never a `siu_*` table), standard classification only, time-boxed, revocable, audited, and beaten by the §17 recusal veto |
+| **Visible to** | the requester (own rows) and SIU command. The fact that the Director asked about a given case number is itself information about what he suspects |
+
+A compartmented investigation **cannot** be opened this way even by X-1 approving — the RPC refuses and points at `siu_compartment_add()`, the deliberate allow-list route. §37 holds: neither the mechanism nor the person operating it pierces a compartment.
+
+Verified live: the Director's requests for a real number and a fabricated one are accepted identically; approval of the standard case gives him the case row and its reports and **zero** rows from `siu_case_notes`, `siu_targets` and the watchlist; his standing stays `null` throughout and his total visible SIU caseload is exactly the one granted case.
+
 ### DELETE was the one write the departmental wall never covered
 
 `private.can_delete()` is a **raw rank check** — `active and role in ('bureau_lead','deputy_director','director')`, read straight off `profiles.role`. It knows nothing about cases and nothing about departments. `can_delete_case_child()` used it verbatim for the CID branch, with no case predicate at all.

@@ -19,6 +19,7 @@ import { toast } from '@/lib/toast'
 import { markWatchSeen, type WatchType } from '@/lib/watchlist'
 import { useJusticeRoster } from '@/lib/justiceRoster'
 import { canReviewCase } from '@/components/command-center/lib/approvals'
+import { SiuAccessRequestCard } from '@/components/siu/SiuAccessRequest'
 import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { PageHeader } from '@/components/ui/PageHeader'
 
@@ -260,6 +261,11 @@ export function InboxView() {
       </div>
 
       {err && <p className="rounded border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">Desk refresh failed: {err}</p>}
+
+      {/* Renders for the Director of CID alone. They hold no SIU standing and
+          cannot reach the SIU workspace at all, so the request surface has to
+          live on their own desk. */}
+      <SiuAccessRequestCard />
       {loading && <p className="rounded border border-white/10 bg-white/[0.03] p-3 text-sm text-slate-400">Loading desk...</p>}
 
       {isCommand && (
