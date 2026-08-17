@@ -32,13 +32,25 @@ stable uuid; the code is unique only within a version and only when present.
 All three reasons are real in the 2026 source: 31 rows arrived with no code at
 all, codes are renumbered between versions, and a future source may repeat one.
 
-**Sequential inference for the codeless rows was considered and refused.** In
-document order Title 4 runs 401 (Schedule 1), then the two unresolved rows,
-then 402 and 403 — so continuing the sequence would number the Schedule 2 and 3
-possession charges 402 and 403, which already belong to Possession with Intent
-to Sell and Sales. The guess would have put the wrong number on a narcotics
-charge. They are imported in full as `needs_code` drafts, which the SELECT
-policy keeps out of every selector until a code is assigned.
+**The codeless rows are resolved by reading the formula, not by guessing.**
+The Code column exported unresolved spreadsheet formulas — `=A147+1` says "one
+more than the row above", which is the author's intent, not an inference about
+it. 29 of the 31 evaluate onto free numbers: Title 7 from Street Racing (705)
+through Illegal Dumping (733), an unbroken run starting from Reckless Driving
+at 704 and ending before Title 8 begins at 801. Those are imported active, each
+carrying in its `special_notes` the fact that the code was derived and which
+formula produced it, so a reviewer sees a computed number rather than a
+transcribed one.
+
+The remaining 2 fail on arithmetic, not caution. In document order Title 4 runs
+401 (Schedule 1), then the two unresolved rows, then 402 and 403 — so
+evaluating their formulas produces 402 and 403, which already belong to
+Possession with Intent to Sell and Sales. `penal_charges_code_unique` refuses
+the assignment outright. The Schedule 2 and 3 possession charges are imported in
+full as `needs_code` drafts, which the SELECT policy keeps out of every selector
+until a real code is assigned. Putting the wrong number on a narcotics
+possession charge is the one error here worse than a missing charge, because the
+number is what gets filed.
 
 Two source conflicts are recorded rather than silently resolved: 214 Possession
 of Burglary Tools has a Stackable column of N and a definition ending
@@ -50,6 +62,38 @@ constraint, so a total can never quietly count "a judge decides" as nothing.
 Nothing in the running portal changed. `cases.charges`, `src/lib/penal.ts` and
 every existing selector are untouched, and the imported version is a **draft** —
 publishing is a separate audited act, not a side effect of a deployment.
+
+All 197 charges are now in the database and were verified field by field
+against the source after loading, not before: 195 coded with no duplicates, 2
+held back for codes, 8 judge-set, 33 in Title 7, plus the 3 schedules, the
+200-month limit and 36 rules.
+
+### An unpublished Penal Code draft was readable by the whole force
+
+Found by probing the import, not by reading the migration that caused it. The
+data layer gated `penal_charges` on version status and, by omission, gated
+nothing else — `penal_substance_schedules`, `penal_rules` and `penal_limits`
+each carried `is_active() or penal_is_admin()` with no version test at all.
+While those tables were empty the gap had nothing to leak and read exactly like
+a working gate. Loading the 2026 code filled them, and a role simulation as an
+ordinary detective returned charges=0 — correct — alongside schedules=3,
+rules=36 and limits=1 from the same unpublished draft.
+
+That is a disclosure, not an inconvenience: these tables are on PostgREST like
+any other, so the UI declining to render a draft proves nothing. The rules carry
+the plea, court and hard-limit text and the schedules say which substance sits
+in which tier, which is the input to a narcotics charging decision. A draft is
+law that is not in force; being able to read it early makes publishing partly
+meaningless, and an officer charging from a draft schedule has charged from
+something that is not the law.
+
+All four content tables now share one predicate, written identically rather than
+abbreviated, so they cannot drift apart while still reading as correct. Verified
+both ways on the live database: a detective sees nothing of the draft, an
+administrator still sees all of it — and in a rolled-back transaction that
+published the version, the gate opens, 195 charges reach the selector and the
+two codeless drafts stay out. A gate that never opens would be a different bug
+wearing the same green tick.
 
 ### A stalled legal request now says who can move it
 
