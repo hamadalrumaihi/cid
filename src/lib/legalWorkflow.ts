@@ -552,6 +552,44 @@ export function activeDeadline(r: LegalReqLike): { at: string; kind: 'expires' |
   return null
 }
 
+/** §9 "why is this stuck", CID lane.
+ *
+ *  The old wording — "awaiting Bureau Lead review" — is true and useless. It
+ *  does not say WHO, and it is silent on the single commonest way a CID request
+ *  stalls: `private.can_approve_legal()` requires `created_by <> p_user`, so a
+ *  Bureau Lead who raises a request in their own bureau cannot approve it, and
+ *  nothing on screen told them that. They wait for themselves.
+ *
+ *  So this names the pool, and calls out the self-approval trap to the one
+ *  person it blocks. The pool mirrors can_approve_legal()'s CID branch:
+ *
+ *      role in ('deputy_director','director') or is_owner
+ *      or (role = 'bureau_lead' and division = responsible_bureau)
+ *      or (role = 'bureau_lead' and case.bureau = 'JTF')
+ *
+ *  The JTF widening is stated as a rule rather than applied to this request:
+ *  `LegalReqLike` carries the responsible bureau but not the case's own bureau,
+ *  and asserting "any Bureau Lead can act on this one" without knowing it is
+ *  JTF would be a guess. Describing the rule is accurate; guessing is not. */
+function cidReviewExplanation(r: LegalReqLike, v?: LegalViewer): string {
+  const bureau = r.responsible_bureau ?? 'the responsible bureau'
+  const base =
+    `This request is awaiting command review before it can be approved and issued. `
+    + `It can be decided by the ${bureau} Bureau Lead, or by any Deputy Director or `
+    + `Director standing in for them. On a joint (JTF) case, any Bureau Lead may act.`
+
+  if (!v?.myId || r.created_by !== v.myId) return base
+
+  // The author is reading it. Nobody may approve their own request, so if they
+  // are the very person the lane would normally route to, say so plainly —
+  // this is the difference between waiting and knowing to escalate.
+  const isOwnBureauLead = v.cidRole === 'bureau_lead'
+  return isOwnBureauLead
+    ? base + ' You raised this request, and no one may approve their own — '
+      + 'even in their own bureau. It needs a Deputy Director or Director.'
+    : base + ' You raised this request, so you cannot decide it yourself.'
+}
+
 /* ── Routing explanation — derived purely from the request's status fields ── */
 export function routingExplanation(r: LegalReqLike, v?: LegalViewer): string {
   const s = r.review_status
@@ -562,7 +600,7 @@ export function routingExplanation(r: LegalReqLike, v?: LegalViewer): string {
   }
   if (s === 'not_submitted') return 'This request is a draft and has not been submitted for review.'
   if (RETURNED.has(s)) return 'This request was returned for revision and is with the requesting investigator.'
-  if (s === 'cid_supervisor_review') return 'This request is awaiting Bureau Lead review before it can be approved and issued.'
+  if (s === 'cid_supervisor_review') return cidReviewExplanation(r, v)
   // §9 "why is this stuck", SIU lane. Says who is holding it AND where it goes
   // next, because the SIU route is not the one most readers know: it skips the
   // prosecutor queue entirely and goes X-1 → Attorney General → Judge.

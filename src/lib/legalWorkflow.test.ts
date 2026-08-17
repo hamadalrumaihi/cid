@@ -624,3 +624,42 @@ describe('the SIU legal lane — X-1, not a Bureau Lead', () => {
     expect(why, 'it must say the prosecutor queue is NOT the next stop').toMatch(/prosecutor queue/i)
   })
 })
+
+describe('§9 why is this stuck — the CID lane names who can act', () => {
+  const pending = (over = {}) =>
+    req({ review_status: 'cid_supervisor_review', created_by: 'inv-1',
+          responsible_bureau: 'LSB', ...over })
+
+  it('names the bureau and the fallback, not just "a Bureau Lead"', () => {
+    // The old wording was true and useless: it never said who, so a stalled
+    // request gave the reader nothing to act on.
+    const why = routingExplanation(pending(), viewer({ myId: 'u-other' }))
+    expect(why).toMatch(/LSB Bureau Lead/)
+    expect(why).toMatch(/Deputy Director or\s+Director/)
+  })
+
+  it('tells the author who IS the Bureau Lead that they cannot approve their own', () => {
+    // The commonest CID stall. can_approve_legal() requires created_by <> the
+    // approver, so a Bureau Lead raising a request in their own bureau waits
+    // for themselves — and nothing on screen used to say so.
+    const selfLead = viewer({ myId: 'inv-1', cidActive: true, cidRole: 'bureau_lead' })
+    const why = routingExplanation(pending(), selfLead)
+    expect(why).toMatch(/no one may approve their own/i)
+    expect(why, 'it must name the escalation').toMatch(/Deputy Director or Director/)
+  })
+
+  it('tells any other author they cannot decide it either', () => {
+    const selfDet = viewer({ myId: 'inv-1', cidActive: true, cidRole: 'detective' })
+    expect(routingExplanation(pending(), selfDet)).toMatch(/cannot decide it yourself/i)
+  })
+
+  it('does not tell a non-author they raised it', () => {
+    const other = viewer({ myId: 'u-other', cidActive: true, cidRole: 'bureau_lead' })
+    expect(routingExplanation(pending(), other)).not.toMatch(/You raised/i)
+  })
+
+  it('says nothing about the author when there is no viewer', () => {
+    // Queue/list surfaces render the explanation with no viewer context.
+    expect(routingExplanation(pending())).not.toMatch(/You raised/i)
+  })
+})
