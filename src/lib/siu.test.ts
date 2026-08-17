@@ -35,6 +35,7 @@ import {
   SIU_CREDIBILITY, SIU_CREDIBILITY_LABEL, SIU_SOURCE_TYPES, SIU_SOURCE_TYPE_LABEL,
   SIU_REVIEW_OUTCOME_LABEL, SIU_TEMP_ACCESS_MAX_DAYS, SIU_WATCH_MAX_DAYS,
   SIU_WATCH_ENTITY_TYPES, SIU_WATCH_ENTITY_LABEL, SIU_WATCH_PRIORITIES,
+  SIU_OPENABLE_DESIGNATIONS, SIU_TARGET_PRIORITIES, SIU_TARGET_PRIORITY_LABEL,
   SIU_WATCH_PRIORITY_LABEL, SIU_WATCH_LIVE_STATUSES, SIU_WATCH_REGISTRY_TYPES,
   SIU_WATCH_STATUS_LABEL, siuWatchStatusLabel, siuLinkStrength,
   SIU_LINK_STRENGTH_LABEL, isUngraded, reviewOverdue, siuCredibilityLabel,
@@ -916,6 +917,40 @@ describe('§25 — a watch always ends', () => {
       expect(SIU_WATCH_ENTITY_TYPES as readonly string[]).toContain(t)
     }
     expect(SIU_WATCH_ENTITY_TYPES).toContain('unknown')
+  })
+})
+
+describe('a designation is opened, never opened as already-cleared', () => {
+  it('offers every designation except `cleared`', () => {
+    // `cleared` is an OUTCOME recorded by siu_clear_target(). Offering it as an
+    // opening position would let an agent create a row saying the unit looked
+    // and cleared somebody when it never looked. The server refuses it too;
+    // this list is the UI half of the same rule, and the two must not drift.
+    expect(SIU_OPENABLE_DESIGNATIONS).not.toContain('cleared')
+    for (const d of SIU_DESIGNATIONS) {
+      if (d === 'cleared') continue
+      expect(SIU_OPENABLE_DESIGNATIONS, `${d} must still be openable`).toContain(d)
+    }
+    expect(SIU_OPENABLE_DESIGNATIONS).toHaveLength(SIU_DESIGNATIONS.length - 1)
+  })
+
+  it('has wording for every designation, cleared included', () => {
+    // Cleared is not offered in the picker but is very much displayed, so it
+    // still needs a label — dropping it from the map would render a raw token
+    // on exactly the rows somebody was exonerated on.
+    for (const d of SIU_DESIGNATIONS) expect(SIU_DESIGNATION_LABEL[d]).toBeTruthy()
+    expect(SIU_DESIGNATION_LABEL.cleared).toBeTruthy()
+  })
+
+  it('keeps target priority distinct from watch priority', () => {
+    // siu_targets uses low|medium|high|critical and siu_watchlist uses
+    // routine|priority|high_priority|critical. They are different check
+    // constraints on different tables; collapsing them in the client would send
+    // a value one of the two servers refuses.
+    expect(SIU_TARGET_PRIORITIES).toEqual(['low', 'medium', 'high', 'critical'])
+    for (const p of SIU_TARGET_PRIORITIES) expect(SIU_TARGET_PRIORITY_LABEL[p]).toBeTruthy()
+    expect(SIU_TARGET_PRIORITIES as readonly string[]).not.toContain('routine')
+    expect(SIU_WATCH_PRIORITIES as readonly string[]).not.toContain('medium')
   })
 })
 

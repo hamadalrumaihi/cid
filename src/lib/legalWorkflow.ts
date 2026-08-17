@@ -44,6 +44,13 @@ export interface LegalViewer {
   isOwner: boolean
   /** Bureaus this viewer is a live prosecutor for (SAB/LSB/BCB). */
   prosecutorBureaus?: readonly string[]
+  /** SIU command standing — the client mirror of private.siu_is_command().
+   *
+   *  Optional so every existing viewer and fixture stays valid; absent reads
+   *  as "no SIU standing", which is the safe default. It is deliberately a
+   *  SEPARATE flag from cidRole: a Bureau Lead is not SIU command, and reusing
+   *  the CID rank here would paint an approve button the database refuses. */
+  siuIsCommand?: boolean
 }
 
 /** The request fields the model reads (a Pick keeps it decoupled from the wide
@@ -76,7 +83,8 @@ const DECIDED = new Set(['approved', 'denied', 'withdrawn'])
 const ADMIN_TERMINAL = new Set(['declined', 'cancelled', 'superseded'])
 const isTerminal = (s: string): boolean => DECIDED.has(s) || ADMIN_TERMINAL.has(s)
 const RETURNED = new Set([
-  'returned_by_cid', 'returned_by_ada', 'returned_by_da', 'returned_by_ag',
+  'returned_by_cid', 'returned_by_siu_command',
+  'returned_by_ada', 'returned_by_da', 'returned_by_ag',
   'returned_by_judge', 'returned_by_prosecutor',
 ])
 
@@ -112,7 +120,12 @@ export function stageForReviewStatus(status: string): StageId {
     case 'not_submitted': return 'draft'
     case 'returned_by_cid': case 'returned_by_ada':
     case 'returned_by_da': case 'returned_by_ag': case 'returned_by_judge': return 'draft'
-    case 'cid_supervisor_review': return 'cid_review'
+    // SIU command review occupies the same LIFECYCLE position as CID
+    // supervisor review — first approval, before the request leaves the
+    // department — even though a different person decides it. Sharing the
+    // stage keeps the progress bar honest; the wording everywhere else says
+    // who is actually holding it.
+    case 'cid_supervisor_review': case 'siu_command_review': return 'cid_review'
     // The shared queue (and a prosecutor return, which re-enters via the
     // queue's stage once the investigator resubmits) sits at DOJ intake.
     case 'submitted_to_doj': case 'prosecutor_queue':
@@ -189,7 +202,7 @@ export function judgeClaimEligible(r: LegalReqLike, v: LegalViewer): boolean {
 
 /* ── Responsible role — who owns the next action right now ─────────────────── */
 export type ResponsibleRole =
-  | 'investigator' | 'cid_supervisor' | 'assigned_ada' | 'bureau_prosecutor'
+  | 'investigator' | 'cid_supervisor' | 'siu_command' | 'assigned_ada' | 'bureau_prosecutor'
   | 'district_attorney' | 'attorney_general' | 'assigned_judge' | 'any_judge'
   | 'doj_management' | 'prosecutor' | 'none'
 
@@ -197,6 +210,7 @@ export function responsibleRole(r: LegalReqLike): ResponsibleRole {
   const s = r.review_status
   if (s === 'not_submitted' || RETURNED.has(s)) return 'investigator'
   if (s === 'cid_supervisor_review') return 'cid_supervisor'
+  if (s === 'siu_command_review') return 'siu_command'
   if (s === 'submitted_to_doj') return r.assigned_ada_id ? 'assigned_ada' : (r.approval_route === 'judge' ? 'any_judge' : 'doj_management')
   // Shared queue: sealed requests wait for AG assignment; everything else is
   // any active prosecutor's to claim.
@@ -220,6 +234,7 @@ export function responsibleRole(r: LegalReqLike): ResponsibleRole {
 export const RESPONSIBLE_ROLE_LABEL: Record<ResponsibleRole, string> = {
   investigator: 'Requesting investigator',
   cid_supervisor: 'Bureau Lead',
+  siu_command: 'SIU command (X-1)',
   assigned_ada: 'Assigned ADA',
   bureau_prosecutor: 'Bureau prosecutor',
   district_attorney: 'District Attorney',
@@ -286,6 +301,13 @@ function viewerOwnsAction(r: LegalReqLike, v: LegalViewer): boolean {
   if (s === 'not_submitted' || RETURNED.has(s)) return isCreator
   if (s === 'cid_supervisor_review') {
     return v.cidActive && !isCreator && (v.isOwner || LEGAL_APPROVER_ROLES.has(v.cidRole ?? ''))
+  }
+  // SIU command review. A CID rank confers nothing here — the server gate is
+  // private.siu_case_command(), so the only honest client mirror is SIU
+  // command standing. Deliberately NOT `LEGAL_APPROVER_ROLES`, which would
+  // show a Bureau Lead an approve button the database then refuses.
+  if (s === 'siu_command_review') {
+    return !isCreator && (v.isOwner || v.siuIsCommand === true)
   }
   if (s === 'ada_review') return mine && r.assigned_ada_id === v.myId
   if (s === 'da_review') return v.justiceRole === 'district_attorney'
@@ -383,7 +405,7 @@ export function countViewerActionable(rows: readonly LegalReqLike[], v: LegalVie
 
 function waitingLane(r: LegalReqLike): 'cid' | 'doj' | 'prosecution' | 'judge' {
   const s = r.review_status
-  if (s === 'cid_supervisor_review') return 'cid'
+  if (s === 'cid_supervisor_review' || s === 'siu_command_review') return 'cid'
   // The shared queue + prosecutor states wait at DOJ.
   if (['submitted_to_doj', 'prosecutor_queue', 'prosecutor_review'].includes(s)) return 'doj'
   if (['ada_review', 'da_review', 'ag_review', 'submitted_to_da', 'submitted_to_ag'].includes(s)) return 'prosecution'
@@ -431,6 +453,7 @@ function nextActionLabel(
     if (s === 'not_submitted') return 'Finish draft'
     if (RETURNED.has(s)) return 'Revise and resubmit'
     if (s === 'cid_supervisor_review') return 'Review as Bureau Lead'
+    if (s === 'siu_command_review') return 'Review as SIU command'
     if (s === 'ada_review') return 'Review as assigned ADA'
     if (s === 'da_review') return 'Review as DA'
     if (s === 'ag_review') return 'Review as AG'
@@ -451,6 +474,7 @@ function nextActionLabel(
   const role = responsibleRole(r)
   if (role === 'any_judge') return 'Available for judicial pickup'
   if (role === 'cid_supervisor') return 'Waiting on CID review'
+  if (role === 'siu_command') return 'Waiting on SIU command'
   if (role === 'assigned_ada' || role === 'bureau_prosecutor') return 'Waiting on ADA'
   if (role === 'prosecutor') return s === 'prosecutor_queue' ? 'Waiting in the prosecutor queue' : 'Waiting on the prosecutor'
   if (role === 'district_attorney' || role === 'attorney_general') return 'Waiting on prosecution'
@@ -539,6 +563,10 @@ export function routingExplanation(r: LegalReqLike, v?: LegalViewer): string {
   if (s === 'not_submitted') return 'This request is a draft and has not been submitted for review.'
   if (RETURNED.has(s)) return 'This request was returned for revision and is with the requesting investigator.'
   if (s === 'cid_supervisor_review') return 'This request is awaiting Bureau Lead review before it can be approved and issued.'
+  // §9 "why is this stuck", SIU lane. Says who is holding it AND where it goes
+  // next, because the SIU route is not the one most readers know: it skips the
+  // prosecutor queue entirely and goes X-1 → Attorney General → Judge.
+  if (s === 'siu_command_review') return 'This request is awaiting SIU command review. SIU legal requests do not go to a CID Bureau Lead or into a prosecutor queue — once SIU command approves, this goes to the Attorney General, and then to a Judge if it needs a warrant.'
   if (s === 'submitted_to_doj') {
     if (sealed) return 'This sealed request is not available for open judicial pickup. It requires explicit assignment under the sealed-request access rules.'
     if (judgeRouted) return 'This request passed CID review and is waiting at DOJ. The responsible bureau prosecutor can review it, while an eligible Judge may claim it directly because the request is Judge-routed and not sealed.'

@@ -1015,6 +1015,98 @@ export async function siuRegistrySearch(
 }
 
 // ---------------------------------------------------------------------------
+// Targets and intelligence — the two tabs that could be read but not written
+// ---------------------------------------------------------------------------
+
+/** The designations an agent may OPEN. `cleared` is missing on purpose: it is
+ *  an outcome recorded by `siu_clear_target()`, and opening a designation as
+ *  already-cleared would produce a row claiming the unit looked when it did
+ *  not. The server refuses it too — this list is the UI half of that rule. */
+export const SIU_OPENABLE_DESIGNATIONS: readonly string[] =
+  SIU_DESIGNATIONS.filter((d) => d !== 'cleared')
+
+export const SIU_TARGET_PRIORITIES = ['low', 'medium', 'high', 'critical'] as const
+
+export const SIU_TARGET_PRIORITY_LABEL: Record<string, string> = {
+  low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical',
+}
+
+export const siuTargetPriorityTint = (p?: string | null): string =>
+  p === 'critical' ? 'bg-rose-500/15 text-rose-300'
+  : p === 'high' ? 'bg-orange-500/15 text-orange-300'
+  : p === 'medium' ? 'bg-amber-500/15 text-amber-300'
+  : 'bg-white/5 text-slate-300'
+
+/** One row of `siu_targets_live()`. `display_name` is joined from the registry
+ *  on every read — a designation must survive the subject's name being
+ *  corrected in CID, which is the whole point of the reference. */
+export interface SiuTargetEntry {
+  id: string
+  case_id: string
+  case_number: string | null
+  case_title: string | null
+  entity_type: string
+  entity_id: string | null
+  display_name: string
+  secondary: string | null
+  designation: string
+  priority: string
+  role_in_network: string | null
+  notes: string | null
+  created_at: string
+  created_by: string | null
+  cleared_at: string | null
+  cleared_by: string | null
+  clearance_reason: string | null
+}
+
+export async function fetchSiuTargets(): Promise<SiuTargetEntry[]> {
+  const res = await rpc('siu_targets_live', {})
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuTargetEntry[] | null) ?? []
+}
+
+/** One row of `siu_intelligence_live()`.
+ *
+ *  `is_about_cid_case` is the field the UI must lead with. A concern recorded
+ *  against a CID investigation is invisible to that investigation's own
+ *  detectives and to CID command — that is what makes investigating a
+ *  compromised investigator possible, and an author is entitled to see it
+ *  stated rather than have to infer it from where they happened to be. */
+export interface SiuIntelEntry {
+  id: string
+  case_id: string
+  case_number: string | null
+  case_title: string | null
+  siu_case_id: string | null
+  siu_case_number: string | null
+  is_about_cid_case: boolean
+  note_type: string
+  body: string
+  severity: string
+  subject_person_id: string | null
+  subject_name: string | null
+  source_type: string | null
+  source_reliability: string | null
+  info_credibility: string | null
+  review_due_at: string | null
+  review_overdue: boolean
+  last_reviewed_at: string | null
+  review_outcome: string | null
+  resolved_at: string | null
+  resolution: string | null
+  created_at: string
+  created_by: string | null
+  created_by_name: string | null
+}
+
+export async function fetchSiuIntelligence(): Promise<SiuIntelEntry[]> {
+  const res = await rpc('siu_intelligence_live', {})
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuIntelEntry[] | null) ?? []
+}
+
+// ---------------------------------------------------------------------------
 // The person dossier
 // ---------------------------------------------------------------------------
 

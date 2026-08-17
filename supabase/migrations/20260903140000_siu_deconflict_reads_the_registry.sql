@@ -174,7 +174,7 @@ begin
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where n.nspname = 'public' and p.proname = v_name;
     if v_src is null then
-      raise exception 'public.% is missing — expected it to exist', v_name;
+      raise exception 'public.% is missing - expected it to exist', v_name;
     end if;
 
     v_new := replace(v_src,

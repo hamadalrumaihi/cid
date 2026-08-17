@@ -249,6 +249,11 @@ export function buildLegalViewer(
   auth: ReturnType<typeof useAuth>,
   prosecutorBureaus: readonly string[] = [],
   justiceRole?: 'prosecutor' | 'attorney_general' | 'judge' | null,
+  /** SIU command standing, from useSiu().isCommand. Passed in rather than read
+   *  here because this builder has no SIU context; omitted it reads as false,
+   *  which only ever hides an action the server would have allowed — never the
+   *  other way round. */
+  siuIsCommand = false,
 ): LegalViewer {
   const p = auth.profile
   return {
@@ -258,6 +263,7 @@ export function buildLegalViewer(
     justiceRole: justiceRole !== undefined ? justiceRole : effectiveJusticeRole(auth.justiceRole),
     isOwner: auth.isOwner,
     prosecutorBureaus,
+    siuIsCommand,
   }
 }
 

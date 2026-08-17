@@ -40,10 +40,10 @@ import { rpc, withRetry } from '@/lib/db'
 import { useSiu } from '@/lib/useSiu'
 import {
   SIU_WATCH_ENTITY_TYPES, SIU_WATCH_MAX_DAYS, SIU_WATCH_PRIORITIES,
-  SIU_WATCH_PRIORITY_LABEL, SIU_WATCH_REGISTRY_TYPES, SIU_WATCH_REVIEW_OUTCOMES,
-  fetchSiuWatchlist, siuDeconflict, siuRegistrySearch, siuWatchEntityLabel,
+  SIU_WATCH_PRIORITY_LABEL, SIU_WATCH_REVIEW_OUTCOMES,
+  fetchSiuWatchlist, siuDeconflict, siuWatchEntityLabel,
   siuWatchPriorityTint, siuWatchStatusLabel, watchExpiringWithin, watchLive,
-  type SiuDeconflictResult, type SiuRegistryMatch, type SiuWatchEntry,
+  type SiuDeconflictResult, type SiuWatchEntry,
 } from '@/lib/siu'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
@@ -55,6 +55,9 @@ import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { uiPrompt } from '@/components/ui/dialog'
 import { SiuPersonDossierModal } from './SiuPersonDossier'
+import {
+  SiuRegistryPicker, choiceIsComplete, emptyChoice, type SiuRegistryChoice,
+} from './SiuRegistryPicker'
 
 const fmtDate = (v?: string | null) =>
   v ? new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
@@ -389,17 +392,11 @@ function DeconflictPanel({ onWatch }: { onWatch: () => void }) {
 
 /* ------------------------------------------------------------------ add form */
 
-/** The registry picker. Typing searches `persons`/`vehicles`/… through RLS, so
- *  an agent is only ever offered records they may already read, and the row
- *  they choose becomes the watch's foreign key. */
+/** The add form. The subject is chosen from a registry through the shared
+ *  picker — the same component target designation uses, so neither screen can
+ *  drift back towards a free-text box and regrow the duplicate address book. */
 function AddWatchModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const [entityType, setEntityType] = useState<string>('person')
-  const [q, setQ] = useState('')
-  const [matches, setMatches] = useState<SiuRegistryMatch[]>([])
-  const [searched, setSearched] = useState(false)
-  const [chosen, setChosen] = useState<SiuRegistryMatch | null>(null)
-  const [stub, setStub] = useState(false)
-  const [stubLabel, setStubLabel] = useState('')
+  const [choice, setChoice] = useState<SiuRegistryChoice>(emptyChoice)
   const [reason, setReason] = useState('')
   const [priority, setPriority] = useState<string>('routine')
   const [days, setDays] = useState(90)
@@ -408,18 +405,8 @@ function AddWatchModal({ onClose, onDone }: { onClose: () => void; onDone: () =>
   const [source, setSource] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const search = async () => {
-    if (!q.trim()) return
-    try {
-      const rows = await siuRegistrySearch(entityType, q)
-      setMatches(rows)
-      setSearched(true)
-    } catch (e) { toast(e instanceof Error ? e.message : String(e), 'danger') }
-  }
-
   const save = async () => {
-    if (!stub && !chosen) { toast('Choose the record this watch is about.', 'warn'); return }
-    if (stub && !stubLabel.trim()) { toast('Describe what is being watched.', 'warn'); return }
+    if (!choiceIsComplete(choice)) { toast('Choose the record this watch is about.', 'warn'); return }
     if (!reason.trim()) { toast('A reason is required.', 'warn'); return }
     if (days < 1 || days > SIU_WATCH_MAX_DAYS) {
       toast(`A watch runs for between 1 and ${SIU_WATCH_MAX_DAYS} days.`, 'warn'); return
@@ -429,17 +416,17 @@ function AddWatchModal({ onClose, onDone }: { onClose: () => void; onDone: () =>
     }
     setBusy(true)
     const res = await rpc('siu_watch_add', {
-      p_entity_type: stub ? 'unknown' : entityType,
+      p_entity_type: choice.entityType,
       // Omitted rather than sent as null: the RPC's own defaults are the
       // single definition of what an unset optional means.
-      p_entity_id: stub ? undefined : chosen?.id,
+      p_entity_id: choice.entityId ?? undefined,
       p_reason: reason.trim(),
       p_priority: priority,
       p_days: days,
       p_review_days: reviewDays,
       p_source: source.trim() || undefined,
       p_notes: notes.trim() || undefined,
-      p_label: stub ? stubLabel.trim() : undefined,
+      p_label: choice.label?.trim() || undefined,
     })
     setBusy(false)
     if (res.error) { toast(res.error.message, 'danger'); return }
@@ -447,124 +434,13 @@ function AddWatchModal({ onClose, onDone }: { onClose: () => void; onDone: () =>
     onDone()
   }
 
-  const dirty = () => !!chosen || !!reason || !!stubLabel || !!q
-
   return (
-    <Modal open onClose={onClose} dirty={dirty}>
+    <Modal open onClose={onClose} dirty={() => choiceIsComplete(choice) || !!reason}>
       <ModalHeader title="Add to the watchlist" onClose={onClose} />
       <div className="space-y-3">
-        {!stub ? (
-          <>
-            <Field label="Type" required>
-              {(id) => (
-                <Select
-                  id={id}
-                  value={entityType}
-                  onChange={(e) => {
-                    setEntityType(e.target.value)
-                    setMatches([]); setChosen(null); setSearched(false)
-                  }}
-                >
-                  {SIU_WATCH_REGISTRY_TYPES.map((t) => (
-                    <option key={t} value={t}>{siuWatchEntityLabel(t)}</option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-
-            <Field
-              label="Find the record"
-              required
-              hint="The watch points at the registry record, so the subject's name, affiliations and vehicles stay current without anyone retyping them."
-            >
-              {(id) => (
-                <div className="flex gap-2">
-                  <Input
-                    id={id}
-                    value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void search() } }}
-                    placeholder="Search by name, plate or handle"
-                  />
-                  <Button onClick={() => void search()}>Search</Button>
-                </div>
-              )}
-            </Field>
-
-            {chosen ? (
-              <div className="flex items-center gap-2 rounded-xl border border-sky-500/30 bg-sky-500/5 p-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-100">{chosen.display_name}</p>
-                  {chosen.secondary && (
-                    <p className="truncate text-[11px] text-slate-400">{chosen.secondary}</p>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  className="ml-auto text-[11px] text-slate-400 underline-offset-2 hover:underline"
-                  onClick={() => setChosen(null)}
-                >
-                  Change
-                </button>
-              </div>
-            ) : matches.length ? (
-              <ul className="max-h-56 space-y-1 overflow-y-auto">
-                {matches.map((m) => (
-                  <li key={m.id}>
-                    <button
-                      type="button"
-                      disabled={m.already_watched}
-                      className="flex w-full items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-left hover:border-white/25 disabled:cursor-not-allowed disabled:opacity-50"
-                      onClick={() => setChosen(m)}
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm text-slate-100">{m.display_name}</span>
-                        {m.secondary && (
-                          <span className="block truncate text-[11px] text-slate-400">{m.secondary}</span>
-                        )}
-                      </span>
-                      {m.already_watched && (
-                        <Badge tone="neutral" className="ml-auto">Already watched</Badge>
-                      )}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : searched ? (
-              <p className="text-xs text-slate-400">
-                Nothing in the registry matches that. Create the record in CID first so everyone
-                works from the same one, or record an unidentified subject below and attach it later.
-              </p>
-            ) : null}
-
-            <button
-              type="button"
-              className="text-[11px] text-slate-400 underline-offset-2 hover:underline"
-              onClick={() => { setStub(true); setChosen(null) }}
-            >
-              The subject is not in the registry
-            </button>
-          </>
-        ) : (
-          <>
-            <Field
-              label="What is being watched"
-              required
-              hint="An unidentified subject. Attach it to a registry record as soon as one exists — until then this entry cannot show affiliations, vehicles or case history."
-            >
-              {(id) => (
-                <Input id={id} value={stubLabel} onChange={(e) => setStubLabel(e.target.value)} />
-              )}
-            </Field>
-            <button
-              type="button"
-              className="text-[11px] text-slate-400 underline-offset-2 hover:underline"
-              onClick={() => setStub(false)}
-            >
-              Search the registry instead
-            </button>
-          </>
-        )}
+        {/* excludeWatched: a second live watch is refused by a unique index, so
+            offering one would be a form that fails on save. */}
+        <SiuRegistryPicker value={choice} onChange={setChoice} excludeWatched />
 
         <Field label="Priority" required>
           {(id) => (

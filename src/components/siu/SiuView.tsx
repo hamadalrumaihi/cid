@@ -33,16 +33,23 @@ import {
   siuClassificationLabel, siuClassificationTint, siuRoleLabel,
   SIU_CLASSIFICATION_HINT, SIU_ROLE_SHORT, SIU_INTEGRITY_NOTE_TYPES,
   SIU_PRIORITY_DESIGNATIONS, siuDesignationLabel, siuNoteTypeLabel,
+  SIU_OPENABLE_DESIGNATIONS, SIU_TARGET_PRIORITIES, SIU_TARGET_PRIORITY_LABEL,
+  SIU_NOTE_TYPES, fetchSiuTargets, fetchSiuIntelligence, siuTargetPriorityTint,
+  type SiuTargetEntry, type SiuIntelEntry,
   siuOperationCategoryLabel, type SiuOperationCategory,
   type SiuAuditRow, type SiuCandidate, type SiuOverview, type SiuRosterRow,
   type SiuDesignation, type SiuNoteType,
   SIU_CREDIBILITY, SIU_RELIABILITY, SIU_SOURCE_TYPES,
-  isUngraded, reviewOverdue, siuCredibilityLabel, siuCredibilityTint,
+  siuCredibilityLabel, siuCredibilityTint,
   siuReliabilityLabel, siuReviewOutcomeLabel, siuSourceTypeLabel,
 } from '@/lib/siu'
 import { SiuDisclosuresSection } from './SiuDisclosures'
 import { SiuIntakeSection } from './SiuIntake'
 import { SiuWatchlistSection } from './SiuWatchlist'
+import {
+  SiuRegistryPicker, choiceIsComplete, emptyChoice, type SiuRegistryChoice,
+} from './SiuRegistryPicker'
+import { SiuPersonDossierModal } from './SiuPersonDossier'
 import { SiuCommandSection } from './SiuCommand'
 import { SiuOversightSection, SiuTradecraftSection } from './SiuTradecraft'
 import { roleLabel } from '@/lib/roles'
@@ -62,9 +69,7 @@ import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 type CaseRow = Tables<'cases'>
 type Section = 'overview' | 'intake' | 'investigations' | 'targets' | 'operations' | 'intelligence'
   | 'watchlist' | 'tradecraft' | 'disclosure' | 'command' | 'oversight' | 'agents' | 'activity'
-type TargetRow = Tables<'siu_targets'>
 type OperationRow = Tables<'operations'>
-type NoteRow = Tables<'siu_case_notes'>
 
 const SECTIONS = [
   { id: 'overview' as const, label: 'Overview' },
@@ -454,23 +459,44 @@ function NewInvestigationModal({ onClose, onCreated }: { onClose: () => void; on
 /* ----------------------------------------------------------------- targets */
 
 function TargetsSection() {
-  const [rows, setRows] = useState<TargetRow[]>([])
+  const siu = useSiu()
+  const [rows, setRows] = useState<SiuTargetEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [showCleared, setShowCleared] = useState(false)
+  const [designating, setDesignating] = useState(false)
+  const [dossier, setDossier] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try { setRows(await withRetry(() => fetchSiuTargets())) }
+    catch (e) { toast(e instanceof Error ? e.message : String(e), 'danger') }
+    finally { setLoading(false) }
+  }, [])
 
   useEffect(() => {
     let live = true
-    void withRetry(() => list('siu_targets', { order: 'created_at', ascending: false }))
-      .then((r) => { if (live) setRows(r as TargetRow[]) })
-      .catch((e) => { if (live) toast(e instanceof Error ? e.message : String(e), 'danger') })
-      .finally(() => { if (live) setLoading(false) })
+    void (async () => {
+      await Promise.resolve()
+      if (live) await load()
+    })()
     return () => { live = false }
-  }, [])
+  }, [load])
 
   const shown = useMemo(
     () => rows.filter((r) => showCleared || !r.cleared_at),
     [rows, showCleared],
   )
+
+  const clear = async (t: SiuTargetEntry) => {
+    const reason = await uiPrompt(
+      `Clearing ${t.display_name} keeps the designation and records that it was lifted. Somebody wrongly designated is entitled to the record showing they were cleared, and the unit needs the record that it once thought otherwise.`,
+      { title: 'Clear this designation', placeholder: 'What the investigation found', confirmText: 'Clear' },
+    )
+    if (!reason?.trim()) return
+    const res = await rpc('siu_clear_target', { p_id: t.id, p_reason: reason.trim() })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Designation cleared.', 'success')
+    void load()
+  }
 
   if (loading) return <CardGridSkeleton cols="" />
 
@@ -480,31 +506,216 @@ function TargetsSection() {
         title="Targets"
         subtitle="Investigative designations across SIU investigations you can access. A designation describes someone's standing in an investigation — it is not a finding or a conviction."
         actions={
-          <Button size="sm" onClick={() => setShowCleared((v) => !v)}>
-            {showCleared ? 'Hide cleared' : 'Show cleared'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => setShowCleared((v) => !v)}>
+              {showCleared ? 'Hide cleared' : 'Show cleared'}
+            </Button>
+            {siu.isAgent && (
+              <Button size="sm" variant="primary" onClick={() => setDesignating(true)}>
+                + Designate a target
+              </Button>
+            )}
+          </div>
         }
       />
       {!shown.length ? (
-        <p className="mt-3 text-xs text-slate-400">
-          {rows.length ? 'No active designations — everything here is cleared.' : 'No targets designated yet.'}
-        </p>
+        <div className="mt-3 rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
+          <p className="text-sm font-semibold text-slate-200">
+            {rows.length ? 'No active designations — everything here is cleared.' : 'No targets designated yet.'}
+          </p>
+          <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-slate-400">
+            A designation records what somebody&apos;s standing is in one investigation. Pick the
+            subject from the registry so the designation stays tied to what CID already knows about
+            them — and so it survives their name being corrected.
+          </p>
+          {siu.isAgent && (
+            <Button variant="primary" size="sm" className="mt-3" onClick={() => setDesignating(true)}>
+              + Designate a target
+            </Button>
+          )}
+        </div>
       ) : (
         <ul className="mt-3 space-y-2">
           {shown.map((t) => (
-            <li key={t.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-white/5 bg-white/5 px-3 py-2">
-              <span className="min-w-0 flex-1 truncate text-sm text-white">{t.label}</span>
-              <Badge tone="neutral">{t.entity_type}</Badge>
-              <Badge tint={designationTint(t.designation)}>
-                {siuDesignationLabel(t.designation as SiuDesignation)}
-              </Badge>
-              {t.role_in_network && <span className="text-[11px] text-slate-400">{t.role_in_network}</span>}
-              {t.cleared_at && <Badge tone="good">Cleared</Badge>}
+            <li key={t.id} className="rounded-lg border border-white/5 bg-white/5 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {t.entity_type === 'person' && t.entity_id ? (
+                  <button
+                    type="button"
+                    className="min-w-0 truncate text-sm text-white underline-offset-2 hover:underline"
+                    onClick={() => setDossier(t.entity_id)}
+                  >
+                    {t.display_name}
+                  </button>
+                ) : (
+                  <span className="min-w-0 truncate text-sm text-white">{t.display_name}</span>
+                )}
+                {t.secondary && <span className="text-[11px] text-slate-500">{t.secondary}</span>}
+                <Badge tone="neutral">{t.entity_type}</Badge>
+                <Badge tint={designationTint(t.designation)}>
+                  {siuDesignationLabel(t.designation as SiuDesignation)}
+                </Badge>
+                <Badge tint={siuTargetPriorityTint(t.priority)}>
+                  {SIU_TARGET_PRIORITY_LABEL[t.priority] ?? t.priority}
+                </Badge>
+                {t.role_in_network && <span className="text-[11px] text-slate-400">{t.role_in_network}</span>}
+                {t.case_number && (
+                  <span className="ml-auto font-mono text-[11px] text-slate-500">{t.case_number}</span>
+                )}
+              </div>
+              {t.notes && <p className="mt-1.5 text-xs text-slate-400">{t.notes}</p>}
+              {t.cleared_at && (
+                <p className="mt-1 text-[11px] text-emerald-300/80">
+                  Cleared {fmtDate(t.cleared_at)}
+                  {t.clearance_reason ? ` — ${t.clearance_reason}` : ''}
+                </p>
+              )}
+              {siu.isAgent && !t.cleared_at && (
+                <div className="mt-2 flex justify-end gap-3 text-[11px]">
+                  {t.entity_type === 'person' && t.entity_id && (
+                    <button
+                      type="button"
+                      className="text-slate-300 underline-offset-2 hover:underline"
+                      onClick={() => setDossier(t.entity_id)}
+                    >
+                      Open dossier
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="text-emerald-300 underline-offset-2 hover:underline"
+                    onClick={() => void clear(t)}
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
       )}
+
+      {designating && (
+        <DesignateTargetModal
+          onClose={() => setDesignating(false)}
+          onDone={() => { setDesignating(false); void load() }}
+        />
+      )}
+      {dossier && (
+        <SiuPersonDossierModal personId={dossier} onClose={() => setDossier(null)} />
+      )}
     </Card>
+  )
+}
+
+/** Designating names a registry record and an investigation. Both are required
+ *  and neither is free text — a designation that floats without a case cannot
+ *  be reviewed, and one that names a typed string cannot be looked up. */
+function DesignateTargetModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [cases, setCases] = useState<CaseRow[]>([])
+  const [caseId, setCaseId] = useState('')
+  const [choice, setChoice] = useState<SiuRegistryChoice>(emptyChoice)
+  const [designation, setDesignation] = useState('person_of_interest')
+  const [priority, setPriority] = useState('medium')
+  const [role, setRole] = useState('')
+  const [notes, setNotes] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let live = true
+    void (async () => {
+      await Promise.resolve()
+      try {
+        const r = await withRetry(() => list('cases', {
+          eq: { case_authority: 'siu' }, is: { closed_at: null },
+          order: 'created_at', ascending: false, limit: 200,
+        })) as CaseRow[]
+        if (live) setCases(r)
+      } catch { /* an empty picker is the honest fallback */ }
+    })()
+    return () => { live = false }
+  }, [])
+
+  const save = async () => {
+    if (!caseId) { toast('Choose the investigation this designation belongs to.', 'warn'); return }
+    if (!choiceIsComplete(choice)) { toast('Choose the subject from the registry.', 'warn'); return }
+    setBusy(true)
+    const res = await rpc('siu_designate_target', {
+      p_case: caseId,
+      p_entity_type: choice.entityType,
+      p_entity_id: choice.entityId ?? undefined,
+      p_designation: designation,
+      p_priority: priority,
+      p_role: role.trim() || undefined,
+      p_notes: notes.trim() || undefined,
+      p_label: choice.label?.trim() || undefined,
+    })
+    setBusy(false)
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Designation recorded.', 'success')
+    onDone()
+  }
+
+  return (
+    <Modal open onClose={onClose} dirty={() => !!caseId || choiceIsComplete(choice)}>
+      <ModalHeader title="Designate a target" onClose={onClose} />
+      <div className="space-y-3">
+        <Field label="Investigation" required hint="Only investigations you can work are listed.">
+          {(id) => (
+            <Select id={id} value={caseId} onChange={(e) => setCaseId(e.target.value)}>
+              <option value="">Choose an investigation…</option>
+              {cases.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.case_number} — {c.title}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+
+        <SiuRegistryPicker value={choice} onChange={setChoice} />
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Designation" required>
+            {(id) => (
+              <Select id={id} value={designation} onChange={(e) => setDesignation(e.target.value)}>
+                {SIU_OPENABLE_DESIGNATIONS.map((d) => (
+                  <option key={d} value={d}>{siuDesignationLabel(d)}</option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          <Field label="Priority" required>
+            {(id) => (
+              <Select id={id} value={priority} onChange={(e) => setPriority(e.target.value)}>
+                {SIU_TARGET_PRIORITIES.map((p) => (
+                  <option key={p} value={p}>{SIU_TARGET_PRIORITY_LABEL[p]}</option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        </div>
+
+        <Field label="Role in the network" hint="e.g. distribution, money movement, enforcement. Optional.">
+          {(id) => <Input id={id} value={role} onChange={(e) => setRole(e.target.value)} />}
+        </Field>
+        <Field label="Notes" hint="Optional.">
+          {(id) => <Textarea id={id} rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />}
+        </Field>
+
+        <p className="text-[11px] leading-relaxed text-slate-500">
+          A designation describes standing in an investigation. It is not a finding, not a charge and
+          not a conviction, and clearing one later keeps the record of both.
+        </p>
+
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={busy} onClick={() => void save()}>
+            {busy ? 'Recording…' : 'Designate'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -583,12 +794,14 @@ function OperationsSection() {
 
 function IntelligenceSection() {
   const siu = useSiu()
-  const [rows, setRows] = useState<NoteRow[]>([])
+  const [rows, setRows] = useState<SiuIntelEntry[]>([])
   const [loading, setLoading] = useState(true)
-  const [grading, setGrading] = useState<NoteRow | null>(null)
+  const [grading, setGrading] = useState<SiuIntelEntry | null>(null)
+  const [recording, setRecording] = useState(false)
+  const [dossier, setDossier] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    try { setRows(await withRetry(() => list('siu_case_notes', { order: 'created_at', ascending: false, limit: 100 })) as NoteRow[]) }
+    try { setRows(await withRetry(() => fetchSiuIntelligence())) }
     catch (e) { toast(e instanceof Error ? e.message : String(e), 'danger') }
     finally { setLoading(false) }
   }, [])
@@ -602,7 +815,7 @@ function IntelligenceSection() {
     return () => { live = false }
   }, [load])
 
-  const review = async (n: NoteRow, outcome: string) => {
+  const review = async (n: SiuIntelEntry, outcome: string) => {
     const note = await uiPrompt(
       outcome === 'withdrawn'
         ? 'The note is resolved and marked withdrawn. It is kept, not deleted — intelligence that turned out to be wrong is part of the record of what the unit believed, and when.'
@@ -619,8 +832,8 @@ function IntelligenceSection() {
   if (loading) return <CardGridSkeleton cols="" />
 
   const open = rows.filter((r) => !r.resolved_at)
-  const ungraded = open.filter(isUngraded).length
-  const overdue = open.filter(reviewOverdue).length
+  const ungraded = open.filter((n) => !n.info_credibility).length
+  const overdue = open.filter((n) => n.review_overdue).length
 
   return (
     <Card>
@@ -631,11 +844,30 @@ function IntelligenceSection() {
           <div className="flex items-center gap-2">
             {ungraded > 0 && <Badge tint="bg-white/5 text-slate-300">{ungraded} ungraded</Badge>}
             {overdue > 0 && <Badge tint="bg-amber-500/15 text-amber-300">{overdue} review overdue</Badge>}
+            {siu.isAgent && (
+              <Button size="sm" variant="primary" onClick={() => setRecording(true)}>
+                + Record intelligence
+              </Button>
+            )}
           </div>
         }
       />
       {!open.length ? (
-        <p className="mt-3 text-xs text-slate-400">No unresolved SIU intelligence.</p>
+        <div className="mt-3 rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
+          <p className="text-sm font-semibold text-slate-200">
+            {rows.length ? 'No unresolved SIU intelligence.' : 'No intelligence recorded yet.'}
+          </p>
+          <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-slate-400">
+            A note can sit on an SIU investigation or on a CID case. Recorded against a CID case it
+            is invisible to that case&apos;s own detectives and to CID command — which is what makes
+            investigating a compromised investigator possible without alerting them.
+          </p>
+          {siu.isAgent && (
+            <Button variant="primary" size="sm" className="mt-3" onClick={() => setRecording(true)}>
+              + Record intelligence
+            </Button>
+          )}
+        </div>
       ) : (
         <ul className="mt-3 space-y-2">
           {open.map((n) => (
@@ -656,11 +888,37 @@ function IntelligenceSection() {
                   </Badge>
                 )}
                 {n.source_type && <Badge tone="neutral">{siuSourceTypeLabel(n.source_type)}</Badge>}
-                {reviewOverdue(n) && (
+                {n.review_overdue && (
                   <Badge tint="bg-amber-500/15 text-amber-300">Review overdue</Badge>
                 )}
                 <span className="ml-auto text-[10px] text-slate-400">{fmtWhen(n.created_at)}</span>
               </div>
+
+              {/* Which case this is ABOUT, said out loud. A concern against a CID
+                  investigation is the sensitive case and must never have to be
+                  inferred from where the reader happened to be standing. */}
+              <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-500">
+                {n.case_number && (
+                  <span className="font-mono">{n.case_number}</span>
+                )}
+                {n.is_about_cid_case && (
+                  <Badge tint="bg-violet-500/15 text-violet-300">CID case — hidden from CID</Badge>
+                )}
+                {n.siu_case_number && n.siu_case_number !== n.case_number && (
+                  <span>held by {n.siu_case_number}</span>
+                )}
+                {n.subject_person_id && n.subject_name && (
+                  <button
+                    type="button"
+                    className="text-slate-400 underline-offset-2 hover:underline"
+                    onClick={() => setDossier(n.subject_person_id)}
+                  >
+                    Subject: {n.subject_name}
+                  </button>
+                )}
+                {n.created_by_name && <span>by {n.created_by_name}</span>}
+              </p>
+
               <p className="mt-1.5 whitespace-pre-wrap text-xs text-slate-300">{n.body}</p>
               {siu.isAgent && (
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px]">
@@ -672,7 +930,7 @@ function IntelligenceSection() {
                     className="ml-auto text-violet-300 underline-offset-2 hover:underline"
                     onClick={() => setGrading(n)}
                   >
-                    {isUngraded(n) ? 'Grade' : 'Regrade'}
+                    {n.info_credibility ? 'Regrade' : 'Grade'}
                   </button>
                   <button
                     type="button"
@@ -695,6 +953,15 @@ function IntelligenceSection() {
         </ul>
       )}
 
+      {recording && (
+        <RecordIntelligenceModal
+          onClose={() => setRecording(false)}
+          onDone={() => { setRecording(false); void load() }}
+        />
+      )}
+      {dossier && (
+        <SiuPersonDossierModal personId={dossier} onClose={() => setDossier(null)} />
+      )}
       {grading && (
         <GradeNoteModal
           note={grading}
@@ -706,11 +973,213 @@ function IntelligenceSection() {
   )
 }
 
-/** §20/§21. Two grades, asked separately and on purpose — collapsing "who said
- *  it" and "is it true" into one confidence number is how an assessment gets
- *  over-trusted. */
+/** Recording a note.
+ *
+ *  Two things this form has to be honest about, because both are easy to get
+ *  wrong and expensive when wrong:
+ *
+ *   * WHICH case. A note against a CID investigation is hidden from that
+ *     investigation's own detectives and from CID command. That is the feature,
+ *     and the author is told so before they save rather than after.
+ *   * Grading at AUTHORSHIP. The 5x5x5 can only be set as the note is written;
+ *     afterwards `block_direct_siu_note_grading` refuses it and grading goes
+ *     through its own verb. Leaving it blank is legitimate and the note is then
+ *     surfaced as ungraded — which is the honest state, not a defect. */
+function RecordIntelligenceModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [cases, setCases] = useState<CaseRow[]>([])
+  const [caseId, setCaseId] = useState('')
+  const [siuCaseId, setSiuCaseId] = useState('')
+  const [noteType, setNoteType] = useState('intelligence')
+  const [severity, setSeverity] = useState('medium')
+  const [body, setBody] = useState('')
+  const [sourceType, setSourceType] = useState('')
+  const [reliability, setReliability] = useState('')
+  const [credibility, setCredibility] = useState('')
+  const [reviewDays, setReviewDays] = useState(90)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let live = true
+    void (async () => {
+      await Promise.resolve()
+      try {
+        const r = await withRetry(() => list('cases', {
+          is: { closed_at: null }, order: 'created_at', ascending: false, limit: 300,
+        })) as CaseRow[]
+        if (live) setCases(r)
+      } catch { /* an empty picker is the honest fallback */ }
+    })()
+    return () => { live = false }
+  }, [])
+
+  const siuCases = useMemo(() => cases.filter((c) => c.case_authority === 'siu'), [cases])
+  const target = cases.find((c) => c.id === caseId)
+  const aboutCid = !!target && target.case_authority !== 'siu'
+
+  const save = async () => {
+    if (!caseId) { toast('Choose the case this note is about.', 'warn'); return }
+    if (!body.trim()) { toast('A note needs a body.', 'warn'); return }
+    setBusy(true)
+    const res = await rpc('siu_record_intelligence', {
+      p_case: caseId,
+      p_note_type: noteType,
+      p_body: body.trim(),
+      p_severity: severity,
+      p_siu_case: siuCaseId || undefined,
+      p_source_type: sourceType || undefined,
+      p_source_reliability: reliability || undefined,
+      p_info_credibility: credibility || undefined,
+      p_review_days: credibility ? reviewDays : undefined,
+    })
+    setBusy(false)
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Intelligence recorded.', 'success')
+    onDone()
+  }
+
+  return (
+    <Modal open onClose={onClose} dirty={() => !!body || !!caseId} wide>
+      <ModalHeader title="Record intelligence" onClose={onClose} />
+      <div className="space-y-3">
+        <Field label="About which case" required>
+          {(id) => (
+            <Select id={id} value={caseId} onChange={(e) => setCaseId(e.target.value)}>
+              <option value="">Choose a case…</option>
+              {cases.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.case_authority === 'siu' ? '[SIU] ' : '[CID] '}{c.case_number} — {c.title}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+
+        {aboutCid && (
+          <p className="rounded-lg border border-violet-500/25 bg-violet-500/5 px-3 py-2 text-[11px] leading-relaxed text-violet-200/90">
+            This note sits on a <strong className="font-semibold">CID investigation</strong>. Its own
+            detectives and CID command will not see that it exists — that is what makes recording a
+            concern about an investigation possible without alerting the people running it. Every SIU
+            field agent can read it.
+          </p>
+        )}
+
+        {aboutCid && (
+          <Field
+            label="Held by which SIU investigation"
+            hint="Optional. Files the concern under one of your investigations so it is found again."
+          >
+            {(id) => (
+              <Select id={id} value={siuCaseId} onChange={(e) => setSiuCaseId(e.target.value)}>
+                <option value="">Not filed under an investigation</option>
+                {siuCases.map((c) => (
+                  <option key={c.id} value={c.id}>{c.case_number} — {c.title}</option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Type" required>
+            {(id) => (
+              <Select id={id} value={noteType} onChange={(e) => setNoteType(e.target.value)}>
+                {SIU_NOTE_TYPES.map((t) => (
+                  <option key={t} value={t}>{siuNoteTypeLabel(t)}</option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          <Field label="Severity" required>
+            {(id) => (
+              <Select id={id} value={severity} onChange={(e) => setSeverity(e.target.value)}>
+                {['low', 'medium', 'high', 'critical'].map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        </div>
+
+        <Field label="The note" required hint="What is being recorded, in enough detail to be assessed later.">
+          {(id) => <Textarea id={id} rows={5} value={body} onChange={(e) => setBody(e.target.value)} />}
+        </Field>
+
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+          <p className="text-xs font-semibold text-slate-200">Grading (5×5×5)</p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">
+            Set here or leave blank. It can only be entered as the note is written — afterwards it
+            goes through Grade, which records who assessed it and when. An ungraded note is shown as
+            ungraded rather than assumed sound.
+          </p>
+          <div className="mt-2 grid gap-3 sm:grid-cols-3">
+            <Field label="Source">
+              {(id) => (
+                <Select id={id} value={sourceType} onChange={(e) => setSourceType(e.target.value)}>
+                  <option value="">Not stated</option>
+                  {SIU_SOURCE_TYPES.map((t) => (
+                    <option key={t} value={t}>{siuSourceTypeLabel(t)}</option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Field label="Reliability">
+              {(id) => (
+                <Select id={id} value={reliability} onChange={(e) => setReliability(e.target.value)}>
+                  <option value="">Not stated</option>
+                  {SIU_RELIABILITY.map((t) => (
+                    <option key={t} value={t}>{siuReliabilityLabel(t)}</option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Field label="Credibility">
+              {(id) => (
+                <Select id={id} value={credibility} onChange={(e) => setCredibility(e.target.value)}>
+                  <option value="">Ungraded</option>
+                  {SIU_CREDIBILITY.map((t) => (
+                    <option key={t} value={t}>{siuCredibilityLabel(t)}</option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          </div>
+          {credibility && (
+            <div className="mt-2 max-w-[12rem]">
+              <Field label="Review in (days)" hint="Only graded intelligence gets a review date.">
+                {(id) => (
+                  <Input
+                    id={id} type="number" min={1} max={730}
+                    value={reviewDays} onChange={(e) => setReviewDays(Number(e.target.value))}
+                  />
+                )}
+              </Field>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={busy} onClick={() => void save()}>
+            {busy ? 'Recording…' : 'Record'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 function GradeNoteModal({ note, onClose, onDone }: {
-  note: NoteRow; onClose: () => void; onDone: () => void
+  // Only the four fields it actually grades. Narrower than the table row on
+  // purpose: the list now comes from siu_intelligence_live(), whose shape is a
+  // join rather than siu_case_notes, and a modal that grades one note has no
+  // business demanding every column of it.
+  note: {
+    id: string
+    source_type: string | null
+    source_reliability: string | null
+    info_credibility: string | null
+  }
+  onClose: () => void; onDone: () => void
 }) {
   const [sourceType, setSourceType] = useState<string>(note.source_type ?? 'human_source')
   const [reliability, setReliability] = useState<string>(note.source_reliability ?? 'untested')

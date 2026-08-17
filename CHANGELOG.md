@@ -8,6 +8,130 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### SIU actions live on the person's own record
+
+An agent reads a profile, decides the person matters, and — before this — had
+to leave, find the SIU tab, open a form and search the registry for the record
+they were already looking at. Every one of those steps was a chance to type a
+name instead of attaching the record, which is exactly how the unit ended up
+with a duplicate address book in the first place.
+
+A person's profile now carries an SIU bar: current watch, designations,
+intelligence count, and a registered-source warning, with **+ Watchlist**,
+**+ Designate**, **+ Intelligence** and **Open dossier** beside them. The
+subject is already chosen and cannot be mistyped.
+
+It renders nothing for anyone without SIU field standing — not because the
+buttons would fail (the RPCs all gate server-side) but because their presence
+on a shared CID registry page would tell any detective that the unit exists and
+takes an interest in people. The status line is read from
+`siu_person_dossier()`, which is SECURITY INVOKER, so a caller who cannot see a
+watch is told there is none; nothing is filtered down in React because there is
+nothing broader to filter.
+
+The registered-source warning is stated in a sentence rather than a chip,
+because targeting somebody else's source is the mistake §19 deconfliction
+exists to prevent and a chip is too easy to skim past.
+
+### SIU legal requests take the SIU lane, and stop telling CID about it
+
+The legal pipeline was built for CID and had no SIU branch at its two front
+stages. Submitting an SIU warrant notified every CID `deputy_director` and
+`director` — four accounts here, the Director of CID among them, who holds no
+SIU authority and has to ask X-1 for sight of a single case.
+
+That was a disclosure, not noise. `private.legal_notify()` puts the request
+number, the type and the **title** into the notification payload for any
+non-sealed request, so the substance of an SIU legal request was being pushed
+to people who could not open it and were not entitled to know it existed.
+
+It then got worse quietly: `legal_resolve_bureau()` stamps an SIU case with a
+CID bureau (the live SIU case already carried `originating_bureau = 'SAB'`),
+X-1's approval sent it to that bureau's **prosecutor queue**, and
+`can_view_legal_request()` handed those prosecutors sight of it — the rule
+"SIU never uses a CID prosecutor queue" broken by the default path, with no way
+for an agent to avoid it. And there was no AG hop at all.
+
+The chain is now Special Agent → X-1 → Attorney General → Judge. Two new
+stages (`siu_command_review`, `returned_by_siu_command`) so an SIU warrant
+never displays "awaiting CID supervisor review", wording that is simply false;
+SIU branches inside the existing RPCs rather than parallel copies; and the
+bureau-scoped CID prosecutor lanes closed to SIU requests. The AG and Judge
+branches are kept, because they are the SIU lane's own next stops.
+
+Measured live, in a rolled-back transaction:
+
+| | before | after |
+|---|---|---|
+| SIU submit → notified | 4 CID command | **1 — X-1 only** |
+| X-1 approves → goes to | `prosecutor_queue` | `ag_review`, AG notified |
+| **CID control** submit | 4 notified | **4 — unchanged** |
+
+**Two bugs the probe caught that review had not.** X-1's approval called
+`legal_sign()` with an action the signature constraint did not know, so the
+whole approval rolled back — and signing as `cid_supervisor_approval` instead
+would have passed silently and put the wrong words on the record of who
+authorised an SIU warrant. And `can_edit_legal_draft()` had never heard of
+`returned_by_siu_command`, so the new return path was a dead end: X-1 sends a
+warrant back and the agent cannot touch it. Both were found by probing the
+*return* path rather than only the happy one.
+
+Authority was already correct and is unchanged — `can_approve_legal()` has had
+an SIU branch since it was written, so no unauthorised person could ever
+*decide* an SIU request. They were merely told one existed and it was routed to
+the wrong bench.
+
+The workflow engine learned the lane too, so "why is this stuck" on an SIU
+request now says who holds it and where it goes next — including that the
+prosecutor queue is *not* the next stop, which a reader who knows the CID
+pipeline would otherwise reasonably assume.
+
+### Targets and Intelligence can finally be created
+
+Both tabs could read, grade, review and clear — every verb except the one that
+puts something there in the first place. `siu_targets` had no create RPC and no
+action on its screen, so the table was empty; `siu_case_notes` had an INSERT
+policy with nothing reaching it. An empty table for a feature the unit needs is
+not a clean slate, it is a feature nobody could use.
+
+`siu_designate_target()`, `siu_clear_target()` and `siu_record_intelligence()`
+close that, and the screens now lead with **+ Designate a target** and
+**+ Record intelligence**, with empty states that say what to do next.
+
+**Designating names a record, not a string.** `siu_targets` carried the same
+untyped `entity_id` and copied `label` the watchlist just shed, so it gets the
+same six typed foreign keys and the same constraint pinning the reference to
+`entity_type`. It was verified empty before the migration was written rather
+than assumed — the previous one made that assumption and failed on apply.
+
+Three rules the designation workflow enforces because each is a real mistake:
+the subject must exist in the registry; there is **one live designation per
+subject per investigation**, so "what is their standing?" cannot have two
+answers; and `cleared` cannot be an *opening* designation, because it is an
+outcome and opening one would assert the unit looked when it never did.
+Clearing keeps the row, the reason and who lifted it — somebody wrongly
+designated is entitled to the record showing they were cleared, and the unit
+needs the record that it once thought otherwise.
+
+**Recording intelligence says which case it is about, out loud.** A note against
+a CID investigation is invisible to that investigation's own detectives and to
+CID command — that is the feature, and the author is now told so before they
+save rather than left to infer it. Grading is offered at authorship because
+that is the only moment it can be set; leaving it blank is legitimate and the
+note is then shown as ungraded, which is the honest state. A review date is set
+only for graded intelligence: scheduling a review of something nobody has
+assessed would put a meaningless date on the calendar.
+
+`siu_record_intelligence()` is SECURITY DEFINER only because
+`private.siu_audit()` is not executable by `authenticated`, so it restates
+`siu_case_notes_ins`'s check verbatim and both are documented as a pair that
+must change together. It never writes the review columns — creating a note is
+not reviewing it — and the note body is never copied into the audit detail,
+since the audit log has a wider readership than the note.
+
+The registry picker built for the watchlist is now shared by target designation
+rather than duplicated, so neither screen can drift back towards a free-text box.
+
 ### The SIU watchlist points at CID's records instead of copying them
 
 `siu_watchlist` was built with an untyped `entity_id` carrying no foreign key

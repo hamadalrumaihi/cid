@@ -457,7 +457,7 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
 
 export function DecisionPanel({
   r, busy, act, promptSig, exhibits,
-  editable, canCidReview, cidActive, viewer,
+  editable, canCidReview, canSiuCommandReview, cidActive, viewer,
   awarenessOnly, disposition, now, onSubmitToCid,
 }: {
   r: LegalRequest
@@ -467,6 +467,11 @@ export function DecisionPanel({
   exhibits: LegalExhibit[]
   editable: boolean
   canCidReview: boolean
+  /** The SIU lane's first approval. Same RPC as the CID one — the server
+   *  branches on the case's authority — but a different person and different
+   *  wording, because "As Bureau Lead" on an SIU warrant names somebody with
+   *  no authority over it. */
+  canSiuCommandReview: boolean
   cidActive: boolean
   /** The workflow model's viewer (effective justice role included). */
   viewer: LegalViewer
@@ -667,7 +672,7 @@ export function DecisionPanel({
   const anyDoj = canClaimProsecutor || isAssignedProsecutor || canClaimJudge || isAssignedJudge
     || agAssignProsecutor || agAssignJudge
 
-  const hasActions = editable || canCidReview || anyFulfilment || anyDoj
+  const hasActions = editable || canCidReview || canSiuCommandReview || anyFulfilment || anyDoj
 
   return (
     <div className="sticky bottom-0 z-20 pb-[env(safe-area-inset-bottom)] sm:static sm:pb-0">
@@ -702,6 +707,16 @@ export function DecisionPanel({
               <Button variant="primary" disabled={busy} onClick={() => void cidDecide('approve')}>Approve</Button>
               <Button disabled={busy} onClick={() => void cidDecide('deny')}>Deny</Button>
               <Button disabled={busy} onClick={() => void cidDecide('return')}>Return for revision</Button>
+            </Block>
+          )}
+          {canSiuCommandReview && (
+            <Block title="As SIU command">
+              <Button variant="primary" disabled={busy} onClick={() => void cidDecide('approve')}>Approve</Button>
+              <Button disabled={busy} onClick={() => void cidDecide('deny')}>Deny</Button>
+              <Button disabled={busy} onClick={() => void cidDecide('return')}>Return for revision</Button>
+              <span className="text-xs text-slate-400">
+                Approval sends this to the Attorney General — not to a CID prosecutor queue.
+              </span>
             </Block>
           )}
           {canClaimProsecutor && (
