@@ -10,7 +10,7 @@
  *  stay in one testable place. Authority is always server-side (RLS + the
  *  definer RPCs); nothing here decides access — it only shapes what is shown. */
 import type { Json, Tables } from '@/lib/database.types'
-import { PENAL_CODE, type PenalCharge } from '@/lib/penal'
+import { penalByCode, type PenalCharge } from '@/lib/penal'
 import type { TimelineEntry } from '@/components/ui/WorkflowTimeline'
 
 export type NarcoticRow = Tables<'narcotics'>
@@ -115,8 +115,11 @@ export const CASE_RELATION_LABEL: Record<CaseRelation, string> = {
   mention: 'Mentioned via place',
 }
 
-/* ── Charges — resolve code strings against PENAL_CODE (no FK) ────────────── */
-const PENAL_BY_CODE: Map<string, PenalCharge> = new Map(PENAL_CODE.map((c) => [c.code, c]))
+/* ── Charges — resolve code strings against the penal catalog (no FK) ─────── */
+// Resolution happens at CALL time, never at import time. This module used to
+// build its own `new Map(PENAL_CODE.map(...))` at module scope; now that the
+// catalog is fetched rather than compiled in, that map would have captured an
+// empty array on first import and stayed empty for the life of the page.
 
 /** charge_codes is a JSON array of penal-code strings. Returns the trimmed,
  *  de-duplicated, non-empty codes in stored order. */
@@ -134,15 +137,17 @@ export function parseChargeCodes(codes: Json | null | undefined): string[] {
 
 export interface ResolvedCharge {
   code: string
-  /** The matching PENAL_CODE entry, or null when the code isn't recognised. */
+  /** The matching statute, or null when the code isn't recognised — or when
+   *  the penal catalog has not loaded yet. Callers that must tell those apart
+   *  should check `penalLoaded()`. */
   charge: PenalCharge | null
 }
 
-/** Resolve stored charge codes to PENAL_CODE entries (unknown codes surface
- *  with `charge: null` so nothing is silently dropped). Never duplicates the
- *  charge text — callers render code + title only. */
+/** Resolve stored charge codes against the published penal code (unknown codes
+ *  surface with `charge: null` so nothing is silently dropped). Never
+ *  duplicates the charge text — callers render code + title only. */
 export function resolveCharges(codes: Json | null | undefined): ResolvedCharge[] {
-  return parseChargeCodes(codes).map((code) => ({ code, charge: PENAL_BY_CODE.get(code) ?? null }))
+  return parseChargeCodes(codes).map((code) => ({ code, charge: penalByCode(code) }))
 }
 
 /* ── Activity timeline (client-side, from the row's own dates + child

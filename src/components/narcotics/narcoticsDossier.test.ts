@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { setPenalCatalog, type PenalCharge } from '@/lib/penal'
 import {
   CASE_RELATION_LABEL, NARCOTIC_REVIEW_DAYS, NARCOTIC_SUGGESTION_TYPES,
   PRODUCTION_ROLES, SECTION_IDS,
@@ -75,6 +76,16 @@ describe('display vocabulary', () => {
 })
 
 describe('charge resolution', () => {
+  // The penal code is no longer compiled into the bundle — it is fetched from
+  // the published version in the database. These tests therefore state the
+  // catalog they are resolving against instead of relying on a constant that
+  // happens to be in scope.
+  const CATALOG: PenalCharge[] = [
+    { id: 'c1', code: '(1)05', title: 'Murder, 1st Degree', level: 'Felony', jail: 150, fine: 250000, rico: true },
+    { id: 'c2', code: '(6)01', title: 'Possession of a Controlled Substance [Schedule I]', level: 'Felony', jail: 20, fine: 20000 },
+  ]
+  beforeEach(() => { setPenalCatalog(CATALOG, 'test catalog') })
+
   it('parses, trims, and de-dupes code strings', () => {
     expect(parseChargeCodes(['(6)01', ' (6)01 ', '', '(6)02'])).toEqual(['(6)01', '(6)02'])
     expect(parseChargeCodes(null)).toEqual([])
@@ -86,6 +97,18 @@ describe('charge resolution', () => {
     expect(res[0].code).toBe('(1)05')
     expect(res[0].charge?.title).toMatch(/murder/i)
     expect(res[1].charge).toBeNull()
+  })
+
+  it('keeps the code when the catalog has not loaded, and never invents a charge', () => {
+    // Resolution now happens at call time against a fetched catalog, so an
+    // empty one is a real state. The code must survive so the UI can still
+    // show what was charged and say the statute text is unavailable — the one
+    // thing it must not do is drop the charge.
+    setPenalCatalog([], null)
+    const res = resolveCharges(['(1)05'])
+    expect(res).toHaveLength(1)
+    expect(res[0].code).toBe('(1)05')
+    expect(res[0].charge).toBeNull()
   })
 })
 

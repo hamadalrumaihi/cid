@@ -6,7 +6,7 @@ import type { Tables } from './database.types'
 import { downloadDocx, type DocxPara } from './docx'
 import { downloadTextFile, fmtUSD, slug } from './format'
 import { reportTitle } from './forms'
-import { penalByCode, penalSentence } from './penal'
+import { ensurePenalCode, penalByCode, penalSentence } from './penal'
 import { parseCharges } from '@/lib/jsonShapes'
 
 type CaseRow = Tables<'cases'>
@@ -25,6 +25,12 @@ export interface PacketData {
 }
 
 export async function gatherCasePacket(c: CaseRow): Promise<PacketData> {
+  // The packet resolves every charge CODE against the published penal code. If
+  // the catalog has not loaded, penalByCode() returns null and the export goes
+  // out with bare codes -- no offense title, no class, no sentence, no fine --
+  // which looks like a complete document and is not one. A packet is filed and
+  // disclosed, so this is the one caller that must not race the load.
+  await ensurePenalCode()
   let ev: PacketData['ev'] = [], rep: PacketData['rep'] = [], rico: PacketData['rico'] = []
   let preds: PacketData['preds'] = [], media: PacketData['media'] = [], persons: PacketData['persons'] = []
   try {

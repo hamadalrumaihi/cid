@@ -6,6 +6,7 @@ import type { Json } from '@/lib/database.types'
 import { fmtUSD } from '@/lib/format'
 import { penalByCode, penalRecommend, penalSentence, penalSearch, penalTotals, type CaseCharge } from '@/lib/penal'
 import { parseCharges } from '@/lib/jsonShapes'
+import { usePenalCode } from '@/lib/usePenalCode'
 import { toast } from '@/lib/toast'
 import { useAction } from '@/lib/useAction'
 import { EmptyState } from '@/components/ui/Notice'
@@ -14,6 +15,12 @@ import { Stat, type CaseRow } from './shared'
 export function ChargesTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boolean; onChanged: () => void }) {
   const charges = parseCharges(c.charges)
   const [q, setQ] = useState('')
+  // Every figure below resolves each charge CODE against the published penal
+  // code. Until that catalog arrives, penalByCode() returns null for
+  // everything and penalTotals() sums to zero -- so a case carrying 60 months
+  // would read "0mo / $0" and a real RICO case would show no predicates. The
+  // numbers are therefore withheld rather than shown wrong.
+  const { ready: penalReady } = usePenalCode()
   const totals = penalTotals(charges)
   // Busy-guarded (useAction): every add/remove writes the whole charges array,
   // so an in-flight save must block further clicks or edits race each other.
@@ -31,9 +38,9 @@ export function ChargesTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boo
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-4">
         <Stat label="Charges" value={charges.reduce((n, x) => n + Math.max(1, x.count || 1), 0)} />
-        <Stat label="Sentence" value={totals.judge ? `${penalSentence(totals.months)} + JUDGE` : penalSentence(totals.months)} />
-        <Stat label="Fine" value={fmtUSD(totals.fine)} />
-        <Stat label="RICO predicates" value={charges.filter((x) => penalByCode(x.code)?.rico).length} />
+        <Stat label="Sentence" value={!penalReady ? '—' : totals.judge ? `${penalSentence(totals.months)} + JUDGE` : penalSentence(totals.months)} />
+        <Stat label="Fine" value={penalReady ? fmtUSD(totals.fine) : '—'} />
+        <Stat label="RICO predicates" value={penalReady ? charges.filter((x) => penalByCode(x.code)?.rico).length : '—'} />
       </div>
       <div className="space-y-2">
         {charges.map((ch) => {
