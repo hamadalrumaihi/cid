@@ -6913,7 +6913,7 @@ create policy mrh_sel on public.membership_request_history
 
 create policy case_assignments_del on public.case_assignments
   as permissive for delete to authenticated
-  using ((private.can_delete() AND (assignment_source = 'standard'::text)));
+  using ((private.can_delete_case_child(case_id) AND (assignment_source = 'standard'::text)));
 
 create policy case_assignments_ins on public.case_assignments
   as permissive for insert to authenticated
@@ -6930,7 +6930,7 @@ create policy case_assignments_upd on public.case_assignments
 
 create policy case_blockers_del on public.case_blockers
   as permissive for delete to authenticated
-  using ((private.can_delete() OR (created_by = ( SELECT auth.uid() AS uid))));
+  using ((private.can_delete_case_child(case_id) OR (created_by = ( SELECT auth.uid() AS uid))));
 
 create policy case_blockers_ins on public.case_blockers
   as permissive for insert to authenticated
@@ -6947,7 +6947,7 @@ create policy case_blockers_upd on public.case_blockers
 
 create policy cf_delete on public.case_files
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using (private.can_delete_case_file(case_number));
 
 create policy cf_insert on public.case_files
   as permissive for insert to authenticated
@@ -6992,7 +6992,7 @@ create policy csh_sel on public.case_signoff_history
 
 create policy case_tasks_del on public.case_tasks
   as permissive for delete to authenticated
-  using (((private.can_delete() OR (created_by = ( SELECT auth.uid() AS uid))) AND (NOT private.case_has_active_hold(case_id))));
+  using (((private.can_delete_case_child(case_id) OR (created_by = ( SELECT auth.uid() AS uid))) AND (NOT private.case_has_active_hold(case_id))));
 
 create policy case_tasks_ins on public.case_tasks
   as permissive for insert to authenticated
@@ -7212,7 +7212,7 @@ create policy documents_versions_sel on public.documents_versions
 
 create policy evidence_del on public.evidence
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using (private.can_delete_case_child(case_id));
 
 create policy evidence_ins on public.evidence
   as permissive for insert to authenticated
@@ -7473,7 +7473,7 @@ create policy mdt_exports_sel on public.mdt_exports
 
 create policy media_del on public.media
   as permissive for delete to authenticated
-  using ((private.can_delete() AND ((case_id IS NULL) OR (NOT private.case_has_active_hold(case_id)))));
+  using ((private.can_delete_case_child(case_id) AND ((case_id IS NULL) OR (NOT private.case_has_active_hold(case_id)))));
 
 create policy media_ins on public.media
   as permissive for insert to authenticated
@@ -7789,7 +7789,7 @@ create policy operations_ins on public.operations
 
 create policy operations_sel on public.operations
   as permissive for select to authenticated
-  using (private.is_active());
+  using (CASE WHEN (authority = 'siu'::text) THEN private.siu_operates() ELSE private.is_active() END);
 
 create policy operations_upd on public.operations
   as permissive for update to authenticated
@@ -8001,7 +8001,7 @@ create policy report_versions_sel on public.report_versions
 
 create policy reports_del on public.reports
   as permissive for delete to authenticated
-  using ((private.can_delete() AND (NOT private.case_has_active_hold(case_id))));
+  using ((private.can_delete_case_child(case_id) AND (NOT private.case_has_active_hold(case_id))));
 
 create policy reports_ins on public.reports
   as permissive for insert to authenticated
@@ -8064,7 +8064,7 @@ create policy siu_targets_ins on public.siu_targets
 
 create policy siu_targets_sel on public.siu_targets
   as permissive for select to authenticated
-  using (private.siu_case_access(case_id));
+  using (private.siu_case_read(case_id));
 
 create policy siu_targets_upd on public.siu_targets
   as permissive for update to authenticated
@@ -8073,7 +8073,7 @@ create policy siu_targets_upd on public.siu_targets
 
 create policy siu_case_agents_sel on public.siu_case_agents
   as permissive for select to authenticated
-  using (private.siu_case_access(case_id));
+  using (private.siu_case_read(case_id));
 
 create policy siu_compartment_members_sel on public.siu_compartment_members
   as permissive for select to authenticated
@@ -10193,3 +10193,66 @@ create policy wl_sel on public.watchlist
 -- case-scoped through private.can_access_case, so an SIU investigation inherits
 -- the whole surveillance domain and its records are automatically invisible to
 -- CID. Definitive SQL in supabase/migrations/20260822120000_siu_phase2.sql.
+
+-- SIU chain of command (20260823120000_siu_sop_chain_of_command) — the unit's
+-- own SOP made authoritative over the earlier architecture amendment.
+-- Commissioner's Office -> Director of CID -> Special Agent in Charge (X-1) ->
+-- SIU Special Agents. ADDITIVE ONLY; still a complete no-op for every account
+-- while the release gate is closed.
+--
+-- RE-EMITTED private.siu_standing(uuid): ONE new branch — an active profile
+-- with role = 'director' resolves to 'oversight', the same standing the
+-- Attorney General already held. An appointed SIU role still wins, so a
+-- Director who is also X-1 is X-1. The Commissioner's Office has no portal
+-- identity; the Portal Owner is the platform's equivalent top authority.
+--
+-- NEW PRIVATE HELPER private.siu_case_read(uuid): the READ superset for an SIU
+-- investigation — siu_case_access() OR "base 'siu' classification and the
+-- caller holds oversight standing". private.siu_case_access() is deliberately
+-- UNCHANGED: it is the write/command wall feeding private.can_access_case()
+-- (~115 write policies) and every siu_case_command() check, so oversight
+-- cannot rewrite a report, destroy evidence, open an investigation, assign an
+-- agent, reclassify a case, author intelligence or designate a target. Granted
+-- EXECUTE to authenticated because it appears inside RLS quals.
+--
+-- RE-EMITTED onto the superset: private.can_read_case(uuid),
+-- private.can_read_case_row(bureau, uuid, uuid, uuid), policies
+-- siu_case_agents_sel and siu_targets_sel, private.siu_can_read_case_note()
+-- (SIU-case branch only — on a CID case the SIU-only layer stays field-agent
+-- only, because the Director is a plausible SUBJECT of an integrity flag),
+-- public.siu_audit_feed() and public.siu_overview() (case counts; `assigned`
+-- and `surveillance_active` stay on the wall so no count reports rows the
+-- caller cannot open). Policy operations_sel now reads private.siu_operates()
+-- for an SIU operation; _upd/_del still require siu_is_command().
+--
+-- PRESERVED: oversight reads ONLY the base 'siu' level. siu_restricted,
+-- siu_command and siu_compartmented still require assignment, SIU command or
+-- an explicit allow-list row, so an investigation INTO the Director, the
+-- Attorney General or X-1 remains possible by classifying it above 'siu'.
+-- CONSEQUENCE: a standard 'siu' investigation is now readable by the Director
+-- and the Attorney General.
+-- Definitive SQL in supabase/migrations/20260823120000_siu_sop_chain_of_command.sql.
+
+-- SIU case delete wall (20260823130000_siu_case_delete_wall) — closes a
+-- blind-delete path found while verifying the migration above. Seven
+-- case-child DELETE policies gated on private.can_delete() alone, a pure CID
+-- ROLE check with no case predicate, and DELETE never needs a read: an active
+-- Bureau Lead, Deputy Director or Director could destroy reports, media,
+-- tasks, blockers, assignments and case_files rows belonging to any SIU
+-- investigation — compartmented included — given a row id.
+--
+-- NEW PRIVATE HELPERS private.can_delete_case_child(uuid) and
+-- private.can_delete_case_file(text): for a CID-authority case they are
+-- private.can_delete() verbatim, so no CID user gains or loses a single
+-- delete; for an SIU-authority case they are private.siu_case_command(), i.e.
+-- access to that investigation AND (SIU command OR its lead agent). SIU
+-- therefore gains the delete it should always have had, oversight standing
+-- gains none, and compartmentation holds because siu_case_command() is built
+-- on siu_case_access(). is_siu_case(null) is false, so a media row with a null
+-- case_id keeps today's rule. Both granted EXECUTE to authenticated (RLS
+-- quals). RE-EMITTED POLICIES: reports_del, evidence_del, media_del,
+-- cf_delete, case_tasks_del, case_blockers_del, case_assignments_del — each
+-- qual verbatim with can_delete() swapped for the guard. evidence carries no
+-- DELETE grant to authenticated, so evidence_del was already unreachable; it
+-- is re-emitted anyway so a future grant cannot silently reopen the hole.
+-- Definitive SQL in supabase/migrations/20260823130000_siu_case_delete_wall.sql.

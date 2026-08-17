@@ -1243,9 +1243,9 @@ Phase-1 banner.)
 
 The Special Investigation Unit is a **separate authority domain**, not another
 rank: a member operates as CID (\`profiles.role\` + \`profiles.division\`) *or* as
-SIU (\`siu_memberships.siu_role\` — \`special_agent\` / \`special_agent_in_charge\`,
-displayed as X-Ray 1). No SIU rule reads \`profiles.role\`, which is what lets
-SIU investigate CID command. One resolver answers every SIU question:
+SIU (\`siu_memberships.siu_role\` — \`special_agent\` / \`senior_special_agent\` /
+\`special_agent_in_charge\`, displayed as X-Ray 1). One resolver answers every
+SIU question:
 \`private.siu_standing()\` server-side, mirrored by \`siuStanding()\` in
 \`src/lib/siu.ts\` and surfaced to components as \`useSiu()\` — never an inline
 \`user.role === …\` check.
@@ -1257,6 +1257,17 @@ any surface, with no placeholder to reveal that a record exists.
 \`siu_compartmented\` cases are allow-list only, with no exemption for X-1, the
 Attorney General or the owner flag. Membership is appointment-only
 (\`siu_appoint\` / \`siu_remove\`); there is no request queue anywhere.
+
+**Chain of command (the unit's SOP).** Commissioner's Office → **Director of
+CID** → X-Ray 1 → agents. The Director and the Attorney General hold
+\`oversight\` standing: personnel authority plus **read** of standard \`siu\`
+investigations, targets, intelligence and operations — via the read-only
+\`private.siu_case_read()\`, never the write wall \`siu_case_access()\`. They
+cannot open, assign, reclassify, author, designate, or delete anything.
+\`siu_restricted\` and above stay closed to them, which is what keeps an
+investigation *into* the Director, the AG or X-1 possible. On a CID case the
+SIU-only intelligence layer remains field-agent only, because the Director is a
+plausible subject of an integrity flag.
 
 **Build-phase gate:** while \`siu_settings.enabled_for_non_owner\` is false,
 \`siu_standing()\` resolves to \`owner\` for the Portal Owner and NULL for
