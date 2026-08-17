@@ -6047,6 +6047,14 @@ export type Database = {
       }
       operations: {
         Row: {
+          after_action: string | null
+          authority: string
+          briefing: string | null
+          commander_id: string | null
+          legal_authority: string | null
+          objective: string | null
+          op_category: string | null
+          starts_at: string | null
           bureau: Database["public"]["Enums"]["bureau"] | null
           created_at: string
           created_by: string | null
@@ -6063,6 +6071,14 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          after_action?: string | null
+          authority?: string
+          briefing?: string | null
+          commander_id?: string | null
+          legal_authority?: string | null
+          objective?: string | null
+          op_category?: string | null
+          starts_at?: string | null
           bureau?: Database["public"]["Enums"]["bureau"] | null
           created_at?: string
           created_by?: string | null
@@ -6079,6 +6095,14 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          after_action?: string | null
+          authority?: string
+          briefing?: string | null
+          commander_id?: string | null
+          legal_authority?: string | null
+          objective?: string | null
+          op_category?: string | null
+          starts_at?: string | null
           bureau?: Database["public"]["Enums"]["bureau"] | null
           created_at?: string
           created_by?: string | null
@@ -7372,6 +7396,105 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      siu_case_notes: {
+        Row: {
+          body: string
+          case_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          note_type: string
+          resolution: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          severity: string
+          siu_case_id: string | null
+          subject_person_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          case_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note_type?: string
+          resolution?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          siu_case_id?: string | null
+          subject_person_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          case_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note_type?: string
+          resolution?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          siu_case_id?: string | null
+          subject_person_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      siu_targets: {
+        Row: {
+          case_id: string
+          cleared_at: string | null
+          cleared_by: string | null
+          created_at: string
+          created_by: string | null
+          designation: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          label: string
+          notes: string | null
+          priority: string
+          role_in_network: string | null
+          updated_at: string
+        }
+        Insert: {
+          case_id: string
+          cleared_at?: string | null
+          cleared_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          designation?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          label: string
+          notes?: string | null
+          priority?: string
+          role_in_network?: string | null
+          updated_at?: string
+        }
+        Update: {
+          case_id?: string
+          cleared_at?: string | null
+          cleared_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          designation?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          label?: string
+          notes?: string | null
+          priority?: string
+          role_in_network?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       siu_case_agents: {
         Row: {
@@ -9407,6 +9530,15 @@ export type Database = {
       }
       siu_create_case: {
         Args: { p_classification?: string; p_summary?: string; p_title: string }
+        Returns: string
+      }
+      siu_create_operation: {
+        Args: {
+          p_case?: string
+          p_category?: string
+          p_name: string
+          p_objective?: string
+        }
         Returns: string
       }
       siu_department_context: {

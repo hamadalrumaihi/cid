@@ -2126,9 +2126,25 @@ create table public.operations (
   jtf_converted_at timestamp with time zone,
   jtf_converted_by uuid,
   resolved_at timestamp with time zone,
-  resolved_by uuid
+  resolved_by uuid,
+  authority text not null default 'cid'::text,
+  op_category text,
+  objective text,
+  commander_id uuid,
+  legal_authority text,
+  briefing text,
+  after_action text,
+  starts_at timestamptz
 );
 alter table public.operations add constraint operations_pkey PRIMARY KEY (id);
+alter table public.operations add constraint operations_authority_check CHECK (authority in ('cid', 'siu'));
+alter table public.operations add constraint operations_op_category_check CHECK ((op_category is null) or (op_category in ('surveillance', 'undercover', 'controlled', 'search_warrant', 'arrest', 'fugitive', 'gang', 'narcotics', 'firearms')));
+alter table public.operations add constraint operations_commander_id_fkey FOREIGN KEY (commander_id) REFERENCES public.profiles(id);
+create index operations_siu_authority_idx ON public.operations USING btree (authority) WHERE (authority = 'siu'::text);
+create index operations_commander_id_fkey_idx ON public.operations USING btree (commander_id);
+-- authority ('cid' | 'siu') is frozen for direct writers by
+-- trg_block_direct_operation_authority: a client INSERT is forced to 'cid' and
+-- a client UPDATE of the column raises. siu_create_operation() is the only path.
 alter table public.operations add constraint operations_jtf_converted_by_fkey FOREIGN KEY (jtf_converted_by) REFERENCES public.profiles(id);
 alter table public.operations add constraint operations_resolved_by_fkey FOREIGN KEY (resolved_by) REFERENCES public.profiles(id);
 alter table public.operations add constraint operations_op_type_check CHECK ((op_type = ANY (ARRAY['normal'::text, 'jtf'::text])));
@@ -2531,6 +2547,72 @@ create table public.security_test_runs (
 alter table public.security_test_runs add constraint security_test_runs_pkey PRIMARY KEY (id);
 alter table public.security_test_runs add constraint security_test_runs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
 alter table public.security_test_runs enable row level security;
+
+create table public.siu_case_notes (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  note_type text not null default 'intelligence'::text,
+  body text not null,
+  siu_case_id uuid,
+  subject_person_id uuid,
+  severity text not null default 'medium'::text,
+  created_by uuid default auth.uid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  resolved_at timestamptz,
+  resolved_by uuid,
+  resolution text
+);
+alter table public.siu_case_notes add constraint siu_case_notes_pkey PRIMARY KEY (id);
+alter table public.siu_case_notes add constraint siu_case_notes_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.siu_case_notes add constraint siu_case_notes_siu_case_id_fkey FOREIGN KEY (siu_case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.siu_case_notes add constraint siu_case_notes_subject_person_id_fkey FOREIGN KEY (subject_person_id) REFERENCES public.persons(id) ON DELETE SET NULL;
+alter table public.siu_case_notes add constraint siu_case_notes_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.siu_case_notes add constraint siu_case_notes_resolved_by_fkey FOREIGN KEY (resolved_by) REFERENCES public.profiles(id);
+alter table public.siu_case_notes add constraint siu_case_notes_note_type_check CHECK (note_type in ('intelligence', 'integrity_concern', 'corruption_flag', 'compromised_officer', 'leak_concern', 'conflict_of_interest', 'surveillance_note', 'related_investigation'));
+alter table public.siu_case_notes add constraint siu_case_notes_severity_check CHECK (severity in ('low', 'medium', 'high', 'critical'));
+alter table public.siu_case_notes enable row level security;
+create index siu_case_notes_case_idx ON public.siu_case_notes USING btree (case_id);
+create index siu_case_notes_siu_case_idx ON public.siu_case_notes USING btree (siu_case_id);
+create index siu_case_notes_subject_idx ON public.siu_case_notes USING btree (subject_person_id);
+create index siu_case_notes_created_by_fkey_idx ON public.siu_case_notes USING btree (created_by);
+create index siu_case_notes_resolved_by_fkey_idx ON public.siu_case_notes USING btree (resolved_by);
+-- THE SIU-ONLY LAYER. Attaches restricted SIU intelligence to ANY case,
+-- including a CID one, with NO branch anywhere admitting a CID role — not the
+-- case's own lead detective, not CID command, not the Director. That is what
+-- lets SIU investigate a compromised investigator without alerting them.
+
+create table public.siu_targets (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  entity_type text not null,
+  entity_id uuid,
+  label text not null,
+  designation text not null default 'person_of_interest'::text,
+  role_in_network text,
+  priority text not null default 'medium'::text,
+  notes text,
+  created_by uuid default auth.uid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  cleared_at timestamptz,
+  cleared_by uuid
+);
+alter table public.siu_targets add constraint siu_targets_pkey PRIMARY KEY (id);
+alter table public.siu_targets add constraint siu_targets_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.siu_targets add constraint siu_targets_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.siu_targets add constraint siu_targets_cleared_by_fkey FOREIGN KEY (cleared_by) REFERENCES public.profiles(id);
+alter table public.siu_targets add constraint siu_targets_entity_type_check CHECK (entity_type in ('person', 'vehicle', 'gang', 'place', 'organization', 'account', 'unknown'));
+alter table public.siu_targets add constraint siu_targets_designation_check CHECK (designation in ('person_of_interest', 'subject', 'target', 'priority_target', 'fugitive', 'associate', 'source', 'unknown', 'cleared'));
+alter table public.siu_targets add constraint siu_targets_priority_check CHECK (priority in ('low', 'medium', 'high', 'critical'));
+alter table public.siu_targets enable row level security;
+create index siu_targets_case_idx ON public.siu_targets USING btree (case_id);
+create index siu_targets_entity_idx ON public.siu_targets USING btree (entity_type, entity_id);
+create index siu_targets_created_by_fkey_idx ON public.siu_targets USING btree (created_by);
+create index siu_targets_cleared_by_fkey_idx ON public.siu_targets USING btree (cleared_by);
+-- Investigative DESIGNATIONS, not findings, pinned to an SIU investigation and
+-- pointing at the SHARED registries by (entity_type, entity_id) — one master
+-- record per person/vehicle/gang, with an SIU-only designation layered on top.
 
 create table public.siu_case_agents (
   id uuid not null default gen_random_uuid(),
@@ -7955,6 +8037,40 @@ create policy role_events_sel on public.role_events
   as permissive for select to authenticated
   using ((private.is_command() OR private.is_owner()));
 
+create policy siu_case_notes_del on public.siu_case_notes
+  as permissive for delete to authenticated
+  using ((private.siu_can_read_case_note(case_id) AND private.siu_is_command()));
+
+create policy siu_case_notes_ins on public.siu_case_notes
+  as permissive for insert to authenticated
+  with check ((private.siu_can_read_case_note(case_id) AND private.siu_is_agent()));
+
+create policy siu_case_notes_sel on public.siu_case_notes
+  as permissive for select to authenticated
+  using (private.siu_can_read_case_note(case_id));
+
+create policy siu_case_notes_upd on public.siu_case_notes
+  as permissive for update to authenticated
+  using ((private.siu_can_read_case_note(case_id) AND ((created_by = ( SELECT auth.uid() AS uid)) OR private.siu_is_command())))
+  with check ((private.siu_can_read_case_note(case_id) AND ((created_by = ( SELECT auth.uid() AS uid)) OR private.siu_is_command())));
+
+create policy siu_targets_del on public.siu_targets
+  as permissive for delete to authenticated
+  using (private.siu_case_command(case_id));
+
+create policy siu_targets_ins on public.siu_targets
+  as permissive for insert to authenticated
+  with check ((private.siu_case_access(case_id) AND private.siu_is_agent()));
+
+create policy siu_targets_sel on public.siu_targets
+  as permissive for select to authenticated
+  using (private.siu_case_access(case_id));
+
+create policy siu_targets_upd on public.siu_targets
+  as permissive for update to authenticated
+  using ((private.siu_case_access(case_id) AND private.siu_is_agent()))
+  with check ((private.siu_case_access(case_id) AND private.siu_is_agent()));
+
 create policy siu_case_agents_sel on public.siu_case_agents
   as permissive for select to authenticated
   using (private.siu_case_access(case_id));
@@ -10037,3 +10153,43 @@ create policy wl_sel on public.watchlist
 -- classification 'siu', status 'published'), idempotent on the document name.
 -- The CID SOP is never presented as the SIU SOP.
 -- Definitive SQL in supabase/migrations/20260821120000_siu_department.sql.
+
+-- SIU Phase 2 (20260822120000_siu_phase2) — targets, operations and the
+-- SIU-only layer on CID cases. ADDITIVE ONLY; a no-op for every existing
+-- account while the release gate is closed. NEW TABLES (blocks above):
+-- siu_targets, siu_case_notes. NEW COLUMNS on public.operations: authority
+-- ('cid' | 'siu', not null default 'cid'), op_category, objective,
+-- commander_id (FK profiles), legal_authority, briefing, after_action,
+-- starts_at — with authority frozen for direct writers by NEW trigger
+-- trg_block_direct_operation_authority → private.block_direct_operation_authority()
+-- (a client INSERT is forced to 'cid'; a client UPDATE of the column raises;
+-- siu_create_operation() is the only path).
+--
+-- RE-EMITTED POLICIES operations_sel / _upd / _del: the CID branch is exactly
+-- today's rule (is_active / can_manage_operation / can_delete+can_manage), so
+-- nothing changes for a CID operation; an SIU operation is gated on
+-- private.siu_is_agent() to read and private.siu_is_command() to change, and
+-- is invisible to CID at every rank.
+--
+-- NEW PRIVATE HELPER private.siu_can_read_case_note(uuid): on an SIU
+-- investigation it is siu_case_access (so a compartmented case's notes stay
+-- allow-list-only); on a CID case it is siu_oversight_read. There is
+-- deliberately NO branch admitting a CID role — not the case's own lead
+-- detective, not CID command, not the Director — which is what lets SIU
+-- investigate a compromised investigator without alerting them.
+--
+-- GRANTS: private.siu_is_agent() and siu_is_command() are now granted EXECUTE
+-- to authenticated because both appear inside RLS quals, which are evaluated
+-- as the QUERYING role rather than in a definer context (the siu_in_compartment
+-- requirement from Phase 1). Neither leaks anything beyond "does the caller
+-- hold SIU standing".
+--
+-- RE-EMITTED public.siu_overview(): adds priority_targets, active_targets,
+-- active_operations, open_intel, cid_integrity_flags (unresolved SIU integrity
+-- concerns raised against CID investigations) and surveillance_active. Every
+-- count re-derives access; an unauthorized caller still gets {"access": false}.
+--
+-- SURVEILLANCE needed no work: surveillance_targets / _observations are already
+-- case-scoped through private.can_access_case, so an SIU investigation inherits
+-- the whole surveillance domain and its records are automatically invisible to
+-- CID. Definitive SQL in supabase/migrations/20260822120000_siu_phase2.sql.

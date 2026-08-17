@@ -36,6 +36,11 @@
  *      audit feed → overview, with the SIU-8000000 number series.
  *   7. Compartment mechanics: no self-removal, and a compartment can never be
  *      emptied — so the allow-list cannot be dissolved to reopen a case.
+ *  10. Phase 2 (20260822120000): an SIU note on a CID case is invisible to
+ *      that case's own lead detective and to CID command — reads, counts and
+ *      writes all refused — while SIU sees it and the dashboard counts it;
+ *      SIU targets and operations are invisible to CID; and operations.authority
+ *      is RPC-only (a client INSERT lands as CID, a promote UPDATE raises).
  *   9. Department separation (20260821120000): while the release gate is
  *      closed every account — Owner included — resolves to the CID
  *      department, only the Owner is offered the deliberate context switch,
@@ -386,6 +391,74 @@ describe.skipIf(!enabled)('v1.66 — SIU Phase 1 (live)', () => {
     expect(mine.error, mine.error?.message).toBeNull()
     expect((mine.data ?? []).map((d: { name: string }) => d.name))
       .toContain('Special Investigation Unit SOP')
+  })
+
+  /* ── 10. Phase 2 — the SIU-only layer on a CID case (20260822120000) ────── */
+
+  it('an SIU note on a CID case is invisible to that case OWN detective and to CID command', async () => {
+    // The selling requirement: SIU records a corruption flag against a CID
+    // investigation and the case's own lead detective — the subject of the
+    // concern — must not learn that any note exists.
+    const note = await owner.from('siu_case_notes').insert({
+      case_id: cidCase,
+      note_type: 'corruption_flag',
+      body: `[rls-test] integrity concern ${RUN}`,
+      severity: 'high',
+    }).select('id').single()
+    expect(note.error, note.error?.message).toBeNull()
+
+    for (const [who, c] of [['lead detective (the subject)', lsb], ['bureau lead', lead], ['director', director]] as const) {
+      const onCase = await c.from('siu_case_notes').select('id').eq('case_id', cidCase)
+      expect(onCase.error, `${who}: reading must not error`).toBeNull()
+      expect(onCase.data, `${who} must not see the SIU note on their own case`).toEqual([])
+
+      const all = await c.from('siu_case_notes').select('id')
+      expect(all.data, `${who} must not see ANY SIU note`).toEqual([])
+
+      const cnt = await c.from('siu_case_notes').select('id', { count: 'exact', head: true })
+      expect(cnt.count ?? 0, `${who} must not learn how many notes exist`).toBe(0)
+
+      // Writing one is refused too — the layer is SIU-only in both directions.
+      const w = await c.from('siu_case_notes').insert({ case_id: cidCase, body: 'probe' }).select('id')
+      expect(w.error, `${who} must not be able to write to the SIU layer`).not.toBeNull()
+    }
+
+    // SIU sees it, and the dashboard counts it as an integrity flag on CID.
+    const mine = await owner.from('siu_case_notes').select('id').eq('case_id', cidCase)
+    expect(mine.data?.length).toBe(1)
+    const ov = await owner.rpc('siu_overview', {})
+    expect((ov.data as { cid_integrity_flags: number }).cid_integrity_flags).toBeGreaterThanOrEqual(1)
+
+    await owner.from('siu_case_notes').delete().eq('id', note.data!.id)
+  })
+
+  it('SIU targets and operations are invisible to CID, and operation authority is RPC-only', async () => {
+    for (const [who, c] of [['detective', lsb], ['director', director]] as const) {
+      const t = await c.from('siu_targets').select('id')
+      expect(t.error, `${who}: reading targets must not error`).toBeNull()
+      expect(t.data, `${who} must not see SIU targets`).toEqual([])
+
+      const o = await c.from('operations').select('id').eq('authority', 'siu')
+      expect(o.data, `${who} must not see SIU operations`).toEqual([])
+
+      const rpcCall = await c.rpc('siu_create_operation', { p_name: `[rls-test] forbidden ${RUN}` })
+      expect(rpcCall.error, `${who} must be refused by siu_create_operation`).not.toBeNull()
+    }
+
+    // A client cannot mint an SIU operation directly: the guard rewrites it.
+    const ins = await lsb.from('operations').insert({
+      name: `[rls-test] op probe ${RUN}`, authority: 'siu',
+    }).select('id,authority').single()
+    expect(ins.error, ins.error?.message).toBeNull()
+    expect(ins.data!.authority, 'a client INSERT must land as a CID operation').toBe('cid')
+    // …and cannot promote it afterwards.
+    const up = await lsb.from('operations').update({ authority: 'siu' }).eq('id', ins.data!.id).select('id')
+    expect(up.error, 'promoting an operation to SIU authority must be refused').not.toBeNull()
+    await lsb.from('operations').delete().eq('id', ins.data!.id)
+
+    // CID operations still behave exactly as before for CID.
+    const cidOps = await lsb.from('operations').select('id').eq('authority', 'cid')
+    expect(cidOps.error, 'CID operations must stay readable by CID').toBeNull()
   })
 
   /* ── 8. CID regression guard ────────────────────────────────────────────── */

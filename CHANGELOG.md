@@ -8,6 +8,45 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### SIU Phase 2 — targets, operations, and the SIU-only layer on CID cases
+
+Migration `20260822120000_siu_phase2` adds the three investigative objects the
+SIU workspace was missing, in each case **extending** an existing system rather
+than cloning it.
+
+- **The SIU-only layer on a CID case.** `siu_case_notes` attaches restricted
+  SIU intelligence — integrity concerns, corruption flags, compromised-officer
+  and leak concerns, links back to an SIU investigation — to **any** case,
+  including a CID one. There is deliberately no branch admitting a CID role:
+  not the case's own lead detective, not CID command, not the Director. That is
+  what makes investigating a compromised investigator possible without alerting
+  them. Verified live: SIU raises a flag on a CID case, the SIU dashboard counts
+  it, and the subject detective sees zero rows and `{access: false}`.
+- **SIU targets.** Investigative designations (person of interest → subject →
+  target → priority target → fugitive → … → cleared) pinned to an SIU
+  investigation and pointing at the **shared** registries by
+  `(entity_type, entity_id)` — one master record per person/vehicle/gang, with
+  an SIU-only designation layered on top. A designation describes standing in an
+  investigation; it is never a finding or a conviction.
+- **SIU operations.** `operations` gains `authority` plus the §26 planning
+  fields (category, objective, commander, legal authority, briefing,
+  after-action, start time). CID operations are untouched and still visible to
+  any active member; SIU operations are invisible to CID at every rank, and
+  `authority` is RPC-only behind a guard trigger.
+- **Surveillance needed no work** — `surveillance_targets`/`_observations` are
+  already case-scoped through `private.can_access_case`, so an SIU investigation
+  inherits the whole surveillance domain and its records are automatically
+  invisible to CID.
+- **Dashboard.** `siu_overview()` gains priority targets, active targets, active
+  operations, unresolved intelligence, integrity flags raised on CID cases, and
+  running surveillance; the workspace gains Targets, Operations and Intelligence
+  sections reading them.
+- Two predicates (`siu_is_agent`, `siu_is_command`) needed EXECUTE grants
+  because they now appear inside RLS quals, which are evaluated as the querying
+  role — the same requirement `siu_in_compartment` hit in Phase 1.
+- Tests: `src/lib/siu.test.ts` → 38 cases; `tests/rls/v166.test.ts` gains the
+  SIU-only-layer invisibility guard and the target/operation isolation guards.
+
 ### SIU becomes a separate department
 
 Migration `20260821120000_siu_department` amends Phase 1: SIU is no longer a
