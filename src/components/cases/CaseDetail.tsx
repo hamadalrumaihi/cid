@@ -112,7 +112,7 @@ export interface WorkflowRows {
 export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () => void; onChanged: () => void }) {
   const sp = useSearchParams()
   const auth = useAuth()
-  const { profile, canEdit, canDelete, isCommand, isOwner } = auth
+  const { profile, canEdit: authCanEdit, canDelete: authCanDelete, isCommand, isOwner } = auth
   const siu = useSiu()
   const operations = useOperationsStore((s) => s.operations)
   const [c, setCase] = useState<CaseRow | null>(null)
@@ -390,6 +390,14 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   // investigation says "Lead Agent", a CID case says "Lead Detective" — while
   // the viewer's own context (siu.inSiu) decides whether the external-access
   // banner is shown. The two are deliberately separate (§12, §20).
+  // Narrow the write gates to what the server will actually accept. RLS
+  // refuses a cross-department write by matching ZERO ROWS rather than
+  // erroring, so leaving Edit visible would let it appear to save and change
+  // nothing. See siuCaseReadOnly().
+  const readOnly = siu.caseReadOnly(c)
+  const canEdit = authCanEdit && !readOnly
+  const canDelete = authCanDelete && !readOnly
+
   const caseDept = caseDepartment(c)
   const caseTerms = termsFor(caseDept)
 

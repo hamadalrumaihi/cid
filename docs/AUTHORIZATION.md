@@ -354,6 +354,16 @@ Chasing each positive branch and subtracting from it is the wrong shape. A recus
 
 **Lifting** needs someone else. `siu_resolve_conflict()` refuses the agent who declared it, and only the `cleared` status restores access — `reassigned` records that the conflict was real and the case moved on, which is not a reason to hand the file back. The resolver is gated on **standing** (`siu_is_command()`, or owner) rather than case access, because `siu_case_command()` now inherits the veto and a case-scoped gate would wedge a unit whose only command-rank member recused.
 
+### Navigating to CID from SIU — read is not write
+
+SIU's broad CID visibility is a **read** grant and always was: `private.siu_oversight_read()` (= `siu_is_agent()`) feeds `can_read_case`/`_row`/`_number`, while `can_access_case()`'s CID branch ends with `not private.is_siu_department()`, so **every** write an SIU department member attempts against a CID case is refused. The SIU navigation gained a Cases category so that read is actually reachable without a department switch; no policy changed.
+
+**RLS refuses those writes by matching zero rows, not by erroring.** An Edit control left visible therefore appears to save and changes nothing, with no signal to the user. `useSiu().caseReadOnly(caseRow)` (mirroring `siuCaseReadOnly` in `src/lib/siu.ts`) narrows `canEdit`/`canDelete` for exactly the two cases the server refuses outright — an SIU department member on a CID case, and oversight standing on an SIU investigation — and nothing else. It **narrows and never widens**: an ordinary CID member is unaffected, and the Owner (SIU `owner` standing but CID `department`) keeps every CID write right while browsing the SIU workspace.
+
+Per-case membership facts (assignment, compartment) are deliberately not mirrored: the client cannot know them for a CID case, and guessing would either hide a control someone legitimately holds or show one they do not. Those keep the existing behaviour and the server decides.
+
+> **Known, unfixed:** `private.can_create_case()` does not exclude SIU department members. The INSERT succeeds, the guard trigger forces `case_authority = 'cid'`, and `can_access_case()` then locks the creator out of what they just made. The UI withholds the control (`mayCreateCidCase`); narrowing the function itself touches CID's own create path and is a separate decision.
+
 ### §20/§21/§23 — Intelligence quality ([`20260831120000_siu_intelligence_quality.sql`](../supabase/migrations/20260831120000_siu_intelligence_quality.sql))
 
 **Two questions, not one.** `siu_sources.reliability` already graded the SOURCE (the Admiralty A–F half). `siu_case_notes` now also carries `info_credibility` (the 1–5 half — is *this* true?) and `source_type` (how it was obtained). Keeping them apart is the point: a reliable source can pass on a rumour and an untested source can be right, and collapsing both into one "confidence" number is how an assessment gets over-trusted.

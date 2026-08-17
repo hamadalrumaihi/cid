@@ -8,6 +8,49 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### SIU can reach CID cases without switching department
+
+SIU's broad read of CID has existed in RLS since Phase 1 —
+`private.siu_oversight_read()` feeds `can_read_case`, and an SIU agent could
+already see every CID case, report, evidence item, media file and task. There
+was simply **no route to it**: the SIU navigation had no Cases entry, so an
+agent had to switch department to look at a Division case, and only the Owner
+and the Attorney General can even do that.
+
+The SIU workspace now has a **Cases** category (`cases`, `case-files`). This
+adds navigation, not access — verified live: an SIU agent sees 21 cases (their
+own investigation plus all 20 CID ones) while a plain CID detective still sees
+7 and **zero** SIU cases. `operations` is deliberately left out: the SIU
+workspace has its own Operations section, and two routes to two different
+operation concepts under one label is how a workspace stops being legible.
+
+**The part that mattered more than the nav.** Every write an SIU member
+attempts against a CID case is refused by RLS matching **zero rows**, not by
+erroring — `can_access_case()`'s CID branch ends with
+`not private.is_siu_department()`. So the Edit, Archive and New Case controls
+were rendering and *silently doing nothing*. A control that appears to work is
+worse than an absent one, and adding the nav entry would have exposed that to
+every agent.
+
+`useSiu().caseReadOnly(caseRow)` now narrows `canEdit`/`canDelete` in the case
+screen, and the cases list withdraws create and bulk-archive in the SIU
+workspace. It mirrors exactly the two places the server refuses outright — an
+SIU department member on a CID case, and oversight standing on an SIU
+investigation — and nothing else: it narrows, never widens, and is inert for an
+ordinary CID member. Per-case membership facts are deliberately not modelled,
+because the client cannot know them and guessing would either hide a control
+someone has or show one they do not.
+
+In the SIU workspace the list also carries an **Authority** column, since the
+two departments now appear together and the difference decides whether the
+viewer can do anything with a row.
+
+*Recorded, not fixed:* `private.can_create_case()` never excluded SIU
+department members, so the INSERT itself is still permitted — the case is
+forced to `case_authority = 'cid'` by the guard trigger and its creator then
+loses access to it. The UI withholds the control; changing the function touches
+CID's own create path and is a separate decision.
+
 ### SIU intelligence quality, watchlist, deconfliction and supporting access (§19, §20, §21, §23, §25, §30, §35, §36, §53)
 
 **§20/§21 — grading asks two questions.** The unit already graded SOURCES; it

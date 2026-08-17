@@ -90,6 +90,18 @@ export const NAV_CATEGORIES: NavCategory[] = [
  *  The CID structure above is untouched: a CID member's portal is unchanged. */
 export const SIU_NAV_CATEGORIES: NavCategory[] = [
   { id: 'siu-unit',   label: 'Unit',         tabs: ['siu'] },
+  // SIU's broad read of CID is a READ grant that has always existed in RLS
+  // (private.siu_oversight_read() feeding can_read_case). Until now there was
+  // no route to it, so an agent had to switch department to look at a CID
+  // case — which only the Owner and the AG can even do. This category adds the
+  // navigation, not the access: every row is still RLS-scoped, and every write
+  // to a CID case is refused because can_access_case()'s CID branch ends with
+  // `not is_siu_department()`. The case screen renders read-only accordingly
+  // (useSiu().caseReadOnly).
+  // 'operations' is deliberately absent: the SIU workspace has its own
+  // Operations section, and two routes to two different operation concepts
+  // under one label is how a workspace stops being legible.
+  { id: 'siu-cases',  label: 'Cases',        tabs: ['cases', 'case-files'] },
   { id: 'siu-intel',  label: 'Intelligence', tabs: ['persons', 'gangs', 'places', 'vehicles', 'accounts', 'indicators', 'network', 'narcotics', 'media'] },
   { id: 'siu-legal',  label: 'Legal',        tabs: ['legal'] },
   { id: 'siu-ref',    label: 'Reference',    tabs: ['sops', 'penal'] },
@@ -99,6 +111,7 @@ export const SIU_NAV_CATEGORIES: NavCategory[] = [
  *  the shared TAB_LABEL, so SIU only overrides what its vocabulary changes. */
 export const SIU_TAB_LABEL: Record<string, string> = {
   siu: 'SIU Workspace',
+  cases: 'Cases',
   sops: 'SIU SOP',
   legal: 'Legal Requests',
 }

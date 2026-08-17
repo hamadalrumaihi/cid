@@ -533,6 +533,52 @@ export function siuCaseAccess(
   }
 }
 
+/** Is this case READ-ONLY for this viewer because of the departmental split?
+ *
+ *  Mirrors the two places the server refuses a write outright, and nothing
+ *  else — it narrows `useAuth().canEdit`, never widens it:
+ *
+ *   * An SIU DEPARTMENT member looking at a CID case. `private.can_access_case()`
+ *     ends its CID branch with `not private.is_siu_department()`, so every
+ *     write is refused. SIU's broad CID visibility is a READ grant
+ *     (`siu_oversight_read()` feeding `can_read_case`) and always was.
+ *   * OVERSIGHT standing looking at an SIU investigation. `siu_case_access()`
+ *     admits only owner/field standing, so the Director of CID and the AG read
+ *     the unit's standard investigations and work none of them.
+ *
+ *  This exists because the alternative is worse than a missing button. RLS
+ *  refuses those writes by returning ZERO ROWS, not by erroring — so an Edit
+ *  control left visible would appear to save and change nothing, with no way
+ *  for the user to tell. A control that appears to work is a lie; an absent
+ *  control is just a boundary.
+ *
+ *  Takes RESOLVED viewer facts rather than a SiuContext, so it consumes the
+ *  server's answer from `siu_department_context()` instead of re-deriving one
+ *  that could disagree with it.
+ *
+ *  Per-case membership facts (assignment, compartment) are deliberately NOT
+ *  modelled: the client cannot know them for a CID case, and guessing would
+ *  either hide a control someone legitimately has or show one they do not.
+ *  Those cases keep the existing behaviour and the server decides. */
+export function siuCaseReadOnly(
+  viewer: { department: Department; standing: SiuStanding | null },
+  caseRow: { case_authority?: string | null },
+): boolean {
+  if (caseDepartment(caseRow) === 'cid') return viewer.department === 'siu'
+  return viewer.standing === 'oversight'
+}
+
+/** May this viewer create a CID case? An SIU department member technically
+ *  can — `private.can_create_case()` never excluded them — but the case is
+ *  forced to `case_authority = 'cid'` by the guard trigger, and
+ *  `can_access_case()` then refuses them access to it. They would create a
+ *  case and watch it vanish. Offering the control is worse than not.
+ *
+ *  NOTE this is a UX guard over a real server-side oddity, not a fix for it:
+ *  the INSERT itself is still permitted. Recorded rather than quietly patched,
+ *  because changing `can_create_case()` touches CID's own create path. */
+export const mayCreateCidCase = (department: Department) => department !== 'siu'
+
 /** §14. Who may work the intake queue. Field standing only, NOT oversight: a
  *  referral may name the Director of CID, and reading the queue would hand its
  *  subject the allegations against them. Oversight sees referral VOLUME through

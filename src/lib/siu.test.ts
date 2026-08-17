@@ -17,7 +17,7 @@ import {
   SIU_OPERATION_CATEGORIES, SIU_PRIORITY_DESIGNATIONS,
   siuDesignationLabel, siuNoteTypeLabel, siuOperationCategoryLabel,
   siuAssignableClassifications, siuCanAppoint, siuCanAppointRole, siuCanReadCid,
-  siuCanRemove, siuCaseAccess, siuIsAgent, siuIsCommand, siuOperates, siuStanding,
+  siuCanRemove, siuCaseAccess, siuCaseReadOnly, mayCreateCidCase, siuIsAgent, siuIsCommand, siuOperates, siuStanding,
   siuAuditLabel, siuCallsign, siuClassificationLabel, siuRoleLabel,
   SIU_AUDIENCES, SIU_AUDIENCE_LABEL, SIU_AUDIENCE_SHORT, SIU_HANDLING,
   SIU_HANDLING_LABEL, SIU_RELEASE_ITEM_TYPES, SIU_RELEASE_ITEM_LABEL,
@@ -867,5 +867,57 @@ describe('Delivery B audit vocabulary', () => {
     ]) {
       expect(siuAuditLabel(a), `${a} needs human wording`).not.toBe(a)
     }
+  })
+})
+
+describe('cross-department write gates — read is not write', () => {
+  const cidCase = { case_authority: 'cid' }
+  const siuCase = { case_authority: 'siu' }
+
+  it('makes every CID case read-only for an SIU department member', () => {
+    // The server refuses these by matching ZERO ROWS, not by erroring — so an
+    // Edit control left visible would appear to save and change nothing. This
+    // is the client half of can_access_case()'s `not is_siu_department()`.
+    const agent = { department: 'siu' as const, standing: 'special_agent' as const }
+    expect(siuCaseReadOnly(agent, cidCase)).toBe(true)
+    // …and their OWN department's work is untouched.
+    expect(siuCaseReadOnly(agent, siuCase)).toBe(false)
+  })
+
+  it('makes every SIU investigation read-only for oversight', () => {
+    // The Director of CID and the AG read the unit's standard investigations
+    // and work none of them — siu_case_access() admits only owner/field.
+    const oversight = { department: 'cid' as const, standing: 'oversight' as const }
+    expect(siuCaseReadOnly(oversight, siuCase)).toBe(true)
+    // Oversight standing is a CID role holder: their CID rights are unchanged.
+    expect(siuCaseReadOnly(oversight, cidCase)).toBe(false)
+  })
+
+  it('leaves an ordinary CID member entirely alone', () => {
+    // The gate must NARROW, never widen, and must be inert for the 99% case.
+    const cid = { department: 'cid' as const, standing: null }
+    expect(siuCaseReadOnly(cid, cidCase)).toBe(false)
+    expect(siuCaseReadOnly(cid, siuCase)).toBe(false)
+    // A missing authority reads as CID, like caseDepartment() everywhere else.
+    expect(siuCaseReadOnly(cid, {})).toBe(false)
+    expect(siuCaseReadOnly({ department: 'siu', standing: 'special_agent' }, {})).toBe(true)
+  })
+
+  it('keeps the owner writing CID cases while they browse the SIU workspace', () => {
+    // The owner holds SIU 'owner' standing but their DEPARTMENT is still cid
+    // (userDepartment excludes oversight-only and unappointed accounts), so
+    // switching workspace must not cost them their CID write rights.
+    const owner = { department: 'cid' as const, standing: 'owner' as const }
+    expect(siuCaseReadOnly(owner, cidCase)).toBe(false)
+    expect(siuCaseReadOnly(owner, siuCase)).toBe(false)
+    expect(mayCreateCidCase('cid')).toBe(true)
+  })
+
+  it('withholds CID case creation from SIU department members', () => {
+    // can_create_case() never excluded them, but the guard trigger forces
+    // case_authority='cid' and can_access_case() then locks them out of what
+    // they just made. Creating a case that vanishes is worse than no button.
+    expect(mayCreateCidCase('siu')).toBe(false)
+    expect(mayCreateCidCase('cid')).toBe(true)
   })
 })
