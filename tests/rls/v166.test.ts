@@ -36,6 +36,10 @@
  *      audit feed → overview, with the SIU-8000000 number series.
  *   7. Compartment mechanics: no self-removal, and a compartment can never be
  *      emptied — so the allow-list cannot be dissolved to reopen a case.
+ *   9. Department separation (20260821120000): while the release gate is
+ *      closed every account — Owner included — resolves to the CID
+ *      department, only the Owner is offered the deliberate context switch,
+ *      and the SIU SOP is invisible to CID at every rank.
  *   8. Existing CID access is UNCHANGED: the detective still reads their own
  *      bureau's cases and their children (a regression guard on the re-emitted
  *      can_access_case / can_read_case chokepoints).
@@ -351,6 +355,37 @@ describe.skipIf(!enabled)('v1.66 — SIU Phase 1 (live)', () => {
     expect(outside.data, 'a non-member must not see who is in a compartment').toEqual([])
     const inside = await owner.from('siu_compartment_members').select('id').eq('case_id', compCase)
     expect(inside.data?.length).toBe(1)
+  })
+
+  /* ── 9. Department separation (20260821120000) ──────────────────────────── */
+
+  it('every account is in the CID department while the release gate is closed', async () => {
+    // The build-phase invariant: SIU is a separate DEPARTMENT, but until the
+    // gate opens nobody resolves to it — so CID keeps operating untouched and
+    // an early appointment cannot strand someone between departments.
+    for (const [who, c] of [['detective', lsb], ['director', director], ['owner', owner]] as const) {
+      const ctx = await c.rpc('siu_department_context', {})
+      expect(ctx.error, `${who}: department context must resolve`).toBeNull()
+      const d = ctx.data as { department: string; release_open: boolean; may_switch: boolean; siu_available: boolean }
+      expect(d.department, `${who} must be in the CID department`).toBe('cid')
+      expect(d.release_open, 'the release gate must still be closed').toBe(false)
+      // Only the Owner holds both contexts and may deliberately switch.
+      expect(d.may_switch, `${who} switch offer`).toBe(who === 'owner')
+      expect(d.siu_available, `${who} SIU availability`).toBe(who === 'owner')
+    }
+  })
+
+  it('the SIU SOP is a separate document CID cannot see at any rank', async () => {
+    for (const [who, c] of [['detective', lsb], ['bureau lead', lead], ['director', director]] as const) {
+      const r = await c.from('documents').select('id,name').eq('classification', 'siu')
+      expect(r.error, `${who}: reading documents must not error`).toBeNull()
+      expect(r.data, `${who} must not see the SIU SOP`).toEqual([])
+    }
+    // The Owner does — and it is the SIU SOP, never the CID one.
+    const mine = await owner.from('documents').select('name').eq('classification', 'siu')
+    expect(mine.error, mine.error?.message).toBeNull()
+    expect((mine.data ?? []).map((d: { name: string }) => d.name))
+      .toContain('Special Investigation Unit SOP')
   })
 
   /* ── 8. CID regression guard ────────────────────────────────────────────── */

@@ -29,20 +29,61 @@ import { rpc } from './db'
 // Vocabulary
 // ---------------------------------------------------------------------------
 
-/** Internal SIU roles. Deliberately small — SIU is not a second hierarchy. */
-export const SIU_ROLES = ['special_agent', 'special_agent_in_charge'] as const
+/** The two investigative departments on the platform. A member has exactly
+ *  one ACTIVE department; the Owner and the Attorney General are the only
+ *  accounts that legitimately hold both contexts (see `maySwitch`). */
+export const DEPARTMENTS = ['cid', 'siu'] as const
+export type Department = (typeof DEPARTMENTS)[number]
+
+export const DEPARTMENT_LABEL: Record<Department, string> = {
+  cid: 'Criminal Investigation Division',
+  siu: 'Special Investigation Unit',
+}
+
+/** SIU's own rank ladder. It is NOT the CID hierarchy renamed: no SIU role
+ *  maps to a CID role, and the CID Director role is never granted to X-1. */
+export const SIU_ROLES = ['special_agent', 'senior_special_agent', 'special_agent_in_charge'] as const
 export type SiuRole = (typeof SIU_ROLES)[number]
 
 export const SIU_ROLE_LABEL: Record<string, string> = {
   special_agent: 'Special Agent',
+  senior_special_agent: 'Senior Special Agent',
   special_agent_in_charge: 'Special Agent in Charge',
 }
 
 /** Short form used on dense rows. X-Ray 1 is the operational head of SIU. */
 export const SIU_ROLE_SHORT: Record<string, string> = {
   special_agent: 'Agent',
+  senior_special_agent: 'Sr Agent',
   special_agent_in_charge: 'X-1',
 }
+
+/** Department-aware vocabulary. The same underlying record renders with the
+ *  owning department's words — an SIU investigation never says "Lead
+ *  Detective", and a CID case never says "SIU Investigation" (§20). */
+export const DEPARTMENT_TERMS: Record<Department, {
+  caseWord: string; caseWordPlural: string; caseHeading: string
+  lead: string; member: string; command: string
+}> = {
+  cid: {
+    caseWord: 'Case', caseWordPlural: 'Cases', caseHeading: 'CID CASE',
+    lead: 'Lead Detective', member: 'Detective', command: 'CID Command',
+  },
+  siu: {
+    caseWord: 'Investigation', caseWordPlural: 'Investigations', caseHeading: 'SIU INVESTIGATION',
+    lead: 'Lead Agent', member: 'Special Agent', command: 'SIU Command',
+  },
+}
+
+/** Terms for a record, chosen by the record's OWNING department rather than
+ *  the viewer's — an SIU agent reading a CID case still sees CID vocabulary,
+ *  with the "viewing under SIU authority" banner supplying the context. */
+export const termsFor = (d: Department | string | null | undefined) =>
+  DEPARTMENT_TERMS[(d === 'siu' ? 'siu' : 'cid')]
+
+/** The department that owns a case row (`cases.case_authority`). */
+export const caseDepartment = (row: { case_authority?: string | null }): Department =>
+  row.case_authority === 'siu' ? 'siu' : 'cid'
 
 export const siuRoleLabel = (r?: string | null) => (r && SIU_ROLE_LABEL[r]) || r || '—'
 
@@ -130,20 +171,41 @@ export function siuStanding(ctx: SiuContext): SiuStanding | null {
   const m = ctx.membership
   if (m && m.active) {
     if (m.oversight_only) return 'oversight'
-    if (m.siu_role === 'special_agent' || m.siu_role === 'special_agent_in_charge') return m.siu_role
+    if ((SIU_ROLES as readonly string[]).includes(m.siu_role)) return m.siu_role as SiuRole
   }
   if (ctx.justiceRole === 'attorney_general') return 'oversight'
   return null
 }
 
+/** The member's ACTIVE department — the client mirror of
+ *  `private.user_department()`. Gate-aware: while the release gate is closed
+ *  everybody is 'cid', so CID is untouched during the build phase. Oversight
+ *  appointees (the AG) are NOT department members — oversight authority is not
+ *  departmental membership (§18). */
+export function userDepartment(ctx: SiuContext): Department {
+  if (!ctx.release) return 'cid'
+  const m = ctx.membership
+  return m && m.active && !m.oversight_only ? 'siu' : 'cid'
+}
+
 /** May this account touch SIU at all — workspace, roster, any SIU record? */
 export const siuOperates = (ctx: SiuContext) => siuStanding(ctx) !== null
+
+/** May this account deliberately switch departmental context? True only for
+ *  accounts that legitimately hold BOTH (Owner, AG oversight). A normal CID
+ *  member is never offered a switch, and the flag grants no data access on its
+ *  own — RLS and the SIU RPCs stay the authority (§23). */
+export const maySwitchDepartment = (ctx: SiuContext) => {
+  const s = siuStanding(ctx)
+  return s === 'owner' || s === 'oversight'
+}
 
 /** Field standing: may run investigations. Oversight-only is excluded — legal
  *  oversight is not a licence to work cases or to read all of CID. */
 export const siuIsAgent = (ctx: SiuContext) => {
   const s = siuStanding(ctx)
-  return s === 'owner' || s === 'special_agent_in_charge' || s === 'special_agent'
+  return s === 'owner' || s === 'special_agent_in_charge'
+    || s === 'senior_special_agent' || s === 'special_agent'
 }
 
 /** SIU command — X-Ray 1 (or the owner during build phase). */
@@ -207,9 +269,11 @@ export function siuCaseAccess(
     case 'siu_command':
       return command || !!facts.inCompartment
     case 'siu_restricted':
-      return command || (s === 'special_agent' && !!facts.assigned) || !!facts.inCompartment
+      return command
+        || ((s === 'special_agent' || s === 'senior_special_agent') && !!facts.assigned)
+        || !!facts.inCompartment
     default:
-      return command || s === 'special_agent' || !!facts.inCompartment
+      return command || s === 'special_agent' || s === 'senior_special_agent' || !!facts.inCompartment
   }
 }
 

@@ -9409,6 +9409,10 @@ export type Database = {
         Args: { p_classification?: string; p_summary?: string; p_title: string }
         Returns: string
       }
+      siu_department_context: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       siu_member_search: {
         Args: { p_q: string }
         Returns: {

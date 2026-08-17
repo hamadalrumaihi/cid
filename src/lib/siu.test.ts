@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 import type { Profile } from './auth'
 import { ROLE_ORDER } from './roles'
 import {
+  caseDepartment, maySwitchDepartment, termsFor, userDepartment,
   siuAssignableClassifications, siuCanAppoint, siuCanAppointRole, siuCanReadCid,
   siuCanRemove, siuCaseAccess, siuIsAgent, siuIsCommand, siuOperates, siuStanding,
   siuAuditLabel, siuCallsign, siuClassificationLabel, siuRoleLabel,
@@ -271,6 +272,73 @@ describe('no role is above investigation', () => {
     const removed = live({ membership: member({ active: false }) })
     expect(siuCaseAccess(removed, c, { inCompartment: true })).toBe(false)
     expect(siuCaseAccess(removed, { siu_classification: 'siu' })).toBe(false)
+  })
+})
+
+describe('department model — one platform, two departments', () => {
+  it('puts everyone in CID while the release gate is closed', () => {
+    // The build-phase invariant: appointing agents early must not strand them
+    // between departments, and CID must keep working untouched.
+    expect(userDepartment({ profile: profile(), membership: member(), release: false })).toBe('cid')
+    expect(userDepartment({ profile: profile({ is_owner: true }), release: false })).toBe('cid')
+  })
+
+  it('moves an appointed agent into SIU once the gate opens', () => {
+    expect(userDepartment(live({ membership: member() }))).toBe('siu')
+    expect(userDepartment(live({ membership: member({ siu_role: 'senior_special_agent' }) }))).toBe('siu')
+    expect(userDepartment(live({ membership: member({ siu_role: 'special_agent_in_charge' }) }))).toBe('siu')
+  })
+
+  it('keeps ordinary CID members — and the AG — in CID', () => {
+    expect(userDepartment(live({ profile: profile({ role: 'director' }) }))).toBe('cid')
+    // Oversight authority is NOT departmental membership (§18).
+    expect(userDepartment(live({ justiceRole: 'attorney_general' }))).toBe('cid')
+    expect(userDepartment(live({ membership: member({ oversight_only: true }) }))).toBe('cid')
+    // An ended membership returns the member to CID.
+    expect(userDepartment(live({ membership: member({ active: false }) }))).toBe('cid')
+  })
+
+  it('offers a deliberate switch ONLY to accounts holding both contexts', () => {
+    expect(maySwitchDepartment(live({ profile: profile({ is_owner: true }) }))).toBe(true)
+    expect(maySwitchDepartment(live({ justiceRole: 'attorney_general' }))).toBe(true)
+    // Field agents hold exactly one context; normal CID members hold one too.
+    expect(maySwitchDepartment(live({ membership: member() }))).toBe(false)
+    expect(maySwitchDepartment(live({ membership: member({ siu_role: 'special_agent_in_charge' }) }))).toBe(false)
+    expect(maySwitchDepartment(live({ profile: profile({ role: 'director' }) }))).toBe(false)
+    expect(maySwitchDepartment({ profile: profile(), release: false })).toBe(false)
+  })
+
+  it('names a record by its OWNING department, not the viewer', () => {
+    expect(caseDepartment({ case_authority: 'siu' })).toBe('siu')
+    expect(caseDepartment({ case_authority: 'cid' })).toBe('cid')
+    expect(caseDepartment({})).toBe('cid')
+
+    expect(termsFor('siu').lead).toBe('Lead Agent')
+    expect(termsFor('siu').caseHeading).toBe('SIU INVESTIGATION')
+    expect(termsFor('cid').lead).toBe('Lead Detective')
+    expect(termsFor('cid').caseHeading).toBe('CID CASE')
+    // An unknown/absent authority reads as CID rather than throwing.
+    expect(termsFor(null).lead).toBe('Lead Detective')
+  })
+})
+
+describe('the senior agent tier', () => {
+  it('is a field tier, never SIU command', () => {
+    const senior = live({ membership: member({ siu_role: 'senior_special_agent' }) })
+    expect(siuIsAgent(senior)).toBe(true)
+    expect(siuCanReadCid(senior)).toBe(true)
+    expect(siuIsCommand(senior)).toBe(false)
+    expect(siuCanAppoint(senior)).toBe(false)
+  })
+
+  it('reaches a restricted investigation only when assigned', () => {
+    const senior = live({ membership: member({ siu_role: 'senior_special_agent' }) })
+    const c = { siu_classification: 'siu_restricted' }
+    expect(siuCaseAccess(senior, c)).toBe(false)
+    expect(siuCaseAccess(senior, c, { assigned: true })).toBe(true)
+    expect(siuCaseAccess(senior, { siu_classification: 'siu' })).toBe(true)
+    expect(siuCaseAccess(senior, { siu_classification: 'siu_command' })).toBe(false)
+    expect(siuCaseAccess(senior, { siu_classification: 'siu_compartmented' }, { assigned: true })).toBe(false)
   })
 })
 

@@ -74,6 +74,31 @@ export const NAV_CATEGORIES: NavCategory[] = [
   { id: 'oversight', label: 'Oversight',    tabs: ['calendar', 'shifts', 'audit'] },
 ]
 
+/** ── Special Investigation Unit navigation ────────────────────────────────
+ *  SIU is a separate DEPARTMENT, so it gets its own navigation rather than a
+ *  button inside the CID sidebar. It deliberately reuses the shared registry
+ *  routes (persons, vehicles, gangs, places, network, media, legal …) — those
+ *  are one master dataset for the whole platform, already RLS-scoped per
+ *  viewer — and adds the SIU-owned surfaces on top. Only the department
+ *  context, labels and default filters differ; the underlying systems are the
+ *  same ones CID uses (§8, §21).
+ *
+ *  The CID structure above is untouched: a CID member's portal is unchanged. */
+export const SIU_NAV_CATEGORIES: NavCategory[] = [
+  { id: 'siu-unit',   label: 'Unit',         tabs: ['siu'] },
+  { id: 'siu-intel',  label: 'Intelligence', tabs: ['persons', 'gangs', 'places', 'vehicles', 'accounts', 'indicators', 'network', 'narcotics', 'media'] },
+  { id: 'siu-legal',  label: 'Legal',        tabs: ['legal'] },
+  { id: 'siu-ref',    label: 'Reference',    tabs: ['sops', 'penal'] },
+]
+
+/** Labels that differ inside the SIU workspace. Anything absent falls back to
+ *  the shared TAB_LABEL, so SIU only overrides what its vocabulary changes. */
+export const SIU_TAB_LABEL: Record<string, string> = {
+  siu: 'SIU Workspace',
+  sops: 'SIU SOP',
+  legal: 'Legal Requests',
+}
+
 export const TAB_LABEL: Record<string, string> = {
   command: 'Dashboard', analytics: 'Analytics', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
   cases: 'Case Files', operations: 'Operations', legal: 'Legal Requests', 'case-files': 'Attachments', rico: 'RICO',

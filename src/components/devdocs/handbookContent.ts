@@ -9,7 +9,7 @@ export interface HandbookPage {
   body: string
 }
 
-export const HANDBOOK_UPDATED = '2026-08-15'
+export const HANDBOOK_UPDATED = '2026-08-16'
 
 export const HANDBOOK_PAGES: HandbookPage[] = [
   {

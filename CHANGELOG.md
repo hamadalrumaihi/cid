@@ -8,6 +8,39 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### SIU becomes a separate department
+
+Migration `20260821120000_siu_department` amends Phase 1: SIU is no longer a
+separate *authority* inside the CID shell but a separate **department** on the
+same platform — one portal, two investigative departments.
+
+- **Active department.** `private.user_department()` resolves `cid` | `siu`
+  from SIU membership (one identity, no duplicate accounts, no column that can
+  drift from the roster). Gate-aware: while the release gate is closed everyone
+  resolves to `cid`, so this migration is a **no-op for every existing account**
+  and CID keeps working untouched during the build phase.
+- **SIU is not CID.** An SIU department member loses the native CID case branch
+  — bureau, lead/creator, command, joint access — and with it all CID case
+  *write* access, keeping only the authority-based read-only oversight.
+- **SIU's own ladder.** `special_agent` → `senior_special_agent` →
+  `special_agent_in_charge` (X-1). X-1 is the Director-equivalent *inside SIU
+  only*; the CID Director role is never reused or granted, and CID command is
+  nowhere in the SIU chain (which runs Attorney General → X-1 → Agents).
+- **Its own SOP.** A `siu` document classification — visible to SIU standing
+  only, editable by SIU command, never CID command — plus the unit's SOP seeded
+  as its own document. The CID SOP is never shown as the SIU SOP.
+- **Its own workspace.** `siu_department_context()` is the single authoritative
+  answer for which departmental shell to render; the sidebar, wordmark, banner,
+  navigation and officer card all follow the department. A deliberate context
+  switch exists only for accounts holding both (Owner, AG oversight) — never a
+  "Switch to SIU" button for normal members. A case names itself by its
+  **owning** department ("SIU Investigation" vs "CID Case"), and an SIU agent
+  opening a CID case is told plainly they are reading it under SIU authority
+  and are not a case member.
+- Tests: `src/lib/siu.test.ts` grows to 34 cases (department resolution, the
+  switch matrix, owning-department vocabulary, the senior tier);
+  `tests/rls/v166.test.ts` gains the department + SIU-SOP separation guards.
+
 ### Special Investigation Unit (SIU) — Phase 1
 
 Migration `20260820120000_siu_phase1` adds SIU to the portal as a **separate
