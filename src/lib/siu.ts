@@ -405,6 +405,11 @@ export function siuStanding(ctx: SiuContext): SiuStanding | null {
     if (m.oversight_only) return 'oversight'
     if ((SIU_ROLES as readonly string[]).includes(m.siu_role)) return m.siu_role as SiuRole
   }
+  // NOTE: the server additionally excludes test fixtures (profiles.is_test)
+  // from both EX-OFFICIO branches — see migration 20260829120000. The client
+  // Profile type does not carry is_test and deliberately does not model it:
+  // fixtures never render the UI, and useSiu() prefers the server-resolved
+  // standing from siu_department_context() anyway.
   if (ctx.justiceRole === 'attorney_general') return 'oversight'
   // Director of CID — SIU's command authority per the unit's SOP. Oversight
   // standing only: departmental administration and standard investigations,

@@ -10759,3 +10759,27 @@ create policy wl_sel on public.watchlist
 -- findings; the only INFO rls_enabled_no_policy rows are the three intentional
 -- deny-all tables (app_secrets, deletion_tokens, security_test_runs).
 -- Definitive SQL in supabase/migrations/20260828120000_siu_settings_fk_index.sql.
+
+-- SIU ex-officio excludes fixtures (20260829120000) — RE-EMITTED
+-- private.siu_standing(uuid). Found during the pre-flight for opening the
+-- release gate: the SOP change gave every active role='director' profile
+-- oversight standing EX OFFICIO, and oversight carries appointment authority
+-- (siu_can_appoint includes it; siu_remove lets oversight end an X-1). That
+-- silently armed rls-test-director@cidportal.test — a Command Center fixture
+-- whose password is the RLS_TEST_PASSWORD_DIRECTOR CI secret — the moment the
+-- gate opened. Both EX-OFFICIO branches (Director, Attorney General) now
+-- require `not profiles.is_test`.
+--
+-- DELIBERATE grants are untouched: an explicit siu_memberships row still
+-- confers standing on a fixture (the post-release RLS lane needs
+-- rls-test-siu-agent to hold it), and profiles.is_owner still confers 'owner'
+-- (the whole owner lane is built on rls-test-owner having it). The distinction
+-- is deliberateness — somebody chose those; nobody chose to give the director
+-- fixture SIU authority.
+--
+-- KNOWN, NOT CHANGED: rls-test-owner carries profiles.is_owner, so it
+-- satisfies private.is_owner() and can call public.siu_set_release() — a test
+-- fixture can open or close the production release gate. Pre-existing and
+-- load-bearing for the owner-path suites; see docs/TEST-ENVIRONMENT.md.
+-- Definitive SQL in
+-- supabase/migrations/20260829120000_siu_exofficio_excludes_fixtures.sql.

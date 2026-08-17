@@ -102,6 +102,29 @@ Verified live, in rolled-back transactions:
 
 **`RLS_TEST_PASSWORD_*` can now be enabled.**
 
+### Residual: fixture accounts with production authority
+
+Two fixtures hold real authority in `cid`, by design, and both are worth
+knowing about now that the SIU release gate is open:
+
+- **`rls-test-owner@cidportal.test` carries `profiles.is_owner`.** It therefore
+  satisfies `private.is_owner()` and can call `public.siu_set_release()` — a
+  test fixture can open or close the production SIU release gate, and holds
+  `owner` SIU standing unconditionally. This is **pre-existing and
+  load-bearing**: the entire v166/v167 owner lane is built on it. Narrowing it
+  means giving those suites another route to owner paths — a design decision,
+  not a patch. Whoever holds `RLS_TEST_PASSWORD_OWNER` holds this.
+- **`rls-test-director@cidportal.test` was silently armed** by the SOP chain
+  change, which granted every active `role = 'director'` profile SIU oversight
+  *ex officio* — and oversight carries appointment authority. Closed by
+  migration `20260829120000`: both ex-officio branches (Director, Attorney
+  General) now require `not profiles.is_test`. Deliberate grants — an explicit
+  `siu_memberships` row, the `is_owner` flag — are untouched.
+
+The rule that came out of this: **a capability keyed on a CID role attaches to
+every account holding that role, including fixtures.** Ex-officio grants need a
+fixture exclusion; deliberate grants do not.
+
 ---
 
 ## Rebuilding an isolated environment — migrations are the source of truth

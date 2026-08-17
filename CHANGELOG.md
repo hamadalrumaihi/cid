@@ -8,6 +8,45 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### SIU release gate OPENED — and a fixture privilege escalation closed first
+
+The build-phase gate (`siu_settings.enabled_for_non_owner`) is now **open**. SIU
+is live for appointed personnel and the SOP oversight chain.
+
+**A pre-flight check caught a real problem, and it was mine.** The SOP
+chain-of-command change gave every active `role = 'director'` profile SIU
+oversight *ex officio*, and oversight is not passive — `siu_can_appoint()`
+includes it, and `siu_remove()` lets oversight end an X-1's membership. That
+silently armed `rls-test-director@cidportal.test`, a Command Center test
+fixture whose password is the `RLS_TEST_PASSWORD_DIRECTOR` CI secret. Opening
+the gate would have handed SIU appointment authority to anyone able to run the
+test suite.
+
+Migration `20260829120000` requires `not profiles.is_test` on both ex-officio
+branches. Deliberate grants are untouched — an explicit `siu_memberships` row
+still confers standing on a fixture (the post-release RLS lane needs it), and
+`profiles.is_owner` still confers `owner`. The distinction is deliberateness:
+somebody chose those; nobody chose to give the director fixture SIU authority.
+
+The general rule, now documented: **a capability keyed on a CID role attaches to
+every account holding that role, fixtures included.** Ex-officio grants need a
+fixture exclusion; deliberate grants do not.
+
+Standing after the gate opened, verified live:
+
+| account | standing | department |
+|---|---|---|
+| Huxley Thatcher | `special_agent_in_charge` (X-1) | siu |
+| Tom wood (owner) | `owner` (X-2) | siu |
+| Oliver Ocho (Director of CID) | `oversight` | cid |
+| Hunter jones (Attorney General) | `oversight` | — |
+| **RLS Test Director** | **(none)** | cid |
+
+Also recorded in `docs/TEST-ENVIRONMENT.md`: `rls-test-owner` carries
+`profiles.is_owner` and can therefore call `siu_set_release()` itself. That is
+pre-existing and load-bearing for the owner-path suites, so it is reported
+rather than changed.
+
 ### Roadmap reconciliation + post-SIU advisor sweep
 
 `docs/CID-FUTURE-STATE-SPEC.md` still described Phase 10 as "in progress on the
