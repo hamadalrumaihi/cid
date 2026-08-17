@@ -1281,7 +1281,7 @@ alter table public.legal_request_signatures add constraint legal_request_signatu
 alter table public.legal_request_signatures add constraint legal_request_signatures_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id);
 alter table public.legal_request_signatures add constraint legal_request_signatures_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.legal_request_versions(id);
 alter table public.legal_request_signatures add constraint legal_request_signatures_signer_id_fkey FOREIGN KEY (signer_id) REFERENCES public.profiles(id);
-alter table public.legal_request_signatures add constraint legal_request_signatures_action_check CHECK (action in ('cid_supervisor_approval', 'ada_submission', 'da_decision', 'ag_decision', 'judge_decision', 'prosecutor_decision'));
+alter table public.legal_request_signatures add constraint legal_request_signatures_action_check CHECK (action in ('cid_supervisor_approval', 'siu_command_approval', 'ada_submission', 'da_decision', 'ag_decision', 'judge_decision', 'prosecutor_decision'));
 alter table public.legal_request_signatures enable row level security;
 
 create table public.legal_request_versions (
@@ -1402,7 +1402,21 @@ alter table public.legal_requests add constraint legal_requests_assigned_prosecu
 alter table public.legal_requests add constraint legal_requests_amends_request_id_fkey FOREIGN KEY (amends_request_id) REFERENCES public.legal_requests(id);
 alter table public.legal_requests add constraint legal_requests_superseded_by_id_fkey FOREIGN KEY (superseded_by_id) REFERENCES public.legal_requests(id);
 alter table public.legal_requests add constraint legal_requests_execution_result_check CHECK ((execution_result IS NULL OR (execution_result = ANY (ARRAY['full'::text, 'partial'::text, 'unable'::text]))));
-alter table public.legal_requests add constraint legal_requests_review_status_check CHECK (review_status in ('not_submitted', 'cid_supervisor_review', 'returned_by_cid', 'submitted_to_doj', 'ada_review', 'returned_by_ada', 'submitted_to_da', 'da_review', 'returned_by_da', 'submitted_to_ag', 'ag_review', 'returned_by_ag', 'submitted_to_judge', 'judicial_review', 'returned_by_judge', 'approved', 'denied', 'withdrawn', 'prosecutor_queue', 'prosecutor_review', 'returned_by_prosecutor', 'declined', 'cancelled', 'superseded'));
+alter table public.legal_requests add constraint legal_requests_review_status_check CHECK (review_status in ('not_submitted', 'cid_supervisor_review', 'returned_by_cid', 'siu_command_review', 'returned_by_siu_command', 'submitted_to_doj', 'ada_review', 'returned_by_ada', 'submitted_to_da', 'da_review', 'returned_by_da', 'submitted_to_ag', 'ag_review', 'returned_by_ag', 'submitted_to_judge', 'judicial_review', 'returned_by_judge', 'approved', 'denied', 'withdrawn', 'prosecutor_queue', 'prosecutor_review', 'returned_by_prosecutor', 'declined', 'cancelled', 'superseded'));
+-- THE SIU LANE (20260903170000). An SIU legal request goes Special Agent ->
+-- X-1 -> Attorney General -> Judge, and never touches a CID Bureau Lead or a
+-- prosecutor queue. Before this, submit_legal_request_to_cid() fanned out to
+-- every CID deputy_director and director with no SIU branch -- and
+-- private.legal_notify() puts request_number, request_type and TITLE in the
+-- payload, so that was a disclosure of an SIU legal request's substance to
+-- accounts with no standing in the unit, not merely noise. Measured live: 4
+-- CID command notified before, 1 (X-1) after; the CID control path still
+-- notifies 4, unchanged. Approval now routes to ag_review rather than
+-- prosecutor_queue, and private.can_view_legal_request() excludes SIU requests
+-- from the bureau-scoped CID prosecutor lanes (an SIU case still carries a
+-- responsible_bureau because the column is NOT NULL). private.legal_is_siu()
+-- is the branch predicate; private.can_edit_legal_draft() learned
+-- 'returned_by_siu_command' so a returned SIU request is not a dead end.
 alter table public.legal_requests enable row level security;
 
 create table public.mdt_wanted_projections (

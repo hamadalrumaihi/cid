@@ -142,6 +142,11 @@ export const REVIEW_STATUS_LABEL: Record<string, string> = {
   not_submitted: 'Draft — not submitted',
   cid_supervisor_review: 'CID supervisor review',
   returned_by_cid: 'Returned by CID',
+  // The SIU lane (20260903170000). Named for who actually decides: an SIU
+  // warrant must never read "CID supervisor review", because the Director of
+  // CID holds no SIU authority and cannot act on it.
+  siu_command_review: 'SIU command review',
+  returned_by_siu_command: 'Returned by SIU command',
   submitted_to_doj: 'Submitted to DOJ — awaiting assignment',
   ada_review: 'ADA review',
   returned_by_ada: 'Returned by ADA',
@@ -197,8 +202,8 @@ export const fulfilmentLabel = (s?: string | null) => (s && FULFILMENT_LABEL[s])
 /** The editable (draft/returned) states — EXACT mirror of
  *  private.can_edit_legal_draft (incl. the minimal-DOJ prosecutor return). */
 export const EDITABLE_REVIEW_STATES = new Set([
-  'not_submitted', 'returned_by_cid', 'returned_by_ada',
-  'returned_by_da', 'returned_by_ag', 'returned_by_judge',
+  'not_submitted', 'returned_by_cid', 'returned_by_siu_command',
+  'returned_by_ada', 'returned_by_da', 'returned_by_ag', 'returned_by_judge',
   'returned_by_prosecutor',
 ])
 export const isEditableDraft = (r: Pick<LegalRequest, 'document_status' | 'review_status'>): boolean =>

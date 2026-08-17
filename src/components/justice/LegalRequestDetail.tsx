@@ -17,6 +17,7 @@
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
+import { useSiu } from '@/lib/useSiu'
 import { list, rpc } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { Drafts } from '@/lib/drafts'
@@ -70,6 +71,7 @@ export function LegalRequestDetail({ requestId, onBack }: { requestId: string; o
 function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack: () => void }) {
   const auth = useAuth()
   const { profile, justiceRole, isCommand } = auth
+  const siu = useSiu()
   const me = profile?.id ?? null
   const isOwnerFlag = !!profile?.is_owner
   const router = useRouter()
@@ -229,6 +231,13 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
   // creator may approve/deny/return a request in supervisor review. Mirror
   // only — review_legal_request_as_cid re-checks everything server-side.
   const canCidReview = (isCommand || isOwnerFlag) && !isCreator && status === 'cid_supervisor_review'
+  // The SIU lane's first approval. Gated on SIU COMMAND standing, never on a
+  // CID rank: private.can_approve_legal() routes an SIU case through
+  // siu_case_command(), so showing this to a Bureau Lead would paint a button
+  // the database refuses — a silent no-op, which this codebase treats as worse
+  // than a missing control.
+  const canSiuCommandReview = (siu.isCommand || isOwnerFlag) && !isCreator
+    && status === 'siu_command_review'
   const canWithdraw = isCreator && !['approved', 'denied', 'withdrawn'].includes(status)
   // Bureau-prosecutor awareness (presentation only): historically an ADA saw a
   // DOJ-parked request scoped to them with no action assigned. Justice
@@ -519,6 +528,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
         r={r} busy={busy} act={act} promptSig={promptSig}
         exhibits={exhibits}
         editable={editable} canCidReview={canCidReview}
+        canSiuCommandReview={canSiuCommandReview}
         cidActive={cidActive} viewer={viewer} awarenessOnly={awarenessOnly}
         disposition={disposition} now={now} onSubmitToCid={submitToCid}
       />

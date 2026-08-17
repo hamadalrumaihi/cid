@@ -8,6 +8,59 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### SIU legal requests take the SIU lane, and stop telling CID about it
+
+The legal pipeline was built for CID and had no SIU branch at its two front
+stages. Submitting an SIU warrant notified every CID `deputy_director` and
+`director` — four accounts here, the Director of CID among them, who holds no
+SIU authority and has to ask X-1 for sight of a single case.
+
+That was a disclosure, not noise. `private.legal_notify()` puts the request
+number, the type and the **title** into the notification payload for any
+non-sealed request, so the substance of an SIU legal request was being pushed
+to people who could not open it and were not entitled to know it existed.
+
+It then got worse quietly: `legal_resolve_bureau()` stamps an SIU case with a
+CID bureau (the live SIU case already carried `originating_bureau = 'SAB'`),
+X-1's approval sent it to that bureau's **prosecutor queue**, and
+`can_view_legal_request()` handed those prosecutors sight of it — the rule
+"SIU never uses a CID prosecutor queue" broken by the default path, with no way
+for an agent to avoid it. And there was no AG hop at all.
+
+The chain is now Special Agent → X-1 → Attorney General → Judge. Two new
+stages (`siu_command_review`, `returned_by_siu_command`) so an SIU warrant
+never displays "awaiting CID supervisor review", wording that is simply false;
+SIU branches inside the existing RPCs rather than parallel copies; and the
+bureau-scoped CID prosecutor lanes closed to SIU requests. The AG and Judge
+branches are kept, because they are the SIU lane's own next stops.
+
+Measured live, in a rolled-back transaction:
+
+| | before | after |
+|---|---|---|
+| SIU submit → notified | 4 CID command | **1 — X-1 only** |
+| X-1 approves → goes to | `prosecutor_queue` | `ag_review`, AG notified |
+| **CID control** submit | 4 notified | **4 — unchanged** |
+
+**Two bugs the probe caught that review had not.** X-1's approval called
+`legal_sign()` with an action the signature constraint did not know, so the
+whole approval rolled back — and signing as `cid_supervisor_approval` instead
+would have passed silently and put the wrong words on the record of who
+authorised an SIU warrant. And `can_edit_legal_draft()` had never heard of
+`returned_by_siu_command`, so the new return path was a dead end: X-1 sends a
+warrant back and the agent cannot touch it. Both were found by probing the
+*return* path rather than only the happy one.
+
+Authority was already correct and is unchanged — `can_approve_legal()` has had
+an SIU branch since it was written, so no unauthorised person could ever
+*decide* an SIU request. They were merely told one existed and it was routed to
+the wrong bench.
+
+The workflow engine learned the lane too, so "why is this stuck" on an SIU
+request now says who holds it and where it goes next — including that the
+prosecutor queue is *not* the next stop, which a reader who knows the CID
+pipeline would otherwise reasonably assume.
+
 ### Targets and Intelligence can finally be created
 
 Both tabs could read, grade, review and clear — every verb except the one that

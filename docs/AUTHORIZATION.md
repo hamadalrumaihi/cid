@@ -447,6 +447,31 @@ The table was not hypothetical when this was fixed. It held one entry created by
 
 `siu_watch_review(id, outcome, note, priority, review_days, extend_days)` records `continue` / `monitor` / `suspend` / `clear` / `archive` with a mandatory note. This is what stops a watch drifting into permanence: the entry has to be looked at again by a person who then says, in writing, what they decided. `siu_watch_extend()` and `siu_watch_remove()` remain for existing callers and were re-emitted onto the new vocabulary in the same migration — left alone, `remove` would have written a status the new constraint refuses, failing every removal at the database.
 
+### SIU legal routing ([`20260903170000`](../supabase/migrations/20260903170000_siu_legal_lane.sql))
+
+**Special Agent → X-1 → Attorney General → Judge.** An SIU legal request never touches a CID Bureau Lead or a CID prosecutor queue.
+
+What was wrong was routing and *disclosure*, not authority — worth stating precisely, because the two get conflated. `private.can_approve_legal()` has had an SIU branch (`siu_case_command`) since it was written, and `can_access_case()` keeps a CID rank out of an SIU case, so no unauthorised person could ever **decide** an SIU request. They were told one existed, and it was then sent to the wrong bench.
+
+- **The disclosure.** `submit_legal_request_to_cid()` fanned out to every `senior_detective`/`bureau_lead` in the responsible bureau plus every `deputy_director` and `director`, with no SIU branch and no case-access check — four CID command accounts here, the Director of CID among them. `private.legal_notify()` writes `request_number`, `request_type` and **`title`** into the payload of any non-sealed request, so this leaked the substance of an SIU legal request, not merely its existence. The SIU branch now notifies SIU **Special Agents in Charge** only, narrowed to the compartment on a compartmented case and skipping anyone recused under §17. It deliberately does *not* replicate `siu_case_command()` (which is written against `auth.uid()` and has no per-user form) — duplicating that predicate would create a second copy of the access rules that could drift. The loop is conservative instead: it can only ever notify a subset of command, never anyone outside SIU.
+- **The prosecutor queue.** `legal_resolve_bureau()` stamps an SIU case with a derived CID bureau and persists it (the live SIU case already carried `originating_bureau = 'SAB'`). `responsible_bureau` is NOT NULL so the column must hold something; what changed is that it no longer drives disclosure. `can_view_legal_request()` now excludes SIU requests from the four bureau-scoped CID prosecutor/DA lanes. The **AG and Judge branches are kept** — they are the SIU lane's own next stops.
+- **The AG hop.** X-1's approval routes to `ag_review`, not `prosecutor_queue`, and notifies the Attorney General. `review_legal_request_as_ag()` already handled `forward_to_judge` for warrants, so the rest of the chain needed no change.
+- **Two new stages**, `siu_command_review` and `returned_by_siu_command`, so an SIU warrant never displays "awaiting CID supervisor review" — wording that is false now the Director of CID holds no SIU standing.
+- **`private.can_review_as_cid()`** now requires SIU command *structurally* on an SIU case rather than relying on `can_access_case()` to filter a CID rank out as a side effect, so a future widening of `can_access_case()` cannot quietly resurrect it.
+
+**If X-1 is unavailable, the audited fallback is the Attorney General — never CID command.** A submission with no eligible SIU reviewer notifies the AG and writes `LEGAL_SIU_COMMAND_UNCOVERED`; an approval with no AG seated notifies the owner (who appoints) and writes `LEGAL_AG_UNCOVERED`. Both are recorded rather than silently rerouted, because the one escalation this unit must not have is into CID.
+
+Verified live in a rolled-back transaction — the CID control line is the one that had to not move:
+
+| | before | after |
+|---|---|---|
+| SIU submit → notified | 4 CID command | **1 — X-1 only** |
+| SIU submit → stage | `cid_supervisor_review` | `siu_command_review` |
+| X-1 approves → goes to | `prosecutor_queue` | `ag_review`, AG notified |
+| **CID control** submit | 4 notified | **4 — unchanged** |
+
+A measurement caveat recorded because the first attempt got it wrong: `public.notifications` is itself under RLS, so counting recipients while impersonating the submitting agent returns only what *that* agent can see — which reported 0 and looked like a fix. The figures above are taken as `postgres`, after the role is reset.
+
 ### Targets — designation ([`20260903150000`](../supabase/migrations/20260903150000_siu_targets_canonical_references.sql))
 
 `siu_targets` carried the same defect as the watchlist — an untyped `entity_id` with no foreign key and a copied `label` — and is corrected the same way: six typed foreign keys, `siu_targets_reference_check` requiring exactly one and pinning it to `entity_type`, `label` demoted to a fallback for `entity_type = 'unknown'`, and `organization` dropped because no registry table backs it. The table was empty when this landed (0 rows, verified live before the migration was written, not assumed).

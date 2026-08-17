@@ -569,3 +569,58 @@ describe('remediation pins — executed grouping, parked ownership, AG judge rev
     }
   })
 })
+
+describe('the SIU legal lane — X-1, not a Bureau Lead', () => {
+  const siuReq = (over = {}) =>
+    req({ review_status: 'siu_command_review', created_by: 'agent-1', ...over })
+
+  it('shares the CID stage but names a different holder', () => {
+    // Same LIFECYCLE position — first approval, before the request leaves the
+    // department — so the progress bar stays honest. Who holds it differs.
+    expect(stageForReviewStatus('siu_command_review')).toBe('cid_review')
+    expect(responsibleRole(siuReq())).toBe('siu_command')
+    expect(responsibleRole(req({ review_status: 'cid_supervisor_review' }))).toBe('cid_supervisor')
+  })
+
+  it('does NOT give a CID Bureau Lead the action', () => {
+    // The regression that matters. private.can_approve_legal() sends an SIU
+    // case through siu_case_command(), so a Bureau Lead is refused server-side;
+    // painting the button anyway produces a control that silently does
+    // nothing, which this codebase treats as worse than no control at all.
+    const lead = viewer({ myId: 'u-lead', cidActive: true, cidRole: 'bureau_lead' })
+    expect(dispositionFor(siuReq(), lead, NOW).viewerCanAct).toBe(false)
+
+    const director = viewer({ myId: 'u-dir', cidActive: true, cidRole: 'director' })
+    expect(dispositionFor(siuReq(), director, NOW).viewerCanAct,
+      'the Director of CID holds no SIU authority').toBe(false)
+  })
+
+  it('gives it to SIU command', () => {
+    const x1 = viewer({ myId: 'u-x1', cidActive: true, cidRole: 'bureau_lead', siuIsCommand: true })
+    expect(dispositionFor(siuReq(), x1, NOW).viewerCanAct).toBe(true)
+    // Never the author of the request, whatever their standing.
+    const selfX1 = viewer({ myId: 'agent-1', cidActive: true, siuIsCommand: true })
+    expect(dispositionFor(siuReq(), selfX1, NOW).viewerCanAct).toBe(false)
+  })
+
+  it('treats a request returned by SIU command as editable by its author', () => {
+    // Without this the return path is a dead end: X-1 sends it back and the
+    // agent cannot touch it. The server had the same omission.
+    const author = viewer({ myId: 'agent-1', cidActive: true })
+    const returned = req({ review_status: 'returned_by_siu_command',
+                           document_status: 'reopened', created_by: 'agent-1' })
+    expect(responsibleRole(returned)).toBe('investigator')
+    expect(dispositionFor(returned, author, NOW).viewerCanAct).toBe(true)
+    expect(stageForReviewStatus('returned_by_siu_command')).toBe('draft')
+  })
+
+  it('explains where the request goes next, since the SIU route is unfamiliar', () => {
+    // §9 "why is this stuck". A reader who knows the CID pipeline would
+    // reasonably expect a prosecutor queue next; the SIU lane skips it.
+    const other = viewer({ myId: 'u-other', cidActive: true })
+    const why = routingExplanation(siuReq(), other)
+    expect(why).toMatch(/SIU command/i)
+    expect(why).toMatch(/Attorney General/i)
+    expect(why, 'it must say the prosecutor queue is NOT the next stop').toMatch(/prosecutor queue/i)
+  })
+})
