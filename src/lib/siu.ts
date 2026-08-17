@@ -23,7 +23,7 @@
  *  is already written here and in the migration — nothing is rebuilt. */
 
 import type { Profile } from './auth'
-import { rpc } from './db'
+import { list, rpc } from './db'
 
 // ---------------------------------------------------------------------------
 // Vocabulary
@@ -200,6 +200,159 @@ export const SIU_INTEGRITY_NOTE_TYPES: readonly string[] =
 
 export const siuNoteTypeLabel = (t?: string | null) =>
   (t && SIU_NOTE_TYPE_LABEL[t]) || 'Intelligence'
+
+
+// ── §15 disclosure vocabulary ──────────────────────────────────────────────
+
+/** Who a release is addressed to. The four §15 routes; 'intelligence' at
+ *  'cid' is the "Release Intelligence" action. */
+export const SIU_AUDIENCES = ['cid', 'case_members', 'investigator'] as const
+
+export const SIU_AUDIENCE_LABEL: Record<string, string> = {
+  cid: 'Share with CID',
+  case_members: 'Share with case members',
+  investigator: 'Share with a specific investigator',
+}
+
+/** What the recipient sees as the addressing line, once released. */
+export const SIU_AUDIENCE_SHORT: Record<string, string> = {
+  cid: 'Division-wide',
+  case_members: 'Case members',
+  investigator: 'Named investigator',
+}
+
+export const SIU_RELEASE_ITEM_TYPES = [
+  'intelligence', 'report', 'evidence', 'media', 'target', 'summary', 'warning',
+] as const
+
+export const SIU_RELEASE_ITEM_LABEL: Record<string, string> = {
+  intelligence: 'Intelligence',
+  report: 'Report extract',
+  evidence: 'Evidence reference',
+  media: 'Media reference',
+  target: 'Designated subject',
+  summary: 'Investigation summary',
+  warning: 'Officer safety warning',
+}
+
+/** Handling caveat travelling with the released text. */
+export const SIU_HANDLING = ['official_use', 'law_enforcement_sensitive', 'court_disclosable'] as const
+
+export const SIU_HANDLING_LABEL: Record<string, string> = {
+  official_use: 'Official use only',
+  law_enforcement_sensitive: 'Law-enforcement sensitive',
+  court_disclosable: 'Disclosable in court',
+}
+
+export const siuAudienceLabel = (a?: string | null) =>
+  (a && SIU_AUDIENCE_LABEL[a]) || a || '—'
+export const siuReleaseItemLabel = (t?: string | null) =>
+  (t && SIU_RELEASE_ITEM_LABEL[t]) || t || '—'
+export const siuHandlingLabel = (h?: string | null) =>
+  (h && SIU_HANDLING_LABEL[h]) || h || '—'
+
+// ── Phase 3 vocabulary ─────────────────────────────────────────────────────
+
+export const SIU_SOURCE_STATUSES = [
+  'proposed', 'active', 'inactive', 'closed', 'burned', 'unsuitable',
+] as const
+
+export const SIU_SOURCE_STATUS_LABEL: Record<string, string> = {
+  proposed: 'Proposed', active: 'Active', inactive: 'Inactive',
+  closed: 'Closed', burned: 'Burned', unsuitable: 'Unsuitable',
+}
+
+/** Admiralty-style reliability grading. A source's product is only ever as
+ *  good as this says it is. */
+export const SIU_RELIABILITY = [
+  'reliable', 'usually_reliable', 'fairly_reliable',
+  'not_usually_reliable', 'unreliable', 'untested',
+] as const
+
+export const SIU_RELIABILITY_LABEL: Record<string, string> = {
+  reliable: 'Reliable',
+  usually_reliable: 'Usually reliable',
+  fairly_reliable: 'Fairly reliable',
+  not_usually_reliable: 'Not usually reliable',
+  unreliable: 'Unreliable',
+  untested: 'Untested',
+}
+
+export const SIU_UNDERCOVER_STATUSES = [
+  'proposed', 'authorized', 'active', 'suspended', 'concluded', 'compromised',
+] as const
+
+export const SIU_UNDERCOVER_STATUS_LABEL: Record<string, string> = {
+  proposed: 'Proposed', authorized: 'Authorized', active: 'Deployed',
+  suspended: 'Suspended', concluded: 'Concluded', compromised: 'Compromised',
+}
+
+export const SIU_ALLEGATIONS = [
+  'evidence_tampering', 'case_fixing', 'unauthorized_disclosure', 'bribery',
+  'excessive_force', 'false_reporting', 'criminal_association',
+  'abuse_of_access', 'obstruction', 'other',
+] as const
+
+export const SIU_ALLEGATION_LABEL: Record<string, string> = {
+  evidence_tampering: 'Evidence tampering',
+  case_fixing: 'Case fixing',
+  unauthorized_disclosure: 'Unauthorized disclosure',
+  bribery: 'Bribery',
+  excessive_force: 'Excessive force',
+  false_reporting: 'False reporting',
+  criminal_association: 'Criminal association',
+  abuse_of_access: 'Abuse of access',
+  obstruction: 'Obstruction',
+  other: 'Other',
+}
+
+export const SIU_REVIEW_STATUSES = [
+  'open', 'substantiated', 'unsubstantiated', 'inconclusive', 'referred', 'withdrawn',
+] as const
+
+export const SIU_REVIEW_STATUS_LABEL: Record<string, string> = {
+  open: 'Open', substantiated: 'Substantiated',
+  unsubstantiated: 'Unsubstantiated', inconclusive: 'Inconclusive',
+  referred: 'Referred', withdrawn: 'Withdrawn',
+}
+
+export const SIU_EXPORT_SCOPES = [
+  'case_summary', 'investigation_file', 'intelligence_only', 'disclosure_packet',
+] as const
+
+export const SIU_EXPORT_SCOPE_LABEL: Record<string, string> = {
+  case_summary: 'Case summary',
+  investigation_file: 'Full investigation file',
+  intelligence_only: 'Intelligence only',
+  disclosure_packet: 'Disclosure packet (court)',
+}
+
+/** Categories siu_export_case() withholds from EVERY export, for every
+ *  caller. Mirrored here only so the UI can say so before the user asks. */
+export const SIU_EXPORT_ALWAYS_WITHHELD = [
+  'confidential_source_identities', 'undercover_legends', 'intercept_content',
+] as const
+
+export const SIU_WITHHELD_LABEL: Record<string, string> = {
+  confidential_source_identities: 'Confidential source identities',
+  undercover_legends: 'Undercover legends',
+  intercept_content: 'Intercept content',
+}
+
+export const siuSourceStatusLabel = (s?: string | null) =>
+  (s && SIU_SOURCE_STATUS_LABEL[s]) || s || '—'
+export const siuReliabilityLabel = (r?: string | null) =>
+  (r && SIU_RELIABILITY_LABEL[r]) || r || '—'
+export const siuUndercoverStatusLabel = (s?: string | null) =>
+  (s && SIU_UNDERCOVER_STATUS_LABEL[s]) || s || '—'
+export const siuAllegationLabel = (a?: string | null) =>
+  (a && SIU_ALLEGATION_LABEL[a]) || a || '—'
+export const siuReviewStatusLabel = (s?: string | null) =>
+  (s && SIU_REVIEW_STATUS_LABEL[s]) || s || '—'
+export const siuExportScopeLabel = (s?: string | null) =>
+  (s && SIU_EXPORT_SCOPE_LABEL[s]) || s || '—'
+export const siuWithheldLabel = (c?: string | null) =>
+  (c && SIU_WITHHELD_LABEL[c]) || c || '—'
 
 // ---------------------------------------------------------------------------
 // Standing — the single authority resolver
@@ -459,6 +612,107 @@ export async function fetchSiuAudit(limit = 100): Promise<SiuAuditRow[]> {
   return (res.data as unknown as SiuAuditRow[] | null) ?? []
 }
 
+/** §15 — one released item, as SIU sees it. The CID side never reads this
+ *  table at all; it calls `siu_released_intelligence()`, which projects no
+ *  origin. */
+export interface SiuDisclosure {
+  id: string
+  siu_case_id: string
+  item_type: string
+  audience: string
+  target_case_id: string | null
+  target_user_id: string | null
+  title: string
+  body: string
+  handling: string
+  reason: string
+  released_by: string | null
+  released_at: string
+  revoked_at: string | null
+  revoke_reason: string | null
+  acknowledged_at: string | null
+  acknowledged_by: string | null
+}
+
+/** The CID-facing shape. Note what is NOT here: no `siu_case_id`, no source
+ *  item, no case number — the origin investigation is never disclosed. */
+export interface SiuReleasedItem {
+  id: string
+  item_type: string
+  title: string
+  body: string
+  handling: string
+  audience: string
+  target_case_id: string | null
+  released_at: string
+  acknowledged_at: string | null
+  acknowledged_by: string | null
+}
+
+/** What SIU released, for the SIU workspace. RLS-scoped to investigations the
+ *  caller can read. */
+export async function fetchSiuDisclosures(caseId?: string): Promise<SiuDisclosure[]> {
+  const rows = await list('siu_disclosures', {
+    order: 'released_at', ascending: false, limit: 200,
+    ...(caseId ? { eq: { siu_case_id: caseId } } : {}),
+  })
+  return rows as unknown as SiuDisclosure[]
+}
+
+/** What CID has been told — called from the CID side, including by accounts
+ *  with no SIU standing at all. An empty array is the honest answer for
+ *  "nothing was released to you". */
+export async function fetchReleasedIntelligence(caseId?: string): Promise<SiuReleasedItem[]> {
+  const res = await rpc('siu_released_intelligence', caseId ? { p_case: caseId } : {})
+  // A miss and "nothing released" are the same answer: never surface an error
+  // state that would tell a CID user something exists that they cannot see.
+  if (res.error) return []
+  return (res.data as unknown as SiuReleasedItem[] | null) ?? []
+}
+
+/** Aggregate-only supervision surface for the SOP chain (Director of CID,
+ *  Attorney General). Deliberately carries no identity of any kind. */
+export interface SiuOversightReport {
+  access: boolean
+  standing?: SiuStanding
+  generated_at?: string
+  investigations?: Record<string, number>
+  control?: Record<string, number>
+  disclosure?: Record<string, number>
+  integrity?: Record<string, number>
+  tradecraft?: Record<string, number>
+  exports?: Record<string, number>
+  personnel?: Record<string, number>
+}
+
+export async function fetchSiuOversightReport(): Promise<SiuOversightReport> {
+  const res = await rpc('siu_oversight_report', {})
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuOversightReport | null) ?? { access: false }
+}
+
+/** One withheld category on an export payload. */
+export interface SiuWithheld { category: string; count: number }
+
+export interface SiuExportRow {
+  id: string
+  case_id: string
+  scope: string
+  reason: string
+  item_count: number
+  withheld: SiuWithheld[]
+  exported_by: string | null
+  exported_at: string
+}
+
+export async function fetchSiuExports(caseId?: string): Promise<SiuExportRow[]> {
+  const rows = await list('siu_exports', {
+    order: 'exported_at', ascending: false, limit: 100,
+    ...(caseId ? { eq: { case_id: caseId } } : {}),
+  })
+  return rows as unknown as SiuExportRow[]
+}
+
 /** Human wording for the SIU audit actions. Unknown actions fall back to the
  *  raw token rather than being hidden — an audit surface never silently drops
  *  a row it doesn't recognise. */
@@ -474,6 +728,12 @@ export const SIU_AUDIT_LABEL: Record<string, string> = {
   SIU_AGENT_UNASSIGNED: 'Agent unassigned',
   SIU_COMPARTMENT_GRANTED: 'Compartment access granted',
   SIU_COMPARTMENT_REVOKED: 'Compartment access revoked',
+  SIU_CASE_ASSUMED: 'SIU control assumed of a CID case',
+  SIU_CASE_RETURNED: 'Control returned to CID',
+  SIU_INTEL_RELEASED: 'Intelligence released to CID',
+  SIU_INTEL_REVOKED: 'Release revoked',
+  SIU_INTEL_ACKNOWLEDGED: 'Release acknowledged',
+  SIU_EXPORTED: 'Investigation exported',
 }
 
 export const siuAuditLabel = (a: string) => SIU_AUDIT_LABEL[a] ?? a

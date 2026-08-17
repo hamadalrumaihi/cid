@@ -8,6 +8,81 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### SIU §14 — Assume SIU Control of a CID case
+
+SIU can take over a live CID investigation. The requirement was preservation,
+and the implementation is one column flip: `cases.case_authority` `cid` → `siu`.
+`private.can_access_case()` already branches on case authority, so the case and
+every child row leave CID's lists, counts, search, graph, realtime and
+autocomplete at every rank the instant it lands — and because no child table is
+touched, `reports.author_id`, `evidence.collected_by`, the custody chain and the
+sign-off history survive byte-for-byte. The detective's work stays their work.
+
+- Case number, bureau, originating bureau and lead detective are **not**
+  rewritten, which is also what makes the takeover reversible.
+- Four new provenance columns (`siu_assumed_at/_by`, `siu_assumption_reason`,
+  `siu_returned_at`) are frozen against every direct write; the full
+  before-picture goes to the audit log as `SIU_CASE_ASSUMED`.
+- **No notification is emitted.** A takeover is frequently a takeover *from* the
+  subject; the case simply stops appearing.
+- `siu_release_control()` hands it back, and refuses unless the case was
+  actually taken from CID — a natively-SIU investigation was never CID's.
+
+Verified live: the detective loses the case, its report and its search hit at
+once; the case number, bureau, lead and report author are unchanged; returning
+control gives everything back.
+
+### SIU §15 — Releasing intelligence to CID
+
+Four routes — the whole Division, one case's members, one named investigator,
+and "Release Intelligence" — all auditable and revocable.
+
+**The snapshot is the mechanism.** A release carries a *copy* of the title and
+body taken at release time, never a pointer into an SIU record. So releasing one
+item cannot widen into the investigation (there is no edge to traverse), the
+released text is immutable (what CID acted on is exactly what was released), and
+revocation is real rather than a permission claw-back.
+
+**The origin is never disclosed.** `siu_disclosures` is SIU-side only — CID
+reads zero rows from it at every rank — and CID goes through
+`siu_released_intelligence()`, which projects no `siu_case_id`, no source item
+and no case number. Release requires field standing, so oversight cannot decide
+what SIU tells CID; acknowledgement re-checks the audience rule so it can never
+be used as an existence oracle.
+
+### SIU Phase 3 — tradecraft
+
+Six new domains: confidential sources, undercover deployments, financial
+intelligence, communications intelligence, integrity reviews and a restricted
+export log, plus an aggregate oversight report.
+
+- **All six ride the WRITE wall, not the read superset.** The SOP chain change
+  let oversight read a standard investigation's case file; oversight must not
+  extend to raw tradecraft, because the Director of CID may be the *subject* of
+  a source report, a legend, an intercept or an allegation.
+- **Sources and legends narrow further** to the handler and SIU command
+  (`private.siu_handler_access`), so an agent with full access to an
+  investigation still cannot read another agent's source — and a leak inside SIU
+  costs one source rather than the register. The deployed officer can always
+  read their own deployment.
+- Two constraints carry policy: communications **content** cannot be recorded
+  without a named legal authority, and an integrity review cannot close without
+  a recorded disposition.
+- **Exports redact unconditionally.** `siu_export_case()` is the only export
+  path, logs every call with a mandatory reason, and never emits source
+  identities, undercover legends or intercept content — at any scope, for any
+  caller, including SIU command and the Owner. It reports what it withheld, with
+  counts computed under the caller's own visibility so the count is never an
+  oracle.
+- `siu_oversight_report()` gives the SOP chain counts only: caseload,
+  takeovers, releases, integrity disposition, tradecraft volume. No case, name,
+  codename, legend or identifier can reach it.
+
+Verified live by role simulation: a peer agent with full case access reads zero
+sources; the Director reads the standard investigation and none of the six
+tables; a plain detective reads nothing at all; and every export scope withheld
+the codename, the legend and the intercept content while keeping toll metadata.
+
 ### SIU chain of command — the unit's SOP is authoritative
 
 The architecture amendment put SIU under the Attorney General with CID command

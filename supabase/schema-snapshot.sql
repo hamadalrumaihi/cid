@@ -438,10 +438,15 @@ create table public.cases (
   priority text,
   investigative_stage text not null default 'intake'::text,
   case_authority text not null default 'cid'::text,
-  siu_classification text
+  siu_classification text,
+  siu_assumed_at timestamptz,
+  siu_assumed_by uuid,
+  siu_assumption_reason text,
+  siu_returned_at timestamptz
 );
 alter table public.cases add constraint cases_joint_case_created_by_fkey FOREIGN KEY (joint_case_created_by) REFERENCES public.profiles(id);
 alter table public.cases add constraint cases_joint_case_ended_by_fkey FOREIGN KEY (joint_case_ended_by) REFERENCES public.profiles(id);
+alter table public.cases add constraint cases_siu_assumed_by_fkey FOREIGN KEY (siu_assumed_by) REFERENCES public.profiles(id);
 alter table public.cases add constraint cases_case_number_key UNIQUE (case_number);
 alter table public.cases add constraint cases_pkey PRIMARY KEY (id);
 alter table public.cases add constraint cases_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
@@ -2613,6 +2618,256 @@ create index siu_targets_cleared_by_fkey_idx ON public.siu_targets USING btree (
 -- Investigative DESIGNATIONS, not findings, pinned to an SIU investigation and
 -- pointing at the SHARED registries by (entity_type, entity_id) — one master
 -- record per person/vehicle/gang, with an SIU-only designation layered on top.
+
+create table public.siu_disclosures (
+  id uuid not null default gen_random_uuid(),
+  siu_case_id uuid not null,
+  source_item_id uuid,
+  item_type text not null default 'intelligence'::text,
+  audience text not null,
+  target_case_id uuid,
+  target_user_id uuid,
+  title text not null,
+  body text not null,
+  handling text not null default 'law_enforcement_sensitive'::text,
+  reason text not null,
+  released_by uuid,
+  released_at timestamptz not null default now(),
+  revoked_at timestamptz,
+  revoked_by uuid,
+  revoke_reason text,
+  acknowledged_at timestamptz,
+  acknowledged_by uuid,
+  created_at timestamptz not null default now()
+);
+alter table public.siu_disclosures add constraint siu_disclosures_pkey PRIMARY KEY (id);
+alter table public.siu_disclosures add constraint siu_disclosures_siu_case_id_fkey FOREIGN KEY (siu_case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.siu_disclosures add constraint siu_disclosures_target_case_id_fkey FOREIGN KEY (target_case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.siu_disclosures add constraint siu_disclosures_target_user_id_fkey FOREIGN KEY (target_user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.siu_disclosures add constraint siu_disclosures_released_by_fkey FOREIGN KEY (released_by) REFERENCES public.profiles(id);
+alter table public.siu_disclosures add constraint siu_disclosures_revoked_by_fkey FOREIGN KEY (revoked_by) REFERENCES public.profiles(id);
+alter table public.siu_disclosures add constraint siu_disclosures_acknowledged_by_fkey FOREIGN KEY (acknowledged_by) REFERENCES public.profiles(id);
+alter table public.siu_disclosures add constraint siu_disclosures_item_type_check CHECK (item_type in ('intelligence', 'report', 'evidence', 'media', 'target', 'summary', 'warning'));
+alter table public.siu_disclosures add constraint siu_disclosures_audience_check CHECK (audience in ('cid', 'case_members', 'investigator'));
+alter table public.siu_disclosures add constraint siu_disclosures_handling_check CHECK (handling in ('official_use', 'law_enforcement_sensitive', 'court_disclosable'));
+alter table public.siu_disclosures enable row level security;
+create index siu_disclosures_case_idx ON public.siu_disclosures USING btree (siu_case_id);
+create index siu_disclosures_target_case_idx ON public.siu_disclosures USING btree (target_case_id);
+create index siu_disclosures_target_user_idx ON public.siu_disclosures USING btree (target_user_id);
+create index siu_disclosures_released_by_fkey_idx ON public.siu_disclosures USING btree (released_by);
+create index siu_disclosures_revoked_by_fkey_idx ON public.siu_disclosures USING btree (revoked_by);
+create index siu_disclosures_acknowledged_by_fkey_idx ON public.siu_disclosures USING btree (acknowledged_by);
+create index siu_disclosures_live_idx ON public.siu_disclosures USING btree (audience) WHERE (revoked_at is null);
+-- §15. A SNAPSHOT of one released item — never a pointer into an SIU record —
+-- so releasing an item cannot widen into the investigation. CID never reads
+-- this table: siu_disclosures_sel is SIU-side only, and CID goes through
+-- public.siu_released_intelligence(), which projects no origin at all.
+
+create table public.siu_sources (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  codename text not null,
+  person_id uuid,
+  handler_id uuid not null,
+  status text not null default 'active'::text,
+  reliability text not null default 'untested'::text,
+  motivation text,
+  tasking text,
+  control_notes text,
+  risk_assessment text,
+  registered_at timestamptz not null default now(),
+  last_contact_at timestamptz,
+  deactivated_at timestamptz,
+  deactivation_reason text,
+  created_by uuid default auth.uid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.siu_sources add constraint siu_sources_pkey PRIMARY KEY (id);
+alter table public.siu_sources add constraint siu_sources_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.siu_sources add constraint siu_sources_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE SET NULL;
+alter table public.siu_sources add constraint siu_sources_handler_id_fkey FOREIGN KEY (handler_id) REFERENCES public.profiles(id);
+alter table public.siu_sources add constraint siu_sources_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.siu_sources add constraint siu_sources_status_check CHECK (status in ('proposed', 'active', 'inactive', 'closed', 'burned', 'unsuitable'));
+alter table public.siu_sources add constraint siu_sources_reliability_check CHECK (reliability in ('reliable', 'usually_reliable', 'fairly_reliable', 'not_usually_reliable', 'unreliable', 'untested'));
+alter table public.siu_sources add constraint siu_sources_motivation_check CHECK (motivation in ('financial', 'plea_consideration', 'revenge', 'civic', 'coerced', 'unknown'));
+alter table public.siu_sources enable row level security;
+create index siu_sources_case_idx ON public.siu_sources USING btree (case_id);
+create index siu_sources_handler_idx ON public.siu_sources USING btree (handler_id);
+create index siu_sources_person_idx ON public.siu_sources USING btree (person_id);
+create index siu_sources_created_by_fkey_idx ON public.siu_sources USING btree (created_by);
+-- Confidential human sources. Compartmented at the ROW level by handler
+-- (private.siu_handler_access), so an agent with full access to the
+-- investigation still cannot read another agent's source.
+
+create table public.siu_undercover_operations (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  operation_id uuid,
+  legend_name text not null,
+  agent_id uuid,
+  handler_id uuid not null,
+  status text not null default 'proposed'::text,
+  objective text,
+  cover_details text,
+  legend_backstop text,
+  extraction_plan text,
+  risk_assessment text,
+  legal_authority text,
+  authorized_by uuid,
+  authorized_at timestamptz,
+  started_at timestamptz,
+  ended_at timestamptz,
+  end_reason text,
+  created_by uuid default auth.uid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.siu_undercover_operations add constraint siu_undercover_operations_pkey PRIMARY KEY (id);
+alter table public.siu_undercover_operations add constraint siu_undercover_operations_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.siu_undercover_operations add constraint siu_undercover_operations_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES public.operations(id) ON DELETE SET NULL;
+alter table public.siu_undercover_operations add constraint siu_undercover_operations_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES public.profiles(id);
+alter table public.siu_undercover_operations add constraint siu_undercover_operations_handler_id_fkey FOREIGN KEY (handler_id) REFERENCES public.profiles(id);
+alter table public.siu_undercover_operations add constraint siu_undercover_operations_authorized_by_fkey FOREIGN KEY (authorized_by) REFERENCES public.profiles(id);
+alter table public.siu_undercover_operations add constraint siu_undercover_operations_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.siu_undercover_operations add constraint siu_undercover_operations_status_check CHECK (status in ('proposed', 'authorized', 'active', 'suspended', 'concluded', 'compromised'));
+alter table public.siu_undercover_operations enable row level security;
+create index siu_uc_case_idx ON public.siu_undercover_operations USING btree (case_id);
+create index siu_uc_handler_idx ON public.siu_undercover_operations USING btree (handler_id);
+create index siu_uc_agent_idx ON public.siu_undercover_operations USING btree (agent_id);
+create index siu_uc_operation_idx ON public.siu_undercover_operations USING btree (operation_id);
+create index siu_uc_authorized_by_fkey_idx ON public.siu_undercover_operations USING btree (authorized_by);
+create index siu_uc_created_by_fkey_idx ON public.siu_undercover_operations USING btree (created_by);
+-- Cover identities, handler-compartmented like sources. The deployed officer
+-- can always read their OWN deployment (siu_uc_sel's second branch).
+
+create table public.siu_financial_intel (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  record_type text not null default 'transaction'::text,
+  subject_type text,
+  subject_id uuid,
+  subject_label text,
+  institution text,
+  identifier text,
+  amount numeric(14,2),
+  currency text not null default 'USD'::text,
+  occurred_at timestamptz,
+  counterparty text,
+  description text,
+  source_of_information text,
+  flagged boolean not null default false,
+  flag_reason text,
+  created_by uuid default auth.uid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.siu_financial_intel add constraint siu_financial_intel_pkey PRIMARY KEY (id);
+alter table public.siu_financial_intel add constraint siu_financial_intel_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.siu_financial_intel add constraint siu_financial_intel_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.siu_financial_intel add constraint siu_financial_intel_record_type_check CHECK (record_type in ('account', 'transaction', 'transfer', 'asset', 'cash_movement', 'shell_entity', 'payroll', 'pattern'));
+alter table public.siu_financial_intel add constraint siu_financial_intel_subject_type_check CHECK (subject_type in ('person', 'organization', 'gang', 'place', 'unknown'));
+alter table public.siu_financial_intel enable row level security;
+create index siu_fin_case_idx ON public.siu_financial_intel USING btree (case_id);
+create index siu_fin_subject_idx ON public.siu_financial_intel USING btree (subject_type, subject_id);
+create index siu_fin_flagged_idx ON public.siu_financial_intel USING btree (case_id) WHERE flagged;
+create index siu_fin_created_by_fkey_idx ON public.siu_financial_intel USING btree (created_by);
+-- Financial intelligence. Rides private.siu_case_access (the WRITE wall), not
+-- the read superset, so oversight standing never reads it.
+
+create table public.siu_comms_intel (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  record_type text not null default 'number'::text,
+  identifier text,
+  subscriber text,
+  carrier text,
+  counterpart text,
+  direction text,
+  occurred_at timestamptz,
+  duration_seconds integer,
+  content_summary text,
+  legal_authority text,
+  legal_request_id uuid,
+  description text,
+  created_by uuid default auth.uid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.siu_comms_intel add constraint siu_comms_intel_pkey PRIMARY KEY (id);
+alter table public.siu_comms_intel add constraint siu_comms_intel_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.siu_comms_intel add constraint siu_comms_intel_legal_request_id_fkey FOREIGN KEY (legal_request_id) REFERENCES public.legal_requests(id) ON DELETE SET NULL;
+alter table public.siu_comms_intel add constraint siu_comms_intel_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.siu_comms_intel add constraint siu_comms_intel_record_type_check CHECK (record_type in ('number', 'device', 'contact', 'toll_record', 'message', 'location', 'pattern'));
+alter table public.siu_comms_intel add constraint siu_comms_intel_direction_check CHECK (direction in ('inbound', 'outbound', 'unknown'));
+alter table public.siu_comms_intel add constraint siu_comms_content_requires_authority CHECK ((content_summary is null) or (legal_authority is not null));
+alter table public.siu_comms_intel enable row level security;
+create index siu_comms_case_idx ON public.siu_comms_intel USING btree (case_id);
+create index siu_comms_identifier_idx ON public.siu_comms_intel USING btree (identifier);
+create index siu_comms_legal_idx ON public.siu_comms_intel USING btree (legal_request_id);
+create index siu_comms_created_by_fkey_idx ON public.siu_comms_intel USING btree (created_by);
+-- Communications intelligence. The CHECK is the point: metadata can be logged
+-- from ordinary investigative work, but CONTENT cannot be recorded without a
+-- named legal authority, and the row can cite the legal_requests row.
+
+create table public.siu_integrity_reviews (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  subject_user_id uuid,
+  subject_description text,
+  allegation_type text not null default 'other'::text,
+  summary text not null,
+  severity text not null default 'medium'::text,
+  status text not null default 'open'::text,
+  findings text,
+  disposition text,
+  referred_to text,
+  opened_at timestamptz not null default now(),
+  closed_at timestamptz,
+  closed_by uuid,
+  created_by uuid default auth.uid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.siu_integrity_reviews add constraint siu_integrity_reviews_pkey PRIMARY KEY (id);
+alter table public.siu_integrity_reviews add constraint siu_integrity_reviews_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.siu_integrity_reviews add constraint siu_integrity_reviews_subject_user_id_fkey FOREIGN KEY (subject_user_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.siu_integrity_reviews add constraint siu_integrity_reviews_closed_by_fkey FOREIGN KEY (closed_by) REFERENCES public.profiles(id);
+alter table public.siu_integrity_reviews add constraint siu_integrity_reviews_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.siu_integrity_reviews add constraint siu_integrity_reviews_allegation_type_check CHECK (allegation_type in ('evidence_tampering', 'case_fixing', 'unauthorized_disclosure', 'bribery', 'excessive_force', 'false_reporting', 'criminal_association', 'abuse_of_access', 'obstruction', 'other'));
+alter table public.siu_integrity_reviews add constraint siu_integrity_reviews_severity_check CHECK (severity in ('low', 'medium', 'high', 'critical'));
+alter table public.siu_integrity_reviews add constraint siu_integrity_reviews_status_check CHECK (status in ('open', 'substantiated', 'unsubstantiated', 'inconclusive', 'referred', 'withdrawn'));
+alter table public.siu_integrity_reviews add constraint siu_integrity_closed_needs_disposition CHECK ((closed_at is null) or (coalesce(btrim(disposition), '') <> ''));
+alter table public.siu_integrity_reviews enable row level security;
+create index siu_integrity_case_idx ON public.siu_integrity_reviews USING btree (case_id);
+create index siu_integrity_subject_idx ON public.siu_integrity_reviews USING btree (subject_user_id);
+create index siu_integrity_open_idx ON public.siu_integrity_reviews USING btree (case_id) WHERE (closed_at is null);
+create index siu_integrity_closed_by_fkey_idx ON public.siu_integrity_reviews USING btree (closed_by);
+create index siu_integrity_created_by_fkey_idx ON public.siu_integrity_reviews USING btree (created_by);
+-- The structured form of an integrity concern. subject_user_id may be ANY
+-- member — nothing here consults the subject's rank, and a review cannot close
+-- without a recorded disposition.
+
+create table public.siu_exports (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  scope text not null,
+  reason text not null,
+  item_count integer not null default 0,
+  withheld jsonb not null default '[]'::jsonb,
+  exported_by uuid,
+  exported_at timestamptz not null default now()
+);
+alter table public.siu_exports add constraint siu_exports_pkey PRIMARY KEY (id);
+alter table public.siu_exports add constraint siu_exports_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.siu_exports add constraint siu_exports_exported_by_fkey FOREIGN KEY (exported_by) REFERENCES public.profiles(id);
+alter table public.siu_exports add constraint siu_exports_scope_check CHECK (scope in ('case_summary', 'investigation_file', 'intelligence_only', 'disclosure_packet'));
+alter table public.siu_exports enable row level security;
+create index siu_exports_case_idx ON public.siu_exports USING btree (case_id);
+create index siu_exports_by_idx ON public.siu_exports USING btree (exported_by);
+-- Every restricted export, logged. Written ONLY by public.siu_export_case();
+-- readable to oversight (siu_case_read) because the log is an accountability
+-- record rather than tradecraft.
 
 create table public.siu_case_agents (
   id uuid not null default gen_random_uuid(),
@@ -8071,6 +8326,99 @@ create policy siu_targets_upd on public.siu_targets
   using ((private.siu_case_access(case_id) AND private.siu_is_agent()))
   with check ((private.siu_case_access(case_id) AND private.siu_is_agent()));
 
+create policy siu_disclosures_sel on public.siu_disclosures
+  as permissive for select to authenticated
+  using (private.siu_case_read(siu_case_id));
+
+create policy siu_sources_sel on public.siu_sources
+  as permissive for select to authenticated
+  using (private.siu_handler_access(case_id, handler_id));
+
+create policy siu_sources_ins on public.siu_sources
+  as permissive for insert to authenticated
+  with check ((private.siu_handler_access(case_id, handler_id) AND private.siu_is_agent()));
+
+create policy siu_sources_upd on public.siu_sources
+  as permissive for update to authenticated
+  using ((private.siu_handler_access(case_id, handler_id) AND private.siu_is_agent()))
+  with check ((private.siu_handler_access(case_id, handler_id) AND private.siu_is_agent()));
+
+create policy siu_sources_del on public.siu_sources
+  as permissive for delete to authenticated
+  using (private.siu_case_command(case_id));
+
+create policy siu_uc_sel on public.siu_undercover_operations
+  as permissive for select to authenticated
+  using ((private.siu_handler_access(case_id, handler_id) OR ((agent_id = ( SELECT auth.uid() AS uid)) AND private.siu_case_access(case_id))));
+
+create policy siu_uc_ins on public.siu_undercover_operations
+  as permissive for insert to authenticated
+  with check ((private.siu_handler_access(case_id, handler_id) AND private.siu_is_agent()));
+
+create policy siu_uc_upd on public.siu_undercover_operations
+  as permissive for update to authenticated
+  using ((private.siu_handler_access(case_id, handler_id) AND private.siu_is_agent()))
+  with check ((private.siu_handler_access(case_id, handler_id) AND private.siu_is_agent()));
+
+create policy siu_uc_del on public.siu_undercover_operations
+  as permissive for delete to authenticated
+  using (private.siu_case_command(case_id));
+
+create policy siu_fin_sel on public.siu_financial_intel
+  as permissive for select to authenticated
+  using (private.siu_case_access(case_id));
+
+create policy siu_fin_ins on public.siu_financial_intel
+  as permissive for insert to authenticated
+  with check ((private.siu_case_access(case_id) AND private.siu_is_agent()));
+
+create policy siu_fin_upd on public.siu_financial_intel
+  as permissive for update to authenticated
+  using ((private.siu_case_access(case_id) AND private.siu_is_agent()))
+  with check ((private.siu_case_access(case_id) AND private.siu_is_agent()));
+
+create policy siu_fin_del on public.siu_financial_intel
+  as permissive for delete to authenticated
+  using (private.siu_case_command(case_id));
+
+create policy siu_comms_sel on public.siu_comms_intel
+  as permissive for select to authenticated
+  using (private.siu_case_access(case_id));
+
+create policy siu_comms_ins on public.siu_comms_intel
+  as permissive for insert to authenticated
+  with check ((private.siu_case_access(case_id) AND private.siu_is_agent()));
+
+create policy siu_comms_upd on public.siu_comms_intel
+  as permissive for update to authenticated
+  using ((private.siu_case_access(case_id) AND private.siu_is_agent()))
+  with check ((private.siu_case_access(case_id) AND private.siu_is_agent()));
+
+create policy siu_comms_del on public.siu_comms_intel
+  as permissive for delete to authenticated
+  using (private.siu_case_command(case_id));
+
+create policy siu_integrity_sel on public.siu_integrity_reviews
+  as permissive for select to authenticated
+  using (private.siu_case_access(case_id));
+
+create policy siu_integrity_ins on public.siu_integrity_reviews
+  as permissive for insert to authenticated
+  with check ((private.siu_case_access(case_id) AND private.siu_is_agent()));
+
+create policy siu_integrity_upd on public.siu_integrity_reviews
+  as permissive for update to authenticated
+  using ((private.siu_case_access(case_id) AND private.siu_is_agent()))
+  with check ((private.siu_case_access(case_id) AND private.siu_is_agent()));
+
+create policy siu_integrity_del on public.siu_integrity_reviews
+  as permissive for delete to authenticated
+  using (private.siu_case_command(case_id));
+
+create policy siu_exports_sel on public.siu_exports
+  as permissive for select to authenticated
+  using (private.siu_case_read(case_id));
+
 create policy siu_case_agents_sel on public.siu_case_agents
   as permissive for select to authenticated
   using (private.siu_case_read(case_id));
@@ -10256,3 +10604,96 @@ create policy wl_sel on public.watchlist
 -- DELETE grant to authenticated, so evidence_del was already unreachable; it
 -- is re-emitted anyway so a future grant cannot silently reopen the hole.
 -- Definitive SQL in supabase/migrations/20260823130000_siu_case_delete_wall.sql.
+
+-- §14 Assume SIU Control (20260824120000_siu_assume_control) — SIU takes over a
+-- live CID case. NEW COLUMNS on public.cases: siu_assumed_at, siu_assumed_by
+-- (FK profiles), siu_assumption_reason, siu_returned_at — a permanent
+-- provenance record that survives a later return to CID, and RPC-only:
+-- private.block_direct_siu_case_cols() is RE-EMITTED to freeze all four
+-- alongside case_authority and siu_classification (client INSERT nulls them,
+-- client UPDATE raises).
+--
+-- The takeover itself is ONE column flip, case_authority 'cid' -> 'siu'.
+-- private.can_access_case() already branches on private.is_siu_case(), so the
+-- case and every child row leave CID's lists, counts, search, graph, realtime
+-- and autocomplete at every rank the moment it lands — with no child table
+-- touched, which is what preserves reports.author_id, evidence.collected_by,
+-- custody_events and case_signoff_history exactly as they were. bureau and
+-- lead_detective_id are deliberately NOT changed.
+--
+-- NEW RPCs: siu_assume_control(uuid, text, text default 'siu_restricted') —
+-- SIU command only, mandatory reason, refuses an already-SIU or archived case,
+-- enrols the actor as lead agent, seeds the compartment when compartmented,
+-- and audits SIU_CASE_ASSUMED with the whole before-picture (prior authority,
+-- bureau, status, CID lead and creator). siu_release_control(uuid, text) —
+-- command over that investigation, refuses unless siu_assumed_at is set, so a
+-- natively-SIU investigation can never be handed to CID this way.
+-- No notification is emitted: a takeover is frequently a takeover FROM the
+-- subject. Definitive SQL in
+-- supabase/migrations/20260824120000_siu_assume_control.sql.
+
+-- §15 Disclosure (20260824130000_siu_disclosure) — releasing ONE item to CID
+-- without surrendering the investigation. NEW TABLE public.siu_disclosures
+-- (block above) carrying a SNAPSHOT of the released title + body rather than a
+-- pointer, which is the mechanism: there is no edge from a disclosure back to
+-- any SIU record for a CID user to traverse, the released text is immutable,
+-- and revocation removes the row from every CID surface rather than clawing
+-- back a permission that was never granted.
+--
+-- Four routes: audience 'cid' (the whole Division), 'case_members' (one named
+-- CID case), 'investigator' (one named officer); item_type 'intelligence' at
+-- audience 'cid' is the "Release Intelligence" action.
+--
+-- ORIGIN IS NEVER DISCLOSED: siu_disclosures_sel is SIU-side only
+-- (private.siu_case_read), so CID reads ZERO rows from the table at every
+-- rank. CID goes through NEW RPC siu_released_intelligence(uuid default null),
+-- which projects only the non-identifying columns — no siu_case_id, no
+-- source_item_id, no case number. NEW RPCs siu_share(...10 args) — release,
+-- gated on siu_case_access + siu_is_agent so oversight standing cannot release
+-- and a compartmented investigation releases only from inside the compartment;
+-- siu_revoke_disclosure(uuid, text) — the releasing agent or SIU command;
+-- siu_acknowledge_disclosure(uuid) — the CID recipient, re-checking the
+-- audience rule so it cannot be used as an existence oracle. Definitive SQL in
+-- supabase/migrations/20260824130000_siu_disclosure.sql.
+
+-- SIU Phase 3 (20260825120000_siu_phase3 + 20260825130000_siu_phase3_rpcs) —
+-- tradecraft. NEW TABLES (blocks above): siu_sources, siu_undercover_operations,
+-- siu_financial_intel, siu_comms_intel, siu_integrity_reviews, siu_exports.
+--
+-- Every one is gated on private.siu_case_access() — the WRITE wall — and never
+-- on private.siu_case_read(). That is deliberate: the SOP chain change let
+-- oversight standing read a standard investigation's case file, and oversight
+-- must not extend to raw tradecraft, because the Director of CID may be the
+-- SUBJECT of a source report, a legend, an intercept or an allegation.
+-- siu_exports is the single exception and rides siu_case_read, because an
+-- export log is an accountability record rather than tradecraft.
+--
+-- NEW PRIVATE PREDICATE private.siu_handler_access(uuid, uuid) = siu_case_access
+-- AND (handler = me OR SIU command). siu_sources and siu_undercover_operations
+-- use it, so an agent with full access to an investigation still cannot read
+-- another agent's source or another officer's cover identity; the deployed
+-- officer can always read their OWN deployment. Granted EXECUTE to
+-- authenticated (RLS quals). Compartmentation composes: on a compartmented
+-- investigation siu_case_access is allow-list-only, so all six inherit it.
+--
+-- siu_comms_intel carries CHECK siu_comms_content_requires_authority:
+-- content_summary cannot be populated unless legal_authority is.
+-- siu_integrity_reviews carries CHECK siu_integrity_closed_needs_disposition:
+-- a review cannot close without a recorded disposition.
+--
+-- NEW RPC siu_export_case(uuid, text, text) — the ONE export path. Re-checks
+-- siu_case_access + siu_is_agent (so oversight cannot export at all), logs to
+-- siu_exports AND the audit trail with a mandatory reason, and NEVER emits
+-- source identities, undercover legends or intercept content at any scope for
+-- any caller including the Owner. What was withheld is returned in the payload
+-- with counts computed under the CALLER'S OWN visibility predicates, so a
+-- withheld count is never an oracle.
+--
+-- NEW RPC siu_oversight_report() — the supervision surface for the SOP chain.
+-- Aggregate counts only: caseload by classification, §14 control taken and
+-- returned, §15 releases and acknowledgements, integrity workload and
+-- disposition, tradecraft VOLUME, export volume. No case id, title, name,
+-- codename, legend or identifier ever appears. Any SIU standing may read it;
+-- an unauthorized caller gets {"access": false}. Definitive SQL in
+-- supabase/migrations/20260825120000_siu_phase3.sql and
+-- supabase/migrations/20260825130000_siu_phase3_rpcs.sql.

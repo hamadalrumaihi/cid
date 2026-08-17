@@ -37,6 +37,8 @@ import {
   type SiuAuditRow, type SiuCandidate, type SiuOverview, type SiuRosterRow,
   type SiuDesignation, type SiuNoteType,
 } from '@/lib/siu'
+import { SiuDisclosuresSection } from './SiuDisclosures'
+import { SiuOversightSection, SiuTradecraftSection } from './SiuTradecraft'
 import { roleLabel } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
@@ -52,7 +54,8 @@ import { Field, Input, Select, Textarea, inputCls } from '@/components/ui/Field'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 
 type CaseRow = Tables<'cases'>
-type Section = 'overview' | 'investigations' | 'targets' | 'operations' | 'intelligence' | 'agents' | 'activity'
+type Section = 'overview' | 'investigations' | 'targets' | 'operations' | 'intelligence'
+  | 'tradecraft' | 'disclosure' | 'oversight' | 'agents' | 'activity'
 type TargetRow = Tables<'siu_targets'>
 type OperationRow = Tables<'operations'>
 type NoteRow = Tables<'siu_case_notes'>
@@ -63,6 +66,9 @@ const SECTIONS = [
   { id: 'targets' as const, label: 'Targets' },
   { id: 'operations' as const, label: 'Operations' },
   { id: 'intelligence' as const, label: 'Intelligence' },
+  { id: 'tradecraft' as const, label: 'Tradecraft' },
+  { id: 'disclosure' as const, label: 'Released to CID' },
+  { id: 'oversight' as const, label: 'Oversight' },
   { id: 'agents' as const, label: 'Agents' },
   { id: 'activity' as const, label: 'Activity' },
 ]
@@ -146,6 +152,9 @@ export function SiuView() {
       {section === 'targets' && <TargetsSection />}
       {section === 'operations' && <OperationsSection />}
       {section === 'intelligence' && <IntelligenceSection />}
+      {section === 'tradecraft' && <SiuTradecraftSection />}
+      {section === 'disclosure' && <SiuDisclosuresSection />}
+      {section === 'oversight' && <SiuOversightSection />}
       {section === 'agents' && <AgentsSection />}
       {section === 'activity' && <ActivitySection />}
     </div>
