@@ -239,6 +239,24 @@ SIU is **not** a bureau, **not** a CID rank, and **not** a badge attached to a d
 
 **Audit.** SIU actions land in the ordinary Owner-only `audit_log` under entity `siu`; ordinary agents cannot edit it (the table carries no client write policy). `siu_audit_feed()` serves compartment-respecting reads — a case-keyed row is returned only to someone who can access that case, so a subject under investigation never learns of the trail through any audit surface.
 
+### Amendment — SIU is a separate DEPARTMENT ([`20260821120000_siu_department.sql`](../supabase/migrations/20260821120000_siu_department.sql))
+
+Phase 1 modelled SIU as a separate *authority*. The architecture amendment completes the intent: **one platform, two investigative departments.**
+
+```
+INVESTIGATIVE PORTAL
+├── Criminal Investigation Division   detective → … → director, bureaus
+└── Special Investigation Unit        Attorney General → X-1 → agents
+```
+
+- **Active department.** `private.user_department()` resolves `cid` | `siu` from SIU membership — one portal identity, one active department, no duplicate accounts and no column that can drift from the roster. It is **gate-aware**: while the release gate is closed *everybody* resolves to `cid`, so CID keeps operating exactly as it does today and appointing agents early cannot strand them between departments.
+- **SIU is not CID.** A member whose department is `siu` loses the **native** CID case branch (bureau match, lead/creator, `is_command()`, joint access) and therefore all CID case *write* access. They keep the broad **read-only** oversight of CID (`private.can_read_case`), which is authority-based and never depends on holding a CID role. `can_access_case`/`_row` are byte-identical to Phase 1 apart from one `not private.is_siu_department()` conjunct.
+- **SIU's own ladder.** `special_agent` → `senior_special_agent` → `special_agent_in_charge` (X-Ray 1). Senior Special Agent is a **field** tier: it reaches `siu_restricted` only when assigned and never `siu_command`. X-1 is SIU's Director-*equivalent* **inside SIU only** — the CID Director role is neither reused nor granted, and CID command sits nowhere in the SIU chain.
+- **Separate SOP.** Classification `siu` on `documents`, visible to SIU standing only (CID at every rank, Director included, sees nothing) and editable by SIU command, never CID command. The unit's own SOP is seeded as its own document; the CID SOP is never presented as the SIU SOP.
+- **Separate workspace.** `siu_department_context()` is the one authoritative answer for which departmental shell to render. A deliberate department switch exists **only** for accounts that legitimately hold both contexts (Owner, AG oversight) — a normal CID member is never offered one, and the flag grants no data access on its own.
+
+> **Known discrepancy — the SIU SOP's own chain of command.** The seeded SOP text states that SIU reports through the Commissioner's Office and the **Director of CID**. The portal implements the amendment's model instead: **Attorney General → X-1 → Agents, with CID command holding no SIU authority whatsoever.** The document is stored exactly as written (it is the unit's policy text), so the two disagree on paper. Whoever owns the SOP should reconcile it; until then the *enforced* model is the one documented here.
+
 ### Build-phase release gate (temporary)
 
 Until SIU is marked production-ready, **only the Portal Owner** may see, query or act on anything SIU — this temporarily overrides the model above for the Attorney General, X-Ray 1, Special Agents, and all of CID. The gate is centralized, not scattered: `private.siu_standing()` returns `owner` for the owner unconditionally and `NULL` for everyone else while `siu_settings.enabled_for_non_owner` is `false`. For every other account SIU simply does not exist — no nav entry, no "coming soon", no route, no rows, no notifications, no realtime, no search hits. Opening the gate is one audited Owner-only call, `siu_set_release(true, reason)`; the production permissions above are already written and need no rebuild.

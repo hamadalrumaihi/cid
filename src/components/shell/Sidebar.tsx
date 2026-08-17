@@ -7,8 +7,9 @@
 import { useSyncExternalStore } from 'react'
 import { useAuth } from '@/lib/auth'
 import { useSiu } from '@/lib/useSiu'
-import { NAV_CATEGORIES } from '@/lib/nav'
+import { NAV_CATEGORIES, SIU_NAV_CATEGORIES, SIU_TAB_LABEL, TAB_LABEL } from '@/lib/nav'
 import { deptLabel, roleLabel } from '@/lib/roles'
+import { DEPARTMENT_LABEL, siuCallsign, siuRoleLabel } from '@/lib/siu'
 import { safeUrl } from '@/lib/safeUrl'
 import { Store } from '@/lib/store'
 import { CategoryIcon, ChevronIcon, CloseIcon, ShieldIcon } from './icons'
@@ -20,6 +21,7 @@ import { useNavBadges } from './useNavBadges'
 
 function OfficerCard() {
   const { profile, session } = useAuth()
+  const siu = useSiu()
   const { navigate } = useNav()
   // Vanilla vocabulary (collab.js renderOfficerCard): 'Badge <n> · <dept
   // abbreviation>' with amber On-LOA / emerald On-duty status dot. Clicking
@@ -28,9 +30,13 @@ function OfficerCard() {
   const initials =
     (profile?.display_name || '?').split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || '?'
   const avatar = safeUrl(profile?.avatar_url ?? '')
-  const sub = profile
-    ? `${profile.badge_number ? `Badge ${profile.badge_number} · ` : ''}${deptLabel(profile.division)}`
-    : '—'
+  // Inside SIU the officer card shows SIU identity — callsign and SIU role —
+  // never the member's former CID rank and bureau (§20).
+  const sub = !profile
+    ? '—'
+    : siu.inSiu
+      ? `${siu.callsign ? `${siuCallsign(siu.callsign)} · ` : ''}Special Investigation Unit`
+      : `${profile.badge_number ? `Badge ${profile.badge_number} · ` : ''}${deptLabel(profile.division)}`
   const dot = !profile
     ? { cls: 'bg-slate-500', title: 'Offline' }
     : profile.loa
@@ -49,7 +55,15 @@ function OfficerCard() {
         <div className="sidebar-hide min-w-0 flex-1 leading-tight">
           <p className="truncate text-sm font-semibold text-white">{name}</p>
           <p className="truncate text-[11px] text-slate-400">{sub}</p>
-          <p className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-wider text-blue-300/80">{roleLabel(profile?.role)}</p>
+          <p className={`mt-0.5 truncate text-[10px] font-semibold uppercase tracking-wider ${
+            siu.inSiu ? 'text-violet-300/80' : 'text-blue-300/80'
+          }`}>
+            {siu.inSiu
+              ? (siu.standing === 'owner' ? 'Portal Owner'
+                 : siu.standing === 'oversight' ? 'SIU Oversight'
+                 : siuRoleLabel(siu.membership?.siu_role))
+              : roleLabel(profile?.role)}
+          </p>
         </div>
         {profile?.loa && (
           <span className="sidebar-hide flex-shrink-0 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-300" title="On Leave of Absence">
@@ -75,6 +89,7 @@ const readCollapsed = () => document.body.classList.contains('nav-collapsed')
 export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; onCloseDrawer: () => void }) {
   const { isCommand, isOwner } = useAuth()
   const siu = useSiu()
+  const inSiu = siu.inSiu
   const { activeCategory, activeTab, navigate, navigateCategory } = useNav()
   const badges = useNavBadges()
   const collapsed = useSyncExternalStore(subscribeCollapse, readCollapsed, () => false)
@@ -97,15 +112,24 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
       aria-label="Primary navigation"
     >
       <div className="sidebar-head flex items-center gap-3 border-b border-white/5 px-5 py-5">
-        <div className="relative grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl bg-gradient-to-br from-badge-500 to-blue-700 shadow-glow">
+        <div className={`relative grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl shadow-glow ${
+          inSiu ? 'bg-gradient-to-br from-violet-500 to-violet-800' : 'bg-gradient-to-br from-badge-500 to-blue-700'
+        }`}>
           <ShieldIcon className="h-6 w-6 text-white" />
         </div>
         <div className="sidebar-hide leading-tight">
           {/* Brand wordmark, not the page heading — each view owns its single
               <h1> (PageHeader / dossier), so the brand is a styled <div> to keep
-              one-h1-per-page. */}
-          <div className="text-base font-bold tracking-tight text-white">CID Portal</div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-blue-300/70">San Andreas</p>
+              one-h1-per-page. The department owns the wordmark: an SIU agent is
+              not looking at "the CID Portal". */}
+          <div className="text-base font-bold tracking-tight text-white">
+            {inSiu ? 'SIU Portal' : 'CID Portal'}
+          </div>
+          <p className={`text-[11px] font-medium uppercase tracking-[0.18em] ${
+            inSiu ? 'text-violet-300/70' : 'text-blue-300/70'
+          }`}>
+            {inSiu ? 'Special Investigation Unit' : 'San Andreas'}
+          </p>
         </div>
         <button
           onClick={onCloseDrawer}
@@ -116,15 +140,45 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
         </button>
       </div>
 
-      <div className="sidebar-hide mx-4 mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
-        <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400/90">
-          <span className="pulse-dot inline-block h-2 w-2 rounded-full bg-amber-400" /> Restricted // CID Eyes Only
+      <div className={`sidebar-hide mx-4 mt-4 rounded-lg border px-3 py-2 ${
+        inSiu ? 'border-violet-500/25 bg-violet-500/5' : 'border-amber-500/20 bg-amber-500/5'
+      }`}>
+        <p className={`flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider ${
+          inSiu ? 'text-violet-300/90' : 'text-amber-400/90'
+        }`}>
+          <span className={`pulse-dot inline-block h-2 w-2 rounded-full ${inSiu ? 'bg-violet-400' : 'bg-amber-400'}`} />
+          {inSiu ? 'Restricted // SIU Eyes Only' : 'Restricted // CID Eyes Only'}
         </p>
       </div>
 
       <nav className="mt-4 flex-1 space-y-1 overflow-y-auto px-3 pb-4" role="navigation">
-        <p className="sidebar-hide px-3 pb-2 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Divisions</p>
-        {NAV_CATEGORIES.map((c) => {
+        <p className="sidebar-hide px-3 pb-2 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+          {inSiu ? 'Unit' : 'Divisions'}
+        </p>
+        {/* SIU renders its OWN navigation — it is a separate department, not a
+            leaf inside the CID sidebar. The shared registry routes are reused
+            deliberately (one master dataset, RLS-scoped per viewer); only the
+            grouping, labels and context differ. */}
+        {inSiu && SIU_NAV_CATEGORIES.map((cat) => (
+          <div key={cat.id} className="pb-1">
+            <p className="sidebar-hide px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{cat.label}</p>
+            {cat.tabs.map((t) => (
+              <button
+                key={t}
+                data-label={SIU_TAB_LABEL[t] ?? TAB_LABEL[t] ?? t}
+                onClick={() => go(() => navigate(t))}
+                className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
+                  activeTab === t
+                    ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-violet-400'
+                    : 'text-slate-300'
+                }`}
+              >
+                <span className="nav-label">{SIU_TAB_LABEL[t] ?? TAB_LABEL[t] ?? t}</span>
+              </button>
+            ))}
+          </div>
+        ))}
+        {!inSiu && NAV_CATEGORIES.map((c) => {
           const on = c.id === activeCategory
           return (
             <button
@@ -154,7 +208,7 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
             </button>
           )
         })}
-        <button
+        {!inSiu && <button
           data-label="Feedback"
           onClick={() => go(() => navigate('feedback'))}
           title="Suggest a feature or report a bug"
@@ -164,10 +218,10 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
         >
           <span className="nav-icon flex-shrink-0"><CategoryIcon cat="feedback" /></span>
           <span className="nav-label">Feedback</span>
-        </button>
+        </button>}
         {/* Command Center — standalone leaf for command staff + owner.
             Hiding is cosmetic; the view gate + RLS/RPCs are the real rule. */}
-        {(isCommand || isOwner) && (
+        {!inSiu && (isCommand || isOwner) && (
           <button
             data-label="Command Center"
             onClick={() => go(() => navigate('command-center'))}
@@ -180,29 +234,30 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
             <span className="nav-label">Command Center</span>
           </button>
         )}
-        {/* Special Investigation Unit — a separate investigative authority, so
-            it is a standalone leaf rather than a CID category. Rendered only
-            for accounts with SIU standing; while the release gate is closed
-            that is the Portal Owner alone, and for everyone else SIU shows no
-            label, no badge and no "coming soon" — it simply is not there.
-            Hiding is cosmetic; SiuView + RLS enforce the real rule. */}
-        {siu.canAccess && (
+        {/* Deliberate department switch — rendered ONLY for accounts that
+            legitimately hold BOTH contexts (Portal Owner, Attorney General
+            oversight). A normal CID member is never offered this, and the
+            control grants nothing on its own: every read stays RLS-scoped and
+            every write still goes through an SIU RPC (§23). */}
+        {siu.maySwitch && siu.canAccess && (
           <button
-            data-label="Special Investigation Unit"
-            onClick={() => go(() => navigate('siu'))}
-            title="Special Investigation Unit"
-            className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
-              activeTab === 'siu' ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-violet-400' : 'text-slate-300'
-            }`}
+            data-label={inSiu ? 'Criminal Investigation Division' : 'Special Investigation Unit'}
+            onClick={() => go(() => {
+              const next = inSiu ? 'cid' : 'siu'
+              siu.setViewing(next)
+              navigate(next === 'siu' ? 'siu' : 'command')
+            })}
+            title={`Switch to ${inSiu ? DEPARTMENT_LABEL.cid : DEPARTMENT_LABEL.siu}`}
+            className="nav-link group mt-2 flex w-full items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"
           >
-            <span className="nav-icon flex-shrink-0" aria-hidden>🔍</span>
-            <span className="nav-label">SIU</span>
+            <span className="nav-icon flex-shrink-0" aria-hidden>⇄</span>
+            <span className="nav-label">{inSiu ? 'Switch to CID' : 'Switch to SIU'}</span>
           </button>
         )}
         {/* Owner Portal — standalone leaf, rendered ONLY for the project
             owner (profiles.is_owner). Hiding is cosmetic; OwnerView and RLS
             (private.is_owner()) enforce the real rule. */}
-        {isOwner && (
+        {!inSiu && isOwner && (
           <button
             data-label="Owner"
             onClick={() => go(() => navigate('owner'))}

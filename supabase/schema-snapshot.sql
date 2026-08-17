@@ -2605,7 +2605,7 @@ alter table public.siu_memberships add constraint siu_memberships_user_id_key UN
 alter table public.siu_memberships add constraint siu_memberships_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 alter table public.siu_memberships add constraint siu_memberships_appointed_by_fkey FOREIGN KEY (appointed_by) REFERENCES public.profiles(id);
 alter table public.siu_memberships add constraint siu_memberships_ended_by_fkey FOREIGN KEY (ended_by) REFERENCES public.profiles(id);
-alter table public.siu_memberships add constraint siu_memberships_siu_role_check CHECK (siu_role in ('special_agent', 'special_agent_in_charge'));
+alter table public.siu_memberships add constraint siu_memberships_siu_role_check CHECK (siu_role in ('special_agent', 'senior_special_agent', 'special_agent_in_charge'));
 alter table public.siu_memberships enable row level security;
 create unique index siu_memberships_active_callsign_idx ON public.siu_memberships USING btree (upper(callsign)) WHERE (active AND (callsign IS NOT NULL));
 create index siu_memberships_appointed_by_fkey_idx ON public.siu_memberships USING btree (appointed_by);
@@ -9987,3 +9987,53 @@ create policy wl_sel on public.watchlist
 -- authorization guards in the write RPCs (the justice NULL-guard class,
 -- 20260714070000). Read paths were never affected.
 -- Definitive SQL in supabase/migrations/20260820120000_siu_phase1.sql.
+
+-- SIU as a SEPARATE DEPARTMENT (20260821120000_siu_department) — the
+-- architecture amendment to Phase 1. ADDITIVE ONLY; a NO-OP for every existing
+-- account while the release gate is closed. WIDENED CHECKS (both strict
+-- supersets, so no existing row can violate them):
+-- siu_memberships_siu_role_check now admits senior_special_agent (SIU's own
+-- three-tier ladder: special_agent → senior_special_agent →
+-- special_agent_in_charge / X-1 — NOT the CID hierarchy renamed, and the CID
+-- Director role is never granted to X-1), and documents_classification_check
+-- now admits 'siu'.
+--
+-- NEW PRIVATE HELPERS: user_department(uuid default null) returns text — the
+-- member's ACTIVE department ('cid' | 'siu'), derived from SIU membership so
+-- there is exactly one source of truth and no column that can drift from the
+-- roster; deliberately GATE-AWARE, returning 'cid' for everybody (an
+-- already-appointed agent included) while siu_settings.enabled_for_non_owner
+-- is false, so CID is untouched during the build phase and an early
+-- appointment cannot strand someone between departments. Oversight-only
+-- appointees (the Attorney General) are NOT department members — oversight
+-- authority is not departmental membership. is_siu_department() is its
+-- strict-boolean predicate form.
+--
+-- RE-EMITTED: private.can_access_case / can_access_case_row — byte-identical
+-- to 20260820120000 apart from ONE new conjunct on the CID branch,
+-- `not private.is_siu_department()`. SIU IS NOT CID: a member whose department
+-- is 'siu' loses the NATIVE CID case branch (bureau match, lead/creator,
+-- command, joint access) and therefore all CID case WRITE access; they keep
+-- the broad read-only oversight of CID through private.can_read_case, which is
+-- authority-based and never depends on holding a CID role. private.siu_is_agent
+-- and siu_case_access re-emitted for the senior tier (a field tier: senior
+-- agents reach siu_restricted only when assigned, and never siu_command).
+-- private.doc_class_visible and can_edit_document_for_bureau each gain ONE
+-- 'siu' branch — visible to SIU standing only (CID at every rank, Director
+-- included, does not see it) and editable by SIU command (X-1), never CID
+-- command. public.siu_appoint re-emitted with the widened role list; the
+-- Owner-only X-1 rule and every target wall are verbatim.
+--
+-- NEW PUBLIC RPC: siu_department_context() returns jsonb — the ONE
+-- authoritative answer for which departmental workspace the client renders
+-- (department, siu_available, siu_standing, release_open, may_switch,
+-- callsign, siu_role), so no component re-derives it from a role check.
+-- may_switch is true only for accounts legitimately holding BOTH contexts
+-- (Owner, AG oversight); it grants nothing on its own. Revoked from
+-- public/anon, granted authenticated + service_role.
+--
+-- NEW DATA: the unit's own Standard Operating Procedure seeded as a
+-- documents row (folder 'SOPs', category 'sops', document_type 'sop',
+-- classification 'siu', status 'published'), idempotent on the document name.
+-- The CID SOP is never presented as the SIU SOP.
+-- Definitive SQL in supabase/migrations/20260821120000_siu_department.sql.

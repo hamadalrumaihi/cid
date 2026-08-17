@@ -13,6 +13,9 @@ import { Field, Input, Textarea } from '@/components/ui/Field'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { countRows, list, rpc, update, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
+import { useSiu } from '@/lib/useSiu'
+import { caseDepartment, siuClassificationLabel, siuClassificationTint, termsFor } from '@/lib/siu'
+import { Badge } from '@/components/ui/Badge'
 import { useOperationsStore } from '@/lib/operations'
 import { caseJointInfo, type OpCaseLinkRow } from '@/lib/opsJoint'
 import { assessCase, ricoTabVisible } from '@/lib/caseWorkflow'
@@ -108,6 +111,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const sp = useSearchParams()
   const auth = useAuth()
   const { profile, canEdit, canDelete, isCommand, isOwner } = auth
+  const siu = useSiu()
   const operations = useOperationsStore((s) => s.operations)
   const [c, setCase] = useState<CaseRow | null>(null)
   // The id this view successfully loaded at least once — distinguishes a case
@@ -380,6 +384,13 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     { label: 'Charges', value: chargesCount, onClick: () => setTab('charges') },
   ]
 
+  // The department that OWNS this record decides its vocabulary — an SIU
+  // investigation says "Lead Agent", a CID case says "Lead Detective" — while
+  // the viewer's own context (siu.inSiu) decides whether the external-access
+  // banner is shown. The two are deliberately separate (§12, §20).
+  const caseDept = caseDepartment(c)
+  const caseTerms = termsFor(caseDept)
+
   const tabDefs: Array<SectionTab<TabId>> = TABS.filter((t) => t !== 'rico' || ricoOn).map((t) => ({
     id: t,
     label: TAB_LABELS[t],
@@ -399,7 +410,36 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
 
   return (
     <div className="space-y-4">
-      <Breadcrumbs items={[{ label: 'Cases', onClick: onBack }, { label: c.case_number }]} />
+      <Breadcrumbs items={[{ label: caseTerms.caseWordPlural, onClick: onBack }, { label: c.case_number }]} />
+      {/* Department banner. The record's OWNING department names it — an SIU
+          investigation is never labelled "CID CASE" and vice versa (§13/§20) —
+          and an SIU agent reading a CID case is told plainly that they are
+          looking at an external investigation under SIU read authority, not
+          as a case member (§12). */}
+      {caseDept === 'siu' ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-violet-500/25 bg-violet-500/5 px-4 py-2.5">
+          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-300">
+            Special Investigation Unit
+          </span>
+          <span className="text-violet-500/40" aria-hidden>·</span>
+          <span className="text-xs font-semibold text-violet-100">SIU Investigation</span>
+          {c.siu_classification && (
+            <Badge tint={siuClassificationTint(c.siu_classification)}>
+              {siuClassificationLabel(c.siu_classification)}
+            </Badge>
+          )}
+        </div>
+      ) : siu.inSiu ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5">
+          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-300">
+            CID Investigation
+          </span>
+          <span className="text-white/20" aria-hidden>·</span>
+          <span className="text-xs text-slate-300">
+            Viewing under SIU authority — read-only oversight. You are not a member of this case.
+          </span>
+        </div>
+      ) : null}
       {c.archived_at && (
         <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">
           This case is archived — it is hidden from the working views. Command can restore it from the header menu.
