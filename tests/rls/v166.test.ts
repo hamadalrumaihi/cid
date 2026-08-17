@@ -288,6 +288,56 @@ describe.skipIf(!enabled)('v1.66 — SIU Phase 1 (live)', () => {
     expect(gate.data!.enabled_for_non_owner, 'the release gate must still be closed').toBe(false)
   })
 
+  /* ── 5b. Hidden is not enough — the rows must be undestroyable ─────────── */
+
+  it('CID command cannot DELETE an SIU investigation’s children, blind or not', async () => {
+    // DELETE never needed a read: `delete ... where id = $1` is evaluated
+    // against the delete qual alone. Seven child-table delete policies gated on
+    // private.can_delete() — a pure CID ROLE check — so a Bureau Lead, Deputy
+    // or Director could destroy SIU records they cannot see (migration
+    // 20260823130000). This is the regression guard for that wall.
+    const rep = await owner.from('reports').insert({ case_id: plainCase, template: 'initial', fields: {} }).select('id').single()
+    expect(rep.error, rep.error?.message).toBeNull()
+    const task = await owner.from('case_tasks').insert({ case_id: plainCase, title: tag('siu task') }).select('id').single()
+    expect(task.error, task.error?.message).toBeNull()
+    const blocker = await owner.from('case_blockers').insert({ case_id: plainCase, title: tag('siu blocker'), type: 'other' }).select('id').single()
+    expect(blocker.error, blocker.error?.message).toBeNull()
+    const med = await owner.from('media').insert({ case_id: plainCase, title: tag('siu media'), type: 'image' }).select('id').single()
+    expect(med.error, med.error?.message).toBeNull()
+
+    const rows: Array<[string, string, string]> = [
+      ['reports', rep.data!.id as string, 'a report'],
+      ['case_tasks', task.data!.id as string, 'a task'],
+      ['case_blockers', blocker.data!.id as string, 'a blocker'],
+      ['media', med.data!.id as string, 'a media row'],
+    ]
+    for (const [who, c] of [['detective', lsb], ['bureau lead', lead], ['director', director]] as const) {
+      for (const [table, id, label] of rows) {
+        const del = await c.from(table).delete().eq('id', id).select('id')
+        expect(del.error !== null || (del.data ?? []).length === 0,
+          `${who} must not delete ${label} on an SIU investigation`).toBe(true)
+      }
+    }
+
+    // Every row is still there, read back through the only account that can see it.
+    for (const [table, id] of rows) {
+      const still = await owner.from(table).select('id').eq('id', id)
+      expect(still.data?.length, `${table} row must survive`).toBe(1)
+      await owner.from(table).delete().eq('id', id)
+    }
+  })
+
+  it('…while CID deletion on a CID case is completely unchanged', async () => {
+    // The other half of the wall: can_delete_case_child() falls through to
+    // private.can_delete() verbatim for a CID-authority case, so command keeps
+    // exactly the deletes it has today.
+    const rep = await lsb.from('reports').insert({ case_id: cidCase, template: 'initial', fields: {} }).select('id').single()
+    expect(rep.error, rep.error?.message).toBeNull()
+    const del = await director.from('reports').delete().eq('id', rep.data!.id).select('id')
+    expect(del.error, del.error?.message).toBeNull()
+    expect((del.data ?? []).length, 'the Director still deletes a CID report').toBe(1)
+  })
+
   /* ── 6. The Owner's path works end to end ──────────────────────────────── */
 
   it('the Owner can run the SIU workspace: cases, numbering, classification, roster, audit, overview', async () => {
@@ -489,18 +539,20 @@ describe.skipIf(!enabled)('v1.66 — SIU Phase 1 (live)', () => {
 /* ── Production-model lane (runs once the release gate is opened) ─────────── */
 
 describe.skipIf(!released)('v1.66 — SIU production model (live, post-release)', () => {
-  let agent: C, agent2: C, lsb: C
+  let agent: C, agent2: C, lsb: C, director: C
   let agentId = ''
   let agent2Id = ''
   let cidCase = ''
+  let standard = ''
   let restricted = ''
   let compartment = ''
 
   beforeAll(async () => {
-    agent = mk(); agent2 = mk(); lsb = mk()
+    agent = mk(); agent2 = mk(); lsb = mk(); director = mk()
     agentId = await signInWithRetry(agent, 'rls-test-siu-agent@cidportal.test', PW.agent!)
     agent2Id = await signInWithRetry(agent2, 'rls-test-siu-agent2@cidportal.test', PW.agent2!)
     await signInWithRetry(lsb, 'rls-test-lsb@cidportal.test', PW.lsb!)
+    await signInWithRetry(director, 'rls-test-director@cidportal.test', PW.director!)
 
     const c = await lsb.from('cases').insert({
       case_number: `LSB-${Date.now().toString().slice(-6)}`,
@@ -508,6 +560,8 @@ describe.skipIf(!released)('v1.66 — SIU production model (live, post-release)'
     }).select('id').single()
     cidCase = c.data!.id as string
 
+    const s = await agent.rpc('siu_create_case', { p_title: tag('standard'), p_classification: 'siu' })
+    standard = s.data as string
     const r = await agent.rpc('siu_create_case', { p_title: tag('restricted'), p_classification: 'siu_restricted' })
     restricted = r.data as string
     const k = await agent.rpc('siu_create_case', { p_title: tag('compartment'), p_classification: 'siu_compartmented' })
@@ -515,9 +569,9 @@ describe.skipIf(!released)('v1.66 — SIU production model (live, post-release)'
   }, 90_000)
 
   afterAll(async () => {
-    await agent.from('cases').delete().in('id', [restricted, compartment].filter(Boolean))
+    await agent.from('cases').delete().in('id', [standard, restricted, compartment].filter(Boolean))
     await lsb.from('cases').delete().eq('id', cidCase)
-    await Promise.all([agent, agent2, lsb].map((c) => c.auth.signOut()))
+    await Promise.all([agent, agent2, lsb, director].map((c) => c.auth.signOut()))
   }, 60_000)
 
   it('an SIU agent READS a CID case from a bureau they were never in', async () => {
@@ -580,6 +634,42 @@ describe.skipIf(!released)('v1.66 — SIU production model (live, post-release)'
     expect(revoke.error, revoke.error?.message).toBeNull()
     const after = await agent2.from('cases').select('id').eq('id', compartment)
     expect(after.data, 'revocation takes effect immediately').toEqual([])
+  })
+
+  /* ── The SOP chain of command: Director of CID → X-1 → Agents ───────────── */
+
+  it('the Director of CID oversees standard investigations, and stops there', async () => {
+    const overview = await director.rpc('siu_overview', {})
+    const o = overview.data as { access: boolean; standing: string }
+    expect(o.access, 'the Director holds SIU standing once the gate is open').toBe(true)
+    expect(o.standing, 'oversight — not a field role, per the SOP').toBe('oversight')
+
+    const std = await director.from('cases').select('id').eq('id', standard)
+    expect(std.data?.length, 'the Director sees a standard SIU investigation').toBe(1)
+
+    // Everything above 'siu' stays shut — this is what keeps the Director (and
+    // the AG, and X-1) investigable by the unit they command.
+    for (const [level, id] of [['siu_restricted', restricted], ['siu_compartmented', compartment]] as const) {
+      const r = await director.from('cases').select('id').eq('id', id)
+      expect(r.error, `${level}: must not error, must return nothing`).toBeNull()
+      expect(r.data, `the Director must not see a ${level} investigation`).toEqual([])
+    }
+  })
+
+  it('the Director holds personnel authority but no field authority', async () => {
+    // Appointment authority, probed without mutating the roster.
+    const candidates = await director.rpc('siu_member_search', { p_q: '' })
+    expect(candidates.error, candidates.error?.message).toBeNull()
+    expect((candidates.data ?? []).length, 'the Director may enumerate appointment candidates').toBeGreaterThan(0)
+    // …but naming an X-Ray 1 remains the Owner's alone.
+    const x1 = await director.rpc('siu_appoint', { p_user: agent2Id, p_role: 'special_agent_in_charge' })
+    expect(x1.error, 'only the Owner names X-Ray 1').not.toBeNull()
+
+    // Oversight is not the field: no opening investigations, no self-assignment.
+    const open = await director.rpc('siu_create_case', { p_title: tag('director-opened') })
+    expect(open.error, 'oversight standing must not open SIU investigations').not.toBeNull()
+    const assign = await director.rpc('siu_assign_agent', { p_case: standard, p_user: agentId })
+    expect(assign.error, 'oversight standing must not assign agents to a case').not.toBeNull()
   })
 
   it('a removed SIU agent loses access at once but keeps their authorship', async () => {

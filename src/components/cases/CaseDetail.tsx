@@ -428,6 +428,14 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
               {siuClassificationLabel(c.siu_classification)}
             </Badge>
           )}
+          {/* Oversight authority (Director of CID, Attorney General) reads the
+              unit's standard investigations but works none of them — say so,
+              rather than letting an edit control imply otherwise. */}
+          {siu.standing === 'oversight' && (
+            <span className="text-xs text-slate-300">
+              Viewing under oversight authority — read-only. You are not assigned to this investigation.
+            </span>
+          )}
         </div>
       ) : siu.inSiu ? (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5">

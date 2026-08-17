@@ -8,6 +8,59 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### SIU chain of command — the unit's SOP is authoritative
+
+The architecture amendment put SIU under the Attorney General with CID command
+holding no SIU authority; the unit's own SOP puts it under the **Director of
+CID**. The SOP wins. Migration `20260823120000_siu_sop_chain_of_command`
+enforces `Commissioner's Office → Director of CID → X-Ray 1 → Special Agents`
+(the Commissioner's Office maps to the Portal Owner, which has no separate
+identity).
+
+- **The Director resolves to `oversight`** — one new branch in
+  `private.siu_standing()`, the same standing the Attorney General held. An
+  appointed SIU role still wins, so a Director who is also X-1 is X-1.
+- **Oversight is a READ standing, and that split is the whole design.**
+  `private.siu_case_access()` — the wall feeding `can_access_case()` and every
+  `siu_case_command()` check — is unchanged. A new `private.siu_case_read()`
+  (the wall OR "standard `siu` classification seen by oversight") is spliced
+  into read surfaces only: `can_read_case`/`_row`, `siu_case_agents_sel`,
+  `siu_targets_sel`, `siu_can_read_case_note`, `siu_audit_feed`,
+  `siu_overview` counts, `operations_sel`. Oversight cannot open an
+  investigation, assign an agent, reclassify a case, author intelligence,
+  designate a target, run an operation, or delete a row.
+- **The escape hatch survives.** `siu_restricted`, `siu_command` and
+  `siu_compartmented` still require assignment, SIU command or an allow-list
+  row, so an investigation *into* the Director, the AG or X-1 remains possible.
+  On a CID case the SIU-only intelligence layer stays field-agent only — the
+  Director is a plausible subject of an integrity flag.
+- **Consequence to plan around:** a standard `siu` investigation is now
+  readable by the Director and the Attorney General. Anything concerning either
+  of them must be opened at `siu_restricted` or higher.
+
+Verified live by role simulation (release gate flipped inside a rolled-back
+transaction): the Director reads the standard investigation, gets nothing at
+restricted or compartmented, holds appointment authority, and is refused by
+`siu_create_case` and `siu_assign_agent`.
+
+### Fix — CID command could blind-delete SIU records
+
+Found while verifying the change above, not by the build. `DELETE` never
+required a read: seven case-child delete policies gated on
+`private.can_delete()`, a pure CID **role** check with no case predicate, so an
+active Bureau Lead, Deputy Director or Director could destroy reports, media,
+tasks, blockers, assignments and `case_files` rows belonging to **any** SIU
+investigation — compartmented included — given a row id. The record was hidden;
+it was not protected.
+
+`20260823130000_siu_case_delete_wall` adds
+`private.can_delete_case_child()` / `can_delete_case_file()`: a CID-authority
+case is `private.can_delete()` verbatim (no CID user gains or loses a single
+delete), an SIU-authority case is `private.siu_case_command()`. SIU also gains
+the delete it should always have had — X-1 and a lead agent can clean up their
+own investigation without needing a senior CID rank. Live-verified before and
+after: 1 row deleted before the fix, 0 after, with CID deletion unchanged.
+
 ### SIU Phase 2 — targets, operations, and the SIU-only layer on CID cases
 
 Migration `20260822120000_siu_phase2` adds the three investigative objects the

@@ -212,9 +212,11 @@ export const siuNoteTypeLabel = (t?: string | null) =>
  *                            authority) — but NOT a compartment key.
  *  'special_agent_in_charge' X-Ray 1, the operational head of SIU.
  *  'special_agent'           Field agent.
- *  'oversight'               Attorney General / oversight-only appointee:
- *                            appointment + legal oversight, never a field
- *                            investigator.
+ *  'oversight'               Director of CID, Attorney General, or an
+ *                            oversight-only appointee. Departmental oversight
+ *                            (roster, appointments, audit) plus STANDARD
+ *                            investigations — never restricted, command or
+ *                            compartmented ones, and never field authority.
  *  null                      SIU does not exist for this account.
  */
 export type SiuStanding = 'owner' | SiuRole | 'oversight'
@@ -251,6 +253,11 @@ export function siuStanding(ctx: SiuContext): SiuStanding | null {
     if ((SIU_ROLES as readonly string[]).includes(m.siu_role)) return m.siu_role as SiuRole
   }
   if (ctx.justiceRole === 'attorney_general') return 'oversight'
+  // Director of CID — SIU's command authority per the unit's SOP. Oversight
+  // standing only: departmental administration and standard investigations,
+  // never restricted/command/compartmented ones, so an investigation INTO the
+  // Director stays possible by classifying it above 'siu'.
+  if (p.role === 'director') return 'oversight'
   return null
 }
 
@@ -329,8 +336,11 @@ export const siuAssignableClassifications = (ctx: SiuContext): readonly SiuClass
   siuIsAgent(ctx) ? SIU_CLASSIFICATIONS : []
 
 /** Can this account SEE this SIU investigation, given the classification and
- *  the caller's assignment/compartment facts? Mirrors
- *  `private.siu_case_access()`. Note the compartmented branch: no standing —
+ *  the caller's assignment/compartment facts? Mirrors the server's READ
+ *  predicate, `private.siu_case_read()` — the write/command wall
+ *  `siu_case_access()` is the same thing minus the `oversight` branch below,
+ *  which is why the Director and the AG can read a standard investigation and
+ *  still not touch a row of it. Note the compartmented branch: no standing —
  *  owner included — substitutes for an allow-list row. */
 export function siuCaseAccess(
   ctx: SiuContext,
@@ -350,7 +360,10 @@ export function siuCaseAccess(
         || ((s === 'special_agent' || s === 'senior_special_agent') && !!facts.assigned)
         || !!facts.inCompartment
     default:
-      return command || s === 'special_agent' || s === 'senior_special_agent' || !!facts.inCompartment
+      // Standard investigations are visible to field agents AND to oversight
+      // authority (Director of CID, Attorney General) per the SOP.
+      return command || s === 'special_agent' || s === 'senior_special_agent'
+        || s === 'oversight' || !!facts.inCompartment
   }
 }
 
