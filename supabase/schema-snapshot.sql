@@ -11192,3 +11192,154 @@ create policy wl_sel on public.watchlist
 -- load-bearing for the owner-path suites; see docs/TEST-ENVIRONMENT.md.
 -- Definitive SQL in
 -- supabase/migrations/20260829120000_siu_exofficio_excludes_fixtures.sql.
+
+create table public.penal_administrators (
+  user_id uuid not null,
+  granted_by uuid,
+  granted_at timestamptz not null default now(),
+  revoked_by uuid,
+  revoked_at timestamptz,
+  reason text
+);
+alter table public.penal_administrators add constraint penal_administrators_pkey PRIMARY KEY (user_id);
+alter table public.penal_administrators add constraint penal_administrators_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.penal_administrators add constraint penal_administrators_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES public.profiles(id);
+alter table public.penal_administrators add constraint penal_administrators_revoked_by_fkey FOREIGN KEY (revoked_by) REFERENCES public.profiles(id);
+alter table public.penal_administrators enable row level security;
+create index penal_administrators_live_idx ON public.penal_administrators USING btree (user_id) WHERE (revoked_at IS NULL);
+-- Who may rewrite the law. Readable by administration only, and APPOINTMENT IS
+-- OWNER ONLY (penal_admins_ins -> private.is_owner()), which is what stops an
+-- administrator appointing more administrators.
+
+create table public.penal_code_versions (
+  id uuid not null default gen_random_uuid(),
+  name text not null,
+  effective_date date not null,
+  source_file text,
+  change_summary text,
+  status text not null default 'draft'::text,
+  published_by uuid,
+  published_at timestamptz,
+  superseded_at timestamptz,
+  created_by uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.penal_code_versions add constraint penal_code_versions_pkey PRIMARY KEY (id);
+alter table public.penal_code_versions add constraint penal_code_versions_published_by_fkey FOREIGN KEY (published_by) REFERENCES public.profiles(id);
+alter table public.penal_code_versions add constraint penal_code_versions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.penal_code_versions add constraint penal_code_versions_status_check CHECK (status in ('draft', 'published', 'superseded'));
+alter table public.penal_code_versions enable row level security;
+-- EXACTLY ONE live code, enforced in the database. Partial, so any number of
+-- drafts and superseded versions coexist beside it.
+create unique index penal_code_versions_one_published ON public.penal_code_versions USING btree (status) WHERE (status = 'published'::text);
+create index penal_code_versions_status_idx ON public.penal_code_versions USING btree (status, effective_date desc);
+
+create table public.penal_charges (
+  id uuid not null default gen_random_uuid(),
+  version_id uuid not null,
+  code text,
+  offense text not null,
+  penal_title text,
+  charge_class text not null,
+  stackable boolean not null default false,
+  fine numeric,
+  jail_months numeric,
+  judge_set_fine boolean not null default false,
+  judge_set_jail boolean not null default false,
+  pd_exempt boolean not null default false,
+  definition text,
+  is_modifier boolean not null default false,
+  is_rico boolean not null default false,
+  substance_schedule integer,
+  special_notes text,
+  lifecycle text not null default 'active'::text,
+  needs_code boolean not null default false,
+  source_row integer,
+  archived_by uuid,
+  archived_at timestamptz,
+  archive_reason text,
+  created_by uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.penal_charges add constraint penal_charges_pkey PRIMARY KEY (id);
+alter table public.penal_charges add constraint penal_charges_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.penal_code_versions(id) ON DELETE CASCADE;
+alter table public.penal_charges add constraint penal_charges_archived_by_fkey FOREIGN KEY (archived_by) REFERENCES public.profiles(id);
+alter table public.penal_charges add constraint penal_charges_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+-- THE VISIBLE CODE IS NOT THE KEY. Unique only within a version and only when
+-- present: 31 rows of the 2026 source arrived with no code (the spreadsheet
+-- exported unresolved formulas), codes are renumbered between versions, and a
+-- future source may repeat one. A code-keyed table would fail the import or
+-- orphan every case that cited a renumbered charge.
+alter table public.penal_charges add constraint penal_charges_code_unique UNIQUE (version_id, code);
+alter table public.penal_charges add constraint penal_charges_charge_class_check CHECK (charge_class in ('Infraction', 'Misdemeanor', 'Felony'));
+alter table public.penal_charges add constraint penal_charges_lifecycle_check CHECK (lifecycle in ('active', 'draft', 'archived'));
+alter table public.penal_charges add constraint penal_charges_substance_schedule_check CHECK (substance_schedule between 1 and 3);
+-- A codeless charge is a DRAFT and can never be selectable.
+alter table public.penal_charges add constraint penal_charges_needs_code_check CHECK ((needs_code and code is null and lifecycle = 'draft') or (not needs_code));
+-- "A judge decides" is NOT zero. NULL + the flag, so a total can never quietly
+-- count a judge-set penalty as nothing.
+alter table public.penal_charges add constraint penal_charges_judge_fine_check CHECK ((judge_set_fine and fine is null) or (not judge_set_fine));
+alter table public.penal_charges add constraint penal_charges_judge_jail_check CHECK ((judge_set_jail and jail_months is null) or (not judge_set_jail));
+alter table public.penal_charges enable row level security;
+create index penal_charges_version_idx ON public.penal_charges USING btree (version_id);
+create index penal_charges_code_idx ON public.penal_charges USING btree (code);
+create index penal_charges_lifecycle_idx ON public.penal_charges USING btree (version_id, lifecycle);
+create index penal_charges_title_idx ON public.penal_charges USING btree (penal_title);
+create index penal_charges_rico_idx ON public.penal_charges USING btree (version_id) WHERE is_rico;
+create index penal_charges_archived_by_idx ON public.penal_charges USING btree (archived_by);
+create index penal_charges_created_by_idx ON public.penal_charges USING btree (created_by);
+-- THE SHARED PENAL CODE. One central dataset for every unit -- CID, SIU, JTF,
+-- DOJ, the AG, prosecutors and judges all read the same rows, because a penal
+-- code that differs by unit is not a penal code. SELECT is private.is_active();
+-- writes are owner or an appointed administrator. Reading it grants nothing
+-- else: these tables reference no case, person or unit, so a shared charge
+-- cannot become a path into another unit's records -- that is structural, not
+-- a policy that could drift. Charges are ARCHIVED, never deleted, so a case
+-- that cited one can always resolve it. Writers: penal_publish_version(),
+-- penal_rollback_to(), penal_archive_charge(), penal_restore_charge().
+-- Readers: penal_current_charges(), penal_current_reference().
+
+create table public.penal_substance_schedules (
+  id uuid not null default gen_random_uuid(),
+  version_id uuid not null,
+  schedule integer not null,
+  substances text not null,
+  notes text,
+  created_at timestamptz not null default now()
+);
+alter table public.penal_substance_schedules add constraint penal_substance_schedules_pkey PRIMARY KEY (id);
+alter table public.penal_substance_schedules add constraint penal_substance_schedules_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.penal_code_versions(id) ON DELETE CASCADE;
+alter table public.penal_substance_schedules add constraint penal_substance_schedules_unique UNIQUE (version_id, schedule);
+alter table public.penal_substance_schedules add constraint penal_substance_schedules_schedule_check CHECK (schedule between 1 and 3);
+alter table public.penal_substance_schedules enable row level security;
+
+create table public.penal_rules (
+  id uuid not null default gen_random_uuid(),
+  version_id uuid not null,
+  section text not null,
+  ordinal integer not null default 0,
+  heading text,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+alter table public.penal_rules add constraint penal_rules_pkey PRIMARY KEY (id);
+alter table public.penal_rules add constraint penal_rules_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.penal_code_versions(id) ON DELETE CASCADE;
+alter table public.penal_rules enable row level security;
+create index penal_rules_version_idx ON public.penal_rules USING btree (version_id, section, ordinal);
+-- The narrative half of the code -- court scheduling, pleas, hard limits, the
+-- PD-exempt doctrine, ankle monitors -- versioned with the charges rather than
+-- written as prose in a component, so amending it is a publish like any other.
+
+create table public.penal_limits (
+  version_id uuid not null,
+  max_total_months numeric not null default 200,
+  max_total_months_note text,
+  created_at timestamptz not null default now()
+);
+alter table public.penal_limits add constraint penal_limits_pkey PRIMARY KEY (version_id);
+alter table public.penal_limits add constraint penal_limits_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.penal_code_versions(id) ON DELETE CASCADE;
+alter table public.penal_limits enable row level security;
+-- The machine-readable limits the validator reads, so "maximum 200 months"
+-- lives with the code it belongs to instead of as a constant in the client.
