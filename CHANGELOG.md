@@ -8,6 +8,55 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### DELETE was the one write the CID↔SIU wall never covered — closed
+
+Found while giving the SIU workspace CID's full navigation. **Pre-existing**,
+and it affected every SIU member.
+
+`private.can_delete()` is a raw rank check — `role in ('bureau_lead',
+'deputy_director','director')` read straight off the profile. No case, no
+department. `can_delete_case_child()` used it verbatim for the CID branch, with
+no case predicate. Inside CID that is invisible, because command reaches every
+CID case anyway. Across the departmental wall it was wide open: an SIU member
+cannot edit a single field of a CID case, but one holding a CID command rank
+satisfied `can_delete()` — and DELETE never consults the write wall.
+
+Probed live as a real Special Agent in Charge with CID rank `bureau_lead`:
+`can_access_case(cid case)` **false**, `can_delete()` **true**, and a CID
+report, task and RICO case all deleted. Both appointed SIU members hold a
+qualifying rank. (The case row survived — `cases_del` has always paired the two
+correctly, which is exactly the shape the children were missing.)
+
+The CID branch is now `can_delete() AND can_access_case(p_case)`. **No CID user
+gains or loses a single delete**: every rank `can_delete()` accepts is command,
+and `can_access_case()` admits `is_command()`, so the term is always true for a
+CID member on a CID case. Verified both directions live — SIU blocked on
+report, task, RICO and predicate acts; the CID Bureau Lead unchanged at 1 row
+each. A null case id now returns false instead of falling through to true.
+
+`rico_cases_del` / `predicate_acts_del` were never routed through the chokepoint
+and joined it here. `tests/rls/v170.test.ts` pins the whole thing, with a CID
+Bureau Lead as the control so a future fix that costs CID a delete fails loudly.
+
+### RICO now reads on the SIU read superset
+
+`rico_cases_sel` and `predicate_acts_sel` were on `can_access_case()` — the
+write wall — while every other case child moved to `can_read_case()` back in
+Phase 1. RICO was missed, so an SIU agent could read a CID case's reports,
+evidence, media and tasks but see zero of its RICO records. SELECT only; every
+write stays on the wall. `case_messages` remains the one deliberate exclusion.
+
+### SIU navigation reaches all of CID
+
+Following on from the Cases entry: the SIU workspace now carries CID's entire
+navigation, tab for tab — Command, Cases (with operations, legal, RICO),
+Intelligence (all fourteen registries and analysis screens), Reference and
+Oversight. That is navigation, not access. Shared registries (persons, gangs,
+places, vehicles, accounts, indicators, media) are one master dataset and SIU
+reads and writes them exactly as CID does; case surfaces are read-only under
+the SIU read superset; owner- and command-only screens self-gate exactly as
+they do for a CID detective without the rank.
+
 ### SIU can reach CID cases without switching department
 
 SIU's broad read of CID has existed in RLS since Phase 1 —

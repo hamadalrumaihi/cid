@@ -277,7 +277,7 @@ SIU Special Agents      → X-2, X-3 …
 
 DELETE never required a read: `delete from reports where id = $1` is evaluated against the delete qual alone. Seven case-child DELETE policies gated on `private.can_delete()` — a pure CID **role** check (`bureau_lead`/`deputy_director`/`director`) with no case predicate — so CID command could destroy reports, media, tasks, blockers, assignments and `case_files` rows belonging to any SIU investigation, compartmented included, given a row id. Found by live role simulation, not by the build.
 
-`private.can_delete_case_child(case_id)` (and `can_delete_case_file(case_number)` for the number-keyed table) branches on case authority: a **CID** case is `private.can_delete()` verbatim, so no CID user gains or loses a single delete; an **SIU** case is `private.siu_case_command()` — access to that investigation *and* (SIU command or its lead agent). SIU gains the delete it should always have had, oversight gains none, and compartmentation holds because `siu_case_command()` is built on `siu_case_access()`.
+`private.can_delete_case_child(case_id)` (and `can_delete_case_file(case_number)` for the number-keyed table) branches on case authority: a **CID** case is `private.can_delete()` **and** `can_access_case()` (see the box below — the access term was added by [`20260901130000`](../supabase/migrations/20260901130000_case_child_delete_requires_case_access.sql) and costs CID nothing, since every rank `can_delete()` accepts is command and `can_access_case()` admits `is_command()`); an **SIU** case is `private.siu_case_command()` — access to that investigation *and* (SIU command or its lead agent). SIU gains the delete it should always have had, oversight gains none, and compartmentation holds because `siu_case_command()` is built on `siu_case_access()`.
 
 ### Phase 2 — targets, operations, and the SIU-only layer ([`20260822120000_siu_phase2.sql`](../supabase/migrations/20260822120000_siu_phase2.sql))
 
@@ -353,6 +353,35 @@ Chasing each positive branch and subtracting from it is the wrong shape. A recus
 **Declaring** is gated on `siu_case_read()`, not `siu_case_access()` — an oversight holder can see a standard investigation but has no case access, and the Director named in a referral is precisely who needs to be able to step back. Widening it carries no risk in the other direction: a declaration only ever removes the declarer's own access.
 
 **Lifting** needs someone else. `siu_resolve_conflict()` refuses the agent who declared it, and only the `cleared` status restores access — `reassigned` records that the conflict was real and the case moved on, which is not a reason to hand the file back. The resolver is gated on **standing** (`siu_is_command()`, or owner) rather than case access, because `siu_case_command()` now inherits the veto and a case-scoped gate would wedge a unit whose only command-rank member recused.
+
+### DELETE was the one write the departmental wall never covered
+
+`private.can_delete()` is a **raw rank check** — `active and role in ('bureau_lead','deputy_director','director')`, read straight off `profiles.role`. It knows nothing about cases and nothing about departments. `can_delete_case_child()` used it verbatim for the CID branch, with no case predicate at all.
+
+Inside CID that is invisible, because command reaches every CID case anyway. Across the departmental wall it was wide open: `can_access_case()`'s CID branch ends with `not private.is_siu_department()`, so an SIU member cannot edit a single field of a CID case — but an SIU member who *also* holds a CID rank of Bureau Lead or above satisfied `can_delete()`, and **DELETE never consults the write wall**.
+
+Probed live against a real CID case, as a real Special Agent in Charge holding CID rank `bureau_lead`:
+
+| | |
+|---|---|
+| `is_siu_department()` | true |
+| `can_access_case(cid case)` | **false** — cannot edit anything |
+| `can_delete()` | **true** |
+| deleted a CID report | **1 row** |
+| deleted a CID task | **1 row** |
+| deleted a CID RICO case | **1 row** |
+
+Both SIU members currently appointed hold a qualifying CID rank, so this was the whole unit. (The case *row* survived — `cases_del` has always paired `can_delete()` with `can_access_case_row()`, which is exactly the shape the children were missing.)
+
+**The fix**: the CID branch is now `can_delete() AND can_access_case(p_case)`. **No CID user gains or loses a single delete** — every rank `can_delete()` accepts is command, and `can_access_case()` admits `is_command()`, so the new term is always true for a CID member on a CID case. It only ever bites an account whose department is barred from the case. A null `p_case` now returns false rather than falling through to true.
+
+`rico_cases_del` and `predicate_acts_del` were never routed through the chokepoint at all and joined it at the same time.
+
+> **The shape to copy.** `cases_del`, `surveillance_observations_del` and `surveillance_association_events_del` have always paired the rank with a case predicate. Any *new* delete policy on a case-scoped table written as bare `private.can_delete()` reopens this. `tests/rls/v170.test.ts` pins it, with a CID Bureau Lead as the control so a fix that costs CID a delete fails loudly.
+
+### RICO reads on the superset
+
+`rico_cases_sel` and `predicate_acts_sel` used `can_access_case()` — the write wall — while every other case child was moved to `can_read_case()` in [`20260820120000`](../supabase/migrations/20260820120000_siu_phase1.sql). RICO was simply missed, so SIU and oversight could read a case's reports, evidence, media and tasks but not the record saying it is an enterprise prosecution. Corrected in [`20260901120000`](../supabase/migrations/20260901120000_rico_rides_the_read_superset.sql), SELECT only; every write stays on `can_access_case()`. `case_messages` (case chat) remains the one deliberate exclusion.
 
 ### Navigating to CID from SIU — read is not write
 

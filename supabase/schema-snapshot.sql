@@ -8333,7 +8333,9 @@ create policy places_upd on public.places
 
 create policy predicate_acts_del on public.predicate_acts
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((EXISTS ( SELECT 1
+   FROM public.rico_cases r
+  WHERE ((r.id = predicate_acts.rico_case_id) AND private.can_delete_case_child(r.case_id)))));
 
 create policy predicate_acts_ins on public.predicate_acts
   as permissive for insert to authenticated
@@ -8345,7 +8347,7 @@ create policy predicate_acts_sel on public.predicate_acts
   as permissive for select to authenticated
   using ((EXISTS ( SELECT 1
    FROM public.rico_cases r
-  WHERE ((r.id = predicate_acts.rico_case_id) AND private.can_access_case(r.case_id)))));
+  WHERE ((r.id = predicate_acts.rico_case_id) AND private.can_read_case(r.case_id)))));
 
 create policy predicate_acts_upd on public.predicate_acts
   as permissive for update to authenticated
@@ -8451,7 +8453,7 @@ create policy reports_upd on public.reports
 
 create policy rico_cases_del on public.rico_cases
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using (private.can_delete_case_child(case_id));
 
 create policy rico_cases_ins on public.rico_cases
   as permissive for insert to authenticated
@@ -8459,7 +8461,7 @@ create policy rico_cases_ins on public.rico_cases
 
 create policy rico_cases_sel on public.rico_cases
   as permissive for select to authenticated
-  using (private.can_access_case(case_id));
+  using (private.can_read_case(case_id));
 
 create policy rico_cases_upd on public.rico_cases
   as permissive for update to authenticated
@@ -10798,6 +10800,28 @@ create policy wl_sel on public.watchlist
 -- DELETE grant to authenticated, so evidence_del was already unreachable; it
 -- is re-emitted anyway so a future grant cannot silently reopen the hole.
 -- Definitive SQL in supabase/migrations/20260823130000_siu_case_delete_wall.sql.
+--
+-- 20260901130000 CLOSED THE OTHER HALF OF THE SAME HOLE. can_delete_case_child's
+-- CID branch was can_delete() VERBATIM -- a raw profiles.role check that knows
+-- nothing about cases OR departments. An SIU member holding a CID rank of
+-- bureau_lead or above therefore satisfied it, and DELETE is the one write the
+-- `not is_siu_department()` term in can_access_case() never covered. Probed
+-- live as a real Special Agent in Charge with CID rank bureau_lead:
+-- can_access_case(cid case) FALSE, can_delete() TRUE, and a CID report, task
+-- and RICO case all deleted. Both currently appointed SIU members hold a
+-- qualifying CID rank. The CID branch is now
+-- `can_delete() AND can_access_case(p_case)`, which changes NOTHING for CID --
+-- every rank can_delete() accepts is command, and can_access_case() admits
+-- is_command() -- and a null p_case now returns false instead of falling
+-- through to true. rico_cases_del and predicate_acts_del joined the chokepoint
+-- at the same time, having never been routed through it.
+--
+-- 20260901120000 moved rico_cases_sel / predicate_acts_sel from
+-- can_access_case() to can_read_case(). Every other case child was put on the
+-- read superset in 20260820120000 and RICO was simply missed, so SIU and
+-- oversight could read a case's reports, evidence, media and tasks but not the
+-- record saying it is an enterprise prosecution. SELECT only; every write stays
+-- on can_access_case(). case_messages remains the one deliberate exclusion.
 
 -- §14 Assume SIU Control (20260824120000_siu_assume_control) — SIU takes over a
 -- live CID case. NEW COLUMNS on public.cases: siu_assumed_at, siu_assumed_by

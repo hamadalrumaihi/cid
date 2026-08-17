@@ -90,6 +90,14 @@ Notes kept accurate to the RLS/RPC reality:
   `siu_is_agent()`, not on SIU standing generally, because a referral can name
   the Director of CID or the Attorney General. Submitting is open to every
   active member; the submitter's receipt carries no review column.
+- **A case-child DELETE needs case ACCESS, not just a rank**: `private.can_delete()`
+  reads `profiles.role` and knows nothing about cases or departments, so on its
+  own it let any CID command rank delete inside a case they could not open —
+  including, across the departmental wall, an SIU member on a CID case.
+  `can_delete_case_child()`'s CID branch is now
+  `can_delete() AND can_access_case()`. No CID user lost a delete. Any NEW
+  delete policy on a case-scoped table written as bare `can_delete()` reopens
+  it; copy `cases_del` / `surveillance_observations_del` instead.
 - **§30 supporting access is not SIU standing**: a grant opens ONE investigation's
   case file and no `siu_*` table at all — it is spliced into
   `can_access_case()`/`_row()`, never into `siu_case_access()`. Standard
