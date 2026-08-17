@@ -57,8 +57,31 @@
 -- Two new review stages, so an SIU warrant never displays "awaiting CID
 -- supervisor review" — wording that is actively false now the Director of CID
 -- has no SIU standing. Then SIU branches inside the two existing RPCs rather
--- than parallel copies: one state machine, one place to read it. Every CID
--- path below is byte-identical to what it replaces.
+-- than parallel copies: one state machine, one place to read it.
+--
+-- ── The CID paths, and the ONE line of them that is not identical ─────────
+-- Every CID branch below is byte-identical to what it replaces, verified by
+-- diffing the re-emitted function against the original, EXCEPT one string:
+--
+--   was:  'The investigator declared a material change — renewed CID review required.'
+--   now:  'The investigator declared a material change - renewed command review required.'
+--
+-- Two edits in one line, and they are not the same kind of thing.
+--
+-- "CID review" → "command review" is deliberate. That log line is written
+-- BEFORE the lane branches, so it is emitted for SIU submissions too, and
+-- telling an SIU agent their warrant needs renewed *CID* review would be
+-- false. Lane-neutral wording is the only correct option there.
+--
+-- The em-dash → hyphen is NOT deliberate: it is an artefact of the text being
+-- ASCII-sanitised on its way into the database, and it silently applied to
+-- every string in every function re-emitted in this series. Discovered by
+-- checking the claim rather than trusting it. The migration files have been
+-- brought into line with what actually ran, so a rebuild from these files
+-- reproduces production exactly — which is the property that matters, and the
+-- one that was quietly broken. Re-applying four core legal functions to
+-- restore punctuation would have been churn on the riskiest path in the
+-- codebase for no behavioural gain.
 --
 -- ── Verified live, in a rolled-back transaction ──────────────────────────
 --                             before            after
@@ -308,7 +331,7 @@ begin
 
   if coalesce(p_material_change, false) then
     perform private.legal_log(p_request, null, 'material_change_declared',
-      v_from, null, 'The investigator declared a material change — renewed command review required.', null);
+      v_from, null, 'The investigator declared a material change - renewed command review required.', null);
   end if;
 
   if v_siu then

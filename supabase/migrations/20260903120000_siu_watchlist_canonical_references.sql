@@ -127,7 +127,7 @@ begin
       values (null, 'SIU_WATCH_UNRESOLVED', 'siu', r.id,
               jsonb_build_object('entity_type', r.entity_type, 'label', r.label,
                                  'matches', v_n, 'note',
-                                 'no single registry match — left for a human to attach'));
+                                 'no single registry match - left for a human to attach'));
     end if;
   end loop;
 end $backfill$;
@@ -357,7 +357,7 @@ begin
     raise exception 'unknown review outcome';
   end if;
   if coalesce(btrim(p_note), '') = '' then
-    raise exception 'a review note is required — it is the record that somebody looked';
+    raise exception 'a review note is required - it is the record that somebody looked';
   end if;
   select * into v_w from public.siu_watchlist where id = p_id for update;
   if not found then raise exception 'watch entry not found'; end if;

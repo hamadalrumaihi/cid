@@ -84,7 +84,7 @@ begin
     raise exception 'unknown severity';
   end if;
   if coalesce(btrim(p_body), '') = '' then
-    raise exception 'a note needs a body — what is being recorded';
+    raise exception 'a note needs a body - what is being recorded';
   end if;
   if p_source_type is not null and p_source_type not in
      ('human_source','officer_observation','surveillance','technical','documentary',

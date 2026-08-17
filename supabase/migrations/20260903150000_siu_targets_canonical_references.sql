@@ -215,7 +215,7 @@ declare v_actor uuid := (select auth.uid()); v_t record;
 begin
   if not private.siu_is_agent() then raise exception 'not authorized'; end if;
   if coalesce(btrim(p_reason), '') = '' then
-    raise exception 'a reason is required — clearing somebody is a finding';
+    raise exception 'a reason is required - clearing somebody is a finding';
   end if;
   select * into v_t from public.siu_targets where id = p_id for update;
   if not found then raise exception 'designation not found'; end if;
