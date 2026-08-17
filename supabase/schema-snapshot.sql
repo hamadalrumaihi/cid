@@ -11251,6 +11251,15 @@ create table public.penal_charges (
   definition text,
   is_modifier boolean not null default false,
   is_rico boolean not null default false,
+  -- NULLABLE, and that is the point: null means "this version does not say".
+  -- The legacy code marks 18 RICO PREDICATE offenses (Murder 1st, Kidnapping)
+  -- which is the opposite end of the statute from is_rico, the six Title 10/12
+  -- RICO MODIFIERS only a prosecutor or judge may add. Collapsing the two would
+  -- both put Murder on the prosecutor-only list and empty the predicate picker.
+  is_rico_predicate boolean,
+  -- Legacy fact: 11 charges require an arrest rather than a citation. Null on a
+  -- 2026 row because that version never addresses it.
+  arrest_required boolean,
   substance_schedule integer,
   special_notes text,
   lifecycle text not null default 'active'::text,
@@ -11273,7 +11282,9 @@ alter table public.penal_charges add constraint penal_charges_created_by_fkey FO
 -- future source may repeat one. A code-keyed table would fail the import or
 -- orphan every case that cited a renumbered charge.
 alter table public.penal_charges add constraint penal_charges_code_unique UNIQUE (version_id, code);
-alter table public.penal_charges add constraint penal_charges_charge_class_check CHECK (charge_class in ('Infraction', 'Misdemeanor', 'Felony'));
+-- 'Capital' was added for the legacy code, which carries 8 capital offenses.
+-- Folding them into Felony would have misstated what those charges are.
+alter table public.penal_charges add constraint penal_charges_charge_class_check CHECK (charge_class in ('Infraction', 'Misdemeanor', 'Felony', 'Capital'));
 alter table public.penal_charges add constraint penal_charges_lifecycle_check CHECK (lifecycle in ('active', 'draft', 'archived'));
 alter table public.penal_charges add constraint penal_charges_substance_schedule_check CHECK (substance_schedule between 1 and 3);
 -- A codeless charge is a DRAFT and can never be selectable.
@@ -11288,6 +11299,7 @@ create index penal_charges_code_idx ON public.penal_charges USING btree (code);
 create index penal_charges_lifecycle_idx ON public.penal_charges USING btree (version_id, lifecycle);
 create index penal_charges_title_idx ON public.penal_charges USING btree (penal_title);
 create index penal_charges_rico_idx ON public.penal_charges USING btree (version_id) WHERE is_rico;
+create index penal_charges_predicate_idx ON public.penal_charges USING btree (version_id) WHERE is_rico_predicate;
 create index penal_charges_archived_by_idx ON public.penal_charges USING btree (archived_by);
 create index penal_charges_created_by_idx ON public.penal_charges USING btree (created_by);
 -- THE SHARED PENAL CODE. One central dataset for every unit -- CID, SIU, JTF,
@@ -11354,3 +11366,86 @@ alter table public.penal_limits add constraint penal_limits_version_id_fkey FORE
 alter table public.penal_limits enable row level security;
 -- The machine-readable limits the validator reads, so "maximum 200 months"
 -- lives with the code it belongs to instead of as a constant in the client.
+
+create table public.case_charges (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  charge_id uuid not null,
+  version_id uuid not null,
+  counts integer not null default 1,
+  status text not null default 'proposed',
+  snap_code text,
+  snap_offense text not null,
+  snap_penal_title text,
+  snap_charge_class text not null,
+  snap_fine numeric,
+  snap_jail_months numeric,
+  snap_judge_set_fine boolean not null default false,
+  snap_judge_set_jail boolean not null default false,
+  snap_stackable boolean not null default false,
+  snap_is_modifier boolean not null default false,
+  snap_is_rico boolean not null default false,
+  snap_substance_schedule integer,
+  substance_quantity numeric,
+  substance_unit text,
+  substance_note text,
+  imposed_fine numeric,
+  imposed_jail_months numeric,
+  imposed_by uuid,
+  imposed_at timestamptz,
+  note text,
+  added_by uuid,
+  added_at timestamptz not null default now(),
+  decided_by uuid,
+  decided_at timestamptz,
+  decision_note text,
+  updated_at timestamptz not null default now()
+);
+alter table public.case_charges add constraint case_charges_pkey PRIMARY KEY (id);
+alter table public.case_charges add constraint case_charges_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.case_charges add constraint case_charges_charge_id_fkey FOREIGN KEY (charge_id) REFERENCES public.penal_charges(id);
+alter table public.case_charges add constraint case_charges_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.penal_code_versions(id);
+alter table public.case_charges add constraint case_charges_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id);
+alter table public.case_charges add constraint case_charges_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id);
+alter table public.case_charges add constraint case_charges_imposed_by_fkey FOREIGN KEY (imposed_by) REFERENCES public.profiles(id);
+alter table public.case_charges add constraint case_charges_status_check CHECK (status in ('proposed', 'under_review', 'approved', 'filed', 'convicted', 'dismissed', 'withdrawn'));
+alter table public.case_charges add constraint case_charges_counts_check CHECK (counts between 1 and 999);
+-- Substance detail belongs only on a scheduled-substance charge.
+alter table public.case_charges add constraint case_charges_substance_check CHECK ((substance_quantity is null and substance_unit is null and substance_note is null) or snap_substance_schedule is not null);
+-- An imposed penalty is meaningful only where the code deferred to a judge, so
+-- a total can never mix "nothing" with "not yet decided".
+alter table public.case_charges add constraint case_charges_imposed_fine_judge_check CHECK (imposed_fine is null or snap_judge_set_fine);
+alter table public.case_charges add constraint case_charges_imposed_jail_judge_check CHECK (imposed_jail_months is null or snap_judge_set_jail);
+alter table public.case_charges enable row level security;
+-- One LIVE row per charge per case; multiplicity is `counts`, not duplicate
+-- rows. Withdrawn and dismissed are excluded so a charge can be re-added.
+create unique index case_charges_one_live ON public.case_charges USING btree (case_id, charge_id) WHERE (status <> ALL (ARRAY['withdrawn'::text, 'dismissed'::text]));
+create index case_charges_case_idx ON public.case_charges USING btree (case_id, status);
+create index case_charges_charge_idx ON public.case_charges USING btree (charge_id);
+create index case_charges_version_idx ON public.case_charges USING btree (version_id);
+create index case_charges_added_by_idx ON public.case_charges USING btree (added_by);
+create index case_charges_decided_by_idx ON public.case_charges USING btree (decided_by);
+create index case_charges_imposed_by_idx ON public.case_charges USING btree (imposed_by);
+create index case_charges_rico_idx ON public.case_charges USING btree (case_id) WHERE snap_is_rico;
+-- A CHARGE ON A CASE, as a record rather than a jsonb entry. The snap_ columns
+-- are a SNAPSHOT of the penal charge as it read when it was attached, written
+-- by private.case_charge_before_insert() from public.penal_charges and never
+-- accepted from the caller -- otherwise a client could file an offense at a
+-- penalty of its choosing. The same trigger refuses any charge on a DRAFT
+-- version (unpublished law is not law) and forces status to 'proposed'.
+--
+-- private.case_charge_before_update() freezes every snap_ column against later
+-- edits, checks the move against private.case_charge_transition_ok(), checks
+-- the mover against private.case_charge_may(), and refuses self-approval. A
+-- transition rule is a statement about (old, new) and an UPDATE policy cannot
+-- see both, so authority for a MOVE lives in the trigger while the policies
+-- below decide who may touch the row at all. Both must pass.
+--
+-- SELECT/UPDATE: private.can_access_case() -- which already dispatches SIU
+-- cases to siu_case_access() -- OR private.case_charge_court_read(), which
+-- opens 'approved' onward to the courts and, on an SIU case, to the Attorney
+-- General and judges ONLY. INSERT additionally reserves RICO modifiers to a
+-- prosecuting attorney or judge, reading the trigger-written snap_is_rico so
+-- the flag cannot be spoofed. There is deliberately NO delete policy: a charge
+-- that should not have been brought is 'withdrawn', which keeps the record
+-- that it was brought. Readers: case_charges_for(), case_charge_totals().
