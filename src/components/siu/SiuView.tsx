@@ -31,8 +31,11 @@ import {
   SIU_CLASSIFICATIONS, fetchSiuAudit, fetchSiuOverview, fetchSiuRoster,
   searchSiuCandidates, siuAuditLabel, siuCallsign, siuCanAppointRole, siuCanRemove,
   siuClassificationLabel, siuClassificationTint, siuRoleLabel,
-  SIU_CLASSIFICATION_HINT, SIU_ROLE_SHORT,
+  SIU_CLASSIFICATION_HINT, SIU_ROLE_SHORT, SIU_INTEGRITY_NOTE_TYPES,
+  SIU_PRIORITY_DESIGNATIONS, siuDesignationLabel, siuNoteTypeLabel,
+  siuOperationCategoryLabel, type SiuOperationCategory,
   type SiuAuditRow, type SiuCandidate, type SiuOverview, type SiuRosterRow,
+  type SiuDesignation, type SiuNoteType,
 } from '@/lib/siu'
 import { roleLabel } from '@/lib/roles'
 import { toast } from '@/lib/toast'
@@ -49,14 +52,32 @@ import { Field, Input, Select, Textarea, inputCls } from '@/components/ui/Field'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 
 type CaseRow = Tables<'cases'>
-type Section = 'overview' | 'investigations' | 'agents' | 'activity'
+type Section = 'overview' | 'investigations' | 'targets' | 'operations' | 'intelligence' | 'agents' | 'activity'
+type TargetRow = Tables<'siu_targets'>
+type OperationRow = Tables<'operations'>
+type NoteRow = Tables<'siu_case_notes'>
 
 const SECTIONS = [
   { id: 'overview' as const, label: 'Overview' },
   { id: 'investigations' as const, label: 'Investigations' },
+  { id: 'targets' as const, label: 'Targets' },
+  { id: 'operations' as const, label: 'Operations' },
+  { id: 'intelligence' as const, label: 'Intelligence' },
   { id: 'agents' as const, label: 'Agents' },
   { id: 'activity' as const, label: 'Activity' },
 ]
+
+/** Designation chips: priority designations read hot, cleared reads resolved,
+ *  everything else stays neutral. Investigative standing, never a finding. */
+const designationTint = (d: string): string =>
+  SIU_PRIORITY_DESIGNATIONS.includes(d) ? 'bg-rose-500/15 text-rose-300'
+  : d === 'cleared' ? 'bg-emerald-500/15 text-emerald-300'
+  : d === 'source' ? 'bg-blue-500/15 text-blue-300'
+  : 'bg-white/5 text-slate-300'
+
+const noteTint = (t: string): string =>
+  SIU_INTEGRITY_NOTE_TYPES.includes(t) ? 'bg-amber-500/15 text-amber-300'
+  : 'bg-white/5 text-slate-300'
 
 const fmtDate = (v?: string | null) =>
   v ? new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
@@ -122,6 +143,9 @@ export function SiuView() {
 
       {section === 'overview' && <OverviewSection onGoto={setSection} />}
       {section === 'investigations' && <InvestigationsSection />}
+      {section === 'targets' && <TargetsSection />}
+      {section === 'operations' && <OperationsSection />}
+      {section === 'intelligence' && <IntelligenceSection />}
       {section === 'agents' && <AgentsSection />}
       {section === 'activity' && <ActivitySection />}
     </div>
@@ -172,6 +196,23 @@ function OverviewSection({ onGoto }: { onGoto: (s: Section) => void }) {
         ]}
       />
 
+      {/* Operational picture — the §14 sections, each counting only what this
+          agent may actually see. */}
+      <MetricStrip
+        metrics={[
+          { label: 'Priority targets', value: data.priority_targets ?? 0,
+            hint: 'Target · Priority · Fugitive',
+            tint: (data.priority_targets ?? 0) > 0 ? 'bg-rose-500/15 text-rose-300' : undefined },
+          { label: 'Active targets', value: data.active_targets ?? 0 },
+          { label: 'Active operations', value: data.active_operations ?? 0 },
+          { label: 'Surveillance', value: data.surveillance_active ?? 0, hint: 'Running' },
+          { label: 'Intelligence', value: data.open_intel ?? 0, hint: 'Unresolved' },
+          { label: 'Integrity flags', value: data.cid_integrity_flags ?? 0,
+            hint: 'Raised on CID cases',
+            tint: (data.cid_integrity_flags ?? 0) > 0 ? 'bg-amber-500/15 text-amber-300' : undefined },
+        ]}
+      />
+
       <Card>
         <SectionHeader
           title="Active investigations"
@@ -206,6 +247,8 @@ function OverviewSection({ onGoto }: { onGoto: (s: Section) => void }) {
           <p className="mt-3 text-[11px] text-slate-400">
             Work CID material in its own screens — Case Files, Persons, Gangs, the relationship
             graph and global search all already return every bureau&rsquo;s records for you.
+            Integrity concerns you record against a CID investigation stay on the SIU layer:
+            the case&rsquo;s own detectives and CID command never see that the note exists.
           </p>
         </Card>
       )}
@@ -384,6 +427,181 @@ function NewInvestigationModal({ onClose, onCreated }: { onClose: () => void; on
         </div>
       </div>
     </Modal>
+  )
+}
+
+/* ----------------------------------------------------------------- targets */
+
+function TargetsSection() {
+  const [rows, setRows] = useState<TargetRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showCleared, setShowCleared] = useState(false)
+
+  useEffect(() => {
+    let live = true
+    void withRetry(() => list('siu_targets', { order: 'created_at', ascending: false }))
+      .then((r) => { if (live) setRows(r as TargetRow[]) })
+      .catch((e) => { if (live) toast(e instanceof Error ? e.message : String(e), 'danger') })
+      .finally(() => { if (live) setLoading(false) })
+    return () => { live = false }
+  }, [])
+
+  const shown = useMemo(
+    () => rows.filter((r) => showCleared || !r.cleared_at),
+    [rows, showCleared],
+  )
+
+  if (loading) return <CardGridSkeleton cols="" />
+
+  return (
+    <Card>
+      <SectionHeader
+        title="Targets"
+        subtitle="Investigative designations across SIU investigations you can access. A designation describes someone's standing in an investigation — it is not a finding or a conviction."
+        actions={
+          <Button size="sm" onClick={() => setShowCleared((v) => !v)}>
+            {showCleared ? 'Hide cleared' : 'Show cleared'}
+          </Button>
+        }
+      />
+      {!shown.length ? (
+        <p className="mt-3 text-xs text-slate-400">
+          {rows.length ? 'No active designations — everything here is cleared.' : 'No targets designated yet.'}
+        </p>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {shown.map((t) => (
+            <li key={t.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-white/5 bg-white/5 px-3 py-2">
+              <span className="min-w-0 flex-1 truncate text-sm text-white">{t.label}</span>
+              <Badge tone="neutral">{t.entity_type}</Badge>
+              <Badge tint={designationTint(t.designation)}>
+                {siuDesignationLabel(t.designation as SiuDesignation)}
+              </Badge>
+              {t.role_in_network && <span className="text-[11px] text-slate-400">{t.role_in_network}</span>}
+              {t.cleared_at && <Badge tone="good">Cleared</Badge>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  )
+}
+
+/* -------------------------------------------------------------- operations */
+
+function OperationsSection() {
+  const siu = useSiu()
+  const [rows, setRows] = useState<OperationRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+
+  const refresh = useCallback(async () => {
+    await Promise.resolve()
+    setLoading(true)
+    try {
+      setRows(await withRetry(() => list('operations', {
+        order: 'created_at', ascending: false, eq: { authority: 'siu' },
+      })) as OperationRow[])
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'danger')
+    } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => {
+    const t = window.setTimeout(() => { void refresh() }, 0)
+    return () => window.clearTimeout(t)
+  }, [refresh])
+
+  const create = async () => {
+    const name = await uiPrompt('Operation name', { title: 'New SIU operation' })
+    if (!name?.trim()) return
+    setBusy(true)
+    const res = await rpc('siu_create_operation', { p_name: name.trim() })
+    setBusy(false)
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Operation created.', 'success')
+    void refresh()
+  }
+
+  if (loading) return <CardGridSkeleton cols="" />
+
+  return (
+    <Card>
+      <SectionHeader
+        title="Operations"
+        subtitle="Planned SIU actions — surveillance, undercover, warrants, apprehensions. Invisible to CID at every rank."
+        actions={siu.isAgent ? (
+          <Button size="sm" variant="primary" disabled={busy} onClick={() => void create()}>
+            + New operation
+          </Button>
+        ) : undefined}
+      />
+      {!rows.length ? (
+        <p className="mt-3 text-xs text-slate-400">No SIU operations yet.</p>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {rows.map((o) => (
+            <li key={o.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-white/5 bg-white/5 px-3 py-2">
+              <span className="min-w-0 flex-1 truncate text-sm text-white">{o.name}</span>
+              {o.op_category && (
+                <Badge tone="neutral">
+                  {siuOperationCategoryLabel(o.op_category as SiuOperationCategory)}
+                </Badge>
+              )}
+              <Badge tone={o.status === 'active' ? 'accent' : 'neutral'}>{o.status}</Badge>
+              <span className="text-[10px] text-slate-400">{fmtDate(o.created_at)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  )
+}
+
+/* ------------------------------------------------------------ intelligence */
+
+function IntelligenceSection() {
+  const [rows, setRows] = useState<NoteRow[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let live = true
+    void withRetry(() => list('siu_case_notes', { order: 'created_at', ascending: false, limit: 100 }))
+      .then((r) => { if (live) setRows(r as NoteRow[]) })
+      .catch((e) => { if (live) toast(e instanceof Error ? e.message : String(e), 'danger') })
+      .finally(() => { if (live) setLoading(false) })
+    return () => { live = false }
+  }, [])
+
+  if (loading) return <CardGridSkeleton cols="" />
+
+  const open = rows.filter((r) => !r.resolved_at)
+
+  return (
+    <Card>
+      <SectionHeader
+        title="Intelligence"
+        subtitle="Restricted SIU intelligence, including concerns recorded against CID investigations. A CID case's own detectives and CID command never see that these notes exist."
+      />
+      {!open.length ? (
+        <p className="mt-3 text-xs text-slate-400">No unresolved SIU intelligence.</p>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {open.map((n) => (
+            <li key={n.id} className="rounded-lg border border-white/5 bg-white/5 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tint={noteTint(n.note_type)}>{siuNoteTypeLabel(n.note_type as SiuNoteType)}</Badge>
+                <Badge tone={n.severity === 'critical' || n.severity === 'high' ? 'warn' : 'neutral'}>
+                  {n.severity}
+                </Badge>
+                <span className="ml-auto text-[10px] text-slate-400">{fmtWhen(n.created_at)}</span>
+              </div>
+              <p className="mt-1.5 whitespace-pre-wrap text-xs text-slate-300">{n.body}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   )
 }
 

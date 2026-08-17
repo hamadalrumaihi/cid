@@ -124,6 +124,83 @@ export const siuClassificationLabel = (c?: string | null) =>
 export const siuClassificationTint = (c?: string | null) =>
   (c && SIU_CLASSIFICATION_TINT[c]) || SIU_CLASSIFICATION_TINT.siu
 
+/** Investigative designations for an SIU subject. These describe a person's
+ *  standing in an investigation — they are NOT findings or convictions, and
+ *  the UI should never present them as such. */
+export const SIU_DESIGNATIONS = [
+  'person_of_interest', 'subject', 'target', 'priority_target',
+  'fugitive', 'associate', 'source', 'unknown', 'cleared',
+] as const
+export type SiuDesignation = (typeof SIU_DESIGNATIONS)[number]
+
+export const SIU_DESIGNATION_LABEL: Record<string, string> = {
+  person_of_interest: 'Person of Interest',
+  subject: 'Subject',
+  target: 'Target',
+  priority_target: 'Priority Target',
+  fugitive: 'Fugitive',
+  associate: 'Associate',
+  source: 'Source',
+  unknown: 'Unknown',
+  cleared: 'Cleared',
+}
+
+/** The designations that make someone a PRIORITY on the dashboard. */
+export const SIU_PRIORITY_DESIGNATIONS: readonly string[] =
+  ['target', 'priority_target', 'fugitive']
+
+export const siuDesignationLabel = (d?: string | null) =>
+  (d && SIU_DESIGNATION_LABEL[d]) || 'Unknown'
+
+/** Planned-action categories for an SIU operation (§26). */
+export const SIU_OPERATION_CATEGORIES = [
+  'surveillance', 'undercover', 'controlled', 'search_warrant',
+  'arrest', 'fugitive', 'gang', 'narcotics', 'firearms',
+] as const
+export type SiuOperationCategory = (typeof SIU_OPERATION_CATEGORIES)[number]
+
+export const SIU_OPERATION_CATEGORY_LABEL: Record<string, string> = {
+  surveillance: 'Surveillance',
+  undercover: 'Undercover Operation',
+  controlled: 'Controlled Operation',
+  search_warrant: 'Search Warrant',
+  arrest: 'Arrest Operation',
+  fugitive: 'Fugitive Apprehension',
+  gang: 'Gang Operation',
+  narcotics: 'Narcotics Operation',
+  firearms: 'Firearms Operation',
+}
+
+export const siuOperationCategoryLabel = (c?: string | null) =>
+  (c && SIU_OPERATION_CATEGORY_LABEL[c]) || 'Operation'
+
+/** The SIU-only intelligence layer that can sit on ANY case, CID included.
+ *  CID never sees that a note exists — that is what makes investigating a
+ *  compromised investigator possible without alerting them (§12). */
+export const SIU_NOTE_TYPES = [
+  'intelligence', 'integrity_concern', 'corruption_flag', 'compromised_officer',
+  'leak_concern', 'conflict_of_interest', 'surveillance_note', 'related_investigation',
+] as const
+export type SiuNoteType = (typeof SIU_NOTE_TYPES)[number]
+
+export const SIU_NOTE_TYPE_LABEL: Record<string, string> = {
+  intelligence: 'Intelligence',
+  integrity_concern: 'Integrity Concern',
+  corruption_flag: 'Corruption Flag',
+  compromised_officer: 'Compromised Officer',
+  leak_concern: 'Information Leak',
+  conflict_of_interest: 'Conflict of Interest',
+  surveillance_note: 'Surveillance Note',
+  related_investigation: 'Related SIU Investigation',
+}
+
+/** The note types that count as an integrity concern against a CID case. */
+export const SIU_INTEGRITY_NOTE_TYPES: readonly string[] =
+  ['integrity_concern', 'corruption_flag', 'compromised_officer', 'leak_concern']
+
+export const siuNoteTypeLabel = (t?: string | null) =>
+  (t && SIU_NOTE_TYPE_LABEL[t]) || 'Intelligence'
+
 // ---------------------------------------------------------------------------
 // Standing — the single authority resolver
 // ---------------------------------------------------------------------------
@@ -295,6 +372,13 @@ export interface SiuOverview {
   compartmented?: number
   agents?: number
   legal_pending?: number
+  priority_targets?: number
+  active_targets?: number
+  active_operations?: number
+  open_intel?: number
+  /** Unresolved SIU integrity concerns raised against CID investigations. */
+  cid_integrity_flags?: number
+  surveillance_active?: number
   /** null for oversight-only standing — no broad CID read. */
   cid_recent_cases?: number | null
   cid_open_cases?: number | null
@@ -366,6 +450,7 @@ export async function fetchSiuAudit(limit = 100): Promise<SiuAuditRow[]> {
  *  raw token rather than being hidden — an audit surface never silently drops
  *  a row it doesn't recognise. */
 export const SIU_AUDIT_LABEL: Record<string, string> = {
+  SIU_OPERATION_CREATED: 'Operation created',
   SIU_APPOINTED: 'Agent appointed',
   SIU_REMOVED: 'Agent removed',
   SIU_CALLSIGN_CHANGED: 'Callsign changed',

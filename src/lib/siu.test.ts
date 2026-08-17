@@ -13,6 +13,9 @@ import type { Profile } from './auth'
 import { ROLE_ORDER } from './roles'
 import {
   caseDepartment, maySwitchDepartment, termsFor, userDepartment,
+  SIU_DESIGNATIONS, SIU_DESIGNATION_LABEL, SIU_INTEGRITY_NOTE_TYPES, SIU_NOTE_TYPES,
+  SIU_OPERATION_CATEGORIES, SIU_PRIORITY_DESIGNATIONS,
+  siuDesignationLabel, siuNoteTypeLabel, siuOperationCategoryLabel,
   siuAssignableClassifications, siuCanAppoint, siuCanAppointRole, siuCanReadCid,
   siuCanRemove, siuCaseAccess, siuIsAgent, siuIsCommand, siuOperates, siuStanding,
   siuAuditLabel, siuCallsign, siuClassificationLabel, siuRoleLabel,
@@ -339,6 +342,55 @@ describe('the senior agent tier', () => {
     expect(siuCaseAccess(senior, { siu_classification: 'siu' })).toBe(true)
     expect(siuCaseAccess(senior, { siu_classification: 'siu_command' })).toBe(false)
     expect(siuCaseAccess(senior, { siu_classification: 'siu_compartmented' }, { assigned: true })).toBe(false)
+  })
+})
+
+describe('Phase 2 vocabulary', () => {
+  it('keeps designations as investigative standing, not findings', () => {
+    // Every designation must carry an explicit label — including 'unknown',
+    // which is a real designation ("we don't yet know their standing") and
+    // legitimately renders as "Unknown". "cleared" must exist so an
+    // investigation can record that someone was ruled out.
+    for (const d of SIU_DESIGNATIONS) {
+      expect(SIU_DESIGNATION_LABEL, `${d} needs a label`).toHaveProperty(d)
+      expect(siuDesignationLabel(d)).toBeTruthy()
+    }
+    expect(SIU_DESIGNATIONS).toContain('cleared')
+    expect(SIU_DESIGNATIONS).toContain('person_of_interest')
+    expect(siuDesignationLabel('priority_target')).toBe('Priority Target')
+    // An unrecognised value degrades to Unknown rather than leaking the raw
+    // token into the UI.
+    expect(siuDesignationLabel('convicted')).toBe('Unknown')
+    expect(siuDesignationLabel(null)).toBe('Unknown')
+  })
+
+  it('treats only genuine escalations as priority designations', () => {
+    for (const d of SIU_PRIORITY_DESIGNATIONS) {
+      expect(SIU_DESIGNATIONS as readonly string[]).toContain(d)
+    }
+    expect(SIU_PRIORITY_DESIGNATIONS).not.toContain('cleared')
+    expect(SIU_PRIORITY_DESIGNATIONS).not.toContain('person_of_interest')
+    expect(SIU_PRIORITY_DESIGNATIONS).not.toContain('source')
+  })
+
+  it('names every note type, and marks the integrity subset', () => {
+    for (const t of SIU_NOTE_TYPES) expect(siuNoteTypeLabel(t)).not.toBe('')
+    for (const t of SIU_INTEGRITY_NOTE_TYPES) {
+      expect(SIU_NOTE_TYPES as readonly string[]).toContain(t)
+    }
+    // The integrity subset is what the dashboard counts against CID cases.
+    expect(SIU_INTEGRITY_NOTE_TYPES).toContain('corruption_flag')
+    expect(SIU_INTEGRITY_NOTE_TYPES).toContain('compromised_officer')
+    expect(SIU_INTEGRITY_NOTE_TYPES).not.toContain('intelligence')
+    expect(siuNoteTypeLabel('nonsense')).toBe('Intelligence')
+  })
+
+  it('names every operation category', () => {
+    for (const c of SIU_OPERATION_CATEGORIES) {
+      expect(siuOperationCategoryLabel(c)).not.toBe('Operation')
+    }
+    expect(siuOperationCategoryLabel('undercover')).toBe('Undercover Operation')
+    expect(siuOperationCategoryLabel(null)).toBe('Operation')
   })
 })
 

@@ -257,6 +257,17 @@ INVESTIGATIVE PORTAL
 
 > **Known discrepancy — the SIU SOP's own chain of command.** The seeded SOP text states that SIU reports through the Commissioner's Office and the **Director of CID**. The portal implements the amendment's model instead: **Attorney General → X-1 → Agents, with CID command holding no SIU authority whatsoever.** The document is stored exactly as written (it is the unit's policy text), so the two disagree on paper. Whoever owns the SOP should reconcile it; until then the *enforced* model is the one documented here.
 
+### Phase 2 — targets, operations, and the SIU-only layer ([`20260822120000_siu_phase2.sql`](../supabase/migrations/20260822120000_siu_phase2.sql))
+
+| Object | Visibility |
+|---|---|
+| `siu_targets` | rides the SIU case wall exactly (`private.siu_case_access`), so a compartmented investigation's designations are allow-list-only too |
+| `siu_case_notes` | **the SIU-only layer.** On an SIU case: whoever can open it. On a **CID** case: any SIU field agent, through oversight authority. **Nobody else** — `private.siu_can_read_case_note` has no branch admitting a CID role, not the case's own lead detective, not CID command, not the Director |
+| `operations` (`authority='siu'`) | read `siu_is_agent`, change `siu_is_command`; CID operations keep exactly today's rule |
+| surveillance | inherited unchanged — already case-scoped through `can_access_case` |
+
+The SIU-only layer is the capability that makes §12 real: SIU can record an integrity concern against a live CID investigation and the officers working that case cannot tell the note exists. `operations.authority` is RPC-only (guard trigger `private.block_direct_operation_authority`); `siu_create_operation` is the one path.
+
 ### Build-phase release gate (temporary)
 
 Until SIU is marked production-ready, **only the Portal Owner** may see, query or act on anything SIU — this temporarily overrides the model above for the Attorney General, X-Ray 1, Special Agents, and all of CID. The gate is centralized, not scattered: `private.siu_standing()` returns `owner` for the owner unconditionally and `NULL` for everyone else while `siu_settings.enabled_for_non_owner` is `false`. For every other account SIU simply does not exist — no nav entry, no "coming soon", no route, no rows, no notifications, no realtime, no search hits. Opening the gate is one audited Owner-only call, `siu_set_release(true, reason)`; the production permissions above are already written and need no rebuild.
