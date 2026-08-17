@@ -2615,14 +2615,23 @@ create index siu_case_notes_reviewed_by_idx ON public.siu_case_notes USING btree
 -- three are NULLABLE with no default: ungraded is a real state, never a silent
 -- pass. Grading is settable at INSERT (authorship) and frozen on UPDATE; the
 -- three review columns are RPC-only. Trigger: block_direct_siu_note_grading.
--- Writers: siu_grade_note(), siu_review_note().
+-- Writers: siu_record_intelligence() creates a note (20260903160000 -- until
+-- then the tab could grade and review notes but had no supported way to write
+-- one, so the INSERT policy existed with nothing reaching it); siu_grade_note()
+-- and siu_review_note() carry the two later verbs. siu_record_intelligence() is
+-- SECURITY DEFINER only because private.siu_audit() is not executable by
+-- `authenticated`, so it restates siu_case_notes_ins's WITH CHECK verbatim --
+-- `siu_can_read_case_note(case_id) and siu_is_agent()` -- and the two must be
+-- changed together. Reader: siu_intelligence_live() resolves the case, the
+-- subject and the author, and flags is_about_cid_case, the distinction the UI
+-- has to lead with.
 
 create table public.siu_targets (
   id uuid not null default gen_random_uuid(),
   case_id uuid not null,
   entity_type text not null,
   entity_id uuid,
-  label text not null,
+  label text,
   designation text not null default 'person_of_interest'::text,
   role_in_network text,
   priority text not null default 'medium'::text,
@@ -2631,23 +2640,75 @@ create table public.siu_targets (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   cleared_at timestamptz,
-  cleared_by uuid
+  cleared_by uuid,
+  person_id uuid,
+  vehicle_id uuid,
+  gang_id uuid,
+  place_id uuid,
+  account_id uuid,
+  indicator_id uuid,
+  clearance_reason text
 );
 alter table public.siu_targets add constraint siu_targets_pkey PRIMARY KEY (id);
 alter table public.siu_targets add constraint siu_targets_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
 alter table public.siu_targets add constraint siu_targets_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
 alter table public.siu_targets add constraint siu_targets_cleared_by_fkey FOREIGN KEY (cleared_by) REFERENCES public.profiles(id);
-alter table public.siu_targets add constraint siu_targets_entity_type_check CHECK (entity_type in ('person', 'vehicle', 'gang', 'place', 'organization', 'account', 'unknown'));
+alter table public.siu_targets add constraint siu_targets_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE CASCADE;
+alter table public.siu_targets add constraint siu_targets_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id) ON DELETE CASCADE;
+alter table public.siu_targets add constraint siu_targets_gang_id_fkey FOREIGN KEY (gang_id) REFERENCES public.gangs(id) ON DELETE CASCADE;
+alter table public.siu_targets add constraint siu_targets_place_id_fkey FOREIGN KEY (place_id) REFERENCES public.places(id) ON DELETE CASCADE;
+alter table public.siu_targets add constraint siu_targets_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
+alter table public.siu_targets add constraint siu_targets_indicator_id_fkey FOREIGN KEY (indicator_id) REFERENCES public.indicators(id) ON DELETE CASCADE;
+alter table public.siu_targets add constraint siu_targets_entity_type_check CHECK (entity_type in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'unknown'));
 alter table public.siu_targets add constraint siu_targets_designation_check CHECK (designation in ('person_of_interest', 'subject', 'target', 'priority_target', 'fugitive', 'associate', 'source', 'unknown', 'cleared'));
 alter table public.siu_targets add constraint siu_targets_priority_check CHECK (priority in ('low', 'medium', 'high', 'critical'));
+alter table public.siu_targets add constraint siu_targets_reference_check CHECK (
+  (case when person_id is not null then 1 else 0 end
+ + case when vehicle_id is not null then 1 else 0 end
+ + case when gang_id is not null then 1 else 0 end
+ + case when place_id is not null then 1 else 0 end
+ + case when account_id is not null then 1 else 0 end
+ + case when indicator_id is not null then 1 else 0 end)
+  = case when entity_type = 'unknown' then 0 else 1 end
+  and (entity_type <> 'person' or person_id is not null)
+  and (entity_type <> 'vehicle' or vehicle_id is not null)
+  and (entity_type <> 'gang' or gang_id is not null)
+  and (entity_type <> 'place' or place_id is not null)
+  and (entity_type <> 'account' or account_id is not null)
+  and (entity_type <> 'indicator' or indicator_id is not null)
+  and (entity_type <> 'unknown' or nullif(btrim(coalesce(label, '')), '') is not null));
 alter table public.siu_targets enable row level security;
 create index siu_targets_case_idx ON public.siu_targets USING btree (case_id);
 create index siu_targets_entity_idx ON public.siu_targets USING btree (entity_type, entity_id);
 create index siu_targets_created_by_fkey_idx ON public.siu_targets USING btree (created_by);
 create index siu_targets_cleared_by_fkey_idx ON public.siu_targets USING btree (cleared_by);
+create index siu_targets_person_idx ON public.siu_targets USING btree (person_id);
+create index siu_targets_vehicle_idx ON public.siu_targets USING btree (vehicle_id);
+create index siu_targets_gang_idx ON public.siu_targets USING btree (gang_id);
+create index siu_targets_place_idx ON public.siu_targets USING btree (place_id);
+create index siu_targets_account_idx ON public.siu_targets USING btree (account_id);
+create index siu_targets_indicator_idx ON public.siu_targets USING btree (indicator_id);
+-- One LIVE designation per subject per investigation. Without it the same
+-- person could be 'associate' and 'priority_target' in one case at once and
+-- "what is their standing?" would have two answers. Partial on cleared_at, so a
+-- cleared designation never blocks re-designating later.
+create unique index siu_targets_one_live_person ON public.siu_targets USING btree (case_id, person_id) WHERE (person_id is not null and cleared_at is null);
+create unique index siu_targets_one_live_vehicle ON public.siu_targets USING btree (case_id, vehicle_id) WHERE (vehicle_id is not null and cleared_at is null);
+create unique index siu_targets_one_live_gang ON public.siu_targets USING btree (case_id, gang_id) WHERE (gang_id is not null and cleared_at is null);
+create unique index siu_targets_one_live_place ON public.siu_targets USING btree (case_id, place_id) WHERE (place_id is not null and cleared_at is null);
 -- Investigative DESIGNATIONS, not findings, pinned to an SIU investigation and
--- pointing at the SHARED registries by (entity_type, entity_id) — one master
--- record per person/vehicle/gang, with an SIU-only designation layered on top.
+-- REFERENCING the shared registries through typed foreign keys (20260903150000)
+-- -- one master record per person/vehicle/gang, with an SIU-only designation
+-- layered on top. It previously carried an untyped entity_id with no FK and a
+-- copied `label`, the same duplicate address book corrected on the watchlist;
+-- `label` is now a fallback for entity_type = 'unknown' only. The table was
+-- empty when that was fixed, because until siu_designate_target() there was no
+-- supported way to create a row at all.
+-- Writers: siu_designate_target(), siu_clear_target() -- clearing KEEPS the row,
+-- since somebody wrongly designated is entitled to the record showing they were
+-- cleared. Reader: siu_targets_live() joins the registry for the display name.
+-- siu_deconflict() reads entity_id, which the writer keeps in step with the
+-- typed reference.
 
 create table public.siu_disclosures (
   id uuid not null default gen_random_uuid(),

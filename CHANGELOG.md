@@ -8,6 +8,52 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Targets and Intelligence can finally be created
+
+Both tabs could read, grade, review and clear — every verb except the one that
+puts something there in the first place. `siu_targets` had no create RPC and no
+action on its screen, so the table was empty; `siu_case_notes` had an INSERT
+policy with nothing reaching it. An empty table for a feature the unit needs is
+not a clean slate, it is a feature nobody could use.
+
+`siu_designate_target()`, `siu_clear_target()` and `siu_record_intelligence()`
+close that, and the screens now lead with **+ Designate a target** and
+**+ Record intelligence**, with empty states that say what to do next.
+
+**Designating names a record, not a string.** `siu_targets` carried the same
+untyped `entity_id` and copied `label` the watchlist just shed, so it gets the
+same six typed foreign keys and the same constraint pinning the reference to
+`entity_type`. It was verified empty before the migration was written rather
+than assumed — the previous one made that assumption and failed on apply.
+
+Three rules the designation workflow enforces because each is a real mistake:
+the subject must exist in the registry; there is **one live designation per
+subject per investigation**, so "what is their standing?" cannot have two
+answers; and `cleared` cannot be an *opening* designation, because it is an
+outcome and opening one would assert the unit looked when it never did.
+Clearing keeps the row, the reason and who lifted it — somebody wrongly
+designated is entitled to the record showing they were cleared, and the unit
+needs the record that it once thought otherwise.
+
+**Recording intelligence says which case it is about, out loud.** A note against
+a CID investigation is invisible to that investigation's own detectives and to
+CID command — that is the feature, and the author is now told so before they
+save rather than left to infer it. Grading is offered at authorship because
+that is the only moment it can be set; leaving it blank is legitimate and the
+note is then shown as ungraded, which is the honest state. A review date is set
+only for graded intelligence: scheduling a review of something nobody has
+assessed would put a meaningless date on the calendar.
+
+`siu_record_intelligence()` is SECURITY DEFINER only because
+`private.siu_audit()` is not executable by `authenticated`, so it restates
+`siu_case_notes_ins`'s check verbatim and both are documented as a pair that
+must change together. It never writes the review columns — creating a note is
+not reviewing it — and the note body is never copied into the audit detail,
+since the audit log has a wider readership than the note.
+
+The registry picker built for the watchlist is now shared by target designation
+rather than duplicated, so neither screen can drift back towards a free-text box.
+
 ### The SIU watchlist points at CID's records instead of copying them
 
 `siu_watchlist` was built with an untyped `entity_id` carrying no foreign key

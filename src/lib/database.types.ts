@@ -7492,6 +7492,13 @@ export type Database = {
       }
       siu_targets: {
         Row: {
+          account_id: string | null
+          clearance_reason: string | null
+          gang_id: string | null
+          indicator_id: string | null
+          person_id: string | null
+          place_id: string | null
+          vehicle_id: string | null
           case_id: string
           cleared_at: string | null
           cleared_by: string | null
@@ -7501,7 +7508,7 @@ export type Database = {
           entity_id: string | null
           entity_type: string
           id: string
-          label: string
+          label: string | null
           notes: string | null
           priority: string
           role_in_network: string | null
@@ -7524,6 +7531,13 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          account_id?: string | null
+          clearance_reason?: string | null
+          gang_id?: string | null
+          indicator_id?: string | null
+          person_id?: string | null
+          place_id?: string | null
+          vehicle_id?: string | null
           case_id?: string
           cleared_at?: string | null
           cleared_by?: string | null
@@ -7533,7 +7547,7 @@ export type Database = {
           entity_id?: string | null
           entity_type?: string
           id?: string
-          label?: string
+          label?: string | null
           notes?: string | null
           priority?: string
           role_in_network?: string | null
@@ -10420,6 +10434,89 @@ export type Database = {
           p_source?: string
         }
         Returns: string
+      }
+      siu_designate_target: {
+        Args: {
+          p_case: string
+          p_designation: string
+          p_entity_id?: string
+          p_entity_type: string
+          p_label?: string
+          p_notes?: string
+          p_priority?: string
+          p_role?: string
+        }
+        Returns: string
+      }
+      siu_clear_target: {
+        Args: { p_id: string; p_reason: string }
+        Returns: undefined
+      }
+      siu_targets_live: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          case_id: string
+          case_number: string | null
+          case_title: string | null
+          clearance_reason: string | null
+          cleared_at: string | null
+          cleared_by: string | null
+          created_at: string
+          created_by: string | null
+          designation: string
+          display_name: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          notes: string | null
+          priority: string
+          role_in_network: string | null
+          secondary: string | null
+        }[]
+      }
+      siu_record_intelligence: {
+        Args: {
+          p_body: string
+          p_case: string
+          p_info_credibility?: string
+          p_note_type: string
+          p_review_days?: number
+          p_severity?: string
+          p_siu_case?: string
+          p_source_reliability?: string
+          p_source_type?: string
+          p_subject_person?: string
+        }
+        Returns: string
+      }
+      siu_intelligence_live: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          body: string
+          case_id: string
+          case_number: string | null
+          case_title: string | null
+          created_at: string
+          created_by: string | null
+          created_by_name: string | null
+          id: string
+          info_credibility: string | null
+          is_about_cid_case: boolean
+          last_reviewed_at: string | null
+          note_type: string
+          resolution: string | null
+          resolved_at: string | null
+          review_due_at: string | null
+          review_outcome: string | null
+          review_overdue: boolean
+          severity: string
+          siu_case_id: string | null
+          siu_case_number: string | null
+          source_reliability: string | null
+          source_type: string | null
+          subject_name: string | null
+          subject_person_id: string | null
+        }[]
       }
       siu_watch_review: {
         Args: {
