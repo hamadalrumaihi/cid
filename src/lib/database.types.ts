@@ -8107,58 +8107,88 @@ export type Database = {
       }
       siu_watchlist: {
         Row: {
+          account_id: string | null
+          assigned_agent: string | null
           case_id: string | null
+          classification: string | null
           created_at: string
           created_by: string | null
           entity_id: string | null
           entity_type: string
           expires_at: string
+          gang_id: string | null
           id: string
-          label: string
+          indicator_id: string | null
+          label: string | null
+          notes: string | null
+          person_id: string | null
+          place_id: string | null
           priority: string
           reason: string
           removal_reason: string | null
           removed_at: string | null
           removed_by: string | null
           review_due_at: string | null
+          source: string | null
           status: string
           updated_at: string
+          vehicle_id: string | null
         }
         Insert: {
+          account_id?: string | null
+          assigned_agent?: string | null
           case_id?: string | null
+          classification?: string | null
           created_at?: string
           created_by?: string | null
           entity_id?: string | null
           entity_type: string
           expires_at: string
+          gang_id?: string | null
           id?: string
-          label: string
+          indicator_id?: string | null
+          label?: string | null
+          notes?: string | null
+          person_id?: string | null
+          place_id?: string | null
           priority?: string
           reason: string
           removal_reason?: string | null
           removed_at?: string | null
           removed_by?: string | null
           review_due_at?: string | null
+          source?: string | null
           status?: string
           updated_at?: string
+          vehicle_id?: string | null
         }
         Update: {
+          account_id?: string | null
+          assigned_agent?: string | null
           case_id?: string | null
+          classification?: string | null
           created_at?: string
           created_by?: string | null
           entity_id?: string | null
           entity_type?: string
           expires_at?: string
+          gang_id?: string | null
           id?: string
-          label?: string
+          indicator_id?: string | null
+          label?: string | null
+          notes?: string | null
+          person_id?: string | null
+          place_id?: string | null
           priority?: string
           reason?: string
           removal_reason?: string | null
           removed_at?: string | null
           removed_by?: string | null
           review_due_at?: string | null
+          source?: string | null
           status?: string
           updated_at?: string
+          vehicle_id?: string | null
         }
         Relationships: []
       }
@@ -10378,14 +10408,70 @@ export type Database = {
       siu_watch_add: {
         Args: {
           p_case?: string
+          p_classification?: string
           p_days?: number
           p_entity_id?: string
           p_entity_type: string
-          p_label: string
+          p_label?: string
+          p_notes?: string
           p_priority?: string
           p_reason: string
+          p_review_days?: number
+          p_source?: string
         }
         Returns: string
+      }
+      siu_watch_review: {
+        Args: {
+          p_extend_days?: number
+          p_id: string
+          p_note: string
+          p_outcome: string
+          p_priority?: string
+          p_review_days?: number
+        }
+        Returns: undefined
+      }
+      siu_watchlist_live: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          assigned_agent: string | null
+          assigned_agent_name: string | null
+          case_id: string | null
+          case_number: string | null
+          classification: string | null
+          created_at: string
+          created_by: string | null
+          days_left: number
+          display_name: string
+          entity_id: string | null
+          entity_type: string
+          expires_at: string
+          id: string
+          notes: string | null
+          priority: string
+          reason: string
+          removal_reason: string | null
+          removed_at: string | null
+          review_due_at: string | null
+          review_overdue: boolean
+          secondary: string | null
+          source: string | null
+          status: string
+        }[]
+      }
+      siu_person_dossier: {
+        Args: { p_person: string }
+        Returns: Json
+      }
+      siu_registry_search: {
+        Args: { p_entity_type: string; p_q: string }
+        Returns: {
+          already_watched: boolean
+          display_name: string
+          id: string
+          secondary: string | null
+        }[]
       }
       siu_watch_extend: {
         Args: { p_days: number; p_id: string; p_reason: string }

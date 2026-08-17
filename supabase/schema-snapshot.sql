@@ -3059,7 +3059,7 @@ create table public.siu_watchlist (
   id uuid not null default gen_random_uuid(),
   entity_type text not null,
   entity_id uuid,
-  label text not null,
+  label text,
   reason text not null,
   case_id uuid,
   priority text not null default 'routine'::text,
@@ -3071,15 +3071,51 @@ create table public.siu_watchlist (
   removal_reason text,
   created_by uuid,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  person_id uuid,
+  vehicle_id uuid,
+  gang_id uuid,
+  place_id uuid,
+  account_id uuid,
+  indicator_id uuid,
+  assigned_agent uuid,
+  classification text,
+  source text,
+  notes text
 );
 alter table public.siu_watchlist add constraint siu_watchlist_pkey PRIMARY KEY (id);
 alter table public.siu_watchlist add constraint siu_watchlist_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
 alter table public.siu_watchlist add constraint siu_watchlist_removed_by_fkey FOREIGN KEY (removed_by) REFERENCES public.profiles(id);
 alter table public.siu_watchlist add constraint siu_watchlist_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
-alter table public.siu_watchlist add constraint siu_watchlist_entity_type_check CHECK (entity_type in ('person', 'vehicle', 'gang', 'place', 'organization', 'account', 'indicator', 'unknown'));
-alter table public.siu_watchlist add constraint siu_watchlist_priority_check CHECK (priority in ('routine', 'elevated', 'urgent'));
-alter table public.siu_watchlist add constraint siu_watchlist_status_check CHECK (status in ('active', 'expired', 'removed'));
+alter table public.siu_watchlist add constraint siu_watchlist_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE CASCADE;
+alter table public.siu_watchlist add constraint siu_watchlist_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id) ON DELETE CASCADE;
+alter table public.siu_watchlist add constraint siu_watchlist_gang_id_fkey FOREIGN KEY (gang_id) REFERENCES public.gangs(id) ON DELETE CASCADE;
+alter table public.siu_watchlist add constraint siu_watchlist_place_id_fkey FOREIGN KEY (place_id) REFERENCES public.places(id) ON DELETE CASCADE;
+alter table public.siu_watchlist add constraint siu_watchlist_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
+alter table public.siu_watchlist add constraint siu_watchlist_indicator_id_fkey FOREIGN KEY (indicator_id) REFERENCES public.indicators(id) ON DELETE CASCADE;
+alter table public.siu_watchlist add constraint siu_watchlist_assigned_agent_fkey FOREIGN KEY (assigned_agent) REFERENCES public.profiles(id);
+alter table public.siu_watchlist add constraint siu_watchlist_entity_type_check CHECK (entity_type in ('person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'unknown'));
+alter table public.siu_watchlist add constraint siu_watchlist_priority_check CHECK (priority in ('routine', 'priority', 'high_priority', 'critical'));
+alter table public.siu_watchlist add constraint siu_watchlist_status_check CHECK (status in ('active', 'monitor', 'review_due', 'suspended', 'cleared', 'archived'));
+alter table public.siu_watchlist add constraint siu_watchlist_classification_check CHECK (classification is null or classification in ('siu', 'siu_restricted', 'siu_command', 'siu_compartmented'));
+-- Exactly one typed reference, and it must agree with entity_type. Without it
+-- the type could say 'person' while person_id is null and a stale label did the
+-- work -- the duplicate address book 20260903120000 exists to remove.
+alter table public.siu_watchlist add constraint siu_watchlist_reference_check CHECK (
+  (case when person_id is not null then 1 else 0 end
+ + case when vehicle_id is not null then 1 else 0 end
+ + case when gang_id is not null then 1 else 0 end
+ + case when place_id is not null then 1 else 0 end
+ + case when account_id is not null then 1 else 0 end
+ + case when indicator_id is not null then 1 else 0 end)
+  = case when entity_type = 'unknown' then 0 else 1 end
+  and (entity_type <> 'person' or person_id is not null)
+  and (entity_type <> 'vehicle' or vehicle_id is not null)
+  and (entity_type <> 'gang' or gang_id is not null)
+  and (entity_type <> 'place' or place_id is not null)
+  and (entity_type <> 'account' or account_id is not null)
+  and (entity_type <> 'indicator' or indicator_id is not null)
+  and (entity_type <> 'unknown' or nullif(btrim(coalesce(label, '')), '') is not null));
 alter table public.siu_watchlist add constraint siu_watchlist_expiry_future CHECK ((expires_at > created_at));
 alter table public.siu_watchlist enable row level security;
 create index siu_watchlist_entity_idx ON public.siu_watchlist USING btree (entity_type, entity_id);
@@ -3087,13 +3123,42 @@ create index siu_watchlist_active_idx ON public.siu_watchlist USING btree (expir
 create index siu_watchlist_case_idx ON public.siu_watchlist USING btree (case_id);
 create index siu_watchlist_created_by_idx ON public.siu_watchlist USING btree (created_by);
 create index siu_watchlist_removed_by_idx ON public.siu_watchlist USING btree (removed_by);
--- Â§25 watchlist. Unit-level rather than case-level. Two rules give it a spine:
+create index siu_watchlist_person_idx ON public.siu_watchlist USING btree (person_id);
+create index siu_watchlist_vehicle_idx ON public.siu_watchlist USING btree (vehicle_id);
+create index siu_watchlist_gang_idx ON public.siu_watchlist USING btree (gang_id);
+create index siu_watchlist_place_idx ON public.siu_watchlist USING btree (place_id);
+create index siu_watchlist_account_idx ON public.siu_watchlist USING btree (account_id);
+create index siu_watchlist_indicator_idx ON public.siu_watchlist USING btree (indicator_id);
+create index siu_watchlist_agent_idx ON public.siu_watchlist USING btree (assigned_agent);
+-- One LIVE watch per registry record, as a database fact rather than a UI check
+-- somebody can race. Partial, so a cleared or archived entry never blocks
+-- re-watching the same subject later.
+create unique index siu_watchlist_one_live_person ON public.siu_watchlist USING btree (person_id) WHERE (person_id is not null and status in ('active', 'monitor', 'review_due', 'suspended'));
+create unique index siu_watchlist_one_live_vehicle ON public.siu_watchlist USING btree (vehicle_id) WHERE (vehicle_id is not null and status in ('active', 'monitor', 'review_due', 'suspended'));
+create unique index siu_watchlist_one_live_gang ON public.siu_watchlist USING btree (gang_id) WHERE (gang_id is not null and status in ('active', 'monitor', 'review_due', 'suspended'));
+create unique index siu_watchlist_one_live_place ON public.siu_watchlist USING btree (place_id) WHERE (place_id is not null and status in ('active', 'monitor', 'review_due', 'suspended'));
+-- Â§25 watchlist. Unit-level rather than case-level. Three rules give it a spine:
 -- EXPIRY IS MANDATORY (expires_at NOT NULL, capped at 365 days per grant, so a
--- watch cannot become a permanent secret dossier on a named person), and it is
+-- watch cannot become a permanent secret dossier on a named person); it is
 -- readable by FIELD AGENTS ONLY -- private.siu_is_agent(), deliberately not
--- oversight, because the list can name the Director of CID. Removal keeps the
--- row: who was watched, why, and who stopped it is what makes it accountable.
--- Writers: siu_watch_add(), siu_watch_extend(), siu_watch_remove().
+-- oversight, because the list can name the Director of CID; and every entry
+-- REFERENCES a canonical registry record rather than copying its name, so a
+-- correction made in CID is a correction here (20260903120000). `label` is a
+-- fallback used only by entity_type = 'unknown'. Closing keeps the row: who was
+-- watched, why, and who stopped it is what makes it accountable.
+-- Writers: siu_watch_add(), siu_watch_review(), siu_watch_extend(),
+-- siu_watch_remove(). Readers: siu_watchlist_live() joins the registry for the
+-- display name; siu_person_dossier() gathers one person across every registry
+-- and is SECURITY INVOKER so each table's own policy does the gating;
+-- siu_registry_search() offers records to attach a new watch to.
+--
+-- siu_deconflict() matches this table through the typed references and counts
+-- ALL FOUR live statuses. It previously matched w.label and status = 'active'
+-- alone, which meant a correctly linked watch, or one stepped down to
+-- monitoring, vanished from the one check whose job is to stop two agents
+-- working the same subject (fixed in 20260903140000). The same status widening
+-- was applied to the watch_active / watch_expiring_14d figures reported by
+-- siu_command_dashboard() and siu_oversight_supplement().
 
 create table public.siu_access_requests (
   id uuid not null default gen_random_uuid(),

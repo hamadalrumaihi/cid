@@ -8,6 +8,72 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### The SIU watchlist points at CID's records instead of copying them
+
+`siu_watchlist` was built with an untyped `entity_id` carrying no foreign key
+and a `label` holding a copy of the subject's name. That is a second, worse
+address book: correct a name in CID and the watchlist keeps showing what was
+true on the day somebody typed it.
+
+It was not hypothetical. The table held one entry created by a live user — a
+watch declared to be on a *person*, with no person attached, just the typed name
+`tobi butler` — while that person already existed in `persons` as a Person of
+Interest with a recorded gang affiliation. None of that reached the watchlist.
+
+Every entry now references a canonical record through a real foreign key
+(`person_id`, `vehicle_id`, `gang_id`, `place_id`, `account_id`,
+`indicator_id`), with a constraint requiring exactly one and pinning it to
+`entity_type` so the two cannot disagree. The name is read through the link on
+every read. The add form searches the registry instead of offering a text box;
+typing a name is possible only by explicitly choosing "not in the registry",
+which creates an unidentified stub to attach later. Partial unique indexes make
+"already on the watchlist" a database fact rather than a UI check somebody can
+race. `organization` was dropped — it had no table to point at, so no watch of
+that type was constructible.
+
+The existing row was backfilled to its registry record by exact name (audited);
+anything ambiguous would have been demoted to `unknown` rather than guessed at,
+because attaching a watch to the wrong person is worse than leaving it
+unattached.
+
+**Two things this quietly broke, found and fixed in the same pass.**
+`siu_watch_remove()` wrote `status = 'removed'`, a value the new vocabulary
+refuses — every removal would have failed at the database. And `siu_deconflict()`
+matched watches on `label` and on `status = 'active'` alone, so a *correctly
+linked* watch, or one stepped down to monitoring, vanished from the one check
+whose job is to stop two agents burning the same operation: the better the data
+got, the more the safety check missed. Deconfliction now resolves a name through
+the registry and counts all four live statuses, and the same widening was
+applied to the `watch_active` / `watch_expiring_14d` figures on the command
+dashboard and the oversight report.
+
+### A person dossier, assembled from the registries
+
+`siu_person_dossier()` is what the reference was for: one subject gathered live
+across persons, gangs and memberships, registered and observed vehicles,
+locations, online accounts and handles, associates, narcotics, surveillance, and
+the unit's own watch, targets and intelligence.
+
+It is **SECURITY INVOKER** — the only SIU RPC that is, and deliberately. It
+performs no action, so it runs as the caller and each of the fifteen tables it
+reads is filtered by its own existing policy. It restates no rule, so it cannot
+disagree with one. An unauthorized caller therefore gets no error, just the
+registry half and empty SIU arrays; the UI says "none you can see", never "none
+exists". Verified live: X-1 sees the watch and its history, a CID detective
+calling the same function on the same person sees the person and zero SIU rows.
+
+Fact and intelligence are shown apart using the columns the registries already
+keep — `link_status`, `confidence`, `provenance`, `ownership_confidence`,
+`verification_status`. A vehicle registered to the subject and a plate an
+informant mentioned are both there, and the record says which is which. A
+registered informant appears as codename and status only, so an agent cannot
+target somebody else's source by accident without learning anything about how
+that source is run.
+
+Each tab's primary action is now on the tab: **+ Add to watchlist**, a review
+that records what was decided, and an empty state that says what to do next
+rather than only that there is nothing there.
+
 ### The Director of CID can ask X-1 to see one investigation
 
 He is the unit's nominal boss and hands-off: no standing, no caseload, no

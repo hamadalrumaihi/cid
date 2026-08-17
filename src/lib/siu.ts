@@ -879,60 +879,299 @@ export async function fetchSiuIntelQuality(): Promise<SiuIntelQuality> {
 // §25 Watchlist
 // ---------------------------------------------------------------------------
 
+/** A watch names a record in a shared registry — it does not describe one.
+ *
+ *  `organization` is gone from this list. It never had a registry table to
+ *  point at, so under the reference constraint added in 20260903120000 there is
+ *  nothing a watch of that type could reference. An organization the registry
+ *  knows is a `gang`; one it does not is `unknown`.
+ *
+ *  `unknown` is the only type that still carries a typed name, and it exists
+ *  precisely so an agent is never forced to invent a registry record in order
+ *  to record that they are watching something. It is a stub to be attached
+ *  later, not a licence to keep the address book. */
 export const SIU_WATCH_ENTITY_TYPES = [
-  'person', 'vehicle', 'gang', 'place', 'organization', 'account', 'indicator', 'unknown',
+  'person', 'vehicle', 'gang', 'place', 'account', 'indicator', 'unknown',
+] as const
+
+/** The types that resolve to a registry record, in the order the add form
+ *  offers them. `unknown` is deliberately excluded — it is the fallback, and
+ *  putting it in the picker alongside the real ones invites it to be chosen. */
+export const SIU_WATCH_REGISTRY_TYPES = [
+  'person', 'vehicle', 'gang', 'place', 'account', 'indicator',
 ] as const
 
 export const SIU_WATCH_ENTITY_LABEL: Record<string, string> = {
   person: 'Person', vehicle: 'Vehicle', gang: 'Gang', place: 'Place',
-  organization: 'Organization', account: 'Account', indicator: 'Indicator',
-  unknown: 'Unknown',
+  account: 'Account', indicator: 'Indicator', unknown: 'Unidentified',
 }
 
-export const SIU_WATCH_PRIORITIES = ['routine', 'elevated', 'urgent'] as const
+export const SIU_WATCH_PRIORITIES =
+  ['routine', 'priority', 'high_priority', 'critical'] as const
 
 export const SIU_WATCH_PRIORITY_LABEL: Record<string, string> = {
-  routine: 'Routine', elevated: 'Elevated', urgent: 'Urgent',
+  routine: 'Routine', priority: 'Priority',
+  high_priority: 'High priority', critical: 'Critical',
 }
+
+/** Statuses a watch can hold. The first four are LIVE — being monitored now.
+ *  `cleared` and `archived` are history and are kept, because ending the
+ *  monitoring is not a reason to erase the record of who was watched and why. */
+export const SIU_WATCH_LIVE_STATUSES =
+  ['active', 'monitor', 'review_due', 'suspended'] as const
+
+export const SIU_WATCH_STATUS_LABEL: Record<string, string> = {
+  active: 'Active', monitor: 'Monitoring', review_due: 'Review due',
+  suspended: 'Suspended', cleared: 'Cleared', archived: 'Archived',
+}
+
+export const SIU_WATCH_REVIEW_OUTCOMES = [
+  { value: 'continue', label: 'Continue the watch' },
+  { value: 'monitor', label: 'Step down to monitoring' },
+  { value: 'suspend', label: 'Suspend it' },
+  { value: 'clear', label: 'Clear the subject' },
+  { value: 'archive', label: 'Archive the entry' },
+] as const
 
 export const siuWatchEntityLabel = (t?: string | null) =>
   (t && SIU_WATCH_ENTITY_LABEL[t]) || t || '—'
+export const siuWatchStatusLabel = (s?: string | null) =>
+  (s && SIU_WATCH_STATUS_LABEL[s]) || s || '—'
 export const siuWatchPriorityTint = (p?: string | null): string =>
-  p === 'urgent' ? 'bg-rose-500/15 text-rose-300'
-  : p === 'elevated' ? 'bg-amber-500/15 text-amber-300'
+  p === 'critical' ? 'bg-rose-500/15 text-rose-300'
+  : p === 'high_priority' ? 'bg-orange-500/15 text-orange-300'
+  : p === 'priority' ? 'bg-amber-500/15 text-amber-300'
   : 'bg-white/5 text-slate-300'
 
+/** One row of `siu_watchlist_live()`.
+ *
+ *  `display_name` is NOT stored on the watch. It is read from the registry on
+ *  every call, so a name corrected in CID is corrected here at once. That is
+ *  the whole reason the reference exists, and it is why nothing in this file
+ *  should ever cache it back onto a watch row. */
 export interface SiuWatchEntry {
   id: string
   entity_type: string
   entity_id: string | null
-  label: string
+  display_name: string
+  secondary: string | null
   reason: string
-  case_id: string | null
   priority: string
+  status: string
+  classification: string | null
+  source: string | null
+  notes: string | null
+  case_id: string | null
+  case_number: string | null
+  assigned_agent: string | null
+  assigned_agent_name: string | null
   expires_at: string
   review_due_at: string | null
-  status: string
-  removed_at: string | null
-  removed_by: string | null
-  removal_reason: string | null
-  created_by: string | null
   created_at: string
+  created_by: string | null
+  removed_at: string | null
+  removal_reason: string | null
+  review_overdue: boolean
+  days_left: number
 }
 
 /** Mirrors `private.siu_watch_live()`. Expiry is read off the CLOCK, not off
  *  the status column — a stale 'active' row must never keep a watch alive past
  *  its end date, on the server or on screen. */
 export const watchLive = (w: { status?: string | null; expires_at?: string | null }) =>
-  w.status === 'active' && !!w.expires_at && new Date(w.expires_at) > new Date()
+  !!w.status
+  && (SIU_WATCH_LIVE_STATUSES as readonly string[]).includes(w.status)
+  && !!w.expires_at && new Date(w.expires_at) > new Date()
 
 export const watchExpiringWithin = (w: SiuWatchEntry, days: number) =>
   watchLive(w) && new Date(w.expires_at).getTime() - Date.now() < days * 86_400_000
 
 export async function fetchSiuWatchlist(): Promise<SiuWatchEntry[]> {
-  const rows = await list('siu_watchlist', { order: 'created_at', ascending: false, limit: 300 })
-  return rows as unknown as SiuWatchEntry[]
+  const res = await rpc('siu_watchlist_live', {})
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuWatchEntry[] | null) ?? []
 }
+
+/** A registry record offered by the add form.
+ *
+ *  `already_watched` comes from the database rather than from filtering the
+ *  loaded watchlist in React: the caller may hold a watch they can see and one
+ *  they cannot, and a UI-side check would then offer to create a duplicate
+ *  that the unique index refuses at save time. */
+export interface SiuRegistryMatch {
+  id: string
+  display_name: string
+  secondary: string | null
+  already_watched: boolean
+}
+
+export async function siuRegistrySearch(
+  entityType: string, q: string,
+): Promise<SiuRegistryMatch[]> {
+  if (!q.trim()) return []
+  const res = await rpc('siu_registry_search', { p_entity_type: entityType, p_q: q.trim() })
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuRegistryMatch[] | null) ?? []
+}
+
+// ---------------------------------------------------------------------------
+// The person dossier
+// ---------------------------------------------------------------------------
+
+/** What `siu_person_dossier()` returns.
+ *
+ *  ── Every SIU field here is OPTIONAL, and that is load-bearing ────────────
+ *  The RPC is SECURITY INVOKER, so an unauthorized caller does not get an
+ *  error — they get the registry half and empty SIU arrays, because their
+ *  policies returned no rows. Nothing in this file should treat an absent
+ *  `watch` as "no watch exists"; it means "no watch this caller may see". The
+ *  UI wording has to respect that distinction, exactly as the deconfliction
+ *  panel does.
+ *
+ *  ── Fact and intelligence are not merged ─────────────────────────────────
+ *  Each relationship carries the registry's own qualifiers — `link_status`,
+ *  `confidence`, `provenance`, `ownership_confidence` — rather than a flag
+ *  this file invented. A vehicle registered to someone and a plate an
+ *  informant mentioned are both here, and they are told apart by the columns
+ *  the database already keeps, so there is only ever one answer to how
+ *  strongly a link is held. */
+export interface SiuDossierLink {
+  link_status?: string | null
+  confidence?: string | null
+  provenance?: string | null
+}
+
+export interface SiuPersonDossier {
+  person: {
+    id: string; name: string; alias: string | null; dob: string | null
+    phone: string | null; status: string | null; classification: string | null
+    confidence: string | null; priority: string | null; lifecycle: string
+    mugshot_url: string | null; notes: string | null
+    ccw: boolean | null; vch: number | null; felony_count: number | null
+    merged_into: string | null
+    reviewed_at: string | null; next_review_at: string | null
+    identity: Record<string, unknown>; properties: Record<string, unknown>
+    intelligence_summary: Record<string, unknown>
+    bolo: {
+      active: boolean; reason: string | null; risk: string | null
+      instructions: string | null; issued_at: string | null
+      expires_at: string | null; case_id: string | null
+    }
+  }
+  gang: {
+    id: string; name: string; threat_level: string | null
+    classification: string | null; status: string | null; confidence: string | null
+  } | null
+  gang_memberships: (SiuDossierLink & {
+    id: string; gang_id: string | null; gang_name: string | null
+    rank: string | null; callsign: string | null; status: string | null
+    joined_at: string | null; left_at: string | null; note: string | null
+    case_id: string | null; reviewed_at: string | null
+  })[]
+  vehicles_registered: {
+    id: string; plate: string; model: string | null; color: string | null
+    gang_id: string | null; notes: string | null
+  }[]
+  vehicles_linked: (SiuDossierLink & {
+    id: string; vehicle_id: string; plate: string; model: string | null
+    color: string | null; role: string | null; note: string | null
+    first_observed: string | null; last_confirmed: string | null
+  })[]
+  places: (SiuDossierLink & {
+    id: string; place_id: string; name: string; type: string | null
+    area: string | null; role: string | null; note: string | null
+    first_observed: string | null; last_confirmed: string | null
+  })[]
+  accounts: {
+    link_id: string; account_id: string; platform: string | null
+    handle: string | null; display_name: string | null; profile_url: string | null
+    category: string | null; state: string | null; restricted: boolean | null
+    lifecycle: string | null; is_impersonation: boolean | null
+    is_compromised: boolean | null
+    ownership_confidence: string | null; source: string | null
+    notes: string | null; confirmed_at: string | null
+    handles: { handle: string; is_current: boolean | null
+               observed_at: string | null; source: string | null }[]
+  }[]
+  relationships: (SiuDossierLink & {
+    id: string; other_id: string; other_name: string
+    relationship: string | null; rel_status: string | null; note: string | null
+    first_observed: string | null; last_confirmed: string | null
+  })[]
+  narcotics: (SiuDossierLink & {
+    id: string; narcotic_id: string; name: string; role: string | null
+    first_observed: string | null; last_confirmed: string | null
+  })[]
+  watch: {
+    id: string; reason: string; priority: string; status: string
+    classification: string | null; source: string | null; notes: string | null
+    case_id: string | null; assigned_agent: string | null
+    expires_at: string; review_due_at: string | null; created_at: string
+    live: boolean
+  } | null
+  watch_history: {
+    id: string; reason: string; priority: string; status: string
+    created_at: string; removed_at: string | null; removal_reason: string | null
+  }[]
+  siu_targets: {
+    id: string; case_id: string; designation: string | null
+    role_in_network: string | null; priority: string | null; notes: string | null
+    cleared_at: string | null; created_at: string
+  }[]
+  siu_intelligence: {
+    id: string; case_id: string | null; note_type: string | null; body: string
+    severity: string | null; source_type: string | null
+    source_reliability: string | null; info_credibility: string | null
+    review_due_at: string | null; last_reviewed_at: string | null
+    review_outcome: string | null; resolved_at: string | null; created_at: string
+  }[]
+  siu_source: { id: string; codename: string; status: string | null
+                case_id: string | null } | null
+  surveillance: {
+    id: string; case_id: string | null; observed_at: string
+    place_id: string | null; location_text: string | null; activity: string | null
+    confidence: string | null; verification_status: string | null
+    restricted: boolean | null
+  }[]
+}
+
+/** Null when the caller cannot see the person — which reads the same as the
+ *  person not existing, deliberately. */
+export async function fetchSiuPersonDossier(
+  personId: string,
+): Promise<SiuPersonDossier | null> {
+  const res = await rpc('siu_person_dossier', { p_person: personId })
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuPersonDossier | null) ?? null
+}
+
+/** How firmly a link is held, collapsed to three buckets for display ONLY.
+ *
+ *  The registry's own vocabulary is richer than this and is always shown
+ *  alongside; this exists so a list can be sorted and tinted, never so a
+ *  caller can ask "is it true?" and get a yes. `unconfirmed` is the default
+ *  for anything unlabelled, because an unqualified link is an unproven one. */
+export type SiuLinkStrength = 'confirmed' | 'probable' | 'unconfirmed'
+
+export function siuLinkStrength(l: SiuDossierLink & {
+  ownership_confidence?: string | null; rel_status?: string | null
+}): SiuLinkStrength {
+  const status = (l.link_status ?? l.rel_status ?? '').toLowerCase()
+  const conf = (l.confidence ?? l.ownership_confidence ?? '').toLowerCase()
+  if (status === 'refuted' || status === 'severed') return 'unconfirmed'
+  if (status === 'confirmed' || conf === 'confirmed' || conf === 'high') return 'confirmed'
+  if (conf === 'probable' || conf === 'medium' || status === 'probable') return 'probable'
+  return 'unconfirmed'
+}
+
+export const SIU_LINK_STRENGTH_LABEL: Record<SiuLinkStrength, string> = {
+  confirmed: 'Confirmed', probable: 'Probable', unconfirmed: 'Unconfirmed',
+}
+
+export const siuLinkStrengthTint = (s: SiuLinkStrength): string =>
+  s === 'confirmed' ? 'bg-emerald-500/15 text-emerald-300'
+  : s === 'probable' ? 'bg-amber-500/15 text-amber-300'
+  : 'bg-white/5 text-slate-400'
 
 // ---------------------------------------------------------------------------
 // §19 Deconfliction
@@ -963,7 +1202,13 @@ export interface SiuDeconflictResult {
   investigations?: SiuDeconflictHit[]
   other_interest?: number
   coordinate_with?: string | null
-  watchlist?: { id: string; label: string; priority: string; expires_at: string }[]
+  /** `label` here is resolved from the registry by `siu_deconflict()`, not read
+   *  off the watch row — a linked watch stores no name. See
+   *  20260903140000 for why matching by typed label alone was a safety bug. */
+  watchlist?: {
+    id: string; label: string; entity_type: string
+    priority: string; status: string; expires_at: string
+  }[]
 }
 
 export async function siuDeconflict(
