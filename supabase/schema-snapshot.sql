@@ -11341,6 +11341,15 @@ create index penal_charges_created_by_idx ON public.penal_charges USING btree (c
 --
 -- This function is the ONLY source of statutes for the client: src/lib/penal.ts
 -- is a cache over it and no longer carries a copy of the code.
+--
+-- penal_admin_overview() (20260907120000) is the administration read: it lists
+-- every version the caller can see with its charge, rule and schedule counts,
+-- and reports `is_admin` from private.penal_is_admin() itself. That last part
+-- is not a convenience -- penal_admins_sel is USING (penal_is_admin()), and the
+-- Portal Owner is an administrator WITHOUT a row in penal_administrators, so a
+-- client inferring adminness from that table would hide the publish action
+-- from the only person entitled to use it. SECURITY INVOKER, so every count is
+-- filtered by the caller's own policy and a non-administrator sees no draft.
 
 create table public.penal_substance_schedules (
   id uuid not null default gen_random_uuid(),

@@ -16,6 +16,7 @@ import { fmtUSD } from '@/lib/format'
 import { PENAL_LEVEL_TINT, penalSearch, penalSentence } from '@/lib/penal'
 import { usePenalCode } from '@/lib/usePenalCode'
 import { SearchIcon } from '@/components/shell/icons'
+import { PenalAdminPanel } from './PenalAdminPanel'
 
 export function PenalView() {
   const sp = useSearchParams()
@@ -69,6 +70,9 @@ export function PenalView() {
       {version && (
         <p className="t-readout mt-4 text-[11px] text-slate-600">IN FORCE: {version.toUpperCase()}</p>
       )}
+      {/* Renders nothing unless the server says the viewer administers the
+          penal code — see PenalAdminPanel. */}
+      <PenalAdminPanel />
     </div>
   )
 }

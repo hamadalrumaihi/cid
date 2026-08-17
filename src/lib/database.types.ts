@@ -10887,6 +10887,10 @@ export type Database = {
           version_name: string
         }[]
       }
+      penal_admin_overview: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       penal_current_reference: {
         Args: Record<PropertyKey, never>
         Returns: Json
