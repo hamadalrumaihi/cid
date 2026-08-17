@@ -8,6 +8,113 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### The Director of CID can ask X-1 to see one investigation
+
+He is the unit's nominal boss and hands-off: no standing, no caseload, no
+appointment authority. When he needs sight of a specific investigation he
+requests it **by case number** and X-1 decides.
+
+The hard part is enumeration. Because he sees no caseload, the form cannot
+validate the number — "unknown case" versus "submitted" would let him walk the
+case-number space and learn how many investigations exist and when each opened.
+So the number is stored as free text and never resolved at request time; X-1
+resolves it at decision time, and a request for a case that does not exist ends
+`denied`, worded identically to a real case being refused. He learns nothing
+from a refusal.
+
+Approval issues a §30 `siu_temporary_access` grant, so it inherits those bounds
+unchanged: one case, case file only, standard classification only, time-boxed,
+revocable, audited, and beaten by the §17 recusal veto. A compartmented
+investigation cannot be opened this way even by X-1 approving.
+
+Verified live: real and fabricated case numbers accepted identically; after
+approval he sees the granted case and its reports, and **zero** rows from
+`siu_case_notes`, `siu_targets` and the watchlist; standing stays `null`
+throughout; total visible SIU caseload is exactly the one granted case.
+
+The request card lives on his own My Desk, because with no standing he cannot
+reach the SIU workspace at all. X-1's decision queue sits in the SIU Intake
+section.
+
+### CID Director no longer holds SIU authority — reversing the SOP chain change
+
+Migration `20260823120000` read the unit's SOP as seating the **Director of
+CID** in the SIU chain and gave every active `role = 'director'` profile
+oversight standing ex officio. The final organisational model removes that:
+SIU's chain is **Attorney General → X-1 → Senior Special Agent → Special
+Agent**. CID command is powerful inside CID and does not command SIU.
+
+This matters more than a label. Oversight standing is not passive —
+`siu_can_appoint()` includes it, and `siu_remove()` lets an oversight holder
+**end an X-1's membership**. Under the old rule the Director of CID could
+dissolve the unit investigating CID. No amount of read-side compartmenting
+fixes an inversion at the appointment layer.
+
+Exactly one branch is deleted from `private.siu_standing()`. Unchanged: the
+**Attorney General** keeps ex-officio oversight (the AG *is* the reporting
+line), `profiles.is_owner` still resolves to `owner`, and an explicit
+`siu_memberships` row still confers standing on anyone — a Director genuinely
+appointed to SIU keeps it. Appointment is now the only route in for any CID
+rank.
+
+Live effect, verified: the serving Director of CID drops from `oversight` to
+`null` and SIU ceases to exist for them. A second director-role account carries
+`is_owner` and is unaffected, because that branch is evaluated first and is
+gate-independent.
+
+Seven unit tests encoded the old model and failed as soon as the branch went —
+they did exactly their job. All seven now pin the new chain, including a
+dedicated "leaves the Director of CID entirely outside the chain" case.
+
+### DELETE was the one write the CID↔SIU wall never covered — closed
+
+Found while giving the SIU workspace CID's full navigation. **Pre-existing**,
+and it affected every SIU member.
+
+`private.can_delete()` is a raw rank check — `role in ('bureau_lead',
+'deputy_director','director')` read straight off the profile. No case, no
+department. `can_delete_case_child()` used it verbatim for the CID branch, with
+no case predicate. Inside CID that is invisible, because command reaches every
+CID case anyway. Across the departmental wall it was wide open: an SIU member
+cannot edit a single field of a CID case, but one holding a CID command rank
+satisfied `can_delete()` — and DELETE never consults the write wall.
+
+Probed live as a real Special Agent in Charge with CID rank `bureau_lead`:
+`can_access_case(cid case)` **false**, `can_delete()` **true**, and a CID
+report, task and RICO case all deleted. Both appointed SIU members hold a
+qualifying rank. (The case row survived — `cases_del` has always paired the two
+correctly, which is exactly the shape the children were missing.)
+
+The CID branch is now `can_delete() AND can_access_case(p_case)`. **No CID user
+gains or loses a single delete**: every rank `can_delete()` accepts is command,
+and `can_access_case()` admits `is_command()`, so the term is always true for a
+CID member on a CID case. Verified both directions live — SIU blocked on
+report, task, RICO and predicate acts; the CID Bureau Lead unchanged at 1 row
+each. A null case id now returns false instead of falling through to true.
+
+`rico_cases_del` / `predicate_acts_del` were never routed through the chokepoint
+and joined it here. `tests/rls/v170.test.ts` pins the whole thing, with a CID
+Bureau Lead as the control so a future fix that costs CID a delete fails loudly.
+
+### RICO now reads on the SIU read superset
+
+`rico_cases_sel` and `predicate_acts_sel` were on `can_access_case()` — the
+write wall — while every other case child moved to `can_read_case()` back in
+Phase 1. RICO was missed, so an SIU agent could read a CID case's reports,
+evidence, media and tasks but see zero of its RICO records. SELECT only; every
+write stays on the wall. `case_messages` remains the one deliberate exclusion.
+
+### SIU navigation reaches all of CID
+
+Following on from the Cases entry: the SIU workspace now carries CID's entire
+navigation, tab for tab — Command, Cases (with operations, legal, RICO),
+Intelligence (all fourteen registries and analysis screens), Reference and
+Oversight. That is navigation, not access. Shared registries (persons, gangs,
+places, vehicles, accounts, indicators, media) are one master dataset and SIU
+reads and writes them exactly as CID does; case surfaces are read-only under
+the SIU read superset; owner- and command-only screens self-gate exactly as
+they do for a CID detective without the rank.
+
 ### SIU can reach CID cases without switching department
 
 SIU's broad read of CID has existed in RLS since Phase 1 —

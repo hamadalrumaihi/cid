@@ -33,12 +33,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
 import { list, rpc, withRetry } from '@/lib/db'
 import { useSiu } from '@/lib/useSiu'
+import { SiuAccessQueue } from './SiuAccessRequest'
 import {
   SIU_CASE_CATEGORIES, SIU_CLASSIFICATIONS, SIU_CONFLICT_RESOLUTIONS,
-  SIU_REFERRAL_DISPOSITIONS, SIU_STAGES, fetchSiuConflicts, fetchSiuReferrals,
+  SIU_REFERRAL_DISPOSITIONS, SIU_STAGES, fetchSiuAccessRequests, fetchSiuConflicts,
+  fetchSiuReferrals,
   siuCaseCategoryLabel, siuClassificationLabel, siuConflictStatusLabel,
   siuRecusesAccess, siuReferralCategoryLabel, siuReferralStatusLabel,
-  siuReferralStatusTint, siuStageLabel, type SiuConflict, type SiuReferral,
+  siuReferralStatusTint, siuStageLabel,
+  type SiuAccessRequest, type SiuConflict, type SiuReferral,
 } from '@/lib/siu'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
@@ -59,6 +62,7 @@ export function SiuIntakeSection() {
   const siu = useSiu()
   const [rows, setRows] = useState<SiuReferral[]>([])
   const [conflicts, setConflicts] = useState<SiuConflict[]>([])
+  const [access, setAccess] = useState<SiuAccessRequest[]>([])
   const [people, setPeople] = useState<Tables<'profiles'>[]>([])
   const [loading, setLoading] = useState(true)
   const [showClosed, setShowClosed] = useState(false)
@@ -66,12 +70,14 @@ export function SiuIntakeSection() {
 
   const load = useCallback(async () => {
     try {
-      const [r, k, p] = await Promise.all([
+      const [r, k, p, a] = await Promise.all([
         withRetry(() => fetchSiuReferrals()),
         withRetry(() => fetchSiuConflicts()),
         withRetry(() => list('profiles', { order: 'display_name', limit: 500 })),
+        // Command-only by RLS; an ordinary agent simply gets an empty list.
+        withRetry(() => fetchSiuAccessRequests()).catch((): SiuAccessRequest[] => []),
       ])
-      setRows(r); setConflicts(k); setPeople(p)
+      setRows(r); setConflicts(k); setPeople(p); setAccess(a)
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'danger')
     } finally { setLoading(false) }
@@ -223,6 +229,8 @@ export function SiuIntakeSection() {
           </ul>
         )}
       </Card>
+
+      {siu.isCommand && <SiuAccessQueue rows={access} onDone={() => void load()} />}
 
       {reviewing && (
         <ReviewModal

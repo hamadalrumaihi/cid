@@ -87,24 +87,34 @@ export const NAV_CATEGORIES: NavCategory[] = [
  *  context, labels and default filters differ; the underlying systems are the
  *  same ones CID uses (§8, §21).
  *
+ *  ── Full CID parity ───────────────────────────────────────────────────────
+ *  SIU now carries CID's entire navigation, tab for tab. That is NAVIGATION,
+ *  not access: every one of these routes is the same RLS-scoped view CID uses,
+ *  and the database decides what an SIU account sees in it. Concretely —
+ *
+ *   * SHARED REGISTRIES (persons, gangs, places, vehicles, accounts,
+ *     indicators, media, and the analysis screens over them) are one master
+ *     dataset for the platform. SIU reads and writes them exactly as CID does;
+ *     their policies are `private.is_active()`.
+ *   * CASE SURFACES are readable via the SIU read superset
+ *     (`private.siu_oversight_read()` → `can_read_case`) and NOT writable —
+ *     `can_access_case()`'s CID branch ends with `not is_siu_department()`.
+ *     The case screen renders read-only accordingly (`useSiu().caseReadOnly`).
+ *   * OWNER/COMMAND-ONLY surfaces (audit, devdocs, and the command staff parts
+ *     of Central Command) self-gate exactly as they do for a CID detective who
+ *     lacks the rank. An SIU account sees the ordinary nothing-here surface,
+ *     which is existing designed behaviour rather than a broken screen.
+ *
  *  The CID structure above is untouched: a CID member's portal is unchanged. */
 export const SIU_NAV_CATEGORIES: NavCategory[] = [
-  { id: 'siu-unit',   label: 'Unit',         tabs: ['siu'] },
-  // SIU's broad read of CID is a READ grant that has always existed in RLS
-  // (private.siu_oversight_read() feeding can_read_case). Until now there was
-  // no route to it, so an agent had to switch department to look at a CID
-  // case — which only the Owner and the AG can even do. This category adds the
-  // navigation, not the access: every row is still RLS-scoped, and every write
-  // to a CID case is refused because can_access_case()'s CID branch ends with
-  // `not is_siu_department()`. The case screen renders read-only accordingly
-  // (useSiu().caseReadOnly).
-  // 'operations' is deliberately absent: the SIU workspace has its own
-  // Operations section, and two routes to two different operation concepts
-  // under one label is how a workspace stops being legible.
-  { id: 'siu-cases',  label: 'Cases',        tabs: ['cases', 'case-files'] },
-  { id: 'siu-intel',  label: 'Intelligence', tabs: ['persons', 'gangs', 'places', 'vehicles', 'accounts', 'indicators', 'network', 'narcotics', 'media'] },
-  { id: 'siu-legal',  label: 'Legal',        tabs: ['legal'] },
-  { id: 'siu-ref',    label: 'Reference',    tabs: ['sops', 'penal'] },
+  // The SIU-owned workspace leads. Everything after it is CID's own navigation,
+  // tab for tab, in CID's order.
+  { id: 'siu-unit',      label: 'Unit',         tabs: ['siu'] },
+  { id: 'siu-command',   label: 'Command',      tabs: ['inbox', 'action', 'command', 'analytics', 'announce', 'heatmap', 'personnel'] },
+  { id: 'siu-cases',     label: 'Cases',        tabs: ['cases', 'operations', 'legal', 'case-files', 'rico'] },
+  { id: 'siu-intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'accounts', 'indicators', 'tips', 'network', 'narcotics', 'ballistics', 'modus', 'media', 'records'] },
+  { id: 'siu-ref',       label: 'Reference',    tabs: ['penal', 'sops', 'guide', 'devdocs'] },
+  { id: 'siu-oversight', label: 'Oversight',    tabs: ['calendar', 'shifts', 'audit'] },
 ]
 
 /** Labels that differ inside the SIU workspace. Anything absent falls back to
@@ -130,6 +140,13 @@ export const TAB_LABEL: Record<string, string> = {
  *  (vanilla parity untouched); the strip just draws labels/dividers. */
 export const SUBTAB_GROUPS: Record<string, { label: string; tabs: string[] }[]> = {
   intel: [
+    { label: 'Registries', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'accounts', 'indicators', 'tips'] },
+    { label: 'Analysis', tabs: ['network', 'narcotics', 'ballistics', 'modus'] },
+    { label: 'Archive', tabs: ['media', 'records'] },
+  ],
+  // Same grouping under SIU's category id, so the shared registries read the
+  // same way in both workspaces.
+  'siu-intel': [
     { label: 'Registries', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'accounts', 'indicators', 'tips'] },
     { label: 'Analysis', tabs: ['network', 'narcotics', 'ballistics', 'modus'] },
     { label: 'Archive', tabs: ['media', 'records'] },

@@ -3095,6 +3095,46 @@ create index siu_watchlist_removed_by_idx ON public.siu_watchlist USING btree (r
 -- row: who was watched, why, and who stopped it is what makes it accountable.
 -- Writers: siu_watch_add(), siu_watch_extend(), siu_watch_remove().
 
+create table public.siu_access_requests (
+  id uuid not null default gen_random_uuid(),
+  case_number_requested text not null,
+  reason text not null,
+  requested_by uuid not null,
+  requested_at timestamptz not null default now(),
+  status text not null default 'pending'::text,
+  decided_by uuid,
+  decided_at timestamptz,
+  decision_note text,
+  granted_access_id uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.siu_access_requests add constraint siu_access_requests_pkey PRIMARY KEY (id);
+alter table public.siu_access_requests add constraint siu_access_requests_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.siu_access_requests add constraint siu_access_requests_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id);
+alter table public.siu_access_requests add constraint siu_access_requests_granted_access_id_fkey FOREIGN KEY (granted_access_id) REFERENCES public.siu_temporary_access(id) ON DELETE SET NULL;
+alter table public.siu_access_requests add constraint siu_access_requests_status_check CHECK (status in ('pending', 'approved', 'denied', 'withdrawn'));
+alter table public.siu_access_requests enable row level security;
+create index siu_access_requests_pending_idx ON public.siu_access_requests USING btree (requested_at) WHERE (status = 'pending'::text);
+create index siu_access_requests_requester_idx ON public.siu_access_requests USING btree (requested_by);
+create index siu_access_requests_decided_by_idx ON public.siu_access_requests USING btree (decided_by);
+create index siu_access_requests_grant_idx ON public.siu_access_requests USING btree (granted_access_id);
+-- The Director of CID asks X-1 to see ONE investigation (20260902130000).
+-- case_number_requested is FREE TEXT and is deliberately NEVER resolved at
+-- request time: the Director sees none of SIU's caseload, so answering "no such
+-- investigation" for a bad number and "submitted" for a good one would let him
+-- walk the case-number space and learn how many investigations exist and when.
+-- Resolution happens at DECISION time, in front of X-1, who can already see the
+-- caseload. A request for a case that does not exist ends as 'denied', which is
+-- what a real case X-1 refuses also looks like.
+-- Approval issues a public.siu_temporary_access grant, so it inherits the \xc2\xa730
+-- bounds unchanged: one case, CASE FILE ONLY (never a siu_* table), standard
+-- classification only, time-boxed, revocable, audited, and beaten by the
+-- \xc2\xa717 recusal veto. A compartmented investigation cannot be opened this way
+-- even by X-1 approving -- siu_compartment_add() is the deliberate route.
+-- Writers: siu_request_case_access(), siu_withdraw_access_request(),
+-- siu_decide_access_request().
+
 create table public.siu_temporary_access (
   id uuid not null default gen_random_uuid(),
   case_id uuid not null,
@@ -8333,7 +8373,9 @@ create policy places_upd on public.places
 
 create policy predicate_acts_del on public.predicate_acts
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((EXISTS ( SELECT 1
+   FROM public.rico_cases r
+  WHERE ((r.id = predicate_acts.rico_case_id) AND private.can_delete_case_child(r.case_id)))));
 
 create policy predicate_acts_ins on public.predicate_acts
   as permissive for insert to authenticated
@@ -8345,7 +8387,7 @@ create policy predicate_acts_sel on public.predicate_acts
   as permissive for select to authenticated
   using ((EXISTS ( SELECT 1
    FROM public.rico_cases r
-  WHERE ((r.id = predicate_acts.rico_case_id) AND private.can_access_case(r.case_id)))));
+  WHERE ((r.id = predicate_acts.rico_case_id) AND private.can_read_case(r.case_id)))));
 
 create policy predicate_acts_upd on public.predicate_acts
   as permissive for update to authenticated
@@ -8451,7 +8493,7 @@ create policy reports_upd on public.reports
 
 create policy rico_cases_del on public.rico_cases
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using (private.can_delete_case_child(case_id));
 
 create policy rico_cases_ins on public.rico_cases
   as permissive for insert to authenticated
@@ -8459,7 +8501,7 @@ create policy rico_cases_ins on public.rico_cases
 
 create policy rico_cases_sel on public.rico_cases
   as permissive for select to authenticated
-  using (private.can_access_case(case_id));
+  using (private.can_read_case(case_id));
 
 create policy rico_cases_upd on public.rico_cases
   as permissive for update to authenticated
@@ -8608,6 +8650,10 @@ create policy siu_conflicts_sel on public.siu_conflicts
 create policy siu_watchlist_sel on public.siu_watchlist
   as permissive for select to authenticated
   using (private.siu_is_agent());
+
+create policy siu_access_requests_sel on public.siu_access_requests
+  as permissive for select to authenticated
+  using (((requested_by = ( SELECT auth.uid() AS uid)) OR private.siu_is_command()));
 
 create policy siu_temp_access_sel on public.siu_temporary_access
   as permissive for select to authenticated
@@ -10736,17 +10782,24 @@ create policy wl_sel on public.watchlist
 -- the whole surveillance domain and its records are automatically invisible to
 -- CID. Definitive SQL in supabase/migrations/20260822120000_siu_phase2.sql.
 
--- SIU chain of command (20260823120000_siu_sop_chain_of_command) — the unit's
--- own SOP made authoritative over the earlier architecture amendment.
--- Commissioner's Office -> Director of CID -> Special Agent in Charge (X-1) ->
--- SIU Special Agents. ADDITIVE ONLY; still a complete no-op for every account
--- while the release gate is closed.
+-- SIU CHAIN OF COMMAND (20260902120000, REVERSING 20260823120000):
+--   Attorney General -> Special Agent in Charge (X-1) -> Senior Special Agent
+--   -> Special Agent.  The Portal Owner sits above during the build phase.
 --
--- RE-EMITTED private.siu_standing(uuid): ONE new branch — an active profile
--- with role = 'director' resolves to 'oversight', the same standing the
--- Attorney General already held. An appointed SIU role still wins, so a
--- Director who is also X-1 is X-1. The Commissioner's Office has no portal
--- identity; the Portal Owner is the platform's equivalent top authority.
+-- 20260823120000 read the unit's SOP as seating the DIRECTOR OF CID in the SIU
+-- chain and gave every active role = 'director' profile oversight standing ex
+-- officio. That branch is DELETED. Oversight standing is not passive --
+-- siu_can_appoint() includes it and siu_remove() lets it end an X-1's
+-- membership -- so the Director of CID could have dissolved the unit
+-- investigating CID. CID command is powerful inside CID and does not command
+-- SIU.
+--
+-- private.siu_standing(uuid) now resolves, in order: profiles.is_owner ->
+-- 'owner' (gate-independent); then, only while the gate is open, an appointed
+-- siu_memberships role; an oversight-only appointment; and the ATTORNEY
+-- GENERAL ex officio (never a fixture, 20260829120000). Nothing else. A
+-- Director appointed to SIU keeps standing through the membership branch --
+-- appointment is the only route in for any CID rank.
 --
 -- NEW PRIVATE HELPER private.siu_case_read(uuid): the READ superset for an SIU
 -- investigation — siu_case_access() OR "base 'siu' classification and the
@@ -10798,6 +10851,28 @@ create policy wl_sel on public.watchlist
 -- DELETE grant to authenticated, so evidence_del was already unreachable; it
 -- is re-emitted anyway so a future grant cannot silently reopen the hole.
 -- Definitive SQL in supabase/migrations/20260823130000_siu_case_delete_wall.sql.
+--
+-- 20260901130000 CLOSED THE OTHER HALF OF THE SAME HOLE. can_delete_case_child's
+-- CID branch was can_delete() VERBATIM -- a raw profiles.role check that knows
+-- nothing about cases OR departments. An SIU member holding a CID rank of
+-- bureau_lead or above therefore satisfied it, and DELETE is the one write the
+-- `not is_siu_department()` term in can_access_case() never covered. Probed
+-- live as a real Special Agent in Charge with CID rank bureau_lead:
+-- can_access_case(cid case) FALSE, can_delete() TRUE, and a CID report, task
+-- and RICO case all deleted. Both currently appointed SIU members hold a
+-- qualifying CID rank. The CID branch is now
+-- `can_delete() AND can_access_case(p_case)`, which changes NOTHING for CID --
+-- every rank can_delete() accepts is command, and can_access_case() admits
+-- is_command() -- and a null p_case now returns false instead of falling
+-- through to true. rico_cases_del and predicate_acts_del joined the chokepoint
+-- at the same time, having never been routed through it.
+--
+-- 20260901120000 moved rico_cases_sel / predicate_acts_sel from
+-- can_access_case() to can_read_case(). Every other case child was put on the
+-- read superset in 20260820120000 and RICO was simply missed, so SIU and
+-- oversight could read a case's reports, evidence, media and tasks but not the
+-- record saying it is an enterprise prosecution. SELECT only; every write stays
+-- on can_access_case(). case_messages remains the one deliberate exclusion.
 
 -- §14 Assume SIU Control (20260824120000_siu_assume_control) — SIU takes over a
 -- live CID case. NEW COLUMNS on public.cases: siu_assumed_at, siu_assumed_by
@@ -10857,7 +10932,7 @@ create policy wl_sel on public.watchlist
 -- Every one is gated on private.siu_case_access() — the WRITE wall — and never
 -- on private.siu_case_read(). That is deliberate: the SOP chain change let
 -- oversight standing read a standard investigation's case file, and oversight
--- must not extend to raw tradecraft, because the Director of CID may be the
+-- must not extend to raw tradecraft, because an oversight holder may be the
 -- SUBJECT of a source report, a legend, an intercept or an allegation.
 -- siu_exports is the single exception and rides siu_case_read, because an
 -- export log is an accountability record rather than tradecraft.

@@ -410,14 +410,15 @@ export function siuStanding(ctx: SiuContext): SiuStanding | null {
   // Profile type does not carry is_test and deliberately does not model it:
   // fixtures never render the UI, and useSiu() prefers the server-resolved
   // standing from siu_department_context() anyway.
+  // The Attorney General is SIU's reporting line, so oversight is ex officio.
   if (ctx.justiceRole === 'attorney_general') return 'oversight'
-  // Director of CID — SIU's command authority per the unit's SOP. Oversight
-  // standing only: departmental administration and standard investigations,
-  // never restricted/command/compartmented ones, so an investigation INTO the
-  // Director stays possible by classifying it above 'siu' — or, before the unit
-  // is even sure, by keeping it a preliminary inquiry (§15), which oversight
-  // cannot see at ANY classification. See siuCaseAccess().
-  if (p.role === 'director') return 'oversight'
+  // NOTE: there is deliberately NO branch for `p.role === 'director'`.
+  // CID command is powerful inside CID and does not command SIU. Oversight
+  // standing carries appointment authority (siuCanAppoint) and siu_remove()
+  // lets it end an X-1's membership — so a CID Director holding it could
+  // dissolve the unit investigating CID. Removed in migration 20260902120000.
+  // A Director who is genuinely appointed to SIU still holds standing through
+  // the membership branch above; the CID role alone confers nothing.
   return null
 }
 
@@ -1019,6 +1020,78 @@ export async function fetchSiuTempAccess(caseId?: string): Promise<SiuTempAccess
 }
 
 // ---------------------------------------------------------------------------
+// Director access requests — asking X-1 to see ONE investigation
+// ---------------------------------------------------------------------------
+
+/** May this account ask SIU for sight of an investigation?
+ *
+ *  The Director of CID, and only the Director. This is the ONE place in the SIU
+ *  model where a CID role confers something — and what it confers is the right
+ *  to ASK. It grants no visibility whatsoever; X-1 decides, and a pending
+ *  request reveals nothing about whether the case number even exists. */
+export const siuMayRequestAccess = (ctx: SiuContext) =>
+  !!ctx.profile?.active && ctx.profile.role === 'director'
+
+export const SIU_ACCESS_REQUEST_STATUSES = ['pending', 'approved', 'denied', 'withdrawn'] as const
+
+export const SIU_ACCESS_REQUEST_STATUS_LABEL: Record<string, string> = {
+  pending: 'Awaiting X-1',
+  approved: 'Approved',
+  denied: 'Declined',
+  withdrawn: 'Withdrawn',
+}
+
+export const siuAccessStatusLabel = (s?: string | null) =>
+  (s && SIU_ACCESS_REQUEST_STATUS_LABEL[s]) || s || '—'
+
+export const siuAccessStatusTint = (s?: string | null): string =>
+  s === 'approved' ? 'bg-emerald-500/15 text-emerald-300'
+  : s === 'denied' ? 'bg-rose-500/15 text-rose-300'
+  : s === 'pending' ? 'bg-amber-500/15 text-amber-300'
+  : 'bg-white/5 text-slate-300'
+
+/** The requester's own view. Deliberately carries no case id, title or
+ *  classification — nothing that would confirm the number corresponds to a real
+ *  investigation. `access_expires_at` is non-null only once access was granted. */
+export interface SiuMyAccessRequest {
+  id: string
+  case_number: string
+  reason: string
+  requested_at: string
+  status: string
+  decided_at: string | null
+  decision_note: string | null
+  access_expires_at: string | null
+}
+
+/** X-1's queue row. Command can see who asked and for what. */
+export interface SiuAccessRequest {
+  id: string
+  case_number_requested: string
+  reason: string
+  requested_by: string
+  requested_at: string
+  status: string
+  decided_by: string | null
+  decided_at: string | null
+  decision_note: string | null
+  granted_access_id: string | null
+}
+
+export async function fetchMySiuAccessRequests(): Promise<SiuMyAccessRequest[]> {
+  const res = await rpc('siu_my_access_requests', {})
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuMyAccessRequest[] | null) ?? []
+}
+
+export async function fetchSiuAccessRequests(): Promise<SiuAccessRequest[]> {
+  const rows = await list('siu_access_requests', {
+    order: 'requested_at', ascending: false, limit: 100,
+  })
+  return rows as unknown as SiuAccessRequest[]
+}
+
+// ---------------------------------------------------------------------------
 // §35/§36/§53 Dashboards
 // ---------------------------------------------------------------------------
 
@@ -1352,6 +1425,9 @@ export const SIU_AUDIT_LABEL: Record<string, string> = {
   SIU_WATCH_REMOVED: 'Removed from the watchlist',
   SIU_TEMP_ACCESS_GRANTED: 'Supporting access granted',
   SIU_TEMP_ACCESS_REVOKED: 'Supporting access ended',
+  SIU_ACCESS_REQUESTED: 'Access requested',
+  SIU_ACCESS_DECIDED: 'Access request decided',
+  SIU_ACCESS_WITHDRAWN: 'Access request withdrawn',
 }
 
 export const siuAuditLabel = (a: string) => SIU_AUDIT_LABEL[a] ?? a
