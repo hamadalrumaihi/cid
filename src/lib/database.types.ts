@@ -6369,6 +6369,243 @@ export type Database = {
           },
         ]
       }
+      penal_administrators: {
+        Row: {
+          granted_at: string
+          granted_by: string | null
+          reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          user_id: string
+        }
+        Insert: {
+          granted_at?: string
+          granted_by?: string | null
+          reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          user_id?: string
+        }
+        Update: {
+          granted_at?: string
+          granted_by?: string | null
+          reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      penal_charges: {
+        Row: {
+          archive_reason: string | null
+          archived_at: string | null
+          archived_by: string | null
+          charge_class: string
+          code: string | null
+          created_at: string
+          created_by: string | null
+          definition: string | null
+          fine: number | null
+          id: string
+          is_modifier: boolean
+          is_rico: boolean
+          jail_months: number | null
+          judge_set_fine: boolean
+          judge_set_jail: boolean
+          lifecycle: string
+          needs_code: boolean
+          offense: string
+          pd_exempt: boolean
+          penal_title: string | null
+          source_row: number | null
+          special_notes: string | null
+          stackable: boolean
+          substance_schedule: number | null
+          updated_at: string
+          version_id: string
+        }
+        Insert: {
+          archive_reason?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          charge_class?: string
+          code?: string | null
+          created_at?: string
+          created_by?: string | null
+          definition?: string | null
+          fine?: number | null
+          id?: string
+          is_modifier?: boolean
+          is_rico?: boolean
+          jail_months?: number | null
+          judge_set_fine?: boolean
+          judge_set_jail?: boolean
+          lifecycle?: string
+          needs_code?: boolean
+          offense?: string
+          pd_exempt?: boolean
+          penal_title?: string | null
+          source_row?: number | null
+          special_notes?: string | null
+          stackable?: boolean
+          substance_schedule?: number | null
+          updated_at?: string
+          version_id?: string
+        }
+        Update: {
+          archive_reason?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          charge_class?: string
+          code?: string | null
+          created_at?: string
+          created_by?: string | null
+          definition?: string | null
+          fine?: number | null
+          id?: string
+          is_modifier?: boolean
+          is_rico?: boolean
+          jail_months?: number | null
+          judge_set_fine?: boolean
+          judge_set_jail?: boolean
+          lifecycle?: string
+          needs_code?: boolean
+          offense?: string
+          pd_exempt?: boolean
+          penal_title?: string | null
+          source_row?: number | null
+          special_notes?: string | null
+          stackable?: boolean
+          substance_schedule?: number | null
+          updated_at?: string
+          version_id?: string
+        }
+        Relationships: []
+      }
+      penal_code_versions: {
+        Row: {
+          change_summary: string | null
+          created_at: string
+          created_by: string | null
+          effective_date: string
+          id: string
+          name: string
+          published_at: string | null
+          published_by: string | null
+          source_file: string | null
+          status: string
+          superseded_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          change_summary?: string | null
+          created_at?: string
+          created_by?: string | null
+          effective_date?: string
+          id?: string
+          name?: string
+          published_at?: string | null
+          published_by?: string | null
+          source_file?: string | null
+          status?: string
+          superseded_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          change_summary?: string | null
+          created_at?: string
+          created_by?: string | null
+          effective_date?: string
+          id?: string
+          name?: string
+          published_at?: string | null
+          published_by?: string | null
+          source_file?: string | null
+          status?: string
+          superseded_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      penal_limits: {
+        Row: {
+          created_at: string
+          max_total_months: number
+          max_total_months_note: string | null
+          version_id: string
+        }
+        Insert: {
+          created_at?: string
+          max_total_months?: number
+          max_total_months_note?: string | null
+          version_id?: string
+        }
+        Update: {
+          created_at?: string
+          max_total_months?: number
+          max_total_months_note?: string | null
+          version_id?: string
+        }
+        Relationships: []
+      }
+      penal_rules: {
+        Row: {
+          body: string
+          created_at: string
+          heading: string | null
+          id: string
+          ordinal: number
+          section: string
+          version_id: string
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          heading?: string | null
+          id?: string
+          ordinal?: number
+          section?: string
+          version_id?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          heading?: string | null
+          id?: string
+          ordinal?: number
+          section?: string
+          version_id?: string
+        }
+        Relationships: []
+      }
+      penal_substance_schedules: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          schedule: number
+          substances: string
+          version_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          schedule?: number
+          substances?: string
+          version_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          schedule?: number
+          substances?: string
+          version_id?: string
+        }
+        Relationships: []
+      }
       persons: {
         Row: {
           alias: string | null
@@ -10434,6 +10671,50 @@ export type Database = {
           p_source?: string
         }
         Returns: string
+      }
+      penal_current_charges: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          charge_class: string
+          code: string | null
+          definition: string | null
+          fine: number | null
+          id: string
+          is_modifier: boolean
+          is_rico: boolean
+          jail_months: number | null
+          judge_set_fine: boolean
+          judge_set_jail: boolean
+          lifecycle: string
+          offense: string
+          pd_exempt: boolean
+          penal_title: string | null
+          special_notes: string | null
+          stackable: boolean
+          substance_schedule: number | null
+          version_id: string
+          version_name: string
+        }[]
+      }
+      penal_current_reference: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      penal_publish_version: {
+        Args: { p_note?: string; p_version: string }
+        Returns: Json
+      }
+      penal_rollback_to: {
+        Args: { p_reason: string; p_version: string }
+        Returns: Json
+      }
+      penal_archive_charge: {
+        Args: { p_charge: string; p_reason: string }
+        Returns: undefined
+      }
+      penal_restore_charge: {
+        Args: { p_charge: string; p_code?: string; p_reason: string }
+        Returns: undefined
       }
       siu_designate_target: {
         Args: {

@@ -8,6 +8,49 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### The Penal Code becomes data, shared by every unit
+
+It was a hard-coded TypeScript array — 162 charges compiled into the bundle,
+with charges landing on a case as `cases.charges` jsonb: a code string and a
+multiplier, nothing else. That shape cannot carry what a penal code needs. No
+version, so an amendment silently rewrites history. No snapshot, so a fine
+changed today changes what a case filed last month appears to have charged. No
+status, so a proposed charge and a conviction are the same row. No audit, no
+schedules, and nothing enforceable in the database at all, because a constant
+in a JS bundle has no RLS.
+
+This is the data layer: versions, charges, controlled-substance schedules, the
+court and plea rules, and the machine-readable sentencing limits — one central
+dataset that CID, SIU, JTF, DOJ, the AG, prosecutors and judges all read,
+because a penal code that differs by unit is not a penal code. Reading it
+grants nothing else: these tables reference no case, person or unit, so a
+shared charge cannot become a path into another unit's records. That is
+structural, not a policy that could drift.
+
+**The visible code is deliberately not the primary key.** Every charge gets a
+stable uuid; the code is unique only within a version and only when present.
+All three reasons are real in the 2026 source: 31 rows arrived with no code at
+all, codes are renumbered between versions, and a future source may repeat one.
+
+**Sequential inference for the codeless rows was considered and refused.** In
+document order Title 4 runs 401 (Schedule 1), then the two unresolved rows,
+then 402 and 403 — so continuing the sequence would number the Schedule 2 and 3
+possession charges 402 and 403, which already belong to Possession with Intent
+to Sell and Sales. The guess would have put the wrong number on a narcotics
+charge. They are imported in full as `needs_code` drafts, which the SELECT
+policy keeps out of every selector until a code is assigned.
+
+Two source conflicts are recorded rather than silently resolved: 214 Possession
+of Burglary Tools has a Stackable column of N and a definition ending
+"STACKABLE" (imported as stackable, disagreement written into the row), and 516
+Prison Break has "MAX ORIGINAL" instead of a jail number. Eight judge-set
+charges store NULL with a flag — a distinct state from zero, enforced by
+constraint, so a total can never quietly count "a judge decides" as nothing.
+
+Nothing in the running portal changed. `cases.charges`, `src/lib/penal.ts` and
+every existing selector are untouched, and the imported version is a **draft** —
+publishing is a separate audited act, not a side effect of a deployment.
+
 ### A stalled legal request now says who can move it
 
 "This request is awaiting Bureau Lead review" was true and useless. It never
