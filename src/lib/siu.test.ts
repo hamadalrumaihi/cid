@@ -35,7 +35,9 @@ import {
   SIU_CREDIBILITY, SIU_CREDIBILITY_LABEL, SIU_SOURCE_TYPES, SIU_SOURCE_TYPE_LABEL,
   SIU_REVIEW_OUTCOME_LABEL, SIU_TEMP_ACCESS_MAX_DAYS, SIU_WATCH_MAX_DAYS,
   SIU_WATCH_ENTITY_TYPES, SIU_WATCH_ENTITY_LABEL, SIU_WATCH_PRIORITIES,
-  SIU_WATCH_PRIORITY_LABEL, isUngraded, reviewOverdue, siuCredibilityLabel,
+  SIU_WATCH_PRIORITY_LABEL, SIU_WATCH_LIVE_STATUSES, SIU_WATCH_REGISTRY_TYPES,
+  SIU_WATCH_STATUS_LABEL, siuWatchStatusLabel, siuLinkStrength,
+  SIU_LINK_STRENGTH_LABEL, isUngraded, reviewOverdue, siuCredibilityLabel,
   siuSourceTypeLabel, siuWatchEntityLabel, tempAccessLive, watchExpiringWithin, watchLive,
   SIU_SOURCE_STATUSES, SIU_SOURCE_STATUS_LABEL, SIU_RELIABILITY,
   SIU_RELIABILITY_LABEL, siuReliabilityLabel,
@@ -43,7 +45,7 @@ import {
   SIU_ALLEGATIONS, SIU_ALLEGATION_LABEL, SIU_REVIEW_STATUSES, SIU_REVIEW_STATUS_LABEL,
   SIU_EXPORT_SCOPES, SIU_EXPORT_SCOPE_LABEL, SIU_EXPORT_ALWAYS_WITHHELD,
   SIU_WITHHELD_LABEL, siuExportScopeLabel,
-  type SiuContext, type SiuMembership,
+  type SiuContext, type SiuMembership, type SiuWatchEntry,
 } from './siu'
 
 const profile = (over: Partial<Profile> = {}): Profile => ({
@@ -840,12 +842,20 @@ describe('§23 — review dates', () => {
 
 describe('§25 — a watch always ends', () => {
   const iso = (msFromNow: number) => new Date(Date.now() + msFromNow).toISOString()
-  const entry = (over: Record<string, unknown> = {}) => ({
-    id: 'w1', entity_type: 'person', entity_id: null, label: 'Subject',
-    reason: 'r', case_id: null, priority: 'routine',
-    expires_at: iso(30 * 86_400_000), review_due_at: null, status: 'active',
-    removed_at: null, removed_by: null, removal_reason: null,
-    created_by: null, created_at: iso(0), ...over,
+  // Shaped like a row of siu_watchlist_live(), which is what the UI now reads:
+  // `display_name` is joined from the registry on every call and the watch row
+  // itself holds no copy of the subject's name.
+  const entry = (over: Partial<SiuWatchEntry> = {}): SiuWatchEntry => ({
+    id: 'w1', entity_type: 'person', entity_id: 'p1',
+    display_name: 'Subject', secondary: null,
+    reason: 'r', priority: 'routine', status: 'active',
+    classification: null, source: null, notes: null,
+    case_id: null, case_number: null,
+    assigned_agent: null, assigned_agent_name: null,
+    expires_at: iso(30 * 86_400_000), review_due_at: null,
+    created_at: iso(0), created_by: null,
+    removed_at: null, removal_reason: null,
+    review_overdue: false, days_left: 30, ...over,
   })
 
   it('reads expiry off the CLOCK, not off the status column', () => {
@@ -854,8 +864,22 @@ describe('§25 — a watch always ends', () => {
     // sweeper job has to run for expiry to bite.
     expect(watchLive(entry())).toBe(true)
     expect(watchLive(entry({ expires_at: iso(-1000) }))).toBe(false)
-    expect(watchLive(entry({ status: 'removed' }))).toBe(false)
+    expect(watchLive(entry({ status: 'cleared' }))).toBe(false)
+    expect(watchLive(entry({ status: 'archived' }))).toBe(false)
     expect(watchLive({ status: 'active' })).toBe(false)
+    // 'removed' is the OLD vocabulary and no longer exists. Treating an
+    // unrecognised status as live would quietly resurrect every closed watch
+    // the day somebody adds a status the client has not heard of.
+    expect(watchLive(entry({ status: 'removed' }))).toBe(false)
+  })
+
+  it('counts every LIVE status, not just active', () => {
+    // A watch stepped down to monitoring is still being monitored. This is the
+    // client half of the bug fixed in 20260903140000, where deconfliction and
+    // the dashboards matched status = 'active' alone and silently lost them.
+    for (const status of SIU_WATCH_LIVE_STATUSES) {
+      expect(watchLive(entry({ status })), `${status} is live`).toBe(true)
+    }
   })
 
   it('flags an entry about to lapse', () => {
@@ -869,7 +893,63 @@ describe('§25 — a watch always ends', () => {
     expect(SIU_WATCH_MAX_DAYS).toBe(365)
     for (const t of SIU_WATCH_ENTITY_TYPES) expect(SIU_WATCH_ENTITY_LABEL[t]).toBeTruthy()
     for (const p of SIU_WATCH_PRIORITIES) expect(SIU_WATCH_PRIORITY_LABEL[p]).toBeTruthy()
+    for (const st of Object.keys(SIU_WATCH_STATUS_LABEL)) {
+      expect(siuWatchStatusLabel(st)).toBeTruthy()
+    }
     expect(siuWatchEntityLabel('mystery')).toBe('mystery')
+  })
+
+  it('drops `organization`, which no registry could satisfy', () => {
+    // It had no table to point at, so under siu_watchlist_reference_check a
+    // watch of that type is unconstructible. Leaving it in the picker would
+    // offer a choice the database refuses.
+    expect(SIU_WATCH_ENTITY_TYPES).not.toContain('organization')
+  })
+
+  it('keeps `unknown` out of the registry picker', () => {
+    // Every registry type resolves to a real table; `unknown` is the escape
+    // hatch for a subject not yet recorded anywhere and has to be chosen
+    // deliberately, or it becomes the easy default and the duplicate address
+    // book grows back.
+    expect(SIU_WATCH_REGISTRY_TYPES).not.toContain('unknown')
+    for (const t of SIU_WATCH_REGISTRY_TYPES) {
+      expect(SIU_WATCH_ENTITY_TYPES as readonly string[]).toContain(t)
+    }
+    expect(SIU_WATCH_ENTITY_TYPES).toContain('unknown')
+  })
+})
+
+describe('fact and intelligence are told apart, using the registry\'s own columns', () => {
+  it('treats an unqualified link as unproven, never as fact', () => {
+    // The default matters more than the mapping: a link with nothing recorded
+    // about how well it is held is exactly the one nobody should read as
+    // confirmed.
+    expect(siuLinkStrength({})).toBe('unconfirmed')
+    expect(siuLinkStrength({ confidence: null, link_status: null })).toBe('unconfirmed')
+  })
+
+  it('reads confirmation off link_status, confidence or ownership_confidence', () => {
+    // Three registries spell the same idea three ways —  person_vehicles and
+    // person_places use link_status/confidence, account_links uses
+    // ownership_confidence — so one helper has to understand all of them.
+    expect(siuLinkStrength({ link_status: 'confirmed' })).toBe('confirmed')
+    expect(siuLinkStrength({ confidence: 'high' })).toBe('confirmed')
+    expect(siuLinkStrength({ ownership_confidence: 'confirmed' })).toBe('confirmed')
+    expect(siuLinkStrength({ confidence: 'probable' })).toBe('probable')
+    expect(siuLinkStrength({ ownership_confidence: 'medium' })).toBe('probable')
+  })
+
+  it('never promotes a refuted or severed link, however confident it once was', () => {
+    // The status is the later fact. A link recorded at high confidence and
+    // since refuted must not keep the confident chip.
+    expect(siuLinkStrength({ link_status: 'refuted', confidence: 'high' })).toBe('unconfirmed')
+    expect(siuLinkStrength({ rel_status: 'severed', confidence: 'confirmed' })).toBe('unconfirmed')
+  })
+
+  it('has wording for every strength it can produce', () => {
+    for (const s of ['confirmed', 'probable', 'unconfirmed'] as const) {
+      expect(SIU_LINK_STRENGTH_LABEL[s]).toBeTruthy()
+    }
   })
 })
 
