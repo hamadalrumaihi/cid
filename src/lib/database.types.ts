@@ -740,6 +740,154 @@ export type Database = {
           },
         ]
       }
+      case_charges: {
+        Row: {
+          added_at: string
+          added_by: string | null
+          case_id: string
+          charge_id: string
+          counts: number
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          id: string
+          imposed_at: string | null
+          imposed_by: string | null
+          imposed_fine: number | null
+          imposed_jail_months: number | null
+          note: string | null
+          snap_charge_class: string
+          snap_code: string | null
+          snap_fine: number | null
+          snap_is_modifier: boolean
+          snap_is_rico: boolean
+          snap_jail_months: number | null
+          snap_judge_set_fine: boolean
+          snap_judge_set_jail: boolean
+          snap_offense: string
+          snap_penal_title: string | null
+          snap_stackable: boolean
+          snap_substance_schedule: number | null
+          status: string
+          substance_note: string | null
+          substance_quantity: number | null
+          substance_unit: string | null
+          updated_at: string
+          version_id: string
+        }
+        Insert: {
+          added_at?: string
+          added_by?: string | null
+          case_id: string
+          charge_id: string
+          counts?: number
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: string
+          imposed_at?: string | null
+          imposed_by?: string | null
+          imposed_fine?: number | null
+          imposed_jail_months?: number | null
+          note?: string | null
+          snap_charge_class: string
+          snap_code?: string | null
+          snap_fine?: number | null
+          snap_is_modifier?: boolean
+          snap_is_rico?: boolean
+          snap_jail_months?: number | null
+          snap_judge_set_fine?: boolean
+          snap_judge_set_jail?: boolean
+          snap_offense: string
+          snap_penal_title?: string | null
+          snap_stackable?: boolean
+          snap_substance_schedule?: number | null
+          status?: string
+          substance_note?: string | null
+          substance_quantity?: number | null
+          substance_unit?: string | null
+          updated_at?: string
+          version_id: string
+        }
+        Update: {
+          added_at?: string
+          added_by?: string | null
+          case_id?: string
+          charge_id?: string
+          counts?: number
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: string
+          imposed_at?: string | null
+          imposed_by?: string | null
+          imposed_fine?: number | null
+          imposed_jail_months?: number | null
+          note?: string | null
+          snap_charge_class?: string
+          snap_code?: string | null
+          snap_fine?: number | null
+          snap_is_modifier?: boolean
+          snap_is_rico?: boolean
+          snap_jail_months?: number | null
+          snap_judge_set_fine?: boolean
+          snap_judge_set_jail?: boolean
+          snap_offense?: string
+          snap_penal_title?: string | null
+          snap_stackable?: boolean
+          snap_substance_schedule?: number | null
+          status?: string
+          substance_note?: string | null
+          substance_quantity?: number | null
+          substance_unit?: string | null
+          updated_at?: string
+          version_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_charges_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_charges_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_charges_charge_id_fkey"
+            columns: ["charge_id"]
+            isOneToOne: false
+            referencedRelation: "penal_charges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_charges_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_charges_imposed_by_fkey"
+            columns: ["imposed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_charges_version_id_fkey"
+            columns: ["version_id"]
+            isOneToOne: false
+            referencedRelation: "penal_code_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       case_files: {
         Row: {
           added_by: string | null
@@ -6401,6 +6549,7 @@ export type Database = {
           archive_reason: string | null
           archived_at: string | null
           archived_by: string | null
+          arrest_required: boolean | null
           charge_class: string
           code: string | null
           created_at: string
@@ -6410,6 +6559,7 @@ export type Database = {
           id: string
           is_modifier: boolean
           is_rico: boolean
+          is_rico_predicate: boolean | null
           jail_months: number | null
           judge_set_fine: boolean
           judge_set_jail: boolean
@@ -6429,6 +6579,7 @@ export type Database = {
           archive_reason?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          arrest_required?: boolean | null
           charge_class?: string
           code?: string | null
           created_at?: string
@@ -6438,6 +6589,7 @@ export type Database = {
           id?: string
           is_modifier?: boolean
           is_rico?: boolean
+          is_rico_predicate?: boolean | null
           jail_months?: number | null
           judge_set_fine?: boolean
           judge_set_jail?: boolean
@@ -6457,6 +6609,7 @@ export type Database = {
           archive_reason?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          arrest_required?: boolean | null
           charge_class?: string
           code?: string | null
           created_at?: string
@@ -6466,6 +6619,7 @@ export type Database = {
           id?: string
           is_modifier?: boolean
           is_rico?: boolean
+          is_rico_predicate?: boolean | null
           jail_months?: number | null
           judge_set_fine?: boolean
           judge_set_jail?: boolean
@@ -10210,6 +10364,41 @@ export type Database = {
         Args: { p_audience: string; p_mentions?: Json }
         Returns: number
       }
+      case_charges_for: {
+        Args: { p_case: string }
+        Returns: {
+          added_at: string
+          added_by: string
+          charge_class: string
+          charge_id: string
+          code: string
+          counts: number
+          decided_at: string
+          decided_by: string
+          decision_note: string
+          fine: number
+          id: string
+          imposed_fine: number
+          imposed_jail_months: number
+          is_modifier: boolean
+          is_rico: boolean
+          jail_months: number
+          judge_set_fine: boolean
+          judge_set_jail: boolean
+          note: string
+          offense: string
+          penal_title: string
+          stackable: boolean
+          status: string
+          substance_note: string
+          substance_quantity: number
+          substance_schedule: number
+          substance_unit: string
+          version_name: string
+          version_status: string
+        }[]
+      }
+      case_charge_totals: { Args: { p_case: string }; Returns: Json }
       case_reassign_bureau: {
         Args: {
           p_case: string

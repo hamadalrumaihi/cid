@@ -8,6 +8,92 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### A charge on a case becomes a record, with a snapshot and a status
+
+`cases.charges` was a jsonb array of `{code, count}`. Five things were wrong
+with it, and none were cosmetic. No identity, so nothing could reference "this
+charge on this case" — not an audit row, not a court decision. No status, so a
+charge an investigator was merely considering and one a judge convicted on were
+the same shape. No snapshot, so the code resolved against whatever the penal
+code said *now*, and amending a fine retroactively changed what a case appeared
+to have charged. Every add and remove rewrote the whole array, so two people
+editing one case silently discarded each other's work. And no authority: any
+writer of the case row could set any charge, including the RICO modifiers the
+code reserves to a prosecutor or judge.
+
+`case_charges` fixes each. The snapshot is written **by the database** — a
+BEFORE INSERT trigger overwrites every `snap_` column from `penal_charges` and
+discards whatever arrived, so a client chooses *which* charge while the database
+decides what that charge *says*. Verified by sending a deliberately false
+payload: offense "Jaywalking", class Infraction, fine 1, jail 1, status
+convicted. What landed was `(1)09 Attempted Murder, Felony, $110,000, 60 months,
+proposed`.
+
+The status lane is proposed → under review → approved → filed → convicted /
+dismissed, with withdrawal available at every pre-court stage and none after.
+Approval and filing route by lane, because **SIU never uses a CID Bureau Lead or
+a prosecutor queue**: a CID charge is approved by a Bureau Lead and filed by a
+prosecuting attorney, an SIU charge by X-1 and the Attorney General. Nobody
+approves their own proposal. There is deliberately no delete — a charge that
+should not have been brought is withdrawn, which keeps the record that it was
+brought, and somebody wrongly charged is entitled to that showing.
+
+A transition rule is a statement about the pair (old status, new status), and an
+UPDATE policy cannot see both — `USING` tests the old row, `WITH CHECK` the new,
+and nothing correlates them. So authority for a *move* lives in a trigger while
+RLS decides who may touch the row at all. Both must pass. RLS is not weakened;
+it is doing the part it can express.
+
+### A charge could be filed and convicted by anyone with no justice role
+
+Found in the migration above, before it shipped, by asserting row counts instead
+of the absence of an error. `private.justice_role()` is NULL for every CID user,
+so `NULL in ('prosecutor', …)` is NULL, `not NULL` is NULL, and
+`if NULL then raise` never fired. The guard passed for exactly the people it
+exists to stop: a detective could move their own case's charges to filed,
+convicted or dismissed — recording a conviction with no court involved.
+
+It read as correct and it *tested* as correct against a real Attorney General,
+because a non-null role compares FALSE rather than NULL. Only a caller with no
+justice role at all opened it, which is the one case a justice-role test
+naturally forgets to try. Both sites now force two-valued logic at the boundary
+rather than patching call sites, so a future caller cannot reintroduce it.
+
+### The legacy penal code is recorded as the superseded version it is
+
+The 29 charges already on 6 cases all carry old codes — `(1)09`, `(4)22`,
+`(10)01` — that do not exist in the 2026 import. They were charged under a
+different penal code, and that code was real. Freezing them as snapshots needs a
+version to belong to, or the reference is either a nullable foreign key that
+later code forgets to check, or a wrong 2026 charge that silently restates what
+a case charged.
+
+So all 162 legacy charges are imported as a `superseded` version, generated
+mechanically from `src/lib/penal.ts` by a script that aborts rather than guesses
+— it fails unless the file yields exactly 162 charges in 14 fields each with no
+non-ASCII surviving normalisation. Verified by digest: an md5 over every field
+computed locally and again in the database matched exactly.
+
+Three legacy facts would have been destroyed by a naive mapping. **Capital** is a
+real class for 8 charges; folding it into Felony would misstate what they are, so
+the constraint was widened. **`rico`** means the opposite of what it means in
+2026: legacy marks 18 RICO *predicate* offenses (Murder 1st, Kidnapping) while
+2026's `is_rico` marks the six Title 12 *modifiers* only a prosecutor may add —
+collapsing them would put Murder on the prosecutor-only list *and* empty the
+predicate picker that reads the flag today, so they are now separate columns.
+**`arrest_required`** covers 11 charges needing an arrest rather than a citation.
+Both new columns are nullable on purpose: null on a 2026 row means "this version
+does not say", which is true, where false would have the 2026 code positively
+asserting that Murder is not a RICO predicate.
+
+The 29 existing charges are migrated as `proposed` with `added_by` NULL. Both
+are deliberate understatements — the old model recorded no status, no author and
+no date, so marking them filed would assert a court event that may never have
+happened, and attributing them to whoever ran the migration would put a name
+against an act that person may not have performed. Each row says so in its note.
+`cases.charges` is **not** modified: the portal still reads it, and the selectors
+move in a later step.
+
 ### The Penal Code becomes data, shared by every unit
 
 It was a hard-coded TypeScript array — 162 charges compiled into the bundle,
