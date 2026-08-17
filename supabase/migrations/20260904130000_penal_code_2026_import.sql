@@ -14,16 +14,30 @@
 -- 31 rows carry no charge code. The spreadsheet exported unresolved formulas
 -- (=A69+1, =A147+1 ...) in the Code column: the two Schedule 2 / Schedule 3
 -- possession charges, and Title 7 from Street Racing through Illegal Dumping.
--- Every other field on those rows is intact, so they are imported in full with
--- lifecycle 'draft' and needs_code, which the SELECT policy keeps out of every
--- selector. Assigning a code through penal_restore_charge() brings one into
--- force.
+-- Every other field on those rows is intact.
 --
--- Sequential inference was considered and rejected as unsafe. In document
--- order Title 4 runs 401 (Schedule 1), =A69+1, =A70+1, then 402 and 403 --
--- so continuing the sequence would number the two Schedule rows 402 and 403,
--- which already belong to Possession with Intent to Sell and Sales. The guess
--- would have put the wrong number on a narcotics charge.
+-- The formula IS the author's intent: =A147+1 says "one more than the row
+-- above". Where evaluating it lands on a free number, that is not a guess, it
+-- is reading what the sheet says. 29 of the 31 resolve that way -- Title 7
+-- from Street Racing (705) through Illegal Dumping (733). The run is
+-- uninterrupted, it starts from Reckless Driving at 704, and Title 8 begins at
+-- 801, so nothing in the assigned range collides with anything. Those 29 are
+-- imported ACTIVE with their derived code, and each one's special_notes
+-- records that the code was derived and which formula it came from, so a
+-- reviewer can see it was computed rather than transcribed.
+--
+-- The remaining 2 cannot be resolved, and the reason is arithmetic, not
+-- caution. In document order Title 4 runs 401 (Schedule 1), =A69+1, =A70+1,
+-- then 402 and 403 -- so evaluating those two formulas produces 402 and 403,
+-- which already belong to Possession with Intent to Sell and Sales. The
+-- schedule refuses the assignment outright: penal_charges_code_unique is on
+-- (version_id, code). Those two stay lifecycle 'draft' with needs_code, which
+-- the SELECT policy keeps out of every selector; assigning a real code through
+-- penal_restore_charge() brings each into force.
+--
+-- Putting the wrong number on a narcotics possession charge is the one error
+-- here that would be worse than a missing charge, because the number is what
+-- gets filed, and 402/403 name real offenses with different penalties.
 --
 -- ── Conflicts recorded rather than silently resolved ──────────────────────
 --
@@ -41,7 +55,8 @@
 -- state from zero, enforced by constraint, so a total can never quietly count
 -- "a judge decides" as nothing.
 --
--- No duplicate codes were found among the 166 rows that have one.
+-- No duplicate codes were found among the 195 rows that have one, counting the
+-- 29 derived above; that was checked after derivation, not before.
 --
 -- ── What this migration does NOT do ───────────────────────────────────────
 -- It does not publish the version, touch cases.charges, alter src/lib/penal.ts
@@ -199,35 +214,35 @@ declare
 702|Speeding (16-30 Over)|6|Infraction||25000||||1|||||135|active|Exceeding the posted limit by 16 to 30.|
 703|Speeding (31+ Over)|6|Infraction||45000||||1|||||136|active|Exceeding the posted limit by more than 30.|
 704|Reckless Driving|6|Misdemeanor||70000|10|||1|||||137|active|Driving with willful disregard for the safety of others.|
-|Street Racing|6|Misdemeanor||50000|15|||||||1|138|draft|Participating in an unsanctioned speed contest on public roads.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A147+1) instead of a number. Held as a draft until a code is assigned.
-|Fleeing and Eluding (Vehicle)|6|Felony||30000|10|||||||1|139|draft|Fleeing from an officer while operating a vehicle. Bicycles are included.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A148+1) instead of a number. Held as a draft until a code is assigned.
-|Driving Under the Influence|6|Misdemeanor||10000|10|||||||1|140|draft|Operating a vehicle while impaired by alcohol or drugs. FST, PBT, or BAC of 0.08% or greater can satisfy.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A149+1) instead of a number. Held as a draft until a code is assigned.
-|Aggravated Driving Under the Influence|6|Felony||15000|20|||||||1|141|draft|Operating a vehicle while unusually intoxicated (over 60%). PBT can satisfy.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A150+1) instead of a number. Held as a draft until a code is assigned.
-|Hit and Run (Property)|6|Misdemeanor||20000|5|||||||1|142|draft|Leaving the scene of a collision involving property damage.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A151+1) instead of a number. Held as a draft until a code is assigned.
-|Hit and Run (Injury)|6|Felony||75000|15|||||||1|143|draft|Leaving the scene of a collision involving an injured person.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A152+1) instead of a number. Held as a draft until a code is assigned.
-|Driving Without a License|6|Infraction||20000||||||||1|144|draft|Operating a vehicle without ever holding a valid license.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A153+1) instead of a number. Held as a draft until a code is assigned.
-|Driving on a Suspended License|6|Misdemeanor||50000|10|||||||1|145|draft|Operating a vehicle while your license is suspended or revoked.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A154+1) instead of a number. Held as a draft until a code is assigned.
-|Failure to Display Driver''s License|6|Infraction||40000||||||||1|146|draft|Failing to display a driver''s license when requested by an officer.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A155+1) instead of a number. Held as a draft until a code is assigned.
-|No Registration / License Plate|6|Infraction||15000||||||||1|147|draft|Operating a vehicle without a valid registration or license plate.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A156+1) instead of a number. Held as a draft until a code is assigned.
-|License Plate Violation|6|Infraction||20000||||||||1|148|draft|Operating with an SA Exempt plate or with another vehicle''s registration.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A157+1) instead of a number. Held as a draft until a code is assigned.
-|Illegal Vehicle Modification|6|Infraction||5000||||||||1|149|draft|Operating a vehicle with prohibited lighting, plates, or equipment.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A158+1) instead of a number. Held as a draft until a code is assigned.
-|Window Tint Violation|6|Infraction||10000||||||||1|150|draft|Use of dark smoke, limo, or black window tint on a vehicle.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A159+1) instead of a number. Held as a draft until a code is assigned.
-|Unroadworthy Vehicle|6|Infraction||5000||||||||1|151|draft|Operating a vehicle in a condition unsafe for public roads.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A160+1) instead of a number. Held as a draft until a code is assigned.
-|Failure to Display Headlights or Brake Lights|6|Infraction||8000||||1||||1|152|draft|Operating a vehicle without headlights or brake lights on.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A161+1) instead of a number. Held as a draft until a code is assigned.
-|Failure to Obey a Traffic Control Device|6|Infraction||5000||||1||||1|153|draft|Not yielding at a red light, stop sign, or posted signal.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A162+1) instead of a number. Held as a draft until a code is assigned.
-|Failure to Yield Right of Way|6|Infraction||5000||||1||||1|154|draft|Failing to yield the right of way or stop at a stop sign.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A163+1) instead of a number. Held as a draft until a code is assigned.
-|Failure to Yield to an Emergency Vehicle|6|Misdemeanor||30000|5|||||||1|155|draft|Blocking or failing to yield to an emergency vehicle responding to a call.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A164+1) instead of a number. Held as a draft until a code is assigned.
-|Failure to Obey a Traffic Officer|6|Infraction||15000||||||||1|156|draft|Ignoring directions given by an officer directing traffic.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A165+1) instead of a number. Held as a draft until a code is assigned.
-|Unsafe Lane Change|6|Infraction||10000||||1||||1|157|draft|Changing lanes without signaling or checking clearance.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A166+1) instead of a number. Held as a draft until a code is assigned.
-|Illegal Overtake|6|Infraction||10000||||1||||1|158|draft|Illegally passing another vehicle by shoulder or across a double yellow line.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A167+1) instead of a number. Held as a draft until a code is assigned.
-|Driving Against Traffic|6|Infraction||15000||||1||||1|159|draft|Operating a vehicle on the wrong side of the roadway.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A168+1) instead of a number. Held as a draft until a code is assigned.
-|Distracted Driving|6|Infraction||5000||||||||1|160|draft|Operating a vehicle while paying attention to anything other than the road.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A169+1) instead of a number. Held as a draft until a code is assigned.
-|Excessive Use of Horn|6|Infraction||15000||||1||||1|161|draft|Honking the horn for any reason other than motor safety.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A170+1) instead of a number. Held as a draft until a code is assigned.
-|Illegal Parking|6|Infraction||5000||||1||||1|162|draft|Parking in a prohibited, reserved, or obstructive location.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A171+1) instead of a number. Held as a draft until a code is assigned.
-|Obstructing a Sidewalk or Crosswalk|6|Infraction||8000||||1||||1|163|draft|Intentionally stopping or parking on a sidewalk or crosswalk.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A172+1) instead of a number. Held as a draft until a code is assigned.
-|Impeding Traffic|6|Misdemeanor||20000|5|||1||||1|164|draft|Obstructing the flow of vehicles on a roadway.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A173+1) instead of a number. Held as a draft until a code is assigned.
-|Aggravated Impeding Traffic|6|Misdemeanor||40000|15|||||||1|165|draft|Obstructing the flow of vehicles on a roadway after being warned by law enforcement.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A174+1) instead of a number. Held as a draft until a code is assigned.
-|Illegal Dumping|6|Felony||100000|15|||||||1|166|draft|Willingly placing a vehicle in the ocean wether to avoid capture.|Imported without a charge code: the source exported an unresolved spreadsheet formula (=A175+1) instead of a number. Held as a draft until a code is assigned.
+705|Street Racing|6|Misdemeanor||50000|15||||||||138|active|Participating in an unsanctioned speed contest on public roads.|Charge code 705 derived from the row above: the source exported an unresolved spreadsheet formula (=A147+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+706|Fleeing and Eluding (Vehicle)|6|Felony||30000|10||||||||139|active|Fleeing from an officer while operating a vehicle. Bicycles are included.|Charge code 706 derived from the row above: the source exported an unresolved spreadsheet formula (=A148+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+707|Driving Under the Influence|6|Misdemeanor||10000|10||||||||140|active|Operating a vehicle while impaired by alcohol or drugs. FST, PBT, or BAC of 0.08% or greater can satisfy.|Charge code 707 derived from the row above: the source exported an unresolved spreadsheet formula (=A149+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+708|Aggravated Driving Under the Influence|6|Felony||15000|20||||||||141|active|Operating a vehicle while unusually intoxicated (over 60%). PBT can satisfy.|Charge code 708 derived from the row above: the source exported an unresolved spreadsheet formula (=A150+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+709|Hit and Run (Property)|6|Misdemeanor||20000|5||||||||142|active|Leaving the scene of a collision involving property damage.|Charge code 709 derived from the row above: the source exported an unresolved spreadsheet formula (=A151+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+710|Hit and Run (Injury)|6|Felony||75000|15||||||||143|active|Leaving the scene of a collision involving an injured person.|Charge code 710 derived from the row above: the source exported an unresolved spreadsheet formula (=A152+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+711|Driving Without a License|6|Infraction||20000|||||||||144|active|Operating a vehicle without ever holding a valid license.|Charge code 711 derived from the row above: the source exported an unresolved spreadsheet formula (=A153+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+712|Driving on a Suspended License|6|Misdemeanor||50000|10||||||||145|active|Operating a vehicle while your license is suspended or revoked.|Charge code 712 derived from the row above: the source exported an unresolved spreadsheet formula (=A154+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+713|Failure to Display Driver''s License|6|Infraction||40000|||||||||146|active|Failing to display a driver''s license when requested by an officer.|Charge code 713 derived from the row above: the source exported an unresolved spreadsheet formula (=A155+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+714|No Registration / License Plate|6|Infraction||15000|||||||||147|active|Operating a vehicle without a valid registration or license plate.|Charge code 714 derived from the row above: the source exported an unresolved spreadsheet formula (=A156+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+715|License Plate Violation|6|Infraction||20000|||||||||148|active|Operating with an SA Exempt plate or with another vehicle''s registration.|Charge code 715 derived from the row above: the source exported an unresolved spreadsheet formula (=A157+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+716|Illegal Vehicle Modification|6|Infraction||5000|||||||||149|active|Operating a vehicle with prohibited lighting, plates, or equipment.|Charge code 716 derived from the row above: the source exported an unresolved spreadsheet formula (=A158+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+717|Window Tint Violation|6|Infraction||10000|||||||||150|active|Use of dark smoke, limo, or black window tint on a vehicle.|Charge code 717 derived from the row above: the source exported an unresolved spreadsheet formula (=A159+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+718|Unroadworthy Vehicle|6|Infraction||5000|||||||||151|active|Operating a vehicle in a condition unsafe for public roads.|Charge code 718 derived from the row above: the source exported an unresolved spreadsheet formula (=A160+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+719|Failure to Display Headlights or Brake Lights|6|Infraction||8000||||1|||||152|active|Operating a vehicle without headlights or brake lights on.|Charge code 719 derived from the row above: the source exported an unresolved spreadsheet formula (=A161+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+720|Failure to Obey a Traffic Control Device|6|Infraction||5000||||1|||||153|active|Not yielding at a red light, stop sign, or posted signal.|Charge code 720 derived from the row above: the source exported an unresolved spreadsheet formula (=A162+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+721|Failure to Yield Right of Way|6|Infraction||5000||||1|||||154|active|Failing to yield the right of way or stop at a stop sign.|Charge code 721 derived from the row above: the source exported an unresolved spreadsheet formula (=A163+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+722|Failure to Yield to an Emergency Vehicle|6|Misdemeanor||30000|5||||||||155|active|Blocking or failing to yield to an emergency vehicle responding to a call.|Charge code 722 derived from the row above: the source exported an unresolved spreadsheet formula (=A164+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+723|Failure to Obey a Traffic Officer|6|Infraction||15000|||||||||156|active|Ignoring directions given by an officer directing traffic.|Charge code 723 derived from the row above: the source exported an unresolved spreadsheet formula (=A165+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+724|Unsafe Lane Change|6|Infraction||10000||||1|||||157|active|Changing lanes without signaling or checking clearance.|Charge code 724 derived from the row above: the source exported an unresolved spreadsheet formula (=A166+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+725|Illegal Overtake|6|Infraction||10000||||1|||||158|active|Illegally passing another vehicle by shoulder or across a double yellow line.|Charge code 725 derived from the row above: the source exported an unresolved spreadsheet formula (=A167+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+726|Driving Against Traffic|6|Infraction||15000||||1|||||159|active|Operating a vehicle on the wrong side of the roadway.|Charge code 726 derived from the row above: the source exported an unresolved spreadsheet formula (=A168+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+727|Distracted Driving|6|Infraction||5000|||||||||160|active|Operating a vehicle while paying attention to anything other than the road.|Charge code 727 derived from the row above: the source exported an unresolved spreadsheet formula (=A169+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+728|Excessive Use of Horn|6|Infraction||15000||||1|||||161|active|Honking the horn for any reason other than motor safety.|Charge code 728 derived from the row above: the source exported an unresolved spreadsheet formula (=A170+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+729|Illegal Parking|6|Infraction||5000||||1|||||162|active|Parking in a prohibited, reserved, or obstructive location.|Charge code 729 derived from the row above: the source exported an unresolved spreadsheet formula (=A171+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+730|Obstructing a Sidewalk or Crosswalk|6|Infraction||8000||||1|||||163|active|Intentionally stopping or parking on a sidewalk or crosswalk.|Charge code 730 derived from the row above: the source exported an unresolved spreadsheet formula (=A172+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+731|Impeding Traffic|6|Misdemeanor||20000|5|||1|||||164|active|Obstructing the flow of vehicles on a roadway.|Charge code 731 derived from the row above: the source exported an unresolved spreadsheet formula (=A173+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+732|Aggravated Impeding Traffic|6|Misdemeanor||40000|15||||||||165|active|Obstructing the flow of vehicles on a roadway after being warned by law enforcement.|Charge code 732 derived from the row above: the source exported an unresolved spreadsheet formula (=A174+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
+733|Illegal Dumping|6|Felony||100000|15||||||||166|active|Willingly placing a vehicle in the ocean wether to avoid capture.|Charge code 733 derived from the row above: the source exported an unresolved spreadsheet formula (=A175+1) in place of the number. Title 7 runs 701-733 unbroken and Title 8 starts at 801, so the sequence resolves with no collision.
 801|Unlicensed Aircraft or Watercraft Operation|7|Felony||250000|15|||1|||||167|active|Operating a plane, helicopter, or boat without certification.|
 802|Failure to Radio|7|Infraction||75000||||1|||||168|active|Failure to utilize radio 737 as a pilot actively flying.|
 803|Reckless Flight|7|Felony||500000|15|||1|||||169|active|Operating a plane or helicopter in an unsafe manner that puts the public at risk.|
@@ -272,7 +287,7 @@ begin
     insert into public.penal_code_versions (name, effective_date, source_file, change_summary, status)
     values ('Odyssey RP Penal Code 2026', date '2026-01-01',
             'ODY_PENAL_CODE_2026_ALL_SHEETS.md',
-            'Full import of both worksheets: 197 charges across 12 titles, 3 controlled-substance schedules, and the court/plea/limit rules. 31 charges arrived without codes and are held as drafts.',
+            'Full import of both worksheets: 197 charges across 12 titles, 3 controlled-substance schedules, and the court/plea/limit rules. 31 charges arrived with an unresolved =A(n)+1 formula instead of a code; 29 were derived from the row above into the free range 705-733, and the 2 Title 4 possession charges are held as drafts because their formulas evaluate onto codes 402 and 403, which are already taken.',
             'draft')
     returning id into v;
   end if;

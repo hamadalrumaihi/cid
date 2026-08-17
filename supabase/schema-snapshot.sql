@@ -11292,8 +11292,19 @@ create index penal_charges_archived_by_idx ON public.penal_charges USING btree (
 create index penal_charges_created_by_idx ON public.penal_charges USING btree (created_by);
 -- THE SHARED PENAL CODE. One central dataset for every unit -- CID, SIU, JTF,
 -- DOJ, the AG, prosecutors and judges all read the same rows, because a penal
--- code that differs by unit is not a penal code. SELECT is private.is_active();
--- writes are owner or an appointed administrator. Reading it grants nothing
+-- code that differs by unit is not a penal code.
+--
+-- SELECT on all four content tables is private.is_active() AND the row's
+-- version is not a draft, with private.penal_is_admin() seeing everything:
+-- penal_charges_sel, penal_schedules_sel, penal_rules_sel, penal_limits_sel.
+-- The three reference policies originally omitted the version test and were
+-- corrected in 20260904140000 -- an unpublished draft was readable by any
+-- active member over PostgREST, which made publishing partly meaningless and
+-- let an officer charge from a schedule that is not yet law. penal_charges_sel
+-- additionally requires the ROW's lifecycle <> 'draft', which is what holds a
+-- codeless charge out of every selector until a code is assigned.
+--
+-- Writes are owner or an appointed administrator. Reading it grants nothing
 -- else: these tables reference no case, person or unit, so a shared charge
 -- cannot become a path into another unit's records -- that is structural, not
 -- a policy that could drift. Charges are ARCHIVED, never deleted, so a case
