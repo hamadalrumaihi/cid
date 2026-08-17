@@ -8,6 +8,31 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### SIU actions live on the person's own record
+
+An agent reads a profile, decides the person matters, and — before this — had
+to leave, find the SIU tab, open a form and search the registry for the record
+they were already looking at. Every one of those steps was a chance to type a
+name instead of attaching the record, which is exactly how the unit ended up
+with a duplicate address book in the first place.
+
+A person's profile now carries an SIU bar: current watch, designations,
+intelligence count, and a registered-source warning, with **+ Watchlist**,
+**+ Designate**, **+ Intelligence** and **Open dossier** beside them. The
+subject is already chosen and cannot be mistyped.
+
+It renders nothing for anyone without SIU field standing — not because the
+buttons would fail (the RPCs all gate server-side) but because their presence
+on a shared CID registry page would tell any detective that the unit exists and
+takes an interest in people. The status line is read from
+`siu_person_dossier()`, which is SECURITY INVOKER, so a caller who cannot see a
+watch is told there is none; nothing is filtered down in React because there is
+nothing broader to filter.
+
+The registered-source warning is stated in a sentence rather than a chip,
+because targeting somebody else's source is the mistake §19 deconfliction
+exists to prevent and a chip is too easy to skim past.
+
 ### SIU legal requests take the SIU lane, and stop telling CID about it
 
 The legal pipeline was built for CID and had no SIU branch at its two front

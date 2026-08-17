@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { deleteWithUndo, list, update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
+import { SiuPersonActions } from '@/components/siu/SiuPersonActions'
 import { downloadDocx } from '@/lib/docx'
 import { fmtDate, slug, todayISO } from '@/lib/format'
 import { officerName, useProfilesStore } from '@/lib/profiles'
@@ -393,6 +394,11 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
               {p.merged_into && <EntityLink kind="person" id={p.merged_into} label="Open the surviving record" />}
             </div>
           )}
+
+          {/* SIU actions — renders nothing unless the viewer is an SIU field
+              agent. Placed above the dossier so an agent acts on the record
+              they are reading rather than re-finding it in the SIU tab. */}
+          <SiuPersonActions personId={p.id} personName={p.name} />
 
           {/* Intelligence header */}
           <Card pad="lg">
