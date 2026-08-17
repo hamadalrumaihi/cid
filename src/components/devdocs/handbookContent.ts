@@ -9,7 +9,7 @@ export interface HandbookPage {
   body: string
 }
 
-export const HANDBOOK_UPDATED = '2026-08-16'
+export const HANDBOOK_UPDATED = '2026-08-17'
 
 export const HANDBOOK_PAGES: HandbookPage[] = [
   {
@@ -1268,6 +1268,23 @@ cannot open, assign, reclassify, author, designate, or delete anything.
 investigation *into* the Director, the AG or X-1 possible. On a CID case the
 SIU-only intelligence layer remains field-agent only, because the Director is a
 plausible subject of an integrity flag.
+
+**Taking and releasing (§14/§15).** SIU command can **assume control** of a
+live CID case: one flip of \`cases.case_authority\` takes the case and every
+child row out of CID at every rank, with the case number, bureau, lead
+detective and all authorship untouched, and \`siu_release_control()\` gives it
+back. Going the other way, SIU releases a **single item** with \`siu_share()\` —
+to the Division, to one case's members, or to one named officer. The release
+carries a snapshot of the text, never a pointer, so it can never widen into the
+investigation; CID reads it through \`siu_released_intelligence()\`, which
+projects no origin at all.
+
+**Tradecraft (Phase 3).** Sources, undercover legends, financial and
+communications intelligence, and integrity reviews all ride the WRITE wall
+(\`private.siu_case_access\`), never the read superset — oversight reads the case
+file, not the tradecraft. Sources and legends narrow further to the handler and
+SIU command (\`private.siu_handler_access\`). Exports go through one logged RPC
+that always withholds source identities, legends and intercept content.
 
 **Build-phase gate:** while \`siu_settings.enabled_for_non_owner\` is false,
 \`siu_standing()\` resolves to \`owner\` for the Portal Owner and NULL for

@@ -290,6 +290,47 @@ DELETE never required a read: `delete from reports where id = $1` is evaluated a
 
 The SIU-only layer is the capability that makes §12 real: SIU can record an integrity concern against a live CID investigation and the officers working that case cannot tell the note exists. `operations.authority` is RPC-only (guard trigger `private.block_direct_operation_authority`); `siu_create_operation` is the one path.
 
+### §14 — Assume SIU Control ([`20260824120000_siu_assume_control.sql`](../supabase/migrations/20260824120000_siu_assume_control.sql))
+
+A takeover is **one column flip**: `cases.case_authority` `cid` → `siu`. Because `private.can_access_case()` already branches on `private.is_siu_case()`, the case and every child row leave CID's lists, counts, search, graph, realtime and autocomplete at every rank the moment it lands — and because **no child table is touched**, `reports.author_id`, `evidence.collected_by`, `custody_events` and `case_signoff_history` are preserved byte-for-byte. The detective's work stays their work; SIU inherits the file, not the credit.
+
+| Preserved | Deliberately not done |
+|---|---|
+| case number, `bureau`, `originating_bureau`, `lead_detective_id`, `created_by`, status, timeline, sign-off history, every child row and its authorship | no notification is emitted — a takeover is frequently a takeover *from* the subject, so the case simply stops appearing |
+
+Four new columns form a permanent provenance record — `siu_assumed_at`, `siu_assumed_by`, `siu_assumption_reason`, `siu_returned_at` — all frozen against direct writes by the re-emitted `private.block_direct_siu_case_cols()`. The full before-picture goes to the audit log as `SIU_CASE_ASSUMED`.
+
+`siu_assume_control(case, reason, classification)` requires **SIU command** and a reason; it refuses an already-SIU or archived case, enrols the actor as lead agent, and seeds the compartment when compartmented. `siu_release_control(case, reason)` requires command over that investigation and **refuses unless `siu_assumed_at` is set** — a natively-SIU investigation was never CID's, so it can never be handed over wholesale. Open legal requests keep working throughout: the DOJ lanes key on request participants, not case access.
+
+### §15 — Releasing SIU material to CID ([`20260824130000_siu_disclosure.sql`](../supabase/migrations/20260824130000_siu_disclosure.sql))
+
+Four routes, all auditable and revocable: **`cid`** (the whole Division), **`case_members`** (one named CID case), **`investigator`** (one named officer), and "Release Intelligence" = `item_type='intelligence'` at audience `cid`.
+
+**The snapshot is the mechanism.** A `siu_disclosures` row carries a *copy* of the released title and body, taken at release time — never a pointer into an SIU record. That single choice is what makes the requirement achievable: releasing one item cannot widen into the investigation because there is no edge for a CID user to traverse; the released text is immutable, so what CID acted on is exactly what was released; and revocation is real, because it removes a row rather than clawing back a permission that never existed.
+
+**The origin is never disclosed.** `siu_disclosures_sel` is SIU-side only (`private.siu_case_read`), so CID reads **zero rows** from the table at every rank. CID goes through `siu_released_intelligence()`, a definer RPC that projects only the non-identifying columns — no `siu_case_id`, no `source_item_id`, no case number. There is no column-level grant to get wrong and no query shape that returns the source.
+
+Release requires `siu_case_access` **and** `siu_is_agent`: oversight standing cannot release (the Director deciding what SIU tells CID about CID would invert the unit), and on a compartmented investigation release authority is confined to the allow-list automatically. Revocation: the releasing agent or SIU command. `siu_acknowledge_disclosure()` re-checks the audience rule rather than trusting the caller, so it can never be used as an existence oracle.
+
+### Phase 3 — tradecraft ([`20260825120000`](../supabase/migrations/20260825120000_siu_phase3.sql) + [`20260825130000`](../supabase/migrations/20260825130000_siu_phase3_rpcs.sql))
+
+| Table | Read | Write | Delete |
+|---|---|---|---|
+| `siu_sources` | `siu_handler_access` — handler **or** SIU command | + `siu_is_agent` | `siu_case_command` |
+| `siu_undercover_operations` | `siu_handler_access`, **or** the deployed officer's own row | + `siu_is_agent` | `siu_case_command` |
+| `siu_financial_intel` | `siu_case_access` | + `siu_is_agent` | `siu_case_command` |
+| `siu_comms_intel` | `siu_case_access` | + `siu_is_agent` | `siu_case_command` |
+| `siu_integrity_reviews` | `siu_case_access` | + `siu_is_agent` | `siu_case_command` |
+| `siu_exports` | `siu_case_read` (oversight included — a log is accountability, not tradecraft) | RPC-only | — |
+
+Every one rides `private.siu_case_access()` — the **write wall** — and never the read superset. That is the point: the SOP chain change let oversight read a standard investigation's case file, and oversight must not extend to raw tradecraft, because the Director of CID may be the *subject* of a source report, a legend, an intercept or an allegation. Sources and legends go one step further with `private.siu_handler_access(case, handler)` = `siu_case_access` **and** (handler = me **or** SIU command), so an agent with full access to an investigation still cannot read another agent's source — and a leak inside SIU costs one source rather than the register. Compartmentation composes: on a `siu_compartmented` case `siu_case_access` is allow-list-only, so all six inherit the allow-list.
+
+Two constraints carry policy rather than shape: `siu_comms_content_requires_authority` (content cannot be recorded without a named `legal_authority`, and the row can cite the `legal_requests` row that granted it) and `siu_integrity_closed_needs_disposition` (a review cannot close without a recorded disposition).
+
+**Exports.** `siu_export_case(case, scope, reason)` is the only export path. It re-checks `siu_case_access` + `siu_is_agent` (so a compartmented investigation exports only from inside the compartment and oversight cannot export at all), logs to `siu_exports` **and** the audit trail with a mandatory reason, and **never** emits source identities, undercover legends or intercept content — at any scope, for any caller, including SIU command and the Owner. What was withheld is returned in the payload, with counts computed under the caller's own visibility predicates so a withheld count is never an oracle.
+
+**Oversight report.** `siu_oversight_report()` is the supervision surface for the SOP chain: caseload by classification, §14 control taken and returned, §15 releases and acknowledgements, integrity workload and disposition, tradecraft *volume*, export volume. Counts only — no case id, title, name, codename, legend or identifier can reach it. Any SIU standing may read it; everyone else gets `{"access": false}`.
+
 ### Build-phase release gate (temporary)
 
 Until SIU is marked production-ready, **only the Portal Owner** may see, query or act on anything SIU — this temporarily overrides the model above for the Attorney General, X-Ray 1, Special Agents, and all of CID. The gate is centralized, not scattered: `private.siu_standing()` returns `owner` for the owner unconditionally and `NULL` for everyone else while `siu_settings.enabled_for_non_owner` is `false`. For every other account SIU simply does not exist — no nav entry, no "coming soon", no route, no rows, no notifications, no realtime, no search hits. Opening the gate is one audited Owner-only call, `siu_set_release(true, reason)`; the production permissions above are already written and need no rebuild.

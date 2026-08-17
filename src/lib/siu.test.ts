@@ -19,6 +19,15 @@ import {
   siuAssignableClassifications, siuCanAppoint, siuCanAppointRole, siuCanReadCid,
   siuCanRemove, siuCaseAccess, siuIsAgent, siuIsCommand, siuOperates, siuStanding,
   siuAuditLabel, siuCallsign, siuClassificationLabel, siuRoleLabel,
+  SIU_AUDIENCES, SIU_AUDIENCE_LABEL, SIU_AUDIENCE_SHORT, SIU_HANDLING,
+  SIU_HANDLING_LABEL, SIU_RELEASE_ITEM_TYPES, SIU_RELEASE_ITEM_LABEL,
+  siuAudienceLabel, siuHandlingLabel, siuReleaseItemLabel,
+  SIU_SOURCE_STATUSES, SIU_SOURCE_STATUS_LABEL, SIU_RELIABILITY,
+  SIU_RELIABILITY_LABEL, siuReliabilityLabel,
+  SIU_UNDERCOVER_STATUSES, SIU_UNDERCOVER_STATUS_LABEL, siuUndercoverStatusLabel,
+  SIU_ALLEGATIONS, SIU_ALLEGATION_LABEL, SIU_REVIEW_STATUSES, SIU_REVIEW_STATUS_LABEL,
+  SIU_EXPORT_SCOPES, SIU_EXPORT_SCOPE_LABEL, SIU_EXPORT_ALWAYS_WITHHELD,
+  SIU_WITHHELD_LABEL, siuExportScopeLabel,
   type SiuContext, type SiuMembership,
 } from './siu'
 
@@ -504,5 +513,74 @@ describe('display helpers', () => {
   it('shows an unrecognised audit action rather than dropping the row', () => {
     expect(siuAuditLabel('SIU_APPOINTED')).toBe('Agent appointed')
     expect(siuAuditLabel('SIU_FUTURE_ACTION')).toBe('SIU_FUTURE_ACTION')
+  })
+})
+
+describe('§15 release vocabulary', () => {
+  it('offers exactly the four release routes', () => {
+    // 'cid' | 'case_members' | 'investigator' are the audiences; "Release
+    // Intelligence" is item_type 'intelligence' addressed to 'cid'.
+    expect([...SIU_AUDIENCES]).toEqual(['cid', 'case_members', 'investigator'])
+    for (const a of SIU_AUDIENCES) {
+      expect(SIU_AUDIENCE_LABEL[a], `${a} needs a label`).toBeTruthy()
+      expect(SIU_AUDIENCE_SHORT[a], `${a} needs a short form`).toBeTruthy()
+    }
+    expect(SIU_RELEASE_ITEM_TYPES).toContain('intelligence')
+    expect(siuAudienceLabel('cid')).toBe('Share with CID')
+  })
+
+  it('labels every release item type and handling caveat', () => {
+    for (const t of SIU_RELEASE_ITEM_TYPES) {
+      expect(SIU_RELEASE_ITEM_LABEL[t], `${t} needs a label`).toBeTruthy()
+    }
+    for (const h of SIU_HANDLING) {
+      expect(SIU_HANDLING_LABEL[h], `${h} needs a label`).toBeTruthy()
+    }
+    // An unknown token is echoed, never silently relabelled.
+    expect(siuReleaseItemLabel('mystery')).toBe('mystery')
+    expect(siuHandlingLabel(null)).toBe('—')
+  })
+})
+
+describe('Phase 3 vocabulary', () => {
+  it('labels every source status and reliability grade', () => {
+    for (const s of SIU_SOURCE_STATUSES) expect(SIU_SOURCE_STATUS_LABEL[s]).toBeTruthy()
+    for (const r of SIU_RELIABILITY) expect(SIU_RELIABILITY_LABEL[r]).toBeTruthy()
+    expect(SIU_RELIABILITY).toContain('untested')
+    expect(siuReliabilityLabel('untested')).toBe('Untested')
+  })
+
+  it('labels every undercover status, allegation and review disposition', () => {
+    for (const s of SIU_UNDERCOVER_STATUSES) expect(SIU_UNDERCOVER_STATUS_LABEL[s]).toBeTruthy()
+    for (const a of SIU_ALLEGATIONS) expect(SIU_ALLEGATION_LABEL[a]).toBeTruthy()
+    for (const s of SIU_REVIEW_STATUSES) expect(SIU_REVIEW_STATUS_LABEL[s]).toBeTruthy()
+    // 'compromised' must exist — a burnt deployment is a state the UI has to
+    // be able to show, not something that gets folded into "concluded".
+    expect(SIU_UNDERCOVER_STATUSES).toContain('compromised')
+    expect(siuUndercoverStatusLabel('active')).toBe('Deployed')
+  })
+
+  it('names the three categories withheld from every export', () => {
+    // These mirror siu_export_case()'s unconditional redaction. If the server
+    // list ever grows, this is the test that should fail first.
+    expect([...SIU_EXPORT_ALWAYS_WITHHELD]).toEqual([
+      'confidential_source_identities', 'undercover_legends', 'intercept_content',
+    ])
+    for (const c of SIU_EXPORT_ALWAYS_WITHHELD) expect(SIU_WITHHELD_LABEL[c]).toBeTruthy()
+    for (const s of SIU_EXPORT_SCOPES) expect(SIU_EXPORT_SCOPE_LABEL[s]).toBeTruthy()
+    expect(siuExportScopeLabel('disclosure_packet')).toBe('Disclosure packet (court)')
+  })
+})
+
+describe('§14/§15 audit vocabulary', () => {
+  it('names every new audit action rather than echoing the raw token', () => {
+    for (const a of [
+      'SIU_CASE_ASSUMED', 'SIU_CASE_RETURNED', 'SIU_INTEL_RELEASED',
+      'SIU_INTEL_REVOKED', 'SIU_INTEL_ACKNOWLEDGED', 'SIU_EXPORTED',
+    ]) {
+      expect(siuAuditLabel(a), `${a} needs human wording`).not.toBe(a)
+    }
+    // …and an action the client has never heard of still shows, unhidden.
+    expect(siuAuditLabel('SIU_FUTURE_THING')).toBe('SIU_FUTURE_THING')
   })
 })

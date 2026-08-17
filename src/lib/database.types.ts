@@ -1090,7 +1090,11 @@ export type Database = {
           signoff_status: string
           signoff_submitted_at: string | null
           signoff_submitted_by: string | null
+          siu_assumed_at: string | null
+          siu_assumed_by: string | null
+          siu_assumption_reason: string | null
           siu_classification: string | null
+          siu_returned_at: string | null
           status: Database["public"]["Enums"]["case_status"]
           summary: string | null
           title: string | null
@@ -1126,7 +1130,11 @@ export type Database = {
           signoff_status?: string
           signoff_submitted_at?: string | null
           signoff_submitted_by?: string | null
+          siu_assumed_at?: string | null
+          siu_assumed_by?: string | null
+          siu_assumption_reason?: string | null
           siu_classification?: string | null
+          siu_returned_at?: string | null
           status?: Database["public"]["Enums"]["case_status"]
           summary?: string | null
           title?: string | null
@@ -1162,7 +1170,11 @@ export type Database = {
           signoff_status?: string
           signoff_submitted_at?: string | null
           signoff_submitted_by?: string | null
+          siu_assumed_at?: string | null
+          siu_assumed_by?: string | null
+          siu_assumption_reason?: string | null
           siu_classification?: string | null
+          siu_returned_at?: string | null
           status?: Database["public"]["Enums"]["case_status"]
           summary?: string | null
           title?: string | null
@@ -7496,6 +7508,426 @@ export type Database = {
         }
         Relationships: []
       }
+      siu_comms_intel: {
+        Row: {
+          carrier: string | null
+          case_id: string
+          content_summary: string | null
+          counterpart: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          direction: string | null
+          duration_seconds: number | null
+          id: string
+          identifier: string | null
+          legal_authority: string | null
+          legal_request_id: string | null
+          occurred_at: string | null
+          record_type: string
+          subscriber: string | null
+          updated_at: string
+        }
+        Insert: {
+          carrier?: string | null
+          case_id: string
+          content_summary?: string | null
+          counterpart?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          direction?: string | null
+          duration_seconds?: number | null
+          id?: string
+          identifier?: string | null
+          legal_authority?: string | null
+          legal_request_id?: string | null
+          occurred_at?: string | null
+          record_type?: string
+          subscriber?: string | null
+          updated_at?: string
+        }
+        Update: {
+          carrier?: string | null
+          case_id?: string
+          content_summary?: string | null
+          counterpart?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          direction?: string | null
+          duration_seconds?: number | null
+          id?: string
+          identifier?: string | null
+          legal_authority?: string | null
+          legal_request_id?: string | null
+          occurred_at?: string | null
+          record_type?: string
+          subscriber?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      siu_disclosures: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          audience: string
+          body: string
+          created_at: string
+          handling: string
+          id: string
+          item_type: string
+          reason: string
+          released_at: string
+          released_by: string | null
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          siu_case_id: string
+          source_item_id: string | null
+          target_case_id: string | null
+          target_user_id: string | null
+          title: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          audience: string
+          body: string
+          created_at?: string
+          handling?: string
+          id?: string
+          item_type?: string
+          reason: string
+          released_at?: string
+          released_by?: string | null
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          siu_case_id: string
+          source_item_id?: string | null
+          target_case_id?: string | null
+          target_user_id?: string | null
+          title: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          audience?: string
+          body?: string
+          created_at?: string
+          handling?: string
+          id?: string
+          item_type?: string
+          reason?: string
+          released_at?: string
+          released_by?: string | null
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          siu_case_id?: string
+          source_item_id?: string | null
+          target_case_id?: string | null
+          target_user_id?: string | null
+          title?: string
+        }
+        Relationships: []
+      }
+      siu_exports: {
+        Row: {
+          case_id: string
+          exported_at: string
+          exported_by: string | null
+          id: string
+          item_count: number
+          reason: string
+          scope: string
+          withheld: Json
+        }
+        Insert: {
+          case_id: string
+          exported_at?: string
+          exported_by?: string | null
+          id?: string
+          item_count?: number
+          reason: string
+          scope: string
+          withheld?: Json
+        }
+        Update: {
+          case_id?: string
+          exported_at?: string
+          exported_by?: string | null
+          id?: string
+          item_count?: number
+          reason?: string
+          scope?: string
+          withheld?: Json
+        }
+        Relationships: []
+      }
+      siu_financial_intel: {
+        Row: {
+          amount: number | null
+          case_id: string
+          counterparty: string | null
+          created_at: string
+          created_by: string | null
+          currency: string
+          description: string | null
+          flag_reason: string | null
+          flagged: boolean
+          id: string
+          identifier: string | null
+          institution: string | null
+          occurred_at: string | null
+          record_type: string
+          source_of_information: string | null
+          subject_id: string | null
+          subject_label: string | null
+          subject_type: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          case_id: string
+          counterparty?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          description?: string | null
+          flag_reason?: string | null
+          flagged?: boolean
+          id?: string
+          identifier?: string | null
+          institution?: string | null
+          occurred_at?: string | null
+          record_type?: string
+          source_of_information?: string | null
+          subject_id?: string | null
+          subject_label?: string | null
+          subject_type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          case_id?: string
+          counterparty?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          description?: string | null
+          flag_reason?: string | null
+          flagged?: boolean
+          id?: string
+          identifier?: string | null
+          institution?: string | null
+          occurred_at?: string | null
+          record_type?: string
+          source_of_information?: string | null
+          subject_id?: string | null
+          subject_label?: string | null
+          subject_type?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      siu_integrity_reviews: {
+        Row: {
+          allegation_type: string
+          case_id: string
+          closed_at: string | null
+          closed_by: string | null
+          created_at: string
+          created_by: string | null
+          disposition: string | null
+          findings: string | null
+          id: string
+          opened_at: string
+          referred_to: string | null
+          severity: string
+          status: string
+          subject_description: string | null
+          subject_user_id: string | null
+          summary: string
+          updated_at: string
+        }
+        Insert: {
+          allegation_type?: string
+          case_id: string
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          disposition?: string | null
+          findings?: string | null
+          id?: string
+          opened_at?: string
+          referred_to?: string | null
+          severity?: string
+          status?: string
+          subject_description?: string | null
+          subject_user_id?: string | null
+          summary: string
+          updated_at?: string
+        }
+        Update: {
+          allegation_type?: string
+          case_id?: string
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          disposition?: string | null
+          findings?: string | null
+          id?: string
+          opened_at?: string
+          referred_to?: string | null
+          severity?: string
+          status?: string
+          subject_description?: string | null
+          subject_user_id?: string | null
+          summary?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      siu_sources: {
+        Row: {
+          case_id: string
+          codename: string
+          control_notes: string | null
+          created_at: string
+          created_by: string | null
+          deactivated_at: string | null
+          deactivation_reason: string | null
+          handler_id: string
+          id: string
+          last_contact_at: string | null
+          motivation: string | null
+          person_id: string | null
+          registered_at: string
+          reliability: string
+          risk_assessment: string | null
+          status: string
+          tasking: string | null
+          updated_at: string
+        }
+        Insert: {
+          case_id: string
+          codename: string
+          control_notes?: string | null
+          created_at?: string
+          created_by?: string | null
+          deactivated_at?: string | null
+          deactivation_reason?: string | null
+          handler_id: string
+          id?: string
+          last_contact_at?: string | null
+          motivation?: string | null
+          person_id?: string | null
+          registered_at?: string
+          reliability?: string
+          risk_assessment?: string | null
+          status?: string
+          tasking?: string | null
+          updated_at?: string
+        }
+        Update: {
+          case_id?: string
+          codename?: string
+          control_notes?: string | null
+          created_at?: string
+          created_by?: string | null
+          deactivated_at?: string | null
+          deactivation_reason?: string | null
+          handler_id?: string
+          id?: string
+          last_contact_at?: string | null
+          motivation?: string | null
+          person_id?: string | null
+          registered_at?: string
+          reliability?: string
+          risk_assessment?: string | null
+          status?: string
+          tasking?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      siu_undercover_operations: {
+        Row: {
+          agent_id: string | null
+          authorized_at: string | null
+          authorized_by: string | null
+          case_id: string
+          cover_details: string | null
+          created_at: string
+          created_by: string | null
+          end_reason: string | null
+          ended_at: string | null
+          extraction_plan: string | null
+          handler_id: string
+          id: string
+          legal_authority: string | null
+          legend_backstop: string | null
+          legend_name: string
+          objective: string | null
+          operation_id: string | null
+          risk_assessment: string | null
+          started_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id?: string | null
+          authorized_at?: string | null
+          authorized_by?: string | null
+          case_id: string
+          cover_details?: string | null
+          created_at?: string
+          created_by?: string | null
+          end_reason?: string | null
+          ended_at?: string | null
+          extraction_plan?: string | null
+          handler_id: string
+          id?: string
+          legal_authority?: string | null
+          legend_backstop?: string | null
+          legend_name: string
+          objective?: string | null
+          operation_id?: string | null
+          risk_assessment?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string | null
+          authorized_at?: string | null
+          authorized_by?: string | null
+          case_id?: string
+          cover_details?: string | null
+          created_at?: string
+          created_by?: string | null
+          end_reason?: string | null
+          ended_at?: string | null
+          extraction_plan?: string | null
+          handler_id?: string
+          id?: string
+          legal_authority?: string | null
+          legend_backstop?: string | null
+          legend_name?: string
+          objective?: string | null
+          operation_id?: string | null
+          risk_assessment?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       siu_case_agents: {
         Row: {
           agent_role: string
@@ -9504,6 +9936,14 @@ export type Database = {
         }
         Returns: string
       }
+      siu_acknowledge_disclosure: {
+        Args: { p_id: string }
+        Returns: undefined
+      }
+      siu_assume_control: {
+        Args: { p_case: string; p_classification?: string; p_reason: string }
+        Returns: undefined
+      }
       siu_assign_agent: {
         Args: { p_agent_role?: string; p_case: string; p_user: string }
         Returns: undefined
@@ -9545,6 +9985,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: Json
       }
+      siu_export_case: {
+        Args: { p_case: string; p_reason: string; p_scope: string }
+        Returns: Json
+      }
       siu_member_search: {
         Args: { p_q: string }
         Returns: {
@@ -9559,8 +10003,35 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: Json
       }
+      siu_oversight_report: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       siu_remove: {
         Args: { p_reason: string; p_user: string }
+        Returns: undefined
+      }
+      siu_release_control: {
+        Args: { p_case: string; p_reason: string }
+        Returns: undefined
+      }
+      siu_released_intelligence: {
+        Args: { p_case?: string }
+        Returns: {
+          acknowledged_at: string
+          acknowledged_by: string
+          audience: string
+          body: string
+          handling: string
+          id: string
+          item_type: string
+          released_at: string
+          target_case_id: string
+          title: string
+        }[]
+      }
+      siu_revoke_disclosure: {
+        Args: { p_id: string; p_reason: string }
         Returns: undefined
       }
       siu_roster: {
@@ -9582,6 +10053,21 @@ export type Database = {
           siu_role: string
           user_id: string
         }[]
+      }
+      siu_share: {
+        Args: {
+          p_audience: string
+          p_body: string
+          p_case: string
+          p_handling?: string
+          p_item_type: string
+          p_reason: string
+          p_source_item?: string
+          p_target_case?: string
+          p_target_user?: string
+          p_title: string
+        }
+        Returns: string
       }
       siu_set_callsign: {
         Args: { p_callsign: string; p_user: string }

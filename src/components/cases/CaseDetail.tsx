@@ -15,6 +15,8 @@ import { countRows, list, rpc, update, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useSiu } from '@/lib/useSiu'
 import { caseDepartment, siuClassificationLabel, siuClassificationTint, termsFor } from '@/lib/siu'
+import { ReleasedIntelligence } from './ReleasedIntelligence'
+import { SiuControlBar } from './SiuControlBar'
 import { Badge } from '@/components/ui/Badge'
 import { useOperationsStore } from '@/lib/operations'
 import { caseJointInfo, type OpCaseLinkRow } from '@/lib/opsJoint'
@@ -448,6 +450,11 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
           </span>
         </div>
       ) : null}
+      {/* §14/§15 controls. SiuControlBar renders nothing without SIU command,
+          and ReleasedIntelligence renders nothing when nothing was released —
+          a CID case untouched by SIU looks exactly as it always did. */}
+      <SiuControlBar caseRow={c} onChanged={() => { void fetchCase(); onChanged() }} />
+      {caseDept === 'cid' && <ReleasedIntelligence caseId={c.id} />}
       {c.archived_at && (
         <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-200">
           This case is archived — it is hidden from the working views. Command can restore it from the header menu.
