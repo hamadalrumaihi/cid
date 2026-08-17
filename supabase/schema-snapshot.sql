@@ -10750,3 +10750,12 @@ create policy wl_sel on public.watchlist
 -- THROWS post-run, so an escaping test turns the build red instead of being
 -- quietly swept. Definitive SQL in
 -- supabase/migrations/20260827120000_rls_cleanup_namespace_wall.sql.
+
+-- siu_settings FK index (20260828120000_siu_settings_fk_index) — the Supabase
+-- performance advisor flagged siu_settings_updated_by_fkey as the one covering
+-- index missing across the whole SIU surface. NEW INDEX
+-- siu_settings_updated_by_fkey_idx ON public.siu_settings (updated_by).
+-- A re-run of the security advisor on the same date returned ZERO ERROR-level
+-- findings; the only INFO rls_enabled_no_policy rows are the three intentional
+-- deny-all tables (app_secrets, deletion_tokens, security_test_runs).
+-- Definitive SQL in supabase/migrations/20260828120000_siu_settings_fk_index.sql.
