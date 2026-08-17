@@ -738,6 +738,315 @@ export async function fetchSiuExports(caseId?: string): Promise<SiuExportRow[]> 
 }
 
 // ---------------------------------------------------------------------------
+// §20/§21/§23 Intelligence quality — TWO questions, not one
+// ---------------------------------------------------------------------------
+
+/** HOW the information was obtained. Distinct from who said it and from
+ *  whether it is true — those are the two grades below. */
+export const SIU_SOURCE_TYPES = [
+  'human_source', 'officer_observation', 'surveillance', 'technical',
+  'documentary', 'open_source', 'anonymous', 'partner_agency', 'other',
+] as const
+
+export const SIU_SOURCE_TYPE_LABEL: Record<string, string> = {
+  human_source: 'Human source',
+  officer_observation: 'Officer observation',
+  surveillance: 'Surveillance',
+  technical: 'Technical',
+  documentary: 'Documentary',
+  open_source: 'Open source',
+  anonymous: 'Anonymous',
+  partner_agency: 'Partner agency',
+  other: 'Other',
+}
+
+/** The second half of the Admiralty pairing. SIU_RELIABILITY grades the
+ *  SOURCE; this grades the INFORMATION. Keeping them apart is the whole point:
+ *  a reliable source can pass on a rumour, and an untested source can be
+ *  right. Collapsing the two into one "confidence" number is the classic way
+ *  an assessment gets over-trusted. */
+export const SIU_CREDIBILITY = [
+  'confirmed', 'probably_true', 'possibly_true',
+  'doubtful', 'improbable', 'cannot_judge',
+] as const
+
+export const SIU_CREDIBILITY_LABEL: Record<string, string> = {
+  confirmed: 'Confirmed by other sources',
+  probably_true: 'Probably true',
+  possibly_true: 'Possibly true',
+  doubtful: 'Doubtful',
+  improbable: 'Improbable',
+  cannot_judge: 'Cannot be judged',
+}
+
+export const SIU_REVIEW_OUTCOME_LABEL: Record<string, string> = {
+  revalidated: 'Revalidated',
+  downgraded: 'Downgraded',
+  superseded: 'Superseded',
+  withdrawn: 'Withdrawn',
+}
+
+export const siuSourceTypeLabel = (t?: string | null) =>
+  (t && SIU_SOURCE_TYPE_LABEL[t]) || t || '—'
+export const siuCredibilityLabel = (c?: string | null) =>
+  (c && SIU_CREDIBILITY_LABEL[c]) || 'Ungraded'
+export const siuReviewOutcomeLabel = (o?: string | null) =>
+  (o && SIU_REVIEW_OUTCOME_LABEL[o]) || o || '—'
+
+/** Ungraded is a REAL state, never a silent pass. Nothing anywhere treats a
+ *  missing grade as good — mirrors the server, where the columns are nullable
+ *  with no default precisely so that "nobody has assessed this" stays visible. */
+export const isUngraded = (n: { info_credibility?: string | null }) => !n.info_credibility
+
+export const siuCredibilityTint = (c?: string | null): string =>
+  c === 'confirmed' ? 'bg-emerald-500/15 text-emerald-300'
+  : c === 'probably_true' ? 'bg-blue-500/15 text-blue-300'
+  : c === 'doubtful' || c === 'improbable' ? 'bg-rose-500/15 text-rose-300'
+  : c === 'possibly_true' ? 'bg-amber-500/15 text-amber-300'
+  : 'bg-white/5 text-slate-300'
+
+/** §23. Intelligence rots, so a review date is a first-class fact. A null date
+ *  means never graded — which is overdue in spirit, and the UI says so. */
+export const reviewOverdue = (n: { review_due_at?: string | null; resolved_at?: string | null }) =>
+  !n.resolved_at && !!n.review_due_at && new Date(n.review_due_at) < new Date()
+
+export interface SiuIntelQuality {
+  access: boolean
+  notes?: number
+  ungraded?: number
+  confirmed?: number
+  doubtful?: number
+  untested_source?: number
+  review_overdue?: number
+  review_due_30d?: number
+  withdrawn?: number
+}
+
+export async function fetchSiuIntelQuality(): Promise<SiuIntelQuality> {
+  const res = await rpc('siu_intel_quality', {})
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuIntelQuality | null) ?? { access: false }
+}
+
+// ---------------------------------------------------------------------------
+// §25 Watchlist
+// ---------------------------------------------------------------------------
+
+export const SIU_WATCH_ENTITY_TYPES = [
+  'person', 'vehicle', 'gang', 'place', 'organization', 'account', 'indicator', 'unknown',
+] as const
+
+export const SIU_WATCH_ENTITY_LABEL: Record<string, string> = {
+  person: 'Person', vehicle: 'Vehicle', gang: 'Gang', place: 'Place',
+  organization: 'Organization', account: 'Account', indicator: 'Indicator',
+  unknown: 'Unknown',
+}
+
+export const SIU_WATCH_PRIORITIES = ['routine', 'elevated', 'urgent'] as const
+
+export const SIU_WATCH_PRIORITY_LABEL: Record<string, string> = {
+  routine: 'Routine', elevated: 'Elevated', urgent: 'Urgent',
+}
+
+export const siuWatchEntityLabel = (t?: string | null) =>
+  (t && SIU_WATCH_ENTITY_LABEL[t]) || t || '—'
+export const siuWatchPriorityTint = (p?: string | null): string =>
+  p === 'urgent' ? 'bg-rose-500/15 text-rose-300'
+  : p === 'elevated' ? 'bg-amber-500/15 text-amber-300'
+  : 'bg-white/5 text-slate-300'
+
+export interface SiuWatchEntry {
+  id: string
+  entity_type: string
+  entity_id: string | null
+  label: string
+  reason: string
+  case_id: string | null
+  priority: string
+  expires_at: string
+  review_due_at: string | null
+  status: string
+  removed_at: string | null
+  removed_by: string | null
+  removal_reason: string | null
+  created_by: string | null
+  created_at: string
+}
+
+/** Mirrors `private.siu_watch_live()`. Expiry is read off the CLOCK, not off
+ *  the status column — a stale 'active' row must never keep a watch alive past
+ *  its end date, on the server or on screen. */
+export const watchLive = (w: { status?: string | null; expires_at?: string | null }) =>
+  w.status === 'active' && !!w.expires_at && new Date(w.expires_at) > new Date()
+
+export const watchExpiringWithin = (w: SiuWatchEntry, days: number) =>
+  watchLive(w) && new Date(w.expires_at).getTime() - Date.now() < days * 86_400_000
+
+export async function fetchSiuWatchlist(): Promise<SiuWatchEntry[]> {
+  const rows = await list('siu_watchlist', { order: 'created_at', ascending: false, limit: 300 })
+  return rows as unknown as SiuWatchEntry[]
+}
+
+// ---------------------------------------------------------------------------
+// §19 Deconfliction
+// ---------------------------------------------------------------------------
+
+/** What `siu_deconflict()` will and will not tell you.
+ *
+ *  `investigations` are cases the caller can ALREADY open, so naming them
+ *  discloses nothing. Everything else collapses to `other_interest` — a count
+ *  and a pointer to SIU command. There is no case number and no agent name in
+ *  it, because naming the agent on a restricted investigation discloses the
+ *  investigation AND a participant.
+ *
+ *  COMPARTMENTED INVESTIGATIONS ARE NOT COUNTED AT ALL. A clean deconfliction
+ *  result therefore does NOT prove nobody else is interested — see the header
+ *  of migration 20260831120000 for why that cost is accepted. Any UI built on
+ *  this must not word a zero result as "no other interest". */
+export interface SiuDeconflictHit {
+  case_id: string
+  case_number: string
+  title: string | null
+  designation: string | null
+  stage: string | null
+}
+
+export interface SiuDeconflictResult {
+  access: boolean
+  investigations?: SiuDeconflictHit[]
+  other_interest?: number
+  coordinate_with?: string | null
+  watchlist?: { id: string; label: string; priority: string; expires_at: string }[]
+}
+
+export async function siuDeconflict(
+  entityType: string,
+  entityId?: string | null,
+  label?: string | null,
+): Promise<SiuDeconflictResult> {
+  const res = await rpc('siu_deconflict', {
+    p_entity_type: entityType,
+    ...(entityId ? { p_entity_id: entityId } : {}),
+    ...(label ? { p_label: label } : {}),
+  })
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuDeconflictResult | null) ?? { access: false }
+}
+
+// ---------------------------------------------------------------------------
+// §30 Temporary supporting-officer access
+// ---------------------------------------------------------------------------
+
+/** A §30 grant opens ONE investigation's case file — reports, evidence, media,
+ *  tasks — and nothing else. It is spliced into `can_access_case()`, never into
+ *  `siu_case_access()`, so every siu_* table (sources, legends, intercepts,
+ *  targets, the SIU-only note layer) stays shut to the holder. It confers no
+ *  SIU standing and no workspace. */
+export interface SiuTempAccess {
+  id: string
+  case_id: string
+  user_id: string
+  reason: string
+  granted_by: string | null
+  granted_at: string
+  expires_at: string
+  revoked_at: string | null
+  revoked_by: string | null
+  revoke_reason: string | null
+}
+
+export const tempAccessLive = (t: { revoked_at?: string | null; expires_at?: string | null }) =>
+  !t.revoked_at && !!t.expires_at && new Date(t.expires_at) > new Date()
+
+/** The cap the server enforces (`siu_grant_temp_access`). Mirrored so the form
+ *  cannot offer a value the RPC will refuse. */
+export const SIU_TEMP_ACCESS_MAX_DAYS = 30
+/** The cap on a single watch grant (`siu_watch_add` / `siu_watch_extend`). */
+export const SIU_WATCH_MAX_DAYS = 365
+
+export async function fetchSiuTempAccess(caseId?: string): Promise<SiuTempAccess[]> {
+  const rows = await list('siu_temporary_access', {
+    order: 'granted_at', ascending: false, limit: 200,
+    ...(caseId ? { eq: { case_id: caseId } } : {}),
+  })
+  return rows as unknown as SiuTempAccess[]
+}
+
+// ---------------------------------------------------------------------------
+// §35/§36/§53 Dashboards
+// ---------------------------------------------------------------------------
+
+export interface SiuWorkloadRow {
+  user_id: string
+  display_name: string | null
+  siu_role: string
+  callsign: string | null
+  open_cases: number
+  inquiries: number
+  leads: number
+  overdue_reviews: number
+  recused_from: number
+}
+
+export interface SiuAgingCase {
+  case_id: string
+  case_number: string
+  title: string | null
+  stage: string
+  category: string | null
+  classification: string
+  opened_at: string
+  days_open: number
+  agents: number
+}
+
+export interface SiuCommandDashboard {
+  access: boolean
+  workload?: SiuWorkloadRow[]
+  aging?: SiuAgingCase[]
+  queues?: {
+    referrals_awaiting: number
+    inquiries_open: number
+    conflicts_standing: number
+    watch_expiring_14d: number
+    watch_active: number
+    temp_access_live: number
+  }
+}
+
+export async function fetchSiuCommandDashboard(): Promise<SiuCommandDashboard> {
+  const res = await rpc('siu_command_dashboard', {})
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuCommandDashboard | null) ?? { access: false }
+}
+
+/** §53. Counts only — no case id, no title, no name, no label. Oversight
+ *  supervises the unit's SHAPE, never its contents. */
+export interface SiuOversightSupplement {
+  access: boolean
+  referrals_total?: number
+  referrals_awaiting?: number
+  referrals_accepted?: number
+  referrals_declined?: number
+  inquiries_open?: number
+  closed_by_reason?: Record<string, number>
+  open_by_category?: Record<string, number>
+  conflicts_declared?: number
+  conflicts_standing?: number
+  intel_ungraded?: number
+  intel_review_overdue?: number
+  watch_active?: number
+  temp_access_live?: number
+  temp_access_granted_total?: number
+}
+
+export async function fetchSiuOversightSupplement(): Promise<SiuOversightSupplement> {
+  const res = await rpc('siu_oversight_supplement', {})
+  if (res.error) throw new Error(res.error.message)
+  return (res.data as unknown as SiuOversightSupplement | null) ?? { access: false }
+}
+
+// ---------------------------------------------------------------------------
 // §14 Intake — the referral queue
 // ---------------------------------------------------------------------------
 
@@ -990,6 +1299,13 @@ export const SIU_AUDIT_LABEL: Record<string, string> = {
   SIU_CASE_CLOSED: 'Investigation closed',
   SIU_CONFLICT_DECLARED: 'Conflict of interest declared',
   SIU_CONFLICT_RESOLVED: 'Conflict of interest resolved',
+  SIU_INTEL_GRADED: 'Intelligence graded',
+  SIU_INTEL_REVIEWED: 'Intelligence reviewed',
+  SIU_WATCH_ADDED: 'Added to the watchlist',
+  SIU_WATCH_EXTENDED: 'Watch extended',
+  SIU_WATCH_REMOVED: 'Removed from the watchlist',
+  SIU_TEMP_ACCESS_GRANTED: 'Supporting access granted',
+  SIU_TEMP_ACCESS_REVOKED: 'Supporting access ended',
 }
 
 export const siuAuditLabel = (a: string) => SIU_AUDIT_LABEL[a] ?? a

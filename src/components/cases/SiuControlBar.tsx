@@ -12,21 +12,23 @@
  *  authority columns are frozen against every direct write by
  *  `private.block_direct_siu_case_cols()`. */
 
-import { useState } from 'react'
-import { rpc } from '@/lib/db'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { list, rpc, withRetry } from '@/lib/db'
 import { useSiu } from '@/lib/useSiu'
 import {
   SIU_CASE_CATEGORIES, SIU_CLASSIFICATIONS, SIU_CLASSIFICATION_HINT,
   SIU_CLOSURE_REASONS, SIU_STAGE_HINT, isPreliminaryInquiry, siuCaseCategoryLabel,
   siuClassificationLabel, siuClosureReasonLabel, siuStageLabel, siuStageTint,
+  SIU_TEMP_ACCESS_MAX_DAYS, fetchSiuTempAccess, tempAccessLive, type SiuTempAccess,
 } from '@/lib/siu'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
-import { Field, Select, Textarea } from '@/components/ui/Field'
+import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { uiPrompt } from '@/components/ui/dialog'
 import { SiuExportPanel } from '@/components/siu/SiuTradecraft'
+import type { Tables } from '@/lib/database.types'
 import type { CaseRow } from './tabs/shared'
 
 const fmtDate = (v?: string | null) =>
@@ -88,6 +90,8 @@ export function SiuControlBar({ caseRow, onChanged }: { caseRow: CaseRow; onChan
       )}
 
       {isSiu && <div className="w-full"><SiuExportPanel caseId={caseRow.id} /></div>}
+
+      {isSiu && <div className="w-full"><SiuSupportingAccess caseRow={caseRow} /></div>}
 
       {taking && (
         <AssumeModal
@@ -250,6 +254,200 @@ function CloseModal({ caseRow, onClose, onDone }: {
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" disabled={busy} onClick={() => void save()}>
             {busy ? 'Closing…' : 'Close investigation'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+/** §30 — supporting-officer access.
+ *
+ *  Available on a STANDARD investigation only, and the panel says so rather
+ *  than silently hiding: command needs to know why the control is absent on a
+ *  restricted case, not wonder where it went.
+ *
+ *  What a grant actually confers is stated on screen every time, because the
+ *  person clicking it is deciding to show a CID officer an SIU file and should
+ *  not have to remember the boundary. `private.siu_temp_access()` is spliced
+ *  into can_access_case()/_row() and never into siu_case_access(), so the
+ *  holder gets the case file and no tradecraft table at all. */
+function SiuSupportingAccess({ caseRow }: { caseRow: CaseRow }) {
+  const siu = useSiu()
+  const [rows, setRows] = useState<SiuTempAccess[]>([])
+  const [people, setPeople] = useState<Tables<'profiles'>[]>([])
+  const [loading, setLoading] = useState(true)
+  const [granting, setGranting] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const [t, p] = await Promise.all([
+        withRetry(() => fetchSiuTempAccess(caseRow.id)),
+        withRetry(() => list('profiles', { order: 'display_name', limit: 500 })),
+      ])
+      setRows(t); setPeople(p)
+    } catch { /* an empty panel is the honest fallback */ }
+    finally { setLoading(false) }
+  }, [caseRow.id])
+
+  useEffect(() => {
+    let live = true
+    void (async () => {
+      await Promise.resolve()
+      if (live) await load()
+    })()
+    return () => { live = false }
+  }, [load])
+
+  const live = useMemo(() => rows.filter(tempAccessLive), [rows])
+  const standard = (caseRow.siu_classification ?? 'siu') === 'siu'
+
+  const revoke = async (t: SiuTempAccess) => {
+    const reason = await uiPrompt(
+      'Access ends immediately. The grant is kept as a record of who saw this investigation and when.',
+      { title: 'End supporting access', placeholder: 'Reason', confirmText: 'End access' },
+    )
+    if (!reason?.trim()) return
+    const res = await rpc('siu_revoke_temp_access', { p_id: t.id, p_reason: reason.trim() })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Supporting access ended.', 'success')
+    void load()
+  }
+
+  const nameOf = (id: string) => people.find((p) => p.id === id)?.display_name ?? 'Unknown'
+
+  if (loading) return null
+
+  return (
+    <div className="mt-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+          Supporting officers
+        </span>
+        {live.length > 0 && (
+          <Badge tint="bg-amber-500/15 text-amber-300">{live.length} with access</Badge>
+        )}
+        {siu.isCommand && standard && (
+          <Button size="sm" className="ml-auto" onClick={() => setGranting(true)}>
+            Grant supporting access
+          </Button>
+        )}
+      </div>
+
+      {!standard && (
+        <p className="mt-2 text-[11px] text-slate-500">
+          Not available above standard classification. A restricted, command or compartmented
+          investigation is never opened to someone outside the unit.
+        </p>
+      )}
+
+      {!live.length ? (
+        standard && <p className="mt-2 text-[11px] text-slate-500">Nobody outside SIU has access.</p>
+      ) : (
+        <ul className="mt-2 space-y-1.5">
+          {live.map((t) => (
+            <li key={t.id} className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+              <span className="text-slate-100">{nameOf(t.user_id)}</span>
+              <span className="text-slate-500">— {t.reason}</span>
+              <span className="ml-auto text-slate-500">until {fmtDate(t.expires_at)}</span>
+              {siu.isCommand && (
+                <button
+                  type="button"
+                  className="text-rose-300 underline-offset-2 hover:underline"
+                  onClick={() => void revoke(t)}
+                >
+                  End
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {granting && (
+        <GrantAccessModal
+          caseRow={caseRow}
+          people={people}
+          onClose={() => setGranting(false)}
+          onDone={() => { setGranting(false); void load() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function GrantAccessModal({ caseRow, people, onClose, onDone }: {
+  caseRow: CaseRow
+  people: Tables<'profiles'>[]
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [user, setUser] = useState('')
+  const [reason, setReason] = useState('')
+  const [days, setDays] = useState(7)
+  const [busy, setBusy] = useState(false)
+
+  const save = async () => {
+    if (!user) { toast('Choose an officer.', 'warn'); return }
+    if (!reason.trim()) { toast('Record why they need access.', 'warn'); return }
+    if (days < 1 || days > SIU_TEMP_ACCESS_MAX_DAYS) {
+      toast(`Supporting access runs for between 1 and ${SIU_TEMP_ACCESS_MAX_DAYS} days.`, 'warn'); return
+    }
+    setBusy(true)
+    const res = await rpc('siu_grant_temp_access', {
+      p_case: caseRow.id, p_user: user, p_reason: reason.trim(), p_days: days,
+    })
+    setBusy(false)
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Supporting access granted.', 'success')
+    onDone()
+  }
+
+  return (
+    <Modal open onClose={onClose} dirty={() => !!reason}>
+      <ModalHeader title={`Grant supporting access to ${caseRow.case_number}`} onClose={onClose} />
+      <div className="space-y-3">
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-200/90">
+          <p className="font-semibold">What they will and will not see</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-amber-200/80">
+            <li>This investigation only — its reports, evidence, media and tasks.</li>
+            <li><strong>Not</strong> sources, undercover operations, financial or communications
+              intelligence, integrity reviews, targets, disclosures or SIU intelligence notes.</li>
+            <li>No SIU workspace, no roster, no other investigation, no SIU standing.</li>
+            <li>Access ends automatically at the expiry date, and immediately if the
+              investigation is reclassified above standard.</li>
+          </ul>
+        </div>
+        <Field label="Officer" required>
+          {(id) => (
+            <Select id={id} value={user} onChange={(e) => setUser(e.target.value)}>
+              <option value="">Select…</option>
+              {people.filter((p) => p.active).map((p) => (
+                <option key={p.id} value={p.id}>{p.display_name ?? p.id}</option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field label="Runs for (days)" required hint={`Hard limit ${SIU_TEMP_ACCESS_MAX_DAYS}.`}>
+          {(id) => (
+            <Input
+              id={id} type="number" min={1} max={SIU_TEMP_ACCESS_MAX_DAYS}
+              value={days} onChange={(e) => setDays(Number(e.target.value))}
+            />
+          )}
+        </Field>
+        <Field label="Reason" required hint="Recorded on the grant and in the audit log, against your name.">
+          {(id) => (
+            <Textarea
+              id={id} rows={3} value={reason} onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Ballistics comparison against the seized firearm"
+            />
+          )}
+        </Field>
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={busy} onClick={() => void save()}>
+            {busy ? 'Granting…' : 'Grant access'}
           </Button>
         </div>
       </div>

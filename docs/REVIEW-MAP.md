@@ -90,4 +90,13 @@ Notes kept accurate to the RLS/RPC reality:
   `siu_is_agent()`, not on SIU standing generally, because a referral can name
   the Director of CID or the Attorney General. Submitting is open to every
   active member; the submitter's receipt carries no review column.
+- **§30 supporting access is not SIU standing**: a grant opens ONE investigation's
+  case file and no `siu_*` table at all — it is spliced into
+  `can_access_case()`/`_row()`, never into `siu_case_access()`. Standard
+  classification only, 30 days maximum, and the classification test lives in the
+  predicate so reclassifying upward closes every outstanding grant at once.
+- **Deconfliction does not pierce a compartment**: `siu_deconflict()` excludes
+  compartmented investigations from its hit count entirely, so a clean result is
+  not proof nobody else is interested. Deliberate — a hit count is an existence
+  oracle. Compartment members deconflict through command.
 - **Client UI mirrors, server decides**: the matrix above is enforced in SQL; `src/lib/roles.ts` mirrors it for option filtering only, pinned by `src/lib/roles.test.ts`.

@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
 import { list, rpc, withRetry } from '@/lib/db'
 import { useSiu } from '@/lib/useSiu'
+import { SiuOversightSupplementCard } from './SiuCommand'
 import {
   SIU_EXPORT_SCOPES, fetchSiuExports, fetchSiuOversightReport,
   siuAllegationLabel, siuExportScopeLabel, siuReliabilityLabel,
@@ -362,6 +363,8 @@ export function SiuOversightSection() {
 
   return (
     <div className="space-y-4">
+      <SiuOversightSupplementCard />
+
       <Card>
         <SectionHeader
           title="Oversight report"

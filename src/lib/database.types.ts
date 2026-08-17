@@ -7427,6 +7427,13 @@ export type Database = {
           case_id: string
           created_at: string
           created_by: string | null
+          info_credibility: string | null
+          last_reviewed_at: string | null
+          last_reviewed_by: string | null
+          review_due_at: string | null
+          review_outcome: string | null
+          source_reliability: string | null
+          source_type: string | null
           id: string
           note_type: string
           resolution: string | null
@@ -7442,6 +7449,13 @@ export type Database = {
           case_id: string
           created_at?: string
           created_by?: string | null
+          info_credibility?: string | null
+          last_reviewed_at?: string | null
+          last_reviewed_by?: string | null
+          review_due_at?: string | null
+          review_outcome?: string | null
+          source_reliability?: string | null
+          source_type?: string | null
           id?: string
           note_type?: string
           resolution?: string | null
@@ -7457,6 +7471,13 @@ export type Database = {
           case_id?: string
           created_at?: string
           created_by?: string | null
+          info_credibility?: string | null
+          last_reviewed_at?: string | null
+          last_reviewed_by?: string | null
+          review_due_at?: string | null
+          review_outcome?: string | null
+          source_reliability?: string | null
+          source_type?: string | null
           id?: string
           note_type?: string
           resolution?: string | null
@@ -8081,6 +8102,108 @@ export type Database = {
           id?: boolean
           updated_at?: string
           updated_by?: string | null
+        }
+        Relationships: []
+      }
+      siu_watchlist: {
+        Row: {
+          case_id: string | null
+          created_at: string
+          created_by: string | null
+          entity_id: string | null
+          entity_type: string
+          expires_at: string
+          id: string
+          label: string
+          priority: string
+          reason: string
+          removal_reason: string | null
+          removed_at: string | null
+          removed_by: string | null
+          review_due_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          case_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          entity_id?: string | null
+          entity_type: string
+          expires_at: string
+          id?: string
+          label: string
+          priority?: string
+          reason: string
+          removal_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          review_due_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          case_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          entity_id?: string | null
+          entity_type?: string
+          expires_at?: string
+          id?: string
+          label?: string
+          priority?: string
+          reason?: string
+          removal_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          review_due_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      siu_temporary_access: {
+        Row: {
+          case_id: string
+          created_at: string
+          expires_at: string
+          granted_at: string
+          granted_by: string | null
+          id: string
+          reason: string
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          case_id: string
+          created_at?: string
+          expires_at: string
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          reason: string
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          case_id?: string
+          created_at?: string
+          expires_at?: string
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          reason?: string
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -10183,6 +10306,69 @@ export type Database = {
       siu_set_callsign: {
         Args: { p_callsign: string; p_user: string }
         Returns: undefined
+      }
+      siu_grade_note: {
+        Args: {
+          p_credibility: string
+          p_note: string
+          p_reliability: string
+          p_review_due?: string
+          p_source_type: string
+        }
+        Returns: undefined
+      }
+      siu_review_note: {
+        Args: {
+          p_next_review?: string
+          p_note: string
+          p_note_text: string
+          p_outcome: string
+        }
+        Returns: undefined
+      }
+      siu_intel_quality: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      siu_watch_add: {
+        Args: {
+          p_case?: string
+          p_days?: number
+          p_entity_id?: string
+          p_entity_type: string
+          p_label: string
+          p_priority?: string
+          p_reason: string
+        }
+        Returns: string
+      }
+      siu_watch_extend: {
+        Args: { p_days: number; p_id: string; p_reason: string }
+        Returns: undefined
+      }
+      siu_watch_remove: {
+        Args: { p_id: string; p_reason: string }
+        Returns: undefined
+      }
+      siu_deconflict: {
+        Args: { p_entity_id?: string; p_entity_type: string; p_label?: string }
+        Returns: Json
+      }
+      siu_grant_temp_access: {
+        Args: { p_case: string; p_days?: number; p_reason: string; p_user: string }
+        Returns: string
+      }
+      siu_revoke_temp_access: {
+        Args: { p_id: string; p_reason: string }
+        Returns: undefined
+      }
+      siu_command_dashboard: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      siu_oversight_supplement: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
       }
       siu_submit_referral: {
         Args: {

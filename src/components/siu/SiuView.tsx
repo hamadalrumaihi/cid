@@ -36,9 +36,14 @@ import {
   siuOperationCategoryLabel, type SiuOperationCategory,
   type SiuAuditRow, type SiuCandidate, type SiuOverview, type SiuRosterRow,
   type SiuDesignation, type SiuNoteType,
+  SIU_CREDIBILITY, SIU_RELIABILITY, SIU_SOURCE_TYPES,
+  isUngraded, reviewOverdue, siuCredibilityLabel, siuCredibilityTint,
+  siuReliabilityLabel, siuReviewOutcomeLabel, siuSourceTypeLabel,
 } from '@/lib/siu'
 import { SiuDisclosuresSection } from './SiuDisclosures'
 import { SiuIntakeSection } from './SiuIntake'
+import { SiuWatchlistSection } from './SiuWatchlist'
+import { SiuCommandSection } from './SiuCommand'
 import { SiuOversightSection, SiuTradecraftSection } from './SiuTradecraft'
 import { roleLabel } from '@/lib/roles'
 import { toast } from '@/lib/toast'
@@ -56,7 +61,7 @@ import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 
 type CaseRow = Tables<'cases'>
 type Section = 'overview' | 'intake' | 'investigations' | 'targets' | 'operations' | 'intelligence'
-  | 'tradecraft' | 'disclosure' | 'oversight' | 'agents' | 'activity'
+  | 'watchlist' | 'tradecraft' | 'disclosure' | 'command' | 'oversight' | 'agents' | 'activity'
 type TargetRow = Tables<'siu_targets'>
 type OperationRow = Tables<'operations'>
 type NoteRow = Tables<'siu_case_notes'>
@@ -68,8 +73,10 @@ const SECTIONS = [
   { id: 'targets' as const, label: 'Targets' },
   { id: 'operations' as const, label: 'Operations' },
   { id: 'intelligence' as const, label: 'Intelligence' },
+  { id: 'watchlist' as const, label: 'Watchlist' },
   { id: 'tradecraft' as const, label: 'Tradecraft' },
   { id: 'disclosure' as const, label: 'Released to CID' },
+  { id: 'command' as const, label: 'Command' },
   { id: 'oversight' as const, label: 'Oversight' },
   { id: 'agents' as const, label: 'Agents' },
   { id: 'activity' as const, label: 'Activity' },
@@ -155,8 +162,10 @@ export function SiuView() {
       {section === 'targets' && <TargetsSection />}
       {section === 'operations' && <OperationsSection />}
       {section === 'intelligence' && <IntelligenceSection />}
+      {section === 'watchlist' && <SiuWatchlistSection />}
       {section === 'tradecraft' && <SiuTradecraftSection />}
       {section === 'disclosure' && <SiuDisclosuresSection />}
+      {section === 'command' && <SiuCommandSection />}
       {section === 'oversight' && <SiuOversightSection />}
       {section === 'agents' && <AgentsSection />}
       {section === 'activity' && <ActivitySection />}
@@ -573,27 +582,57 @@ function OperationsSection() {
 /* ------------------------------------------------------------ intelligence */
 
 function IntelligenceSection() {
+  const siu = useSiu()
   const [rows, setRows] = useState<NoteRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [grading, setGrading] = useState<NoteRow | null>(null)
+
+  const load = useCallback(async () => {
+    try { setRows(await withRetry(() => list('siu_case_notes', { order: 'created_at', ascending: false, limit: 100 })) as NoteRow[]) }
+    catch (e) { toast(e instanceof Error ? e.message : String(e), 'danger') }
+    finally { setLoading(false) }
+  }, [])
 
   useEffect(() => {
     let live = true
-    void withRetry(() => list('siu_case_notes', { order: 'created_at', ascending: false, limit: 100 }))
-      .then((r) => { if (live) setRows(r as NoteRow[]) })
-      .catch((e) => { if (live) toast(e instanceof Error ? e.message : String(e), 'danger') })
-      .finally(() => { if (live) setLoading(false) })
+    void (async () => {
+      await Promise.resolve()
+      if (live) await load()
+    })()
     return () => { live = false }
-  }, [])
+  }, [load])
+
+  const review = async (n: NoteRow, outcome: string) => {
+    const note = await uiPrompt(
+      outcome === 'withdrawn'
+        ? 'The note is resolved and marked withdrawn. It is kept, not deleted — intelligence that turned out to be wrong is part of the record of what the unit believed, and when.'
+        : 'Recorded against your name, with the next review date set 90 days out.',
+      { title: `Record a review — ${siuReviewOutcomeLabel(outcome)}`, placeholder: 'What the review found', confirmText: 'Record' },
+    )
+    if (!note?.trim()) return
+    const res = await rpc('siu_review_note', { p_note: n.id, p_outcome: outcome, p_note_text: note.trim() })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Review recorded.', 'success')
+    void load()
+  }
 
   if (loading) return <CardGridSkeleton cols="" />
 
   const open = rows.filter((r) => !r.resolved_at)
+  const ungraded = open.filter(isUngraded).length
+  const overdue = open.filter(reviewOverdue).length
 
   return (
     <Card>
       <SectionHeader
         title="Intelligence"
         subtitle="Restricted SIU intelligence, including concerns recorded against CID investigations. A CID case's own detectives and CID command never see that these notes exist."
+        actions={
+          <div className="flex items-center gap-2">
+            {ungraded > 0 && <Badge tint="bg-white/5 text-slate-300">{ungraded} ungraded</Badge>}
+            {overdue > 0 && <Badge tint="bg-amber-500/15 text-amber-300">{overdue} review overdue</Badge>}
+          </div>
+        }
       />
       {!open.length ? (
         <p className="mt-3 text-xs text-slate-400">No unresolved SIU intelligence.</p>
@@ -606,14 +645,135 @@ function IntelligenceSection() {
                 <Badge tone={n.severity === 'critical' || n.severity === 'high' ? 'warn' : 'neutral'}>
                   {n.severity}
                 </Badge>
+                {/* Grading reads as its own pair: who said it, and whether it is
+                    true. Ungraded shows as ungraded — never as neutral-good. */}
+                <Badge tint={siuCredibilityTint(n.info_credibility)}>
+                  {siuCredibilityLabel(n.info_credibility)}
+                </Badge>
+                {n.source_reliability && (
+                  <Badge tone="neutral" title="Source reliability">
+                    {siuReliabilityLabel(n.source_reliability)}
+                  </Badge>
+                )}
+                {n.source_type && <Badge tone="neutral">{siuSourceTypeLabel(n.source_type)}</Badge>}
+                {reviewOverdue(n) && (
+                  <Badge tint="bg-amber-500/15 text-amber-300">Review overdue</Badge>
+                )}
                 <span className="ml-auto text-[10px] text-slate-400">{fmtWhen(n.created_at)}</span>
               </div>
               <p className="mt-1.5 whitespace-pre-wrap text-xs text-slate-300">{n.body}</p>
+              {siu.isAgent && (
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px]">
+                  {n.review_due_at && (
+                    <span className="text-slate-500">Review due {fmtDate(n.review_due_at)}</span>
+                  )}
+                  <button
+                    type="button"
+                    className="ml-auto text-violet-300 underline-offset-2 hover:underline"
+                    onClick={() => setGrading(n)}
+                  >
+                    {isUngraded(n) ? 'Grade' : 'Regrade'}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-slate-300 underline-offset-2 hover:underline"
+                    onClick={() => void review(n, 'revalidated')}
+                  >
+                    Revalidate
+                  </button>
+                  <button
+                    type="button"
+                    className="text-rose-300 underline-offset-2 hover:underline"
+                    onClick={() => void review(n, 'withdrawn')}
+                  >
+                    Withdraw
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
       )}
+
+      {grading && (
+        <GradeNoteModal
+          note={grading}
+          onClose={() => setGrading(null)}
+          onDone={() => { setGrading(null); void load() }}
+        />
+      )}
     </Card>
+  )
+}
+
+/** §20/§21. Two grades, asked separately and on purpose — collapsing "who said
+ *  it" and "is it true" into one confidence number is how an assessment gets
+ *  over-trusted. */
+function GradeNoteModal({ note, onClose, onDone }: {
+  note: NoteRow; onClose: () => void; onDone: () => void
+}) {
+  const [sourceType, setSourceType] = useState<string>(note.source_type ?? 'human_source')
+  const [reliability, setReliability] = useState<string>(note.source_reliability ?? 'untested')
+  const [credibility, setCredibility] = useState<string>(note.info_credibility ?? 'cannot_judge')
+  const [busy, setBusy] = useState(false)
+
+  const save = async () => {
+    setBusy(true)
+    const res = await rpc('siu_grade_note', {
+      p_note: note.id,
+      p_source_type: sourceType,
+      p_reliability: reliability,
+      p_credibility: credibility,
+    })
+    setBusy(false)
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Graded. Next review in 90 days.', 'success')
+    onDone()
+  }
+
+  return (
+    <Modal open onClose={onClose} dirty={() => false}>
+      <ModalHeader title="Grade this intelligence" onClose={onClose} />
+      <div className="space-y-3">
+        <Field label="How it was obtained" required>
+          {(id) => (
+            <Select id={id} value={sourceType} onChange={(e) => setSourceType(e.target.value)}>
+              {SIU_SOURCE_TYPES.map((t) => (
+                <option key={t} value={t}>{siuSourceTypeLabel(t)}</option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field label="Source reliability" required hint="How much the SOURCE has been worth in the past.">
+          {(id) => (
+            <Select id={id} value={reliability} onChange={(e) => setReliability(e.target.value)}>
+              {SIU_RELIABILITY.map((r) => (
+                <option key={r} value={r}>{siuReliabilityLabel(r)}</option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field
+          label="Information credibility"
+          required
+          hint="Whether THIS piece is true, judged on its own. A reliable source can still pass on a rumour."
+        >
+          {(id) => (
+            <Select id={id} value={credibility} onChange={(e) => setCredibility(e.target.value)}>
+              {SIU_CREDIBILITY.map((c) => (
+                <option key={c} value={c}>{siuCredibilityLabel(c)}</option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={busy} onClick={() => void save()}>
+            {busy ? 'Saving…' : 'Save grading'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 

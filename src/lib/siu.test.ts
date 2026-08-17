@@ -30,6 +30,11 @@ import {
   isPreliminaryInquiry, siuCanResolveConflict, siuCanReviewReferrals,
   siuCaseCategoryLabel, siuClosureReasonLabel, siuConflictStatusLabel,
   siuRecusesAccess, siuReferralCategoryLabel, siuReferralStatusLabel, siuStageLabel,
+  SIU_CREDIBILITY, SIU_CREDIBILITY_LABEL, SIU_SOURCE_TYPES, SIU_SOURCE_TYPE_LABEL,
+  SIU_REVIEW_OUTCOME_LABEL, SIU_TEMP_ACCESS_MAX_DAYS, SIU_WATCH_MAX_DAYS,
+  SIU_WATCH_ENTITY_TYPES, SIU_WATCH_ENTITY_LABEL, SIU_WATCH_PRIORITIES,
+  SIU_WATCH_PRIORITY_LABEL, isUngraded, reviewOverdue, siuCredibilityLabel,
+  siuSourceTypeLabel, siuWatchEntityLabel, tempAccessLive, watchExpiringWithin, watchLive,
   SIU_SOURCE_STATUSES, SIU_SOURCE_STATUS_LABEL, SIU_RELIABILITY,
   SIU_RELIABILITY_LABEL, siuReliabilityLabel,
   SIU_UNDERCOVER_STATUSES, SIU_UNDERCOVER_STATUS_LABEL, siuUndercoverStatusLabel,
@@ -748,6 +753,117 @@ describe('Delivery A audit vocabulary', () => {
       'SIU_REFERRAL_SUBMITTED', 'SIU_REFERRAL_REVIEWED', 'SIU_INQUIRY_PROMOTED',
       'SIU_CATEGORY_SET', 'SIU_CASE_CLOSED', 'SIU_CONFLICT_DECLARED',
       'SIU_CONFLICT_RESOLVED',
+    ]) {
+      expect(siuAuditLabel(a), `${a} needs human wording`).not.toBe(a)
+    }
+  })
+})
+
+describe('§20/§21 — grading asks two questions, not one', () => {
+  it('keeps source reliability and information credibility as separate scales', () => {
+    // The whole point of the Admiralty pairing. If these two ever merge into
+    // one "confidence" value, a reliable source passing on a rumour starts
+    // reading as trustworthy — which is the classic way an assessment gets
+    // over-trusted.
+    for (const r of SIU_RELIABILITY) expect(SIU_CREDIBILITY).not.toContain(r)
+    for (const c of SIU_CREDIBILITY) expect(SIU_RELIABILITY).not.toContain(c)
+    for (const c of SIU_CREDIBILITY) expect(SIU_CREDIBILITY_LABEL[c]).toBeTruthy()
+    for (const t of SIU_SOURCE_TYPES) expect(SIU_SOURCE_TYPE_LABEL[t]).toBeTruthy()
+    expect(siuSourceTypeLabel(null)).toBe('—')
+  })
+
+  it('treats ungraded as ungraded, never as neutral-good', () => {
+    // A missing grade must never read as a pass. This is the client half of
+    // the server rule that the columns are nullable with no default.
+    expect(isUngraded({})).toBe(true)
+    expect(isUngraded({ info_credibility: null })).toBe(true)
+    expect(isUngraded({ info_credibility: 'cannot_judge' })).toBe(false)
+    expect(siuCredibilityLabel(null)).toBe('Ungraded')
+    expect(siuCredibilityLabel(undefined)).toBe('Ungraded')
+    // …and 'cannot_judge' is a DELIBERATE grade, distinct from never assessed.
+    expect(SIU_CREDIBILITY).toContain('cannot_judge')
+    expect(siuCredibilityLabel('cannot_judge')).not.toBe('Ungraded')
+  })
+
+  it('offers the downgrade outcomes, not just revalidation', () => {
+    for (const o of ['revalidated', 'downgraded', 'superseded', 'withdrawn']) {
+      expect(SIU_REVIEW_OUTCOME_LABEL[o], `${o} needs a label`).toBeTruthy()
+    }
+  })
+})
+
+describe('§23 — review dates', () => {
+  const iso = (msFromNow: number) => new Date(Date.now() + msFromNow).toISOString()
+
+  it('counts a past due date as overdue, and a resolved note as not', () => {
+    expect(reviewOverdue({ review_due_at: iso(-86_400_000) })).toBe(true)
+    expect(reviewOverdue({ review_due_at: iso(86_400_000) })).toBe(false)
+    // Resolved wins: a withdrawn note is not an outstanding chore.
+    expect(reviewOverdue({ review_due_at: iso(-86_400_000), resolved_at: iso(-1000) })).toBe(false)
+    // No date at all is "never graded", which the UI surfaces separately via
+    // isUngraded rather than pretending it is a scheduled review.
+    expect(reviewOverdue({})).toBe(false)
+  })
+})
+
+describe('§25 — a watch always ends', () => {
+  const iso = (msFromNow: number) => new Date(Date.now() + msFromNow).toISOString()
+  const entry = (over: Record<string, unknown> = {}) => ({
+    id: 'w1', entity_type: 'person', entity_id: null, label: 'Subject',
+    reason: 'r', case_id: null, priority: 'routine',
+    expires_at: iso(30 * 86_400_000), review_due_at: null, status: 'active',
+    removed_at: null, removed_by: null, removal_reason: null,
+    created_by: null, created_at: iso(0), ...over,
+  })
+
+  it('reads expiry off the CLOCK, not off the status column', () => {
+    // A stale 'active' row must never keep a watch alive past its end date —
+    // mirrors private.siu_watch_live(), which is deliberately time-based so no
+    // sweeper job has to run for expiry to bite.
+    expect(watchLive(entry())).toBe(true)
+    expect(watchLive(entry({ expires_at: iso(-1000) }))).toBe(false)
+    expect(watchLive(entry({ status: 'removed' }))).toBe(false)
+    expect(watchLive({ status: 'active' })).toBe(false)
+  })
+
+  it('flags an entry about to lapse', () => {
+    expect(watchExpiringWithin(entry({ expires_at: iso(3 * 86_400_000) }), 14)).toBe(true)
+    expect(watchExpiringWithin(entry({ expires_at: iso(30 * 86_400_000) }), 14)).toBe(false)
+    // An already-dead watch is not "expiring" — it has expired.
+    expect(watchExpiringWithin(entry({ expires_at: iso(-1000) }), 14)).toBe(false)
+  })
+
+  it('caps a single grant at a year, and mirrors the server exactly', () => {
+    expect(SIU_WATCH_MAX_DAYS).toBe(365)
+    for (const t of SIU_WATCH_ENTITY_TYPES) expect(SIU_WATCH_ENTITY_LABEL[t]).toBeTruthy()
+    for (const p of SIU_WATCH_PRIORITIES) expect(SIU_WATCH_PRIORITY_LABEL[p]).toBeTruthy()
+    expect(siuWatchEntityLabel('mystery')).toBe('mystery')
+  })
+})
+
+describe('§30 — supporting access is time-boxed', () => {
+  const iso = (msFromNow: number) => new Date(Date.now() + msFromNow).toISOString()
+
+  it('is dead once expired or revoked, whatever else is true', () => {
+    expect(tempAccessLive({ expires_at: iso(86_400_000) })).toBe(true)
+    expect(tempAccessLive({ expires_at: iso(-1000) })).toBe(false)
+    expect(tempAccessLive({ expires_at: iso(86_400_000), revoked_at: iso(-1000) })).toBe(false)
+    expect(tempAccessLive({})).toBe(false)
+  })
+
+  it('caps a grant at 30 days — much shorter than a watch, deliberately', () => {
+    // A supporting officer is borrowed for a task, not seconded to the unit.
+    expect(SIU_TEMP_ACCESS_MAX_DAYS).toBe(30)
+    expect(SIU_TEMP_ACCESS_MAX_DAYS).toBeLessThan(SIU_WATCH_MAX_DAYS)
+  })
+})
+
+describe('Delivery B audit vocabulary', () => {
+  it('names every new action rather than echoing the raw token', () => {
+    for (const a of [
+      'SIU_INTEL_GRADED', 'SIU_INTEL_REVIEWED', 'SIU_WATCH_ADDED',
+      'SIU_WATCH_EXTENDED', 'SIU_WATCH_REMOVED',
+      'SIU_TEMP_ACCESS_GRANTED', 'SIU_TEMP_ACCESS_REVOKED',
     ]) {
       expect(siuAuditLabel(a), `${a} needs human wording`).not.toBe(a)
     }
