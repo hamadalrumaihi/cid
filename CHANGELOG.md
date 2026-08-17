@@ -8,6 +8,30 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### A stalled legal request now says who can move it
+
+"This request is awaiting Bureau Lead review" was true and useless. It never
+said *which* Bureau Lead, and it was silent on the commonest way a CID request
+stalls: nobody may approve their own request, so a Bureau Lead who raises one in
+their own bureau is waiting for themselves — with nothing on screen saying so.
+
+The explanation now names the responsible bureau's Bureau Lead, the Deputy
+Director / Director who can stand in, and the JTF widening, and it tells the
+author plainly when the person the lane would route to is them.
+
+**And when command does stand in, the record says so.** Approval already worked
+out whether the approver was the bureau's own lead or a substitute, but wrote
+that only to the restricted audit log — the request's own timeline showed a bare
+"CID approved". The audit log answers "what happened, for an investigator of the
+system"; the timeline answers "what happened, for a participant in this
+request", and who authorised a warrant is squarely the second question. A
+`command_fallback` entry now appears on the timeline naming the substitution.
+
+That fact is captured at decision time rather than derived later. Computing it
+in the client from the reviewer's *current* role and division would retroactively
+turn every past LSB approval into a "fallback" the day that Bureau Lead
+transfers to BCB.
+
 ### SIU actions live on the person's own record
 
 An agent reads a profile, decides the person matters, and — before this — had

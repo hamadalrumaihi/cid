@@ -447,6 +447,16 @@ The table was not hypothetical when this was fixed. It held one entry created by
 
 `siu_watch_review(id, outcome, note, priority, review_days, extend_days)` records `continue` / `monitor` / `suspend` / `clear` / `archive` with a mandatory note. This is what stops a watch drifting into permanence: the entry has to be looked at again by a person who then says, in writing, what they decided. `siu_watch_extend()` and `siu_watch_remove()` remain for existing callers and were re-emitted onto the new vocabulary in the same migration — left alone, `remove` would have written a status the new constraint refuses, failing every removal at the database.
 
+### CID command fallback, made visible ([`20260903180000`](../supabase/migrations/20260903180000_cid_fallback_visibility.sql))
+
+`review_legal_request_as_cid()` has always worked out whether the approver was the responsible bureau's own Bureau Lead or somebody standing in — `v_jtf_any` (a Bureau Lead from another bureau, allowed because the case is JTF) and `v_fallback` (a Deputy Director, Director or Owner approving because they outrank the lane). Both were recorded **only** into `private.legal_audit()`, the restricted audit log. The request's own timeline showed a bare "CID approved".
+
+That is the wrong place for it. The audit log answers "what happened, for an investigator of the system"; the timeline answers "what happened, for a participant in this request". Who authorised a warrant, and whether they were the ordinary authority or a substitute, is the second question — a defence challenge to a warrant is participant-facing, not internal-audit.
+
+Approval now also writes a `command_fallback` row to `legal_request_actions` naming the substitution. **The fact is captured at decision time, not derived later**: working it out in the client by comparing the reviewer's *current* role and division against the responsible bureau would retroactively relabel past decisions every time somebody transfers or is promoted.
+
+**Why the commonest CID stall happens.** `private.can_approve_legal()` requires `created_by <> p_user`, so a Bureau Lead who raises a request in their own bureau cannot approve it and must escalate to a Deputy Director or Director. `routingExplanation()` now names the approver pool (mirroring the policy's CID branch) and calls that trap out to the one person it blocks. The JTF widening is stated as a rule rather than applied to a specific request — `LegalReqLike` carries `responsible_bureau` but not the case's own bureau, and asserting "any Bureau Lead can act on this one" without knowing it is JTF would be a guess.
+
 ### SIU legal routing ([`20260903170000`](../supabase/migrations/20260903170000_siu_legal_lane.sql))
 
 **Special Agent → X-1 → Attorney General → Judge.** An SIU legal request never touches a CID Bureau Lead or a CID prosecutor queue.
