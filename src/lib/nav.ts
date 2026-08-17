@@ -52,6 +52,10 @@ export const PAGE_META: Record<string, PageMeta> = {
   // (useSiu()), and the view itself renders the ordinary nothing-here surface
   // for everyone else. RLS is the real wall.
   siu:        { title: 'Special Investigation Unit', sub: 'SIU investigations, personnel & oversight of CID activity' },
+  // The CID-facing door into SIU intake (§14). Deliberately NOT named after
+  // SIU: a route labelled for the unit would disclose it to every detective,
+  // and to the subjects of its investigations. See ConcernView.
+  concern:    { title: 'Report a Concern', sub: 'Confidential reporting outside the ordinary chain of command' },
 }
 // NOTE: vanilla PAGE_META also declares a legacy 'reports' route with no view
 // (authoring lives in the case-detail Reports tab); its fallback-to-cases

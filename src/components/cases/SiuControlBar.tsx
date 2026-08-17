@@ -16,9 +16,12 @@ import { useState } from 'react'
 import { rpc } from '@/lib/db'
 import { useSiu } from '@/lib/useSiu'
 import {
-  SIU_CLASSIFICATIONS, SIU_CLASSIFICATION_HINT, siuClassificationLabel,
+  SIU_CASE_CATEGORIES, SIU_CLASSIFICATIONS, SIU_CLASSIFICATION_HINT,
+  SIU_CLOSURE_REASONS, SIU_STAGE_HINT, isPreliminaryInquiry, siuCaseCategoryLabel,
+  siuClassificationLabel, siuClosureReasonLabel, siuStageLabel, siuStageTint,
 } from '@/lib/siu'
 import { toast } from '@/lib/toast'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Field, Select, Textarea } from '@/components/ui/Field'
@@ -94,6 +97,163 @@ export function SiuControlBar({ caseRow, onChanged }: { caseRow: CaseRow; onChan
         />
       )}
     </div>
+  )
+}
+
+/** §15/§17/§32/§33 — stage, category, closure and recusal on an SIU
+ *  investigation.
+ *
+ *  Separate from SiuControlBar because the audiences differ. Promotion,
+ *  category and closure are command acts. DECLARING A CONFLICT is not: it is
+ *  available to anyone who can see the file, deliberately including oversight,
+ *  because the person most in need of a way to step back is often the most
+ *  senior one in the room. `siu_declare_conflict()` gates on
+ *  `private.siu_case_read()` for exactly that reason.
+ *
+ *  Declaring is one-way from this screen. The recusal takes effect in the same
+ *  transaction — `private.siu_recused()` vetoes access above every grant, rank
+ *  and owner included — and only a DIFFERENT member of command can lift it,
+ *  from the Intake screen. */
+export function SiuCaseLifecycle({ caseRow, onChanged }: { caseRow: CaseRow; onChanged: () => void }) {
+  const siu = useSiu()
+  const [closing, setClosing] = useState(false)
+
+  if (caseRow.case_authority !== 'siu' || !siu.canAccess) return null
+
+  const inquiry = isPreliminaryInquiry(caseRow)
+  const closed = caseRow.status === 'closed'
+
+  const promote = async () => {
+    const reason = await uiPrompt(
+      'The inquiry becomes a full investigation. From that moment it is visible to oversight — the Director of CID and the Attorney General — at standard classification. This cannot be undone.',
+      { title: 'Promote to full investigation', placeholder: 'Reason', confirmText: 'Promote' },
+    )
+    if (!reason?.trim()) return
+    const res = await rpc('siu_promote_inquiry', { p_case: caseRow.id, p_reason: reason.trim() })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Promoted to a full investigation.', 'success')
+    onChanged()
+  }
+
+  const setCategory = async (value: string) => {
+    const res = await rpc('siu_set_case_category', { p_case: caseRow.id, p_category: value })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Category updated.', 'success')
+    onChanged()
+  }
+
+  const declareConflict = async () => {
+    const reason = await uiPrompt(
+      'Your access to this investigation ends immediately — reading and writing both, whatever your rank. Only another member of command can restore it. The declaration itself is kept: a conflict declared and handled is a good record.',
+      { title: 'Declare a conflict of interest', placeholder: 'Why you are conflicted', confirmText: 'Declare and step back' },
+    )
+    if (!reason?.trim()) return
+    const res = await rpc('siu_declare_conflict', { p_case: caseRow.id, p_reason: reason.trim() })
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Conflict declared. You no longer have access to this investigation.', 'success')
+    onChanged()
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-2.5">
+      <Badge tint={siuStageTint(caseRow.siu_stage)} title={SIU_STAGE_HINT[caseRow.siu_stage ?? 'investigation']}>
+        {siuStageLabel(caseRow.siu_stage)}
+      </Badge>
+      {caseRow.siu_category && (
+        <Badge tone="neutral">{siuCaseCategoryLabel(caseRow.siu_category)}</Badge>
+      )}
+      {closed && caseRow.siu_closure_reason && (
+        <span className="text-xs text-slate-400">
+          Closed — {siuClosureReasonLabel(caseRow.siu_closure_reason)}
+          {caseRow.siu_closure_note ? `: ${caseRow.siu_closure_note}` : ''}
+        </span>
+      )}
+
+      {inquiry && (
+        <span className="text-[11px] text-amber-300/80">
+          Not visible to oversight until promoted.
+        </span>
+      )}
+
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        {siu.isCommand && !closed && (
+          <Select
+            aria-label="Case category"
+            className="h-7 w-auto py-0 text-xs"
+            value={caseRow.siu_category ?? ''}
+            onChange={(e) => void setCategory(e.target.value)}
+          >
+            <option value="">No category</option>
+            {SIU_CASE_CATEGORIES.map((c) => (
+              <option key={c} value={c}>{siuCaseCategoryLabel(c)}</option>
+            ))}
+          </Select>
+        )}
+        {siu.isCommand && inquiry && !closed && (
+          <Button size="sm" onClick={() => void promote()}>Promote to investigation</Button>
+        )}
+        {siu.isCommand && !closed && (
+          <Button size="sm" onClick={() => setClosing(true)}>Close investigation</Button>
+        )}
+        <Button size="sm" onClick={() => void declareConflict()}>Declare a conflict</Button>
+      </div>
+
+      {closing && (
+        <CloseModal
+          caseRow={caseRow}
+          onClose={() => setClosing(false)}
+          onDone={() => { setClosing(false); onChanged() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function CloseModal({ caseRow, onClose, onDone }: {
+  caseRow: CaseRow; onClose: () => void; onDone: () => void
+}) {
+  const [reason, setReason] = useState<string>('insufficient_evidence')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const save = async () => {
+    if (!note.trim()) { toast('A closure note is required.', 'warn'); return }
+    setBusy(true)
+    const res = await rpc('siu_close_case', {
+      p_case: caseRow.id, p_reason: reason, p_note: note.trim(),
+    })
+    setBusy(false)
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast('Investigation closed.', 'success')
+    onDone()
+  }
+
+  return (
+    <Modal open onClose={onClose} dirty={() => !!note}>
+      <ModalHeader title={`Close ${caseRow.case_number}`} onClose={onClose} />
+      <div className="space-y-3">
+        <Field label="Reason" required hint="Every closed SIU investigation carries why, from a fixed list.">
+          {(id) => (
+            <Select id={id} value={reason} onChange={(e) => setReason(e.target.value)}>
+              {SIU_CLOSURE_REASONS.map((r) => (
+                <option key={r} value={r}>{siuClosureReasonLabel(r)}</option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field label="Closure note" required hint="What was found, or why nothing was. Recorded against your name.">
+          {(id) => (
+            <Textarea id={id} rows={4} value={note} onChange={(e) => setNote(e.target.value)} />
+          )}
+        </Field>
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={busy} onClick={() => void save()}>
+            {busy ? 'Closing…' : 'Close investigation'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 

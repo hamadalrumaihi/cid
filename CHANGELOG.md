@@ -8,6 +8,78 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### SIU intake, case lifecycle and conflict of interest (§14, §15, §17, §32, §33)
+
+The front of the SIU workflow: how work **enters** the unit, how it is graded
+while SIU decides whether it is real, and how it is disposed of. Until now an
+SIU investigation could only be opened directly, so every allegation became a
+full investigation the moment anyone typed it in.
+
+**§14 — the door is wide, the queue is narrow.** Any active member can submit a
+referral; almost nobody can read one. `siu_referrals` is gated on
+`private.siu_is_agent()` — SIU **field agents only**, deliberately not oversight
+standing, because a referral can name the Director of CID. The submitter's own
+view (`siu_my_referrals()`) strips every review column, so a referral confirms
+receipt and never reveals whether SIU acted, declined, or opened an
+investigation. Without that, filing a referral about yourself would tell you
+whether you are a subject.
+
+The CID-facing surface is a new **Report a Concern** page that never says "SIU".
+That is the design, not decoration: a button naming the unit would disclose it to
+every detective, and to the people it investigates.
+
+**§15 — preliminary inquiries.** `cases.siu_stage` marks an investigation as an
+inquiry, and an inquiry is invisible to oversight at *every* classification —
+including the standard level the Director and the AG normally read. Field access
+is unchanged. `siu_promote_inquiry()` is the deliberate, reasoned, one-way act
+that opens it. This is what lets the unit examine a senior allegation before it
+is sure, which is the usual reason to open an inquiry rather than a case.
+
+**§17 — a conflict is a veto, and the first version wasn't.** `siu_declare_conflict()`
+originally cleared the agent's assignment and read them out of any compartment.
+A live probe showed the declaring agent still holding full read and write, and
+still able to close the case. Two independent reasons:
+
+1. `siu_case_access()` grants on **rank** — a Special Agent in Charge reaches
+   every non-compartmented case with no assignment, so clearing an assignment
+   cleared nothing. The conflicted officer the rule most needs to bind was the
+   one it did not touch.
+2. `siu_case_assigned()` is also satisfied by `cases.lead_detective_id`, which
+   the new referral-acceptance path sets — so even a line agent who declared a
+   conflict on a case they lead kept access.
+
+Chasing each positive grant and subtracting from it is the wrong shape. A
+recusal is a **negative fact**, so `private.siu_recused()` is now checked *first*
+in `siu_case_access()`, above every grant including rank and `owner`, and
+propagates for free to `siu_case_command()`, `siu_case_read()`,
+`can_access_case()` and the ~115 policies routed through it. Same principle as
+§37: a rule that exempts the top of the organisation is not a rule.
+
+Declaring is gated on `siu_case_read()` rather than `siu_case_access()` — the
+first probe found an oversight holder could not recuse themselves at all, which
+is exactly backwards. Lifting requires `siu_resolve_conflict()`, which refuses
+the agent who declared it; only `cleared` restores access, since `reassigned`
+means the conflict was real and the work moved on.
+
+**§32/§33 — category and closure.** `siu_category` is subject matter,
+deliberately orthogonal to `siu_classification`, which is sensitivity —
+conflating them is how a unit over-classifies everything whose subject sounds
+serious. Closing requires a reason from a fixed list plus a note, and the list
+includes `unfounded`, `insufficient_evidence` and `inactive`, because a list of
+only successes pushes people to mislabel.
+
+All four new `cases` columns are RPC-only, frozen by
+`private.block_direct_siu_case_cols()`. `rls_test_cleanup()` gained an intake
+branch (`20260830140000`) so fixture referrals cannot accumulate in the live
+queue — a fixture referral naming a real officer is removed *and* reported as a
+namespace escape.
+
+Verified live in rolled-back transactions across five roles (CID detective,
+Director/oversight, SIU field agent, SIU command, owner): 22 assertions covering
+queue visibility, receipt shape, inquiry invisibility, promotion, the recusal
+veto at command rank, self-resolve refusal, and closure validation. Migrations
+`20260830120000`, `20260830130000`, `20260830140000`; suite `tests/rls/v168.test.ts`.
+
 ### SIU release gate OPENED — and a fixture privilege escalation closed first
 
 The build-phase gate (`siu_settings.enabled_for_non_owner`) is now **open**. SIU

@@ -1093,8 +1093,12 @@ export type Database = {
           siu_assumed_at: string | null
           siu_assumed_by: string | null
           siu_assumption_reason: string | null
+          siu_category: string | null
           siu_classification: string | null
+          siu_closure_note: string | null
+          siu_closure_reason: string | null
           siu_returned_at: string | null
+          siu_stage: string | null
           status: Database["public"]["Enums"]["case_status"]
           summary: string | null
           title: string | null
@@ -1133,8 +1137,12 @@ export type Database = {
           siu_assumed_at?: string | null
           siu_assumed_by?: string | null
           siu_assumption_reason?: string | null
+          siu_category?: string | null
           siu_classification?: string | null
+          siu_closure_note?: string | null
+          siu_closure_reason?: string | null
           siu_returned_at?: string | null
+          siu_stage?: string | null
           status?: Database["public"]["Enums"]["case_status"]
           summary?: string | null
           title?: string | null
@@ -1173,8 +1181,12 @@ export type Database = {
           siu_assumed_at?: string | null
           siu_assumed_by?: string | null
           siu_assumption_reason?: string | null
+          siu_category?: string | null
           siu_classification?: string | null
+          siu_closure_note?: string | null
+          siu_closure_reason?: string | null
           siu_returned_at?: string | null
+          siu_stage?: string | null
           status?: Database["public"]["Enums"]["case_status"]
           summary?: string | null
           title?: string | null
@@ -8072,6 +8084,105 @@ export type Database = {
         }
         Relationships: []
       }
+      siu_referrals: {
+        Row: {
+          category: string
+          created_at: string
+          detail: string | null
+          id: string
+          opened_case_id: string | null
+          related_case_id: string | null
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          subject_description: string | null
+          subject_user_id: string | null
+          submitted_at: string
+          submitted_by: string | null
+          summary: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          detail?: string | null
+          id?: string
+          opened_case_id?: string | null
+          related_case_id?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          subject_description?: string | null
+          subject_user_id?: string | null
+          submitted_at?: string
+          submitted_by?: string | null
+          summary: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          detail?: string | null
+          id?: string
+          opened_case_id?: string | null
+          related_case_id?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          subject_description?: string | null
+          subject_user_id?: string | null
+          submitted_at?: string
+          submitted_by?: string | null
+          summary?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      siu_conflicts: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          agent_id: string
+          case_id: string
+          created_at: string
+          declared_at: string
+          id: string
+          reason: string
+          resolution_note: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          agent_id: string
+          case_id: string
+          created_at?: string
+          declared_at?: string
+          id?: string
+          reason: string
+          resolution_note?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          agent_id?: string
+          case_id?: string
+          created_at?: string
+          declared_at?: string
+          id?: string
+          reason?: string
+          resolution_note?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       shift_reports: {
         Row: {
           arrests: number
@@ -10071,6 +10182,58 @@ export type Database = {
       }
       siu_set_callsign: {
         Args: { p_callsign: string; p_user: string }
+        Returns: undefined
+      }
+      siu_submit_referral: {
+        Args: {
+          p_category: string
+          p_detail?: string
+          p_related_case?: string
+          p_subject_description?: string
+          p_subject_user?: string
+          p_summary: string
+        }
+        Returns: string
+      }
+      siu_my_referrals: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          acknowledged: boolean
+          category: string
+          id: string
+          submitted_at: string
+          summary: string
+        }[]
+      }
+      siu_review_referral: {
+        Args: {
+          p_category?: string
+          p_classification?: string
+          p_disposition: string
+          p_note: string
+          p_open_as?: string
+          p_referral: string
+        }
+        Returns: string
+      }
+      siu_promote_inquiry: {
+        Args: { p_case: string; p_reason: string }
+        Returns: undefined
+      }
+      siu_set_case_category: {
+        Args: { p_case: string; p_category: string }
+        Returns: undefined
+      }
+      siu_close_case: {
+        Args: { p_case: string; p_note: string; p_reason: string }
+        Returns: undefined
+      }
+      siu_declare_conflict: {
+        Args: { p_case: string; p_reason: string }
+        Returns: string
+      }
+      siu_resolve_conflict: {
+        Args: { p_conflict: string; p_note: string; p_status: string }
         Returns: undefined
       }
       siu_set_case_classification: {

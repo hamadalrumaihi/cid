@@ -38,6 +38,7 @@ import {
   type SiuDesignation, type SiuNoteType,
 } from '@/lib/siu'
 import { SiuDisclosuresSection } from './SiuDisclosures'
+import { SiuIntakeSection } from './SiuIntake'
 import { SiuOversightSection, SiuTradecraftSection } from './SiuTradecraft'
 import { roleLabel } from '@/lib/roles'
 import { toast } from '@/lib/toast'
@@ -54,7 +55,7 @@ import { Field, Input, Select, Textarea, inputCls } from '@/components/ui/Field'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 
 type CaseRow = Tables<'cases'>
-type Section = 'overview' | 'investigations' | 'targets' | 'operations' | 'intelligence'
+type Section = 'overview' | 'intake' | 'investigations' | 'targets' | 'operations' | 'intelligence'
   | 'tradecraft' | 'disclosure' | 'oversight' | 'agents' | 'activity'
 type TargetRow = Tables<'siu_targets'>
 type OperationRow = Tables<'operations'>
@@ -62,6 +63,7 @@ type NoteRow = Tables<'siu_case_notes'>
 
 const SECTIONS = [
   { id: 'overview' as const, label: 'Overview' },
+  { id: 'intake' as const, label: 'Intake' },
   { id: 'investigations' as const, label: 'Investigations' },
   { id: 'targets' as const, label: 'Targets' },
   { id: 'operations' as const, label: 'Operations' },
@@ -148,6 +150,7 @@ export function SiuView() {
       />
 
       {section === 'overview' && <OverviewSection onGoto={setSection} />}
+      {section === 'intake' && <SiuIntakeSection />}
       {section === 'investigations' && <InvestigationsSection />}
       {section === 'targets' && <TargetsSection />}
       {section === 'operations' && <OperationsSection />}

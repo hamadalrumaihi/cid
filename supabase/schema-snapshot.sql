@@ -442,11 +442,19 @@ create table public.cases (
   siu_assumed_at timestamptz,
   siu_assumed_by uuid,
   siu_assumption_reason text,
-  siu_returned_at timestamptz
+  siu_returned_at timestamptz,
+  siu_stage text,
+  siu_category text,
+  siu_closure_reason text,
+  siu_closure_note text
 );
 alter table public.cases add constraint cases_joint_case_created_by_fkey FOREIGN KEY (joint_case_created_by) REFERENCES public.profiles(id);
 alter table public.cases add constraint cases_joint_case_ended_by_fkey FOREIGN KEY (joint_case_ended_by) REFERENCES public.profiles(id);
 alter table public.cases add constraint cases_siu_assumed_by_fkey FOREIGN KEY (siu_assumed_by) REFERENCES public.profiles(id);
+alter table public.cases add constraint cases_siu_stage_check CHECK (siu_stage is null or siu_stage in ('preliminary_inquiry', 'investigation'));
+alter table public.cases add constraint cases_siu_category_check CHECK (siu_category is null or siu_category in ('public_corruption', 'law_enforcement_integrity', 'organized_crime', 'gang', 'narcotics', 'firearms', 'fugitive', 'major_crime', 'internal_leak', 'other'));
+alter table public.cases add constraint cases_siu_closure_reason_check CHECK (siu_closure_reason is null or siu_closure_reason in ('arrest_prosecution', 'referred_to_cid', 'referred_to_doj', 'administrative_action', 'unfounded', 'insufficient_evidence', 'intelligence_only', 'merged', 'inactive', 'other'));
+create index cases_siu_stage_idx ON public.cases USING btree (siu_stage) WHERE (siu_stage IS NOT NULL);
 alter table public.cases add constraint cases_case_number_key UNIQUE (case_number);
 alter table public.cases add constraint cases_pkey PRIMARY KEY (id);
 alter table public.cases add constraint cases_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
@@ -2952,6 +2960,78 @@ create index siu_memberships_ended_by_fkey_idx ON public.siu_memberships USING b
 -- table, no queue and no self-service path anywhere in the product.
 -- internal_note is column-revoked from authenticated/anon (the
 -- membership_requests.internal_decision_note precedent).
+
+create table public.siu_referrals (
+  id uuid not null default gen_random_uuid(),
+  category text not null default 'other'::text,
+  summary text not null,
+  detail text,
+  subject_user_id uuid,
+  subject_description text,
+  related_case_id uuid,
+  submitted_by uuid default auth.uid(),
+  submitted_at timestamptz not null default now(),
+  status text not null default 'submitted'::text,
+  review_note text,
+  reviewed_by uuid,
+  reviewed_at timestamptz,
+  opened_case_id uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.siu_referrals add constraint siu_referrals_pkey PRIMARY KEY (id);
+alter table public.siu_referrals add constraint siu_referrals_subject_user_id_fkey FOREIGN KEY (subject_user_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+alter table public.siu_referrals add constraint siu_referrals_related_case_id_fkey FOREIGN KEY (related_case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.siu_referrals add constraint siu_referrals_submitted_by_fkey FOREIGN KEY (submitted_by) REFERENCES public.profiles(id);
+alter table public.siu_referrals add constraint siu_referrals_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.profiles(id);
+alter table public.siu_referrals add constraint siu_referrals_opened_case_id_fkey FOREIGN KEY (opened_case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
+alter table public.siu_referrals add constraint siu_referrals_category_check CHECK (category in ('corruption', 'misconduct', 'organized_crime', 'narcotics_trafficking', 'firearms_trafficking', 'criminal_conspiracy', 'fugitive', 'internal_leak', 'compromised_investigation', 'other'));
+alter table public.siu_referrals add constraint siu_referrals_status_check CHECK (status in ('submitted', 'under_review', 'accepted', 'declined', 'referred_to_cid', 'info_requested', 'withdrawn'));
+alter table public.siu_referrals enable row level security;
+create index siu_referrals_status_idx ON public.siu_referrals USING btree (status) WHERE (status = ANY (ARRAY['submitted'::text, 'under_review'::text, 'info_requested'::text]));
+create index siu_referrals_subject_idx ON public.siu_referrals USING btree (subject_user_id);
+create index siu_referrals_submitted_by_idx ON public.siu_referrals USING btree (submitted_by);
+create index siu_referrals_related_case_idx ON public.siu_referrals USING btree (related_case_id);
+create index siu_referrals_opened_case_idx ON public.siu_referrals USING btree (opened_case_id);
+create index siu_referrals_reviewed_by_fkey_idx ON public.siu_referrals USING btree (reviewed_by);
+-- SIU intake queue (Â§14). Readable by FIELD AGENTS ONLY -- private.siu_is_agent(),
+-- deliberately not oversight standing, because a referral may name the Director
+-- of CID or the Attorney General and the queue would hand its own subject the
+-- allegations against them. Oversight sees referral VOLUME via
+-- siu_oversight_report(). There is NO client write policy: public.siu_submit_referral()
+-- (any active member) and public.siu_review_referral() (field standing) are the
+-- only writers. The submitter's own view is public.siu_my_referrals(), which
+-- strips every review column so a referral cannot become an oracle about SIU
+-- activity.
+
+create table public.siu_conflicts (
+  id uuid not null default gen_random_uuid(),
+  case_id uuid not null,
+  agent_id uuid not null,
+  reason text not null,
+  status text not null default 'declared'::text,
+  declared_at timestamptz not null default now(),
+  acknowledged_by uuid,
+  acknowledged_at timestamptz,
+  resolution_note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.siu_conflicts add constraint siu_conflicts_pkey PRIMARY KEY (id);
+alter table public.siu_conflicts add constraint siu_conflicts_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.siu_conflicts add constraint siu_conflicts_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.siu_conflicts add constraint siu_conflicts_acknowledged_by_fkey FOREIGN KEY (acknowledged_by) REFERENCES public.profiles(id);
+alter table public.siu_conflicts add constraint siu_conflicts_status_check CHECK (status in ('declared', 'acknowledged', 'reassigned', 'cleared'));
+alter table public.siu_conflicts enable row level security;
+create index siu_conflicts_case_idx ON public.siu_conflicts USING btree (case_id);
+create index siu_conflicts_agent_idx ON public.siu_conflicts USING btree (agent_id);
+create index siu_conflicts_ack_fkey_idx ON public.siu_conflicts USING btree (acknowledged_by);
+-- Â§17 recusal register. A row whose status is anything but 'cleared' makes
+-- private.siu_recused() true, and that predicate is checked FIRST in
+-- private.siu_case_access() -- above every grant, rank and owner included -- so
+-- a declared conflict removes read AND write across the ~115 policies routed
+-- through can_access_case(). Only public.siu_resolve_conflict() can lift it, and
+-- it refuses the agent who declared it.
 
 create table public.siu_settings (
   id boolean not null default true,
@@ -8418,6 +8498,14 @@ create policy siu_integrity_del on public.siu_integrity_reviews
 create policy siu_exports_sel on public.siu_exports
   as permissive for select to authenticated
   using (private.siu_case_read(case_id));
+
+create policy siu_referrals_sel on public.siu_referrals
+  as permissive for select to authenticated
+  using (private.siu_is_agent());
+
+create policy siu_conflicts_sel on public.siu_conflicts
+  as permissive for select to authenticated
+  using (((agent_id = ( SELECT auth.uid() AS uid)) OR private.siu_case_command(case_id)));
 
 create policy siu_case_agents_sel on public.siu_case_agents
   as permissive for select to authenticated
