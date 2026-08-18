@@ -36,6 +36,7 @@ import { toast } from '@/lib/toast'
 import { useAction } from '@/lib/useAction'
 import { Button } from '@/components/ui/Button'
 import { ErrorNotice } from '@/components/ui/Notice'
+import { PenalChargeAdmin } from './PenalChargeAdmin'
 
 const STATUS_TINT: Record<string, string> = {
   published: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
@@ -51,6 +52,7 @@ export function PenalAdminPanel() {
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<{ v: PenalVersionSummary; mode: 'publish' | 'rollback' } | null>(null)
   const [reason, setReason] = useState('')
+  const [chargesFor, setChargesFor] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     // Every setState here follows the await, which is the repo's rule and also
@@ -141,6 +143,25 @@ export function PenalAdminPanel() {
               </div>
             </div>
             {v.change_summary && <p className="mt-2 text-xs text-slate-500">{v.change_summary}</p>}
+            <button
+              onClick={() => setChargesFor(chargesFor === v.id ? null : v.id)}
+              className="t-readout mt-2 text-[11px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
+            >
+              {chargesFor === v.id ? 'HIDE CHARGES' : 'MANAGE CHARGES'}
+              {v.needs_code > 0 && <span className="text-amber-300"> · {v.needs_code} AWAITING A CODE</span>}
+            </button>
+            {chargesFor === v.id && (
+              <PenalChargeAdmin
+                versionId={v.id}
+                onChanged={() => {
+                  // Bringing a charge into force or retiring one changes the
+                  // counts on this row AND, if this version is in force, the
+                  // catalog every other screen is holding.
+                  void refresh()
+                  if (v.status === 'published') void ensurePenalCode(true)
+                }}
+              />
+            )}
           </div>
         ))}
       </div>

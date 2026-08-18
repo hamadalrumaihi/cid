@@ -12,6 +12,7 @@ import {
   type PenalVersionSummary,
   canPublish,
   canRollBack,
+  codeConflict,
   inForceVersion,
   publishWarnings,
 } from './penalAdmin'
@@ -92,5 +93,43 @@ describe('what the confirm step has to say', () => {
 
   it('says nothing surprising about a clean version', () => {
     expect(publishWarnings(v({ needs_code: 0, rules: 12, active_charges: 162 }), null)).toEqual([])
+  })
+})
+
+describe('the code-collision check', () => {
+  // Presentation only: penal_charges_code_unique (version_id, code) is the
+  // guarantee. This catches the common mistake before a round trip and says
+  // what it collided WITH, which the database error does not.
+  const existing = [
+    { code: '401', offense: 'Possession of a Controlled Substance (Schedule 1)' },
+    { code: '402', offense: 'Possession with Intent to Sell (Modifier)' },
+    { code: '403', offense: 'Sales of a Controlled Substance' },
+    { code: null, offense: 'Something codeless' },
+  ]
+
+  it('names the statute a proposed code already belongs to', () => {
+    // 402 and 403 are exactly the collision the 2026 import refused to make
+    // by inference; an administrator typing one by hand hits the same wall.
+    expect(codeConflict('402', existing)).toContain('Possession with Intent to Sell')
+    expect(codeConflict('403', existing)).toContain('Sales of a Controlled Substance')
+  })
+
+  it('accepts a free code', () => {
+    expect(codeConflict('416', existing)).toBeNull()
+  })
+
+  it('requires a code at all, because a codeless charge reaches no picker', () => {
+    expect(codeConflict('', existing)).toMatch(/required/i)
+    expect(codeConflict('   ', existing)).toMatch(/required/i)
+  })
+
+  it('trims before comparing, so " 402 " is still a collision', () => {
+    expect(codeConflict(' 402 ', existing)).toContain('Possession with Intent to Sell')
+  })
+
+  it('does not treat a codeless statute as owning the empty code', () => {
+    // A null code must never collide with a typed one — otherwise every
+    // assignment would appear to clash with every other codeless row.
+    expect(codeConflict('999', existing)).toBeNull()
   })
 })
