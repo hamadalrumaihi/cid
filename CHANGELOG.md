@@ -8,6 +8,61 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### The anon revoke is made permanent, and TRUNCATE stops being granted
+
+`20260807150000_anon_revoke_hygiene` revoked every privilege on `public` from
+`anon`, and the schema snapshot has recorded the result as an invariant ever
+since: *"anon holds NO privileges on any table or sequence in public"*. That
+was not true, and had not been for months — **53 tables granted anon DELETE,
+INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE and UPDATE**, including every SIU
+table, every surveillance table, the whole penal code, and `case_charges`.
+
+The revoke was a one-time cleanup that never touched `pg_default_acl`, which
+still read `arwdDxtm` for anon on tables created in `public`. Every table
+created after 2026-08-07 was therefore born with full anon DML again, silently,
+and would have gone on doing so forever. Cleaning up without changing the
+default is a treadmill; this migration does both.
+
+**Nothing was exposed, and that was verified rather than assumed.** Reading
+each affected table as `anon` returns 0 rows or a hard permission error,
+because every policy resolves through `auth.uid()` and no policy targets anon
+at all — 0 of them do. RLS held throughout. The gap being closed is between
+the documented state and the real one.
+
+The one exception worth naming is TRUNCATE: it is **not** subject to row-level
+security — RLS governs SELECT, INSERT, UPDATE and DELETE and nothing else — so
+"the policies deny everything" is not an argument about it. It is not reachable
+through PostgREST, which has no TRUNCATE verb, so it was not exploitable, but
+it was a privilege with no backstop and no purpose. It is revoked from
+`authenticated` too, along with TRIGGER and REFERENCES, leaving exactly the
+four DML privileges the policies actually govern. No TRUNCATE was executed
+against the live database to prove any of this.
+
+After: `anon` holds 0 table privileges and is gone from the default ACL
+entirely (`{postgres=arwdDxtm/postgres, authenticated=arwdm/postgres,
+service_role=arwdDxtm/postgres}`); `authenticated` holds 0 TRUNCATE grants and
+still holds 137 SELECT and 124 INSERT. A detective reads the same rows as
+before — cases 15, persons 258, evidence 3, `case_charges` 26, penal charges
+162 — so nothing legitimate depended on what was removed.
+
+The snapshot's grant section is rewritten from live state rather than patched:
+the false invariant, 55 `authenticated` grant lines, 67 `anon` lines, and the
+two tables that are not standard (`notifications`, `profiles`).
+
+### `case_charge_transition_ok()` gets its search_path pinned
+
+Supabase's advisor flagged `function_search_path_mutable` on one function, and
+it was mine: `20260905130000` gave `set search_path to ''` to
+`case_charge_may`, both triggers and `case_charge_court_read`, and missed the
+transition table.
+
+It could not have returned a wrong answer — the body is two string comparisons
+against literals, calling nothing and reading no table, so there is no
+unqualified name for a caller's `search_path` to capture. It is fixed anyway,
+because a function with a mutable search_path is one edit away from mattering,
+and an advisor with a known exception in it stops being read. Same signature,
+same 9 edges, verified unchanged.
+
 ### The two codeless charges can be given their numbers
 
 The 2026 code has been imported and unpublishable-as-complete since it landed:

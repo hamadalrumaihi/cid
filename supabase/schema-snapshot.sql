@@ -9092,145 +9092,168 @@ create policy wl_sel on public.watchlist
 -- Table grants (anon / authenticated)
 -- ============================================================
 --
--- As of 20260807150000_anon_revoke_hygiene, `anon` holds NO privileges on any
--- table or sequence in public (blanket revoke) — every `-> anon` line below is
--- therefore "(none)". The per-table `authenticated` grants are unchanged.
+-- As of 20260908130000_grant_hygiene_defaults, `anon` holds NO privileges on
+-- any table, sequence or function in public — every `-> anon` line below is
+-- "(none)" — AND `alter default privileges` now revokes them, so a new table
+-- cannot be born with them.
 --
---   announcements -> anon: (none — global anon revoke, 20260807150000)
---   announcements -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   audit_log -> anon: (none — global anon revoke, 20260807150000)
---   audit_log -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   ballistic_footprints -> anon: (none — global anon revoke, 20260807150000)
---   ballistic_footprints -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   ballistics_benches -> anon: (none — global anon revoke, 20260807150000)
---   ballistics_benches -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_access_grants -> anon: (none — global anon revoke, 20260807150000)
---   case_access_grants -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_access_requests -> anon: (none — global anon revoke, 20260807150000)
---   case_access_requests -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_assignments -> anon: (none — global anon revoke, 20260807150000)
---   case_assignments -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_blockers -> anon: (none — global anon revoke, 20260807150000)
---   case_blockers -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_files -> anon: (none — global anon revoke, 20260807150000)
---   case_files -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_intel_links -> anon: (none — global anon revoke, 20260807150000)
---   case_intel_links -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_messages -> anon: (none — global anon revoke, 20260807150000)
---   case_messages -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+-- That second half is the point. 20260807150000_anon_revoke_hygiene did the
+-- blanket revoke but never touched pg_default_acl, which still read
+-- `arwdDxtm` for anon on new tables. The invariant this comment used to assert
+-- had therefore been FALSE since shortly after it was written: 53 tables --
+-- every SIU table, every surveillance table, the whole penal code,
+-- case_charges -- were created afterwards and came back with full anon DML.
+-- Nothing was exposed (verified: reading each of them as `anon` returns 0 rows
+-- or a permission error, and no policy targets anon), but the claim was wrong
+-- and the mechanism guaranteed it would keep being wrong.
+--
+-- `authenticated` now holds only the four DML privileges RLS actually governs.
+-- TRUNCATE, TRIGGER and REFERENCES are revoked, on existing tables and by
+-- default. TRUNCATE is the one that mattered: it is NOT subject to row-level
+-- security, so "the policies deny it" was never an argument about it. It was
+-- unreachable through PostgREST, which has no TRUNCATE verb, and used by
+-- nothing -- a privilege with no purpose and no backstop.
+--
+-- The per-table lines below therefore read DELETE, INSERT, SELECT, UPDATE for
+-- authenticated, and "(none)" for anon, everywhere.
+--
+--   announcements -> anon: (none — global revoke + default privileges, 20260908130000)
+--   announcements -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   audit_log -> anon: (none — global revoke + default privileges, 20260908130000)
+--   audit_log -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   ballistic_footprints -> anon: (none — global revoke + default privileges, 20260908130000)
+--   ballistic_footprints -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   ballistics_benches -> anon: (none — global revoke + default privileges, 20260908130000)
+--   ballistics_benches -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   case_access_grants -> anon: (none — global revoke + default privileges, 20260908130000)
+--   case_access_grants -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   case_access_requests -> anon: (none — global revoke + default privileges, 20260908130000)
+--   case_access_requests -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   case_assignments -> anon: (none — global revoke + default privileges, 20260908130000)
+--   case_assignments -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   case_blockers -> anon: (none — global revoke + default privileges, 20260908130000)
+--   case_blockers -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   case_files -> anon: (none — global revoke + default privileges, 20260908130000)
+--   case_files -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   case_intel_links -> anon: (none — global revoke + default privileges, 20260908130000)
+--   case_intel_links -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   case_messages -> anon: (none — global revoke + default privileges, 20260908130000)
+--   case_messages -> authenticated: DELETE, INSERT, SELECT, UPDATE
 --   case_signoff_history -> authenticated: REFERENCES, SELECT, TRIGGER
---   case_tasks -> anon: (none — global anon revoke, 20260807150000)
---   case_tasks -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   case_templates -> anon: (none — global anon revoke, 20260807150000)
---   case_templates -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   cases -> anon: (none — global anon revoke, 20260807150000)
---   cases -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   cid_records -> anon: (none — global anon revoke, 20260807150000)
---   cid_records -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   client_errors -> anon: (none — global anon revoke, 20260807150000)
---   client_errors -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   commendations -> anon: (none — global anon revoke, 20260807150000)
---   commendations -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   custody_chain -> anon: (none — global anon revoke, 20260807150000)
+--   case_tasks -> anon: (none — global revoke + default privileges, 20260908130000)
+--   case_tasks -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   case_templates -> anon: (none — global revoke + default privileges, 20260908130000)
+--   case_templates -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   cases -> anon: (none — global revoke + default privileges, 20260908130000)
+--   cases -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   cid_records -> anon: (none — global revoke + default privileges, 20260908130000)
+--   cid_records -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   client_errors -> anon: (none — global revoke + default privileges, 20260908130000)
+--   client_errors -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   commendations -> anon: (none — global revoke + default privileges, 20260908130000)
+--   commendations -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   custody_chain -> anon: (none — global revoke + default privileges, 20260908130000)
 --   custody_chain -> authenticated: REFERENCES, SELECT, TRIGGER (writes revoked — read-only legacy)
---   deleted_member_ledger -> anon: (none — global anon revoke, 20260807150000)
+--   deleted_member_ledger -> anon: (none — global revoke + default privileges, 20260908130000)
 --   deleted_member_ledger -> authenticated: REFERENCES, SELECT, TRIGGER (writes revoked)
---   deletion_tokens -> anon: (none — global anon revoke, 20260807150000)
+--   deletion_tokens -> anon: (none — global revoke + default privileges, 20260908130000)
 --   deletion_tokens -> authenticated: (all revoked)
---   document_suggestion_comments -> anon: (none — global anon revoke, 20260807150000)
+--   document_suggestion_comments -> anon: (none — global revoke + default privileges, 20260908130000)
 --   document_suggestion_comments -> authenticated: SELECT (RLS-scoped; writes are RPC-only)
---   document_suggestion_events -> anon: (none — global anon revoke, 20260807150000)
+--   document_suggestion_events -> anon: (none — global revoke + default privileges, 20260908130000)
 --   document_suggestion_events -> authenticated: SELECT (RLS-scoped; writes are RPC-only)
---   document_suggestions -> anon: (none — global anon revoke, 20260807150000)
+--   document_suggestions -> anon: (none — global revoke + default privileges, 20260908130000)
 --   document_suggestions -> authenticated: SELECT (RLS-scoped; writes are RPC-only)
---   documents -> anon: (none — global anon revoke, 20260807150000)
---   documents -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   documents_versions -> anon: (none — global anon revoke, 20260807150000)
---   documents_versions -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   evidence -> anon: (none — global anon revoke, 20260807150000)
+--   documents -> anon: (none — global revoke + default privileges, 20260908130000)
+--   documents -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   documents_versions -> anon: (none — global revoke + default privileges, 20260908130000)
+--   documents_versions -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   evidence -> anon: (none — global revoke + default privileges, 20260908130000)
 --   evidence -> authenticated: REFERENCES, SELECT, TRIGGER (writes revoked — read-only legacy)
---   feedback -> anon: (none — global anon revoke, 20260807150000)
---   feedback -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   feedback_meta -> anon: (none — global anon revoke, 20260807150000)
---   feedback_meta -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   gang_members -> anon: (none — global anon revoke, 20260807150000)
---   gang_members -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   gang_ranks -> anon: (none — global anon revoke, 20260807150000)
---   gang_ranks -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   gang_turf -> anon: (none — global anon revoke, 20260807150000)
---   gang_turf -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   gangs -> anon: (none — global anon revoke, 20260807150000)
---   gangs -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   indicators -> anon: (none — global anon revoke, 20260807150000)
---   indicators -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   media -> anon: (none — global anon revoke, 20260807150000)
---   media -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   mo_profiles -> anon: (none — global anon revoke, 20260807150000)
---   mo_profiles -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotic_aliases -> anon: (none — global anon revoke, 20260807150000)
---   narcotic_aliases -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotic_gangs -> anon: (none — global anon revoke, 20260807150000)
---   narcotic_gangs -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotic_hotspots -> anon: (none — global anon revoke, 20260807150000)
---   narcotic_hotspots -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotic_persons -> anon: (none — global anon revoke, 20260807150000)
---   narcotic_persons -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotic_places -> anon: (none — global anon revoke, 20260807150000)
---   narcotic_places -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotic_precursors -> anon: (none — global anon revoke, 20260807150000)
---   narcotic_precursors -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotic_seizures -> anon: (none — global anon revoke, 20260807150000)
---   narcotic_seizures -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotic_suggestion_events -> anon: (none — global anon revoke, 20260807150000)
+--   feedback -> anon: (none — global revoke + default privileges, 20260908130000)
+--   feedback -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   feedback_meta -> anon: (none — global revoke + default privileges, 20260908130000)
+--   feedback_meta -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   gang_members -> anon: (none — global revoke + default privileges, 20260908130000)
+--   gang_members -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   gang_ranks -> anon: (none — global revoke + default privileges, 20260908130000)
+--   gang_ranks -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   gang_turf -> anon: (none — global revoke + default privileges, 20260908130000)
+--   gang_turf -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   gangs -> anon: (none — global revoke + default privileges, 20260908130000)
+--   gangs -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   indicators -> anon: (none — global revoke + default privileges, 20260908130000)
+--   indicators -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   media -> anon: (none — global revoke + default privileges, 20260908130000)
+--   media -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   mo_profiles -> anon: (none — global revoke + default privileges, 20260908130000)
+--   mo_profiles -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   narcotic_aliases -> anon: (none — global revoke + default privileges, 20260908130000)
+--   narcotic_aliases -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   narcotic_gangs -> anon: (none — global revoke + default privileges, 20260908130000)
+--   narcotic_gangs -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   narcotic_hotspots -> anon: (none — global revoke + default privileges, 20260908130000)
+--   narcotic_hotspots -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   narcotic_persons -> anon: (none — global revoke + default privileges, 20260908130000)
+--   narcotic_persons -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   narcotic_places -> anon: (none — global revoke + default privileges, 20260908130000)
+--   narcotic_places -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   narcotic_precursors -> anon: (none — global revoke + default privileges, 20260908130000)
+--   narcotic_precursors -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   narcotic_seizures -> anon: (none — global revoke + default privileges, 20260908130000)
+--   narcotic_seizures -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   narcotic_suggestion_events -> anon: (none — global revoke + default privileges, 20260908130000)
 --   narcotic_suggestion_events -> authenticated: SELECT (RLS-scoped; writes are RPC-only)
---   narcotic_suggestions -> anon: (none — global anon revoke, 20260807150000)
+--   narcotic_suggestions -> anon: (none — global revoke + default privileges, 20260908130000)
 --   narcotic_suggestions -> authenticated: SELECT (RLS-scoped; writes are RPC-only)
---   narcotic_vehicles -> anon: (none — global anon revoke, 20260807150000)
---   narcotic_vehicles -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   narcotics -> anon: (none — global anon revoke, 20260807150000)
---   narcotics -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   notifications -> anon: (none — global anon revoke, 20260807150000)
---   notifications -> authenticated: DELETE, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   operations -> anon: (none — global anon revoke, 20260807150000)
---   operations -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   person_places -> anon: (none — global anon revoke, 20260807150000)
---   person_places -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   person_relationships -> anon: (none — global anon revoke, 20260807150000)
---   person_relationships -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   person_vehicles -> anon: (none — global anon revoke, 20260807150000)
---   person_vehicles -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   persons -> anon: (none — global anon revoke, 20260807150000)
---   persons -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   place_process_steps -> anon: (none — global anon revoke, 20260807150000)
---   place_process_steps -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   places -> anon: (none — global anon revoke, 20260807150000)
---   places -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   predicate_acts -> anon: (none — global anon revoke, 20260807150000)
---   predicate_acts -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   profiles -> anon: (none — global anon revoke, 20260807150000)
---   profiles -> authenticated: DELETE, INSERT, REFERENCES, TRIGGER, TRUNCATE, UPDATE
---   raid_compensations -> anon: (none — global anon revoke, 20260807150000)
---   raid_compensations -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   record_extraction_facts -> anon: (none — global anon revoke, 20260807150000)
+--   narcotic_vehicles -> anon: (none — global revoke + default privileges, 20260908130000)
+--   narcotic_vehicles -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   narcotics -> anon: (none — global revoke + default privileges, 20260908130000)
+--   narcotics -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   notifications -> anon: (none — global revoke + default privileges, 20260908130000)
+--   notifications -> authenticated: DELETE, SELECT, UPDATE (no INSERT — only
+--     private.notify() writes them)
+--   operations -> anon: (none — global revoke + default privileges, 20260908130000)
+--   operations -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   person_places -> anon: (none — global revoke + default privileges, 20260908130000)
+--   person_places -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   person_relationships -> anon: (none — global revoke + default privileges, 20260908130000)
+--   person_relationships -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   person_vehicles -> anon: (none — global revoke + default privileges, 20260908130000)
+--   person_vehicles -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   persons -> anon: (none — global revoke + default privileges, 20260908130000)
+--   persons -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   place_process_steps -> anon: (none — global revoke + default privileges, 20260908130000)
+--   place_process_steps -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   places -> anon: (none — global revoke + default privileges, 20260908130000)
+--   places -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   predicate_acts -> anon: (none — global revoke + default privileges, 20260908130000)
+--   predicate_acts -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   profiles -> anon: (none — global revoke + default privileges, 20260908130000)
+--   profiles -> authenticated: DELETE, INSERT, UPDATE (no SELECT — reads go
+--     through the membership views/RPCs, not the table)
+--   raid_compensations -> anon: (none — global revoke + default privileges, 20260908130000)
+--   raid_compensations -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   record_extraction_facts -> anon: (none — global revoke + default privileges, 20260908130000)
 --   record_extraction_facts -> authenticated: SELECT (RLS-scoped; writes are RPC-only via public.extraction_add_fact)
---   record_extractions -> anon: (none — global anon revoke, 20260807150000)
---   record_extractions -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   reports -> anon: (none — global anon revoke, 20260807150000)
---   reports -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   rico_cases -> anon: (none — global anon revoke, 20260807150000)
---   rico_cases -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   role_events -> anon: (none — global anon revoke, 20260807150000)
---   role_events -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   shift_reports -> anon: (none — global anon revoke, 20260807150000)
---   shift_reports -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   tickets -> anon: (none — global anon revoke, 20260807150000)
---   tickets -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   trackers -> anon: (none — global anon revoke, 20260807150000)
---   trackers -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   vehicles -> anon: (none — global anon revoke, 20260807150000)
---   vehicles -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
---   watchlist -> anon: (none — global anon revoke, 20260807150000)
---   watchlist -> authenticated: DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+--   record_extractions -> anon: (none — global revoke + default privileges, 20260908130000)
+--   record_extractions -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   reports -> anon: (none — global revoke + default privileges, 20260908130000)
+--   reports -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   rico_cases -> anon: (none — global revoke + default privileges, 20260908130000)
+--   rico_cases -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   role_events -> anon: (none — global revoke + default privileges, 20260908130000)
+--   role_events -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   shift_reports -> anon: (none — global revoke + default privileges, 20260908130000)
+--   shift_reports -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   tickets -> anon: (none — global revoke + default privileges, 20260908130000)
+--   tickets -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   trackers -> anon: (none — global revoke + default privileges, 20260908130000)
+--   trackers -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   vehicles -> anon: (none — global revoke + default privileges, 20260908130000)
+--   vehicles -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   watchlist -> anon: (none — global revoke + default privileges, 20260908130000)
+--   watchlist -> authenticated: DELETE, INSERT, SELECT, UPDATE
 
 -- ============================================================
 -- Column-level ACLs (columns with explicit column grants)
