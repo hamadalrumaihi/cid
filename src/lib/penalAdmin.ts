@@ -22,7 +22,7 @@
  *  selected on a case.
  */
 
-import { rpc } from './db'
+import { list, rpc } from './db'
 
 export type PenalVersionStatus = 'draft' | 'published' | 'superseded'
 
@@ -126,10 +126,75 @@ export async function rollBackPenalVersion(id: string, reason: string): Promise<
   return res.error?.message ?? null
 }
 
-// public.penal_archive_charge(p_charge, p_reason) and
-// public.penal_restore_charge(p_charge, p_reason, p_code) are the per-CHARGE
-// half of administration: retiring a statute, and giving a codeless draft its
-// number. Wrappers for them are deliberately not defined here — they need a
-// charge-list surface to be called from, and an exported function with no
-// caller reads as a supported path that nothing has ever exercised. They
-// arrive with that screen.
+// ---------------------------------------------------------------------------
+// Per-charge administration
+// ---------------------------------------------------------------------------
+
+/** One statute as an administrator sees it, including the ones no selector
+ *  shows. `penal_charges_sel` lets an administrator read every lifecycle; a
+ *  non-administrator reaching this would simply get nothing back. */
+export interface PenalAdminCharge {
+  id: string
+  code: string | null
+  offense: string
+  penal_title: string | null
+  charge_class: string
+  lifecycle: string
+  needs_code: boolean
+  archive_reason: string | null
+  substance_schedule: number | null
+}
+
+const ADMIN_CHARGE_COLS =
+  'id,code,offense,penal_title,charge_class,lifecycle,needs_code,archive_reason,substance_schedule'
+
+/** Charges of one version in a given lifecycle. Ordered by code with the
+ *  codeless first, because those are the ones that need doing something about. */
+export async function loadVersionCharges(
+  versionId: string, lifecycle: 'draft' | 'archived' | 'active',
+): Promise<PenalAdminCharge[]> {
+  const rows = await list('penal_charges', {
+    select: ADMIN_CHARGE_COLS,
+    eq: { version_id: versionId, lifecycle },
+    order: 'code',
+  }).catch(() => [])
+  return rows as unknown as PenalAdminCharge[]
+}
+
+/** Give a codeless draft its number, bringing it into force. The same RPC
+ *  un-archives a retired statute, because both are "make this selectable
+ *  again" — it refuses if the charge is already active, and refuses a codeless
+ *  charge with no code supplied. */
+export async function restorePenalCharge(
+  chargeId: string, reason: string, code?: string,
+): Promise<string | null> {
+  const res = await rpc('penal_restore_charge', {
+    p_charge: chargeId, p_reason: reason, p_code: code || undefined,
+  })
+  return res.error?.message ?? null
+}
+
+/** Retire a statute. Archived, never deleted, so a case that charged it can
+ *  still resolve what it charged. */
+export async function archivePenalCharge(
+  chargeId: string, reason: string,
+): Promise<string | null> {
+  const res = await rpc('penal_archive_charge', { p_charge: chargeId, p_reason: reason })
+  return res.error?.message ?? null
+}
+
+/** Why a proposed code cannot be used, or null if it looks usable. This is
+ *  presentation only: `penal_charges_code_unique (version_id, code)` is the
+ *  actual guarantee, and a collision it catches surfaces as an error from the
+ *  RPC. Checking here just means the common mistake is caught before a round
+ *  trip, with a sentence that explains it. */
+export function codeConflict(
+  code: string, existing: ReadonlyArray<{ code: string | null; offense: string }>,
+): string | null {
+  const c = code.trim()
+  if (!c) return 'A code is required to bring this charge into force.'
+  const clash = existing.find((x) => (x.code ?? '').trim() === c)
+  return clash
+    ? `${c} already belongs to ${clash.offense} in this version.`
+    : null
+}

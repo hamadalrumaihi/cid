@@ -8,6 +8,41 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### The two codeless charges can be given their numbers
+
+The 2026 code has been imported and unpublishable-as-complete since it landed:
+2 of its 197 charges arrived with an unresolved spreadsheet formula instead of
+a number, and a charge with no code is held out of every selector. Nothing
+could assign one, because `penal_restore_charge()` had no caller.
+
+`PenalChargeAdmin` sits under each version in the administration panel and
+shows the two things that can be wrong with a statute — **awaiting a code**
+(held back, cannot be charged, makes the version incomplete to publish) and
+**retired** (archived, still resolvable by cases that charged it). Both are the
+same RPC, because both are the same act: make this charge selectable again.
+
+Retiring a statute is there too, behind a search rather than a button on all
+162 catalog rows — it is rare, deliberate, and needs a reason for the audit
+log. Nothing is deleted: an archived charge stays readable so a case that
+charged it can still resolve what it charged.
+
+**The collision check explains rather than just refusing.** Typing 402 for the
+Schedule 2 possession charge is exactly the assignment the import declined to
+make by inference, and an administrator doing it by hand hits the same wall —
+`penal_charges_code_unique (version_id, code)`. The client says *"402 already
+belongs to Possession with Intent to Sell in this version"* before the round
+trip; the constraint is still the guarantee, and a collision the client misses
+fails in the database.
+
+No code is suggested. Which number a statute carries is the administrator's
+decision, and the reasoning that refused to infer 402/403 during the import
+applies just as much to a helpful default now.
+
+Verified live, rolled back: a detective is refused (`not authorized`); a blank
+reason is refused; 402 is refused by the unique constraint; and assigning two
+free numbers drops `needs_code` to **0** — which is what makes the 2026 code
+publishable as a complete code. The real assignment is left to a person.
+
 ### Charges on a case become the records they always should have been
 
 `case_charges` shipped with the data layer and nothing rendered it. The Charges
