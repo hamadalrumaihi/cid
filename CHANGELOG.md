@@ -8,6 +8,46 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### The penal code can finally be published by a person
+
+The publish, rollback, archive and restore RPCs have existed since the data
+layer landed and **nothing had ever called them**. That was not a cosmetic gap:
+the 2026 code sat imported and unpublishable, because publishing requires an
+authenticated administrator and no screen offered the action.
+
+`PenalAdminPanel` is that screen — versions with their status and counts,
+publish, and roll back to a superseded version. It renders only for a Penal
+Code administrator, and it does not decide that itself: `penal_admin_overview()`
+reports `is_admin` from `private.penal_is_admin()`, the same helper every penal
+policy uses. Every action behind it is a SECURITY DEFINER RPC that re-checks the
+same thing, so hiding the panel is tidiness rather than the boundary.
+
+**The obvious way to detect an administrator is wrong.** `penal_admins_sel` is
+`USING (private.penal_is_admin())`, and that helper is
+`is_owner() OR an appointed administrator`. The Portal Owner is an administrator
+*without having a row* in `penal_administrators` — and today no administrator
+has ever been appointed, so the table is empty. A client inferring adminness by
+reading it would have hidden the publish button from the only person entitled to
+press it.
+
+**Publishing is spelled out rather than confirmed.** The step says what will
+happen: every unit reads the new code immediately, the version in force is named
+and will be superseded, charges already on a case keep their own snapshots — and
+the one that is easy to miss, that a version carrying codeless charges publishes
+an **incomplete** code, since a charge with no code reaches no picker. The 2026
+draft has exactly 2 of those. A reason is required for a rollback and optional
+for a publish, matching what the RPCs demand.
+
+After either action the client re-fetches the statute catalog before reporting
+success, because every other screen is still holding the code that was in force
+a moment earlier.
+
+Verified live in a rolled-back transaction: a detective is refused
+("not authorized"); the owner publishes 2026 and the force immediately sees 195
+charges with 36 rules and 3 schedules instead of 162 with none; the owner rolls
+back and it returns to 162. Live state is unchanged — legacy remains in force
+and 2026 remains a draft, which is still a decision for a person to make.
+
 ### The penal code stops being compiled into the app
 
 `src/lib/penal.ts` *was* the penal code: a 162-entry array converted from the
