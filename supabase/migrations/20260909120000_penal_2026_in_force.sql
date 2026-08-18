@@ -64,13 +64,19 @@
 -- code was reverted rather than advanced. Cases charged under 2026 keep their
 -- 2026 snapshots either way.
 --
--- APPLICATION NOTE: NOT YET APPLIED LIVE. Every other migration in this repo
--- carries "applied live as <name>" because it was run against the CID project
--- before being committed. This one was written and reviewed but the apply was
--- refused by the environment's permission policy, so the live database still
--- serves the legacy 162 statutes. Applying it is the single remaining step,
--- and it is what actually changes the code in force. Until then this file is
--- the intent, not the state -- do not read it as describing the live database.
+-- APPLICATION NOTE: NEVER APPLIED, AND THAT IS THE RIGHT OUTCOME. This file
+-- was written as a fallback when it looked as though nobody could reach the
+-- Publish control. In the end the switch was thrown the proper way, through
+-- public.penal_publish_version() from PenalAdminPanel, by the active owner
+-- account on 2026-08-18 22:58:15Z -- so the audit row is the RPC's own, with a
+-- real actor, and no migration had to stand in for a person's decision.
+--
+-- The file is kept rather than deleted because a rebuild from migrations must
+-- still end with the 2026 code in force; without it, a fresh database would
+-- replay the import and stop at "draft". Against the live database it is a
+-- no-op: the early return above sees status = 'published' and does nothing.
+--
+-- Read the live state from penal_code_versions, not from this file.
 -- ============================================================================
 
 do $publish$
