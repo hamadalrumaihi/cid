@@ -8,6 +8,90 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### The 2026 penal code becomes the code in force
+
+The whole penal overhaul was built for this switch. The 2026 code has been
+imported and unpublished since `20260904130000`; the portal has served the
+legacy 162 statutes, published as a real version so the selectors had a real
+published code to read. `20260909120000_penal_2026_in_force.sql` publishes the
+2026 code and supersedes the legacy one.
+
+What changes the moment it runs:
+
+| | before | after |
+| --- | --- | --- |
+| `penal_current_charges()` | 162 statutes | **195** |
+| code format | `(1)05` | bare numerics, `109` |
+| court / plea / sentencing rules | 0 | **36** |
+| controlled-substance schedules | 0 | **3** |
+| sentence cap | none stated | 1 limit |
+
+**No case is touched.** Every `case_charges` row carries its own snapshot of
+what the code said when the charge was attached, so the 29 existing charge
+records keep their legacy offense, class, fine and jail term, and keep naming
+*San Andreas Penal Code (legacy)* as what they were charged under. That is the
+entire reason the record model was built before this switch was thrown.
+Superseded charges also stay attachable, by design — the BEFORE INSERT trigger
+refuses a draft but not a superseded version, because historical charges are
+real.
+
+**Two charges stay held back, on the owner's instruction.** 195 of 197 are
+active. *Possession of a Controlled Substance (Schedule 2)* and *(Schedule 3)*
+arrived from the source carrying an unevaluated `=A(n)+1` formula, and both
+formulas resolve onto 402 and 403, which already belong to other statutes. The
+consequence is stated rather than left to be discovered: **under this code a
+person can be charged with possessing a Schedule 1 substance and cannot be
+charged with possessing a Schedule 2 or Schedule 3 one.** Both statutes exist
+and are readable; `PenalChargeAdmin` can give them numbers at any time, with no
+migration and no republish.
+
+**It is applied as a migration rather than through `penal_publish_version()`,
+and the audit row says so.** The RPC requires `private.penal_is_admin()` —
+`is_owner AND active`, or an unrevoked `penal_administrators` row. The owner who
+gave the instruction has `active = false` and a `removed_at` of 2026-07-07, and
+no `penal_administrators` row exists for anyone, so the RPC refuses them.
+Publishing under the *other*, active owner account was rejected as an option:
+attributing a decision to somebody who did not make it is worse than an unusual
+audit entry. Nothing about `penal_is_admin()` was relaxed and no profile was
+edited to get around it.
+
+Reversible in the product, not just in SQL: `penal_rollback_to()` on the legacy
+version restores it and records that the code was *reverted* rather than
+advanced.
+
+### The RICO predicate picker stops offering RICO charges as predicate acts
+
+The legacy code designates 18 offenses as RICO predicate acts. **The 2026 code
+designates none** — its only RICO rule says the RICO charges are modifiers a
+prosecutor or judge adds, and it never names which acts can underlie one.
+
+`RicoTab` filtered on the client `rico` flag, which is the union of *is a RICO
+modifier* and *is a designated predicate*. Under the legacy code that gave 24
+options and mostly worked. Under 2026 it would have given **six — all of them
+RICO modifiers**, so an investigator building a RICO case would have been
+offered "RICO Murder (Modifier)" as a predicate act and would not have been
+offered Murder. That is the wrong end of the statute.
+
+`penalPredicateOptions()` now answers the question properly: if the published
+code designates predicate acts, offer exactly those; if it does not, offer every
+non-modifier offense, grouped by class, and say plainly that this code
+designates no predicate list. Excluding modifiers is structural rather than a
+legal judgement — a modifier is by definition added on top of another charge.
+
+What it deliberately does **not** do is invent a predicate list by carrying the
+legacy designations onto their 2026 equivalents. Which offenses qualify is a
+decision for whoever maintains the code, and `penal_charges.is_rico_predicate`
+is where it belongs: set it there and the picker narrows to it automatically,
+with no code change.
+
+The prosecutor-only restriction is unaffected either way — it reads
+`snap_is_rico`, set by the trigger from `penal_charges.is_rico`, which is the 6
+modifiers under both codes.
+
+Also removed the `(6)01, (6)02` example from the narcotics charge-codes hint.
+Code *format* is a property of the published code, not of that form, and the
+example became wrong the day a version numbered its statutes differently.
+
 ### The anon revoke is made permanent, and TRUNCATE stops being granted
 
 `20260807150000_anon_revoke_hygiene` revoked every privilege on `public` from

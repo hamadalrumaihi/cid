@@ -124,8 +124,12 @@ export function NarcoticEditModal({ narcotic, canEditCharges, focusCharges, onCl
           <Field label="Officer-safety notes">{(id) => <Textarea id={id} value={officerSafety} onChange={(e) => setOfficerSafety(e.target.value)} rows={2} />}</Field>
           <Field label="Intelligence gaps">{(id) => <Textarea id={id} value={intelGaps} onChange={(e) => setIntelGaps(e.target.value)} rows={2} />}</Field>
 
+          {/* No example code in the hint on purpose: code FORMAT is a property
+              of the published penal code, not of this form, and the previous
+              example ("(6)01") became wrong the day a version numbered its
+              statutes differently. */}
           {canEditCharges && (
-            <Field label="Related charge codes" hint="Comma- or newline-separated penal codes (e.g. (6)01, (6)02). Titles resolve automatically.">
+            <Field label="Related charge codes" hint="Comma- or newline-separated penal codes, exactly as they appear in the Penal Code. Titles resolve automatically.">
               {(id) => <Textarea id={id} value={charges} onChange={(e) => setCharges(e.target.value)} rows={2} autoFocus={focusCharges} />}
             </Field>
           )}

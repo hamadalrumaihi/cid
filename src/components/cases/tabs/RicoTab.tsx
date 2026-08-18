@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { insert, list, update, deleteWithUndo } from '@/lib/db'
 import { todayISO } from '@/lib/format'
+import { PENAL_CLASS_ORDER, penalPredicateOptions } from '@/lib/penal'
 import { usePenalCode } from '@/lib/usePenalCode'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
@@ -18,10 +19,19 @@ export function RicoTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolea
   const [gangs, setGangs] = useState<GangRow[]>([])
   const [evidence, setEvidence] = useState<EvidenceRow[]>([])
   const [form, setForm] = useState({ predicate_type: '', evidence_id: '', evidence_ref: '', act_date: todayISO(), note: '' })
-  // Predicate acts are picked from the RICO-eligible statutes of the PUBLISHED
-  // code. `rico` here is the union the old array carried: the RICO modifiers
-  // plus the offenses that can serve as a predicate act.
-  const { charges: penal, ready: penalReady } = usePenalCode()
+  // Predicate acts come from the PUBLISHED code. Which statutes are offered
+  // depends on whether that code designates predicate acts at all -- see
+  // penalPredicateOptions(). Filtering on the `rico` flag here would offer the
+  // RICO modifiers as predicates, which is the wrong end of the statute.
+  const { ready: penalReady } = usePenalCode()
+  const { designated, charges: predicateChoices } = penalPredicateOptions()
+  // Grouped by class when the code names no predicates, because the fallback
+  // is the whole offense list and ~200 flat options is not a picker. Computed
+  // per render rather than memoised: penalPredicateOptions() returns a fresh
+  // array every time, so a memo keyed on it would never hit.
+  const predicateGroups = PENAL_CLASS_ORDER
+    .map((level) => ({ level, charges: predicateChoices.filter((p) => p.level === level) }))
+    .filter((g) => g.charges.length > 0)
   const vR = useTableVersion('rico_cases')
   const vP = useTableVersion('predicate_acts')
   const refresh = useCallback(async () => {
@@ -65,7 +75,24 @@ export function RicoTab({ c, canEdit, canDelete }: { c: CaseRow; canEdit: boolea
         </label>
       </div>
       {canEdit && <div className="grid gap-2 rounded-xl border border-white/10 bg-ink-950/50 p-4 md:grid-cols-2">
-        <select value={form.predicate_type} onChange={(e) => setForm({ ...form, predicate_type: e.target.value })} disabled={!penalReady} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white disabled:opacity-60"><option value="">{penalReady ? 'Predicate type' : 'Loading penal code…'}</option>{penal.filter((p) => p.rico).map((p) => <option key={p.id} value={`${p.code} ${p.title}`}>{p.code} {p.title}</option>)}</select>
+        <div>
+          <select value={form.predicate_type} onChange={(e) => setForm({ ...form, predicate_type: e.target.value })} disabled={!penalReady} className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-white disabled:opacity-60">
+            <option value="">{penalReady ? 'Predicate type' : 'Loading penal code…'}</option>
+            {designated
+              ? predicateChoices.map((p) => <option key={p.id} value={`${p.code} ${p.title}`}>{p.code} {p.title}</option>)
+              : predicateGroups.map((g) => (
+                <optgroup key={g.level} label={g.level}>
+                  {g.charges.map((p) => <option key={p.id} value={`${p.code} ${p.title}`}>{p.code} {p.title}</option>)}
+                </optgroup>
+              ))}
+          </select>
+          {penalReady && !designated && (
+            <p className="mt-1 text-xs text-slate-400">
+              This penal code does not designate predicate acts, so every offense is listed.
+              Choose the one actually committed.
+            </p>
+          )}
+        </div>
         <div className="flex min-h-[42px] items-center">
           {form.evidence_id ? (
             <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200">
