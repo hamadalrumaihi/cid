@@ -7,25 +7,10 @@
  *  screen. (Hand-rolled on purpose — the shapes are tiny and this keeps the
  *  dependency surface at zero.) */
 
-import type { CaseCharge } from '@/lib/penal'
 import type { FormValues } from '@/lib/forms'
 
 /** `cases.charges` — an array of `{ code, count? }`. Entries without a
  *  string `code` are dropped; a non-numeric `count` becomes 1. */
-export function parseCharges(v: unknown): CaseCharge[] {
-  if (!Array.isArray(v)) return []
-  const out: CaseCharge[] = []
-  for (const x of v) {
-    if (!x || typeof x !== 'object' || Array.isArray(x)) continue
-    const code = (x as { code?: unknown }).code
-    if (typeof code !== 'string' || !code) continue
-    const count = (x as { count?: unknown }).count
-    out.push({ code, count: typeof count === 'number' && Number.isFinite(count) && count > 0 ? count : 1 })
-  }
-  return out
-}
-
-/** `reports.fields` — a string-keyed value map. Arrays/scalars degrade to `{}`. */
 export function parseFormValues(v: unknown): FormValues {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
   return v as FormValues

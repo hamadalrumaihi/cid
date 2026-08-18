@@ -6,8 +6,8 @@ import type { Tables } from './database.types'
 import { downloadDocx, type DocxPara } from './docx'
 import { downloadTextFile, fmtUSD, slug } from './format'
 import { reportTitle } from './forms'
-import { ensurePenalCode, penalByCode, penalSentence } from './penal'
-import { parseCharges } from '@/lib/jsonShapes'
+import { loadCaseCharges } from './caseCharges'
+import { penalSentence } from './penal'
 
 type CaseRow = Tables<'cases'>
 
@@ -17,7 +17,12 @@ export interface PacketData {
   rico: Tables<'rico_cases'>[]
   preds: Tables<'predicate_acts'>[]
   media: Tables<'media'>[]
-  charges: { code: string; count: number; title: string; level: string; jail: number | null; fine: number | null }[]
+  /** From the case's charge RECORDS, using each one's snapshot — so a packet
+   *  states what was charged under the code in force at the time, not what
+   *  today's penal code says. `status` matters in a disclosed document: a
+   *  withdrawn or dismissed charge listed as if it were live would misstate
+   *  the case against somebody. */
+  charges: { code: string; count: number; title: string; level: string; jail: number | null; fine: number | null; status: string }[]
   persons: { name: string | null; alias: string | null; status: string | null }[]
   /** Restricted media rows EXCLUDED from this packet (Phase 6 default-deny):
    *  0 when none exist or a fresh Lead+ export approval covered them. */
@@ -25,12 +30,10 @@ export interface PacketData {
 }
 
 export async function gatherCasePacket(c: CaseRow): Promise<PacketData> {
-  // The packet resolves every charge CODE against the published penal code. If
-  // the catalog has not loaded, penalByCode() returns null and the export goes
-  // out with bare codes -- no offense title, no class, no sentence, no fine --
-  // which looks like a complete document and is not one. A packet is filed and
-  // disclosed, so this is the one caller that must not race the load.
-  await ensurePenalCode()
+  // No penal-catalog load is needed any more. The packet reads charge RECORDS,
+  // each of which carries its own snapshot, so there is nothing to resolve and
+  // nothing to race -- the export cannot go out with bare codes even if the
+  // statute book has not been fetched.
   let ev: PacketData['ev'] = [], rep: PacketData['rep'] = [], rico: PacketData['rico'] = []
   let preds: PacketData['preds'] = [], media: PacketData['media'] = [], persons: PacketData['persons'] = []
   try {
@@ -64,10 +67,19 @@ export async function gatherCasePacket(c: CaseRow): Promise<PacketData> {
     restrictedExcluded = media.filter((m) => m.restricted).length
     if (restrictedExcluded) media = media.filter((m) => !m.restricted)
   }
-  const charges = parseCharges(c.charges).map((x) => {
-    const pc = penalByCode(x.code)
-    return { code: x.code, count: Math.max(1, x.count || 1), title: pc ? pc.title : '(unknown)', level: pc ? pc.level : '', jail: pc ? pc.jail : null, fine: pc ? pc.fine : null }
-  })
+  // Straight from the snapshot on each record: no code resolution, so the
+  // "(unknown)" fallback that used to appear when a statute was renumbered
+  // cannot happen. A judge-set penalty carries the imposed value once a judge
+  // has set one, and stays null otherwise -- never zero.
+  const charges = (await loadCaseCharges(c.id).catch(() => [])).map((x) => ({
+    code: x.code ?? '',
+    count: Math.max(1, x.counts || 1),
+    title: x.offense,
+    level: x.charge_class,
+    jail: x.imposed_jail_months ?? x.jail_months,
+    fine: x.imposed_fine ?? x.fine,
+    status: x.status,
+  }))
   return { ev, rep, rico, preds, media, charges, persons, restrictedExcluded }
 }
 
@@ -94,7 +106,7 @@ export function packetParas(c: CaseRow, d: PacketData): DocxPara[] {
   }
   P.push({ text: `Charges (${d.charges.length})`, style: 'heading' })
   if (d.charges.length) {
-    d.charges.forEach((x) => P.push({ text: `• ${x.code} — ${x.title}${x.count > 1 ? ' ×' + x.count : ''}${x.level ? ' [' + x.level + ']' : ''}${x.jail != null ? ' · ' + penalSentence(x.jail) : ''}${x.fine != null ? ' · ' + fmtUSD(x.fine) : ''}`, style: 'normal' }))
+    d.charges.forEach((x) => P.push({ text: `• ${x.code} — ${x.title}${x.status !== 'filed' && x.status !== 'convicted' ? ' [' + x.status.replace('_', ' ') + ']' : ''}${x.count > 1 ? ' ×' + x.count : ''}${x.level ? ' [' + x.level + ']' : ''}${x.jail != null ? ' · ' + penalSentence(x.jail) : ''}${x.fine != null ? ' · ' + fmtUSD(x.fine) : ''}`, style: 'normal' }))
   } else {
     P.push({ text: 'None.', style: 'normal' })
   }
@@ -133,9 +145,9 @@ export function packetPdfSpec(c: CaseRow, d: PacketData): import('./pdf').PdfDoc
     },
     {
       title: `Charges (${d.charges.length})`,
-      headers: ['Code', 'Offense', 'Count', 'Sentence', 'Fine'],
-      widths: [0.9, 2.6, 0.6, 1.1, 0.9],
-      rows: d.charges.map((x) => [x.code, `${x.title}${x.level ? ` [${x.level}]` : ''}`, `×${x.count}`, x.jail != null ? penalSentence(x.jail) : '—', x.fine != null ? fmtUSD(x.fine) : '—']),
+      headers: ['Code', 'Offense', 'Status', 'Count', 'Sentence', 'Fine'],
+      widths: [0.8, 2.2, 0.9, 0.5, 1.0, 0.8],
+      rows: d.charges.map((x) => [x.code, `${x.title}${x.level ? ` [${x.level}]` : ''}`, x.status.replace('_', ' '), `×${x.count}`, x.jail != null ? penalSentence(x.jail) : '—', x.fine != null ? fmtUSD(x.fine) : '—']),
     },
     {
       title: `Reports (${d.rep.length})`,
@@ -202,7 +214,7 @@ export function caseToMarkdown(c: CaseRow, d: PacketData): string {
   L.push('')
   L.push(`## Charges (${d.charges.length})`)
   if (d.charges.length) {
-    d.charges.forEach((x) => L.push(`- ${x.code} — ${x.title}${x.count > 1 ? ' ×' + x.count : ''}${x.level ? ' [' + x.level + ']' : ''}${x.jail != null ? ' · ' + penalSentence(x.jail) : ''}${x.fine != null ? ' · ' + fmtUSD(x.fine) : ''}`))
+    d.charges.forEach((x) => L.push(`- ${x.code} — ${x.title}${x.status !== 'filed' && x.status !== 'convicted' ? ' [' + x.status.replace('_', ' ') + ']' : ''}${x.count > 1 ? ' ×' + x.count : ''}${x.level ? ' [' + x.level + ']' : ''}${x.jail != null ? ' · ' + penalSentence(x.jail) : ''}${x.fine != null ? ' · ' + fmtUSD(x.fine) : ''}`))
   } else {
     L.push('_None._')
   }
