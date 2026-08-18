@@ -1,21 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { parseCharges, parseFormValues, parseStringArray } from './jsonShapes'
+import { parseFormValues, parseStringArray } from './jsonShapes'
 
-describe('parseCharges', () => {
-  it('keeps well-formed entries and defaults count to 1', () => {
-    expect(parseCharges([{ code: 'PC-101', count: 3 }, { code: 'PC-102' }]))
-      .toEqual([{ code: 'PC-101', count: 3 }, { code: 'PC-102', count: 1 }])
-  })
-  it('drops malformed entries and repairs bad counts', () => {
-    expect(parseCharges([null, 'PC-101', { count: 2 }, { code: '' }, { code: 'PC-103', count: -4 }, { code: 'PC-104', count: 'two' }]))
-      .toEqual([{ code: 'PC-103', count: 1 }, { code: 'PC-104', count: 1 }])
-  })
-  it('degrades non-arrays to []', () => {
-    expect(parseCharges(null)).toEqual([])
-    expect(parseCharges({ code: 'PC-101' })).toEqual([])
-    expect(parseCharges('[]')).toEqual([])
-  })
-})
 
 describe('parseFormValues', () => {
   it('passes plain objects through', () => {

@@ -173,23 +173,14 @@ export function penalSentence(months: number | null | undefined): string {
   return (y ? y + "y " : "") + (m || !y ? m + "mo" : "").trim() || "0mo"
 }
 
-/** A case's charge entry (cases.charges jsonb = [{code,count}]). */
-export interface CaseCharge { code: string; count?: number | null }
-export interface PenalTotals { months: number; fine: number; judge: boolean }
-
-// Sum a case's charges ([{code,count}]) → { months, fine, judge }.
-export function penalTotals(charges: CaseCharge[] | null | undefined): PenalTotals {
-  let months = 0, fine = 0, judge = false
-  for (const ch of charges || []) {
-    const c = penalByCode(ch.code)
-    if (!c) continue
-    const n = Math.max(1, ch.count || 1)
-    if (c.jail == null) judge = true
-    else months += c.jail * n
-    if (c.fine != null) fine += c.fine * n
-  }
-  return { months, fine, judge }
-}
+// The legacy `cases.charges` jsonb totals used to live here (CaseCharge,
+// PenalTotals, penalTotals). They are gone with the column's last reader.
+//
+// Keeping them would have been worse than dead code: penalTotals() resolved
+// stored codes against the PUBLISHED catalog, so the moment a new version is
+// published every case charged under the old one would silently total to
+// 0mo / $0 -- no error, just a wrong number on screen. Charge totals now come
+// from public.case_charge_totals(), which sums each record's own snapshot.
 
 export const penalSearch = (q: string | null | undefined): PenalCharge[] => {
   const query = String(q || "").trim().toLowerCase()

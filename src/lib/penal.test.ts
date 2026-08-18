@@ -18,7 +18,6 @@ import {
   penalRecommend,
   penalSearch,
   penalSentence,
-  penalTotals,
   penalVersionName,
   setPenalCatalog,
 } from './penal'
@@ -47,15 +46,6 @@ describe('an unloaded catalog is not an empty penal code', () => {
     expect(penalLoaded()).toBe(true)
     expect(penalVersionName()).toBe('Test Code 2026')
     expect(penalCatalog()).toHaveLength(4)
-  })
-
-  it('totals to zero when nothing can be resolved — which is why callers must check', () => {
-    setPenalCatalog([], null)
-    // This is the failure mode ChargesTab guards against: a case carrying real
-    // charges totals to 0mo/$0 against an empty catalog, and that number is a
-    // lie rather than a small inaccuracy.
-    expect(penalTotals([{ code: '(1)05', count: 2 }])).toEqual({ months: 0, fine: 0, judge: false })
-    expect(penalLoaded()).toBe(false)
   })
 })
 
@@ -97,24 +87,6 @@ describe('sentence formatting', () => {
   })
 })
 
-describe('totals', () => {
-  it('multiplies by counts and flags judge-set terms instead of adding zero', () => {
-    const t = penalTotals([{ code: '(1)11', count: 2 }, { code: '(3)12', count: 1 }])
-    expect(t.months).toBe(40)          // 20 x 2; Terrorism adds no months
-    expect(t.fine).toBe(540000)        // 20000 x 2 + 500000
-    expect(t.judge).toBe(true)         // ...it is flagged instead
-  })
-
-  it('treats a missing count as one and skips unknown codes', () => {
-    expect(penalTotals([{ code: '(1)11' }])).toEqual({ months: 20, fine: 20000, judge: false })
-    expect(penalTotals([{ code: '(99)99', count: 3 }])).toEqual({ months: 0, fine: 0, judge: false })
-  })
-
-  it('handles null and empty input', () => {
-    expect(penalTotals(null)).toEqual({ months: 0, fine: 0, judge: false })
-    expect(penalTotals([])).toEqual({ months: 0, fine: 0, judge: false })
-  })
-})
 
 describe('search', () => {
   it('returns the whole catalog for an empty query', () => {

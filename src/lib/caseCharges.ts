@@ -24,6 +24,8 @@
  *  distinction rather than flattening it into a number that reads as settled.
  */
 
+import { insert, rpc, update } from './db'
+
 // ---------------------------------------------------------------------------
 // Vocabulary
 // ---------------------------------------------------------------------------
@@ -232,12 +234,75 @@ export function caseChargeCapLabel(t: CaseChargeTotals): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Data access lives with its callers
+// Data access
 // ---------------------------------------------------------------------------
 //
-// public.case_charges_for(p_case) and public.case_charge_totals(p_case) are the
-// two read surfaces, both SECURITY INVOKER so each caller sees exactly what the
-// policies allow. Loaders for them are deliberately NOT defined here: nothing
-// renders charge records yet, and an exported function with no consumer is dead
-// code that reads as a supported path. They arrive with the components that
-// call them, when the selectors move off `cases.charges`.
+// Both reads are SECURITY INVOKER, so each caller sees exactly what the
+// policies allow. Every write below is an ordinary table write: the INSERT and
+// UPDATE policies decide who may touch the row, and the BEFORE triggers decide
+// what the row may say and which status move it may make. Nothing here is
+// trusted -- in particular the snapshot is written by the database from
+// penal_charges and whatever this client sends is discarded.
+
+export async function loadCaseCharges(caseId: string): Promise<CaseChargeRow[]> {
+  const res = await rpc('case_charges_for', { p_case: caseId })
+  // The generated row type carries `status: string`; the check constraint
+  // narrows it to CaseChargeStatus and this records that, rather than widening
+  // every consumer to accept a status the database cannot produce.
+  return (res.data ?? []) as unknown as CaseChargeRow[]
+}
+
+export async function loadCaseChargeTotals(caseId: string): Promise<CaseChargeTotals | null> {
+  const res = await rpc('case_charge_totals', { p_case: caseId })
+  return (res.data ?? null) as unknown as CaseChargeTotals | null
+}
+
+/** Propose a charge. The client sends only what it legitimately chooses --
+ *  which charge, how many counts, an optional note. It does NOT send
+ *  version_id, snap_offense or snap_charge_class, even though all three are
+ *  NOT NULL: Postgres evaluates NOT NULL after the BEFORE INSERT trigger, and
+ *  that trigger fills them from the canonical charge row. Verified against the
+ *  live database rather than assumed.
+ *
+ *  Sending placeholders would work too, and would be worse — it would look
+ *  like the client had a say in what the charge says. It does not. */
+export async function proposeCaseCharge(
+  caseId: string, chargeId: string, counts = 1, note?: string,
+): Promise<string | null> {
+  // The generated Insert type requires the three columns above, because it
+  // describes the table and cannot know a trigger supplies them. The cast is
+  // narrow and deliberate; the database is the thing being satisfied here.
+  const res = await insert('case_charges', {
+    case_id: caseId, charge_id: chargeId, counts, note: note || null,
+  } as never)
+  return res.error?.message ?? null
+}
+
+export async function setCaseChargeCounts(id: string, counts: number): Promise<string | null> {
+  const res = await update('case_charges', id, { counts })
+  return res.error?.message ?? null
+}
+
+/** Move a charge along the lane. The database refuses an illegal edge and an
+ *  unentitled mover; an RLS refusal matches zero rows rather than erroring, so
+ *  the caller must check that something actually changed. */
+export async function moveCaseCharge(
+  id: string, to: CaseChargeStatus, note?: string,
+): Promise<string | null> {
+  const res = await update('case_charges', id, {
+    status: to, ...(note ? { decision_note: note } : {}),
+  })
+  return res.error?.message ?? null
+}
+
+/** Controlled-substance detail. Refused by constraint on a charge the code
+ *  does not schedule, which is the point: a quantity against Littering is a
+ *  data-entry error worth failing. */
+export async function setCaseChargeSubstance(
+  id: string, quantity: number | null, unit: string | null, note: string | null,
+): Promise<string | null> {
+  const res = await update('case_charges', id, {
+    substance_quantity: quantity, substance_unit: unit, substance_note: note,
+  })
+  return res.error?.message ?? null
+}

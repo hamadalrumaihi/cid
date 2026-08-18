@@ -8,6 +8,56 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Charges on a case become the records they always should have been
+
+`case_charges` shipped with the data layer and nothing rendered it. The Charges
+tab still read and wrote `cases.charges`, the jsonb array — so the status lane,
+the snapshots and the RICO restriction all existed and none of them were
+reachable. That is now the tab.
+
+Each row shows its own snapshot: the offense, class, sentence and fine as the
+penal code read **when the charge was attached**, with the version named
+underneath. The figures come from `case_charge_totals()` rather than being
+summed in the client, because the database is the only place that knows which
+rows a given viewer may see. A judge-set term is reported separately —
+`120 mo + 1 for a judge` — never folded in as zero.
+
+The lane is visible: each charge offers only the moves its status allows, and
+every button is labelled with who performs it. **An action can be visible and
+still be refused**, deliberately — the alternative is a client that quietly
+holds a second copy of everyone's authority, which is exactly what drifts. So
+each move re-reads the row afterwards and checks the status actually changed:
+RLS refuses by matching zero rows, not by erroring, so "no error" proves nothing
+and a silent no-op would otherwise report success.
+
+`CaseDetail`'s charge badge and the case packet move across too. The packet no
+longer resolves codes against the current catalog at all — it reads each
+record's snapshot, so the `(unknown)` fallback that used to appear when a
+statute was renumbered is now unreachable, and the export cannot race the
+catalog load. It also states each charge's status, because a disclosed document
+listing a withdrawn charge as if it were live misstates the case against
+somebody.
+
+### The legacy jsonb path is removed, not just bypassed
+
+`parseCharges`, `CaseCharge`, `PenalTotals` and `penalTotals` are gone with the
+column's last reader. `cases.charges` itself is untouched and keeps its history;
+nothing in the client reads or writes it.
+
+Deleting `penalTotals()` was the point rather than tidiness. It resolved stored
+codes against the **published** catalog, so the moment a new version is
+published, every case charged under the previous one would have totalled to
+`0mo / $0` — no error, just a wrong number on screen. A helper that returns a
+confident zero when it cannot resolve anything is worse than one that is
+missing.
+
+**Controlled-substance capture is built and dormant.** The fields, the
+constraint and the UI are all in place, and verified: recording a quantity
+against a charge the code does not schedule is refused. But the legacy code
+currently in force schedules nothing — `penal.ts` never carried schedule
+numbers, and only the 2026 import does (401/402/403 → Schedules 1/2/3). The
+capture appears when that version is published, and not before.
+
 ### The penal code can finally be published by a person
 
 The publish, rollback, archive and restore RPCs have existed since the data

@@ -25,9 +25,9 @@ import { normalizeCaseTab } from '@/lib/caseLinks'
 import type { Tables } from '@/lib/database.types'
 import type { LegalRequest } from '@/lib/justice'
 import { canChangeResponsibleBureau, canSetResponsibleBureau, countViewerActionable, isJtfAssigned, isRoutingBureau } from '@/lib/legalWorkflow'
-import { parseCharges } from '@/lib/jsonShapes'
 import { officerName, activeProfiles } from '@/lib/profiles'
 import { notify } from '@/lib/notify'
+import { loadCaseChargeTotals } from '@/lib/caseCharges'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { useNow } from '@/lib/useNow'
@@ -104,6 +104,10 @@ export interface WorkflowRows {
   /** rico_cases rows for this case (0/1 — UNIQUE case_id). HEAD count only;
    *  drives the conditional RICO tab. */
   rico: number
+  /** Total counts across every live charge record, from case_charge_totals().
+   *  NOT from cases.charges: that jsonb is frozen history now, so a case edited
+   *  through the charge record would show a stale badge forever. */
+  chargeCounts: number
   /** Live (non-removed) case_assignments — HEAD count only; feeds the case
    *  jacket header's Supporting field via assessCase's supportCount. */
   assignments: number
@@ -205,7 +209,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const vAsg = useTableVersion('case_assignments')
   const fetchWorkflow = useCallback(async () => {
     try {
-      const [tasks, reports, legal, media, blockers, rico, assignments] = await Promise.all([
+      const [tasks, reports, legal, media, blockers, rico, assignments, chargeTotals] = await Promise.all([
         list('case_tasks', { eq: { case_id: id } }),
         list('reports', { eq: { case_id: id } }),
         // Legal is read-scoped by RLS; a failure must not sink the header.
@@ -218,8 +222,12 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         countRows('rico_cases', { eq: { case_id: id } }).catch(() => 0),
         // Live assignment roster size (Supporting field in the case jacket).
         countRows('case_assignments', { eq: { case_id: id }, is: { removed_at: null } }).catch(() => 0),
+        // Charge totals are computed by the database because it is the only
+        // place that knows which charge rows this viewer may see.
+        loadCaseChargeTotals(id).catch(() => null),
       ])
-      setWf({ tasks, reports, legal: legal as LegalRequest[], media, blockers, rico, assignments })
+      setWf({ tasks, reports, legal: legal as LegalRequest[], media, blockers, rico, assignments,
+              chargeCounts: chargeTotals?.counts ?? 0 })
     } catch { /* header/metrics render with em-dashes until a fetch lands */ }
   }, [id])
   useEffect(() => { queueMicrotask(() => { void fetchWorkflow() }) }, [fetchWorkflow, casesV, vM, vR, vT, vL, vB, vRi, vAsg])
@@ -363,7 +371,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   }
 
   // Header/metric derivations — cheap, render-pure.
-  const chargesCount = parseCharges(c.charges).reduce((n, x) => n + Math.max(1, x.count || 1), 0)
+  const chargesCount = wf?.chargeCounts
   const openTasks = wf ? wf.tasks.filter((t) => !t.done).length : null
   const openBlockers = wf ? wf.blockers.filter((b) => b.status === 'open').length : null
   const counts = assessment?.counts ?? null
@@ -383,7 +391,9 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
       label: 'Open blockers', value: openBlockers ?? '—', onClick: () => setTab('overview'),
       tint: openBlockers ? 'bg-amber-500/15 text-amber-300' : undefined,
     },
-    { label: 'Charges', value: chargesCount, onClick: () => setTab('charges') },
+    // Em-dash until the totals land, matching Photos: a 0 would read as
+    // "this case has no charges", which is a different claim from "not yet known".
+    { label: 'Charges', value: chargesCount ?? '—', onClick: () => setTab('charges') },
   ]
 
   // The department that OWNS this record decides its vocabulary — an SIU
