@@ -51,7 +51,13 @@ export interface PenalCharge {
   modifier?: true
   stack?: true
   arrest?: true
+  /** Anything to do with RICO — a modifier OR a designated predicate act. This
+   *  is the union the old array carried and what a badge should render. It is
+   *  NOT the right list for a predicate picker; see `predicate`. */
   rico?: true
+  /** Designated as a predicate act by the published code. Null in the database
+   *  means the code says nothing, which is why this is separate from `rico`. */
+  predicate?: true
 }
 
 /** Row shape returned by public.penal_current_charges(). */
@@ -96,6 +102,7 @@ function toCharge(r: PenalRow): PenalCharge {
     stack: r.stackable || undefined,
     arrest: r.arrest_required || undefined,
     rico: penalRicoFlag(r),
+    predicate: r.is_rico_predicate || undefined,
   }
 }
 
@@ -186,6 +193,43 @@ export const penalSearch = (q: string | null | undefined): PenalCharge[] => {
   const query = String(q || "").trim().toLowerCase()
   if (!query) return CATALOG
   return CATALOG.filter((c) => (c.code + " " + c.title + " " + c.level + " " + (c.desc || "")).toLowerCase().includes(query))
+}
+
+/** Charge classes from most to least serious, for grouping a long list. */
+export const PENAL_CLASS_ORDER = ['Capital', 'Felony', 'Misdemeanor', 'Infraction'] as const
+
+export interface PenalPredicateOptions {
+  /** True when the published code actually designates predicate acts. */
+  designated: boolean
+  charges: PenalCharge[]
+}
+
+/** What may be recorded as a RICO predicate act under the published code.
+ *
+ *  The legacy code designated 18 offenses as predicates, so the picker could
+ *  simply list them. The 2026 code designates NONE — its only RICO rule says
+ *  the RICO charges are modifiers that a prosecutor or judge adds, and it
+ *  never names which acts can underlie one.
+ *
+ *  Filtering on `rico` would therefore offer the six RICO modifiers as
+ *  predicate acts, which is backwards: "RICO Murder (Modifier)" is the charge
+ *  a predicate act supports, not the act itself. So:
+ *
+ *    - if the code designates predicates, offer exactly those;
+ *    - if it does not, offer every non-modifier offense and let the caller say
+ *      so. Excluding modifiers is structural, not a legal judgement — a
+ *      modifier is by definition added on top of another charge rather than
+ *      being an act on its own.
+ *
+ *  What this deliberately does NOT do is invent a predicate list by carrying
+ *  the legacy designations onto their 2026 equivalents. Which offenses qualify
+ *  is a decision for whoever maintains the code, and `penal_charges
+ *  .is_rico_predicate` is where it belongs — set it there and this picker
+ *  narrows to it automatically, with no code change. */
+export function penalPredicateOptions(): PenalPredicateOptions {
+  const designated = CATALOG.filter((c) => c.predicate)
+  if (designated.length) return { designated: true, charges: designated }
+  return { designated: false, charges: CATALOG.filter((c) => !c.modifier) }
 }
 
 const RECOMMEND_STOP_WORDS = new Set(["the", "and", "for", "with", "was", "were", "that", "this", "from", "have", "has", "are", "his", "her", "him", "them", "they", "you", "your", "any", "all", "out", "not", "but", "who", "how", "one", "two", "about", "into", "than", "then", "when", "what", "will", "would", "could", "their", "there", "been", "being", "also", "such", "each", "some"])

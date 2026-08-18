@@ -10,11 +10,13 @@
 
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  PENAL_CLASS_ORDER,
   PENAL_LEVEL_TINT,
   type PenalCharge,
   penalByCode,
   penalCatalog,
   penalLoaded,
+  penalPredicateOptions,
   penalRecommend,
   penalSearch,
   penalSentence,
@@ -23,10 +25,18 @@ import {
 } from './penal'
 
 const CATALOG: PenalCharge[] = [
-  { id: 'a', code: '(1)05', title: 'Murder, 1st Degree', level: 'Felony', jail: 150, fine: 250000, desc: 'Unlawful killing, willful and premeditated.', stack: true, rico: true },
+  { id: 'a', code: '(1)05', title: 'Murder, 1st Degree', level: 'Felony', jail: 150, fine: 250000, desc: 'Unlawful killing, willful and premeditated.', stack: true, rico: true, predicate: true },
   { id: 'b', code: '(1)11', title: 'False Imprisonment', level: 'Felony', jail: 20, fine: 20000, desc: 'Restricting movement without justification.' },
   { id: 'c', code: '(3)12', title: 'Terrorism', level: 'Capital', jail: null, fine: 500000, desc: 'Mass violence to cause widespread fear.' },
   { id: 'd', code: '(10)01', title: 'RICO Conspiracy (Modifier)', level: 'Capital', jail: null, fine: 150000, modifier: true, rico: true },
+]
+
+/** A code shaped like the 2026 one: RICO modifiers, and no charge designated
+ *  as a predicate act anywhere in it. */
+const NO_PREDICATES: PenalCharge[] = [
+  { id: 'p', code: '109', title: 'Murder', level: 'Felony', jail: 60, fine: 750000 },
+  { id: 'q', code: '407', title: 'Possession of Drug Paraphernalia', level: 'Infraction', jail: 0, fine: 500 },
+  { id: 'r', code: '1202', title: 'RICO Murder (Modifier)', level: 'Felony', jail: null, fine: 1000000, modifier: true, rico: true },
 ]
 
 beforeEach(() => { setPenalCatalog(CATALOG, 'Test Code 2026') })
@@ -110,6 +120,40 @@ describe('the RICO flag covers both senses', () => {
     // have always displayed.
     const flagged = penalCatalog().filter((c) => c.rico).map((c) => c.code).sort()
     expect(flagged).toEqual(['(1)05', '(10)01'])
+  })
+})
+
+describe('predicate acts', () => {
+  it('offers exactly the designated predicates when the code names any', () => {
+    const { designated, charges } = penalPredicateOptions()
+    expect(designated).toBe(true)
+    expect(charges.map((c) => c.code)).toEqual(['(1)05'])
+    // The RICO modifier carries `rico` but is not a predicate act, and must
+    // not be offered as one -- it is the charge a predicate act supports.
+    expect(charges.map((c) => c.code)).not.toContain('(10)01')
+  })
+
+  it('falls back to every non-modifier offense when the code names none', () => {
+    setPenalCatalog(NO_PREDICATES, 'Odyssey RP Penal Code 2026')
+    const { designated, charges } = penalPredicateOptions()
+    expect(designated).toBe(false)
+    // Filtering on `rico` here would have produced exactly the wrong list:
+    // the one RICO modifier, and no actual offense.
+    expect(charges.map((c) => c.code).sort()).toEqual(['109', '407'])
+  })
+
+  it('reports not-designated rather than an empty list, so a picker can say why', () => {
+    setPenalCatalog(NO_PREDICATES, 'v')
+    const { designated, charges } = penalPredicateOptions()
+    expect(designated).toBe(false)
+    expect(charges.length).toBeGreaterThan(0)
+  })
+
+  it('covers every class the fallback grouping can encounter', () => {
+    setPenalCatalog(NO_PREDICATES, 'v')
+    for (const c of penalPredicateOptions().charges) {
+      expect(PENAL_CLASS_ORDER as readonly string[], c.code).toContain(c.level)
+    }
   })
 })
 
