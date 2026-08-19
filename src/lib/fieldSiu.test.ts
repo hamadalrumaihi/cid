@@ -31,6 +31,7 @@ const act = (over: Partial<FieldSiuActionRow> = {}): FieldSiuActionRow => ({
 const sub = (over: Partial<FieldSubmissionRow> = {}): FieldSubmissionRow => ({
   id: 's1', submission_no: 'FI-2026-0001', officer_id: 'u1', snap_agency: 'SAHP',
   snap_callsign: '924', snap_rank: null, snap_unit: null,
+  snap_officer_name: 'Tom Wood',
   status: 'reviewing', jurisdiction: 'city', summary: 'x', details: null,
   observed_at: null, observed_to: null, observed_precision: 'unknown',
   mdt_reference: null, submitted_at: '2026-08-19T00:00:00Z',

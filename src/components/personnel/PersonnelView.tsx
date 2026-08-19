@@ -11,7 +11,7 @@ import { initials } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { type RosterProfile, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
-import { ROLE_LABEL, ROLE_ORDER } from '@/lib/roles'
+import { ROLE_ORDER, roleLabel } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { useNav } from '@/components/shell/useNav'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -53,7 +53,7 @@ export function PersonnelView() {
     .slice()
     .sort((a, b) =>
       Number(b.active) - Number(a.active)
-      || (ROLE_RANK.get(b.role) ?? -1) - (ROLE_RANK.get(a.role) ?? -1)
+      || (ROLE_RANK.get(b.role ?? '') ?? -1) - (ROLE_RANK.get(a.role ?? '') ?? -1)
       || (a.display_name || '').localeCompare(b.display_name || ''))
   const visible = roster.slice(0, shown)
   const remaining = Math.max(0, roster.length - visible.length)
@@ -134,7 +134,7 @@ function RosterCard({ p, isMe, onEditMe, onChanged }: { p: RosterProfile; isMe: 
             {p.display_name}
             {p.loa && <span className="ml-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-300">On LOA</span>}
           </p>
-          <p className="text-xs text-slate-400">{ROLE_LABEL[p.role] || p.role}</p>
+          <p className="text-xs text-slate-400">{roleLabel(p.role)}</p>
         </div>
         <span className={`pulse-dot h-2.5 w-2.5 rounded-full ${p.loa ? 'bg-amber-400' : p.active ? 'bg-emerald-400' : 'bg-slate-500'}`} title={status} />
       </div>

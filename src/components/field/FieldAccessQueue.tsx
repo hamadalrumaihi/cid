@@ -1,25 +1,16 @@
 'use client'
 
-/** Field Intelligence → Access requests.
+/** Field Intelligence → Access requests (historical).
  *
- *  A patrol officer who signs in now asks for a reporting channel from the gate
- *  itself, and this is where that ask lands. It lives inside the Field
- *  Intelligence workspace on purpose: processing a trooper's request is Field
- *  Intelligence business, and sending command off to the Command Center to do it
- *  is how a queue quietly stops being worked.
+ *  Officers no longer ask: `field_access_self_serve()` creates the standing on
+ *  the spot, because the access grants nothing except the ability to write a
+ *  report addressed to CID and a queue in front of that was a delay with no
+ *  decision in it.
  *
- *  ── The panel decides nothing ──────────────────────────────────────────────
- *  Approving calls field_access_decide(), which re-checks private.is_command()
- *  and then routes through the SAME assign_field_officer() that the Command
- *  Center roster uses. So there is one way to become a field officer and one
- *  audit trail for it — this is a queue in front of that door, not a second
- *  door. A detective may READ the queue (they are the ones who notice a name
- *  they recognise); the decide buttons are command-only, and the RPC refuses
- *  anybody else regardless of what this file renders.
- *
- *  Declining requires a reason because the applicant reads it on their own
- *  sign-in screen. "No" with nothing after it is how somebody applies four more
- *  times.
+ *  This panel stays for the rows that were filed while the queue existed. A
+ *  pending one can still be answered — approving routes through the same
+ *  `assign_field_officer()` as ever — and the decided ones are a record of what
+ *  command did. It will not gain new rows.
  */
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
@@ -119,7 +110,7 @@ export function FieldAccessQueue({ rows, onChanged }: {
           Access requests
         </h3>
         <p className="mt-1 text-xs text-slate-500">
-          Officers asking for a way to send CID information. Approving gives the Field
+          Requests filed before access became immediate. Approving gives the Field
           Intelligence portal and nothing else — no case files, no persons, no vehicles.
           {!isCommand && ' Command decides these; you are seeing the queue.'}
         </p>
@@ -128,8 +119,8 @@ export function FieldAccessQueue({ rows, onChanged }: {
         <p className="px-5 py-6 text-center text-sm text-slate-500">Loading…</p>
       ) : !shown.length ? (
         <EmptyState
-          title="Nobody is waiting"
-          hint="Officers ask from the sign-in screen. Requests appear here the moment they do."
+          title="Nothing here"
+          hint="Officers now get Field Intelligence access straight from the sign-in screen, so nothing new arrives here. Appoint someone under Command Center → Field Intelligence Officers."
           className="m-4"
         />
       ) : (

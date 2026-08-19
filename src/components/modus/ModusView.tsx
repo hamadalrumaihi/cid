@@ -119,7 +119,7 @@ export function ModusView() {
     const res = await insert('case_access_requests', { case_id: caseId, requester_name: profile.display_name, reason: reason || null })
     if (res.error) { toast(`Request failed: ${res.error.message}`, 'danger'); return }
     // Notify deciders (command roles) — the case lead is RLS-hidden from us here.
-    const deciders = activeProfiles().filter((p) => (COMMAND_ROLES as readonly string[]).includes(p.role) && p.id !== profile.id)
+    const deciders = activeProfiles().filter((p) => (!!p.role && (COMMAND_ROLES as readonly string[]).includes(p.role)) && p.id !== profile.id)
     for (const d of deciders) await notify(d.id, 'access_requested', { case_id: caseId, case_number: caseNumber, detective: profile.display_name, reason: reason ? `Access requested: ${reason}` : 'Requested access to this case.' })
     toast('Access request sent to the case owner.', 'success')
   }

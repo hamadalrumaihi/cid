@@ -383,7 +383,11 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
             <p className="mt-1 text-xs text-slate-400">
               {[submission.snap_callsign, submission.snap_agency, submission.snap_rank, submission.snap_unit]
                 .filter(Boolean).join(' · ')}
-              {' — '}{officerName(submission.officer_id) ?? "Officer"}
+              {/* The snapshot first: it is taken at submit time and survives the
+                  account being removed or permanently deleted, so a report keeps
+                  saying who filed it rather than degrading to "Deleted Member". */}
+              {' — '}{submission.snap_officer_name
+                ?? officerName(submission.officer_id) ?? 'Officer'}
             </p>
             <p className="text-xs text-slate-500">
               {submission.submitted_at && `Sent ${fmtDateTime(submission.submitted_at)}`}

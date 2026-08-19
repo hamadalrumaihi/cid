@@ -3400,6 +3400,7 @@ export type Database = {
           siu_state: string | null
           snap_agency: string
           snap_callsign: string | null
+          snap_officer_name: string | null
           snap_rank: string | null
           snap_unit: string | null
           status: string
@@ -3431,6 +3432,7 @@ export type Database = {
           siu_state?: string | null
           snap_agency?: string
           snap_callsign?: string | null
+          snap_officer_name?: string | null
           snap_rank?: string | null
           snap_unit?: string | null
           status?: string
@@ -3462,6 +3464,7 @@ export type Database = {
           siu_state?: string | null
           snap_agency?: string
           snap_callsign?: string | null
+          snap_officer_name?: string | null
           snap_rank?: string | null
           snap_unit?: string | null
           status?: string
@@ -8070,7 +8073,7 @@ export type Database = {
           created_at: string
           discord_id: string | null
           display_name: string
-          division: Database["public"]["Enums"]["bureau"]
+          division: Database["public"]["Enums"]["bureau"] | null
           email: string | null
           id: string
           is_owner: boolean
@@ -8083,7 +8086,7 @@ export type Database = {
           login_denied_by: string | null
           login_denied_reason: string | null
           removed_at: string | null
-          role: Database["public"]["Enums"]["app_role"]
+          role: Database["public"]["Enums"]["app_role"] | null
           updated_at: string
         }
         Insert: {
@@ -8093,7 +8096,7 @@ export type Database = {
           created_at?: string
           discord_id?: string | null
           display_name?: string
-          division?: Database["public"]["Enums"]["bureau"]
+          division?: Database["public"]["Enums"]["bureau"] | null
           email?: string | null
           id: string
           is_owner?: boolean
@@ -8106,7 +8109,7 @@ export type Database = {
           login_denied_by?: string | null
           login_denied_reason?: string | null
           removed_at?: string | null
-          role?: Database["public"]["Enums"]["app_role"]
+          role?: Database["public"]["Enums"]["app_role"] | null
           updated_at?: string
         }
         Update: {
@@ -8116,7 +8119,7 @@ export type Database = {
           created_at?: string
           discord_id?: string | null
           display_name?: string
-          division?: Database["public"]["Enums"]["bureau"]
+          division?: Database["public"]["Enums"]["bureau"] | null
           email?: string | null
           id?: string
           is_owner?: boolean
@@ -8129,7 +8132,7 @@ export type Database = {
           login_denied_by?: string | null
           login_denied_reason?: string | null
           removed_at?: string | null
-          role?: Database["public"]["Enums"]["app_role"]
+          role?: Database["public"]["Enums"]["app_role"] | null
           updated_at?: string
         }
         Relationships: []
@@ -11416,6 +11419,15 @@ export type Database = {
       field_claim_decide: {
         Args: { p_claim: string; p_kind: string; p_note?: string; p_verdict: string }
         Returns: undefined
+      }
+      field_access_self_serve: {
+        Args: {
+          p_agency: string
+          p_callsign?: string
+          p_rank?: string
+          p_unit?: string
+        }
+        Returns: Json
       }
       field_access_decide: {
         Args: { p_approve: boolean; p_reason?: string; p_request: string }
