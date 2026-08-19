@@ -25,26 +25,29 @@ import { officerName } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import {
-  FIELD_ROUTE_LABEL, fieldStatusLabel, loadSubmissionParts, submissionRef,
+  fieldStatusLabel, jurisdictionLabel, jurisdictionRouting, loadSubmissionParts,
+  submissionRef,
   type FieldSubmissionRow, type SubmissionParts,
 } from '@/lib/fieldSubmissions'
 import {
   VERDICTS, VERDICT_LABEL, VERDICT_MEANING, VERDICT_TONE,
   askOfficer, awaitingReviewer, claimSubmission, decideClaim, decideSubmission,
   isOpen, loadClaimProgress, loadMessages, loadReviewNotes, loadReviewQueue,
-  loadVerdicts, progressLabel, rerouteSubmission, reviewNext, reviewPrompt,
+  loadVerdicts, progressLabel, reviewNext, reviewPrompt,
   linkClaim, linkFor, loadClaimLinks, loadMatches, publishSubmission,
   verdictFor, type ClaimKind, type ClaimProgress, type EntityMatch,
   type FieldClaimLinkRow, type FieldMessageRow, type FieldReviewNoteRow,
   type FieldVerdictRow, type MatchResult, type Verdict,
 } from '@/lib/fieldReview'
 import { evidenceLabel, evidenceUrl, loadEvidence, type FieldEvidenceRow } from '@/lib/fieldEvidence'
+import { FieldAccessQueue, countPending, useAccessRequests } from './FieldAccessQueue'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, Select, Textarea } from '@/components/ui/Field'
 import { EmptyState, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { SectionTabs } from '@/components/ui/SectionTabs'
 import { uiPrompt } from '@/components/ui/dialog'
 
 const NO_PARTS: SubmissionParts = { persons: [], vehicles: [], orgs: [], locations: [], items: [] }
@@ -54,7 +57,9 @@ export function FieldReviewView() {
   const [rows, setRows] = useState<FieldSubmissionRow[] | null>(null)
   const [openOnly, setOpenOnly] = useState(true)
   const [selected, setSelected] = useState<string | null>(null)
+  const [tab, setTab] = useState<'reports' | 'access'>('reports')
   const v = useTableVersion('field_submissions')
+  const access = useAccessRequests()
 
   const refresh = useCallback(async () => { setRows(await loadReviewQueue()) }, [])
   useEffect(() => {
@@ -77,7 +82,31 @@ export function FieldReviewView() {
         />
       </Card>
 
-      {current ? (
+      {!current && (
+        <SectionTabs
+          idBase="field-review"
+          ariaLabel="Field Intelligence sections"
+          active={tab}
+          onChange={setTab}
+          tabs={[
+            { id: 'reports', label: 'Reports', count: all.filter((r) => isOpen(r.status)).length },
+            // The count is the reason this tab exists: an officer waiting on a
+            // decision has no other way to reach CID, so the wait has to be
+            // visible where reviewers already are.
+            {
+              id: 'access',
+              label: 'Access requests',
+              count: countPending(access.rows ?? []),
+              marker: countPending(access.rows ?? []) > 0,
+              markerLabel: 'Officers are waiting for a decision',
+            },
+          ]}
+        />
+      )}
+
+      {!current && tab === 'access' ? (
+        <FieldAccessQueue rows={access.rows} onChanged={() => void access.refresh()} />
+      ) : current ? (
         <SubmissionDetail
           submission={current}
           onBack={() => setSelected(null)}
@@ -113,7 +142,7 @@ export function FieldReviewView() {
                       <span className="font-mono text-sm text-slate-300">{submissionRef(r)}</span>
                       <span className="flex items-center gap-2">
                         <Badge tone="neutral">{r.snap_agency}</Badge>
-                        {r.route !== 'unsure' && <Badge tone="accent">{r.route.toUpperCase()}</Badge>}
+                        <Badge tone="accent">{jurisdictionLabel(r.jurisdiction)}</Badge>
                         <Badge tone={r.status === 'needs_info' ? 'warn' : 'accent'}>
                           {fieldStatusLabel(r.status)}
                         </Badge>
@@ -179,16 +208,6 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
     window.open(href, '_blank', 'noopener,noreferrer')
   }
 
-  const reroute = async () => {
-    const to = submission.route === 'siu' ? 'cid' : 'siu'
-    const reason = await uiPrompt(
-      `Send ${submissionRef(submission)} to ${to.toUpperCase()}?`,
-      { title: 'Reroute', placeholder: 'Reason (recorded in the audit log)', confirmText: 'Reroute' },
-    )
-    if (!reason?.trim()) return
-    await after(await rerouteSubmission(id, to, reason), `Routed to ${to.toUpperCase()}.`)
-  }
-
   const ask = async () => {
     const q = await uiPrompt(
       'The officer sees this question and can reply. Internal notes stay internal.',
@@ -215,7 +234,7 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
             <p className="text-xs text-slate-500">
               {submission.submitted_at && `Sent ${fmtDateTime(submission.submitted_at)}`}
               {submission.mdt_reference && ` · their report ${submission.mdt_reference}`}
-              {` · routed: ${FIELD_ROUTE_LABEL[submission.route as 'cid' | 'siu' | 'unsure']}`}
+              {` · ${jurisdictionRouting(submission.jurisdiction)}`}
             </p>
           </div>
           <Button size="sm" variant="ghost" onClick={onBack}>Back to queue</Button>
@@ -274,9 +293,6 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
             Take it
           </Button>
           <Button size="sm" variant="ghost" onClick={() => void ask()}>Ask the officer</Button>
-          <Button size="sm" variant="ghost" onClick={() => void reroute()}>
-            Reroute to {submission.route === 'siu' ? 'CID' : 'SIU'}
-          </Button>
           <Button size="sm" variant="ghost"
             onClick={() => void (async () => {
               await after(await publishSubmission(id),

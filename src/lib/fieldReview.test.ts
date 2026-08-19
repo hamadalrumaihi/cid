@@ -15,7 +15,7 @@ import type { FieldMessageRow } from './fieldReview'
 const sub = (over: Partial<FieldSubmissionRow> = {}): FieldSubmissionRow => ({
   id: 's1', submission_no: 'FI-2026-0001', officer_id: 'u1', snap_agency: 'SAHP',
   snap_callsign: '924', snap_rank: null, snap_unit: null,
-  status: 'submitted', route: 'unsure', summary: 'x', details: null,
+  status: 'submitted', jurisdiction: 'city', summary: 'x', details: null,
   observed_at: null, observed_to: null, observed_precision: 'unknown',
   mdt_reference: null, submitted_at: '2026-08-19T00:00:00Z', assigned_to: null,
   created_at: '2026-08-19T00:00:00Z', updated_at: '2026-08-19T00:00:00Z',

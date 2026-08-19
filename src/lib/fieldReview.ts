@@ -122,18 +122,6 @@ export async function decideSubmission(
   return res.error?.message ?? null
 }
 
-/** Send it to the other unit. The reason is required by the database, not by
- *  this function — which unit sees a report about police conduct is not a
- *  filing detail. */
-export async function rerouteSubmission(
-  id: string, route: string, reason: string,
-): Promise<string | null> {
-  const res = await rpc('field_submission_route', {
-    p_submission: id, p_route: route, p_reason: reason,
-  })
-  return res.error?.message ?? null
-}
-
 /** Ask the officer something. One call, so the question and the status move
  *  cannot come apart: a report sitting in 'needs_info' with no question in it
  *  is a dead end for the officer. */

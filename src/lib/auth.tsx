@@ -56,6 +56,18 @@ export interface FieldStanding {
   appointed_at: string
 }
 
+/** An outstanding or decided request for Field Intelligence access. Present for
+ *  somebody who has asked but is not yet an appointed officer, and for somebody
+ *  who was declined -- who needs to be told why rather than left at a screen
+ *  that looks identical to never having applied. */
+export interface FieldAccessRequest {
+  id: string
+  status: 'pending' | 'approved' | 'denied' | 'withdrawn'
+  agency: string
+  decision_reason: string | null
+  created_at: string
+}
+
 /** Justice identity (justice_memberships) — a SEPARATE authorization domain
  *  from the CID role. An active justice member passes the gate even with an
  *  inactive CID profile (they get the Justice portal, never the CID shell);
@@ -78,6 +90,10 @@ interface AuthContextValue {
    *  what routes to the Field Intelligence portal — but only when the account
    *  is not already CID, because CID wins at the gate. */
   field: FieldStanding | null
+  /** The user's latest Field Intelligence access request, if any. Drives the
+   *  welcome fork: somebody with no CID, SIU or field standing AND no request
+   *  is a genuinely new user who should be asked what they need. */
+  fieldRequest: FieldAccessRequest | null
   /** Re-run the gate evaluation (retry button, post-mutation refresh). */
   refresh: () => Promise<void>
   signInOAuth: (provider: 'google' | 'discord') => Promise<{ error: { message: string } | null }>
@@ -129,10 +145,13 @@ async function fetchJustice(uid: string): Promise<JusticeIdentity | null> {
  *  appointment. Missing standing is the normal case for CID members. Errors
  *  throw like fetchProfile so the gate retries rather than silently dropping an
  *  officer to the pending screen. */
-async function fetchFieldStanding(): Promise<FieldStanding | null> {
-  const { data, error } = await supabase().rpc('my_field_standing')
+async function fetchFieldAccess(): Promise<{
+  standing: FieldStanding | null; request: FieldAccessRequest | null
+}> {
+  const { data, error } = await supabase().rpc('my_field_access')
   if (error) throw new Error(error.message)
-  return (data as FieldStanding | null) ?? null
+  const d = (data ?? {}) as { standing?: FieldStanding | null; request?: FieldAccessRequest | null }
+  return { standing: d.standing ?? null, request: d.request ?? null }
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -141,6 +160,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [justice, setJustice] = useState<JusticeIdentity | null>(null)
   const [field, setField] = useState<FieldStanding | null>(null)
+  const [fieldRequest, setFieldRequest] = useState<FieldAccessRequest | null>(null)
   // Serialize evaluations: auth events can burst (INITIAL_SESSION + SIGNED_IN);
   // a stale earlier evaluation must not overwrite a newer result.
   const evalSeq = useRef(0)
@@ -170,6 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(null)
       setJustice(null)
       setField(null)
+      setFieldRequest(null)
       try { supabase().removeAllChannels() } catch { /* no channels yet */ }
       resetRealtime()
       setState('out')
@@ -179,10 +200,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let p: Profile | null = null
     let j: JusticeIdentity | null = null
     let f: FieldStanding | null = null
+    let fr: FieldAccessRequest | null = null
     try {
-      [p, j, f] = await Promise.all([
-        fetchProfile(s.user.id), fetchJustice(s.user.id), fetchFieldStanding(),
+      const [pp, jj, fa] = await Promise.all([
+        fetchProfile(s.user.id), fetchJustice(s.user.id), fetchFieldAccess(),
       ])
+      p = pp; j = jj; f = fa.standing; fr = fa.request
     }
     catch { if (!stale()) { settledUser.current = null; setState('error') } return } // transient — offer retry
     if (stale()) return
@@ -193,6 +216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(p)
     setJustice(j)
     setField(f)
+    setFieldRequest(fr)
 
     // A login-denied profile blocks sign-in (the deny gate renders in
     // PendingBody). The DOJ/Judiciary workflow is retired (Phase 1): a justice
@@ -304,6 +328,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       justice,
       justiceRole: justice?.active ? justice.justice_role : null,
       field,
+      fieldRequest,
       refresh: evaluate,
       signInOAuth, signInEmail, signOut, setMyLoa,
       canEdit: active,
@@ -311,7 +336,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isCommand: active && isCommandRole(profile?.role),
       isOwner: active && !!profile?.is_owner,
     }
-  }, [state, session, profile, justice, field, evaluate, signInOAuth, signInEmail, signOut, setMyLoa])
+  }, [state, session, profile, justice, field, fieldRequest, evaluate, signInOAuth, signInEmail, signOut, setMyLoa])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

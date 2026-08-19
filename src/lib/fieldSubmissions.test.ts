@@ -16,7 +16,7 @@ import type { FieldSubmissionRow } from './fieldSubmissions'
 const sub = (over: Partial<FieldSubmissionRow> = {}): FieldSubmissionRow => ({
   id: 's1', submission_no: null, officer_id: 'u1', snap_agency: 'SAHP',
   snap_callsign: '924', snap_rank: null, snap_unit: null,
-  status: 'draft', route: 'unsure', summary: null, details: null,
+  status: 'draft', jurisdiction: 'city', summary: null, details: null,
   observed_at: null, observed_to: null, observed_precision: 'unknown',
   mdt_reference: null, submitted_at: null, assigned_to: null,
   created_at: '2026-08-19T00:00:00Z', updated_at: '2026-08-19T00:00:00Z',
@@ -64,8 +64,16 @@ describe('what a report needs before it can be sent', () => {
     expect(submitProblem(sub({ summary: 'Saw a van' }))).toBeNull()
   })
 
+  it('requires a jurisdiction, because it decides who ever sees the report', () => {
+    // A check constraint enforces this too. Without it the report reaches no
+    // bureau queue at all -- worse than a rejected submission, because the
+    // officer would believe it had been sent to somebody.
+    expect(submitProblem(sub({ summary: 'Saw a van', jurisdiction: null })))
+      .toMatch(/where this happened/)
+  })
+
   it('requires both ends of a time range', () => {
-    const base = { summary: 'x', observed_precision: 'range' as const }
+    const base = { summary: 'x', jurisdiction: 'city', observed_precision: 'range' as const }
     expect(submitProblem({ ...base, observed_at: '2026-08-19T01:00:00Z', observed_to: null }))
       .toMatch(/both a start and an end/)
     expect(submitProblem({ ...base, observed_at: null, observed_to: '2026-08-19T02:00:00Z' }))
@@ -74,7 +82,7 @@ describe('what a report needs before it can be sent', () => {
 
   it('refuses a range that ends before it starts', () => {
     expect(submitProblem({
-      summary: 'x', observed_precision: 'range',
+      summary: 'x', jurisdiction: 'city', observed_precision: 'range',
       observed_at: '2026-08-19T03:00:00Z', observed_to: '2026-08-19T01:00:00Z',
     })).toMatch(/ends before it starts/)
   })

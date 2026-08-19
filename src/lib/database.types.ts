@@ -2589,6 +2589,59 @@ export type Database = {
           },
         ]
       }
+      field_access_requests: {
+        Row: {
+          agency: string
+          callsign: string | null
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_reason: string | null
+          id: string
+          officer_rank: string | null
+          status: string
+          unit: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          agency: string
+          callsign?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_reason?: string | null
+          id?: string
+          officer_rank?: string | null
+          status?: string
+          unit?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          agency?: string
+          callsign?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_reason?: string | null
+          id?: string
+          officer_rank?: string | null
+          status?: string
+          unit?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_access_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       field_claim_links: {
         Row: {
           claim_location_id: string | null
@@ -3128,7 +3181,7 @@ export type Database = {
           observed_precision: string
           observed_to: string | null
           officer_id: string
-          route: string
+          jurisdiction: string | null
           snap_agency: string
           snap_callsign: string | null
           snap_rank: string | null
@@ -3149,7 +3202,7 @@ export type Database = {
           observed_precision?: string
           observed_to?: string | null
           officer_id?: string
-          route?: string
+          jurisdiction?: string | null
           snap_agency?: string
           snap_callsign?: string | null
           snap_rank?: string | null
@@ -3170,7 +3223,7 @@ export type Database = {
           observed_precision?: string
           observed_to?: string | null
           officer_id?: string
-          route?: string
+          jurisdiction?: string | null
           snap_agency?: string
           snap_callsign?: string | null
           snap_rank?: string | null
@@ -11125,6 +11178,10 @@ export type Database = {
         Args: { p_claim: string; p_kind: string; p_note?: string; p_verdict: string }
         Returns: undefined
       }
+      field_access_decide: {
+        Args: { p_approve: boolean; p_reason?: string; p_request: string }
+        Returns: undefined
+      }
       field_claim_link: {
         Args: { p_claim: string; p_kind: string; p_target: string; p_target_kind: string }
         Returns: undefined
@@ -11153,11 +11210,7 @@ export type Database = {
         Args: { p_submission: string }
         Returns: string
       }
-      field_submission_route: {
-        Args: { p_reason: string; p_route: string; p_submission: string }
-        Returns: undefined
-      }
-      my_field_standing: {
+      my_field_access: {
         Args: Record<PropertyKey, never>
         Returns: Json
       }
