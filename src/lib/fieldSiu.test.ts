@@ -14,7 +14,11 @@ import {
   canFlag, canRefer, followupLabel, referralProblem, referralWarning,
   siuActionLine, siuCategoryLabel, siuStateLabel, siuStateMeaning, siuStateTone,
 } from './fieldSiu'
-import type { FieldSiuActionRow } from './fieldSiu'
+import {
+  SIU_LAYERS, SIU_LAYER_LABEL, SIU_ROLE_HINTS, byLayer, nodeEntity, nodeLabel,
+  nodeProblem, siuLayerLabel,
+} from './fieldSiu'
+import type { FieldSiuActionRow, FieldSiuNodeRow } from './fieldSiu'
 import { SIU_FILTERS, SIU_FILTER_LABEL, matchesFilter } from './fieldReview'
 import type { FieldSubmissionRow } from './fieldSubmissions'
 
@@ -34,6 +38,7 @@ const sub = (over: Partial<FieldSubmissionRow> = {}): FieldSubmissionRow => ({
   siu_state: null, siu_category: null, siu_reason: null,
   siu_referred_by: null, siu_referred_at: null,
   siu_assigned_to: null, siu_assigned_at: null, siu_sensitive: false,
+  siu_case_id: null,
   created_at: '2026-08-19T00:00:00Z', updated_at: '2026-08-19T00:00:00Z',
   ...over,
 })
@@ -173,5 +178,96 @@ describe('the SIU queues', () => {
     const r = sub({ siu_state: 'referred', assigned_to: null, status: 'submitted' })
     expect(matchesFilter(r, 'unclaimed', null)).toBe(true)
     expect(matchesFilter(r, 'city', null)).toBe(true)
+  })
+})
+
+const node = (over: Partial<FieldSiuNodeRow> = {}): FieldSiuNodeRow => ({
+  id: 'n1', submission_id: 's1', layer: 'leadership', role: null, label: null, note: null,
+  claim_person_id: null, claim_vehicle_id: null, claim_org_id: null,
+  claim_location_id: null, claim_item_id: null,
+  person_id: null, vehicle_id: null, gang_id: null, place_id: null,
+  created_by: 'x1', created_at: '2026-08-19T00:00:00Z',
+  removed_by: null, removed_at: null, remove_reason: null,
+  ...over,
+})
+
+describe('the enterprise layers', () => {
+  it('reads top to bottom, the way the model does', () => {
+    // Leadership first and activity last is not decoration: it is how an
+    // enterprise is read, from who decides down to what they do.
+    expect(SIU_LAYERS[0]).toBe('leadership')
+    expect(SIU_LAYERS[SIU_LAYERS.length - 1]).toBe('activity')
+    for (const l of SIU_LAYERS) {
+      expect(SIU_LAYER_LABEL[l], l).toBeTruthy()
+      expect(SIU_ROLE_HINTS[l].length, l).toBeGreaterThan(0)
+    }
+  })
+
+  it('shows an unfamiliar layer rather than dropping it', () => {
+    expect(siuLayerLabel('couriers')).toBe('couriers')
+  })
+})
+
+describe('grouping the picture', () => {
+  it('keeps the model order and skips empty layers', () => {
+    const g = byLayer([
+      node({ id: 'a', layer: 'activity', label: 'narcotics' }),
+      node({ id: 'b', layer: 'leadership', label: 'boss' }),
+    ])
+    expect(g.map((x) => x.layer)).toEqual(['leadership', 'activity'])
+  })
+
+  it('never hides a node under a layer this file has not heard of', () => {
+    // The database could gain a layer before the client does. A node that
+    // silently vanished from the picture is worse than one under an odd
+    // heading.
+    const g = byLayer([node({ id: 'a', layer: 'couriers', label: 'runner' })])
+    expect(g).toHaveLength(1)
+    expect(g[0].layer).toBe('couriers')
+  })
+
+  it('drops removed nodes from the picture but not from the record', () => {
+    // Removal is soft server-side, with a reason: how the picture was built is
+    // part of the picture. It just does not belong in the live reading.
+    const g = byLayer([node({ removed_at: '2026-08-19T01:00:00Z', label: 'wrong' })])
+    expect(g).toHaveLength(0)
+  })
+})
+
+describe('a node has to be about something', () => {
+  it('accepts a bare name, a claim, or a record', () => {
+    expect(nodeProblem('leadership', 'Man with the neck tattoo', false)).toBeNull()
+    expect(nodeProblem('leadership', '', true)).toBeNull()
+  })
+
+  it('refuses an empty one and an unknown layer', () => {
+    expect(nodeProblem('leadership', '   ', false)).toMatch(/who or what/)
+    expect(nodeProblem('couriers', 'x', false)).toMatch(/layer/)
+  })
+})
+
+describe('which nodes can become targets', () => {
+  it('is only the ones resolved to a registry record', () => {
+    // Designating "a man in a red jacket" is not a designation. The RPC refuses
+    // it too -- it demands an entity id for anything but an explicit unknown.
+    expect(nodeEntity(node({ person_id: 'p1' }))).toEqual({ type: 'person', id: 'p1' })
+    expect(nodeEntity(node({ gang_id: 'g1' }))).toEqual({ type: 'gang', id: 'g1' })
+    expect(nodeEntity(node({ label: 'red jacket' }))).toBeNull()
+  })
+
+  it('describes a node even when it has no name of its own', () => {
+    expect(nodeLabel(node({ label: 'Tony' }))).toBe('Tony')
+    expect(nodeLabel(node({ person_id: 'p1' }))).toBe('Linked record')
+    expect(nodeLabel(node({ claim_person_id: 'c1' }))).toBe('From the report')
+  })
+})
+
+describe('the SIU history covers the new steps', () => {
+  const name = () => 'Reyes'
+  it('says what happened in words', () => {
+    expect(siuActionLine(act({ action: 'case_linked' }), name))
+      .toBe('Reyes linked it to an SIU investigation')
+    expect(siuActionLine(act({ action: 'target_designated' }), name))
+      .toBe('Reyes designated a target from it')
   })
 })

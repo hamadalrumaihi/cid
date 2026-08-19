@@ -8,6 +8,40 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### SIU reads the network, and nothing gets promoted on its own
+
+Claim verdicts answer whether what an officer reported happened. The SIU
+question is what it says about a **structure** — who leads, who supplies, who
+moves it, who enforces, where the money and the assets are.
+`field_siu_enterprise` records that reading against the report, in the SOP's own
+nine layers, with free-text roles because "shot caller", "stash operator" and
+"launders through the tow yard" are all legitimate and a fixed vocabulary pushes
+an agent into the nearest wrong word.
+
+It does **not** replace the relationship tables. `gang_members`,
+`person_relationships` and the rest stay where structural fact lives. A node
+here is an assessment attached to one report, optionally pointing at the claim
+it came from and optionally at a registry record — so following it backwards
+reaches the officer, their evidence and the verdict somebody recorded.
+
+**A node is a candidate, never a target.** Only a node resolved to a registry
+record can be designated; designating calls the same `siu_designate_target()`
+the SIU workspace already uses, and the report must have been **accepted** by
+SIU first. Patrol cannot start an SIU case, and neither can a referral nobody
+answered. The designated target carries `field_submission_id`, mirroring the
+provenance column on `intelligence_tips`, so a target can say which patrol
+report it came out of.
+
+**Linking to an investigation does not move the report.** `siu_case_id` records
+that FI-2026-0042 fed investigation X; the report keeps its number, its
+jurisdiction, its CID queue and its CID assignee. Unlinking needs a reason, and
+removing a mapped node is soft and needs one too — how the picture was built is
+part of the picture, and a deleted wrong reading leaves the next agent deriving
+the same wrong conclusion.
+
+Like the follow-up candidates, the whole assessment is `private.siu_is_agent()`
+and nothing else.
+
 ### SIU without a second intake queue
 
 SIU is a specialist detachment inside CID, so it works the same reports out of

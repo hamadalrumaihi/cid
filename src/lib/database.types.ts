@@ -2830,6 +2830,83 @@ export type Database = {
           },
         ]
       }
+      field_siu_enterprise: {
+        Row: {
+          claim_item_id: string | null
+          claim_location_id: string | null
+          claim_org_id: string | null
+          claim_person_id: string | null
+          claim_vehicle_id: string | null
+          created_at: string
+          created_by: string
+          gang_id: string | null
+          id: string
+          label: string | null
+          layer: string
+          note: string | null
+          person_id: string | null
+          place_id: string | null
+          remove_reason: string | null
+          removed_at: string | null
+          removed_by: string | null
+          role: string | null
+          submission_id: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          claim_item_id?: string | null
+          claim_location_id?: string | null
+          claim_org_id?: string | null
+          claim_person_id?: string | null
+          claim_vehicle_id?: string | null
+          created_at?: string
+          created_by: string
+          gang_id?: string | null
+          id?: string
+          label?: string | null
+          layer: string
+          note?: string | null
+          person_id?: string | null
+          place_id?: string | null
+          remove_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          role?: string | null
+          submission_id: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          claim_item_id?: string | null
+          claim_location_id?: string | null
+          claim_org_id?: string | null
+          claim_person_id?: string | null
+          claim_vehicle_id?: string | null
+          created_at?: string
+          created_by?: string
+          gang_id?: string | null
+          id?: string
+          label?: string | null
+          layer?: string
+          note?: string | null
+          person_id?: string | null
+          place_id?: string | null
+          remove_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          role?: string | null
+          submission_id?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_siu_enterprise_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       field_siu_followups: {
         Row: {
           clear_reason: string | null
@@ -3312,6 +3389,7 @@ export type Database = {
           observed_to: string | null
           officer_id: string
           jurisdiction: string | null
+          siu_case_id: string | null
           siu_assigned_at: string | null
           siu_assigned_to: string | null
           siu_category: string | null
@@ -3342,6 +3420,7 @@ export type Database = {
           observed_to?: string | null
           officer_id?: string
           jurisdiction?: string | null
+          siu_case_id?: string | null
           siu_assigned_at?: string | null
           siu_assigned_to?: string | null
           siu_category?: string | null
@@ -3372,6 +3451,7 @@ export type Database = {
           observed_to?: string | null
           officer_id?: string
           jurisdiction?: string | null
+          siu_case_id?: string | null
           siu_assigned_at?: string | null
           siu_assigned_to?: string | null
           siu_category?: string | null
@@ -8784,6 +8864,7 @@ export type Database = {
           person_id: string | null
           place_id: string | null
           vehicle_id: string | null
+          field_submission_id: string | null
           case_id: string
           cleared_at: string | null
           cleared_by: string | null
@@ -8800,6 +8881,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          field_submission_id?: string | null
           case_id: string
           cleared_at?: string | null
           cleared_by?: string | null
@@ -8823,6 +8905,7 @@ export type Database = {
           person_id?: string | null
           place_id?: string | null
           vehicle_id?: string | null
+          field_submission_id?: string | null
           case_id?: string
           cleared_at?: string | null
           cleared_by?: string | null
@@ -11364,6 +11447,46 @@ export type Database = {
       }
       field_submission_assign: {
         Args: { p_reason?: string; p_submission: string; p_user: string }
+        Returns: undefined
+      }
+      field_siu_designate_target: {
+        Args: {
+          p_case: string
+          p_designation: string
+          p_entity_id: string
+          p_entity_type: string
+          p_label?: string
+          p_notes?: string
+          p_priority?: string
+          p_role?: string
+          p_submission: string
+        }
+        Returns: string
+      }
+      field_siu_link_case: {
+        Args: { p_case: string; p_reason?: string; p_submission: string }
+        Returns: undefined
+      }
+      field_siu_map_add: {
+        Args: {
+          p_claim_id?: string
+          p_claim_kind?: string
+          p_entity_id?: string
+          p_entity_type?: string
+          p_label?: string
+          p_layer: string
+          p_note?: string
+          p_role?: string
+          p_submission: string
+        }
+        Returns: string
+      }
+      field_siu_map_remove: {
+        Args: { p_id: string; p_reason: string }
+        Returns: undefined
+      }
+      field_siu_unlink_case: {
+        Args: { p_reason: string; p_submission: string }
         Returns: undefined
       }
       field_siu_followup_add: {

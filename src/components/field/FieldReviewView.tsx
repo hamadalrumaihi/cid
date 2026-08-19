@@ -437,7 +437,8 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
         </Card>
       )}
 
-      <SiuPanel submission={submission} onChanged={() => { void load(); onChanged() }} />
+      <SiuPanel submission={submission} parts={parts}
+        onChanged={() => { void load(); onChanged() }} />
 
       <Card>
         <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
