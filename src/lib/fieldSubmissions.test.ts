@@ -19,6 +19,9 @@ const sub = (over: Partial<FieldSubmissionRow> = {}): FieldSubmissionRow => ({
   status: 'draft', jurisdiction: 'city', summary: null, details: null,
   observed_at: null, observed_to: null, observed_precision: 'unknown',
   mdt_reference: null, submitted_at: null, assigned_to: null, assigned_at: null,
+  siu_state: null, siu_category: null, siu_reason: null,
+  siu_referred_by: null, siu_referred_at: null,
+  siu_assigned_to: null, siu_assigned_at: null, siu_sensitive: false,
   created_at: '2026-08-19T00:00:00Z', updated_at: '2026-08-19T00:00:00Z',
   ...over,
 })

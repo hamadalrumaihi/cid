@@ -30,7 +30,7 @@ import {
   type FieldSubmissionRow, type SubmissionParts,
 } from '@/lib/fieldSubmissions'
 import {
-  QUEUE_FILTERS, QUEUE_LABEL, VERDICTS, VERDICT_LABEL, VERDICT_MEANING, VERDICT_TONE,
+  QUEUE_FILTERS, QUEUE_LABEL, SIU_FILTERS, SIU_FILTER_LABEL, VERDICTS, VERDICT_LABEL, VERDICT_MEANING, VERDICT_TONE,
   askOfficer, assignSubmission, assignmentLine, awaitingReviewer, claimSubmission,
   countsSummary, decideClaim, decideSubmission, loadAssignments,
   loadClaimProgress, loadCounts, loadMessages, loadReviewNotes, loadReviewQueue,
@@ -39,10 +39,13 @@ import {
   verdictFor, type ClaimKind, type ClaimProgress, type EntityMatch,
   type FieldAssignmentRow, type FieldClaimLinkRow, type FieldMessageRow,
   type FieldReviewNoteRow, type FieldVerdictRow, type MatchResult,
-  type QueueFilter, type SubmissionCounts, type Verdict,
+  type QueueFilter, type SiuFilter, type SubmissionCounts, type Verdict,
 } from '@/lib/fieldReview'
 import { evidenceLabel, evidenceUrl, loadEvidence, type FieldEvidenceRow } from '@/lib/fieldEvidence'
 import { FieldAccessQueue, countPending, useAccessRequests } from './FieldAccessQueue'
+import { SiuPanel } from './SiuPanel'
+import { siuCategoryLabel, siuStateLabel, siuStateTone } from '@/lib/fieldSiu'
+import { useSiu } from '@/lib/useSiu'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -60,9 +63,10 @@ export function FieldReviewView() {
   const [rows, setRows] = useState<FieldSubmissionRow[] | null>(null)
   const [counts, setCounts] = useState<Record<string, SubmissionCounts>>({})
   const [selected, setSelected] = useState<string | null>(null)
-  const [tab, setTab] = useState<QueueFilter | 'access'>('unclaimed')
+  const [tab, setTab] = useState<QueueFilter | SiuFilter | 'access'>('unclaimed')
   const v = useTableVersion('field_submissions')
   const access = useAccessRequests()
+  const siu = useSiu()
 
   const refresh = useCallback(async () => {
     const [q, c] = await Promise.all([loadReviewQueue(), loadCounts()])
@@ -83,7 +87,7 @@ export function FieldReviewView() {
   // Counts on the tabs so a reviewer can see where the work is without opening
   // each queue. Only the ones that mean "somebody is waiting" are counted; a
   // number on "All" or "Processed" is trivia.
-  const countFor = (f: QueueFilter): number | undefined =>
+  const countFor = (f: QueueFilter | SiuFilter): number | undefined =>
     f === 'all' || f === 'processed' ? undefined
       : all.filter((r) => matchesFilter(r, f, me)).length
 
@@ -104,10 +108,17 @@ export function FieldReviewView() {
           onChange={setTab}
           tabs={[
             ...QUEUE_FILTERS.map((f) => ({
-              id: f as QueueFilter | 'access',
+              id: f as QueueFilter | SiuFilter | 'access',
               label: QUEUE_LABEL[f],
               count: countFor(f),
             })),
+            // Same table, same reports: SIU is a specialist detachment inside
+            // CID, so these are filters rather than a second application.
+            ...(siu.isAgent ? SIU_FILTERS.map((f) => ({
+              id: f as QueueFilter | SiuFilter | 'access',
+              label: SIU_FILTER_LABEL[f],
+              count: countFor(f),
+            })) : []),
             // An officer waiting on an access decision has no other way to
             // reach CID, so the wait belongs where reviewers already are.
             {
@@ -133,7 +144,9 @@ export function FieldReviewView() {
         <Card pad="none" className="overflow-hidden">
           <div className="border-b border-white/5 px-5 py-3">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-              {tab === 'access' ? 'Access requests' : QUEUE_LABEL[tab]}
+              {tab === 'access' ? 'Access requests'
+                : tab in QUEUE_LABEL ? QUEUE_LABEL[tab as QueueFilter]
+                : SIU_FILTER_LABEL[tab as SiuFilter]}
             </h3>
           </div>
           {rows === null ? (
@@ -198,6 +211,14 @@ function ReportCard({ r, counts, me, isCommand, onOpen, onChanged }: {
           <Badge tone={r.status === 'needs_info' ? 'warn' : 'accent'}>
             {fieldStatusLabel(r.status)}
           </Badge>
+          {/* A workflow indicator, never "confirmed SIU case" -- the wording
+              comes from siuStateLabel so the two cannot drift apart. */}
+          {r.siu_state && (
+            <Badge tone={siuStateTone(r.siu_state)}>
+              {siuStateLabel(r.siu_state)}
+              {r.siu_category ? ` · ${siuCategoryLabel(r.siu_category)}` : ''}
+            </Badge>
+          )}
         </span>
       </div>
       <button onClick={onOpen} className="mt-1 block w-full text-left">
@@ -415,6 +436,8 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
           </ul>
         </Card>
       )}
+
+      <SiuPanel submission={submission} onChanged={() => { void load(); onChanged() }} />
 
       <Card>
         <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
