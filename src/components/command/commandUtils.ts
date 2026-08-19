@@ -5,7 +5,6 @@
 import type { Tables } from '@/lib/database.types'
 
 export type CaseRow = Tables<'cases'>
-export type TicketRow = Tables<'tickets'>
 export type TrackerRow = Tables<'trackers'>
 
 /* ---- Command filters (#17) — command staff scope the dashboard ------------ */
@@ -61,18 +60,15 @@ export const fmtAvgDays = (avg: number | null): string =>
 
 /* ---- Ticket routing (core.js:9-22) ---------------------------------------- */
 /** Case-number-issuing bureaus (JTF never issues via ticket intake). */
-export const TICKET_BUREAUS: Record<string, { name: string; prefix: string; dept: string }> = {
-  LSB: { name: 'Los Santos Bureau', prefix: 'LSB', dept: 'LSPD' },
-  BCB: { name: 'Blaine County Bureau', prefix: 'BCB', dept: 'BCSO' },
-  SAB: { name: 'State Bureau', prefix: 'SAB', dept: 'SAHP' },
-}
-export const DEPT_ROUTING: Record<string, { bureau: string; rename: string }> = {
-  LSPD: { bureau: 'LSB', rename: 'losangeles' },
-  BCSO: { bureau: 'BCB', rename: 'blaine' },
-  SAHP: { bureau: 'SAB', rename: 'state' },
-}
-/** Expected leading digit of the numeric case number per bureau. */
-export const CASE_NUM_LEAD: Record<string, string> = { LSB: '1', BCB: '2', SAB: '9', JTF: '9' }
+// ---- Odyssey ticket queue: RETIRED -----------------------------------------
+// TICKET_BUREAUS, DEPT_ROUTING and CASE_NUM_LEAD lived here to drive the ticket
+// intake wizard, which is gone. The `tickets` TABLE and its one row are kept --
+// permanent-deletion repointing still refers to them and the history is real --
+// but 20260913120000 revoked insert/update/delete from `authenticated`, so
+// nothing can create a ticket any more. Field Intelligence Review replaced it.
+//
+// The agency -> bureau mapping these held (LSPD->LSB, BCSO->BCB, SAHP->SAB) now
+// lives where it is actually used: FIELD_AGENCIES in src/lib/fieldOfficers.ts.
 
 /* ---- Raid compensation (core.js:25-32) ------------------------------------ */
 export const BRACKETS = [

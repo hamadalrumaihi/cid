@@ -999,6 +999,20 @@ alter table public.field_submission_locations add constraint field_submission_lo
 alter table public.field_submission_locations add constraint field_submission_locations_basis_check CHECK ((basis = ANY (ARRAY['observed'::text, 'reported'::text, 'unknown'::text])));
 alter table public.field_submission_locations enable row level security;
 
+create table public.field_submission_messages (
+  id uuid not null default gen_random_uuid(),
+  submission_id uuid not null,
+  author_id uuid,
+  from_reviewer boolean not null default false,
+  body text not null,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.field_submission_messages add constraint field_submission_messages_pkey PRIMARY KEY (id);
+alter table public.field_submission_messages add constraint field_submission_messages_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.field_submissions(id) ON DELETE CASCADE;
+alter table public.field_submission_messages add constraint field_submission_messages_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.profiles(id);
+alter table public.field_submission_messages add constraint field_submission_messages_body_not_blank CHECK ((btrim(body) <> ''::text));
+alter table public.field_submission_messages enable row level security;
+
 create table public.field_submission_orgs (
   id uuid not null default gen_random_uuid(),
   submission_id uuid not null,
@@ -1039,6 +1053,19 @@ alter table public.field_submission_persons add constraint field_submission_pers
 alter table public.field_submission_persons add constraint field_submission_persons_org_role_check CHECK (((org_role IS NULL) OR (org_role = ANY (ARRAY['member'::text, 'associate'::text, 'prospect'::text, 'leadership'::text, 'unknown'::text]))));
 alter table public.field_submission_persons add constraint field_submission_persons_basis_check CHECK ((basis = ANY (ARRAY['observed'::text, 'reported'::text, 'unknown'::text])));
 alter table public.field_submission_persons enable row level security;
+
+create table public.field_submission_reviews (
+  id uuid not null default gen_random_uuid(),
+  submission_id uuid not null,
+  author_id uuid,
+  note text not null,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.field_submission_reviews add constraint field_submission_reviews_pkey PRIMARY KEY (id);
+alter table public.field_submission_reviews add constraint field_submission_reviews_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.field_submissions(id) ON DELETE CASCADE;
+alter table public.field_submission_reviews add constraint field_submission_reviews_author_id_fkey FOREIGN KEY (author_id) REFERENCES public.profiles(id);
+alter table public.field_submission_reviews add constraint field_submission_reviews_note_not_blank CHECK ((btrim(note) <> ''::text));
+alter table public.field_submission_reviews enable row level security;
 
 create table public.field_submission_vehicles (
   id uuid not null default gen_random_uuid(),
@@ -4053,6 +4080,8 @@ CREATE INDEX field_officers_agency_idx ON public.field_officers USING btree (age
 CREATE INDEX field_officers_appointed_by_fkey_idx ON public.field_officers USING btree (appointed_by);
 CREATE INDEX field_officers_ended_by_fkey_idx ON public.field_officers USING btree (ended_by);
 CREATE INDEX field_submission_evidence_submission_idx ON public.field_submission_evidence USING btree (submission_id);
+CREATE INDEX field_submission_messages_submission_idx ON public.field_submission_messages USING btree (submission_id, created_at);
+CREATE INDEX field_submission_reviews_submission_idx ON public.field_submission_reviews USING btree (submission_id, created_at DESC);
 CREATE INDEX field_submission_items_submission_idx ON public.field_submission_items USING btree (submission_id);
 CREATE INDEX field_submission_locations_submission_idx ON public.field_submission_locations USING btree (submission_id);
 CREATE INDEX field_submission_orgs_submission_idx ON public.field_submission_orgs USING btree (submission_id);
@@ -7539,6 +7568,9 @@ CREATE TRIGGER field_officers_audit AFTER INSERT OR DELETE OR UPDATE ON public.f
 CREATE TRIGGER field_officers_touch BEFORE UPDATE ON public.field_officers FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER field_evidence_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_evidence FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_evidence_before_insert BEFORE INSERT ON public.field_submission_evidence FOR EACH ROW EXECUTE FUNCTION private.field_evidence_before_insert();
+CREATE TRIGGER field_messages_before_insert BEFORE INSERT ON public.field_submission_messages FOR EACH ROW EXECUTE FUNCTION private.field_message_before_insert();
+CREATE TRIGGER field_submission_messages_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_messages FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER field_submission_reviews_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_reviews FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_submission_items_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_items FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_submission_locations_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_locations FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_submission_orgs_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_orgs FOR EACH ROW EXECUTE FUNCTION private.audit();
@@ -8141,6 +8173,26 @@ create policy field_submission_evidence_del on public.field_submission_evidence
   as permissive for delete to authenticated
   using (private.field_submission_my_draft(submission_id) OR private.is_command());
 
+create policy field_submission_reviews_sel on public.field_submission_reviews
+  as permissive for select to authenticated
+  using (private.is_active());
+
+create policy field_submission_reviews_ins on public.field_submission_reviews
+  as permissive for insert to authenticated
+  with check (private.is_active());
+
+create policy field_submission_reviews_del on public.field_submission_reviews
+  as permissive for delete to authenticated
+  using (private.is_command());
+
+create policy field_submission_messages_sel on public.field_submission_messages
+  as permissive for select to authenticated
+  using (private.field_submission_mine(submission_id) OR private.is_active());
+
+create policy field_submission_messages_ins on public.field_submission_messages
+  as permissive for insert to authenticated
+  with check (((private.is_active() AND (EXISTS ( SELECT 1 FROM public.field_submissions s WHERE ((s.id = field_submission_messages.submission_id) AND (s.status <> 'draft'::text))))) OR (private.field_submission_mine(submission_id) AND (EXISTS ( SELECT 1 FROM public.field_submissions s WHERE ((s.id = field_submission_messages.submission_id) AND (s.status = 'needs_info'::text)))))));
+
 create policy field_submission_items_sel on public.field_submission_items
   as permissive for select to authenticated
   using (private.field_submission_mine(submission_id) OR (private.is_active() AND (EXISTS ( SELECT 1 FROM public.field_submissions s WHERE ((s.id = field_submission_items.submission_id) AND (s.status <> 'draft'::text))))));
@@ -8169,10 +8221,13 @@ create policy field_submissions_ins on public.field_submissions
   as permissive for insert to authenticated
   with check (private.is_field_officer());
 
+-- CID has NO update policy here as of 20260913120000: every review action goes
+-- through an audited SECURITY DEFINER RPC instead, so a reroute or a decision
+-- cannot be made without a record of who made it and why.
 create policy field_submissions_upd on public.field_submissions
   as permissive for update to authenticated
-  using (((officer_id = ( SELECT auth.uid() AS uid)) AND private.is_field_officer()) OR (private.is_active() AND (status <> 'draft'::text)))
-  with check ((officer_id = ( SELECT auth.uid() AS uid)) OR private.is_active());
+  using ((officer_id = ( SELECT auth.uid() AS uid)) AND private.is_field_officer())
+  with check (officer_id = ( SELECT auth.uid() AS uid));
 
 create policy field_submissions_del on public.field_submissions
   as permissive for delete to authenticated
@@ -9498,6 +9553,8 @@ create policy wl_sel on public.watchlist
 --   field_submissions -> anon: (none — global revoke + default privileges, 20260908130000)
 --   field_submissions -> authenticated: DELETE, INSERT, SELECT, UPDATE
 --   field_submission_evidence -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
+--   field_submission_messages -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
+--   field_submission_reviews -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
 --   field_submission_items -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
 --   field_submission_locations -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
 --   field_submission_orgs -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
@@ -9576,7 +9633,10 @@ create policy wl_sel on public.watchlist
 --   shift_reports -> anon: (none — global revoke + default privileges, 20260908130000)
 --   shift_reports -> authenticated: DELETE, INSERT, SELECT, UPDATE
 --   tickets -> anon: (none — global revoke + default privileges, 20260908130000)
---   tickets -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   tickets -> authenticated: SELECT only. INSERT/UPDATE/DELETE were revoked by
+--     20260913120000 when Field Intelligence Review replaced the ticket queue:
+--     the table, its row and its audit history are kept and readable, but
+--     nothing can create a ticket any more.
 --   trackers -> anon: (none — global revoke + default privileges, 20260908130000)
 --   trackers -> authenticated: DELETE, INSERT, SELECT, UPDATE
 --   vehicles -> anon: (none — global revoke + default privileges, 20260908130000)

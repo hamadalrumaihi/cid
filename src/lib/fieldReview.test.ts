@@ -1,0 +1,123 @@
+/** Unit tests for the review mirror.
+ *
+ *  The rules are in the database — the transition table, who may call which
+ *  RPC, and above all the fact that a field officer cannot read
+ *  `field_submission_reviews` at all. Those were probed live and the results are
+ *  recorded in 20260913120000_field_review.sql. What is pinned here is the
+ *  client's copy of the lane, which drives which outcomes a reviewer is offered.
+ */
+
+import { describe, expect, it } from 'vitest'
+import { FIELD_STATUSES, type FieldSubmissionRow } from './fieldSubmissions'
+import { OPEN_STATUSES, awaitingReviewer, isOpen, reviewNext, reviewPrompt } from './fieldReview'
+import type { FieldMessageRow } from './fieldReview'
+
+const sub = (over: Partial<FieldSubmissionRow> = {}): FieldSubmissionRow => ({
+  id: 's1', submission_no: 'FI-2026-0001', officer_id: 'u1', snap_agency: 'SAHP',
+  snap_callsign: '924', snap_rank: null, snap_unit: null,
+  status: 'submitted', route: 'unsure', summary: 'x', details: null,
+  observed_at: null, observed_to: null, observed_precision: 'unknown',
+  mdt_reference: null, submitted_at: '2026-08-19T00:00:00Z', assigned_to: null,
+  created_at: '2026-08-19T00:00:00Z', updated_at: '2026-08-19T00:00:00Z',
+  ...over,
+})
+
+const msg = (from_reviewer: boolean): FieldMessageRow => ({
+  id: Math.random().toString(36), submission_id: 's1', author_id: null,
+  from_reviewer, body: 'x', created_at: '2026-08-19T00:00:00Z',
+})
+
+describe('the review lane', () => {
+  it('offers nothing out of a draft — a draft is not in the queue', () => {
+    // RLS does not even return drafts to a reviewer; this makes the client
+    // agree rather than rendering outcomes that would be refused.
+    expect(reviewNext('draft')).toEqual([])
+  })
+
+  it('starts a submitted report at reviewing, archived or rejected', () => {
+    expect(reviewNext('submitted')).toEqual(['reviewing', 'archived', 'rejected'])
+  })
+
+  it('never routes a report backwards to submitted', () => {
+    // 'submitted' means "the officer has sent it and nobody has looked".
+    // Returning a report there would erase the fact that it was reviewed.
+    for (const s of FIELD_STATUSES) {
+      expect(reviewNext(s), s).not.toContain('submitted')
+    }
+  })
+
+  it('never offers draft as an outcome', () => {
+    // A reviewer cannot push a report back into the officer's editable window;
+    // that would let the account of what happened be rewritten after review.
+    for (const s of FIELD_STATUSES) {
+      expect(reviewNext(s), s).not.toContain('draft')
+    }
+  })
+
+  it('lets a wrong rejection be undone', () => {
+    // Rejecting is a judgement, and judgements are sometimes wrong. Both
+    // rejected and archived reopen to reviewing.
+    expect(reviewNext('rejected')).toContain('reviewing')
+    expect(reviewNext('archived')).toContain('reviewing')
+  })
+
+  it('narrows as a report settles, ending at archived', () => {
+    expect(reviewNext('intel_added')).not.toContain('rejected')
+    expect(reviewNext('linked_case')).toEqual(['archived'])
+  })
+
+  it('returns an empty list for a status it does not know', () => {
+    expect(reviewNext('nonsense')).toEqual([])
+  })
+
+  it('every offered outcome is a real status', () => {
+    for (const s of FIELD_STATUSES) {
+      for (const to of reviewNext(s)) {
+        expect(FIELD_STATUSES, `${s} -> ${to}`).toContain(to)
+      }
+    }
+  })
+})
+
+describe('the open queue', () => {
+  it('is the statuses that still want a decision', () => {
+    expect(OPEN_STATUSES).toEqual(['submitted', 'reviewing', 'needs_info', 'partially_reviewed'])
+    expect(isOpen('submitted')).toBe(true)
+    expect(isOpen('intel_added')).toBe(false)
+    expect(isOpen('archived')).toBe(false)
+  })
+
+  it('does not count drafts, which reviewers cannot see anyway', () => {
+    expect(isOpen('draft')).toBe(false)
+  })
+})
+
+describe('what the reviewer is being asked to do', () => {
+  it('distinguishes unassigned review from assigned', () => {
+    expect(reviewPrompt(sub({ status: 'reviewing' }))).toMatch(/unassigned/)
+    expect(reviewPrompt(sub({ status: 'reviewing', assigned_to: 'd1' }))).toBe('In review')
+  })
+
+  it('says when the ball is with the officer', () => {
+    expect(reviewPrompt(sub({ status: 'needs_info' }))).toMatch(/Waiting on the officer/)
+  })
+
+  it('is null once the report is settled', () => {
+    for (const s of ['intel_added', 'linked_case', 'archived', 'rejected'] as const) {
+      expect(reviewPrompt(sub({ status: s })), s).toBeNull()
+    }
+  })
+})
+
+describe('spotting a reply that is waiting', () => {
+  it('is true when the officer spoke last', () => {
+    // Answering deliberately does NOT change the status, so the thread is the
+    // only signal a reviewer gets.
+    expect(awaitingReviewer([msg(true), msg(false)])).toBe(true)
+  })
+
+  it('is false when the reviewer spoke last, or nobody has', () => {
+    expect(awaitingReviewer([msg(false), msg(true)])).toBe(false)
+    expect(awaitingReviewer([])).toBe(false)
+  })
+})
