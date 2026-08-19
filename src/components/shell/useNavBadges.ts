@@ -17,6 +17,7 @@ import { useAuth } from '@/lib/auth'
 import { todayISO } from '@/lib/format'
 import { useProfilesStore } from '@/lib/profiles'
 import { useJusticeRoster } from '@/lib/justiceRoster'
+import { useFieldStanding } from '@/lib/fieldStanding'
 import { useTableVersion } from '@/lib/realtime'
 import { Store } from '@/lib/store'
 import { visibleAnnouncements, type AnnouncementRow } from '@/components/announce/announceUtils'
@@ -52,6 +53,9 @@ export function useNavBadges(): NavBadges {
   const profiles = useProfilesStore((s) => s.profiles)
   const fetchProfiles = useProfilesStore((s) => s.fetch)
   const justiceByUser = useJusticeRoster((s) => s.byUser)
+  const fieldIds = useFieldStanding((s) => s.ids)
+  const fieldLoaded = useFieldStanding((s) => s.loaded)
+  const fetchFieldStanding = useFieldStanding((s) => s.fetch)
   const fetchJustice = useJusticeRoster((s) => s.fetch)
   const [anns, setAnns] = useState<AnnouncementRow[]>([])
   const [cases, setCases] = useState<CaseRow[]>([])
@@ -98,10 +102,12 @@ export function useNavBadges(): NavBadges {
     if (state !== 'in') return
     const t = window.setTimeout(() => {
       void fetchProfiles()
+      void fetchFieldStanding()
       if (isCommand || isOwner) void fetchJustice()
     }, 0)
     return () => window.clearTimeout(t)
-  }, [state, isCommand, isOwner, fetchProfiles, fetchJustice, vProfiles, vJustice])
+  }, [state, isCommand, isOwner, fetchProfiles, fetchJustice, fetchFieldStanding,
+      vProfiles, vJustice])
 
   useEffect(() => {
     if (state !== 'in' || !(isCommand || isOwner)) return
@@ -125,7 +131,8 @@ export function useNavBadges(): NavBadges {
     // requests fetch and therefore surface only in the Approval Queue, the
     // Overview tile and the Action Center. Rank-and-file keep a 0 badge.
     const pending = (isCommand || isOwner)
-      ? pendingMembership(profiles, null, justiceByUser, justiceReqs).awaitingCount
+      ? pendingMembership(profiles, null, justiceByUser, justiceReqs,
+          fieldLoaded ? fieldIds : null).awaitingCount
       : 0
 
     const seen = Store.get<string>('annSeen', '')
@@ -142,5 +149,6 @@ export function useNavBadges(): NavBadges {
     const signoff = review.length + bounced.length + mentions + overdue + followUps
 
     return { pending, announcements, signoff, command: pending + announcements + signoff }
-  }, [state, profile, isCommand, isOwner, profiles, justiceByUser, justiceReqs, anns, cases, notifs])
+  }, [state, profile, isCommand, isOwner, profiles, justiceByUser, justiceReqs,
+      fieldIds, fieldLoaded, anns, cases, notifs])
 }

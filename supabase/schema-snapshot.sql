@@ -7669,6 +7669,21 @@ create or replace function public.field_access_self_serve(
   p_rank text default null, p_unit text default null)
 returns jsonb language plpgsql security definer set search_path to '';
 
+-- Who can send us intelligence: one row per account that has ever held field
+-- standing, with the identity they gave, when the access was created, whether
+-- it still stands and how much they have sent. A roster, not a queue -- access
+-- is immediate. Any active investigator may read it; the sign-in email and the
+-- last sign-in time come back null for anybody who is not command.
+create or replace function public.field_access_roster()
+returns table (
+  user_id uuid, display_name text, email text, agency text, callsign text,
+  officer_rank text, unit text, standing_active boolean, self_served boolean,
+  appointed_by uuid, appointed_at timestamptz, ended_at timestamptz,
+  end_reason text, removed_at timestamptz, login_denied boolean,
+  first_seen timestamptz, last_seen timestamptz, submissions integer,
+  last_submission_at timestamptz)
+language plpgsql stable security definer set search_path to '';
+
 create or replace function public.justice_migration_review()
 returns jsonb language sql stable security definer set search_path to '' as $$
   select case

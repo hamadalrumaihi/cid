@@ -60,6 +60,93 @@ export async function selfServeFieldAccess(
   return res.error?.message ?? null
 }
 
+// ---------------------------------------------------------------------------
+// The roster — who can send us intelligence
+// ---------------------------------------------------------------------------
+
+/** One person who has, or once had, Field Intelligence access.
+ *
+ *  This is a ROSTER, not a queue: nobody here is waiting for anything. It is
+ *  the answer to "who is allowed to submit, and who are they?", assembled from
+ *  the appointment, the account and the submissions rather than joined by eye.
+ *
+ *  `email` and `last_seen` come back null for anybody who is not command —
+ *  same rule as member emails have always followed. An investigator does not
+ *  need a patrol officer's address to know they are cleared to submit. */
+export interface FieldRosterRow {
+  user_id: string
+  display_name: string
+  email: string | null
+  agency: string
+  callsign: string | null
+  officer_rank: string | null
+  unit: string | null
+  standing_active: boolean
+  self_served: boolean
+  appointed_by: string | null
+  appointed_at: string
+  ended_at: string | null
+  end_reason: string | null
+  removed_at: string | null
+  login_denied: boolean
+  first_seen: string | null
+  last_seen: string | null
+  submissions: number
+  last_submission_at: string | null
+}
+
+export async function loadFieldRoster(): Promise<FieldRosterRow[]> {
+  const res = await rpc('field_access_roster', {})
+  return (res.data ?? []) as FieldRosterRow[]
+}
+
+export type RosterStatus = 'active' | 'removed' | 'denied' | 'former'
+
+/** What this person's access actually is, worst news first. A removed or
+ *  denied account is not "active" even while the appointment row still says
+ *  true — the login is what they would hit first. */
+export function rosterStatus(r: FieldRosterRow): RosterStatus {
+  if (r.login_denied) return 'denied'
+  if (r.removed_at) return 'removed'
+  if (!r.standing_active) return 'former'
+  return 'active'
+}
+
+export const ROSTER_STATUS_LABEL: Record<RosterStatus, string> = {
+  active: 'Active',
+  removed: 'Removed from portal',
+  denied: 'Login denied',
+  former: 'Former submitter',
+}
+
+export const ROSTER_STATUS_TONE: Record<RosterStatus, 'good' | 'neutral' | 'warn' | 'danger'> = {
+  active: 'good',
+  removed: 'warn',
+  denied: 'danger',
+  former: 'neutral',
+}
+
+/** The identity they gave, as one line. */
+export function rosterIdentity(r: FieldRosterRow): string {
+  return [r.callsign, r.agency, r.officer_rank, r.unit].filter(Boolean).join(' · ')
+}
+
+/** How the access came about. Worth saying out loud: a self-served officer has
+ *  no appointer, and a blank column would read as missing data rather than as
+ *  the fact that nobody had to approve it. */
+export function rosterOrigin(r: FieldRosterRow): string {
+  return r.self_served ? 'Self-registered' : 'Appointed by command'
+}
+
+/** Roster search over the fields somebody would actually type: a name, a
+ *  callsign, an agency. */
+export function rosterMatches(r: FieldRosterRow, q: string): boolean {
+  const term = q.trim().toLowerCase()
+  if (!term) return true
+  return [r.display_name, r.agency, r.callsign, r.officer_rank, r.unit]
+    .filter(Boolean).join(' ').toLowerCase().includes(term)
+}
+
 /** Approve or decline. Command only — the RPC re-checks, so this is
  *  convenience. Declining requires a reason because the applicant reads it;
  *  "no" with no explanation is how somebody applies four more times. */

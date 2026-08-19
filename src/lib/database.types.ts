@@ -11420,6 +11420,30 @@ export type Database = {
         Args: { p_claim: string; p_kind: string; p_note?: string; p_verdict: string }
         Returns: undefined
       }
+      field_access_roster: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          agency: string
+          appointed_at: string
+          appointed_by: string | null
+          callsign: string | null
+          display_name: string
+          email: string | null
+          end_reason: string | null
+          ended_at: string | null
+          first_seen: string | null
+          last_seen: string | null
+          last_submission_at: string | null
+          login_denied: boolean
+          officer_rank: string | null
+          removed_at: string | null
+          self_served: boolean
+          standing_active: boolean
+          submissions: number
+          unit: string | null
+          user_id: string
+        }[]
+      }
       field_access_self_serve: {
         Args: {
           p_agency: string

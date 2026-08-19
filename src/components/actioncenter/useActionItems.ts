@@ -17,6 +17,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth'
 import { todayISO } from '@/lib/format'
 import { useJusticeRoster } from '@/lib/justiceRoster'
+import { useFieldStanding } from '@/lib/fieldStanding'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { pendingMembership, type JusticeRequestLite } from '@/components/command-center/lib/membershipPending'
@@ -246,6 +247,10 @@ export function useActionItems(): ActionItemsResult {
             membershipRequests,
             useJusticeRoster.getState().byUser,
             justiceRequests,
+            // Field Intelligence submitters are inactive on purpose and have
+            // applied for nothing -- excluded, or the Action Center nags
+            // command about work that does not exist.
+            useFieldStanding.getState().loaded ? useFieldStanding.getState().ids : null,
           ).awaitingCount
         : null
       // Library governance facts, pre-derived through docModel so the pure

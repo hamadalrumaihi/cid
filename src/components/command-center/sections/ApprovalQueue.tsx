@@ -21,6 +21,7 @@ import { notify } from '@/lib/notify'
 import { officerName, type RosterProfile, useProfilesStore } from '@/lib/profiles'
 import { AGENCY_LABEL, justiceRoleLabel, type JusticeAgency } from '@/lib/justice'
 import { useJusticeRoster } from '@/lib/justiceRoster'
+import { useFieldStanding } from '@/lib/fieldStanding'
 import { useTableVersion } from '@/lib/realtime'
 import { PERMANENT_BUREAUS, ROLE_LABEL, ROLE_ORDER, bureauLabel, canApproveRequestedRole, roleLabel, type RoleParty } from '@/lib/roles'
 import { signoffLabel, signoffTint } from '@/lib/signoff'
@@ -237,6 +238,9 @@ export function ApprovalQueue() {
   const profilesLoaded = useProfilesStore((s) => s.loaded)
   const fetchProfiles = useProfilesStore((s) => s.fetch)
   const justiceByUser = useJusticeRoster((s) => s.byUser)
+  const fieldIds = useFieldStanding((s) => s.ids)
+  const fieldLoaded = useFieldStanding((s) => s.loaded)
+  const fetchFieldStanding = useFieldStanding((s) => s.fetch)
   const fetchJustice = useJusticeRoster((s) => s.fetch)
   const router = useRouter()
   const [cases, setCases] = useState<CaseRow[]>([])
@@ -259,6 +263,7 @@ export function ApprovalQueue() {
   const refresh = useCallback(async () => {
     void fetchProfiles()
     void fetchJustice()
+    void fetchFieldStanding()
     try { setCases(await list('cases', { order: 'updated_at', ascending: false })) } catch { /* stale */ }
     if (canAdmin) {
       const [rq, em] = await Promise.all([
@@ -287,12 +292,13 @@ export function ApprovalQueue() {
         }) as JusticeRequestRow[])
       } catch { /* degrade: applicants blend into sign-ins as before */ }
     }
-  }, [fetchProfiles, fetchJustice, canAdmin])
+  }, [fetchProfiles, fetchJustice, fetchFieldStanding, canAdmin])
   useEffect(() => { const t = window.setTimeout(() => { void refresh() }, 0); return () => window.clearTimeout(t) }, [refresh, vP, vC, vM, vJ, vJR])
 
   // Single source of truth for every membership bucket (and the shared
   // awaitingCount the badge/tile/Action Center use) — see lib/membershipPending.
-  const pm = pendingMembership(profiles, requests, justiceByUser, justiceReqs)
+  const pm = pendingMembership(profiles, requests, justiceByUser, justiceReqs,
+    fieldLoaded ? fieldIds : null)
   const membershipLoading = !profilesLoaded || (canAdmin && requests === null && reqError === null)
   const justicePending = (justiceReqs ?? []).filter((j) => j.status === 'pending')
   const reviews = cases.filter((c) => canReviewCase(c, profile))

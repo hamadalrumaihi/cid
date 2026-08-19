@@ -18,6 +18,8 @@ import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { markWatchSeen, type WatchType } from '@/lib/watchlist'
 import { useJusticeRoster } from '@/lib/justiceRoster'
+import { useFieldStanding } from '@/lib/fieldStanding'
+import { isFieldOnlyAccount } from '@/components/command-center/lib/membershipPending'
 import { canReviewCase } from '@/components/command-center/lib/approvals'
 import { SiuAccessRequestCard } from '@/components/siu/SiuAccessRequest'
 import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
@@ -155,6 +157,9 @@ export function InboxView() {
   const fetchProfiles = useProfilesStore((s) => s.fetch)
   const rosterProfiles = useProfilesStore((s) => s.profiles)
   const justiceByUser = useJusticeRoster((s) => s.byUser)
+  const fieldIds = useFieldStanding((s) => s.ids)
+  const fieldLoaded = useFieldStanding((s) => s.loaded)
+  const fetchFieldStanding = useFieldStanding((s) => s.fetch)
   const fetchJustice = useJusticeRoster((s) => s.fetch)
   const [data, setData] = useState<InboxData>(EMPTY)
   const [loading, setLoading] = useState(true)
@@ -180,6 +185,7 @@ export function InboxView() {
     try {
       await fetchProfiles()
       void fetchJustice()
+      void fetchFieldStanding()
       const [cases, tasks, messages, notifications, reports, watchlist, persons, vehicles] = await Promise.all([
         list('cases', { order: 'updated_at', ascending: false, is: { archived_at: null } }),
         list('case_tasks', { order: 'due', nullsFirst: false }),
@@ -197,7 +203,7 @@ export function InboxView() {
     } finally {
       setLoading(false)
     }
-  }, [fetchProfiles, fetchJustice, profile, state])
+  }, [fetchProfiles, fetchJustice, fetchFieldStanding, profile, state])
 
   useEffect(() => {
     const id = window.setTimeout(() => { void refresh() }, 0)
@@ -207,8 +213,11 @@ export function InboxView() {
   // Command-only: pending CID sign-ins awaiting a decision. Mirrors the roster
   // rule — a deactivated member who now holds an active justice identity was
   // moved out by an organization correction and is NOT a pending sign-in.
+  // ...and a Field Intelligence submitter is inactive by design, having
+  // applied for nothing at all.
   const pendingApprovals = isCommand
-    ? rosterProfiles.filter((p) => !p.active && !p.removed_at && !justiceByUser[p.id]).length
+    ? rosterProfiles.filter((p) => !p.active && !p.removed_at && !justiceByUser[p.id]
+        && !isFieldOnlyAccount(p.id, fieldLoaded ? fieldIds : null)).length
     : 0
 
   const model = useMemo(() => {
