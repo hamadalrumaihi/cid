@@ -910,6 +910,159 @@ alter table public.field_officers add constraint field_officers_ended_by_fkey FO
 alter table public.field_officers add constraint field_officers_agency_check CHECK ((agency = ANY (ARRAY['SAHP'::text, 'BCSO'::text, 'LSPD'::text])));
 alter table public.field_officers enable row level security;
 
+create table public.field_submission_items (
+  id uuid not null default gen_random_uuid(),
+  submission_id uuid not null,
+  category text not null default 'other'::text,
+  description text,
+  quantity numeric,
+  weight_value numeric,
+  weight_unit text,
+  weight_grams numeric generated always as (
+    CASE weight_unit
+      WHEN 'g'::text THEN weight_value
+      WHEN 'kg'::text THEN (weight_value * (1000)::numeric)
+      WHEN 'oz'::text THEN (weight_value * 28.349523125)
+      WHEN 'lb'::text THEN (weight_value * 453.59237)
+      ELSE NULL::numeric
+    END) stored,
+  suspected_substance text,
+  tested boolean,
+  packaging text,
+  package_count integer,
+  seized_from_person text,
+  seized_from_vehicle text,
+  seized_from_location text,
+  basis text not null default 'unknown'::text,
+  note text,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.field_submission_items add constraint field_submission_items_pkey PRIMARY KEY (id);
+alter table public.field_submission_items add constraint field_submission_items_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.field_submissions(id) ON DELETE CASCADE;
+alter table public.field_submission_items add constraint field_submission_items_category_check CHECK ((category = ANY (ARRAY['narcotics'::text, 'firearm'::text, 'ammunition'::text, 'money'::text, 'dirty_money'::text, 'weapon'::text, 'tools'::text, 'crafting_material'::text, 'electronics'::text, 'documents'::text, 'stolen_property'::text, 'other'::text])));
+alter table public.field_submission_items add constraint field_submission_items_basis_check CHECK ((basis = ANY (ARRAY['observed'::text, 'reported'::text, 'unknown'::text])));
+alter table public.field_submission_items add constraint field_submission_items_weight_unit_check CHECK (((weight_unit IS NULL) OR (weight_unit = ANY (ARRAY['g'::text, 'kg'::text, 'oz'::text, 'lb'::text]))));
+alter table public.field_submission_items add constraint field_submission_items_quantity_check CHECK (((quantity IS NULL) OR (quantity >= (0)::numeric)));
+alter table public.field_submission_items add constraint field_submission_items_weight_value_check CHECK (((weight_value IS NULL) OR (weight_value >= (0)::numeric)));
+alter table public.field_submission_items add constraint field_submission_items_package_count_check CHECK (((package_count IS NULL) OR (package_count >= 0)));
+alter table public.field_submission_items add constraint field_submission_items_weight_pair CHECK ((((weight_value IS NULL) AND (weight_unit IS NULL)) OR ((weight_value IS NOT NULL) AND (weight_unit IS NOT NULL))));
+alter table public.field_submission_items enable row level security;
+
+create table public.field_submission_locations (
+  id uuid not null default gen_random_uuid(),
+  submission_id uuid not null,
+  kind text not null default 'general_area'::text,
+  postal text,
+  street text,
+  description text,
+  org_name text,
+  observed_what text,
+  observed_at timestamp with time zone,
+  basis text not null default 'unknown'::text,
+  note text,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.field_submission_locations add constraint field_submission_locations_pkey PRIMARY KEY (id);
+alter table public.field_submission_locations add constraint field_submission_locations_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.field_submissions(id) ON DELETE CASCADE;
+alter table public.field_submission_locations add constraint field_submission_locations_kind_check CHECK ((kind = ANY (ARRAY['residence'::text, 'business'::text, 'general_area'::text, 'street'::text, 'gang_territory'::text, 'gang_clubhouse'::text, 'mc_clubhouse'::text, 'stash_house'::text, 'drug_location'::text, 'drug_production'::text, 'meeting_location'::text, 'chop_shop'::text, 'weapons_location'::text, 'gun_bench'::text, 'gang_gun_bench'::text, 'crafting_bench'::text, 'warehouse'::text, 'storage'::text, 'laundering'::text, 'unknown_criminal'::text, 'other'::text])));
+alter table public.field_submission_locations add constraint field_submission_locations_basis_check CHECK ((basis = ANY (ARRAY['observed'::text, 'reported'::text, 'unknown'::text])));
+alter table public.field_submission_locations enable row level security;
+
+create table public.field_submission_orgs (
+  id uuid not null default gen_random_uuid(),
+  submission_id uuid not null,
+  name text,
+  org_type text not null default 'unknown'::text,
+  colors text,
+  symbols text,
+  clothing text,
+  territory text,
+  leadership text,
+  members text,
+  basis text not null default 'unknown'::text,
+  note text,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.field_submission_orgs add constraint field_submission_orgs_pkey PRIMARY KEY (id);
+alter table public.field_submission_orgs add constraint field_submission_orgs_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.field_submissions(id) ON DELETE CASCADE;
+alter table public.field_submission_orgs add constraint field_submission_orgs_org_type_check CHECK ((org_type = ANY (ARRAY['street_gang'::text, 'mc'::text, 'organized_crime'::text, 'crew'::text, 'syndicate'::text, 'unknown'::text])));
+alter table public.field_submission_orgs add constraint field_submission_orgs_basis_check CHECK ((basis = ANY (ARRAY['observed'::text, 'reported'::text, 'unknown'::text])));
+alter table public.field_submission_orgs enable row level security;
+
+create table public.field_submission_persons (
+  id uuid not null default gen_random_uuid(),
+  submission_id uuid not null,
+  full_name text,
+  alias text,
+  description text,
+  phone text,
+  org_name text,
+  org_role text,
+  reason text,
+  basis text not null default 'unknown'::text,
+  note text,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.field_submission_persons add constraint field_submission_persons_pkey PRIMARY KEY (id);
+alter table public.field_submission_persons add constraint field_submission_persons_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.field_submissions(id) ON DELETE CASCADE;
+alter table public.field_submission_persons add constraint field_submission_persons_org_role_check CHECK (((org_role IS NULL) OR (org_role = ANY (ARRAY['member'::text, 'associate'::text, 'prospect'::text, 'leadership'::text, 'unknown'::text]))));
+alter table public.field_submission_persons add constraint field_submission_persons_basis_check CHECK ((basis = ANY (ARRAY['observed'::text, 'reported'::text, 'unknown'::text])));
+alter table public.field_submission_persons enable row level security;
+
+create table public.field_submission_vehicles (
+  id uuid not null default gen_random_uuid(),
+  submission_id uuid not null,
+  plate text,
+  make text,
+  model text,
+  color text,
+  secondary_color text,
+  description text,
+  registered_owner text,
+  occupants text,
+  org_name text,
+  reason text,
+  basis text not null default 'unknown'::text,
+  note text,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.field_submission_vehicles add constraint field_submission_vehicles_pkey PRIMARY KEY (id);
+alter table public.field_submission_vehicles add constraint field_submission_vehicles_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.field_submissions(id) ON DELETE CASCADE;
+alter table public.field_submission_vehicles add constraint field_submission_vehicles_basis_check CHECK ((basis = ANY (ARRAY['observed'::text, 'reported'::text, 'unknown'::text])));
+alter table public.field_submission_vehicles enable row level security;
+
+create table public.field_submissions (
+  id uuid not null default gen_random_uuid(),
+  submission_no text,
+  officer_id uuid not null,
+  snap_agency text not null,
+  snap_callsign text,
+  snap_rank text,
+  snap_unit text,
+  status text not null default 'draft'::text,
+  route text not null default 'unsure'::text,
+  summary text,
+  details text,
+  observed_at timestamp with time zone,
+  observed_to timestamp with time zone,
+  observed_precision text not null default 'unknown'::text,
+  mdt_reference text,
+  submitted_at timestamp with time zone,
+  assigned_to uuid,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.field_submissions add constraint field_submissions_pkey PRIMARY KEY (id);
+alter table public.field_submissions add constraint field_submissions_submission_no_key UNIQUE (submission_no);
+alter table public.field_submissions add constraint field_submissions_officer_id_fkey FOREIGN KEY (officer_id) REFERENCES public.profiles(id);
+alter table public.field_submissions add constraint field_submissions_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.profiles(id);
+alter table public.field_submissions add constraint field_submissions_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'submitted'::text, 'reviewing'::text, 'needs_info'::text, 'partially_reviewed'::text, 'intel_added'::text, 'linked_existing'::text, 'linked_case'::text, 'archived'::text, 'rejected'::text])));
+alter table public.field_submissions add constraint field_submissions_route_check CHECK ((route = ANY (ARRAY['cid'::text, 'siu'::text, 'unsure'::text])));
+alter table public.field_submissions add constraint field_submissions_observed_precision_check CHECK ((observed_precision = ANY (ARRAY['exact'::text, 'approximate'::text, 'range'::text, 'unknown'::text])));
+alter table public.field_submissions add constraint field_submissions_summary_on_submit CHECK (((status = 'draft'::text) OR (COALESCE(btrim(summary), ''::text) <> ''::text)));
+alter table public.field_submissions add constraint field_submissions_range_ends CHECK ((((observed_precision = 'range'::text) AND (observed_at IS NOT NULL) AND (observed_to IS NOT NULL)) OR ((observed_precision <> 'range'::text) AND (observed_to IS NULL))));
+alter table public.field_submissions enable row level security;
+
 create table public.gang_members (
   id uuid not null default gen_random_uuid(),
   gang_id uuid not null,
@@ -3868,6 +4021,14 @@ CREATE INDEX feedback_meta_updated_by_idx ON public.feedback_meta USING btree (u
 CREATE INDEX field_officers_agency_idx ON public.field_officers USING btree (agency) WHERE active;
 CREATE INDEX field_officers_appointed_by_fkey_idx ON public.field_officers USING btree (appointed_by);
 CREATE INDEX field_officers_ended_by_fkey_idx ON public.field_officers USING btree (ended_by);
+CREATE INDEX field_submission_items_submission_idx ON public.field_submission_items USING btree (submission_id);
+CREATE INDEX field_submission_locations_submission_idx ON public.field_submission_locations USING btree (submission_id);
+CREATE INDEX field_submission_orgs_submission_idx ON public.field_submission_orgs USING btree (submission_id);
+CREATE INDEX field_submission_persons_submission_idx ON public.field_submission_persons USING btree (submission_id);
+CREATE INDEX field_submission_vehicles_submission_idx ON public.field_submission_vehicles USING btree (submission_id);
+CREATE INDEX field_submissions_officer_idx ON public.field_submissions USING btree (officer_id, created_at DESC);
+CREATE INDEX field_submissions_status_idx ON public.field_submissions USING btree (status, created_at DESC);
+CREATE INDEX field_submissions_assigned_idx ON public.field_submissions USING btree (assigned_to) WHERE (assigned_to IS NOT NULL);
 CREATE INDEX gang_members_case_id_fkey_idx ON public.gang_members USING btree (case_id);
 CREATE INDEX gang_members_gang_id_fkey_idx ON public.gang_members USING btree (gang_id);
 CREATE INDEX gang_members_person_id_fkey_idx ON public.gang_members USING btree (person_id);
@@ -7344,6 +7505,14 @@ CREATE TRIGGER feedback_meta_audit AFTER INSERT OR DELETE OR UPDATE ON public.fe
 CREATE TRIGGER feedback_meta_touch BEFORE UPDATE ON public.feedback_meta FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER field_officers_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_officers FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_officers_touch BEFORE UPDATE ON public.field_officers FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER field_submission_items_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_items FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER field_submission_locations_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_locations FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER field_submission_orgs_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_orgs FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER field_submission_persons_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_persons FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER field_submission_vehicles_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_vehicles FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER field_submissions_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submissions FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER field_submissions_before_insert BEFORE INSERT ON public.field_submissions FOR EACH ROW EXECUTE FUNCTION private.field_submission_before_insert();
+CREATE TRIGGER field_submissions_before_update BEFORE UPDATE ON public.field_submissions FOR EACH ROW EXECUTE FUNCTION private.field_submission_before_update();
 CREATE TRIGGER gang_members_audit AFTER INSERT OR DELETE OR UPDATE ON public.gang_members FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER gang_members_touch BEFORE UPDATE ON public.gang_members FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER gang_places_audit AFTER INSERT OR DELETE OR UPDATE ON public.gang_places FOR EACH ROW EXECUTE FUNCTION private.audit();
@@ -7899,6 +8068,47 @@ create policy field_officers_cmd on public.field_officers
   as permissive for all to authenticated
   using (private.is_command())
   with check (private.is_command());
+
+-- The five child tables all carry the same four policies, generated by a loop
+-- in 20260911120000 so they cannot drift apart. Visibility follows the PARENT:
+-- a claim is never independently readable. Writes are open only while the
+-- parent is the officer's own draft.
+create policy field_submission_items_sel on public.field_submission_items
+  as permissive for select to authenticated
+  using (private.field_submission_mine(submission_id) OR (private.is_active() AND (EXISTS ( SELECT 1 FROM public.field_submissions s WHERE ((s.id = field_submission_items.submission_id) AND (s.status <> 'draft'::text))))));
+
+create policy field_submission_items_ins on public.field_submission_items
+  as permissive for insert to authenticated
+  with check (private.field_submission_my_draft(submission_id));
+
+create policy field_submission_items_upd on public.field_submission_items
+  as permissive for update to authenticated
+  using (private.field_submission_my_draft(submission_id))
+  with check (private.field_submission_my_draft(submission_id));
+
+create policy field_submission_items_del on public.field_submission_items
+  as permissive for delete to authenticated
+  using (private.field_submission_my_draft(submission_id) OR private.is_command());
+
+-- field_submission_locations, _orgs, _persons and _vehicles carry the same
+-- four policies with the same predicates; only the table name differs.
+
+create policy field_submissions_sel on public.field_submissions
+  as permissive for select to authenticated
+  using ((officer_id = ( SELECT auth.uid() AS uid)) OR (private.is_active() AND (status <> 'draft'::text)));
+
+create policy field_submissions_ins on public.field_submissions
+  as permissive for insert to authenticated
+  with check (private.is_field_officer());
+
+create policy field_submissions_upd on public.field_submissions
+  as permissive for update to authenticated
+  using (((officer_id = ( SELECT auth.uid() AS uid)) AND private.is_field_officer()) OR (private.is_active() AND (status <> 'draft'::text)))
+  with check ((officer_id = ( SELECT auth.uid() AS uid)) OR private.is_active());
+
+create policy field_submissions_del on public.field_submissions
+  as permissive for delete to authenticated
+  using (((officer_id = ( SELECT auth.uid() AS uid)) AND (status = 'draft'::text)) OR private.is_command());
 
 create policy gang_members_del on public.gang_members
   as permissive for delete to authenticated
@@ -9217,6 +9427,13 @@ create policy wl_sel on public.watchlist
 --     (SELECT was briefly a column-list grant while the table carried a
 --      command-only internal_note; the column was dropped, so the grant is
 --      plain again and RLS alone decides who sees a row — 20260910120000)
+--   field_submissions -> anon: (none — global revoke + default privileges, 20260908130000)
+--   field_submissions -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   field_submission_items -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
+--   field_submission_locations -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
+--   field_submission_orgs -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
+--   field_submission_persons -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
+--   field_submission_vehicles -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
 --   gang_members -> anon: (none — global revoke + default privileges, 20260908130000)
 --   gang_members -> authenticated: DELETE, INSERT, SELECT, UPDATE
 --   gang_ranks -> anon: (none — global revoke + default privileges, 20260908130000)

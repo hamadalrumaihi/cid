@@ -16,14 +16,23 @@
  *  database in 20260910120000_field_officers.sql. Hiding a nav item has never
  *  been the security model here and is not one now.
  *
- *  ── What is deliberately missing ──────────────────────────────────────────
- *  Submitting intelligence. This phase ships the identity and the boundary
- *  only, so the landing page says so in plain words rather than offering a
- *  button that does nothing. Dead controls teach people the portal is broken.
+ *  ── Navigation is local state, not routes ──────────────────────────────────
+ *  Four screens, no deep-linking requirement, and using the CID router would
+ *  mean registering routes that must then be defended against CID users
+ *  wandering in. Local state has no such surface.
  */
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
+import { fmtDateTime } from '@/lib/format'
+import {
+  fieldStatusLabel, fieldStatusMeaning, isEditableByOfficer, loadMySubmissions,
+  submissionRef, type FieldSubmissionRow,
+} from '@/lib/fieldSubmissions'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { EmptyState } from '@/components/ui/Notice'
+import { FieldSubmitForm } from './FieldSubmitForm'
 
 const AGENCY_NAME: Record<string, string> = {
   SAHP: 'San Andreas Highway Patrol',
@@ -31,24 +40,42 @@ const AGENCY_NAME: Record<string, string> = {
   LSPD: 'Los Santos Police Department',
 }
 
+type Screen = 'home' | 'submit' | 'reports' | 'drafts'
+
+const TABS: Array<{ id: Screen; label: string }> = [
+  { id: 'home', label: 'Home' },
+  { id: 'submit', label: 'Submit Intelligence' },
+  { id: 'reports', label: 'My Reports' },
+  { id: 'drafts', label: 'Drafts' },
+]
+
 /** Name, callsign, rank and agency, as one line. The callsign and rank come
  *  from the APPOINTMENT (command-set) rather than from profiles.badge_number,
  *  which the account holder can edit — attribution should not be self-declared. */
 function identityLine(
-  name: string | null | undefined,
-  callsign: string | null,
-  agency: string,
-  rank: string | null,
+  name: string | null | undefined, callsign: string | null,
+  agency: string, rank: string | null,
 ): string {
   return [name || 'Officer', callsign, agency, rank].filter(Boolean).join(' · ')
 }
 
 export function FieldShell() {
   const { profile, field, signOut } = useAuth()
-  // `field` is non-null whenever the gate settled to 'field'; the fallbacks
-  // exist so a render during a refetch cannot throw.
+  const [screen, setScreen] = useState<Screen>('home')
+  const [rows, setRows] = useState<FieldSubmissionRow[] | null>(null)
+
   const agency = field?.agency ?? ''
   const agencyName = AGENCY_NAME[agency] ?? agency
+
+  const refresh = useCallback(async () => { setRows(await loadMySubmissions()) }, [])
+  useEffect(() => {
+    const t = window.setTimeout(() => { void refresh() }, 0)
+    return () => window.clearTimeout(t)
+  }, [refresh, screen])
+
+  const drafts = (rows ?? []).filter((r) => isEditableByOfficer(r.status))
+  const sent = (rows ?? []).filter((r) => !isEditableByOfficer(r.status))
+  const needsAnswer = sent.filter((r) => r.status === 'needs_info')
 
   return (
     <main className="min-h-screen bg-ink-950 text-white">
@@ -62,51 +89,128 @@ export function FieldShell() {
           </div>
           <Button size="sm" variant="ghost" onClick={() => void signOut()}>Sign out</Button>
         </div>
+        <nav className="mx-auto flex max-w-3xl gap-1 overflow-x-auto px-4 pb-2 sm:px-6" aria-label="Field Intelligence">
+          {TABS.map((t) => (
+            <button key={t.id} onClick={() => setScreen(t.id)}
+              aria-current={screen === t.id ? 'page' : undefined}
+              className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                screen === t.id ? 'bg-badge-500/15 text-white' : 'text-slate-400 hover:bg-white/5'
+              }`}>
+              {t.label}
+              {t.id === 'drafts' && drafts.length > 0 && (
+                <span className="ml-1.5 text-xs text-slate-500">{drafts.length}</span>
+              )}
+            </button>
+          ))}
+        </nav>
       </header>
 
       <div className="mx-auto max-w-3xl space-y-4 px-4 py-6 sm:px-6">
-        <Card>
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-            Reporting officer
-          </h2>
-          <p className="mt-1 text-base font-semibold text-white">
-            {identityLine(profile?.display_name, field?.callsign ?? null, agency, field?.officer_rank ?? null)}
-          </p>
-          {field?.unit && <p className="text-sm text-slate-400">{field.unit}</p>}
-          <p className="mt-3 text-xs text-slate-500">
-            Your name, callsign and agency are attached to everything you submit, and are
-            set by CID rather than typed in — so a report can always be traced back to
-            the officer who actually made it.
-          </p>
-        </Card>
+        {screen === 'home' && (
+          <>
+            <Card>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                Reporting officer
+              </h2>
+              <p className="mt-1 text-base font-semibold text-white">
+                {identityLine(profile?.display_name, field?.callsign ?? null, agency, field?.officer_rank ?? null)}
+              </p>
+              {field?.unit && <p className="text-sm text-slate-400">{field.unit}</p>}
+              <p className="mt-3 text-xs text-slate-500">
+                Your name, callsign and agency are attached to everything you submit, and
+                are set by CID rather than typed in — so a report can always be traced
+                back to the officer who actually made it.
+              </p>
+            </Card>
 
-        <Card>
-          <h2 className="text-base font-semibold text-white">
-            Send information to CID&nbsp;/&nbsp;SIU
-          </h2>
-          <p className="mt-2 text-sm text-slate-300">
-            This is where you report what you have seen on patrol — people, vehicles,
-            gangs and motorcycle clubs, criminal locations, seizures, and the evidence
-            that backs it up. Investigators review it and decide what it means; you do
-            not need to know which unit or case it belongs to.
-          </p>
-          <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-sm text-amber-200/90">
-            Submissions are not open yet. This release sets up your access; the
-            submission form is next. Nothing you need to do in the meantime.
-          </p>
-        </Card>
+            <Card>
+              <h2 className="text-base font-semibold text-white">
+                Send information to CID&nbsp;/&nbsp;SIU
+              </h2>
+              <p className="mt-2 text-sm text-slate-300">
+                Report what you have seen on patrol — people, vehicles, gangs and
+                motorcycle clubs, criminal locations and seizures. Investigators review it
+                and decide what it means; you do not need to know which unit or case it
+                belongs to.
+              </p>
+              <div className="mt-4">
+                <Button variant="primary" onClick={() => setScreen('submit')}>
+                  Submit Intelligence
+                </Button>
+              </div>
+            </Card>
 
-        <Card>
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-            What you can see here
-          </h2>
-          <p className="mt-2 text-sm text-slate-300">
-            Only your own reports. Field Intelligence accounts have no access to case
-            files, investigative records or anyone else&rsquo;s submissions — that is
-            enforced by the database, not by which buttons appear on this page.
-          </p>
-        </Card>
+            {needsAnswer.length > 0 && (
+              <Card>
+                <h2 className="text-sm font-semibold text-amber-200">
+                  {needsAnswer.length === 1 ? 'An investigator has a question' : `${needsAnswer.length} questions for you`}
+                </h2>
+                <p className="mt-1 text-sm text-slate-300">
+                  Open {needsAnswer.length === 1 ? 'it' : 'them'} under My Reports.
+                </p>
+              </Card>
+            )}
+
+            <SubmissionList
+              rows={sent.slice(0, 5)} title="Recent reports"
+              empty="Nothing sent yet. Anything useful you have seen is worth reporting."
+            />
+          </>
+        )}
+
+        {screen === 'submit' && (
+          <FieldSubmitForm onDone={() => { setScreen('reports') }} />
+        )}
+
+        {screen === 'reports' && (
+          <SubmissionList
+            rows={sent} title="My reports"
+            empty="Nothing sent yet."
+          />
+        )}
+
+        {screen === 'drafts' && (
+          <SubmissionList
+            rows={drafts} title="Drafts"
+            empty="No unfinished reports. Drafts save themselves as you type, so nothing is lost if you close the tab."
+          />
+        )}
       </div>
     </main>
+  )
+}
+
+function SubmissionList({ rows, title, empty }: {
+  rows: FieldSubmissionRow[]; title: string; empty: string
+}) {
+  return (
+    <Card pad="none" className="overflow-hidden">
+      <div className="border-b border-white/5 px-5 py-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">{title}</h2>
+      </div>
+      {!rows.length ? (
+        <EmptyState title="Nothing here" hint={empty} className="m-4" />
+      ) : (
+        <ul className="divide-y divide-white/5">
+          {rows.map((r) => (
+            <li key={r.id} className="px-5 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-mono text-sm text-slate-300">{submissionRef(r)}</span>
+                <Badge tone={r.status === 'needs_info' ? 'warn' : r.status === 'rejected' ? 'neutral' : 'accent'}>
+                  {fieldStatusLabel(r.status)}
+                </Badge>
+              </div>
+              <p className="mt-1 text-sm text-white">{r.summary || 'No summary yet'}</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {fieldStatusMeaning(r.status)}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-600">
+                {r.submitted_at ? `Sent ${fmtDateTime(r.submitted_at)}` : `Started ${fmtDateTime(r.created_at)}`}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   )
 }

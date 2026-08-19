@@ -2589,6 +2589,380 @@ export type Database = {
           },
         ]
       }
+      field_submission_items: {
+        Row: {
+          basis: string
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          note: string | null
+          package_count: number | null
+          packaging: string | null
+          quantity: number | null
+          seized_from_location: string | null
+          seized_from_person: string | null
+          seized_from_vehicle: string | null
+          submission_id: string
+          suspected_substance: string | null
+          tested: boolean | null
+          weight_grams: number | null
+          weight_unit: string | null
+          weight_value: number | null
+        }
+        Insert: {
+          basis?: string
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          note?: string | null
+          package_count?: number | null
+          packaging?: string | null
+          quantity?: number | null
+          seized_from_location?: string | null
+          seized_from_person?: string | null
+          seized_from_vehicle?: string | null
+          submission_id: string
+          suspected_substance?: string | null
+          tested?: boolean | null
+          weight_unit?: string | null
+          weight_value?: number | null
+        }
+        Update: {
+          basis?: string
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          note?: string | null
+          package_count?: number | null
+          packaging?: string | null
+          quantity?: number | null
+          seized_from_location?: string | null
+          seized_from_person?: string | null
+          seized_from_vehicle?: string | null
+          submission_id?: string
+          suspected_substance?: string | null
+          tested?: boolean | null
+          weight_unit?: string | null
+          weight_value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_submission_items_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      field_submission_locations: {
+        Row: {
+          basis: string
+          created_at: string
+          description: string | null
+          id: string
+          kind: string
+          note: string | null
+          observed_at: string | null
+          observed_what: string | null
+          org_name: string | null
+          postal: string | null
+          street: string | null
+          submission_id: string
+        }
+        Insert: {
+          basis?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          kind?: string
+          note?: string | null
+          observed_at?: string | null
+          observed_what?: string | null
+          org_name?: string | null
+          postal?: string | null
+          street?: string | null
+          submission_id: string
+        }
+        Update: {
+          basis?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          kind?: string
+          note?: string | null
+          observed_at?: string | null
+          observed_what?: string | null
+          org_name?: string | null
+          postal?: string | null
+          street?: string | null
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_submission_locations_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      field_submission_orgs: {
+        Row: {
+          basis: string
+          clothing: string | null
+          colors: string | null
+          created_at: string
+          id: string
+          leadership: string | null
+          members: string | null
+          name: string | null
+          note: string | null
+          org_type: string
+          submission_id: string
+          symbols: string | null
+          territory: string | null
+        }
+        Insert: {
+          basis?: string
+          clothing?: string | null
+          colors?: string | null
+          created_at?: string
+          id?: string
+          leadership?: string | null
+          members?: string | null
+          name?: string | null
+          note?: string | null
+          org_type?: string
+          submission_id: string
+          symbols?: string | null
+          territory?: string | null
+        }
+        Update: {
+          basis?: string
+          clothing?: string | null
+          colors?: string | null
+          created_at?: string
+          id?: string
+          leadership?: string | null
+          members?: string | null
+          name?: string | null
+          note?: string | null
+          org_type?: string
+          submission_id?: string
+          symbols?: string | null
+          territory?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_submission_orgs_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      field_submission_persons: {
+        Row: {
+          alias: string | null
+          basis: string
+          created_at: string
+          description: string | null
+          full_name: string | null
+          id: string
+          note: string | null
+          org_name: string | null
+          org_role: string | null
+          phone: string | null
+          reason: string | null
+          submission_id: string
+        }
+        Insert: {
+          alias?: string | null
+          basis?: string
+          created_at?: string
+          description?: string | null
+          full_name?: string | null
+          id?: string
+          note?: string | null
+          org_name?: string | null
+          org_role?: string | null
+          phone?: string | null
+          reason?: string | null
+          submission_id: string
+        }
+        Update: {
+          alias?: string | null
+          basis?: string
+          created_at?: string
+          description?: string | null
+          full_name?: string | null
+          id?: string
+          note?: string | null
+          org_name?: string | null
+          org_role?: string | null
+          phone?: string | null
+          reason?: string | null
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_submission_persons_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      field_submission_vehicles: {
+        Row: {
+          basis: string
+          color: string | null
+          created_at: string
+          description: string | null
+          id: string
+          make: string | null
+          model: string | null
+          note: string | null
+          occupants: string | null
+          org_name: string | null
+          plate: string | null
+          reason: string | null
+          registered_owner: string | null
+          secondary_color: string | null
+          submission_id: string
+        }
+        Insert: {
+          basis?: string
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          make?: string | null
+          model?: string | null
+          note?: string | null
+          occupants?: string | null
+          org_name?: string | null
+          plate?: string | null
+          reason?: string | null
+          registered_owner?: string | null
+          secondary_color?: string | null
+          submission_id: string
+        }
+        Update: {
+          basis?: string
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          make?: string | null
+          model?: string | null
+          note?: string | null
+          occupants?: string | null
+          org_name?: string | null
+          plate?: string | null
+          reason?: string | null
+          registered_owner?: string | null
+          secondary_color?: string | null
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_submission_vehicles_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      field_submissions: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          details: string | null
+          id: string
+          mdt_reference: string | null
+          observed_at: string | null
+          observed_precision: string
+          observed_to: string | null
+          officer_id: string
+          route: string
+          snap_agency: string
+          snap_callsign: string | null
+          snap_rank: string | null
+          snap_unit: string | null
+          status: string
+          submission_no: string | null
+          submitted_at: string | null
+          summary: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          details?: string | null
+          id?: string
+          mdt_reference?: string | null
+          observed_at?: string | null
+          observed_precision?: string
+          observed_to?: string | null
+          officer_id?: string
+          route?: string
+          snap_agency?: string
+          snap_callsign?: string | null
+          snap_rank?: string | null
+          snap_unit?: string | null
+          status?: string
+          submission_no?: string | null
+          submitted_at?: string | null
+          summary?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          details?: string | null
+          id?: string
+          mdt_reference?: string | null
+          observed_at?: string | null
+          observed_precision?: string
+          observed_to?: string | null
+          officer_id?: string
+          route?: string
+          snap_agency?: string
+          snap_callsign?: string | null
+          snap_rank?: string | null
+          snap_unit?: string | null
+          status?: string
+          submission_no?: string | null
+          submitted_at?: string | null
+          summary?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_submissions_officer_id_fkey"
+            columns: ["officer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "field_submissions_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gang_members: {
         Row: {
           callsign: string | null
