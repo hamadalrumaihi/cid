@@ -8,6 +8,58 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### A patrol officer can now ask for the door
+
+Field Intelligence shipped with one way in: command had to appoint an officer
+out of nowhere, which meant command had to already know the officer wanted in.
+A SAHP trooper who signed in saw the CID membership application and nothing
+else — so their choices were to apply for an investigator post they were not
+asking for, or to leave.
+
+**The sign-in screen asks which one it is.** "Join CID / SIU" is the existing
+membership request, unchanged. "Submit Intelligence" is a short four-field
+request that lands in a queue. A pending request can be **withdrawn**: one
+pending request per person is enforced by a unique index, so an officer who
+picked the wrong agency would otherwise be stuck waiting to be told no before
+they could correct it. A declined request shows **the reason**, because "no"
+with nothing after it is how somebody applies four more times.
+
+**A request grants nothing.** `field_access_decide()` re-checks
+`private.is_command()` and then approves by calling the same
+`assign_field_officer()` the Command Center roster already used — one way to
+become a field officer, one audit trail for it. The trigger overwrites
+`user_id` with the caller, so nobody files on somebody else's behalf, and it
+refuses an account that already has portal access rather than putting a
+confusing row in front of a reviewer. Declining without a reason is refused by
+the database, not just by the form.
+
+**The queue lives where the work is.** Access requests are a tab in the Field
+Intelligence workspace, not a Command Center errand — a queue command has to go
+somewhere else to work is a queue that quietly stops being worked. Every active
+investigator can read it (they are the ones who recognise a name); only command
+sees the decide buttons, and the RPC refuses everybody else regardless.
+
+### Reports are routed by where they happened, not by a guess
+
+`field_submissions.route` — a CID / SIU / "unsure" picker — is **dropped**,
+along with `field_submission_route()`. It asked the submitter the wrong
+question: a patrol officer cannot know whether an observation belongs to a
+bureau or to the Special Investigation Unit, so the honest answers were a guess
+or "unsure". In its place, `jurisdiction`: Los Santos / City, or Blaine County.
+Where they were standing, they know.
+
+A check constraint requires it on submit (drafts may still be blank), so a
+report cannot reach *no* queue while the officer believes it was sent to
+somebody. `private.field_jurisdiction_visible()` narrows
+`field_submissions_sel`: LSB sees city, BCB sees Blaine, SAB and JTF see both,
+and SIU and command see everything. Because a subquery inside an RLS policy is
+itself subject to that table's RLS, narrowing the parent narrowed claims,
+evidence, messages and verdicts with it — verified live rather than assumed.
+Reviewers see the owning bureau next to the jurisdiction, since "Los Santos /
+City" alone does not tell a detective whether the report reached them because
+it is theirs.
+
+
 ### Submissions become intelligence
 
 Sixth and last phase. Until now a verified claim was verified and then sat

@@ -25,7 +25,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from '@/lib/toast'
 import {
-  BASIS, BASIS_LABEL, FIELD_ROUTES, FIELD_ROUTE_LABEL, ITEM_CATEGORIES,
+  BASIS, BASIS_LABEL, ITEM_CATEGORIES, JURISDICTIONS, JURISDICTION_LABEL,
   ITEM_CATEGORY_LABEL, LOCATION_KINDS, LOCATION_KIND_LABEL, ORG_ROLES,
   ORG_ROLE_LABEL, ORG_TYPES, ORG_TYPE_LABEL, TIME_PRECISION, TIME_PRECISION_LABEL,
   WEIGHT_UNITS, addPart, createDraft, discardDraft, loadSubmissionParts,
@@ -44,12 +44,12 @@ interface Draft {
   observed_at: string
   observed_to: string
   mdt_reference: string
-  route: string
+  jurisdiction: string
 }
 
 const EMPTY: Draft = {
   summary: '', details: '', observed_precision: 'unknown',
-  observed_at: '', observed_to: '', mdt_reference: '', route: 'unsure',
+  observed_at: '', observed_to: '', mdt_reference: '', jurisdiction: '',
 }
 
 const NO_PARTS: SubmissionParts = { persons: [], vehicles: [], orgs: [], locations: [], items: [] }
@@ -100,7 +100,7 @@ export function FieldSubmitForm({ onDone }: { onDone: () => void }) {
           observed_at: iso(draft.observed_at),
           observed_to: draft.observed_precision === 'range' ? iso(draft.observed_to) : null,
           mdt_reference: draft.mdt_reference || null,
-          route: draft.route,
+          jurisdiction: draft.jurisdiction || null,
         })
         dirty.current = false
         setSaving(err ? 'idle' : 'saved')
@@ -122,6 +122,7 @@ export function FieldSubmitForm({ onDone }: { onDone: () => void }) {
       observed_precision: draft.observed_precision,
       observed_at: iso(draft.observed_at),
       observed_to: draft.observed_precision === 'range' ? iso(draft.observed_to) : null,
+      jurisdiction: draft.jurisdiction || null,
     })
     if (problem) { toast(problem, 'warn'); return }
     setSending(true)
@@ -131,7 +132,7 @@ export function FieldSubmitForm({ onDone }: { onDone: () => void }) {
       observed_precision: draft.observed_precision,
       observed_at: iso(draft.observed_at),
       observed_to: draft.observed_precision === 'range' ? iso(draft.observed_to) : null,
-      mdt_reference: draft.mdt_reference || null, route: draft.route,
+      mdt_reference: draft.mdt_reference || null, jurisdiction: draft.jurisdiction || null,
     })
     if (saveErr) { setSending(false); toast(saveErr, 'danger'); return }
     const err = await submitDraft(id)
@@ -259,11 +260,12 @@ export function FieldSubmitForm({ onDone }: { onDone: () => void }) {
                 onChange={(e) => set('mdt_reference', e.target.value)} placeholder="26-12345" />
             )}
           </Field>
-          <Field label="Who should see this?" hint="If you are not sure, leave it — CID routes it correctly.">
+          <Field label="Where did this happen?" hint="Required. This decides which detectives see it — not your agency, since SAHP works both.">
             {(fid) => (
-              <Select id={fid} value={draft.route} onChange={(e) => set('route', e.target.value)}>
-                {FIELD_ROUTES.map((r) => (
-                  <option key={r} value={r}>{FIELD_ROUTE_LABEL[r]}</option>
+              <Select id={fid} value={draft.jurisdiction} onChange={(e) => set('jurisdiction', e.target.value)}>
+                <option value="">Choose…</option>
+                {JURISDICTIONS.map((j) => (
+                  <option key={j} value={j}>{JURISDICTION_LABEL[j]}</option>
                 ))}
               </Select>
             )}

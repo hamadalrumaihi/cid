@@ -886,6 +886,27 @@ alter table public.feedback_meta add constraint feedback_meta_priority_check CHE
 alter table public.feedback_meta add constraint feedback_meta_status_check CHECK ((status = ANY (ARRAY['new'::text, 'reviewed'::text, 'triaged'::text, 'planned'::text, 'in_progress'::text, 'waiting'::text, 'resolved'::text, 'duplicate'::text, 'rejected'::text, 'archived'::text])));
 alter table public.feedback_meta enable row level security;
 
+create table public.field_access_requests (
+  id uuid not null default gen_random_uuid(),
+  user_id uuid not null,
+  agency text not null,
+  callsign text,
+  officer_rank text,
+  unit text,
+  status text not null default 'pending'::text,
+  decided_by uuid,
+  decided_at timestamp with time zone,
+  decision_reason text,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.field_access_requests add constraint field_access_requests_pkey PRIMARY KEY (id);
+alter table public.field_access_requests add constraint field_access_requests_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.field_access_requests add constraint field_access_requests_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id);
+alter table public.field_access_requests add constraint field_access_requests_agency_check CHECK ((agency = ANY (ARRAY['SAHP'::text, 'BCSO'::text, 'LSPD'::text])));
+alter table public.field_access_requests add constraint field_access_requests_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'denied'::text, 'withdrawn'::text])));
+alter table public.field_access_requests enable row level security;
+
 create table public.field_officers (
   id uuid not null default gen_random_uuid(),
   user_id uuid not null,
@@ -1154,7 +1175,7 @@ create table public.field_submissions (
   snap_rank text,
   snap_unit text,
   status text not null default 'draft'::text,
-  route text not null default 'unsure'::text,
+  jurisdiction text,
   summary text,
   details text,
   observed_at timestamp with time zone,
@@ -1171,7 +1192,8 @@ alter table public.field_submissions add constraint field_submissions_submission
 alter table public.field_submissions add constraint field_submissions_officer_id_fkey FOREIGN KEY (officer_id) REFERENCES public.profiles(id);
 alter table public.field_submissions add constraint field_submissions_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.profiles(id);
 alter table public.field_submissions add constraint field_submissions_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'submitted'::text, 'reviewing'::text, 'needs_info'::text, 'partially_reviewed'::text, 'intel_added'::text, 'linked_existing'::text, 'linked_case'::text, 'archived'::text, 'rejected'::text])));
-alter table public.field_submissions add constraint field_submissions_route_check CHECK ((route = ANY (ARRAY['cid'::text, 'siu'::text, 'unsure'::text])));
+alter table public.field_submissions add constraint field_submissions_jurisdiction_check CHECK (((jurisdiction IS NULL) OR (jurisdiction = ANY (ARRAY['city'::text, 'blaine'::text]))));
+alter table public.field_submissions add constraint field_submissions_jurisdiction_on_submit CHECK (((status = 'draft'::text) OR (jurisdiction IS NOT NULL)));
 alter table public.field_submissions add constraint field_submissions_observed_precision_check CHECK ((observed_precision = ANY (ARRAY['exact'::text, 'approximate'::text, 'range'::text, 'unknown'::text])));
 alter table public.field_submissions add constraint field_submissions_summary_on_submit CHECK (((status = 'draft'::text) OR (COALESCE(btrim(summary), ''::text) <> ''::text)));
 alter table public.field_submissions add constraint field_submissions_range_ends CHECK ((((observed_precision = 'range'::text) AND (observed_at IS NOT NULL) AND (observed_to IS NOT NULL)) OR ((observed_precision <> 'range'::text) AND (observed_to IS NULL))));
