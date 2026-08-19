@@ -8,6 +8,68 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Claim-level verification: deciding about the parts, not the whole
+
+Fifth phase. A field report is several separate assertions, and confirming one
+says nothing about the others:
+
+```
+John Doe                        VERIFIED
+driving ABC123                  VERIFIED
+John Doe → vehicle ABC123       VERIFIED
+John Doe → Drenger Blade MC     UNVERIFIED
+seen at Postal 2025             VERIFIED
+```
+
+Accepting or rejecting that as one indivisible thing loses four true claims to
+protect against one unconfirmed one, or accepts the unconfirmed one to keep the
+four. Neither is what a reviewer means.
+
+**A verdict is a separate table, not a column on the claim.** The obvious
+implementation is a `verdict` column on each of the five child tables, and it is
+wrong here for a specific reason: those tables' UPDATE policy is
+`field_submission_my_draft`, so a reviewer has **no UPDATE on them at all** —
+deliberately, because P4 established that a reviewer must not be able to rewrite
+the officer's account and then review it. Adding a verdict column means granting
+reviewers UPDATE on the claim rows, and with it the ability to edit the claim
+text. So the officer's account stays immutable and a verdict is a separate
+assertion *about* it, in a table only reviewers can reach.
+
+**Five nullable foreign keys, not a polymorphic key.** `claim_id uuid` plus a
+`claim_kind` text would be shorter and would have no referential integrity at
+all — a deleted claim would leave a verdict pointing at nothing and nothing
+would notice. Here the cascade takes the verdict with the claim, and
+`num_nonnulls(...) = 1` keeps exactly one target.
+
+**`unverified` is not a soft rejection**, and the wording is tested to keep
+saying so: *"Useful, but not confirmed. This is not the same as wrong."* It is
+tinted neutral rather than as a failure. `disputed` is the different thing —
+something CID holds contradicts it.
+
+**Evidence attached still is not verified.** There is no path from "this claim
+has a photo" to a verdict. A verdict is a person's judgement, recorded with
+their name on it.
+
+Probed live, rolled back:
+
+| attempt | result |
+| --- | --- |
+| **officer reads verdicts** | **0 rows** — reviewer-only |
+| officer records a verdict | `not authorized` |
+| reviewer changes their mind | **1 row**, replaced not accumulated, old value in the audit |
+| unknown verdict / unknown claim | refused |
+| reviewer writes the table directly | INSERT refused, UPDATE **0 rows** — the audited RPC is the only path |
+| reviewer edits the claim text | **0 rows** — still cannot rewrite the account |
+| verdict on an unsent draft, holding the claim id | refused: *that report has not been sent yet* |
+
+That last one is worth spelling out. The first attempt passed for the *wrong*
+reason — RLS hid the draft claim, so the lookup returned NULL and the RPC said
+"no such claim", never reaching the draft guard. Since `field_claim_decide` is
+SECURITY DEFINER its internal lookups bypass RLS, so the guard genuinely matters
+for anyone who already holds the id. Re-probed with the id captured out of band:
+the reviewer sees **0 rows** through RLS *and* the RPC refuses on the guard.
+Two layers, both real.
+
 ### Field Intelligence Review, and the ticket queue goes dormant
 
 Fourth phase. Patrol could file structured, evidence-backed reports; now CID and

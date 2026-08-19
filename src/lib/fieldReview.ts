@@ -171,3 +171,93 @@ export function awaitingReviewer(messages: FieldMessageRow[]): boolean {
   const last = messages[messages.length - 1]
   return !!last && !last.from_reviewer
 }
+
+// ---------------------------------------------------------------------------
+// Claim-level verification
+// ---------------------------------------------------------------------------
+
+export type ClaimKind = 'person' | 'vehicle' | 'org' | 'location' | 'item'
+export type FieldVerdictRow = Tables<'field_claim_verdicts'>
+
+export const VERDICTS = ['verified', 'unverified', 'disputed', 'rejected'] as const
+export type Verdict = (typeof VERDICTS)[number]
+
+/** What each verdict actually asserts. `unverified` is the one worth wording
+ *  carefully: it is not a synonym for wrong, and a reviewer choosing between it
+ *  and `disputed` is making a real distinction. */
+export const VERDICT_LABEL: Record<Verdict, string> = {
+  verified: 'Verified',
+  unverified: 'Unverified',
+  disputed: 'Disputed',
+  rejected: 'Rejected',
+}
+export const VERDICT_MEANING: Record<Verdict, string> = {
+  verified: 'Confirmed against what CID already holds.',
+  unverified: 'Useful, but not confirmed. This is not the same as wrong.',
+  disputed: 'Something CID holds contradicts this.',
+  rejected: 'Should not be treated as intelligence.',
+}
+
+export const VERDICT_TONE: Record<Verdict, 'good' | 'neutral' | 'warn' | 'danger'> = {
+  verified: 'good', unverified: 'neutral', disputed: 'warn', rejected: 'danger',
+}
+
+export interface ClaimProgress {
+  claims: number
+  decided: number
+  verified: number
+  unverified: number
+  disputed: number
+  rejected: number
+}
+
+const NO_PROGRESS: ClaimProgress = {
+  claims: 0, decided: 0, verified: 0, unverified: 0, disputed: 0, rejected: 0,
+}
+
+/** Verdicts on one report. Empty for a field officer — verdicts are
+ *  reviewer-only, and that is the policy's doing, not this function's. */
+export async function loadVerdicts(submissionId: string): Promise<FieldVerdictRow[]> {
+  return list('field_claim_verdicts', { eq: { submission_id: submissionId } })
+    .catch(() => [])
+}
+
+export async function loadClaimProgress(submissionId: string): Promise<ClaimProgress> {
+  const res = await rpc('field_claim_progress', { p_submission: submissionId })
+  return (res.data as unknown as ClaimProgress | null) ?? NO_PROGRESS
+}
+
+/** Record — or change — the verdict on one claim. The RPC upserts, so changing
+ *  your mind replaces the verdict rather than accumulating contradictory ones,
+ *  and the audit log keeps what it was before. */
+export async function decideClaim(
+  kind: ClaimKind, claimId: string, verdict: Verdict, note?: string,
+): Promise<string | null> {
+  const res = await rpc('field_claim_decide', {
+    p_kind: kind, p_claim: claimId, p_verdict: verdict,
+    p_note: note?.trim() || undefined,
+  })
+  return res.error?.message ?? null
+}
+
+/** The verdict on a given claim, or null when nobody has decided yet. */
+export function verdictFor(
+  verdicts: FieldVerdictRow[], kind: ClaimKind, claimId: string,
+): FieldVerdictRow | null {
+  const col = ({
+    person: 'person_id', vehicle: 'vehicle_id', org: 'org_id',
+    location: 'location_id', item: 'item_id',
+  } as const)[kind]
+  return verdicts.find((v) => v[col] === claimId) ?? null
+}
+
+/** How to summarise review progress in one line. Deliberately does NOT say
+ *  "complete" when every claim is decided: the reviewer decides when a report
+ *  is finished, not an arithmetic check. */
+export function progressLabel(p: ClaimProgress): string {
+  if (!p.claims) return 'No structured claims to decide'
+  if (!p.decided) return `${p.claims} claim${p.claims === 1 ? '' : 's'}, none decided`
+  return `${p.decided} of ${p.claims} decided`
+    + (p.verified ? ` · ${p.verified} verified` : '')
+    + (p.disputed ? ` · ${p.disputed} disputed` : '')
+}

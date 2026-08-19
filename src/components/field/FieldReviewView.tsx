@@ -29,9 +29,12 @@ import {
   type FieldSubmissionRow, type SubmissionParts,
 } from '@/lib/fieldSubmissions'
 import {
-  askOfficer, awaitingReviewer, claimSubmission, decideSubmission, isOpen,
-  loadMessages, loadReviewNotes, loadReviewQueue, rerouteSubmission, reviewNext,
-  reviewPrompt, type FieldMessageRow, type FieldReviewNoteRow,
+  VERDICTS, VERDICT_LABEL, VERDICT_MEANING, VERDICT_TONE,
+  askOfficer, awaitingReviewer, claimSubmission, decideClaim, decideSubmission,
+  isOpen, loadClaimProgress, loadMessages, loadReviewNotes, loadReviewQueue,
+  loadVerdicts, progressLabel, rerouteSubmission, reviewNext, reviewPrompt,
+  verdictFor, type ClaimKind, type ClaimProgress, type FieldMessageRow,
+  type FieldReviewNoteRow, type FieldVerdictRow, type Verdict,
 } from '@/lib/fieldReview'
 import { evidenceLabel, evidenceUrl, loadEvidence, type FieldEvidenceRow } from '@/lib/fieldEvidence'
 import { Badge } from '@/components/ui/Badge'
@@ -140,15 +143,19 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
   const [evidence, setEvidence] = useState<FieldEvidenceRow[]>([])
   const [messages, setMessages] = useState<FieldMessageRow[]>([])
   const [notes, setNotes] = useState<FieldReviewNoteRow[]>([])
+  const [verdicts, setVerdicts] = useState<FieldVerdictRow[]>([])
+  const [progress, setProgress] = useState<ClaimProgress | null>(null)
   const [next, setNext] = useState('')
   const [note, setNote] = useState('')
   const id = submission.id
 
   const load = useCallback(async () => {
-    const [p, e, m, n] = await Promise.all([
+    const [p, e, m, n, v, pr] = await Promise.all([
       loadSubmissionParts(id), loadEvidence(id), loadMessages(id), loadReviewNotes(id),
+      loadVerdicts(id), loadClaimProgress(id),
     ])
     setParts(p); setEvidence(e); setMessages(m); setNotes(n)
+    setVerdicts(v); setProgress(pr)
   }, [id])
 
   useEffect(() => {
@@ -216,8 +223,18 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
       </Card>
 
       <Card>
-        <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400">What was reported</h4>
-        <ClaimList parts={parts} />
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400">What was reported</h4>
+          {progress && <span className="text-xs text-slate-500">{progressLabel(progress)}</span>}
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          Decide each claim on its own. Confirming a plate says nothing about whether
+          the person driving it belongs to the club the officer named.
+        </p>
+        <ClaimList parts={parts} verdicts={verdicts}
+          onDecide={(kind, claimId, verdict) => void (async () => {
+            await after(await decideClaim(kind, claimId, verdict), 'Verdict recorded.')
+          })()} />
       </Card>
 
       {evidence.length > 0 && (
@@ -340,20 +357,82 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
   )
 }
 
-function ClaimList({ parts }: { parts: SubmissionParts }) {
-  const rows: string[] = [
-    ...parts.persons.map((p) => `Person — ${[p.full_name, p.alias, p.description].filter(Boolean).join(' / ') || 'unidentified'}${p.org_name ? ` · ${p.org_name}${p.org_role ? ` (${p.org_role})` : ''}` : ''} · ${p.basis}`),
-    ...parts.vehicles.map((v) => `Vehicle — ${[v.plate, v.color, v.model].filter(Boolean).join(' ') || 'no details'}${v.org_name ? ` · ${v.org_name}` : ''} · ${v.basis}`),
-    ...parts.orgs.map((o) => `Organization — ${o.name || o.org_type}${o.territory ? ` · ${o.territory}` : ''} · ${o.basis}`),
-    ...parts.locations.map((l) => `${l.kind.replace(/_/g, ' ')} — ${[l.postal, l.street, l.description].filter(Boolean).join(' ') || 'no address'} · ${l.basis}`),
-    ...parts.items.map((i) => `${i.category.replace(/_/g, ' ')} — ${[i.suspected_substance, i.description].filter(Boolean).join(' ')}${i.weight_value ? ` · ${i.weight_value}${i.weight_unit} (${Number(i.weight_grams ?? 0).toFixed(0)} g)` : ''} · ${i.basis}`),
+/** Every claim in the report, each independently decidable.
+ *
+ *  This is the point of the phase: confirming that a plate was seen says
+ *  nothing about whether the person driving it belongs to the MC the officer
+ *  named. Deciding the report as one thing loses the true claims to protect
+ *  against the unconfirmed one, or keeps the unconfirmed one to save the true
+ *  ones. Neither is what a reviewer means.
+ *
+ *  A verdict is written to a separate table and never touches the claim row --
+ *  the officer's account stays exactly as they wrote it. */
+function ClaimList({ parts, verdicts, onDecide }: {
+  parts: SubmissionParts
+  verdicts: FieldVerdictRow[]
+  onDecide: (kind: ClaimKind, id: string, verdict: Verdict) => void
+}) {
+  const rows: Array<{ kind: ClaimKind; id: string; label: string; basis: string }> = [
+    ...parts.persons.map((p) => ({
+      kind: 'person' as const, id: p.id, basis: p.basis,
+      label: `Person — ${[p.full_name, p.alias, p.description].filter(Boolean).join(' / ') || 'unidentified'}${p.org_name ? ` · ${p.org_name}${p.org_role ? ` (${p.org_role})` : ''}` : ''}`,
+    })),
+    ...parts.vehicles.map((v) => ({
+      kind: 'vehicle' as const, id: v.id, basis: v.basis,
+      label: `Vehicle — ${[v.plate, v.color, v.model].filter(Boolean).join(' ') || 'no details'}${v.org_name ? ` · ${v.org_name}` : ''}`,
+    })),
+    ...parts.orgs.map((o) => ({
+      kind: 'org' as const, id: o.id, basis: o.basis,
+      label: `Organization — ${o.name || o.org_type}${o.territory ? ` · ${o.territory}` : ''}`,
+    })),
+    ...parts.locations.map((l) => ({
+      kind: 'location' as const, id: l.id, basis: l.basis,
+      label: `${l.kind.replace(/_/g, ' ')} — ${[l.postal, l.street, l.description].filter(Boolean).join(' ') || 'no address'}`,
+    })),
+    ...parts.items.map((i) => ({
+      kind: 'item' as const, id: i.id, basis: i.basis,
+      label: `${i.category.replace(/_/g, ' ')} — ${[i.suspected_substance, i.description].filter(Boolean).join(' ')}${i.weight_value ? ` · ${i.weight_value}${i.weight_unit} (${Number(i.weight_grams ?? 0).toFixed(0)} g)` : ''}`,
+    })),
   ]
+
   if (!rows.length) {
     return <p className="mt-2 text-sm text-slate-500">No structured claims — the summary is the whole report.</p>
   }
+
   return (
-    <ul className="mt-2 space-y-1 text-sm text-slate-300">
-      {rows.map((r) => <li key={r} className="rounded bg-ink-950/50 px-3 py-1.5">{r}</li>)}
+    <ul className="mt-2 space-y-2">
+      {rows.map((r) => {
+        const v = verdictFor(verdicts, r.kind, r.id)
+        const current = v?.verdict as Verdict | undefined
+        return (
+          <li key={r.id} className="rounded-lg bg-ink-950/50 px-3 py-2">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <span className="min-w-0 text-sm text-slate-200">{r.label}</span>
+              {current && (
+                <Badge tone={VERDICT_TONE[current]}>{VERDICT_LABEL[current]}</Badge>
+              )}
+            </div>
+            <p className="mt-0.5 text-[11px] uppercase tracking-wider text-slate-500">
+              {r.basis === 'observed' ? 'Officer saw this'
+                : r.basis === 'reported' ? 'Officer was told this'
+                : 'Basis not stated'}
+              {current && ` · ${VERDICT_MEANING[current]}`}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {VERDICTS.map((verdict) => (
+                <button key={verdict} onClick={() => onDecide(r.kind, r.id, verdict)}
+                  className={`rounded px-2 py-0.5 text-[11px] font-semibold transition ${
+                    current === verdict
+                      ? 'bg-white/15 text-white'
+                      : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200'
+                  }`}>
+                  {VERDICT_LABEL[verdict]}
+                </button>
+              ))}
+            </div>
+          </li>
+        )
+      })}
     </ul>
   )
 }
