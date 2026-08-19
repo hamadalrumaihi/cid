@@ -33,8 +33,10 @@ import {
   askOfficer, awaitingReviewer, claimSubmission, decideClaim, decideSubmission,
   isOpen, loadClaimProgress, loadMessages, loadReviewNotes, loadReviewQueue,
   loadVerdicts, progressLabel, rerouteSubmission, reviewNext, reviewPrompt,
-  verdictFor, type ClaimKind, type ClaimProgress, type FieldMessageRow,
-  type FieldReviewNoteRow, type FieldVerdictRow, type Verdict,
+  linkClaim, linkFor, loadClaimLinks, loadMatches, publishSubmission,
+  verdictFor, type ClaimKind, type ClaimProgress, type EntityMatch,
+  type FieldClaimLinkRow, type FieldMessageRow, type FieldReviewNoteRow,
+  type FieldVerdictRow, type MatchResult, type Verdict,
 } from '@/lib/fieldReview'
 import { evidenceLabel, evidenceUrl, loadEvidence, type FieldEvidenceRow } from '@/lib/fieldEvidence'
 import { Badge } from '@/components/ui/Badge'
@@ -144,18 +146,19 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
   const [messages, setMessages] = useState<FieldMessageRow[]>([])
   const [notes, setNotes] = useState<FieldReviewNoteRow[]>([])
   const [verdicts, setVerdicts] = useState<FieldVerdictRow[]>([])
+  const [links, setLinks] = useState<FieldClaimLinkRow[]>([])
   const [progress, setProgress] = useState<ClaimProgress | null>(null)
   const [next, setNext] = useState('')
   const [note, setNote] = useState('')
   const id = submission.id
 
   const load = useCallback(async () => {
-    const [p, e, m, n, v, pr] = await Promise.all([
+    const [p, e, m, n, v, pr, lk] = await Promise.all([
       loadSubmissionParts(id), loadEvidence(id), loadMessages(id), loadReviewNotes(id),
-      loadVerdicts(id), loadClaimProgress(id),
+      loadVerdicts(id), loadClaimProgress(id), loadClaimLinks(id),
     ])
     setParts(p); setEvidence(e); setMessages(m); setNotes(n)
-    setVerdicts(v); setProgress(pr)
+    setVerdicts(v); setProgress(pr); setLinks(lk)
   }, [id])
 
   useEffect(() => {
@@ -231,9 +234,13 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
           Decide each claim on its own. Confirming a plate says nothing about whether
           the person driving it belongs to the club the officer named.
         </p>
-        <ClaimList parts={parts} verdicts={verdicts}
+        <ClaimList parts={parts} verdicts={verdicts} links={links}
           onDecide={(kind, claimId, verdict) => void (async () => {
             await after(await decideClaim(kind, claimId, verdict), 'Verdict recorded.')
+          })()}
+          onLink={(kind, claimId, m) => void (async () => {
+            await after(await linkClaim(kind, claimId, m.kind, m.id),
+              `Matched to the existing ${m.kind}.`)
           })()} />
       </Card>
 
@@ -270,7 +277,19 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
           <Button size="sm" variant="ghost" onClick={() => void reroute()}>
             Reroute to {submission.route === 'siu' ? 'CID' : 'SIU'}
           </Button>
+          <Button size="sm" variant="ghost"
+            onClick={() => void (async () => {
+              await after(await publishSubmission(id),
+                'Added to the intelligence database, with this report as its source.')
+            })()}>
+            Add to intelligence
+          </Button>
         </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Adding to intelligence creates one tip carrying this report&rsquo;s number, plus a
+          link for each claim you matched to an existing record. It creates no new
+          persons, vehicles, gangs or cases &mdash; and never a case.
+        </p>
 
         {edges.length > 0 ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -367,10 +386,12 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
  *
  *  A verdict is written to a separate table and never touches the claim row --
  *  the officer's account stays exactly as they wrote it. */
-function ClaimList({ parts, verdicts, onDecide }: {
+function ClaimList({ parts, verdicts, links, onDecide, onLink }: {
   parts: SubmissionParts
   verdicts: FieldVerdictRow[]
+  links: FieldClaimLinkRow[]
   onDecide: (kind: ClaimKind, id: string, verdict: Verdict) => void
+  onLink: (kind: ClaimKind, id: string, match: EntityMatch) => void
 }) {
   const rows: Array<{ kind: ClaimKind; id: string; label: string; basis: string }> = [
     ...parts.persons.map((p) => ({
@@ -404,6 +425,7 @@ function ClaimList({ parts, verdicts, onDecide }: {
       {rows.map((r) => {
         const v = verdictFor(verdicts, r.kind, r.id)
         const current = v?.verdict as Verdict | undefined
+        const linked = linkFor(links, r.kind, r.id)
         return (
           <li key={r.id} className="rounded-lg bg-ink-950/50 px-3 py-2">
             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -430,9 +452,84 @@ function ClaimList({ parts, verdicts, onDecide }: {
                 </button>
               ))}
             </div>
+            {linked
+              ? <p className="mt-1.5 text-[11px] text-emerald-300">Matched to an existing record.</p>
+              : <ClaimMatches kind={r.kind} claimId={r.id}
+                  onLink={(m) => onLink(r.kind, r.id, m)} />}
           </li>
         )
       })}
     </ul>
+  )
+}
+
+/** Possible existing records for one claim, and how often it has been reported
+ *  before.
+ *
+ *  Loaded on demand rather than for every claim on open: matching runs four
+ *  different searches over persons, vehicles, gangs and places, and a reviewer
+ *  skimming a queue does not need all of them speculatively.
+ *
+ *  Repetition is shown as a count and nothing more. Three officers reporting
+ *  the same plate is a reason to look, not evidence — they may all be repeating
+ *  one rumour, and presenting frequency as corroboration is how that becomes a
+ *  fact nobody checked. */
+function ClaimMatches({ kind, claimId, onLink }: {
+  kind: ClaimKind
+  claimId: string
+  onLink: (match: EntityMatch) => void
+}) {
+  const [result, setResult] = useState<MatchResult | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const look = async () => {
+    setBusy(true)
+    const r = await loadMatches(kind, claimId)
+    setBusy(false)
+    setResult(r)
+  }
+
+  if (!result) {
+    return (
+      <button onClick={() => void look()} disabled={busy}
+        className="mt-1.5 text-[11px] font-semibold text-blue-300 hover:text-blue-200 disabled:opacity-50">
+        {busy ? 'Searching…' : 'Look for an existing record'}
+      </button>
+    )
+  }
+
+  if (!result.matchable) {
+    return <p className="mt-1.5 text-[11px] text-slate-500">Nothing to match this against.</p>
+  }
+
+  return (
+    <div className="mt-1.5">
+      {result.also_reported > 0 && (
+        <p className="text-[11px] text-amber-300">
+          Also named in {result.also_reported} other submission
+          {result.also_reported === 1 ? '' : 's'} — worth a look, not corroboration.
+        </p>
+      )}
+      {!result.matches.length ? (
+        <p className="text-[11px] text-slate-500">
+          No existing record matches. Nothing is created automatically.
+        </p>
+      ) : (
+        <ul className="mt-1 space-y-1">
+          {result.matches.map((m) => (
+            <li key={m.id} className="flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-[11px] text-slate-300">
+                {m.label}
+                {m.exact && <span className="ml-1.5 text-emerald-300">exact</span>}
+              </span>
+              <button onClick={() => onLink(m)}
+                className="shrink-0 text-[11px] font-semibold text-blue-300 hover:text-blue-200">
+                Link
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }

@@ -251,6 +251,86 @@ export function verdictFor(
   return verdicts.find((v) => v[col] === claimId) ?? null
 }
 
+// ---------------------------------------------------------------------------
+// Entity matching and publication
+// ---------------------------------------------------------------------------
+//
+// Nothing here creates a person, a vehicle, a gang or a case. Matching
+// SUGGESTS; a reviewer links; publishing records the link as intelligence with
+// the submission attached as its source. An external report that could mint
+// records on its own would mean a patrol officer's guess becoming a database
+// fact with nobody's name against it.
+
+export type TargetKind = 'person' | 'vehicle' | 'gang' | 'place'
+
+export interface EntityMatch {
+  kind: TargetKind
+  id: string
+  label: string
+  /** The normalizers made this compare equal, rather than it merely being
+   *  similar. Still a suggestion, not a conclusion. */
+  exact: boolean
+}
+
+export interface MatchResult {
+  matches: EntityMatch[]
+  /** How many OTHER submissions named the same plate, person or organization.
+   *  Repetition is a signal worth surfacing and is NOT corroboration — three
+   *  officers can repeat the same rumour. */
+  also_reported: number
+  /** False for items: a seizure is an event, not a standing record, so there is
+   *  no table for it to be a duplicate of. */
+  matchable: boolean
+}
+
+const NO_MATCHES: MatchResult = { matches: [], also_reported: 0, matchable: false }
+
+export async function loadMatches(kind: ClaimKind, claimId: string): Promise<MatchResult> {
+  const res = await rpc('field_claim_matches', { p_kind: kind, p_claim: claimId })
+  return (res.data as unknown as MatchResult | null) ?? NO_MATCHES
+}
+
+export type FieldClaimLinkRow = Tables<'field_claim_links'>
+
+export async function loadClaimLinks(submissionId: string): Promise<FieldClaimLinkRow[]> {
+  return list('field_claim_links', { eq: { submission_id: submissionId } }).catch(() => [])
+}
+
+/** Assert that this claim refers to that existing record. It does not edit
+ *  either one — the record keeps its data and the claim keeps the officer's
+ *  words. */
+export async function linkClaim(
+  kind: ClaimKind, claimId: string, targetKind: TargetKind, targetId: string,
+): Promise<string | null> {
+  const res = await rpc('field_claim_link', {
+    p_kind: kind, p_claim: claimId, p_target_kind: targetKind, p_target: targetId,
+  })
+  return res.error?.message ?? null
+}
+
+/** Put the report into the intelligence database: one `intelligence_tips` row
+ *  carrying the submission id, plus a tip link per linked claim.
+ *
+ *  The tip arrives as `new` / `unverified` whatever a reviewer decided about
+ *  individual claims. A tip's own triage is a separate judgement, and an
+ *  external submission arriving pre-accepted is the thing to avoid. */
+export async function publishSubmission(id: string): Promise<string | null> {
+  const res = await rpc('field_submission_publish', { p_submission: id })
+  return res.error?.message ?? null
+}
+
+/** Whether a claim has already been matched to a record. */
+export function linkFor(
+  links: FieldClaimLinkRow[], kind: ClaimKind, claimId: string,
+): FieldClaimLinkRow | null {
+  const col = ({
+    person: 'claim_person_id', vehicle: 'claim_vehicle_id',
+    org: 'claim_org_id', location: 'claim_location_id',
+  } as const)[kind as 'person' | 'vehicle' | 'org' | 'location'] ?? null
+  if (!col) return null
+  return links.find((l) => l[col] === claimId) ?? null
+}
+
 /** How to summarise review progress in one line. Deliberately does NOT say
  *  "complete" when every claim is decided: the reviewer decides when a report
  *  is finished, not an arithmetic check. */

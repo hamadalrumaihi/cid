@@ -8,6 +8,72 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Submissions become intelligence
+
+Sixth and last phase. Until now a verified claim was verified and then sat
+there. This connects it to the investigative database.
+
+**Nothing is created automatically.** Not a person, not a vehicle, not a gang,
+and above all **not a case**. Matching *suggests*; a reviewer links; publishing
+records the link. A submission that could mint records on its own would mean a
+patrol officer's guess becoming a database fact with nobody's name against it.
+Nor does anything merge: if a submitted plate matches an existing vehicle the
+reviewer is told so and can link the claim to it — the vehicle row is not
+edited and the claim keeps the officer's words.
+
+**Provenance is the point.** P2 promised integration would happen at review
+time through `intelligence_tips` and `intelligence_tip_links`, carrying the
+submission id. This honours it: publishing creates **one** tip whose
+`field_submission_id` points home, plus one tip link per claim a reviewer
+matched. Following any of them backwards reaches the officer, their agency,
+their evidence, and the verdict somebody recorded. `intelligence_tips` gains one
+nullable column; its policies, triage lifecycle and RPC are untouched.
+
+The tip arrives **`new` / `unverified`** whatever a reviewer decided about
+individual claims. A tip's own triage is a separate judgement, and an external
+submission arriving pre-accepted is exactly what must not happen.
+
+**Matching respects the reader.** `field_claim_matches()` is SECURITY INVOKER
+over `persons`, `vehicles`, `gangs` and `places` — all `is_active()`-gated — and
+refuses a field officer outright. An entity-matching endpoint is precisely the
+shape of thing that leaks a database one lookup at a time.
+
+**A normalizer bug, found by testing against the real gang roster.** The spec's
+example is that *Drenger Blade MC*, *Drenger Blades MC* and *Drenger Blade
+Motorcycle Club* are one organization. All three collapsed correctly — but
+*Drenger Blade M.C.* did not, normalizing to `drengerblademc` and failing to
+match. The word-boundary regex cannot see a dotted abbreviation as a word. Dots
+are now stripped *before* the suffix step. Acronyms are unharmed: `HAMC` stays
+`hamc` rather than becoming `ha`, and the real roster entries `Sinful Reapers
+MC` and `Devils MC` normalize as expected.
+
+Probed live against real records, rolled back:
+
+| attempt | result |
+| --- | --- |
+| officer runs matching | `not authorized` — refused outright, not an empty result |
+| officer links / publishes | refused |
+| plate `"podyl873 "` (lowercased, trailing space) | matched the real `PODYL873` — **exact** |
+| `"Sinful Reapers Motorcycle Club"` | matched the real `Sinful Reapers MC` — **exact** |
+| link to a nonexistent target | refused |
+| reviewer writes the link table directly | refused — the audited RPC is the only path |
+| publish | tip `source=patrol status=new reliability=unverified`, provenance correct, both entity links written |
+| publish twice | refused: *already in the intelligence database* |
+| records created | **persons +0, vehicles +0, gangs +0** |
+| officer reads links or tips afterwards | 0 and 0 |
+
+One probe number needed checking rather than reporting: it showed `cases -18`.
+That was **my own measurement artifact** — the baseline was counted as
+`postgres` (all 22 cases) and the final count as a CID detective, who sees only
+the 4 that `can_access_case` allows. Verified afterwards: **22 cases, unchanged.**
+Nothing was deleted.
+
+**Repetition is shown as a count and nothing more.** When several submissions
+name the same plate or organization the reviewer is told *"also named in N other
+submissions — worth a look, not corroboration."* Three officers can repeat one
+rumour, and presenting frequency as corroboration is how that becomes a fact
+nobody checked.
+
 ### Claim-level verification: deciding about the parts, not the whole
 
 Fifth phase. A field report is several separate assertions, and confirming one
