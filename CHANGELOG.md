@@ -8,6 +8,76 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Evidence, and the project's first Supabase Storage bucket
+
+Third phase of the Field Intelligence portal. Patrol can now back a report up
+with screenshots, clips and documents.
+
+**This introduces a second authorization system, and that is the significant
+part.** Every access decision in this project until today was RLS on a table in
+`public`. Storage is not that: a file is governed by policies on
+`storage.objects`, a different table with its own policy set — and **a bucket
+marked public bypasses them entirely**, serving anything in it to the open
+internet with no session at all. That is why the project had no buckets before:
+238 media rows, every one an external URL, and a migration recording plainly
+that the app *"never calls supabase.storage.\*"*.
+
+So `field-evidence` is **private**, and every read is a short-lived signed URL.
+There is no public path to an evidence file.
+
+**One ownership rule, not two.** The obvious mistake would be to invent a
+separate model for files — "the uploader owns the object" — and end up with a
+file whose access rules disagree with the report it belongs to. Instead the
+object path carries the submission id:
+
+```
+field/<submission_id>/<uuid>.<ext>
+```
+
+and the storage policies resolve that id back through exactly the helpers the
+submission tables already use. **A file is visible precisely when its report
+is**, and writable precisely while that report is an unsent draft. There is
+deliberately *no* update policy: overwriting an object in place would change
+what a piece of evidence is while its row, title and audit trail still described
+the old one. Replacing evidence means deleting and re-adding.
+
+A path segment that is not a uuid would raise `22P02` from inside a policy — a
+confusing way to be denied — so `private.uuid_or_null()` returns NULL instead,
+and NULL fails the ownership test. A malformed path is simply refused.
+
+**Medal links stay links.** A Medal clip is a page on medal.tv, not a file:
+there is nothing to download and re-host, and an officer should never have to
+export a clip and re-upload it. Evidence therefore has two shapes, `upload` and
+`link`, and a link keeps its original URL untouched. `is_medal` is recognised
+from the URL **by a trigger**, not accepted from the client — so a reviewer can
+be shown a player without the client getting to claim what a URL is.
+
+Probed live, rolled back:
+
+| attempt | result |
+| --- | --- |
+| bucket visibility | `public = false` |
+| officer uploads into own draft | 1 row |
+| officer uploads into own **sent** report | refused |
+| officer uploads to `field/not-a-uuid/…` | refused by policy, not a cast error |
+| officer uploads outside `field/` | refused |
+| client sends `is_medal: true`, `added_by: <a detective>` | stored **false**, and the caller — both discarded |
+| `https://medal.tv/…` | `is_medal` **true**, set by the trigger |
+| `javascript:alert(1)` as evidence | refused |
+| row pointing at another submission's folder | refused by check constraint |
+| officer B reads officer A's evidence | 0 objects, 0 rows |
+| CID reads a **draft's** evidence | 0 objects, 0 rows |
+| CID reads it **after sending** | 1 object, 2 rows, Medal flagged |
+| CID adds evidence to someone's report | refused |
+| CID deletes evidence | 0 rows |
+
+A reviewer can read evidence and cannot plant or remove it. That asymmetry is
+the point: evidence is the officer's account, not the reviewer's.
+
+Knip caught `evidenceUrl` unused, which was a real gap rather than dead code —
+an officer could attach a file and had no way to open it and check they picked
+the right screenshot. It is now an **Open** action that mints a signed URL.
+
 ### Patrol can now send intelligence to CID
 
 Second phase of the Field Intelligence portal. P1 established who an external

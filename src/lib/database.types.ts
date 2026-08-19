@@ -2589,6 +2589,71 @@ export type Database = {
           },
         ]
       }
+      field_submission_evidence: {
+        Row: {
+          added_by: string | null
+          captured_at: string | null
+          created_at: string
+          description: string | null
+          external_url: string | null
+          id: string
+          is_medal: boolean
+          item_id: string | null
+          kind: string
+          location_id: string | null
+          org_id: string | null
+          person_id: string | null
+          storage_path: string | null
+          submission_id: string
+          title: string | null
+          vehicle_id: string | null
+        }
+        Insert: {
+          added_by?: string | null
+          captured_at?: string | null
+          created_at?: string
+          description?: string | null
+          external_url?: string | null
+          id?: string
+          is_medal?: boolean
+          item_id?: string | null
+          kind: string
+          location_id?: string | null
+          org_id?: string | null
+          person_id?: string | null
+          storage_path?: string | null
+          submission_id: string
+          title?: string | null
+          vehicle_id?: string | null
+        }
+        Update: {
+          added_by?: string | null
+          captured_at?: string | null
+          created_at?: string
+          description?: string | null
+          external_url?: string | null
+          id?: string
+          is_medal?: boolean
+          item_id?: string | null
+          kind?: string
+          location_id?: string | null
+          org_id?: string | null
+          person_id?: string | null
+          storage_path?: string | null
+          submission_id?: string
+          title?: string | null
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_submission_evidence_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       field_submission_items: {
         Row: {
           basis: string

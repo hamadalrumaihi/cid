@@ -910,6 +910,37 @@ alter table public.field_officers add constraint field_officers_ended_by_fkey FO
 alter table public.field_officers add constraint field_officers_agency_check CHECK ((agency = ANY (ARRAY['SAHP'::text, 'BCSO'::text, 'LSPD'::text])));
 alter table public.field_officers enable row level security;
 
+create table public.field_submission_evidence (
+  id uuid not null default gen_random_uuid(),
+  submission_id uuid not null,
+  kind text not null,
+  storage_path text,
+  external_url text,
+  is_medal boolean not null default false,
+  title text,
+  description text,
+  captured_at timestamp with time zone,
+  person_id uuid,
+  vehicle_id uuid,
+  org_id uuid,
+  location_id uuid,
+  item_id uuid,
+  added_by uuid,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.field_submission_evidence add constraint field_submission_evidence_pkey PRIMARY KEY (id);
+alter table public.field_submission_evidence add constraint field_submission_evidence_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.field_submissions(id) ON DELETE CASCADE;
+alter table public.field_submission_evidence add constraint field_submission_evidence_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.field_submission_persons(id) ON DELETE SET NULL;
+alter table public.field_submission_evidence add constraint field_submission_evidence_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.field_submission_vehicles(id) ON DELETE SET NULL;
+alter table public.field_submission_evidence add constraint field_submission_evidence_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.field_submission_orgs(id) ON DELETE SET NULL;
+alter table public.field_submission_evidence add constraint field_submission_evidence_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.field_submission_locations(id) ON DELETE SET NULL;
+alter table public.field_submission_evidence add constraint field_submission_evidence_item_id_fkey FOREIGN KEY (item_id) REFERENCES public.field_submission_items(id) ON DELETE SET NULL;
+alter table public.field_submission_evidence add constraint field_submission_evidence_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id);
+alter table public.field_submission_evidence add constraint field_submission_evidence_kind_check CHECK ((kind = ANY (ARRAY['upload'::text, 'link'::text])));
+alter table public.field_submission_evidence add constraint field_submission_evidence_shape CHECK ((((kind = 'upload'::text) AND (storage_path IS NOT NULL) AND (external_url IS NULL)) OR ((kind = 'link'::text) AND (external_url IS NOT NULL) AND (storage_path IS NULL))));
+alter table public.field_submission_evidence add constraint field_submission_evidence_path_scoped CHECK (((storage_path IS NULL) OR (storage_path ~~ (('field/'::text || (submission_id)::text) || '/%'::text))));
+alter table public.field_submission_evidence enable row level security;
+
 create table public.field_submission_items (
   id uuid not null default gen_random_uuid(),
   submission_id uuid not null,
@@ -4021,6 +4052,7 @@ CREATE INDEX feedback_meta_updated_by_idx ON public.feedback_meta USING btree (u
 CREATE INDEX field_officers_agency_idx ON public.field_officers USING btree (agency) WHERE active;
 CREATE INDEX field_officers_appointed_by_fkey_idx ON public.field_officers USING btree (appointed_by);
 CREATE INDEX field_officers_ended_by_fkey_idx ON public.field_officers USING btree (ended_by);
+CREATE INDEX field_submission_evidence_submission_idx ON public.field_submission_evidence USING btree (submission_id);
 CREATE INDEX field_submission_items_submission_idx ON public.field_submission_items USING btree (submission_id);
 CREATE INDEX field_submission_locations_submission_idx ON public.field_submission_locations USING btree (submission_id);
 CREATE INDEX field_submission_orgs_submission_idx ON public.field_submission_orgs USING btree (submission_id);
@@ -7505,6 +7537,8 @@ CREATE TRIGGER feedback_meta_audit AFTER INSERT OR DELETE OR UPDATE ON public.fe
 CREATE TRIGGER feedback_meta_touch BEFORE UPDATE ON public.feedback_meta FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER field_officers_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_officers FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_officers_touch BEFORE UPDATE ON public.field_officers FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER field_evidence_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_evidence FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER field_evidence_before_insert BEFORE INSERT ON public.field_submission_evidence FOR EACH ROW EXECUTE FUNCTION private.field_evidence_before_insert();
 CREATE TRIGGER field_submission_items_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_items FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_submission_locations_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_locations FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_submission_orgs_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_orgs FOR EACH ROW EXECUTE FUNCTION private.audit();
@@ -8073,6 +8107,40 @@ create policy field_officers_cmd on public.field_officers
 -- in 20260911120000 so they cannot drift apart. Visibility follows the PARENT:
 -- a claim is never independently readable. Writes are open only while the
 -- parent is the officer's own draft.
+-- ---------------------------------------------------------------------------
+-- STORAGE. As of 20260912120000 this project has its first bucket, and these
+-- are policies on storage.objects -- a DIFFERENT table from anything in public,
+-- with its own policy set. A bucket marked public bypasses them entirely, so
+-- `field-evidence` is private (public = false) and every read is a signed URL.
+--
+-- The object path carries the submission id (field/<submission_id>/<file>) and
+-- these policies resolve it back through the same helpers the submission tables
+-- use, so a file is visible precisely when its report is. There is one
+-- ownership rule, not two.
+--
+--   storage.buckets: field-evidence, public=false, 50 MB,
+--     image/jpeg|png|webp|gif, video/mp4|webm|quicktime, application/pdf
+--
+--   field_evidence_read   SELECT: own submission, or CID once status <> 'draft'
+--   field_evidence_write  INSERT: only under field/<own draft id>/
+--   field_evidence_delete DELETE: own draft, or command
+--   (deliberately NO update policy -- overwriting an object in place would
+--    change what a piece of evidence is while its row still described the old
+--    one; replacing evidence means delete + add)
+-- ---------------------------------------------------------------------------
+
+create policy field_submission_evidence_sel on public.field_submission_evidence
+  as permissive for select to authenticated
+  using (private.field_submission_mine(submission_id) OR (private.is_active() AND (EXISTS ( SELECT 1 FROM public.field_submissions s WHERE ((s.id = field_submission_evidence.submission_id) AND (s.status <> 'draft'::text))))));
+
+create policy field_submission_evidence_ins on public.field_submission_evidence
+  as permissive for insert to authenticated
+  with check (private.field_submission_my_draft(submission_id));
+
+create policy field_submission_evidence_del on public.field_submission_evidence
+  as permissive for delete to authenticated
+  using (private.field_submission_my_draft(submission_id) OR private.is_command());
+
 create policy field_submission_items_sel on public.field_submission_items
   as permissive for select to authenticated
   using (private.field_submission_mine(submission_id) OR (private.is_active() AND (EXISTS ( SELECT 1 FROM public.field_submissions s WHERE ((s.id = field_submission_items.submission_id) AND (s.status <> 'draft'::text))))));
@@ -9429,6 +9497,7 @@ create policy wl_sel on public.watchlist
 --      plain again and RLS alone decides who sees a row — 20260910120000)
 --   field_submissions -> anon: (none — global revoke + default privileges, 20260908130000)
 --   field_submissions -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   field_submission_evidence -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
 --   field_submission_items -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
 --   field_submission_locations -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
 --   field_submission_orgs -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
