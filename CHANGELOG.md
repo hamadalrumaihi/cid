@@ -8,6 +8,48 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Accounts could not be permanently deleted, and Intel Tips is gone
+
+**The bug.** Freezing the reporting officer on an intelligence record was right —
+a report is the account of who reported what, and reattributing it after the fact
+is exactly the edit that must never happen. But the freeze was **absolute**, and
+one legitimate write does change it: permanent account deletion repoints every
+no-action reference to `profiles` at the tombstone, and
+`field_submissions.officer_id` and `.created_by` are two of the ~159 such
+references.
+
+So the Owner's erasure path was being refused by its own guard — *"the reporting
+officer on a record cannot be changed"* — and **any account that had ever filed
+or authored intelligence could not be deleted at all**. The most destructive
+operation in the portal was quietly broken by a guard written for a different
+threat.
+
+The trigger now recognises the erasure by its **destination**: a profile
+reference on the row may move *to the tombstone*, which nothing else in the
+portal ever does, and nowhere else. Reattributing a report to a real person is
+still refused. The **snapshot stays frozen even during an erasure** —
+`snap_officer_name`, `snap_callsign`, `snap_agency`, `snap_rank` and `snap_unit`
+are text, are not references, are not repointed, and survive untouched. Keeping a
+report readable after the account behind it is destroyed is the entire reason
+those columns exist. Verified by walking the real reference map: **159 repoints,
+zero failures**, with reattribution and snapshot rewrites still refused.
+
+**Permanent deletion is one action now.** It was two: *Arm permanent deletion*
+minted a single-use token, then a five-minute countdown ran while the Owner
+retyped `DELETE <name>` into a confirmation box. The button now does the whole
+thing. The server's two-phase contract is untouched underneath — arming is what
+writes the ledger entry and re-checks eligibility at the moment of the write — so
+what went away is the *ceremony*, not the record. The preview already says what
+will be destroyed, and the reason field still feeds the audit log and the ledger.
+
+**Intel Tips is dropped.** Held dormant for a release after the merge, as the
+ticket system was: three tables, **zero rows between them**, nothing outside their
+own children referencing them, and nothing writing to them since. Gone now, with
+`tip_triage()` and the guard trigger that existed only to serve them, and with
+the RLS pins that tested them — their successors on `field_submissions` are
+stronger, and the source wall in particular has no SELECT test left to write
+because `field_submission_sources` admits no role at all.
+
 ### Finding a record, and noticing when the same name keeps coming up
 
 **Search reaches the whole record, not the summary field.** Everything a
