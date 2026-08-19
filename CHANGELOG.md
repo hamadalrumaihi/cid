@@ -8,6 +8,51 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### A claim that actually holds
+
+`field_submission_claim()` took the row lock and then wrote `assigned_to`
+unconditionally. Two detectives could not corrupt the row — the lock saw to
+that — but the **second one won**, silently taking the report off the first. The
+lock made the write atomic; it did not make the claim mean anything. The check
+now happens inside the same lock, so the second claim is refused with a sentence.
+
+**Releasing needs a reason**, because whoever picks the report up next needs to
+know whether it was "not my area" or "I know this suspect personally". The
+status deliberately does not wind back: the report **has** been looked at.
+
+**Bureau Leads assign and reassign.** Taking a report off its current holder
+requires a reason; handing out an unheld one does not, because there is nobody
+it was taken from. A target who cannot see the report's jurisdiction is refused
+server-side — assigning work to somebody who cannot open it is worse than
+leaving it unassigned, since the queue then reads as handled and the named
+investigator never sees it.
+
+**`field_assignments` never forgets.** Claimed, released, assigned and
+reassigned each append a row; nothing edits one. `authenticated` holds no
+INSERT, UPDATE or DELETE on it at all — the RPCs are the only writers — and its
+SELECT policy requires `private.is_active()`, so the officer who sent the report
+cannot learn which detective is working it.
+
+**And one hole closed.** Every review RPC is SECURITY DEFINER, which bypasses
+RLS; they checked `private.is_active()` and nothing else. An active detective
+holding a submission id from another bureau's jurisdiction could therefore
+claim, decide or question a report the SELECT policy would never have shown
+them. `claim`, `release`, `assign`, `decide` and `ask` now all check
+`private.field_jurisdiction_visible()` inside the function, which is where it
+matters for a caller who already has the id.
+
+### Queues instead of a single list
+
+The review screen was one list with a "show only open" toggle. It is now the
+queues a reviewer actually thinks in — All, Unclaimed, Mine, Assigned, Needs
+info, Los Santos / City, Blaine County, Processed — plus Access requests, with
+counts on the ones that mean somebody is waiting. These are views over one
+table, not separate inboxes: "Mine" and "City" can hold the same report, which
+is the point. Each card now says what the report contains ("2 people · 1 vehicle
+· 3 evidence items") before anybody opens it, via one `field_submission_counts()`
+call rather than six child-table reads per row — SECURITY INVOKER, so it counts
+exactly what the caller could have counted themselves.
+
 ### A patrol officer can now ask for the door
 
 Field Intelligence shipped with one way in: command had to appoint an officer

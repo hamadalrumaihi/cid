@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { fmtDateTime, timeAgo } from '@/lib/format'
-import { officerName } from '@/lib/profiles'
+import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import {
@@ -30,14 +30,16 @@ import {
   type FieldSubmissionRow, type SubmissionParts,
 } from '@/lib/fieldSubmissions'
 import {
-  VERDICTS, VERDICT_LABEL, VERDICT_MEANING, VERDICT_TONE,
-  askOfficer, awaitingReviewer, claimSubmission, decideClaim, decideSubmission,
-  isOpen, loadClaimProgress, loadMessages, loadReviewNotes, loadReviewQueue,
-  loadVerdicts, progressLabel, reviewNext, reviewPrompt,
+  QUEUE_FILTERS, QUEUE_LABEL, VERDICTS, VERDICT_LABEL, VERDICT_MEANING, VERDICT_TONE,
+  askOfficer, assignSubmission, assignmentLine, awaitingReviewer, claimSubmission,
+  countsSummary, decideClaim, decideSubmission, loadAssignments,
+  loadClaimProgress, loadCounts, loadMessages, loadReviewNotes, loadReviewQueue,
+  loadVerdicts, matchesFilter, progressLabel, releaseSubmission, reviewNext, reviewPrompt,
   linkClaim, linkFor, loadClaimLinks, loadMatches, publishSubmission,
   verdictFor, type ClaimKind, type ClaimProgress, type EntityMatch,
-  type FieldClaimLinkRow, type FieldMessageRow, type FieldReviewNoteRow,
-  type FieldVerdictRow, type MatchResult, type Verdict,
+  type FieldAssignmentRow, type FieldClaimLinkRow, type FieldMessageRow,
+  type FieldReviewNoteRow, type FieldVerdictRow, type MatchResult,
+  type QueueFilter, type SubmissionCounts, type Verdict,
 } from '@/lib/fieldReview'
 import { evidenceLabel, evidenceUrl, loadEvidence, type FieldEvidenceRow } from '@/lib/fieldEvidence'
 import { FieldAccessQueue, countPending, useAccessRequests } from './FieldAccessQueue'
@@ -53,15 +55,19 @@ import { uiPrompt } from '@/components/ui/dialog'
 const NO_PARTS: SubmissionParts = { persons: [], vehicles: [], orgs: [], locations: [], items: [] }
 
 export function FieldReviewView() {
-  const { state } = useAuth()
+  const { state, profile, isCommand } = useAuth()
+  const me = profile?.id ?? null
   const [rows, setRows] = useState<FieldSubmissionRow[] | null>(null)
-  const [openOnly, setOpenOnly] = useState(true)
+  const [counts, setCounts] = useState<Record<string, SubmissionCounts>>({})
   const [selected, setSelected] = useState<string | null>(null)
-  const [tab, setTab] = useState<'reports' | 'access'>('reports')
+  const [tab, setTab] = useState<QueueFilter | 'access'>('unclaimed')
   const v = useTableVersion('field_submissions')
   const access = useAccessRequests()
 
-  const refresh = useCallback(async () => { setRows(await loadReviewQueue()) }, [])
+  const refresh = useCallback(async () => {
+    const [q, c] = await Promise.all([loadReviewQueue(), loadCounts()])
+    setRows(q); setCounts(c)
+  }, [])
   useEffect(() => {
     const t = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(t)
@@ -70,8 +76,16 @@ export function FieldReviewView() {
   if (state !== 'in') return <Notice text="Sign in to review field intelligence." />
 
   const all = rows ?? []
-  const shown = openOnly ? all.filter((r) => isOpen(r.status)) : all
+  const shown = tab === 'access' ? [] : all.filter((r) => matchesFilter(r, tab, me))
   const current = all.find((r) => r.id === selected) ?? null
+  const pending = countPending(access.rows ?? [])
+
+  // Counts on the tabs so a reviewer can see where the work is without opening
+  // each queue. Only the ones that mean "somebody is waiting" are counted; a
+  // number on "All" or "Processed" is trivia.
+  const countFor = (f: QueueFilter): number | undefined =>
+    f === 'all' || f === 'processed' ? undefined
+      : all.filter((r) => matchesFilter(r, f, me)).length
 
   return (
     <div className="space-y-5">
@@ -85,19 +99,22 @@ export function FieldReviewView() {
       {!current && (
         <SectionTabs
           idBase="field-review"
-          ariaLabel="Field Intelligence sections"
+          ariaLabel="Field Intelligence queues"
           active={tab}
           onChange={setTab}
           tabs={[
-            { id: 'reports', label: 'Reports', count: all.filter((r) => isOpen(r.status)).length },
-            // The count is the reason this tab exists: an officer waiting on a
-            // decision has no other way to reach CID, so the wait has to be
-            // visible where reviewers already are.
+            ...QUEUE_FILTERS.map((f) => ({
+              id: f as QueueFilter | 'access',
+              label: QUEUE_LABEL[f],
+              count: countFor(f),
+            })),
+            // An officer waiting on an access decision has no other way to
+            // reach CID, so the wait belongs where reviewers already are.
             {
-              id: 'access',
+              id: 'access' as const,
               label: 'Access requests',
-              count: countPending(access.rows ?? []),
-              marker: countPending(access.rows ?? []) > 0,
+              count: pending,
+              marker: pending > 0,
               markerLabel: 'Officers are waiting for a decision',
             },
           ]}
@@ -114,54 +131,159 @@ export function FieldReviewView() {
         />
       ) : (
         <Card pad="none" className="overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 px-5 py-3">
+          <div className="border-b border-white/5 px-5 py-3">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-              {openOnly ? 'Needing a decision' : 'All reports'}
+              {tab === 'access' ? 'Access requests' : QUEUE_LABEL[tab]}
             </h3>
-            <Button size="sm" variant="ghost" onClick={() => setOpenOnly(!openOnly)}>
-              {openOnly ? 'Show all' : 'Show only open'}
-            </Button>
           </div>
           {rows === null ? (
             <p className="px-5 py-6 text-center text-sm text-slate-500">Loading…</p>
           ) : !shown.length ? (
             <EmptyState
-              title={openOnly ? 'Nothing waiting' : 'No reports yet'}
-              hint={openOnly
-                ? 'Every submitted report has been decided. Switch to “Show all” for the history.'
-                : 'Field officers have not sent anything yet. Appoint them under Command Center → Field Intelligence Officers.'}
+              title="Nothing here"
+              hint={tab === 'mine'
+                ? 'Nothing is assigned to you. Claim a report from the Unclaimed queue.'
+                : 'No reports match this queue. Try “All”.'}
               className="m-4"
             />
           ) : (
             <ul className="divide-y divide-white/5">
               {shown.map((r) => (
-                <li key={r.id}>
-                  <button onClick={() => setSelected(r.id)}
-                    className="w-full px-5 py-3 text-left transition hover:bg-white/5">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-mono text-sm text-slate-300">{submissionRef(r)}</span>
-                      <span className="flex items-center gap-2">
-                        <Badge tone="neutral">{r.snap_agency}</Badge>
-                        <Badge tone="accent">{jurisdictionLabel(r.jurisdiction)}</Badge>
-                        <Badge tone={r.status === 'needs_info' ? 'warn' : 'accent'}>
-                          {fieldStatusLabel(r.status)}
-                        </Badge>
-                      </span>
-                    </div>
-                    <p className="mt-1 truncate text-sm text-white">{r.summary}</p>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      {[r.snap_callsign, r.snap_rank].filter(Boolean).join(' · ')}
-                      {r.submitted_at && ` · sent ${timeAgo(r.submitted_at)}`}
-                      {reviewPrompt(r) && ` · ${reviewPrompt(r)}`}
-                    </p>
-                  </button>
-                </li>
+                <ReportCard key={r.id} r={r} counts={counts[r.id]} me={me}
+                  isCommand={isCommand}
+                  onOpen={() => setSelected(r.id)}
+                  onChanged={() => void refresh()} />
               ))}
             </ul>
           )}
         </Card>
       )}
     </div>
+  )
+}
+
+/** One report as it reads in a queue: what it is, what is in it, and who has
+ *  it. Claim is offered here rather than only inside the report because the
+ *  decision to pick something up is made from the list. */
+function ReportCard({ r, counts, me, isCommand, onOpen, onChanged }: {
+  r: FieldSubmissionRow
+  counts: SubmissionCounts | undefined
+  me: string | null
+  isCommand: boolean
+  onOpen: () => void
+  onChanged: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const summary = countsSummary(counts)
+  const holder = r.assigned_to ? (officerName(r.assigned_to) ?? 'another investigator') : null
+
+  const claim = async () => {
+    setBusy(true)
+    const err = await claimSubmission(r.id)
+    setBusy(false)
+    if (err) { toast(err, 'danger'); return }
+    toast('Claimed. It is yours now.', 'success')
+    onChanged()
+  }
+
+  return (
+    <li className="px-5 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <button onClick={onOpen} className="font-mono text-sm text-slate-300 hover:text-white">
+          {submissionRef(r)}
+        </button>
+        <span className="flex flex-wrap items-center gap-2">
+          <Badge tone="neutral">{r.snap_agency}</Badge>
+          <Badge tone="accent">{jurisdictionLabel(r.jurisdiction)}</Badge>
+          <Badge tone={r.status === 'needs_info' ? 'warn' : 'accent'}>
+            {fieldStatusLabel(r.status)}
+          </Badge>
+        </span>
+      </div>
+      <button onClick={onOpen} className="mt-1 block w-full text-left">
+        <p className="truncate text-sm text-white">{r.summary}</p>
+        <p className="mt-0.5 text-xs text-slate-500">
+          {[r.snap_callsign, r.snap_rank].filter(Boolean).join(' · ')}
+          {r.submitted_at && ` · sent ${timeAgo(r.submitted_at)}`}
+          {reviewPrompt(r) && ` · ${reviewPrompt(r)}`}
+        </p>
+        {summary && <p className="mt-0.5 text-xs text-slate-400">{summary}</p>}
+      </button>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <span className="text-xs text-slate-500">
+          {holder
+            ? `${r.assigned_to === me ? 'Yours' : holder}${r.assigned_at ? ` since ${timeAgo(r.assigned_at)}` : ''}`
+            : 'Unclaimed'}
+        </span>
+        <span className="flex-1" />
+        <Button size="sm" variant="ghost" onClick={onOpen}>Open</Button>
+        {!r.assigned_to && (
+          <Button size="sm" variant="primary" disabled={busy} onClick={() => void claim()}>
+            {busy ? 'Claiming…' : 'Claim'}
+          </Button>
+        )}
+        {isCommand && <AssignButton submission={r} onChanged={onChanged} />}
+      </div>
+    </li>
+  )
+}
+
+/** Command handing a report out. The eligible list is drawn from the roster and
+ *  the RPC re-checks it: a detective who cannot see the report's jurisdiction is
+ *  refused server-side even if this list somehow offered them. */
+function AssignButton({ submission, onChanged }: {
+  submission: FieldSubmissionRow
+  onChanged: () => void
+}) {
+  const profiles = useProfilesStore((s) => s.profiles)
+  const fetchProfiles = useProfilesStore((s) => s.fetch)
+  const [open, setOpen] = useState(false)
+  const [who, setWho] = useState('')
+
+  useEffect(() => {
+    const t = window.setTimeout(() => { void fetchProfiles() }, 0)
+    return () => window.clearTimeout(t)
+  }, [fetchProfiles])
+
+  const eligible = profiles.filter((p) => p.active && !p.removed_at
+    && p.id !== submission.assigned_to)
+
+  const send = async () => {
+    if (!who) { toast('Choose an investigator.', 'warn'); return }
+    let reason: string | undefined
+    if (submission.assigned_to) {
+      const said = await uiPrompt(
+        `${officerName(submission.assigned_to) ?? 'The current investigator'} has this report. Say why it is moving.`,
+        { title: 'Reassign', placeholder: 'e.g. Workload — they are on the Vespucci case.', confirmText: 'Reassign' },
+      )
+      if (!said?.trim()) return
+      reason = said
+    }
+    const err = await assignSubmission(submission.id, who, reason)
+    if (err) { toast(err, 'danger'); return }
+    toast('Assigned.', 'success')
+    setOpen(false); setWho('')
+    onChanged()
+  }
+
+  if (!open) {
+    return (
+      <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
+        {submission.assigned_to ? 'Reassign' : 'Assign'}
+      </Button>
+    )
+  }
+  return (
+    <span className="flex items-center gap-2">
+      <Select value={who} onChange={(e) => setWho(e.target.value)} className="text-xs">
+        <option value="">Investigator…</option>
+        {eligible.map((p) => (
+          <option key={p.id} value={p.id}>{p.display_name || p.id}</option>
+        ))}
+      </Select>
+      <Button size="sm" variant="primary" onClick={() => void send()}>Confirm</Button>
+      <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+    </span>
   )
 }
 
@@ -177,17 +299,18 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
   const [verdicts, setVerdicts] = useState<FieldVerdictRow[]>([])
   const [links, setLinks] = useState<FieldClaimLinkRow[]>([])
   const [progress, setProgress] = useState<ClaimProgress | null>(null)
+  const [history, setHistory] = useState<FieldAssignmentRow[]>([])
   const [next, setNext] = useState('')
   const [note, setNote] = useState('')
   const id = submission.id
 
   const load = useCallback(async () => {
-    const [p, e, m, n, v, pr, lk] = await Promise.all([
+    const [p, e, m, n, v, pr, lk, hist] = await Promise.all([
       loadSubmissionParts(id), loadEvidence(id), loadMessages(id), loadReviewNotes(id),
-      loadVerdicts(id), loadClaimProgress(id), loadClaimLinks(id),
+      loadVerdicts(id), loadClaimProgress(id), loadClaimLinks(id), loadAssignments(id),
     ])
     setParts(p); setEvidence(e); setMessages(m); setNotes(n)
-    setVerdicts(v); setProgress(pr); setLinks(lk)
+    setVerdicts(v); setProgress(pr); setLinks(lk); setHistory(hist)
   }, [id])
 
   useEffect(() => {
@@ -215,6 +338,16 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
     )
     if (!q?.trim()) return
     await after(await askOfficer(id, q), 'Question sent to the officer.')
+  }
+
+  const release = async () => {
+    const why = await uiPrompt(
+      'Whoever picks this up next reads this. "Not my area" and "I know the suspect" '
+      + 'are very different reasons to hand a report back.',
+      { title: 'Release this report', placeholder: 'Why are you releasing it?', confirmText: 'Release' },
+    )
+    if (!why?.trim()) return
+    await after(await releaseSubmission(id, why), 'Released. It is back in the unclaimed queue.')
   }
 
   const edges = reviewNext(submission.status)
@@ -284,14 +417,48 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
       )}
 
       <Card>
+        <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+          Assignment
+        </h4>
+        <p className="mt-1 text-sm text-slate-300">
+          {submission.assigned_to
+            ? `${officerName(submission.assigned_to) ?? 'An investigator'} has this report`
+              + (submission.assigned_at ? ` — since ${fmtDateTime(submission.assigned_at)}` : '')
+            : 'Nobody has this report yet.'}
+        </p>
+        {/* Append-only server-side. A handover adds a line; it never edits one,
+            so who held the report when a decision was made stays readable. */}
+        {history.length > 0 && (
+          <ul className="mt-3 space-y-1 border-l border-white/10 pl-3">
+            {history.map((a) => (
+              <li key={a.id} className="text-xs text-slate-400">
+                <span className="text-slate-300">{assignmentLine(a, (u) => officerName(u) ?? 'Someone')}</span>
+                {' · '}{fmtDateTime(a.created_at)}
+                {a.reason && <span className="block text-slate-500">“{a.reason}”</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card>
         <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Decide</h4>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button size="sm" variant="ghost"
-            onClick={() => void (async () => {
-              await after(await claimSubmission(id), 'Assigned to you.')
-            })()}>
-            Take it
-          </Button>
+          {/* Only one of these is ever the honest offer: an unheld report can be
+              taken, a held one can be handed back. Showing "Take it" on a report
+              somebody else has would be an offer the database refuses. */}
+          {!submission.assigned_to ? (
+            <Button size="sm" variant="ghost"
+              onClick={() => void (async () => {
+                await after(await claimSubmission(id), 'Assigned to you.')
+              })()}>
+              Take it
+            </Button>
+          ) : (
+            <Button size="sm" variant="ghost" onClick={() => void release()}>
+              Release
+            </Button>
+          )}
           <Button size="sm" variant="ghost" onClick={() => void ask()}>Ask the officer</Button>
           <Button size="sm" variant="ghost"
             onClick={() => void (async () => {

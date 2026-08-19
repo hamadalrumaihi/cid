@@ -2642,6 +2642,47 @@ export type Database = {
           },
         ]
       }
+      field_assignments: {
+        Row: {
+          action: string
+          actor_id: string
+          created_at: string
+          from_user: string | null
+          id: string
+          reason: string | null
+          submission_id: string
+          to_user: string | null
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          created_at?: string
+          from_user?: string | null
+          id?: string
+          reason?: string | null
+          submission_id: string
+          to_user?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          created_at?: string
+          from_user?: string | null
+          id?: string
+          reason?: string | null
+          submission_id?: string
+          to_user?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_assignments_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       field_claim_links: {
         Row: {
           claim_location_id: string | null
@@ -3172,6 +3213,7 @@ export type Database = {
       }
       field_submissions: {
         Row: {
+          assigned_at: string | null
           assigned_to: string | null
           created_at: string
           details: string | null
@@ -3193,6 +3235,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          assigned_at?: string | null
           assigned_to?: string | null
           created_at?: string
           details?: string | null
@@ -3214,6 +3257,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          assigned_at?: string | null
           assigned_to?: string | null
           created_at?: string
           details?: string | null
@@ -11204,6 +11248,26 @@ export type Database = {
       }
       field_submission_decide: {
         Args: { p_note?: string; p_status: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_assign: {
+        Args: { p_reason?: string; p_submission: string; p_user: string }
+        Returns: undefined
+      }
+      field_submission_counts: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          evidence: number
+          items: number
+          locations: number
+          orgs: number
+          persons: number
+          submission_id: string
+          vehicles: number
+        }[]
+      }
+      field_submission_release: {
+        Args: { p_reason: string; p_submission: string }
         Returns: undefined
       }
       field_submission_publish: {

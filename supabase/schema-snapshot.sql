@@ -931,6 +931,24 @@ alter table public.field_officers add constraint field_officers_ended_by_fkey FO
 alter table public.field_officers add constraint field_officers_agency_check CHECK ((agency = ANY (ARRAY['SAHP'::text, 'BCSO'::text, 'LSPD'::text])));
 alter table public.field_officers enable row level security;
 
+create table public.field_assignments (
+  id uuid not null default gen_random_uuid(),
+  submission_id uuid not null,
+  action text not null,
+  actor_id uuid not null,
+  from_user uuid,
+  to_user uuid,
+  reason text,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.field_assignments add constraint field_assignments_pkey PRIMARY KEY (id);
+alter table public.field_assignments add constraint field_assignments_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.field_submissions(id) ON DELETE CASCADE;
+alter table public.field_assignments add constraint field_assignments_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id);
+alter table public.field_assignments add constraint field_assignments_from_user_fkey FOREIGN KEY (from_user) REFERENCES public.profiles(id);
+alter table public.field_assignments add constraint field_assignments_to_user_fkey FOREIGN KEY (to_user) REFERENCES public.profiles(id);
+alter table public.field_assignments add constraint field_assignments_action_check CHECK ((action = ANY (ARRAY['claimed'::text, 'released'::text, 'assigned'::text, 'reassigned'::text])));
+alter table public.field_assignments enable row level security;
+
 create table public.field_claim_links (
   id uuid not null default gen_random_uuid(),
   submission_id uuid not null,
@@ -1184,6 +1202,7 @@ create table public.field_submissions (
   mdt_reference text,
   submitted_at timestamp with time zone,
   assigned_to uuid,
+  assigned_at timestamp with time zone,
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now()
 );
