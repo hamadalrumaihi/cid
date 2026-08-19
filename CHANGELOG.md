@@ -8,6 +8,80 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Patrol can now send intelligence to CID
+
+Second phase of the Field Intelligence portal. P1 established who an external
+officer is and proved they can reach nothing; this gives them something to do.
+
+**A submission is a report with parts.** Several people, several vehicles, an
+organization, a stash house, a seizure — each stored as its own row rather than
+buried in a paragraph, because a reviewer decides about each one separately and
+a plate that becomes searchable is worth more than the same plate in prose. Six
+tables: `field_submissions` plus persons, vehicles, orgs, locations and items.
+
+**Why not `intelligence_tips`.** It already exists, is empty, and already has a
+triage lifecycle and entity links, so reusing it was the obvious move. Two
+things ruled it out. Structurally a tip is one flat record and a field report is
+not — flattening loses what makes it useful, and widening a tip into a report
+distorts the model CID already uses. And `intelligence_tips_ins` requires
+`private.is_active()`, so letting a field officer insert one means editing that
+policy — which is exactly the pattern P1 identified as how this leaks. **Not one
+existing policy is touched here either.** Integration happens at review time
+(P4/P6), where accepted claims become tips and links carrying the submission id
+as provenance. Nothing becomes intelligence on its own.
+
+**Reviewer-private notes are deliberately absent.** P1 proved a column-level
+revoke cannot subtract from a table-level grant, and revoking the table grant
+locks out command too. So internal notes are not columns on these tables — they
+get their own table with its own policy in P4. Until then there is nothing to
+leak.
+
+**Drafts are a status, not a second table.** The draft row is created the moment
+the form opens, so a part added before the first save has a parent and a refresh
+cannot lose it. Edits autosave a second after typing stops. **A draft carries no
+FI number** — numbers are issued at submit, so the series is not full of holes
+from reports nobody sent.
+
+**Progressive disclosure.** The form starts as four questions — what, when,
+where, your report number. Fields for a person, vehicle, organization, location
+or seizure appear only when the officer says there is one. An officer who saw a
+car and nothing else fills in a plate and sends it. Nothing is required except a
+summary: a vehicle with no plate or a person with no name is still worth having,
+and demanding the rest would either lose the report or invite invention.
+
+**Weights keep what the officer typed.** `2.4 lb` stores as `2.4` + `lb`; the
+normalized `1088.62 g` is a *generated* column, so the original can never be
+overwritten by it. A number without a unit is refused — a bare `2.4` is not a
+measurement.
+
+**Direct observation and hearsay are different, and neither means verified.**
+Every claim carries `basis`: saw it myself / was told / not stated.
+
+Probed live with two appointed officers and a CID detective, rolled back, with
+`GET DIAGNOSTICS` row counts because RLS refuses by matching zero rows:
+
+| attempt | result |
+| --- | --- |
+| client sends `officer_id`=a detective, agency `LSPD`, callsign `CHIEF` | stored as **the caller, SAHP** — client input discarded, not validated |
+| `2.4 lb` | `1088.62 g`, original still `2.4 lb` |
+| draft | no FI number |
+| submit | `FI-2026-0001` |
+| officer edits a sent report | refused |
+| officer edits a sent report's vehicle | **0 rows — silent refusal, no error** |
+| officer self-promotes to `intel_added` | refused |
+| officer inserts a pre-verified report | refused |
+| submit with an empty summary | refused by check constraint |
+| officer B reads officer A's work | 0 submissions, 0 parts |
+| CID reads drafts | 0 |
+| CID reviews a draft | 0 rows |
+| CID edits the officer's account | refused |
+| CID sets `reviewing` | 1 row |
+| CID creates a submission | refused — not an appointed officer |
+
+One refusal message was wrong and got fixed: a draft moving to `intel_added` was
+told *"a submitted report cannot be edited"*, which is a true refusal and a false
+explanation. It now says a draft can only be saved or submitted.
+
 ### Field officers — patrol can sign in without becoming CID
 
 First phase of the Field Intelligence Submission Portal: the identity and the
