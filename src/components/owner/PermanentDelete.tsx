@@ -27,7 +27,7 @@
  *  See docs/AUTHORIZATION.md §4 and
  *  supabase/migrations/20260726010000_phase_b_permanent_deletion.sql.
  */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { Json } from '@/lib/database.types'
 import { rpc } from '@/lib/db'
 import { useProfilesStore } from '@/lib/profiles'
@@ -64,6 +64,9 @@ export interface DeletePreview {
 
 interface ArmedToken {
   token: string
+  /** The server's five-minute window. Nothing on screen counts it down any
+   *  more: the token is minted and spent inside one action, so it never sits
+   *  around long enough to expire. */
   expires_at: string
   display_name: string
 }
@@ -100,45 +103,41 @@ export function PermanentDelete({ targetId, targetName, renderPreview, onDeleted
   const [open, setOpen] = useState(false)
   const [preview, setPreview] = useState<DeletePreview | null>(null)
   const [reason, setReason] = useState('')
-  const [armed, setArmed] = useState<ArmedToken | null>(null)
-  const [confirmText, setConfirmText] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [nowTs, setNowTs] = useState(() => Date.now())
-
-  // Token-expiry countdown — ticks only while armed.
-  useEffect(() => {
-    if (!armed) return
-    const t = window.setInterval(() => setNowTs(Date.now()), 1000)
-    return () => window.clearInterval(t)
-  }, [armed])
-
-  const secondsLeft = armed ? Math.max(0, Math.floor((Date.parse(armed.expires_at) - nowTs) / 1000)) : 0
-  const expectedConfirm = armed ? `DELETE ${armed.display_name}` : ''
-  const confirmOk = !!armed && confirmText === expectedConfirm
+  const [busy, setBusy] = useState(false)
 
   const doPreview = async () => {
-    setError(null); setArmed(null); setConfirmText('')
+    setError(null)
     const res = await rpc('permanent_delete_preview', { p_target: targetId })
     if (res.error) { setPreview(null); setError(res.error.message); return }
     setPreview(res.data as unknown as DeletePreview)
   }
 
-  const doArm = async () => {
+  // One action. The server still runs its two-phase contract underneath —
+  // permanent_delete_arm mints a single-use token bound to this target and
+  // permanent_delete_execute spends it — because that is what writes the ledger
+  // entry and re-checks eligibility at the moment of the write. What is gone is
+  // the ARMING as something the Owner performs: no second button, no five-minute
+  // countdown to race, no name to retype. The preview above already says what
+  // will happen, and the reason below is what the audit keeps.
+  const doDelete = async () => {
     setError(null)
-    const res = await rpc('permanent_delete_arm', { p_target: targetId, p_reason: reason })
-    if (res.error) { setError(res.error.message); return }
-    setArmed(res.data as unknown as ArmedToken)
-    setConfirmText('')
-  }
-
-  const doExecute = async () => {
-    if (!armed) return
-    setError(null)
-    const res = await rpc('permanent_delete_execute', { p_token: armed.token, p_confirm: confirmText })
+    setBusy(true)
+    const armRes = await rpc('permanent_delete_arm', { p_target: targetId, p_reason: reason })
+    if (armRes.error) { setBusy(false); setError(armRes.error.message); return }
+    const token = armRes.data as unknown as ArmedToken
+    const res = await rpc('permanent_delete_execute', {
+      p_token: token.token,
+      // The server's own phrasing, built from the name it just handed back
+      // rather than from anything on screen — if the two ever disagree, the
+      // server's copy is the one that decides and the delete fails closed.
+      p_confirm: `DELETE ${token.display_name}`,
+    })
+    setBusy(false)
     if (res.error) { setError(res.error.message); return }
     const summary = res.data as unknown as { display_name: string; ledger_id: string; references: Json }
     toast(`${summary.display_name} was permanently deleted — ledger entry ${summary.ledger_id}.`, 'success')
-    setOpen(false); setPreview(null); setArmed(null); setConfirmText(''); setReason('')
+    setOpen(false); setPreview(null); setReason('')
     void useProfilesStore.getState().fetch()
     onDeleted?.()
   }
@@ -192,44 +191,14 @@ export function PermanentDelete({ targetId, targetName, renderPreview, onDeleted
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="danger" disabled={!preview?.eligible || !reason.trim()} onAction={doArm}>
-          Arm permanent deletion
+        <Button variant="danger" disabled={!preview?.eligible || !reason.trim() || busy}
+          onAction={doDelete}>
+          {busy ? 'Deleting…' : `Permanently delete ${targetName}`}
         </Button>
-        <Button variant="ghost" onClick={() => { setOpen(false); setArmed(null); setError(null) }}>
+        <Button variant="ghost" onClick={() => { setOpen(false); setError(null) }}>
           Cancel
         </Button>
-        {armed && secondsLeft > 0 && (
-          <span className="text-xs text-amber-300">
-            Armed for <b className="font-mono">
-              {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}
-            </b> — single-use, expires after 5 minutes.
-          </span>
-        )}
-        {armed && secondsLeft === 0 && (
-          <span className="text-xs text-rose-300">The token expired — arm again.</span>
-        )}
       </div>
-
-      {armed && (
-        <div>
-          <label htmlFor={`pd-confirm-${targetId}`} className={labelCls}>
-            Type <span className="font-mono text-rose-300">{expectedConfirm}</span> to confirm
-          </label>
-          <input
-            id={`pd-confirm-${targetId}`} type="text" value={confirmText}
-            onChange={(e) => setConfirmText(e.target.value)}
-            disabled={secondsLeft === 0}
-            autoComplete="off" spellCheck={false}
-            placeholder={expectedConfirm}
-            className={inputCls}
-          />
-          <div className="mt-2">
-            <Button variant="danger" disabled={!confirmOk || secondsLeft === 0} onAction={doExecute}>
-              Permanently delete {targetName}
-            </Button>
-          </div>
-        </div>
-      )}
 
       {error && <ServerError message={error} />}
     </div>

@@ -1,13 +1,13 @@
 /** v1.39 — Surveillance & Intelligence domain: authorization pipeline,
- *  observation walls, tips, and the dormant bridge
+ *  observation walls, and the dormant bridge
  *  (migration 20260812120000_surveillance_domain.sql).
  *
  *  The walls under test: surveillance_targets is RPC-only (no client write
  *  policies) and reads follow private.can_access_case; observations are
  *  ordinary casework but the non-definer guard trigger stamps browser writes
  *  (never automated provenance, never pre-verified); restricted observations
- *  add a stricter wall on top of case access; tip source identity is stricter
- *  than the tip; the inbound bridge is service_role-only by construction.
+ *  add a stricter wall on top of case access; the inbound bridge is
+ *  service_role-only by construction.
  *
  *  Pins:
  *   - surveillance_request_create(p_submit) → pending_approval; a DIRECT
@@ -27,12 +27,6 @@
  *   - observation_review: a case-access member verifies → verified + a
  *     surveillance_review_history row; observation_promote is rejected while
  *     unverified (/VERIFIED/) and stamps promoted_at after verification;
- *   - TIP GUARD + SOURCE WALL: inserting a tip with status 'actioned' +
- *     assigned_to is reset to 'new'/null; intelligence_tip_sources rows are
- *     invisible to non-handler/non-assigned/non-command members and visible
- *     to command; tip_triage requires command/assignment (plain detective
- *     rejected); director 'accept' with p_case + p_create_observation actions
- *     the tip and mints an UNVERIFIED observation;
  *   - bridge_ingest_event and mdt_bridge_ack are service_role-only
  *     (authenticated call → permission denied);
  *   - surveillance_alert_rules: readable by active members; a detective
@@ -47,7 +41,7 @@
  *  self-approval pin), director (SAB director — command authorizer), target
  *  (throwaway, reset to detective/LSB — the same-bureau case-access member).
  *  rls_test_cleanup() runs at start AND teardown; the 20260812120000 re-emit
- *  sweeps surveillance rows + tips + rls-test% bridge events (cases cascade
+ *  sweeps surveillance rows + rls-test% bridge events (cases cascade
  *  their surveillance children). The fixture person is deleted best-effort by
  *  the director (persons are not swept). Requires migration 20260812120000. */
 
@@ -80,7 +74,6 @@ describe.skipIf(!enabled)('v1.39 — surveillance & intelligence domain (live)',
   let leadReqId = ''      // lead's request — the self-approval + lifecycle pin
   let obsId = ''          // manual observation (guard + review/promote pins)
   let restrictedObsId = ''// restricted observation — the stricter wall pin
-  let tipId = ''          // intelligence tip (guard + source wall + triage)
 
   const resetTarget = (role: string, division: string) =>
     director.rpc('rls_test_reset_member', {
@@ -285,50 +278,13 @@ describe.skipIf(!enabled)('v1.39 — surveillance & intelligence domain (live)',
     expect(prom.data.promoted_by).not.toBeNull()
   })
 
-  /* ── 9. tips: guard, source wall, triage authority ─────────────────────── */
-
-  it('tip guard + source wall + triage: detective rejected, director accept mints an unverified observation', async () => {
-    // Guard: a browser insert cannot pre-action or pre-assign a tip.
-    const ins = await lsb.from('intelligence_tips')
-      .insert({
-        summary: `[rls-test] v139 tip ${tag}`, details: 'RLS pin: triage queue',
-        status: 'actioned', assigned_to: targetId,
-      })
-      .select('id, status, assigned_to')
-    expect(ins.error, ins.error?.message).toBeNull()
-    expect(ins.data![0]).toMatchObject({ status: 'new', assigned_to: null })
-    tipId = ins.data![0].id
-
-    // Source identity: creator-only insert; stricter read wall than the tip.
-    const src = await lsb.from('intelligence_tip_sources')
-      .insert({ tip_id: tipId, source_name: `[rls-test] v139 source ${tag}` })
-      .select('tip_id')
-    expect(src.error, src.error?.message).toBeNull()
-    const walled = await target.from('intelligence_tip_sources').select('tip_id').eq('tip_id', tipId)
-    expect(walled.error).toBeNull()
-    expect(walled.data ?? []).toHaveLength(0) // neither creator/assigned/command
-    const cmd = await director.from('intelligence_tip_sources').select('tip_id').eq('tip_id', tipId)
-    expect(cmd.error).toBeNull()
-    expect(cmd.data).toHaveLength(1)
-
-    // Triage authority: the plain detective (creator, unassigned) is rejected.
-    const no = await lsb.rpc('tip_triage', { p_tip: tipId, p_action: 'accept' })
-    expect(no.error).not.toBeNull()
-    expect(no.error!.message).toMatch(/command authority|assignment/i)
-
-    // Director accepts into the case, minting an observation — UNVERIFIED.
-    const ok = await director.rpc('tip_triage', {
-      p_tip: tipId, p_action: 'accept', p_case: caseId, p_create_observation: true,
-    })
-    expect(ok.error, ok.error?.message).toBeNull()
-    expect(ok.data.status).toBe('actioned')
-    expect(ok.data.related_observation_id).not.toBeNull()
-    const obs = await lsb.from('surveillance_observations')
-      .select('verification_status, source_ref').eq('id', ok.data.related_observation_id)
-    expect(obs.error).toBeNull()
-    expect(obs.data).toHaveLength(1)
-    expect(obs.data![0].verification_status).toBe('unverified')
-  })
+  /* ── 9. (was: tips guard, source wall, triage authority) ────────────────
+     Removed with intelligence_tips. The pins it held now live on
+     field_submissions: the insert guard is exercised by the Field Intelligence
+     suite, and the source wall is stronger than a policy there --
+     field_submission_sources has RLS on with no policy and no grants, so no
+     role can read it at all and there is nothing left for a SELECT test to
+     assert against. field_submission_source_reveal() is the only way in. */
 
   /* ── 10–11. the dormant bridge is service_role-only ────────────────────── */
 

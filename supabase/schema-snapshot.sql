@@ -1501,82 +1501,6 @@ alter table public.indicators add constraint indicators_kind_check CHECK ((kind 
 alter table public.indicators add constraint indicators_value_check CHECK ((length(btrim(value)) > 0));
 alter table public.indicators enable row level security;
 
-create table public.intelligence_tip_links (
-  id uuid not null default gen_random_uuid(),
-  tip_id uuid not null,
-  kind text not null,
-  ref_id uuid not null,
-  note text,
-  created_by uuid default auth.uid(),
-  created_at timestamp with time zone not null default now()
-);
-alter table public.intelligence_tip_links add constraint intelligence_tip_links_pkey PRIMARY KEY (id);
-alter table public.intelligence_tip_links add constraint intelligence_tip_links_tip_id_kind_ref_id_key UNIQUE (tip_id, kind, ref_id);
-alter table public.intelligence_tip_links add constraint intelligence_tip_links_tip_id_fkey FOREIGN KEY (tip_id) REFERENCES public.intelligence_tips(id) ON DELETE CASCADE;
-alter table public.intelligence_tip_links add constraint intelligence_tip_links_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
-alter table public.intelligence_tip_links add constraint intelligence_tip_links_kind_check CHECK ((kind = ANY (ARRAY['person'::text, 'gang'::text, 'place'::text, 'vehicle'::text, 'account'::text])));
-alter table public.intelligence_tip_links enable row level security;
-
-create table public.intelligence_tip_sources (
-  tip_id uuid not null,
-  source_name text,
-  source_contact text,
-  handler_notes text,
-  created_by uuid default auth.uid(),
-  created_at timestamp with time zone not null default now()
-);
-alter table public.intelligence_tip_sources add constraint intelligence_tip_sources_pkey PRIMARY KEY (tip_id);
-alter table public.intelligence_tip_sources add constraint intelligence_tip_sources_tip_id_fkey FOREIGN KEY (tip_id) REFERENCES public.intelligence_tips(id) ON DELETE CASCADE;
-alter table public.intelligence_tip_sources add constraint intelligence_tip_sources_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
-alter table public.intelligence_tip_sources enable row level security;
--- SENSITIVE source identity: deliberately a stricter wall than the tip itself
--- (handler/assignee/command/owner only — never mere tip or case visibility).
-
-create table public.intelligence_tips (
-  id uuid not null default gen_random_uuid(),
-  kind text not null default 'tip'::text,
-  source_type text not null default 'cid_detective'::text,
-  summary text not null,
-  details text,
-  observed_at timestamp with time zone,
-  location_text text,
-  place_id uuid,
-  urgency text not null default 'medium'::text,
-  reliability text not null default 'unverified'::text,
-  case_id uuid,
-  operation_id uuid,
-  related_bolo text,
-  status text not null default 'new'::text,
-  assigned_to uuid,
-  triage_notes text,
-  disposition text,
-  decided_by uuid,
-  decided_at timestamp with time zone,
-  related_observation_id uuid,
-  field_submission_id uuid,
-  created_by uuid default auth.uid(),
-  created_at timestamp with time zone not null default now(),
-  updated_at timestamp with time zone not null default now()
-);
-alter table public.intelligence_tips add constraint intelligence_tips_pkey PRIMARY KEY (id);
-alter table public.intelligence_tips add constraint intelligence_tips_field_submission_id_fkey FOREIGN KEY (field_submission_id) REFERENCES public.field_submissions(id) ON DELETE SET NULL;
-alter table public.intelligence_tips add constraint intelligence_tips_place_id_fkey FOREIGN KEY (place_id) REFERENCES public.places(id) ON DELETE SET NULL;
-alter table public.intelligence_tips add constraint intelligence_tips_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
-alter table public.intelligence_tips add constraint intelligence_tips_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES public.operations(id) ON DELETE SET NULL;
-alter table public.intelligence_tips add constraint intelligence_tips_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.profiles(id);
-alter table public.intelligence_tips add constraint intelligence_tips_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id);
-alter table public.intelligence_tips add constraint intelligence_tips_related_observation_id_fkey FOREIGN KEY (related_observation_id) REFERENCES public.surveillance_observations(id) ON DELETE SET NULL;
-alter table public.intelligence_tips add constraint intelligence_tips_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
-alter table public.intelligence_tips add constraint intelligence_tips_kind_check CHECK ((kind = ANY (ARRAY['tip'::text, 'patrol_submission'::text])));
-alter table public.intelligence_tips add constraint intelligence_tips_source_type_check CHECK ((source_type = ANY (ARRAY['cid_detective'::text, 'patrol'::text, 'confidential_source'::text, 'imported'::text, 'system'::text, 'fivem_bridge'::text])));
-alter table public.intelligence_tips add constraint intelligence_tips_summary_check CHECK ((length(btrim(summary)) > 0));
-alter table public.intelligence_tips add constraint intelligence_tips_urgency_check CHECK ((urgency = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text])));
-alter table public.intelligence_tips add constraint intelligence_tips_reliability_check CHECK ((reliability = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text])));
-alter table public.intelligence_tips add constraint intelligence_tips_status_check CHECK ((status = ANY (ARRAY['new'::text, 'reviewing'::text, 'actioned'::text, 'closed'::text, 'rejected'::text])));
-alter table public.intelligence_tips enable row level security;
--- Triage/lifecycle columns are frozen for direct writers by
--- private.guard_intelligence_tip(); they move only through tip_triage().
-
 create table public.justice_membership_request_history (
   id uuid not null default gen_random_uuid(),
   request_id uuid not null,
@@ -4336,7 +4260,6 @@ CREATE INDEX field_officers_agency_idx ON public.field_officers USING btree (age
 CREATE INDEX field_officers_appointed_by_fkey_idx ON public.field_officers USING btree (appointed_by);
 CREATE INDEX field_officers_ended_by_fkey_idx ON public.field_officers USING btree (ended_by);
 CREATE INDEX field_claim_links_submission_idx ON public.field_claim_links USING btree (submission_id);
-CREATE INDEX intelligence_tips_field_submission_idx ON public.intelligence_tips USING btree (field_submission_id) WHERE (field_submission_id IS NOT NULL);
 CREATE UNIQUE INDEX field_claim_verdicts_person_uk ON public.field_claim_verdicts USING btree (person_id) WHERE (person_id IS NOT NULL);
 CREATE UNIQUE INDEX field_claim_verdicts_vehicle_uk ON public.field_claim_verdicts USING btree (vehicle_id) WHERE (vehicle_id IS NOT NULL);
 CREATE UNIQUE INDEX field_claim_verdicts_org_uk ON public.field_claim_verdicts USING btree (org_id) WHERE (org_id IS NOT NULL);
@@ -4377,18 +4300,6 @@ CREATE INDEX gangs_notes_trgm ON public.gangs USING gin (notes extensions.gin_tr
 CREATE INDEX indicators_case_idx ON public.indicators USING btree (case_id);
 CREATE INDEX indicators_created_by_fkey_idx ON public.indicators USING btree (created_by);
 CREATE INDEX indicators_value_idx ON public.indicators USING btree (lower(btrim(value)));
-CREATE INDEX intelligence_tip_links_tip_idx ON public.intelligence_tip_links USING btree (tip_id);
-CREATE INDEX intelligence_tip_links_ref_idx ON public.intelligence_tip_links USING btree (kind, ref_id);
-CREATE INDEX intelligence_tip_links_created_by_idx ON public.intelligence_tip_links USING btree (created_by);
-CREATE INDEX intelligence_tip_sources_created_by_idx ON public.intelligence_tip_sources USING btree (created_by);
-CREATE INDEX intelligence_tips_status_idx ON public.intelligence_tips USING btree (status, created_at DESC);
-CREATE INDEX intelligence_tips_case_idx ON public.intelligence_tips USING btree (case_id);
-CREATE INDEX intelligence_tips_assigned_idx ON public.intelligence_tips USING btree (assigned_to);
-CREATE INDEX intelligence_tips_place_idx ON public.intelligence_tips USING btree (place_id);
-CREATE INDEX intelligence_tips_operation_idx ON public.intelligence_tips USING btree (operation_id);
-CREATE INDEX intelligence_tips_decided_by_idx ON public.intelligence_tips USING btree (decided_by);
-CREATE INDEX intelligence_tips_related_obs_idx ON public.intelligence_tips USING btree (related_observation_id);
-CREATE INDEX intelligence_tips_created_by_idx ON public.intelligence_tips USING btree (created_by);
 CREATE INDEX justice_membership_request_history_actor_id_idx ON public.justice_membership_request_history USING btree (actor_id);
 CREATE INDEX justice_membership_request_history_request_id_idx ON public.justice_membership_request_history USING btree (request_id);
 CREATE INDEX justice_membership_requests_decided_by_idx ON public.justice_membership_requests USING btree (decided_by);
@@ -7750,7 +7661,6 @@ returns jsonb language plpgsql security definer set search_path to '';
 -- last sign-in time come back null for anybody who is not command.
 -- Grading a record: a reviewer's judgement of urgency and source reliability,
 -- audited. Not the author's -- somebody grading their own account grades it
--- high. Vocabularies carried unchanged from the retired intelligence_tips.
 create or replace function public.field_submission_grade(
   p_submission uuid, p_urgency text default null, p_reliability text default null)
 returns void language plpgsql security definer set search_path to '';
@@ -8768,56 +8678,15 @@ create policy indicators_upd on public.indicators
   using (private.is_active())
   with check (private.is_active());
 
-create policy intelligence_tip_links_del on public.intelligence_tip_links
-  as permissive for delete to authenticated
-  using ((EXISTS ( SELECT 1
-   FROM public.intelligence_tips t
-  WHERE (t.id = intelligence_tip_links.tip_id))));
 
-create policy intelligence_tip_links_ins on public.intelligence_tip_links
-  as permissive for insert to authenticated
-  with check ((EXISTS ( SELECT 1
-   FROM public.intelligence_tips t
-  WHERE (t.id = intelligence_tip_links.tip_id))));
 
-create policy intelligence_tip_links_sel on public.intelligence_tip_links
-  as permissive for select to authenticated
-  using ((EXISTS ( SELECT 1
-   FROM public.intelligence_tips t
-  WHERE (t.id = intelligence_tip_links.tip_id))));
 
-create policy intelligence_tip_sources_del on public.intelligence_tip_sources
-  as permissive for delete to authenticated
-  using (((created_by = ( SELECT auth.uid() AS uid)) OR ( SELECT private.can_delete() AS can_delete)));
 
-create policy intelligence_tip_sources_ins on public.intelligence_tip_sources
-  as permissive for insert to authenticated
-  with check ((EXISTS ( SELECT 1
-   FROM public.intelligence_tips t
-  WHERE ((t.id = intelligence_tip_sources.tip_id) AND (t.created_by = ( SELECT auth.uid() AS uid))))));
 
-create policy intelligence_tip_sources_sel on public.intelligence_tip_sources
-  as permissive for select to authenticated
-  using (((created_by = ( SELECT auth.uid() AS uid)) OR private.is_command() OR ( SELECT COALESCE(profiles.is_owner, false) FROM public.profiles WHERE (profiles.id = ( SELECT auth.uid() AS uid))) OR (EXISTS ( SELECT 1
-   FROM public.intelligence_tips t
-  WHERE ((t.id = intelligence_tip_sources.tip_id) AND (t.assigned_to = ( SELECT auth.uid() AS uid)))))));
 
-create policy intelligence_tips_del on public.intelligence_tips
-  as permissive for delete to authenticated
-  using (( SELECT private.can_delete() AS can_delete));
 
-create policy intelligence_tips_ins on public.intelligence_tips
-  as permissive for insert to authenticated
-  with check (( SELECT private.is_active() AS is_active));
 
-create policy intelligence_tips_sel on public.intelligence_tips
-  as permissive for select to authenticated
-  using ((private.is_active() AND ((created_by = ( SELECT auth.uid() AS uid)) OR (assigned_to = ( SELECT auth.uid() AS uid)) OR private.is_command() OR ( SELECT COALESCE(profiles.is_owner, false) FROM public.profiles WHERE (profiles.id = ( SELECT auth.uid() AS uid))) OR ((case_id IS NOT NULL) AND private.can_access_case(case_id)))));
 
-create policy intelligence_tips_upd on public.intelligence_tips
-  as permissive for update to authenticated
-  using (((status = 'new'::text) AND ((created_by = ( SELECT auth.uid() AS uid)) OR private.is_command())))
-  with check ((created_by IS NOT NULL));
 
 create policy jmrh_sel on public.justice_membership_request_history
   as permissive for select to authenticated
@@ -11376,7 +11245,6 @@ create policy wl_sel on public.watchlist
 -- surveillance_event_participants (structured meetings/co-presence),
 -- surveillance_alert_rules (seeded 4 rules; command-tunable) +
 -- surveillance_alerts (trigger-written, dedupe-keyed, self-explaining),
--- intelligence_tips + intelligence_tip_links + intelligence_tip_sources
 -- (source identity behind a stricter handler/assignee/command/owner wall),
 -- and bridge_ingestion_events (dormant inbound FiveM surface; quarantine +
 -- (source, source_event_id) idempotency).
@@ -11390,7 +11258,6 @@ create policy wl_sel on public.watchlist
 --   stamps created_by/received_at, forces manual source types, resets
 --   verification/promotion/ingestion state on insert, freezes provenance and
 --   workflow columns on update (restricted may tighten, never loosen);
--- private.guard_intelligence_tip() [trg_guard_intelligence_tip] stamps
 --   created_by, forces status='new', clears triage/decision columns on
 --   insert and freezes them on update;
 -- private.guard_surveillance_event() [trg_guard_surveillance_event] same
@@ -11423,7 +11290,6 @@ create policy wl_sel on public.watchlist
 -- 20260810120000 body plus the surveillance sweep (tips/observations/targets/
 -- alerts/bridge events, before cases are deleted).
 -- REALTIME: surveillance_targets, surveillance_observations,
--- surveillance_alerts and intelligence_tips added to the supabase_realtime
 -- publication (RLS applies to payloads).
 -- Definitive SQL in supabase/migrations/20260812120000_surveillance_domain.sql.
 
@@ -11991,7 +11857,6 @@ create policy wl_sel on public.watchlist
 --
 -- THE RULE: a row is deleted only if it is fixture-OWNED and deleting it
 -- cannot alter a record belonging to someone else. reports / surveillance_* /
--- intelligence_tips live INSIDE a case and are now case-scoped; operations are
 -- top-level and fixture-created so they remain cleanup's, except one linked to
 -- a non-fixture case (skipped — the cascade would strip that case's joint
 -- access); role_events keeps target_id = any(ids) only, because an event a
