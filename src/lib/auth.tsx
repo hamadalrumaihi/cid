@@ -36,7 +36,25 @@ export type Profile = Pick<
   | 'is_owner' | 'login_denied' | 'login_denied_reason'
 > & { email?: string | null }
 
-export type GateState = 'loading' | 'setup' | 'out' | 'pending' | 'error' | 'in'
+export type GateState = 'loading' | 'setup' | 'out' | 'pending' | 'error' | 'in' | 'field'
+
+/** Field officer standing (field_officers) — the SAHP/BCSO/LSPD identity that
+ *  reaches the Field Intelligence portal and nothing else.
+ *
+ *  It is deliberately NOT a CID role. `private.is_active()` is `profiles.active`
+ *  and 22 intelligence tables grant SELECT on it alone, so an external officer
+ *  who were made active would read every person, gang member and stash house in
+ *  the database. They are therefore not active, and every CID policy stays shut
+ *  against them without a single one being edited. See
+ *  20260910120000_field_officers.sql. */
+export interface FieldStanding {
+  agency: string
+  callsign: string | null
+  officer_rank: string | null
+  unit: string | null
+  active: boolean
+  appointed_at: string
+}
 
 /** Justice identity (justice_memberships) — a SEPARATE authorization domain
  *  from the CID role. An active justice member passes the gate even with an
@@ -56,6 +74,10 @@ interface AuthContextValue {
   justice: JusticeIdentity | null
   /** Active justice role, or null — the UX mirror of private.justice_role(). */
   justiceRole: string | null
+  /** Field officer standing, or null. Non-null with an ACTIVE appointment is
+   *  what routes to the Field Intelligence portal — but only when the account
+   *  is not already CID, because CID wins at the gate. */
+  field: FieldStanding | null
   /** Re-run the gate evaluation (retry button, post-mutation refresh). */
   refresh: () => Promise<void>
   signInOAuth: (provider: 'google' | 'discord') => Promise<{ error: { message: string } | null }>
@@ -102,11 +124,23 @@ async function fetchJustice(uid: string): Promise<JusticeIdentity | null> {
   return (data as JusticeIdentity | null) ?? null
 }
 
+/** Own field-officer standing via my_field_standing() — SECURITY INVOKER, so it
+ *  returns only what the policies allow and can never read somebody else's
+ *  appointment. Missing standing is the normal case for CID members. Errors
+ *  throw like fetchProfile so the gate retries rather than silently dropping an
+ *  officer to the pending screen. */
+async function fetchFieldStanding(): Promise<FieldStanding | null> {
+  const { data, error } = await supabase().rpc('my_field_standing')
+  if (error) throw new Error(error.message)
+  return (data as FieldStanding | null) ?? null
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GateState>(isConfigured ? 'loading' : 'setup')
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [justice, setJustice] = useState<JusticeIdentity | null>(null)
+  const [field, setField] = useState<FieldStanding | null>(null)
   // Serialize evaluations: auth events can burst (INITIAL_SESSION + SIGNED_IN);
   // a stale earlier evaluation must not overwrite a newer result.
   const evalSeq = useRef(0)
@@ -135,6 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       settledUser.current = null
       setProfile(null)
       setJustice(null)
+      setField(null)
       try { supabase().removeAllChannels() } catch { /* no channels yet */ }
       resetRealtime()
       setState('out')
@@ -143,7 +178,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     let p: Profile | null = null
     let j: JusticeIdentity | null = null
-    try { [p, j] = await Promise.all([fetchProfile(s.user.id), fetchJustice(s.user.id)]) }
+    let f: FieldStanding | null = null
+    try {
+      [p, j, f] = await Promise.all([
+        fetchProfile(s.user.id), fetchJustice(s.user.id), fetchFieldStanding(),
+      ])
+    }
     catch { if (!stale()) { settledUser.current = null; setState('error') } return } // transient — offer retry
     if (stale()) return
 
@@ -152,6 +192,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (p && s.user.email) p = { ...p, email: s.user.email }
     setProfile(p)
     setJustice(j)
+    setField(f)
 
     // A login-denied profile blocks sign-in (the deny gate renders in
     // PendingBody). The DOJ/Judiciary workflow is retired (Phase 1): a justice
@@ -159,6 +200,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // profile passes the gate. (Historical justice identity still resolves for
     // read-only attribution; it just isn't an admission ticket.)
     if (p?.login_denied) { settledUser.current = null; setState('pending'); return }
+    // ── Which portal ────────────────────────────────────────────────────────
+    // CID is tested FIRST and the order is deliberate. An officer who later
+    // joins CID keeps the same account and their old field_officers row, so
+    // both identities can be live at once; testing 'field' first would demote a
+    // detective to the submission portal the moment they had ever been patrol.
+    //
+    // The reverse mistake is the dangerous one and cannot happen here: reaching
+    // 'field' does not grant anything, because standing is not profiles.active
+    // and every CID policy asks for is_active(). This branch chooses a SHELL.
+    // It is not the access boundary — the database is, and it stays shut
+    // whatever this function decides.
     if (p && p.active) {
       settledUser.current = s.user.id
       setState('in')
@@ -172,6 +224,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .then(() => setProfile((prev) => (prev ? { ...prev, discord_id: String(did) } : prev)))
         }
       } catch { /* capture is best-effort */ }
+    } else if (f?.active) {
+      // SAHP/BCSO/LSPD with no CID standing. They are signed in and entitled to
+      // the Field Intelligence portal -- NOT to a CID dashboard with the tabs
+      // greyed out, which would advertise what they cannot have.
+      settledUser.current = s.user.id
+      setState('field')
     } else {
       settledUser.current = null
       setState('pending')
@@ -245,6 +303,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       state, session, profile,
       justice,
       justiceRole: justice?.active ? justice.justice_role : null,
+      field,
       refresh: evaluate,
       signInOAuth, signInEmail, signOut, setMyLoa,
       canEdit: active,
@@ -252,7 +311,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isCommand: active && isCommandRole(profile?.role),
       isOwner: active && !!profile?.is_owner,
     }
-  }, [state, session, profile, justice, evaluate, signInOAuth, signInEmail, signOut, setMyLoa])
+  }, [state, session, profile, justice, field, evaluate, signInOAuth, signInEmail, signOut, setMyLoa])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

@@ -8,6 +8,83 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Field officers — patrol can sign in without becoming CID
+
+First phase of the Field Intelligence Submission Portal: the identity and the
+access boundary, shipped on their own because the boundary is the part that can
+go wrong quietly.
+
+**The problem this exists to avoid.** `private.is_active()` is just
+`profiles.active`, and it is a master key — **22 tables grant SELECT on it and
+nothing else**: `persons`, `person_relationships`, `person_vehicles`,
+`person_places`, `vehicles`, `gangs`, `gang_members`, `gang_ranks`,
+`gang_places`, `gang_turf`, `places`, `place_process_steps`, `accounts`,
+`account_handles`, `account_links`, `indicators`, `narcotic_hotspots`,
+`narcotic_precursors`, `ballistics_benches`, `ballistic_footprints`,
+`commendations`, `tickets`.
+
+So the obvious implementation — give a trooper `profiles.active = true` so they
+can file a report — would hand them the entire intelligence database on first
+login: every person of interest, every gang member, every stash house.
+
+The other repair, rewriting 45 policies to `is_active() and not
+is_field_officer()`, was rejected. It is one forgotten policy away from the same
+leak, and a policy nobody thought about would fail **open**.
+
+**So a field officer is not `profiles.active`.** Standing lives in
+`field_officers` instead. Not one existing policy was edited, and every CID
+table stays shut against them because `is_active()` is false — including tables
+nobody remembered to consider. Default-deny by construction rather than by
+vigilance.
+
+**Proven, not asserted.** The dedicated `rls-test-inactive` account was
+appointed a SAHP field officer inside a transaction and rolled back. As that
+officer, **37 tables returned nothing** — persons, vehicles, gangs, places,
+accounts, indicators, narcotics, ballistics, cases, evidence, reports, media,
+audit_log, siu_memberships, case_charges, legal_requests, observations, targets,
+operations, notifications, tickets and the rest. `profiles` returned 1 row —
+their own. Those zeros mean something because the tables are not empty: 263
+persons, 254 gang members, 60 places, 53 gangs, 22 cases, 238 media.
+
+Writes were probed with `GET DIAGNOSTICS` row counts, because RLS refuses by
+matching zero rows rather than by erroring and *no error proves nothing*:
+
+| attempt | result |
+| --- | --- |
+| insert `persons` / `gangs` | refused by policy |
+| appoint another officer | refused by policy |
+| change own agency | **0 rows — silent refusal, no error raised** |
+| self-activate own profile | **1 row, and `active` still false** — `guard_profile` stripped it; the row count looks like success and is not |
+| `assign_field_officer()` | `not authorized` |
+
+**A grant trap worth recording.** The table first carried an `internal_note`
+column for command, hidden with `revoke select (internal_note) … from
+authenticated` plus a column-list grant. The probe read it anyway: `authenticated`
+already held a **table-level** SELECT from the default privileges, and column
+privileges only *add* to table privileges — they cannot subtract. Revoking the
+table grant worked, and then locked out the column's only intended audience,
+since command connects as `authenticated` too. A column with no reader is worse
+than no column, so it was dropped. If command notes are wanted later they need a
+reader designed alongside them — a SECURITY DEFINER RPC gated on
+`is_command()`, not a column grant.
+
+**Dual identity is normal.** An officer who later joins CID keeps the same
+account and their old appointment, so historical submissions stay attributed to
+the same `user_id`. CID is tested first at the gate, so such a person gets the
+investigative portal; `is_field_officer()` only ever grants Field Intelligence
+surfaces and can never take a CID surface away.
+
+**What ships.** `field_officers`, `private.is_field_officer()`,
+`private.field_officer_agency()`, `assign_field_officer()` / `end_field_officer()`
+(command-only, audited, revocation requires a reason and never deletes — the
+appointment is the provenance of everything that officer submitted), a
+`my_field_standing()` read, a `field` gate state, the `FieldShell` workspace,
+and a Command Center section for appointments.
+
+The landing page says plainly that submissions are not open yet rather than
+offering a button that does nothing — dead controls teach people the portal is
+broken. The submission model is the next phase.
+
 ### The 2026 penal code becomes the code in force
 
 The whole penal overhaul was built for this switch. The 2026 code has been
