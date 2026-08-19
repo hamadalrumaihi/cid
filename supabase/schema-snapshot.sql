@@ -910,6 +910,31 @@ alter table public.field_officers add constraint field_officers_ended_by_fkey FO
 alter table public.field_officers add constraint field_officers_agency_check CHECK ((agency = ANY (ARRAY['SAHP'::text, 'BCSO'::text, 'LSPD'::text])));
 alter table public.field_officers enable row level security;
 
+create table public.field_claim_verdicts (
+  id uuid not null default gen_random_uuid(),
+  submission_id uuid not null,
+  person_id uuid,
+  vehicle_id uuid,
+  org_id uuid,
+  location_id uuid,
+  item_id uuid,
+  verdict text not null,
+  note text,
+  decided_by uuid,
+  decided_at timestamp with time zone not null default now()
+);
+alter table public.field_claim_verdicts add constraint field_claim_verdicts_pkey PRIMARY KEY (id);
+alter table public.field_claim_verdicts add constraint field_claim_verdicts_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.field_submissions(id) ON DELETE CASCADE;
+alter table public.field_claim_verdicts add constraint field_claim_verdicts_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.field_submission_persons(id) ON DELETE CASCADE;
+alter table public.field_claim_verdicts add constraint field_claim_verdicts_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.field_submission_vehicles(id) ON DELETE CASCADE;
+alter table public.field_claim_verdicts add constraint field_claim_verdicts_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.field_submission_orgs(id) ON DELETE CASCADE;
+alter table public.field_claim_verdicts add constraint field_claim_verdicts_location_id_fkey FOREIGN KEY (location_id) REFERENCES public.field_submission_locations(id) ON DELETE CASCADE;
+alter table public.field_claim_verdicts add constraint field_claim_verdicts_item_id_fkey FOREIGN KEY (item_id) REFERENCES public.field_submission_items(id) ON DELETE CASCADE;
+alter table public.field_claim_verdicts add constraint field_claim_verdicts_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id);
+alter table public.field_claim_verdicts add constraint field_claim_verdicts_verdict_check CHECK ((verdict = ANY (ARRAY['verified'::text, 'unverified'::text, 'disputed'::text, 'rejected'::text])));
+alter table public.field_claim_verdicts add constraint field_claim_verdicts_one_claim CHECK ((num_nonnulls(person_id, vehicle_id, org_id, location_id, item_id) = 1));
+alter table public.field_claim_verdicts enable row level security;
+
 create table public.field_submission_evidence (
   id uuid not null default gen_random_uuid(),
   submission_id uuid not null,
@@ -4079,6 +4104,12 @@ CREATE INDEX feedback_meta_updated_by_idx ON public.feedback_meta USING btree (u
 CREATE INDEX field_officers_agency_idx ON public.field_officers USING btree (agency) WHERE active;
 CREATE INDEX field_officers_appointed_by_fkey_idx ON public.field_officers USING btree (appointed_by);
 CREATE INDEX field_officers_ended_by_fkey_idx ON public.field_officers USING btree (ended_by);
+CREATE UNIQUE INDEX field_claim_verdicts_person_uk ON public.field_claim_verdicts USING btree (person_id) WHERE (person_id IS NOT NULL);
+CREATE UNIQUE INDEX field_claim_verdicts_vehicle_uk ON public.field_claim_verdicts USING btree (vehicle_id) WHERE (vehicle_id IS NOT NULL);
+CREATE UNIQUE INDEX field_claim_verdicts_org_uk ON public.field_claim_verdicts USING btree (org_id) WHERE (org_id IS NOT NULL);
+CREATE UNIQUE INDEX field_claim_verdicts_location_uk ON public.field_claim_verdicts USING btree (location_id) WHERE (location_id IS NOT NULL);
+CREATE UNIQUE INDEX field_claim_verdicts_item_uk ON public.field_claim_verdicts USING btree (item_id) WHERE (item_id IS NOT NULL);
+CREATE INDEX field_claim_verdicts_submission_idx ON public.field_claim_verdicts USING btree (submission_id);
 CREATE INDEX field_submission_evidence_submission_idx ON public.field_submission_evidence USING btree (submission_id);
 CREATE INDEX field_submission_messages_submission_idx ON public.field_submission_messages USING btree (submission_id, created_at);
 CREATE INDEX field_submission_reviews_submission_idx ON public.field_submission_reviews USING btree (submission_id, created_at DESC);
@@ -7566,6 +7597,7 @@ CREATE TRIGGER feedback_meta_audit AFTER INSERT OR DELETE OR UPDATE ON public.fe
 CREATE TRIGGER feedback_meta_touch BEFORE UPDATE ON public.feedback_meta FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER field_officers_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_officers FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_officers_touch BEFORE UPDATE ON public.field_officers FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER field_claim_verdicts_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_claim_verdicts FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_evidence_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_evidence FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_evidence_before_insert BEFORE INSERT ON public.field_submission_evidence FOR EACH ROW EXECUTE FUNCTION private.field_evidence_before_insert();
 CREATE TRIGGER field_messages_before_insert BEFORE INSERT ON public.field_submission_messages FOR EACH ROW EXECUTE FUNCTION private.field_message_before_insert();
@@ -8160,6 +8192,17 @@ create policy field_officers_cmd on public.field_officers
 --    change what a piece of evidence is while its row still described the old
 --    one; replacing evidence means delete + add)
 -- ---------------------------------------------------------------------------
+
+-- Verdicts are reviewer-only, and there is deliberately NO insert or update
+-- policy: they are recorded solely through field_claim_decide(), which audits.
+-- A direct write would be an unrecorded judgement about somebody.
+create policy field_claim_verdicts_sel on public.field_claim_verdicts
+  as permissive for select to authenticated
+  using (private.is_active());
+
+create policy field_claim_verdicts_del on public.field_claim_verdicts
+  as permissive for delete to authenticated
+  using (private.is_command());
 
 create policy field_submission_evidence_sel on public.field_submission_evidence
   as permissive for select to authenticated
@@ -9552,6 +9595,8 @@ create policy wl_sel on public.watchlist
 --      plain again and RLS alone decides who sees a row — 20260910120000)
 --   field_submissions -> anon: (none — global revoke + default privileges, 20260908130000)
 --   field_submissions -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   field_claim_verdicts -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
+--     (INSERT/UPDATE are unreachable: no policy grants them)
 --   field_submission_evidence -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
 --   field_submission_messages -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
 --   field_submission_reviews -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE

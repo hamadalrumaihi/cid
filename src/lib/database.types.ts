@@ -2589,6 +2589,56 @@ export type Database = {
           },
         ]
       }
+      field_claim_verdicts: {
+        Row: {
+          decided_at: string
+          decided_by: string | null
+          id: string
+          item_id: string | null
+          location_id: string | null
+          note: string | null
+          org_id: string | null
+          person_id: string | null
+          submission_id: string
+          vehicle_id: string | null
+          verdict: string
+        }
+        Insert: {
+          decided_at?: string
+          decided_by?: string | null
+          id?: string
+          item_id?: string | null
+          location_id?: string | null
+          note?: string | null
+          org_id?: string | null
+          person_id?: string | null
+          submission_id: string
+          vehicle_id?: string | null
+          verdict: string
+        }
+        Update: {
+          decided_at?: string
+          decided_by?: string | null
+          id?: string
+          item_id?: string | null
+          location_id?: string | null
+          note?: string | null
+          org_id?: string | null
+          person_id?: string | null
+          submission_id?: string
+          vehicle_id?: string | null
+          verdict?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_claim_verdicts_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       field_submission_evidence: {
         Row: {
           added_by: string | null
@@ -11014,6 +11064,14 @@ export type Database = {
       end_field_officer: {
         Args: { p_reason: string; p_user: string }
         Returns: undefined
+      }
+      field_claim_decide: {
+        Args: { p_claim: string; p_kind: string; p_note?: string; p_verdict: string }
+        Returns: undefined
+      }
+      field_claim_progress: {
+        Args: { p_submission: string }
+        Returns: Json
       }
       field_submission_ask: {
         Args: { p_question: string; p_submission: string }
