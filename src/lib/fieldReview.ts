@@ -61,6 +61,54 @@ export function isOpen(s: string): boolean {
   return (OPEN_STATUSES as readonly string[]).includes(s)
 }
 
+/** The queue a reviewer is looking at. These are views over one table, not
+ *  separate inboxes: "Mine" and "City" can hold the same report, and that is
+ *  the point -- a bureau's work and a person's work are different questions
+ *  about the same pile.
+ *
+ *  'processed' is deliberately not called "closed". A report that produced
+ *  intelligence and a report that was rejected are both done being triaged, and
+ *  neither is closed in any sense the officer would recognise. */
+export const QUEUE_FILTERS = [
+  'all', 'unclaimed', 'mine', 'assigned', 'needs_info', 'city', 'blaine', 'processed',
+] as const
+export type QueueFilter = (typeof QUEUE_FILTERS)[number]
+
+export const QUEUE_LABEL: Record<QueueFilter, string> = {
+  all: 'All',
+  unclaimed: 'Unclaimed',
+  mine: 'Mine',
+  assigned: 'Assigned',
+  needs_info: 'Needs info',
+  city: 'Los Santos / City',
+  blaine: 'Blaine County',
+  processed: 'Processed',
+}
+
+/** Statuses that are done being triaged. */
+const PROCESSED: readonly string[] = [
+  'intel_added', 'linked_existing', 'linked_case', 'archived', 'rejected',
+]
+
+export function matchesFilter(
+  r: Pick<FieldSubmissionRow, 'status' | 'assigned_to' | 'jurisdiction'>,
+  filter: QueueFilter, me: string | null,
+): boolean {
+  switch (filter) {
+    case 'all': return true
+    // Unclaimed means "waiting for somebody to take it", so a processed report
+    // with nobody on it is not in this queue -- nobody needs to take it.
+    case 'unclaimed': return !r.assigned_to && !PROCESSED.includes(r.status)
+    case 'mine': return !!me && r.assigned_to === me
+    case 'assigned': return !!r.assigned_to && !PROCESSED.includes(r.status)
+    case 'needs_info': return r.status === 'needs_info'
+    case 'city': return r.jurisdiction === 'city'
+    case 'blaine': return r.jurisdiction === 'blaine'
+    case 'processed': return PROCESSED.includes(r.status)
+    default: return true
+  }
+}
+
 /** What a reviewer is being asked to do next, in one phrase. Null when the
  *  report is settled. */
 export function reviewPrompt(s: FieldSubmissionRow): string | null {
@@ -99,6 +147,70 @@ export async function loadReviewNotes(submissionId: string): Promise<FieldReview
   }).catch(() => [])
 }
 
+export type FieldAssignmentRow = Tables<'field_assignments'>
+
+/** Who has held this report, in order. Append-only server-side: releasing or
+ *  reassigning adds a row and never edits one, so the record of who had it at
+ *  the time a decision was made survives the next handover.
+ *
+ *  Returns [] for a field officer — the policy requires `private.is_active()`,
+ *  so the officer who sent the report cannot learn which detective has it. */
+export async function loadAssignments(submissionId: string): Promise<FieldAssignmentRow[]> {
+  return list('field_assignments', {
+    eq: { submission_id: submissionId }, order: 'created_at',
+  }).catch(() => [])
+}
+
+export interface SubmissionCounts {
+  submission_id: string
+  persons: number
+  vehicles: number
+  orgs: number
+  locations: number
+  items: number
+  evidence: number
+}
+
+/** What each report contains, for the queue card, in one call. The alternative
+ *  is six child-table reads per row. SECURITY INVOKER server-side, so it counts
+ *  exactly what the caller could count themselves. */
+export async function loadCounts(): Promise<Record<string, SubmissionCounts>> {
+  const res = await rpc('field_submission_counts', {})
+  const rows = (res.data ?? []) as SubmissionCounts[]
+  return Object.fromEntries(rows.map((r) => [r.submission_id, r]))
+}
+
+/** "2 persons, 1 vehicle, 3 evidence items" — the parts that are actually
+ *  there, so an empty report reads as empty rather than as six zeroes. */
+export function countsSummary(c: SubmissionCounts | undefined): string {
+  if (!c) return ''
+  const parts: string[] = []
+  const add = (n: number, one: string, many: string) => {
+    if (n > 0) parts.push(`${n} ${n === 1 ? one : many}`)
+  }
+  add(c.persons, 'person', 'people')
+  add(c.vehicles, 'vehicle', 'vehicles')
+  add(c.orgs, 'organization', 'organizations')
+  add(c.locations, 'location', 'locations')
+  add(c.items, 'item', 'items')
+  add(c.evidence, 'evidence item', 'evidence items')
+  return parts.join(' · ')
+}
+
+/** One line of the assignment history, in plain words. */
+export function assignmentLine(
+  a: FieldAssignmentRow, nameOf: (id: string | null) => string,
+): string {
+  switch (a.action) {
+    case 'claimed': return `${nameOf(a.to_user)} claimed it`
+    case 'released': return `${nameOf(a.from_user)} released it`
+    case 'assigned': return `${nameOf(a.actor_id)} assigned it to ${nameOf(a.to_user)}`
+    case 'reassigned':
+      return `${nameOf(a.actor_id)} moved it from ${nameOf(a.from_user)} to ${nameOf(a.to_user)}`
+    default: return a.action
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Actions — each one audits itself server-side
 // ---------------------------------------------------------------------------
@@ -107,6 +219,28 @@ export async function loadReviewNotes(submissionId: string): Promise<FieldReview
  *  and saying you are reviewing it are the same act. */
 export async function claimSubmission(id: string): Promise<string | null> {
   const res = await rpc('field_submission_claim', { p_submission: id })
+  return res.error?.message ?? null
+}
+
+/** Give it back. The reason is required by the database, not by the form: the
+ *  next person to pick this up needs to know whether it was "not mine" or "I
+ *  know this suspect personally". The status deliberately does not wind back --
+ *  the report HAS been looked at. */
+export async function releaseSubmission(id: string, reason: string): Promise<string | null> {
+  const res = await rpc('field_submission_release', { p_submission: id, p_reason: reason })
+  return res.error?.message ?? null
+}
+
+/** Hand it to somebody. Command only, and the RPC refuses a target who cannot
+ *  see the report's jurisdiction -- assigning work to somebody who cannot open
+ *  it is worse than leaving it unassigned, because the queue then reads as
+ *  handled. `reason` is required when taking a report off its current holder. */
+export async function assignSubmission(
+  id: string, userId: string, reason?: string,
+): Promise<string | null> {
+  const res = await rpc('field_submission_assign', {
+    p_submission: id, p_user: userId, p_reason: reason?.trim() || undefined,
+  })
   return res.error?.message ?? null
 }
 

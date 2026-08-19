@@ -18,7 +18,7 @@ const sub = (over: Partial<FieldSubmissionRow> = {}): FieldSubmissionRow => ({
   snap_callsign: '924', snap_rank: null, snap_unit: null,
   status: 'draft', jurisdiction: 'city', summary: null, details: null,
   observed_at: null, observed_to: null, observed_precision: 'unknown',
-  mdt_reference: null, submitted_at: null, assigned_to: null,
+  mdt_reference: null, submitted_at: null, assigned_to: null, assigned_at: null,
   created_at: '2026-08-19T00:00:00Z', updated_at: '2026-08-19T00:00:00Z',
   ...over,
 })
