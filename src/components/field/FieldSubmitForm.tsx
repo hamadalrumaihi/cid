@@ -35,6 +35,7 @@ import {
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { EvidencePanel } from './EvidencePanel'
 
 interface Draft {
   summary: string
@@ -247,6 +248,8 @@ export function FieldSubmitForm({ onDone }: { onDone: () => void }) {
 
         <PartList parts={parts} onRemove={(t, pid) => void drop(t, pid)} />
       </Card>
+
+      {id && <EvidencePanel submissionId={id} />}
 
       <Card>
         <div className="grid gap-3 sm:grid-cols-2">
