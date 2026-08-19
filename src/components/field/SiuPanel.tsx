@@ -23,7 +23,7 @@ import { fmtDateTime } from '@/lib/format'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
 import { useSiu } from '@/lib/useSiu'
-import type { FieldSubmissionRow } from '@/lib/fieldSubmissions'
+import type { FieldSubmissionRow, SubmissionParts } from '@/lib/fieldSubmissions'
 import {
   FOLLOWUP_KINDS, SIU_CATEGORIES, SIU_CATEGORY_LABEL, addFollowup, assignSiuAgent,
   canFlag, canRefer, clearFollowup, decideSiuReferral, flagForSiu, followupLabel,
@@ -33,14 +33,16 @@ import {
   type FieldSiuActionRow, type FieldSiuFollowupRow, type FollowupKind,
   type SiuCategory,
 } from '@/lib/fieldSiu'
+import { SiuEnterprise } from './SiuEnterprise'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, Select, Textarea } from '@/components/ui/Field'
 import { uiPrompt } from '@/components/ui/dialog'
 
-export function SiuPanel({ submission, onChanged }: {
+export function SiuPanel({ submission, parts, onChanged }: {
   submission: FieldSubmissionRow
+  parts: SubmissionParts
   onChanged: () => void
 }) {
   const siu = useSiu()
@@ -313,6 +315,10 @@ export function SiuPanel({ submission, onChanged }: {
             </ul>
           )}
         </div>
+      )}
+
+      {siu.isAgent && (
+        <SiuEnterprise submission={submission} parts={parts} onChanged={onChanged} />
       )}
 
       {actions.length > 0 && (

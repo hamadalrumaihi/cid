@@ -145,6 +145,186 @@ export function followupLabel(k: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// The enterprise picture — SIU eyes only
+// ---------------------------------------------------------------------------
+
+export type FieldSiuNodeRow = Tables<'field_siu_enterprise'>
+
+/** The SOP's investigative model, top to bottom. The order matters: it is how
+ *  an enterprise is read, from who decides down to what they do. */
+export const SIU_LAYERS = [
+  'leadership', 'suppliers', 'distribution', 'enforcement', 'associates',
+  'financial', 'locations', 'assets', 'activity',
+] as const
+export type SiuLayer = (typeof SIU_LAYERS)[number]
+
+export const SIU_LAYER_LABEL: Record<SiuLayer, string> = {
+  leadership: 'Leadership',
+  suppliers: 'Suppliers',
+  distribution: 'Distribution',
+  enforcement: 'Enforcement',
+  associates: 'Associates',
+  financial: 'Financial networks',
+  locations: 'Locations',
+  assets: 'Assets',
+  activity: 'Criminal activity',
+}
+
+/** Suggestions, not a vocabulary. The role column is free text on purpose:
+ *  "shot caller", "stash operator" and "launders through the tow yard" are all
+ *  legitimate, and a fixed list pushes an agent into the nearest wrong word. */
+export const SIU_ROLE_HINTS: Record<SiuLayer, readonly string[]> = {
+  leadership: ['Boss', 'President', 'Shot caller', 'Organizer', 'Ranking member'],
+  suppliers: ['Narcotics supplier', 'Firearms supplier', 'Material supplier'],
+  distribution: ['Dealer', 'Courier', 'Stash operator', 'Transporter'],
+  enforcement: ['Enforcer', 'Shooter', 'Security', 'Intimidation'],
+  associates: ['Known associate', 'Business contact', 'Criminal partner'],
+  financial: ['Account', 'Laundering link', 'Front business', 'Proceeds movement'],
+  locations: ['Clubhouse', 'Stash house', 'Warehouse', 'Grow', 'Gun bench', 'Meeting point'],
+  assets: ['Vehicle', 'Property', 'Business', 'Equipment'],
+  activity: ['Narcotics', 'Firearms', 'Violent crime', 'Laundering', 'Corruption',
+    'Organized theft'],
+}
+
+export function siuLayerLabel(l: string): string {
+  return SIU_LAYER_LABEL[l as SiuLayer] ?? l
+}
+
+/** Which claim in the report a node came from, and which registry record it
+ *  resolves to. Both optional, at most one each — a node is one thing. */
+export type NodeClaimKind = 'person' | 'vehicle' | 'org' | 'location' | 'item'
+export type NodeEntityType = 'person' | 'vehicle' | 'gang' | 'place'
+
+/** The registry record a node points at, if any. Only such a node can become a
+ *  target: designating "a man in a red jacket" is not a designation. */
+export function nodeEntity(n: FieldSiuNodeRow): { type: NodeEntityType; id: string } | null {
+  if (n.person_id) return { type: 'person', id: n.person_id }
+  if (n.vehicle_id) return { type: 'vehicle', id: n.vehicle_id }
+  if (n.gang_id) return { type: 'gang', id: n.gang_id }
+  if (n.place_id) return { type: 'place', id: n.place_id }
+  return null
+}
+
+/** How a node reads in the list. */
+export function nodeLabel(n: FieldSiuNodeRow): string {
+  return n.label?.trim() || (nodeEntity(n) ? 'Linked record' : 'From the report')
+}
+
+/** Why a node cannot be recorded yet, or null. */
+export function nodeProblem(layer: string, label: string, hasLink: boolean): string | null {
+  if (!(SIU_LAYERS as readonly string[]).includes(layer)) return 'Choose a layer.'
+  if (!label.trim() && !hasLink) {
+    return 'Say who or what this is: a name, a claim from the report, or a record.'
+  }
+  return null
+}
+
+/** Group the live nodes by layer, in the model's order, dropping empty layers.
+ *  A layer with nothing in it is not a finding — showing nine empty headings
+ *  would read as nine unanswered questions.
+ *
+ *  A layer this file does not know about still comes back, at the end. The
+ *  database could gain one before the client does, and a node that silently
+ *  vanished from the picture would be worse than one under an odd heading. */
+export function byLayer(
+  nodes: ReadonlyArray<FieldSiuNodeRow>,
+): Array<{ layer: string; nodes: FieldSiuNodeRow[] }> {
+  const live = nodes.filter((n) => !n.removed_at)
+  const known: string[] = [...SIU_LAYERS]
+  const extra = [...new Set(live.map((n) => n.layer))].filter((l) => !known.includes(l))
+  return [...known, ...extra]
+    .map((layer) => ({ layer, nodes: live.filter((n) => n.layer === layer) }))
+    .filter((g) => g.nodes.length > 0)
+}
+
+export async function loadEnterprise(submissionId: string): Promise<FieldSiuNodeRow[]> {
+  return list('field_siu_enterprise', {
+    eq: { submission_id: submissionId }, order: 'created_at',
+  }).catch(() => [])
+}
+
+export async function addNode(
+  submissionId: string, layer: SiuLayer,
+  opts: {
+    role?: string; label?: string; note?: string
+    claimKind?: NodeClaimKind; claimId?: string
+    entityType?: NodeEntityType; entityId?: string
+  } = {},
+): Promise<string | null> {
+  const res = await rpc('field_siu_map_add', {
+    p_submission: submissionId,
+    p_layer: layer,
+    p_role: opts.role?.trim() || undefined,
+    p_label: opts.label?.trim() || undefined,
+    p_note: opts.note?.trim() || undefined,
+    p_claim_kind: opts.claimKind,
+    p_claim_id: opts.claimId,
+    p_entity_type: opts.entityType,
+    p_entity_id: opts.entityId,
+  })
+  return res.error?.message ?? null
+}
+
+export async function removeNode(id: string, reason: string): Promise<string | null> {
+  const res = await rpc('field_siu_map_remove', { p_id: id, p_reason: reason })
+  return res.error?.message ?? null
+}
+
+// ---------------------------------------------------------------------------
+// The investigation this report fed
+// ---------------------------------------------------------------------------
+
+/** Link the report to an SIU investigation. The report is NOT moved into the
+ *  case: it keeps its number, its jurisdiction and its CID assignee, and this
+ *  records that it fed the investigation. SIU must have accepted it first, so a
+ *  referral nobody answered cannot be quietly worked. */
+export async function linkSiuCase(
+  submissionId: string, caseId: string, reason?: string,
+): Promise<string | null> {
+  const res = await rpc('field_siu_link_case', {
+    p_submission: submissionId, p_case: caseId, p_reason: reason?.trim() || undefined,
+  })
+  return res.error?.message ?? null
+}
+
+export async function unlinkSiuCase(
+  submissionId: string, reason: string,
+): Promise<string | null> {
+  const res = await rpc('field_siu_unlink_case', { p_submission: submissionId, p_reason: reason })
+  return res.error?.message ?? null
+}
+
+// Designations and priorities are NOT redefined here. SIU_OPENABLE_DESIGNATIONS
+// (which already excludes 'cleared', because a designation is cleared with
+// siu_clear_target() and never opened as cleared) and SIU_TARGET_PRIORITIES
+// live in siu.ts and are what the rest of the SIU workspace uses. A second copy
+// would drift from the RPC's own validation the first time either list moved.
+
+/** Promote a mapped node to a target in an SIU investigation. Nothing here is
+ *  automatic: an agent picks the node, the case and the designation, and the
+ *  underlying siu_designate_target() re-checks standing, case access and
+ *  whether the record is already designated live. */
+export async function designateFromField(
+  submissionId: string, caseId: string,
+  entity: { type: NodeEntityType; id: string },
+  designation: string,
+  priority = 'medium',
+  role?: string, notes?: string,
+): Promise<string | null> {
+  const res = await rpc('field_siu_designate_target', {
+    p_submission: submissionId,
+    p_case: caseId,
+    p_entity_type: entity.type,
+    p_entity_id: entity.id,
+    p_designation: designation,
+    p_priority: priority,
+    p_role: role?.trim() || undefined,
+    p_notes: notes?.trim() || undefined,
+  })
+  return res.error?.message ?? null
+}
+
+// ---------------------------------------------------------------------------
 // Reads
 // ---------------------------------------------------------------------------
 
@@ -258,6 +438,9 @@ export function siuActionLine(
     case 'reassigned': return `${who} moved it from ${nameOf(a.from_user)} to ${nameOf(a.to_user)}`
     case 'sensitive_on': return `${who} restricted this report to SIU`
     case 'sensitive_off': return `${who} lifted the restriction`
+    case 'case_linked': return `${who} linked it to an SIU investigation`
+    case 'case_unlinked': return `${who} unlinked it from the investigation`
+    case 'target_designated': return `${who} designated a target from it`
     default: return a.action
   }
 }
