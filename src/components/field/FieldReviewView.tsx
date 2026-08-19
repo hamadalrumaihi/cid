@@ -32,8 +32,10 @@ import {
   type FieldSubmissionRow, type Reliability, type SubmissionParts, type Urgency,
 } from '@/lib/fieldSubmissions'
 import {
-  QUEUE_FILTERS, QUEUE_LABEL, SIU_FILTERS, SIU_FILTER_LABEL, VERDICTS, VERDICT_LABEL, VERDICT_MEANING, VERDICT_TONE,
-  askOfficer, assignSubmission, assignmentLine, awaitingReviewer, claimSubmission,
+  ARCHIVE_REASONS, DELETED_FILTER, QUEUE_FILTERS, QUEUE_LABEL, SIU_FILTERS,
+  SIU_FILTER_LABEL, VERDICTS, VERDICT_LABEL, VERDICT_MEANING, VERDICT_TONE,
+  archiveSubmission, askOfficer, assignSubmission, assignmentLine, awaitingReviewer,
+  claimSubmission, deleteSubmission, restoreSubmission, undeleteSubmission,
   countsSummary, decideClaim, decideSubmission, loadAssignments,
   loadClaimProgress, loadCounts, loadMessages, loadReviewNotes, loadReviewQueue,
   loadVerdicts, matchesFilter, progressLabel, releaseSubmission, reviewNext, reviewPrompt,
@@ -62,12 +64,13 @@ import { uiPrompt } from '@/components/ui/dialog'
 const NO_PARTS: SubmissionParts = { persons: [], vehicles: [], orgs: [], locations: [], items: [] }
 
 export function FieldReviewView() {
-  const { state, profile, isCommand } = useAuth()
+  const { state, profile, isCommand, isOwner } = useAuth()
   const me = profile?.id ?? null
   const [rows, setRows] = useState<FieldSubmissionRow[] | null>(null)
   const [counts, setCounts] = useState<Record<string, SubmissionCounts>>({})
   const [selected, setSelected] = useState<string | null>(null)
-  const [tab, setTab] = useState<QueueFilter | SiuFilter | 'access' | 'legacy'>('unclaimed')
+  const [tab, setTab] = useState<
+    QueueFilter | SiuFilter | typeof DELETED_FILTER | 'access' | 'legacy'>('unclaimed')
   const [writing, setWriting] = useState(false)
   const v = useTableVersion('field_submissions')
   const access = useAccessRequests()
@@ -94,7 +97,7 @@ export function FieldReviewView() {
   // Counts on the tabs so a reviewer can see where the work is without opening
   // each queue. Only the ones that mean "somebody is waiting" are counted; a
   // number on "All" or "Processed" is trivia.
-  const countFor = (f: QueueFilter | SiuFilter): number | undefined =>
+  const countFor = (f: QueueFilter | SiuFilter | typeof DELETED_FILTER): number | undefined =>
     f === 'all' || f === 'processed' ? undefined
       : all.filter((r) => matchesFilter(r, f, me)).length
 
@@ -149,6 +152,14 @@ export function FieldReviewView() {
               label: SIU_FILTER_LABEL[f],
               count: countFor(f),
             })) : []),
+            // The Owner is the only reader who can see a deleted record at
+            // all, and this is the only place one appears -- so that undoing a
+            // deletion does not depend on whoever made it.
+            ...(isOwner ? [{
+              id: DELETED_FILTER as QueueFilter | SiuFilter | 'access' | 'legacy',
+              label: 'Deleted',
+              count: countFor(DELETED_FILTER),
+            }] : []),
             // Not a queue: access is immediate. This is the record of who can
             // send us intelligence, and it belongs where the reports arrive.
             {
@@ -276,6 +287,9 @@ function ReportCard({ r, counts, me, isCommand, onOpen, onChanged }: {
         </p>
         {summary && <p className="mt-0.5 text-xs text-slate-400">{summary}</p>}
       </button>
+      {r.delete_reason && (
+        <p className="mt-0.5 text-xs text-rose-300/80">Deleted — “{r.delete_reason}”</p>
+      )}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <span className="text-xs text-slate-500">
           {holder
@@ -284,12 +298,24 @@ function ReportCard({ r, counts, me, isCommand, onOpen, onChanged }: {
         </span>
         <span className="flex-1" />
         <Button size="sm" variant="ghost" onClick={onOpen}>Open</Button>
-        {!r.assigned_to && (
+        {!r.assigned_to && !r.deleted_at && (
           <Button size="sm" variant="primary" disabled={busy} onClick={() => void claim()}>
             {busy ? 'Claiming…' : 'Claim'}
           </Button>
         )}
-        {isCommand && <AssignButton submission={r} onChanged={onChanged} />}
+        {isCommand && !r.deleted_at && <AssignButton submission={r} onChanged={onChanged} />}
+        {/* Only the Owner ever sees a deleted record, and this is the only
+            place one appears. */}
+        {r.deleted_at && (
+          <Button size="sm" variant="ghost" onClick={() => void (async () => {
+            const err = await undeleteSubmission(r.id)
+            if (err) { toast(err, 'danger'); return }
+            toast('Restored. It is back in the queues.', 'success')
+            onChanged()
+          })()}>
+            Undo delete
+          </Button>
+        )}
       </div>
     </li>
   )
@@ -359,6 +385,7 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
   onBack: () => void
   onChanged: () => void
 }) {
+  const { isCommand } = useAuth()
   const [parts, setParts] = useState<SubmissionParts>(NO_PARTS)
   const [evidence, setEvidence] = useState<FieldEvidenceRow[]>([])
   const [messages, setMessages] = useState<FieldMessageRow[]>([])
@@ -417,6 +444,44 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
     await after(await releaseSubmission(id, why), 'Released. It is back in the unclaimed queue.')
   }
 
+  const archive = async () => {
+    const why = await uiPrompt(
+      'Archiving takes it out of the active queues and keeps everything — the '
+      + 'evidence, the claims, the verdicts, who reported it. It stays searchable '
+      + 'and can be restored.',
+      {
+        title: 'Archive this record',
+        placeholder: `Why? e.g. ${ARCHIVE_REASONS[0]}`,
+        confirmText: 'Archive',
+      },
+    )
+    if (!why?.trim()) return
+    await after(await archiveSubmission(id, why), 'Archived. It stays searchable.')
+  }
+
+  const restore = async () => {
+    const why = await uiPrompt(
+      'It comes back as "being reviewed" — somebody is looking again. The reason '
+      + 'it was archived stays on the record.',
+      { title: 'Restore from the archive', placeholder: 'Why now? (optional)', confirmText: 'Restore' },
+    )
+    // An empty reason is fine here; a cancelled dialog is not.
+    if (why === null) return
+    await after(await restoreSubmission(id, why), 'Restored.')
+  }
+
+  const drop = async () => {
+    const why = await uiPrompt(
+      'Delete is for a record that should not exist — a test entry, a double '
+      + 'submission, something filed by mistake. If the information is simply not '
+      + 'useful, archive it instead: that keeps everything and can be undone.',
+      { title: 'Delete this record', placeholder: 'Why should this record not exist?', confirmText: 'Delete' },
+    )
+    if (!why?.trim()) return
+    await after(await deleteSubmission(id, why), 'Deleted.')
+    onBack()
+  }
+
   const edges = reviewNext(submission.status)
 
   return (
@@ -441,6 +506,11 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
               {` · ${jurisdictionRouting(submission.jurisdiction)}`}
               {` · ${sourceLabel(submission.source_type)}`}
             </p>
+            {submission.archive_reason && (
+              <p className="text-xs text-amber-300/80">
+                Archived — “{submission.archive_reason}”
+              </p>
+            )}
           </div>
           <Button size="sm" variant="ghost" onClick={onBack}>Back to queue</Button>
         </div>
@@ -554,6 +624,22 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
             <option value="">Reliability…</option>
             {RELIABILITIES.map((r) => <option key={r} value={r}>{RELIABILITY_LABEL[r]}</option>)}
           </Select>
+          {/* Archive is the normal way a record leaves the queue: everything
+              is kept and it can be undone. It is offered next to the review
+              actions because that is where the decision is actually made. */}
+          {submission.status === 'archived' ? (
+            <Button size="sm" variant="ghost" onClick={() => void restore()}>
+              Restore from archive
+            </Button>
+          ) : (
+            <Button size="sm" variant="ghost" onClick={() => void archive()}>Archive</Button>
+          )}
+          {/* Deleting is not tidying up. It is for a record that should not
+              exist -- and the server refuses it outright the moment anything
+              depends on the record, naming what is in the way. */}
+          {isCommand && (
+            <Button size="sm" variant="danger" onClick={() => void drop()}>Delete</Button>
+          )}
           {/* "Add to intelligence" is gone. It copied this record into a second
               one so it could "become intelligence" -- but it already IS
               intelligence, and the copy existed only because there were two

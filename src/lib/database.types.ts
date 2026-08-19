@@ -3389,6 +3389,12 @@ export type Database = {
           observed_to: string | null
           officer_id: string
           jurisdiction: string | null
+          archive_reason: string | null
+          archived_at: string | null
+          archived_by: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           siu_case_id: string | null
           created_by: string | null
           reliability: string | null
@@ -3425,6 +3431,12 @@ export type Database = {
           observed_to?: string | null
           officer_id?: string
           jurisdiction?: string | null
+          archive_reason?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           siu_case_id?: string | null
           created_by?: string | null
           reliability?: string | null
@@ -3461,6 +3473,12 @@ export type Database = {
           observed_to?: string | null
           officer_id?: string
           jurisdiction?: string | null
+          archive_reason?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           siu_case_id?: string | null
           created_by?: string | null
           reliability?: string | null
@@ -11567,6 +11585,22 @@ export type Database = {
       }
       field_submission_siu_unflag: {
         Args: { p_reason: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_archive: {
+        Args: { p_reason: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_delete: {
+        Args: { p_reason: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_restore: {
+        Args: { p_reason?: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_undelete: {
+        Args: { p_submission: string }
         Returns: undefined
       }
       field_submission_grade: {

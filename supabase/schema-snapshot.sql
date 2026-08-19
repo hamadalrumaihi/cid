@@ -1285,6 +1285,12 @@ create table public.field_submissions (
   urgency text,
   reliability text,
   created_by uuid,
+  archived_at timestamp with time zone,
+  archived_by uuid,
+  archive_reason text,
+  deleted_at timestamp with time zone,
+  deleted_by uuid,
+  delete_reason text,
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now()
 );
@@ -1293,6 +1299,8 @@ alter table public.field_submissions add constraint field_submissions_siu_referr
 alter table public.field_submissions add constraint field_submissions_siu_assigned_to_fkey FOREIGN KEY (siu_assigned_to) REFERENCES public.profiles(id);
 alter table public.field_submissions add constraint field_submissions_siu_case_id_fkey FOREIGN KEY (siu_case_id) REFERENCES public.cases(id);
 alter table public.field_submissions add constraint field_submissions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.field_submissions add constraint field_submissions_archived_by_fkey FOREIGN KEY (archived_by) REFERENCES public.profiles(id);
+alter table public.field_submissions add constraint field_submissions_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES public.profiles(id);
 alter table public.field_submissions add constraint field_submissions_source_type_check CHECK ((source_type = ANY (ARRAY['patrol'::text, 'detective'::text, 'confidential'::text, 'surveillance'::text, 'internal'::text, 'external'::text, 'other'::text])));
 alter table public.field_submissions add constraint field_submissions_urgency_check CHECK (((urgency IS NULL) OR (urgency = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
 alter table public.field_submissions add constraint field_submissions_reliability_check CHECK (((reliability IS NULL) OR (reliability = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
@@ -1301,7 +1309,7 @@ alter table public.field_submissions add constraint field_submissions_siu_catego
 alter table public.field_submissions add constraint field_submissions_submission_no_key UNIQUE (submission_no);
 alter table public.field_submissions add constraint field_submissions_officer_id_fkey FOREIGN KEY (officer_id) REFERENCES public.profiles(id);
 alter table public.field_submissions add constraint field_submissions_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.profiles(id);
-alter table public.field_submissions add constraint field_submissions_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'submitted'::text, 'reviewing'::text, 'needs_info'::text, 'partially_reviewed'::text, 'intel_added'::text, 'linked_existing'::text, 'linked_case'::text, 'archived'::text, 'rejected'::text])));
+alter table public.field_submissions add constraint field_submissions_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'new'::text, 'reviewing'::text, 'needs_info'::text, 'reviewed'::text, 'actionable'::text, 'archived'::text])));
 alter table public.field_submissions add constraint field_submissions_jurisdiction_check CHECK (((jurisdiction IS NULL) OR (jurisdiction = ANY (ARRAY['city'::text, 'blaine'::text]))));
 alter table public.field_submissions add constraint field_submissions_jurisdiction_on_submit CHECK (((status = 'draft'::text) OR (jurisdiction IS NOT NULL)));
 alter table public.field_submissions add constraint field_submissions_observed_precision_check CHECK ((observed_precision = ANY (ARRAY['exact'::text, 'approximate'::text, 'range'::text, 'unknown'::text])));
@@ -4289,7 +4297,9 @@ CREATE INDEX field_submission_persons_submission_idx ON public.field_submission_
 CREATE INDEX field_submission_vehicles_submission_idx ON public.field_submission_vehicles USING btree (submission_id);
 CREATE INDEX field_submissions_officer_idx ON public.field_submissions USING btree (officer_id, created_at DESC);
 CREATE INDEX field_submissions_status_idx ON public.field_submissions USING btree (status, created_at DESC);
+CREATE INDEX field_submissions_source_type_idx ON public.field_submissions USING btree (source_type);
 CREATE INDEX field_submissions_assigned_idx ON public.field_submissions USING btree (assigned_to) WHERE (assigned_to IS NOT NULL);
+CREATE INDEX field_submissions_deleted_idx ON public.field_submissions USING btree (deleted_at) WHERE (deleted_at IS NOT NULL);
 CREATE INDEX gang_members_case_id_fkey_idx ON public.gang_members USING btree (case_id);
 CREATE INDEX gang_members_gang_id_fkey_idx ON public.gang_members USING btree (gang_id);
 CREATE INDEX gang_members_person_id_fkey_idx ON public.gang_members USING btree (person_id);
@@ -7687,6 +7697,30 @@ returns jsonb language plpgsql security definer set search_path to '';
 -- high. Vocabularies carried unchanged from the retired intelligence_tips.
 create or replace function public.field_submission_grade(
   p_submission uuid, p_urgency text default null, p_reliability text default null)
+returns void language plpgsql security definer set search_path to '';
+
+-- The way a record normally leaves the active queues: everything is kept and
+-- the reason is required, because "why is nobody working this?" is the question
+-- somebody asks three months later. Restoring puts it back in the lane it was
+-- in, and keeps the archive reason as history rather than erasing it.
+create or replace function public.field_submission_archive(
+  p_submission uuid, p_reason text)
+returns void language plpgsql security definer set search_path to '';
+
+create or replace function public.field_submission_restore(
+  p_submission uuid, p_reason text default null)
+returns void language plpgsql security definer set search_path to '';
+
+-- Deletion is soft, command-only, and refused outright when other work already
+-- depends on the record -- the refusal names what is in the way and points at
+-- archiving. The external officer who submitted a report can never delete it:
+-- a report is not withdrawable once CID has it. Undeleting is the Owner's, so
+-- the person who deleted something is not the only check on it coming back.
+create or replace function public.field_submission_delete(
+  p_submission uuid, p_reason text)
+returns void language plpgsql security definer set search_path to '';
+
+create or replace function public.field_submission_undelete(p_submission uuid)
 returns void language plpgsql security definer set search_path to '';
 
 create or replace function public.field_access_roster()

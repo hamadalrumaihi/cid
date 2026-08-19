@@ -34,28 +34,35 @@ export type FieldOrgRow = Tables<'field_submission_orgs'>
 export type FieldLocationRow = Tables<'field_submission_locations'>
 export type FieldItemRow = Tables<'field_submission_items'>
 
-/** Mirrors the status check constraint. 'draft' and 'submitted' are the only
- *  two an officer can cause; the rest are review decisions. */
+/** Mirrors the status check constraint.
+ *
+ *  The old lane ended in intel_added / linked_existing / linked_case -- three
+ *  terminal states that all meant "somebody pressed Add to intelligence and
+ *  something was created elsewhere". That button is gone, because the record
+ *  already IS the intelligence, so those states described a step nobody takes.
+ *  'partially_reviewed' went the same way from the other direction: claim
+ *  verdicts already say which claims are decided, and a coarser whole-record
+ *  echo of them could only ever disagree.
+ *
+ *  'rejected' folded into 'archived'. It meant "this was worth nothing", which
+ *  is one of the archive reasons -- and keeping both meant two ways to say the
+ *  same thing, one of which read as an accusation about the person who sent it. */
 export const FIELD_STATUSES = [
-  'draft', 'submitted', 'reviewing', 'needs_info', 'partially_reviewed',
-  'intel_added', 'linked_existing', 'linked_case', 'archived', 'rejected',
+  'draft', 'new', 'reviewing', 'needs_info', 'reviewed', 'actionable', 'archived',
 ] as const
 export type FieldStatus = (typeof FIELD_STATUSES)[number]
 
-/** What each status means TO THE SUBMITTING OFFICER. Deliberately plain, and
- *  deliberately free of internal detail — an officer learns that their report
- *  was used, not how CID is working it. */
+/** What each status means TO THE AUTHOR. Deliberately plain, and deliberately
+ *  free of internal detail -- an author learns that their report was used, not
+ *  how CID is working it. */
 const STATUS_LABEL: Record<FieldStatus, string> = {
   draft: 'Draft',
-  submitted: 'Sent',
+  new: 'Sent',
   reviewing: 'Being reviewed',
   needs_info: 'Question for you',
-  partially_reviewed: 'Partly reviewed',
-  intel_added: 'Used as intelligence',
-  linked_existing: 'Added to existing intelligence',
-  linked_case: 'Linked to an investigation',
+  reviewed: 'Reviewed',
+  actionable: 'Being acted on',
   archived: 'Filed, no action',
-  rejected: 'Not used',
 }
 export function fieldStatusLabel(s: string): string {
   return STATUS_LABEL[s as FieldStatus] ?? s
@@ -63,15 +70,12 @@ export function fieldStatusLabel(s: string): string {
 
 const STATUS_MEANING: Record<FieldStatus, string> = {
   draft: 'Not sent yet. Only you can see it, and you can keep editing it.',
-  submitted: 'Sent to CID/SIU. Nobody has picked it up yet.',
+  new: 'Sent to CID/SIU. Nobody has picked it up yet.',
   reviewing: 'An investigator is going through it.',
   needs_info: 'An investigator has asked you something. Open it to answer.',
-  partially_reviewed: 'Some of what you reported has been decided; the rest is still open.',
-  intel_added: 'What you reported became intelligence in the investigative database.',
-  linked_existing: 'It matched something already known and was added to it.',
-  linked_case: 'It was connected to an active investigation.',
-  archived: 'Kept on file. Nothing to act on right now — it may still matter later.',
-  rejected: 'Not usable as intelligence. It stays on record that you reported it.',
+  reviewed: 'An investigator has read it and understood it. Nothing further is needed right now.',
+  actionable: 'It is being acted on.',
+  archived: 'Kept on file. Nothing to act on right now -- it may still matter later.',
 }
 export function fieldStatusMeaning(s: string): string {
   return STATUS_MEANING[s as FieldStatus] ?? ''
@@ -396,7 +400,7 @@ export async function saveDraft(
 /** Send it. The FI number is issued by the database at this moment, so the
  *  caller must re-read the row to learn it rather than predicting one. */
 export async function submitDraft(id: string): Promise<string | null> {
-  const res = await update('field_submissions', id, { status: 'submitted' })
+  const res = await update('field_submissions', id, { status: 'new' })
   return res.error?.message ?? null
 }
 

@@ -8,6 +8,65 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### One lifecycle, and the difference between archiving and deleting
+
+The statuses an intelligence record could hold were still describing the system
+that got removed last week. Three of them — `intel_added`, `linked_existing`,
+`linked_case` — were terminal states that all meant *somebody pressed "Add to
+intelligence" and something was created elsewhere*. That button is gone; the
+record already **is** the intelligence. `partially_reviewed` had the same
+problem from the other end: claim verdicts already say precisely which claims
+are decided, so a whole-record status repeating it in coarser form could only
+ever drift out of agreement with them.
+
+The lifecycle is now what a reviewer actually does:
+
+| | |
+|---|---|
+| **Draft** | being written, visible only to its author |
+| **New** | sent, nobody has picked it up |
+| **Being reviewed** | somebody is working through it |
+| **Waiting on the officer** | a question has been asked |
+| **Reviewed** | looked at, understood, nothing further needed right now |
+| **Being acted on** | worth acting on — a case, surveillance, an SIU referral |
+| **Archived** | out of the active queues, still searchable, restorable |
+
+`rejected` folds into archived. It meant "this was not worth anything", which
+is one of the archive reasons — and keeping both meant two ways to say the same
+thing, one of which sounded like an accusation about the officer who sent it.
+**Reviewed is not the end of the road**: something read a week ago starts
+mattering the moment a second report names the same person, so it reopens.
+
+**Archiving needs a reason.** Not because a form should be tedious, but because
+"why is nobody working this?" is a question somebody asks three months later and
+*Unable to corroborate* and *Duplicate of an earlier report* are very different
+answers. Everything is kept — evidence, claims, verdicts, provenance,
+assignment history, SIU handling — and **Restore** puts the record back into
+review with the archive reason retained as history rather than erased.
+
+**Deleting is a different thing, and is treated as one.** It is the
+administrative correction for a record that should not exist at all: a test
+entry, a double submission, a misfire. So:
+
+- It is **soft**. The row stays, invisible to every ordinary reader, with who
+  deleted it, when, and why.
+- It is **refused outright when anything downstream depends on the record** —
+  claim links, verdicts, evidence, messages, assignment history, SIU handling, a
+  linked case, a designated target. The refusal names what is in the way and
+  points at archiving, which is the answer in nearly every case. *A case is
+  never cascade-deleted because the intelligence behind it was.*
+- It is **command and above**. An investigator can archive anything they can
+  see; deciding a record should never have existed is a different call.
+- The external officer who submitted it **can never delete it**, at any point.
+  That is the point: a report is not withdrawable once CID has it.
+- **Undeleting is the Owner's**, not command's — the person who deleted
+  something should not be the only check on whether it comes back. There is a
+  *Deleted* queue only they can see.
+
+None of this is a second copy of the account-deletion system. Removing a person
+from the portal and removing one intelligence record are separate concerns with
+separate authority, and they stay that way.
+
 ### Intelligence is one thing
 
 The portal had grown two systems for the same job. **Intel Tips** came first — a
