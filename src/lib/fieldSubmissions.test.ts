@@ -16,6 +16,7 @@ import type { FieldSubmissionRow } from './fieldSubmissions'
 const sub = (over: Partial<FieldSubmissionRow> = {}): FieldSubmissionRow => ({
   id: 's1', submission_no: null, officer_id: 'u1', snap_agency: 'SAHP',
   snap_callsign: '924', snap_rank: null, snap_unit: null,
+  snap_officer_name: 'Tom Wood',
   status: 'draft', jurisdiction: 'city', summary: null, details: null,
   observed_at: null, observed_to: null, observed_precision: 'unknown',
   mdt_reference: null, submitted_at: null, assigned_to: null, assigned_at: null,
@@ -136,5 +137,16 @@ describe('status wording', () => {
     // value beats showing nothing.
     expect(fieldStatusLabel('something_new')).toBe('something_new')
     expect(fieldStatusMeaning('something_new')).toBe('')
+  })
+})
+
+describe('who filed a report, after the account is gone', () => {
+  it('keeps the reporting identity on the submission itself', () => {
+    // Permanent deletion repoints officer_id to the tombstone, so reading the
+    // name through the FK would degrade every old report to "Deleted Member".
+    // The snapshot is taken at submit time and frozen by a trigger.
+    const r = sub({ snap_officer_name: 'John Smith', snap_agency: 'BCSO', snap_callsign: '412' })
+    expect(r.snap_officer_name).toBe('John Smith')
+    expect([r.snap_callsign, r.snap_agency].join(' ')).toBe('412 BCSO')
   })
 })

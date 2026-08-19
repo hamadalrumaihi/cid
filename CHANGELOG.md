@@ -8,6 +8,49 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Permanent deletion stops being hand-maintained (and starts working again)
+
+Phase B classified every foreign key pointing at `profiles` by hand — a ~90-entry
+reference map and a matching ~40-statement repoint block, both correct on the
+day. Since then the portal gained Field Intelligence, the whole SIU domain,
+surveillance, narcotics, the penal code, documents, operations and
+records/requests: **176 references neither list had heard of**.
+
+That was not cosmetic. `permanent_delete_execute()` repointed what it knew and
+then deleted the profile, so the first unrepointed NO-ACTION reference aborted
+the run with a raw foreign-key error. Permanently deleting anybody who had
+touched SIU, surveillance or Field Intelligence was simply broken.
+
+The map is now **generated from `pg_constraint`**, so it cannot fall behind the
+schema again. Only the judgement calls stay hand-written — which references are
+immutable records that must block a deletion (court paper, signatures, custody,
+report authorship, evidence collection, standing identity) and which are live
+work somebody must hand over first. The SIU domain adds the second kind: a
+covert operation's agent or handler, a source's handler, a watchlist entry or a
+field report somebody is holding. Those are filtered on whether the work is
+still live, so an operation that ended years ago is a record rather than a
+reassignment somebody owes.
+
+Everything else classifies itself from the FK's own delete rule: RESTRICT
+blocks, CASCADE and SET NULL are counted into the ledger, NO ACTION is repointed
+to the tombstone — and NO ACTION under a single-column UNIQUE has its row
+deleted instead, which is the rule Phase B applied by hand to one table.
+
+**The protocol is unchanged.** Owner-only, a fresh sign-in for both steps, a
+five-minute single-use token, the typed `DELETE <display name>` confirmation,
+the owner-only ledger, and soft removal remaining the default. Verified live: a
+Director, a Bureau Lead and a detective are each refused at both `arm` and
+`execute`.
+
+**Provenance survives the account.** A submission already snapshotted the
+agency, callsign, rank and unit of the officer who filed it; it now snapshots
+their **name** too, so a report reads "John Smith · BCSO 412" rather than
+degrading to "Deleted Member" once the account is gone. Probing the deletion
+end-to-end turned up that the submission guard refused the tombstone repoint
+outright — the guard now allows exactly that one move, with every snapshot
+column still frozen. Verified: the account and its auth row delete cleanly, the
+report survives pointing at the tombstone, and the identity on it is unchanged.
+
 ### Field Intelligence is an access class, not a bureau
 
 `profiles.division` defaulted to **JTF** and `profiles.role` to **detective**.

@@ -3400,6 +3400,7 @@ export type Database = {
           siu_state: string | null
           snap_agency: string
           snap_callsign: string | null
+          snap_officer_name: string | null
           snap_rank: string | null
           snap_unit: string | null
           status: string
@@ -3431,6 +3432,7 @@ export type Database = {
           siu_state?: string | null
           snap_agency?: string
           snap_callsign?: string | null
+          snap_officer_name?: string | null
           snap_rank?: string | null
           snap_unit?: string | null
           status?: string
@@ -3462,6 +3464,7 @@ export type Database = {
           siu_state?: string | null
           snap_agency?: string
           snap_callsign?: string | null
+          snap_officer_name?: string | null
           snap_rank?: string | null
           snap_unit?: string | null
           status?: string

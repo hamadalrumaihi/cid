@@ -20,6 +20,7 @@ import type { Json } from '@/lib/database.types'
 import { rpc } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useProfilesStore } from '@/lib/profiles'
+import { bureauLabel, roleLabel } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -30,8 +31,10 @@ interface PreviewTarget {
   id: string
   display_name: string
   badge_number: string | null
-  role: string
-  division: string
+  // Null for an account nobody ever assigned a bureau or a rank -- a Field
+  // Intelligence submitter, or a sign-in still waiting on a decision.
+  role: string | null
+  division: string | null
   active: boolean
   removed_at: string | null
   is_test: boolean
@@ -202,7 +205,7 @@ export function PermanentDeletionSection() {
               <option value="">— select a member —</option>
               {candidates.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.display_name} · {p.role}/{p.division}
+                  {p.display_name} · {roleLabel(p.role)}/{bureauLabel(p.division)}
                   {p.removed_at ? ' · removed' : p.active ? '' : ' · inactive'}
                 </option>
               ))}
@@ -215,7 +218,7 @@ export function PermanentDeletionSection() {
           <div className="mt-4 space-y-3">
             <p className="text-sm text-slate-300">
               <b className="text-white">{preview.target.display_name}</b>{' '}
-              ({preview.target.role}/{preview.target.division},{' '}
+              ({roleLabel(preview.target.role)}/{bureauLabel(preview.target.division)},{' '}
               {preview.target.removed_at ? 'removed' : preview.target.active ? 'active' : 'inactive'}) —{' '}
               {preview.eligible
                 ? <span className="text-emerald-300">eligible for permanent deletion</span>

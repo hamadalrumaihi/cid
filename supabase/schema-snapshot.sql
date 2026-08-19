@@ -1260,6 +1260,7 @@ create table public.field_submissions (
   snap_callsign text,
   snap_rank text,
   snap_unit text,
+  snap_officer_name text,
   status text not null default 'draft'::text,
   jurisdiction text,
   summary text,
@@ -7655,6 +7656,14 @@ end $$;
 -- CID, and a field officer is not profiles.active, so every investigative table
 -- stays shut. Refuses an active CID account, an existing field officer, a
 -- removed account and a login-denied one.
+-- Permanent deletion classifies every FK to profiles from pg_constraint rather
+-- than from a hand-maintained list, so the map cannot fall behind the schema:
+-- RESTRICT and the named immutable/active-work refs block, CASCADE and SET NULL
+-- are counted, everything else is repointed to the tombstone.
+create or replace function private.permanent_delete_plan()
+returns table (bucket text, tbl text, col text, ref text, filter text)
+language sql stable security definer set search_path to '';
+
 create or replace function public.field_access_self_serve(
   p_agency text, p_callsign text default null,
   p_rank text default null, p_unit text default null)
