@@ -2951,6 +2951,107 @@ export type Database = {
           },
         ]
       }
+      field_submission_cases: {
+        Row: {
+          case_id: string
+          id: string
+          linked_at: string
+          linked_by: string | null
+          note: string | null
+          relation: string
+          submission_id: string
+          submission_no: string | null
+          unlink_reason: string | null
+          unlinked_at: string | null
+          unlinked_by: string | null
+        }
+        Insert: {
+          case_id: string
+          id?: string
+          linked_at?: string
+          linked_by?: string | null
+          note?: string | null
+          relation: string
+          submission_id: string
+          submission_no?: string | null
+          unlink_reason?: string | null
+          unlinked_at?: string | null
+          unlinked_by?: string | null
+        }
+        Update: {
+          case_id?: string
+          id?: string
+          linked_at?: string
+          linked_by?: string | null
+          note?: string | null
+          relation?: string
+          submission_id?: string
+          submission_no?: string | null
+          unlink_reason?: string | null
+          unlinked_at?: string | null
+          unlinked_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_submission_cases_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "field_submission_cases_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      field_submission_sources: {
+        Row: {
+          codename: string
+          created_at: string
+          created_by: string | null
+          handler_id: string
+          handler_notes: string | null
+          source_contact: string | null
+          source_name: string | null
+          submission_id: string
+          updated_at: string
+        }
+        Insert: {
+          codename: string
+          created_at?: string
+          created_by?: string | null
+          handler_id: string
+          handler_notes?: string | null
+          source_contact?: string | null
+          source_name?: string | null
+          submission_id: string
+          updated_at?: string
+        }
+        Update: {
+          codename?: string
+          created_at?: string
+          created_by?: string | null
+          handler_id?: string
+          handler_notes?: string | null
+          source_contact?: string | null
+          source_name?: string | null
+          submission_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_submission_sources_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: true
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       field_submission_evidence: {
         Row: {
           added_by: string | null
@@ -3389,7 +3490,18 @@ export type Database = {
           observed_to: string | null
           officer_id: string
           jurisdiction: string | null
+          archive_reason: string | null
+          archived_at: string | null
+          archived_by: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           siu_case_id: string | null
+          created_by: string | null
+          reliability: string | null
+          source_codename: string | null
+          source_type: string
+          urgency: string | null
           siu_assigned_at: string | null
           siu_assigned_to: string | null
           siu_category: string | null
@@ -3421,7 +3533,18 @@ export type Database = {
           observed_to?: string | null
           officer_id?: string
           jurisdiction?: string | null
+          archive_reason?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           siu_case_id?: string | null
+          created_by?: string | null
+          reliability?: string | null
+          source_codename?: string | null
+          source_type?: string
+          urgency?: string | null
           siu_assigned_at?: string | null
           siu_assigned_to?: string | null
           siu_category?: string | null
@@ -3453,7 +3576,18 @@ export type Database = {
           observed_to?: string | null
           officer_id?: string
           jurisdiction?: string | null
+          archive_reason?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           siu_case_id?: string | null
+          created_by?: string | null
+          reliability?: string | null
+          source_codename?: string | null
+          source_type?: string
+          urgency?: string | null
           siu_assigned_at?: string | null
           siu_assigned_to?: string | null
           siu_category?: string | null
@@ -10126,6 +10260,7 @@ export type Database = {
           confidence: string
           created_at: string
           created_by: string | null
+          field_submission_id: string | null
           id: string
           ingestion_id: string | null
           lat: number | null
@@ -10157,6 +10292,7 @@ export type Database = {
           confidence?: string
           created_at?: string
           created_by?: string | null
+          field_submission_id?: string | null
           id?: string
           ingestion_id?: string | null
           lat?: number | null
@@ -10188,6 +10324,7 @@ export type Database = {
           confidence?: string
           created_at?: string
           created_by?: string | null
+          field_submission_id?: string | null
           id?: string
           ingestion_id?: string | null
           lat?: number | null
@@ -11557,6 +11694,88 @@ export type Database = {
         Args: { p_reason: string; p_submission: string }
         Returns: undefined
       }
+      field_submission_archive: {
+        Args: { p_reason: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_repeats: {
+        Args: { p_submission: string }
+        Returns: {
+          basis: string
+          kind: string
+          label: string
+          others: number
+          records: string[]
+        }[]
+      }
+      field_submission_search: {
+        Args: { p_limit?: number; p_query: string }
+        Returns: { matched: string[]; submission_id: string }[]
+      }
+      field_submission_create_case: {
+        Args: {
+          p_bureau: string
+          p_lead?: string
+          p_submission: string
+          p_summary?: string
+          p_title: string
+        }
+        Returns: string
+      }
+      field_submission_create_observation: {
+        Args: {
+          p_activity: string
+          p_case: string
+          p_confidence?: string
+          p_location?: string
+          p_observed_at?: string
+          p_submission: string
+        }
+        Returns: string
+      }
+      field_submission_link_case: {
+        Args: { p_case: string; p_note?: string; p_submission: string }
+        Returns: string
+      }
+      field_submission_link_observation: {
+        Args: { p_observation: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_set_source: {
+        Args: {
+          p_codename: string
+          p_contact?: string
+          p_handler?: string
+          p_name?: string
+          p_notes?: string
+          p_submission: string
+        }
+        Returns: undefined
+      }
+      field_submission_source_reveal: {
+        Args: { p_submission: string }
+        Returns: Json
+      }
+      field_submission_unlink_case: {
+        Args: { p_link: string; p_reason: string }
+        Returns: undefined
+      }
+      field_submission_delete: {
+        Args: { p_reason: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_restore: {
+        Args: { p_reason?: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_undelete: {
+        Args: { p_submission: string }
+        Returns: undefined
+      }
+      field_submission_grade: {
+        Args: { p_reliability?: string; p_submission: string; p_urgency?: string }
+        Returns: undefined
+      }
       field_submission_counts: {
         Args: Record<PropertyKey, never>
         Returns: {
@@ -11572,10 +11791,6 @@ export type Database = {
       field_submission_release: {
         Args: { p_reason: string; p_submission: string }
         Returns: undefined
-      }
-      field_submission_publish: {
-        Args: { p_submission: string }
-        Returns: string
       }
       my_field_access: {
         Args: Record<PropertyKey, never>

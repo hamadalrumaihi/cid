@@ -8,8 +8,11 @@
 
 import { describe, expect, it } from 'vitest'
 import {
-  FIELD_STATUSES, fieldStatusLabel, fieldStatusMeaning, isEditableByOfficer,
-  normalizedGrams, submissionRef, submitProblem, weightProblem,
+  AUTHORABLE_SOURCES, FIELD_STATUSES, RELIABILITIES, RELIABILITY_LABEL,
+  RELIABILITY_MEANING, SOURCE_TYPES, URGENCIES, URGENCY_LABEL, fieldStatusLabel,
+  fieldStatusMeaning, isEditableByOfficer, isExternalSource, normalizedGrams,
+  reliabilityLabel, sourceLabel, submissionRef, submitProblem, urgencyLabel,
+  urgencyTone, weightProblem,
 } from './fieldSubmissions'
 import type { FieldSubmissionRow } from './fieldSubmissions'
 
@@ -24,6 +27,9 @@ const sub = (over: Partial<FieldSubmissionRow> = {}): FieldSubmissionRow => ({
   siu_referred_by: null, siu_referred_at: null,
   siu_assigned_to: null, siu_assigned_at: null, siu_sensitive: false,
   siu_case_id: null,
+  source_type: 'patrol', source_codename: null, urgency: null, reliability: null, created_by: null,
+  archived_at: null, archived_by: null, archive_reason: null,
+  deleted_at: null, deleted_by: null, delete_reason: null,
   created_at: '2026-08-19T00:00:00Z', updated_at: '2026-08-19T00:00:00Z',
   ...over,
 })
@@ -148,5 +154,71 @@ describe('who filed a report, after the account is gone', () => {
     const r = sub({ snap_officer_name: 'John Smith', snap_agency: 'BCSO', snap_callsign: '412' })
     expect(r.snap_officer_name).toBe('John Smith')
     expect([r.snap_callsign, r.snap_agency].join(' ')).toBe('412 BCSO')
+  })
+})
+
+describe('where the information came from', () => {
+  it('labels every source type', () => {
+    for (const s of SOURCE_TYPES) {
+      expect(sourceLabel(s), s).toBeTruthy()
+      expect(sourceLabel(s), s).not.toContain('_')
+    }
+    expect(sourceLabel(null)).toBe('Unknown')
+  })
+
+  it('never offers patrol as something an investigator can choose', () => {
+    // 'patrol' means "arrived through the external portal", and the database
+    // stamps it. A detective writing down what a patrol officer told them is
+    // second-hand information from a detective, and the record should say so.
+    expect(AUTHORABLE_SOURCES).not.toContain('patrol')
+  })
+
+  it('never offers confidential before its protection exists', () => {
+    // Shipping the option before the protected identity storage is how a
+    // source's name ends up in a summary field. The insert trigger refuses it
+    // too; this keeps the picker honest in the meantime.
+    expect(AUTHORABLE_SOURCES).not.toContain('confidential')
+  })
+
+  it('treats only a patrol record as externally reported', () => {
+    // The agency badge means "somebody outside CID sent this". Everything else
+    // was written by somebody inside it.
+    expect(isExternalSource('patrol')).toBe(true)
+    for (const s of SOURCE_TYPES.filter((s) => s !== 'patrol')) {
+      expect(isExternalSource(s), s).toBe(false)
+    }
+  })
+})
+
+describe('grading the source', () => {
+  it('labels and explains every reliability', () => {
+    for (const r of RELIABILITIES) {
+      expect(RELIABILITY_LABEL[r], r).toBeTruthy()
+      expect(RELIABILITY_MEANING[r], r).toBeTruthy()
+    }
+  })
+
+  it('keeps reliability about the source, not about a claim', () => {
+    // The distinction most easily lost: a confirmed source can still say
+    // something that turns out to be wrong, which is why claim verdicts exist
+    // separately.
+    expect(RELIABILITY_MEANING.confirmed).toMatch(/independent/)
+    expect(RELIABILITY_MEANING.unverified).toMatch(/assessed/)
+  })
+
+  it('escalates the urgency tone rather than shouting at every level', () => {
+    expect(urgencyTone('critical')).toBe('danger')
+    expect(urgencyTone('high')).toBe('warn')
+    expect(urgencyTone('low')).toBe('neutral')
+    expect(urgencyTone(null)).toBe('neutral')
+  })
+
+  it('says nothing when nothing has been graded', () => {
+    expect(urgencyLabel(null)).toBe('')
+    expect(reliabilityLabel(null)).toBe('')
+  })
+
+  it('labels every urgency', () => {
+    for (const u of URGENCIES) expect(URGENCY_LABEL[u], u).toBeTruthy()
   })
 })

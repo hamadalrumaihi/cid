@@ -10,16 +10,19 @@
 import { describe, expect, it } from 'vitest'
 import { FIELD_STATUSES, type FieldSubmissionRow } from './fieldSubmissions'
 import {
-  OPEN_STATUSES, QUEUE_FILTERS, QUEUE_LABEL, assignmentLine, awaitingReviewer,
-  countsSummary, isOpen, matchesFilter, reviewNext, reviewPrompt,
+  ARCHIVE_REASONS, DELETED_FILTER, OPEN_STATUSES, QUEUE_FILTERS, QUEUE_LABEL,
+  assignmentLine, awaitingReviewer, countsSummary, isOpen, matchesFilter,
+  repeatLine, reviewNext, reviewPrompt,
 } from './fieldReview'
-import type { FieldAssignmentRow, FieldMessageRow, SubmissionCounts } from './fieldReview'
+import type {
+  FieldAssignmentRow, FieldMessageRow, RepeatSignal, SubmissionCounts,
+} from './fieldReview'
 
 const sub = (over: Partial<FieldSubmissionRow> = {}): FieldSubmissionRow => ({
   id: 's1', submission_no: 'FI-2026-0001', officer_id: 'u1', snap_agency: 'SAHP',
   snap_callsign: '924', snap_rank: null, snap_unit: null,
   snap_officer_name: 'Tom Wood',
-  status: 'submitted', jurisdiction: 'city', summary: 'x', details: null,
+  status: 'new', jurisdiction: 'city', summary: 'x', details: null,
   observed_at: null, observed_to: null, observed_precision: 'unknown',
   mdt_reference: null, submitted_at: '2026-08-19T00:00:00Z', assigned_to: null,
   assigned_at: null,
@@ -27,6 +30,9 @@ const sub = (over: Partial<FieldSubmissionRow> = {}): FieldSubmissionRow => ({
   siu_referred_by: null, siu_referred_at: null,
   siu_assigned_to: null, siu_assigned_at: null, siu_sensitive: false,
   siu_case_id: null,
+  source_type: 'patrol', source_codename: null, urgency: null, reliability: null, created_by: null,
+  archived_at: null, archived_by: null, archive_reason: null,
+  deleted_at: null, deleted_by: null, delete_reason: null,
   created_at: '2026-08-19T00:00:00Z', updated_at: '2026-08-19T00:00:00Z',
   ...over,
 })
@@ -43,15 +49,15 @@ describe('the review lane', () => {
     expect(reviewNext('draft')).toEqual([])
   })
 
-  it('starts a submitted report at reviewing, archived or rejected', () => {
-    expect(reviewNext('submitted')).toEqual(['reviewing', 'archived', 'rejected'])
+  it('starts a new record at reviewing, reviewed, actionable or archived', () => {
+    expect(reviewNext('new')).toEqual(['reviewing', 'reviewed', 'actionable', 'archived'])
   })
 
-  it('never routes a report backwards to submitted', () => {
-    // 'submitted' means "the officer has sent it and nobody has looked".
-    // Returning a report there would erase the fact that it was reviewed.
+  it('never routes a record backwards to new', () => {
+    // 'new' means "sent, and nobody has looked". Returning a record there
+    // would erase the fact that somebody did.
     for (const s of FIELD_STATUSES) {
-      expect(reviewNext(s), s).not.toContain('submitted')
+      expect(reviewNext(s), s).not.toContain('new')
     }
   })
 
@@ -63,16 +69,18 @@ describe('the review lane', () => {
     }
   })
 
-  it('lets a wrong rejection be undone', () => {
-    // Rejecting is a judgement, and judgements are sometimes wrong. Both
-    // rejected and archived reopen to reviewing.
-    expect(reviewNext('rejected')).toContain('reviewing')
-    expect(reviewNext('archived')).toContain('reviewing')
+  it('reopens an archived record to reviewing and nowhere else', () => {
+    // Archiving is a judgement, and judgements are sometimes wrong. Restoring
+    // means somebody is looking again -- not that the old decision returns
+    // with it.
+    expect(reviewNext('archived')).toEqual(['reviewing'])
   })
 
-  it('narrows as a report settles, ending at archived', () => {
-    expect(reviewNext('intel_added')).not.toContain('rejected')
-    expect(reviewNext('linked_case')).toEqual(['archived'])
+  it('keeps a reviewed record reopenable, because a second report can change it', () => {
+    // Something read a week ago matters the moment another record names the
+    // same person, so 'reviewed' is not a dead end.
+    expect(reviewNext('reviewed')).toContain('reviewing')
+    expect(reviewNext('actionable')).toContain('reviewing')
   })
 
   it('returns an empty list for a status it does not know', () => {
@@ -90,9 +98,9 @@ describe('the review lane', () => {
 
 describe('the open queue', () => {
   it('is the statuses that still want a decision', () => {
-    expect(OPEN_STATUSES).toEqual(['submitted', 'reviewing', 'needs_info', 'partially_reviewed'])
-    expect(isOpen('submitted')).toBe(true)
-    expect(isOpen('intel_added')).toBe(false)
+    expect(OPEN_STATUSES).toEqual(['new', 'reviewing', 'needs_info'])
+    expect(isOpen('new')).toBe(true)
+    expect(isOpen('reviewed')).toBe(false)
     expect(isOpen('archived')).toBe(false)
   })
 
@@ -111,10 +119,16 @@ describe('what the reviewer is being asked to do', () => {
     expect(reviewPrompt(sub({ status: 'needs_info' }))).toMatch(/Waiting on the officer/)
   })
 
-  it('is null once the report is settled', () => {
-    for (const s of ['intel_added', 'linked_case', 'archived', 'rejected'] as const) {
+  it('is null once the record is settled', () => {
+    for (const s of ['reviewed', 'archived'] as const) {
       expect(reviewPrompt(sub({ status: s })), s).toBeNull()
     }
+  })
+
+  it('still says something for an actionable record, which is live work', () => {
+    // 'actionable' is not a resting state: somebody decided this is worth
+    // acting on, and the queue should keep saying so until it is.
+    expect(reviewPrompt(sub({ status: 'actionable' }))).toBe('Being acted on')
   })
 })
 
@@ -152,9 +166,8 @@ describe('the queues', () => {
   it('counts an unheld report as unclaimed only while it still wants a decision', () => {
     // A processed report with nobody on it is not work waiting to be taken; it
     // is finished. Listing it under Unclaimed would make the queue a liar.
-    expect(matchesFilter(sub({ status: 'submitted', assigned_to: null }), 'unclaimed', ME)).toBe(true)
+    expect(matchesFilter(sub({ status: 'new', assigned_to: null }), 'unclaimed', ME)).toBe(true)
     expect(matchesFilter(sub({ status: 'archived', assigned_to: null }), 'unclaimed', ME)).toBe(false)
-    expect(matchesFilter(sub({ status: 'rejected', assigned_to: null }), 'unclaimed', ME)).toBe(false)
   })
 
   it('never puts a report in both Unclaimed and Assigned', () => {
@@ -190,10 +203,11 @@ describe('the queues', () => {
     }
   })
 
-  it('treats rejected as processed, not as open work', () => {
-    // Rejected is a decision that was made, not a decision still owed.
-    expect(matchesFilter(sub({ status: 'rejected' }), 'processed', ME)).toBe(true)
-    expect(matchesFilter(sub({ status: 'intel_added' }), 'processed', ME)).toBe(true)
+  it('treats a decided record as processed, not as open work', () => {
+    // These are decisions that were made, not decisions still owed.
+    expect(matchesFilter(sub({ status: 'archived' }), 'processed', ME)).toBe(true)
+    expect(matchesFilter(sub({ status: 'reviewed' }), 'processed', ME)).toBe(true)
+    expect(matchesFilter(sub({ status: 'actionable' }), 'processed', ME)).toBe(true)
     expect(matchesFilter(sub({ status: 'needs_info' }), 'processed', ME)).toBe(false)
   })
 })
@@ -232,5 +246,63 @@ describe('reading the assignment history', () => {
     // The database could gain an action before this file does. A history with a
     // silent gap in it is worse than one with an unfamiliar word in it.
     expect(assignmentLine(asg({ action: 'siu_assigned' }), name)).toBe('siu_assigned')
+  })
+})
+
+describe('archive and delete are different things', () => {
+  const ME = 'd1'
+
+  it('offers reasons worth having a word for', () => {
+    // "Archived" tells the next person nothing; "unable to corroborate" tells
+    // them whether it is worth trying again.
+    expect(ARCHIVE_REASONS.length).toBeGreaterThan(3)
+    expect(ARCHIVE_REASONS).toContain('Unable to corroborate')
+    expect(ARCHIVE_REASONS).toContain('Duplicate of another record')
+  })
+
+  it('keeps an archived record in its own queue, out of the working ones', () => {
+    const r = sub({ status: 'archived', assigned_to: null })
+    expect(matchesFilter(r, 'archived', ME)).toBe(true)
+    expect(matchesFilter(r, 'unclaimed', ME)).toBe(false)
+    // ...but it is still there under All, because archived is not gone.
+    expect(matchesFilter(r, 'all', ME)).toBe(true)
+  })
+
+  it('keeps a deleted record out of every queue except Deleted', () => {
+    // The Owner is the only reader who sees these at all, and one turning up
+    // in a working queue is one somebody would work.
+    const r = sub({ status: 'new', assigned_to: null, deleted_at: '2026-08-19T00:00:00Z' })
+    expect(matchesFilter(r, DELETED_FILTER, ME)).toBe(true)
+    for (const f of QUEUE_FILTERS) {
+      expect(matchesFilter(r, f, ME), f).toBe(false)
+    }
+  })
+
+  it('keeps a live record out of the Deleted list', () => {
+    expect(matchesFilter(sub({ status: 'new' }), DELETED_FILTER, ME)).toBe(false)
+  })
+
+  it('labels every queue including the archive', () => {
+    for (const f of QUEUE_FILTERS) expect(QUEUE_LABEL[f], f).toBeTruthy()
+  })
+})
+
+describe('the repeat signal', () => {
+  const rep = (over: Partial<RepeatSignal> = {}): RepeatSignal => ({
+    kind: 'person', label: 'Marisol Rodriguez', basis: 'named',
+    others: 2, records: ['FI-2026-0003', 'FI-2026-0009'], ...over,
+  })
+
+  it('says how many others, because the count is the whole signal', () => {
+    expect(repeatLine(rep())).toBe('Marisol Rodriguez — also named in 2 other records')
+    expect(repeatLine(rep({ others: 1 }))).toBe('Marisol Rodriguez — also named in 1 other record')
+  })
+
+  it('distinguishes a shared name from a reviewer-confirmed match', () => {
+    // Two people can share a name. Two records matched to the same registry
+    // entry cannot -- a human already decided they were the same, so it reads
+    // as a stronger claim rather than the same sentence.
+    expect(repeatLine(rep({ basis: 'linked' })))
+      .toBe('Marisol Rodriguez — matched to the same registry record in 2 other records')
   })
 })

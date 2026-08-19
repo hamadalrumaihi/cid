@@ -35,17 +35,16 @@ export type FieldReviewNoteRow = Tables<'field_submission_reviews'>
  *  report archived before its moment can matter later. */
 const NEXT: Record<FieldStatus, readonly FieldStatus[]> = {
   draft: [],
-  submitted: ['reviewing', 'archived', 'rejected'],
-  reviewing: ['needs_info', 'partially_reviewed', 'intel_added', 'linked_existing',
-    'linked_case', 'archived', 'rejected'],
-  needs_info: ['reviewing', 'archived', 'rejected'],
-  partially_reviewed: ['reviewing', 'intel_added', 'linked_existing', 'linked_case',
-    'archived', 'rejected'],
-  intel_added: ['linked_existing', 'linked_case', 'archived'],
-  linked_existing: ['linked_case', 'archived'],
-  linked_case: ['archived'],
+  new: ['reviewing', 'reviewed', 'actionable', 'archived'],
+  reviewing: ['needs_info', 'reviewed', 'actionable', 'archived'],
+  needs_info: ['reviewing', 'reviewed', 'actionable', 'archived'],
+  // Reviewed is not the end of the road: something read a week ago can turn
+  // out to matter the moment a second report names the same person.
+  reviewed: ['reviewing', 'actionable', 'archived'],
+  actionable: ['reviewing', 'reviewed', 'archived'],
+  // Archived reopens to reviewing and nowhere else -- restoring means somebody
+  // is looking again, not that the old decision comes back with it.
   archived: ['reviewing'],
-  rejected: ['reviewing'],
 }
 
 export function reviewNext(from: string): readonly FieldStatus[] {
@@ -54,7 +53,7 @@ export function reviewNext(from: string): readonly FieldStatus[] {
 
 /** Statuses that still want a decision, for the default queue filter. */
 export const OPEN_STATUSES: readonly FieldStatus[] = [
-  'submitted', 'reviewing', 'needs_info', 'partially_reviewed',
+  'new', 'reviewing', 'needs_info',
 ]
 
 export function isOpen(s: string): boolean {
@@ -70,7 +69,8 @@ export function isOpen(s: string): boolean {
  *  intelligence and a report that was rejected are both done being triaged, and
  *  neither is closed in any sense the officer would recognise. */
 export const QUEUE_FILTERS = [
-  'all', 'unclaimed', 'mine', 'assigned', 'needs_info', 'city', 'blaine', 'processed',
+  'all', 'unclaimed', 'mine', 'assigned', 'needs_info', 'city', 'blaine',
+  'processed', 'archived',
 ] as const
 export type QueueFilter = (typeof QUEUE_FILTERS)[number]
 
@@ -83,7 +83,13 @@ export const QUEUE_LABEL: Record<QueueFilter, string> = {
   city: 'Los Santos / City',
   blaine: 'Blaine County',
   processed: 'Processed',
+  archived: 'Archived',
 }
+
+/** The Owner's view of records somebody deleted. Separate from the queue
+ *  filters because it is not a queue: nobody works it, and it exists so a
+ *  deletion can be undone by somebody other than whoever made it. */
+export const DELETED_FILTER = 'deleted' as const
 
 /** The queues an SIU agent gets on top of the ordinary ones. Same table, same
  *  reports: SIU is a specialist detachment inside CID, not a separate system
@@ -105,15 +111,19 @@ export const SIU_FILTER_LABEL: Record<SiuFilter, string> = {
 }
 
 /** Statuses that are done being triaged. */
-const PROCESSED: readonly string[] = [
-  'intel_added', 'linked_existing', 'linked_case', 'archived', 'rejected',
-]
+const PROCESSED: readonly string[] = ['reviewed', 'actionable', 'archived']
 
 export function matchesFilter(
   r: Pick<FieldSubmissionRow, 'status' | 'assigned_to' | 'jurisdiction'
-    | 'siu_state' | 'siu_category' | 'siu_assigned_to'>,
-  filter: QueueFilter | SiuFilter, me: string | null,
+    | 'siu_state' | 'siu_category' | 'siu_assigned_to' | 'deleted_at'>,
+  filter: QueueFilter | SiuFilter | typeof DELETED_FILTER, me: string | null,
 ): boolean {
+  // A deleted record is only ever in the Deleted list. The Owner is the only
+  // reader who sees them at all, and they should not turn up mixed into the
+  // working queues -- somebody would work one.
+  if (r.deleted_at) return filter === DELETED_FILTER
+  if (filter === DELETED_FILTER) return false
+
   switch (filter) {
     // The SIU queues. 'siu_referred' is deliberately the ones still waiting on
     // an answer: a report SIU already took is no longer a referral to work.
@@ -135,6 +145,7 @@ export function matchesFilter(
     case 'city': return r.jurisdiction === 'city'
     case 'blaine': return r.jurisdiction === 'blaine'
     case 'processed': return PROCESSED.includes(r.status)
+    case 'archived': return r.status === 'archived'
     default: return true
   }
 }
@@ -143,10 +154,10 @@ export function matchesFilter(
  *  report is settled. */
 export function reviewPrompt(s: FieldSubmissionRow): string | null {
   switch (s.status) {
-    case 'submitted': return 'Not picked up yet'
+    case 'new': return 'Not picked up yet'
     case 'reviewing': return s.assigned_to ? 'In review' : 'In review, unassigned'
     case 'needs_info': return 'Waiting on the officer'
-    case 'partially_reviewed': return 'Part-decided'
+    case 'actionable': return 'Being acted on'
     default: return null
   }
 }
@@ -157,6 +168,63 @@ export function reviewPrompt(s: FieldSubmissionRow): string | null {
 //
 // All RLS-scoped. A reviewer's policy returns submitted reports and never a
 // draft, so there is no "exclude drafts" filter here to forget.
+
+/** One search over the record and all six of its child tables, plus the thread
+ *  with the officer. Server-side because the searchable text mostly is NOT on
+ *  the record — somebody looking for "Rodriguez" is almost never looking for a
+ *  report whose summary says Rodriguez — and every hit is passed back through
+ *  the same readability guard the queue uses, so a search can never reach
+ *  further than the queue can.
+ *
+ *  ARCHIVED RECORDS ARE INCLUDED. Archiving means "not being worked", not
+ *  "gone": the promise of archive-over-delete is that the record stays findable,
+ *  and a search that skipped them would break that promise exactly when somebody
+ *  is looking for the report they archived last month.
+ *
+ *  Returns a map of submission id → what matched, so the result list can say
+ *  "matched a person" rather than leaving the reader to guess why a record with
+ *  an unrelated-looking summary is in front of them. */
+export async function searchSubmissions(q: string): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>()
+  if (q.trim().length < 2) return out
+  const res = await rpc('field_submission_search', { p_query: q.trim() })
+  if (res.error || !Array.isArray(res.data)) return out
+  for (const row of res.data as unknown as { submission_id: string; matched: string[] | null }[]) {
+    if (row?.submission_id) out.set(row.submission_id, row.matched ?? [])
+  }
+  return out
+}
+
+/** Have we heard this before?
+ *
+ *  Three unremarkable reports naming the same person are not three unremarkable
+ *  reports, and nobody spots that reading them a week apart. Two strengths of
+ *  signal, kept apart: 'named' is the same text written down twice — cheap,
+ *  noisy, often right — and 'linked' means a reviewer already matched both
+ *  records to the SAME registry entry, which is a human having decided they are
+ *  the same person. */
+export interface RepeatSignal {
+  kind: string
+  label: string
+  basis: 'named' | 'linked'
+  others: number
+  records: string[]
+}
+
+export async function loadRepeats(submissionId: string): Promise<RepeatSignal[]> {
+  const res = await rpc('field_submission_repeats', { p_submission: submissionId })
+  if (res.error || !Array.isArray(res.data)) return []
+  return (res.data as unknown as RepeatSignal[]).filter((r) => r && r.others > 0)
+}
+
+/** How a repeat reads to a reviewer. The count is the point, and the strength
+ *  of the match changes what it means, so both are said. */
+export function repeatLine(r: RepeatSignal): string {
+  const n = `${r.others} other record${r.others === 1 ? '' : 's'}`
+  return r.basis === 'linked'
+    ? `${r.label} — matched to the same registry record in ${n}`
+    : `${r.label} — also named in ${n}`
+}
 
 export async function loadReviewQueue(): Promise<FieldSubmissionRow[]> {
   return list('field_submissions', { order: 'submitted_at', ascending: false })
@@ -271,6 +339,62 @@ export async function assignSubmission(
   const res = await rpc('field_submission_assign', {
     p_submission: id, p_user: userId, p_reason: reason?.trim() || undefined,
   })
+  return res.error?.message ?? null
+}
+
+// ---------------------------------------------------------------------------
+// Leaving the queue: archive, and the rarer thing that is not archive
+// ---------------------------------------------------------------------------
+
+/** The reasons a record stops being worked. Offered as a list because the
+ *  reason is the useful part -- "archived" tells the next person nothing, and
+ *  "unable to corroborate" tells them whether to try again. Free text is still
+ *  accepted; these are the ones worth having a word for. */
+export const ARCHIVE_REASONS = [
+  'No investigative value',
+  'Duplicate of another record',
+  'Resolved through another case',
+  'Outdated',
+  'Unable to corroborate',
+  'Retained for reference',
+] as const
+
+/** Archive. The normal way a record leaves the active queues: everything is
+ *  kept -- evidence, claims, verdicts, provenance, assignment history, SIU
+ *  handling -- it stays searchable, and it can be restored. */
+export async function archiveSubmission(id: string, reason: string): Promise<string | null> {
+  const res = await rpc('field_submission_archive', { p_submission: id, p_reason: reason })
+  return res.error?.message ?? null
+}
+
+/** Restore. Comes back as 'reviewing', never as whatever it was before:
+ *  somebody is looking again, and the archive reason stays on the record. */
+export async function restoreSubmission(
+  id: string, reason?: string,
+): Promise<string | null> {
+  const res = await rpc('field_submission_restore', {
+    p_submission: id, p_reason: reason?.trim() || undefined,
+  })
+  return res.error?.message ?? null
+}
+
+/** Delete. NOT the way to clear out information that turned out to be
+ *  unhelpful -- that is archiving. This is an administrative correction for a
+ *  record that should not exist: a test entry, a double submission, something
+ *  filed against the wrong report.
+ *
+ *  Command and above, soft server-side, and refused outright when anything
+ *  downstream depends on the record. The refusal names what is in the way and
+ *  points at archive, because "no" on its own would just be tried again. */
+export async function deleteSubmission(id: string, reason: string): Promise<string | null> {
+  const res = await rpc('field_submission_delete', { p_submission: id, p_reason: reason })
+  return res.error?.message ?? null
+}
+
+/** Undelete — the Owner's, not command's. The person who deleted something
+ *  should not be the only check on whether it comes back. */
+export async function undeleteSubmission(id: string): Promise<string | null> {
+  const res = await rpc('field_submission_undelete', { p_submission: id })
   return res.error?.message ?? null
 }
 
@@ -460,16 +584,13 @@ export async function linkClaim(
   return res.error?.message ?? null
 }
 
-/** Put the report into the intelligence database: one `intelligence_tips` row
- *  carrying the submission id, plus a tip link per linked claim.
- *
- *  The tip arrives as `new` / `unverified` whatever a reviewer decided about
- *  individual claims. A tip's own triage is a separate judgement, and an
- *  external submission arriving pre-accepted is the thing to avoid. */
-export async function publishSubmission(id: string): Promise<string | null> {
-  const res = await rpc('field_submission_publish', { p_submission: id })
-  return res.error?.message ?? null
-}
+// "Add to intelligence" is gone, and so is publishSubmission(). It copied a
+// reviewed report into an intelligence_tips row so the report could "become
+// intelligence" -- but the report already WAS intelligence, and the copy
+// existed only because there were two systems. What it produced was the same
+// information twice, under two numbers, with a detective having to know which
+// screen to read. The claim links a reviewer makes are untouched: those are
+// matches to real registry records, which was always the part worth keeping.
 
 /** Whether a claim has already been matched to a record. */
 export function linkFor(

@@ -20,7 +20,7 @@
  *  ever sent. The officer may edit a draft freely and cannot touch it after.
  */
 
-import { insert, list, remove, update } from './db'
+import { insert, list, remove, rpc, update } from './db'
 import type { Tables, TablesInsert } from './database.types'
 
 // ---------------------------------------------------------------------------
@@ -34,28 +34,35 @@ export type FieldOrgRow = Tables<'field_submission_orgs'>
 export type FieldLocationRow = Tables<'field_submission_locations'>
 export type FieldItemRow = Tables<'field_submission_items'>
 
-/** Mirrors the status check constraint. 'draft' and 'submitted' are the only
- *  two an officer can cause; the rest are review decisions. */
+/** Mirrors the status check constraint.
+ *
+ *  The old lane ended in intel_added / linked_existing / linked_case -- three
+ *  terminal states that all meant "somebody pressed Add to intelligence and
+ *  something was created elsewhere". That button is gone, because the record
+ *  already IS the intelligence, so those states described a step nobody takes.
+ *  'partially_reviewed' went the same way from the other direction: claim
+ *  verdicts already say which claims are decided, and a coarser whole-record
+ *  echo of them could only ever disagree.
+ *
+ *  'rejected' folded into 'archived'. It meant "this was worth nothing", which
+ *  is one of the archive reasons -- and keeping both meant two ways to say the
+ *  same thing, one of which read as an accusation about the person who sent it. */
 export const FIELD_STATUSES = [
-  'draft', 'submitted', 'reviewing', 'needs_info', 'partially_reviewed',
-  'intel_added', 'linked_existing', 'linked_case', 'archived', 'rejected',
+  'draft', 'new', 'reviewing', 'needs_info', 'reviewed', 'actionable', 'archived',
 ] as const
 export type FieldStatus = (typeof FIELD_STATUSES)[number]
 
-/** What each status means TO THE SUBMITTING OFFICER. Deliberately plain, and
- *  deliberately free of internal detail — an officer learns that their report
- *  was used, not how CID is working it. */
+/** What each status means TO THE AUTHOR. Deliberately plain, and deliberately
+ *  free of internal detail -- an author learns that their report was used, not
+ *  how CID is working it. */
 const STATUS_LABEL: Record<FieldStatus, string> = {
   draft: 'Draft',
-  submitted: 'Sent',
+  new: 'Sent',
   reviewing: 'Being reviewed',
   needs_info: 'Question for you',
-  partially_reviewed: 'Partly reviewed',
-  intel_added: 'Used as intelligence',
-  linked_existing: 'Added to existing intelligence',
-  linked_case: 'Linked to an investigation',
+  reviewed: 'Reviewed',
+  actionable: 'Being acted on',
   archived: 'Filed, no action',
-  rejected: 'Not used',
 }
 export function fieldStatusLabel(s: string): string {
   return STATUS_LABEL[s as FieldStatus] ?? s
@@ -63,15 +70,12 @@ export function fieldStatusLabel(s: string): string {
 
 const STATUS_MEANING: Record<FieldStatus, string> = {
   draft: 'Not sent yet. Only you can see it, and you can keep editing it.',
-  submitted: 'Sent to CID/SIU. Nobody has picked it up yet.',
+  new: 'Sent to CID/SIU. Nobody has picked it up yet.',
   reviewing: 'An investigator is going through it.',
   needs_info: 'An investigator has asked you something. Open it to answer.',
-  partially_reviewed: 'Some of what you reported has been decided; the rest is still open.',
-  intel_added: 'What you reported became intelligence in the investigative database.',
-  linked_existing: 'It matched something already known and was added to it.',
-  linked_case: 'It was connected to an active investigation.',
-  archived: 'Kept on file. Nothing to act on right now — it may still matter later.',
-  rejected: 'Not usable as intelligence. It stays on record that you reported it.',
+  reviewed: 'An investigator has read it and understood it. Nothing further is needed right now.',
+  actionable: 'It is being acted on.',
+  archived: 'Kept on file. Nothing to act on right now -- it may still matter later.',
 }
 export function fieldStatusMeaning(s: string): string {
   return STATUS_MEANING[s as FieldStatus] ?? ''
@@ -114,6 +118,110 @@ export function jurisdictionLabel(j: string | null): string {
 export function jurisdictionRouting(j: string | null): string {
   const b = JURISDICTION_BUREAU[j as Jurisdiction]
   return b ? `${jurisdictionLabel(j)} · ${b}` : jurisdictionLabel(j)
+}
+
+// ---------------------------------------------------------------------------
+// Where the information came from
+// ---------------------------------------------------------------------------
+
+/** Intelligence is one entity whatever its origin, and the origin is a fact
+ *  about the record rather than a separate system to keep. These are the source
+ *  types the old Intel Tips model carried, re-spelled once so that patrol,
+ *  detectives, surveillance and outside agencies all describe themselves in the
+ *  same vocabulary.
+ *
+ *  'patrol' is not offered as a choice: it means "arrived through the external
+ *  portal", and the database stamps it. A detective writing down what a patrol
+ *  officer told them is second-hand information from a detective, and the
+ *  record says so. */
+export const SOURCE_TYPES = [
+  'patrol', 'detective', 'confidential', 'surveillance',
+  'internal', 'external', 'other',
+] as const
+export type SourceType = (typeof SOURCE_TYPES)[number]
+
+export const SOURCE_LABEL: Record<SourceType, string> = {
+  patrol: 'Patrol submission',
+  detective: 'Detective',
+  confidential: 'Confidential source',
+  surveillance: 'Surveillance',
+  internal: 'Internal intelligence',
+  external: 'External agency',
+  other: 'Other',
+}
+
+/** What an investigator may pick when authoring a record. 'patrol' is stamped
+ *  by the database. 'confidential' is still absent, but no longer because it is
+ *  unavailable: it is now set by registering the source (see fieldActions), and
+ *  the database refuses the claim until that protected row exists. Picking it
+ *  from a dropdown would put the choice before the protection. */
+export const AUTHORABLE_SOURCES: readonly SourceType[] = [
+  'detective', 'surveillance', 'internal', 'external', 'other',
+]
+
+export function sourceLabel(s: string | null): string {
+  return SOURCE_LABEL[s as SourceType] ?? s ?? 'Unknown'
+}
+
+/** Only a patrol record carries an external reporting identity worth showing
+ *  as an agency badge; everything else was written by somebody in CID. */
+export function isExternalSource(s: string | null): boolean {
+  return s === 'patrol'
+}
+
+// ---------------------------------------------------------------------------
+// Grading — a reviewer's judgement, not the author's
+// ---------------------------------------------------------------------------
+
+/** How fast somebody should look. */
+export const URGENCIES = ['low', 'medium', 'high', 'critical'] as const
+export type Urgency = (typeof URGENCIES)[number]
+
+export const URGENCY_LABEL: Record<Urgency, string> = {
+  low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical',
+}
+
+/** The classic source grading, carried over from Intel Tips unchanged: a
+ *  second scale for the same judgement would have meant learning two. */
+export const RELIABILITIES = [
+  'confirmed', 'probable', 'possible', 'unverified', 'disproven',
+] as const
+export type Reliability = (typeof RELIABILITIES)[number]
+
+export const RELIABILITY_LABEL: Record<Reliability, string> = {
+  confirmed: 'Confirmed',
+  probable: 'Probable',
+  possible: 'Possible',
+  unverified: 'Unverified',
+  disproven: 'Disproven',
+}
+
+/** Deliberately distinct from claim verdicts. Reliability grades the SOURCE —
+ *  how much weight this account carries. A verdict grades one CLAIM against the
+ *  record. A confirmed source can still make a claim that turns out wrong. */
+export const RELIABILITY_MEANING: Record<Reliability, string> = {
+  confirmed: 'Corroborated by something independent of the source.',
+  probable: 'Consistent with what we already know, not independently confirmed.',
+  possible: 'Plausible, nothing supports or contradicts it yet.',
+  unverified: 'Nobody has assessed this yet.',
+  disproven: 'Something independent contradicts it.',
+}
+
+export function urgencyLabel(u: string | null): string {
+  return u ? (URGENCY_LABEL[u as Urgency] ?? u) : ''
+}
+
+export function reliabilityLabel(r: string | null): string {
+  return r ? (RELIABILITY_LABEL[r as Reliability] ?? r) : ''
+}
+
+export function urgencyTone(u: string | null): 'neutral' | 'accent' | 'warn' | 'danger' {
+  switch (u) {
+    case 'critical': return 'danger'
+    case 'high': return 'warn'
+    case 'medium': return 'accent'
+    default: return 'neutral'
+  }
 }
 
 export const TIME_PRECISION = ['exact', 'approximate', 'range', 'unknown'] as const
@@ -237,6 +345,18 @@ export function submissionRef(s: FieldSubmissionRow): string {
 // ordinary table writes -- the INSERT policy decides who may create, and the
 // BEFORE triggers decide what the row may say.
 
+/** Grade the source. Reviewer-only server-side: an officer reporting what they
+ *  saw is not the person to say how reliable it is, and a detective grading
+ *  their own tip grades it high. */
+export async function gradeSubmission(
+  id: string, urgency?: Urgency, reliability?: Reliability,
+): Promise<string | null> {
+  const res = await rpc('field_submission_grade', {
+    p_submission: id, p_urgency: urgency, p_reliability: reliability,
+  })
+  return res.error?.message ?? null
+}
+
 export async function loadMySubmissions(): Promise<FieldSubmissionRow[]> {
   return list('field_submissions', { order: 'created_at', ascending: false })
     .catch(() => [])
@@ -281,7 +401,7 @@ export async function saveDraft(
 /** Send it. The FI number is issued by the database at this moment, so the
  *  caller must re-read the row to learn it rather than predicting one. */
 export async function submitDraft(id: string): Promise<string | null> {
-  const res = await update('field_submissions', id, { status: 'submitted' })
+  const res = await update('field_submissions', id, { status: 'new' })
   return res.error?.message ?? null
 }
 

@@ -25,7 +25,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from '@/lib/toast'
 import {
-  BASIS, BASIS_LABEL, ITEM_CATEGORIES, JURISDICTIONS, JURISDICTION_LABEL,
+  AUTHORABLE_SOURCES, BASIS, BASIS_LABEL, ITEM_CATEGORIES, JURISDICTIONS,
+  JURISDICTION_LABEL, SOURCE_LABEL,
   ITEM_CATEGORY_LABEL, LOCATION_KINDS, LOCATION_KIND_LABEL, ORG_ROLES,
   ORG_ROLE_LABEL, ORG_TYPES, ORG_TYPE_LABEL, TIME_PRECISION, TIME_PRECISION_LABEL,
   WEIGHT_UNITS, addPart, createDraft, discardDraft, loadSubmissionParts,
@@ -45,11 +46,13 @@ interface Draft {
   observed_to: string
   mdt_reference: string
   jurisdiction: string
+  source_type: string
 }
 
 const EMPTY: Draft = {
   summary: '', details: '', observed_precision: 'unknown',
   observed_at: '', observed_to: '', mdt_reference: '', jurisdiction: '',
+  source_type: 'detective',
 }
 
 const NO_PARTS: SubmissionParts = { persons: [], vehicles: [], orgs: [], locations: [], items: [] }
@@ -57,7 +60,22 @@ const NO_PARTS: SubmissionParts = { persons: [], vehicles: [], orgs: [], locatio
 /** A datetime-local value -> an ISO string the database will accept, or null. */
 const iso = (v: string): string | null => (v ? new Date(v).toISOString() : null)
 
-export function FieldSubmitForm({ onDone }: { onDone: () => void }) {
+/** The structured intelligence form.
+ *
+ *  One form for both authors. A patrol officer reaches it from their portal; an
+ *  investigator reaches it from the Intelligence workspace through "New
+ *  intelligence". They produce the same kind of record, which is the entire
+ *  point of there being one Intelligence entity: the difference between them is
+ *  who is recorded as the author and where the information came from, and the
+ *  database decides both.
+ *
+ *  `asInvestigator` only adds the source picker. A patrol officer is not shown
+ *  it because their record is a patrol record by definition -- the database
+ *  stamps it whatever the client sends. */
+export function FieldSubmitForm({ onDone, asInvestigator = false }: {
+  onDone: () => void
+  asInvestigator?: boolean
+}) {
   const [id, setId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft>(EMPTY)
   const [parts, setParts] = useState<SubmissionParts>(NO_PARTS)
@@ -101,6 +119,9 @@ export function FieldSubmitForm({ onDone }: { onDone: () => void }) {
           observed_to: draft.observed_precision === 'range' ? iso(draft.observed_to) : null,
           mdt_reference: draft.mdt_reference || null,
           jurisdiction: draft.jurisdiction || null,
+          // Ignored by the database for a patrol officer, whose record is a
+          // patrol record however the client asks.
+          source_type: draft.source_type,
         })
         dirty.current = false
         setSaving(err ? 'idle' : 'saved')
@@ -177,6 +198,19 @@ export function FieldSubmitForm({ onDone }: { onDone: () => void }) {
         </div>
 
         <div className="mt-4 space-y-3">
+          {asInvestigator && (
+            <Field label="Where did this come from?"
+              hint="What kind of information this is. Frozen once the record is sent.">
+              {(fid) => (
+                <Select id={fid} value={draft.source_type}
+                  onChange={(e) => set('source_type', e.target.value)}>
+                  {AUTHORABLE_SOURCES.map((v) => (
+                    <option key={v} value={v}>{SOURCE_LABEL[v]}</option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          )}
           <Field label="What happened?" hint="One or two lines is fine. This is the only thing required.">
             {(fid) => (
               <Textarea id={fid} rows={3} value={draft.summary}

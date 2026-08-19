@@ -25,32 +25,40 @@ import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import {
-  fieldStatusLabel, jurisdictionLabel, jurisdictionRouting, loadSubmissionParts,
-  submissionRef,
-  type FieldSubmissionRow, type SubmissionParts,
+  RELIABILITIES, RELIABILITY_LABEL, RELIABILITY_MEANING, URGENCIES, URGENCY_LABEL,
+  fieldStatusLabel, gradeSubmission, isExternalSource, jurisdictionLabel,
+  jurisdictionRouting, loadSubmissionParts, reliabilityLabel, sourceLabel,
+  submissionRef, urgencyLabel, urgencyTone,
+  type FieldSubmissionRow, type Reliability, type SubmissionParts, type Urgency,
 } from '@/lib/fieldSubmissions'
 import {
-  QUEUE_FILTERS, QUEUE_LABEL, SIU_FILTERS, SIU_FILTER_LABEL, VERDICTS, VERDICT_LABEL, VERDICT_MEANING, VERDICT_TONE,
-  askOfficer, assignSubmission, assignmentLine, awaitingReviewer, claimSubmission,
+  ARCHIVE_REASONS, DELETED_FILTER, QUEUE_FILTERS, QUEUE_LABEL, SIU_FILTERS,
+  SIU_FILTER_LABEL, VERDICTS, VERDICT_LABEL, VERDICT_MEANING, VERDICT_TONE,
+  archiveSubmission, askOfficer, assignSubmission, assignmentLine, awaitingReviewer,
+  claimSubmission, deleteSubmission, loadRepeats, repeatLine, restoreSubmission,
+  searchSubmissions, undeleteSubmission,
   countsSummary, decideClaim, decideSubmission, loadAssignments,
   loadClaimProgress, loadCounts, loadMessages, loadReviewNotes, loadReviewQueue,
   loadVerdicts, matchesFilter, progressLabel, releaseSubmission, reviewNext, reviewPrompt,
-  linkClaim, linkFor, loadClaimLinks, loadMatches, publishSubmission,
+  linkClaim, linkFor, loadClaimLinks, loadMatches,
   verdictFor, type ClaimKind, type ClaimProgress, type EntityMatch,
   type FieldAssignmentRow, type FieldClaimLinkRow, type FieldMessageRow,
   type FieldReviewNoteRow, type FieldVerdictRow, type MatchResult,
-  type QueueFilter, type SiuFilter, type SubmissionCounts, type Verdict,
+  type QueueFilter, type RepeatSignal, type SiuFilter, type SubmissionCounts,
+  type Verdict,
 } from '@/lib/fieldReview'
 import { evidenceLabel, evidenceUrl, loadEvidence, type FieldEvidenceRow } from '@/lib/fieldEvidence'
 import { FieldAccessQueue, countPending, useAccessRequests } from './FieldAccessQueue'
 import { FieldAccessRoster, useFieldRoster } from './FieldAccessRoster'
+import { IntelActions } from './IntelActions'
 import { SiuPanel } from './SiuPanel'
+import { FieldSubmitForm } from './FieldSubmitForm'
 import { siuCategoryLabel, siuStateLabel, siuStateTone } from '@/lib/fieldSiu'
 import { useSiu } from '@/lib/useSiu'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import { Field, Select, Textarea } from '@/components/ui/Field'
+import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { EmptyState, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionTabs } from '@/components/ui/SectionTabs'
@@ -59,12 +67,20 @@ import { uiPrompt } from '@/components/ui/dialog'
 const NO_PARTS: SubmissionParts = { persons: [], vehicles: [], orgs: [], locations: [], items: [] }
 
 export function FieldReviewView() {
-  const { state, profile, isCommand } = useAuth()
+  const { state, profile, isCommand, isOwner } = useAuth()
   const me = profile?.id ?? null
   const [rows, setRows] = useState<FieldSubmissionRow[] | null>(null)
   const [counts, setCounts] = useState<Record<string, SubmissionCounts>>({})
   const [selected, setSelected] = useState<string | null>(null)
-  const [tab, setTab] = useState<QueueFilter | SiuFilter | 'access' | 'legacy'>('unclaimed')
+  const [tab, setTab] = useState<
+    QueueFilter | SiuFilter | typeof DELETED_FILTER | 'access' | 'legacy'>('unclaimed')
+  const [writing, setWriting] = useState(false)
+  // Search is a MODE, not another filter. A reviewer searching has stopped
+  // asking "what is in my queue" and started asking "where is that report", and
+  // the answer must not depend on which tab they happened to be on -- least of
+  // all for an archived record, which is exactly the one somebody searches for.
+  const [query, setQuery] = useState('')
+  const [hits, setHits] = useState<Map<string, string[]> | null>(null)
   const v = useTableVersion('field_submissions')
   const access = useAccessRequests()
   const roster = useFieldRoster()
@@ -79,31 +95,88 @@ export function FieldReviewView() {
     return () => window.clearTimeout(t)
   }, [refresh, v])
 
+  // Debounced, because the search reaches seven tables and a reviewer types
+  // faster than that deserves.
+  useEffect(() => {
+    const q = query.trim()
+    const t = window.setTimeout(() => {
+      if (q.length < 2) { setHits(null); return }
+      void searchSubmissions(q).then(setHits).catch(() => setHits(new Map()))
+    }, 250)
+    return () => window.clearTimeout(t)
+  }, [query, v])
+
   if (state !== 'in') return <Notice text="Sign in to review field intelligence." />
 
   const all = rows ?? []
+  const searching = hits !== null
   const shown = tab === 'access' || tab === 'legacy'
-    ? [] : all.filter((r) => matchesFilter(r, tab, me))
+    ? []
+    // Searching spans every queue INCLUDING the archive, and deliberately keeps
+    // the deleted out -- a deleted record is only ever in the Deleted list.
+    : searching
+      ? all.filter((r) => hits.has(r.id) && !r.deleted_at)
+      : all.filter((r) => matchesFilter(r, tab, me))
   const current = all.find((r) => r.id === selected) ?? null
   const pending = countPending(access.rows ?? [])
 
   // Counts on the tabs so a reviewer can see where the work is without opening
   // each queue. Only the ones that mean "somebody is waiting" are counted; a
   // number on "All" or "Processed" is trivia.
-  const countFor = (f: QueueFilter | SiuFilter): number | undefined =>
+  const countFor = (f: QueueFilter | SiuFilter | typeof DELETED_FILTER): number | undefined =>
     f === 'all' || f === 'processed' ? undefined
       : all.filter((r) => matchesFilter(r, f, me)).length
 
   return (
     <div className="space-y-5">
       <Card>
-        <PageHeader
-          title="📻 Field Intelligence Review"
-          subtitle="Reports from SAHP, BCSO and LSPD officers. Review what was sent, decide what it means."
-        />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <PageHeader
+            title="📻 Intelligence"
+            subtitle="Everything that comes into CID as information — patrol, detectives, surveillance and outside agencies. Review what arrived, decide what it means."
+          />
+          {!writing && (
+            <Button variant="primary" onClick={() => setWriting(true)}>
+              + New intelligence
+            </Button>
+          )}
+        </div>
       </Card>
 
+      {/* The same structured form a patrol officer fills in. An investigator
+          writing something down produces the same kind of record -- that is
+          what "one Intelligence entity" means in practice, and it is why the
+          separate "submit a tip" page is gone. */}
+      {writing && (
+        <Card>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+              New intelligence
+            </h3>
+            <Button size="sm" variant="ghost" onClick={() => setWriting(false)}>Cancel</Button>
+          </div>
+          <FieldSubmitForm asInvestigator onDone={() => { setWriting(false); void refresh() }} />
+        </Card>
+      )}
+
       {!current && (
+        <Card>
+          <Field label="Search intelligence"
+            hint="Looks through the report, the people, vehicles, organisations, places and items named in it, and the thread with the officer. Archived records are included — that is the point of archiving rather than deleting.">
+            {(fid) => (
+              <div className="flex gap-2">
+                <Input id={fid} value={query} onChange={(e) => setQuery(e.target.value)}
+                  placeholder="A name, a plate, a street, an FI number…" />
+                {query && (
+                  <Button size="sm" variant="ghost" onClick={() => setQuery('')}>Clear</Button>
+                )}
+              </div>
+            )}
+          </Field>
+        </Card>
+      )}
+
+      {!current && !searching && (
         <SectionTabs
           idBase="field-review"
           ariaLabel="Field Intelligence queues"
@@ -122,6 +195,14 @@ export function FieldReviewView() {
               label: SIU_FILTER_LABEL[f],
               count: countFor(f),
             })) : []),
+            // The Owner is the only reader who can see a deleted record at
+            // all, and this is the only place one appears -- so that undoing a
+            // deletion does not depend on whoever made it.
+            ...(isOwner ? [{
+              id: DELETED_FILTER as QueueFilter | SiuFilter | 'access' | 'legacy',
+              label: 'Deleted',
+              count: countFor(DELETED_FILTER),
+            }] : []),
             // Not a queue: access is immediate. This is the record of who can
             // send us intelligence, and it belongs where the reports arrive.
             {
@@ -157,18 +238,26 @@ export function FieldReviewView() {
         <Card pad="none" className="overflow-hidden">
           <div className="border-b border-white/5 px-5 py-3">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-              {tab === 'access' ? 'Submitter access'
+              {searching ? `Search — ${shown.length} record${shown.length === 1 ? '' : 's'}`
+                : tab === 'access' ? 'Submitter access'
                 : tab === 'legacy' ? 'Legacy requests'
                 : tab in QUEUE_LABEL ? QUEUE_LABEL[tab as QueueFilter]
                 : SIU_FILTER_LABEL[tab as SiuFilter]}
             </h3>
+            {searching && (
+              <p className="mt-0.5 text-xs text-slate-500">
+                Across every queue, archived included.
+              </p>
+            )}
           </div>
           {rows === null ? (
             <p className="px-5 py-6 text-center text-sm text-slate-500">Loading…</p>
           ) : !shown.length ? (
             <EmptyState
-              title="Nothing here"
-              hint={tab === 'mine'
+              title={searching ? 'Nothing matched' : 'Nothing here'}
+              hint={searching
+                ? 'No record you can open mentions that — in its own text or in anything named in it.'
+                : tab === 'mine'
                 ? 'Nothing is assigned to you. Claim a report from the Unclaimed queue.'
                 : 'No reports match this queue. Try “All”.'}
               className="m-4"
@@ -178,6 +267,7 @@ export function FieldReviewView() {
               {shown.map((r) => (
                 <ReportCard key={r.id} r={r} counts={counts[r.id]} me={me}
                   isCommand={isCommand}
+                  matched={hits?.get(r.id)}
                   onOpen={() => setSelected(r.id)}
                   onChanged={() => void refresh()} />
               ))}
@@ -192,11 +282,15 @@ export function FieldReviewView() {
 /** One report as it reads in a queue: what it is, what is in it, and who has
  *  it. Claim is offered here rather than only inside the report because the
  *  decision to pick something up is made from the list. */
-function ReportCard({ r, counts, me, isCommand, onOpen, onChanged }: {
+function ReportCard({ r, counts, me, isCommand, matched, onOpen, onChanged }: {
   r: FieldSubmissionRow
   counts: SubmissionCounts | undefined
   me: string | null
   isCommand: boolean
+  /** Why this row is in a search result. Without it a reviewer is looking at a
+   *  report whose summary says nothing about what they searched for, left to
+   *  guess whether the search is broken. */
+  matched?: string[]
   onOpen: () => void
   onChanged: () => void
 }) {
@@ -220,7 +314,12 @@ function ReportCard({ r, counts, me, isCommand, onOpen, onChanged }: {
           {submissionRef(r)}
         </button>
         <span className="flex flex-wrap items-center gap-2">
-          <Badge tone="neutral">{r.snap_agency}</Badge>
+          {/* An external report is badged by the agency that sent it; anything
+              written inside CID is badged by what kind of information it is. */}
+          <Badge tone="neutral">
+            {isExternalSource(r.source_type) ? r.snap_agency : sourceLabel(r.source_type)}
+          </Badge>
+          {r.urgency && <Badge tone={urgencyTone(r.urgency)}>{urgencyLabel(r.urgency)}</Badge>}
           <Badge tone="accent">{jurisdictionLabel(r.jurisdiction)}</Badge>
           <Badge tone={r.status === 'needs_info' ? 'warn' : 'accent'}>
             {fieldStatusLabel(r.status)}
@@ -235,6 +334,11 @@ function ReportCard({ r, counts, me, isCommand, onOpen, onChanged }: {
           )}
         </span>
       </div>
+      {matched && matched.length > 0 && (
+        <p className="mt-1 text-xs text-emerald-300/80">
+          Matched {matched.join(', ')}
+        </p>
+      )}
       <button onClick={onOpen} className="mt-1 block w-full text-left">
         <p className="truncate text-sm text-white">{r.summary}</p>
         <p className="mt-0.5 text-xs text-slate-500">
@@ -244,6 +348,9 @@ function ReportCard({ r, counts, me, isCommand, onOpen, onChanged }: {
         </p>
         {summary && <p className="mt-0.5 text-xs text-slate-400">{summary}</p>}
       </button>
+      {r.delete_reason && (
+        <p className="mt-0.5 text-xs text-rose-300/80">Deleted — “{r.delete_reason}”</p>
+      )}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <span className="text-xs text-slate-500">
           {holder
@@ -252,12 +359,24 @@ function ReportCard({ r, counts, me, isCommand, onOpen, onChanged }: {
         </span>
         <span className="flex-1" />
         <Button size="sm" variant="ghost" onClick={onOpen}>Open</Button>
-        {!r.assigned_to && (
+        {!r.assigned_to && !r.deleted_at && (
           <Button size="sm" variant="primary" disabled={busy} onClick={() => void claim()}>
             {busy ? 'Claiming…' : 'Claim'}
           </Button>
         )}
-        {isCommand && <AssignButton submission={r} onChanged={onChanged} />}
+        {isCommand && !r.deleted_at && <AssignButton submission={r} onChanged={onChanged} />}
+        {/* Only the Owner ever sees a deleted record, and this is the only
+            place one appears. */}
+        {r.deleted_at && (
+          <Button size="sm" variant="ghost" onClick={() => void (async () => {
+            const err = await undeleteSubmission(r.id)
+            if (err) { toast(err, 'danger'); return }
+            toast('Restored. It is back in the queues.', 'success')
+            onChanged()
+          })()}>
+            Undo delete
+          </Button>
+        )}
       </div>
     </li>
   )
@@ -327,6 +446,7 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
   onBack: () => void
   onChanged: () => void
 }) {
+  const { isCommand } = useAuth()
   const [parts, setParts] = useState<SubmissionParts>(NO_PARTS)
   const [evidence, setEvidence] = useState<FieldEvidenceRow[]>([])
   const [messages, setMessages] = useState<FieldMessageRow[]>([])
@@ -335,17 +455,19 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
   const [links, setLinks] = useState<FieldClaimLinkRow[]>([])
   const [progress, setProgress] = useState<ClaimProgress | null>(null)
   const [history, setHistory] = useState<FieldAssignmentRow[]>([])
+  const [repeats, setRepeats] = useState<RepeatSignal[]>([])
   const [next, setNext] = useState('')
   const [note, setNote] = useState('')
   const id = submission.id
 
   const load = useCallback(async () => {
-    const [p, e, m, n, v, pr, lk, hist] = await Promise.all([
+    const [p, e, m, n, v, pr, lk, hist, rep] = await Promise.all([
       loadSubmissionParts(id), loadEvidence(id), loadMessages(id), loadReviewNotes(id),
       loadVerdicts(id), loadClaimProgress(id), loadClaimLinks(id), loadAssignments(id),
+      loadRepeats(id).catch(() => []),
     ])
     setParts(p); setEvidence(e); setMessages(m); setNotes(n)
-    setVerdicts(v); setProgress(pr); setLinks(lk); setHistory(hist)
+    setVerdicts(v); setProgress(pr); setLinks(lk); setHistory(hist); setRepeats(rep)
   }, [id])
 
   useEffect(() => {
@@ -385,6 +507,44 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
     await after(await releaseSubmission(id, why), 'Released. It is back in the unclaimed queue.')
   }
 
+  const archive = async () => {
+    const why = await uiPrompt(
+      'Archiving takes it out of the active queues and keeps everything — the '
+      + 'evidence, the claims, the verdicts, who reported it. It stays searchable '
+      + 'and can be restored.',
+      {
+        title: 'Archive this record',
+        placeholder: `Why? e.g. ${ARCHIVE_REASONS[0]}`,
+        confirmText: 'Archive',
+      },
+    )
+    if (!why?.trim()) return
+    await after(await archiveSubmission(id, why), 'Archived. It stays searchable.')
+  }
+
+  const restore = async () => {
+    const why = await uiPrompt(
+      'It comes back as "being reviewed" — somebody is looking again. The reason '
+      + 'it was archived stays on the record.',
+      { title: 'Restore from the archive', placeholder: 'Why now? (optional)', confirmText: 'Restore' },
+    )
+    // An empty reason is fine here; a cancelled dialog is not.
+    if (why === null) return
+    await after(await restoreSubmission(id, why), 'Restored.')
+  }
+
+  const drop = async () => {
+    const why = await uiPrompt(
+      'Delete is for a record that should not exist — a test entry, a double '
+      + 'submission, something filed by mistake. If the information is simply not '
+      + 'useful, archive it instead: that keeps everything and can be undone.',
+      { title: 'Delete this record', placeholder: 'Why should this record not exist?', confirmText: 'Delete' },
+    )
+    if (!why?.trim()) return
+    await after(await deleteSubmission(id, why), 'Deleted.')
+    onBack()
+  }
+
   const edges = reviewNext(submission.status)
 
   return (
@@ -407,12 +567,37 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
               {submission.submitted_at && `Sent ${fmtDateTime(submission.submitted_at)}`}
               {submission.mdt_reference && ` · their report ${submission.mdt_reference}`}
               {` · ${jurisdictionRouting(submission.jurisdiction)}`}
+              {` · ${sourceLabel(submission.source_type)}`}
             </p>
+            {submission.archive_reason && (
+              <p className="text-xs text-amber-300/80">
+                Archived — “{submission.archive_reason}”
+              </p>
+            )}
           </div>
           <Button size="sm" variant="ghost" onClick={onBack}>Back to queue</Button>
         </div>
         {submission.details && (
           <p className="mt-3 whitespace-pre-wrap text-sm text-slate-300">{submission.details}</p>
+        )}
+        {/* Have we heard this before? Three unremarkable reports naming the same
+            person are not three unremarkable reports -- and nobody notices that
+            reading them a week apart, which is why it is said here rather than
+            left for somebody to work out. */}
+        {repeats.length > 0 && (
+          <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-amber-300">
+              Seen before
+            </p>
+            <ul className="mt-1 space-y-0.5">
+              {repeats.map((rp) => (
+                <li key={`${rp.kind}-${rp.label}-${rp.basis}`} className="text-sm text-amber-100">
+                  {repeatLine(rp)}
+                  <span className="text-xs text-amber-200/70"> — {rp.records.join(', ')}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </Card>
 
@@ -454,6 +639,13 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
           </ul>
         </Card>
       )}
+
+      {/* What acting on the record actually looks like: a case, a link to one
+          somebody already opened, a surveillance entry, the source behind it.
+          Placed above the SIU panel because it is the CID path, and below the
+          decision controls because the decision comes first. */}
+      <IntelActions submission={submission}
+        onChanged={() => { void load(); onChanged() }} />
 
       <SiuPanel submission={submission} parts={parts}
         onChanged={() => { void load(); onChanged() }} />
@@ -502,19 +694,57 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
             </Button>
           )}
           <Button size="sm" variant="ghost" onClick={() => void ask()}>Ask the officer</Button>
-          <Button size="sm" variant="ghost"
-            onClick={() => void (async () => {
-              await after(await publishSubmission(id),
-                'Added to the intelligence database, with this report as its source.')
+          {/* Grading is a REVIEWER's judgement. An officer reporting what they
+              saw is not the person to say how reliable it is, and somebody
+              grading their own account grades it high -- so the RPC takes it
+              from whoever is reviewing, not from the author. */}
+          <Select value={submission.urgency ?? ''} aria-label="Urgency" className="text-xs"
+            onChange={(e) => void (async () => {
+              await after(await gradeSubmission(id, e.target.value as Urgency), 'Urgency set.')
             })()}>
-            Add to intelligence
-          </Button>
+            <option value="">Urgency…</option>
+            {URGENCIES.map((u) => <option key={u} value={u}>{URGENCY_LABEL[u]}</option>)}
+          </Select>
+          <Select value={submission.reliability ?? ''} aria-label="Reliability" className="text-xs"
+            onChange={(e) => void (async () => {
+              await after(await gradeSubmission(id, undefined, e.target.value as Reliability),
+                'Reliability set.')
+            })()}>
+            <option value="">Reliability…</option>
+            {RELIABILITIES.map((r) => <option key={r} value={r}>{RELIABILITY_LABEL[r]}</option>)}
+          </Select>
+          {/* Archive is the normal way a record leaves the queue: everything
+              is kept and it can be undone. It is offered next to the review
+              actions because that is where the decision is actually made. */}
+          {submission.status === 'archived' ? (
+            <Button size="sm" variant="ghost" onClick={() => void restore()}>
+              Restore from archive
+            </Button>
+          ) : (
+            <Button size="sm" variant="ghost" onClick={() => void archive()}>Archive</Button>
+          )}
+          {/* Deleting is not tidying up. It is for a record that should not
+              exist -- and the server refuses it outright the moment anything
+              depends on the record, naming what is in the way. */}
+          {isCommand && (
+            <Button size="sm" variant="danger" onClick={() => void drop()}>Delete</Button>
+          )}
+          {/* "Add to intelligence" is gone. It copied this record into a second
+              one so it could "become intelligence" -- but it already IS
+              intelligence, and the copy existed only because there were two
+              systems. The claim matches you make are the part that mattered,
+              and they are recorded where you make them. */}
         </div>
-        <p className="mt-2 text-xs text-slate-500">
-          Adding to intelligence creates one tip carrying this report&rsquo;s number, plus a
-          link for each claim you matched to an existing record. It creates no new
-          persons, vehicles, gangs or cases &mdash; and never a case.
-        </p>
+        {submission.reliability && (
+          <p className="mt-2 text-xs text-slate-500">
+            {/* Spelled out because it is the distinction most easily lost:
+                reliability grades the SOURCE, a verdict grades one CLAIM. A
+                confirmed source can still say something that is wrong. */}
+            <b className="text-slate-400">{reliabilityLabel(submission.reliability)}</b>
+            {' — '}{RELIABILITY_MEANING[submission.reliability as Reliability] ?? ''}
+            {' This grades the source, not any individual claim below.'}
+          </p>
+        )}
 
         {edges.length > 0 ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">

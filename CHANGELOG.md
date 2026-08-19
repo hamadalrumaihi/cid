@@ -8,6 +8,235 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Finding a record, and noticing when the same name keeps coming up
+
+**Search reaches the whole record, not the summary field.** Everything a
+reviewer might search by is spread across seven tables — the people, vehicles,
+organisations, places and items named in a report each live in their own child
+table, and somebody looking for *Rodriguez* is almost never looking for a report
+whose **summary** says Rodriguez. One server-side function now covers the record
+(including the frozen reporting identity, so "who filed this?" is a search), all
+six claim tables, and the thread with the officer.
+
+It cannot see further than the queue can: every hit is passed back through the
+same readability guard the rest of the domain uses, which already knows about
+jurisdiction, SIU sensitivity and soft deletes. A search that reached further
+would be a way to enumerate records you are not allowed to open.
+
+**Archived records are included, deliberately.** Archiving means "not being
+worked", not "gone" — the whole promise of archive-over-delete is that the record
+stays findable, and a search that quietly skipped them would break that promise
+exactly when somebody is looking for the report they archived last month.
+Searching is a *mode*, not another queue filter: the results span every queue,
+because a reviewer who is searching has stopped asking "what is in my queue" and
+started asking "where is that report". Each result says **why** it matched —
+*matched a person*, *matched a vehicle* — so a record whose summary looks
+unrelated does not read as a broken search. Deleted records stay out; they only
+ever appear in the Owner's Deleted list.
+
+**"Seen before" is now said out loud.** Three unremarkable reports naming the
+same person are not three unremarkable reports, and nobody notices that reading
+them a week apart. A record now shows what it names that also appears elsewhere,
+with the other record numbers — *"Marisol Rodriguez — also named in 2 other
+records — FI-2026-0003, FI-2026-0009"* — rather than a bare count somebody then
+has to go hunting for.
+
+Two strengths of signal, kept apart because they mean different things:
+
+- **named** — the same text was written down twice. Cheap, noisy, and often
+  right. Matched on kind as well as text, so a plate that happens to read like an
+  alias does not become a lead.
+- **matched to the same registry record** — a reviewer already linked both
+  reports to the same person, vehicle, gang or place. Slower to accumulate and
+  much stronger, because a human already decided they were the same.
+
+Both sides are RLS-filtered, so the count is of records *you* can open — the
+signal never hints at a report in a jurisdiction you cannot see.
+
+### What follows from a record that matters
+
+D2 gave a record the status **Being acted on**. It did not say what acting on it
+looks like. Three things follow from a report worth acting on, and all three
+already existed — on other screens, which a reviewer had to leave the record to
+reach, retyping from memory what they had just finished reading. That is how a
+case ends up titled *follow up* with an empty summary.
+
+All three are now one action from the record, prefilled from it.
+
+**Opening a case records permanent provenance.** The case number continues the
+bureau's own established series — the same generator the New case form uses,
+because a second numbering scheme for cases that happen to start from
+intelligence would be a second numbering scheme. The link it leaves behind is
+marked `originated` and **nobody can remove it**: not the person who made it,
+not command, not the Owner. It is a fact about how the case came to exist, and
+it does not stop being true because it later becomes inconvenient. The case's
+Overview now carries a **Where this came from** panel, so in a year — when the
+detective who opened it has moved on and somebody asks why this investigation
+exists — the answer is on the case rather than in somebody's memory.
+
+**Linking to an existing case keeps history.** A link somebody added afterwards
+can be taken back, because somebody will link the wrong case. Taking it back
+**stamps the row rather than deleting it**, so the record reads "linked on the
+4th, unlinked on the 9th, wrong Rodriguez" instead of losing both events. A pair
+can be linked, unlinked and linked again; the live one is unique, the history
+keeps all of it.
+
+**Surveillance observations cite the report that put them on the board.** An
+observation belongs to a case, so the record has to be linked to that case first
+— not a technicality, but what keeps every route from intelligence to a case
+visible in the same link history instead of a third one nobody thinks to check.
+Confidence defaults to the record's own reliability grade, since it is the same
+judgement about the same information, and **`confirmed` is not on offer**: a
+report *of* something is not a confirmation of it. Observations logged before
+anybody realised which report they answered can be adopted the other way round.
+
+Both link tables refuse a case the caller cannot open, from either direction —
+linking to a case you cannot see would tell you it exists, and would put a
+record you can read onto a screen you should not be reading. The link history is
+**investigators only**, which is not the same thing: an external officer can read
+their own report, so without that rule they would learn that CID opened a case
+off the back of it. What happens to a report after it is filed is not the
+submitter's to see, the same rule the SIU flags and the reviewer notes follow.
+
+### Confidential sources, and the protection arriving with the option
+
+D1 **refused** `confidential` as a source type rather than ship the option
+without the protection, on the grounds that offering it first is how a source's
+name ends up in a summary field half the bureau can read. This is the protection.
+
+The identity lives in a table with **row-level security on, no policy at all, and
+every privilege revoked** — PostgREST returns nothing to anybody, at any rank,
+through any query. It is reachable only through an RPC that admits the handler
+and the Owner and writes an audit row naming who looked. **Rank does not open
+it**: command can see that a source exists and what it is called, because that is
+on the record, and that is as far as rank gets you. A table command can read
+directly is a table whose reads leave no trace.
+
+What the record carries is the **codename**, which is what a reviewer actually
+needs — *"CS-14 has been right four times"* is how you weigh what CS-14 says, and
+it requires knowing nothing about who CS-14 is.
+
+The ordering is enforced, not merely encouraged: the before-update trigger
+refuses to let a record call itself confidential unless a protected source row
+already exists for it — on a draft as much as on a sent record, since a draft is
+freely editable by its author and that is exactly where the claim would be made.
+The option and the protection cannot come apart again.
+
+**One thing D2 left open, closed here.** `field_submission_readable()` — the
+guard every RPC in this domain uses — had never learned about the soft delete, so
+a caller holding the id of a deleted record could still archive it, grade it, and
+would now have been able to link it to a case. It is brought into line with the
+SELECT policy that already said exactly this.
+
+### One lifecycle, and the difference between archiving and deleting
+
+The statuses an intelligence record could hold were still describing the system
+that got removed last week. Three of them — `intel_added`, `linked_existing`,
+`linked_case` — were terminal states that all meant *somebody pressed "Add to
+intelligence" and something was created elsewhere*. That button is gone; the
+record already **is** the intelligence. `partially_reviewed` had the same
+problem from the other end: claim verdicts already say precisely which claims
+are decided, so a whole-record status repeating it in coarser form could only
+ever drift out of agreement with them.
+
+The lifecycle is now what a reviewer actually does:
+
+| | |
+|---|---|
+| **Draft** | being written, visible only to its author |
+| **New** | sent, nobody has picked it up |
+| **Being reviewed** | somebody is working through it |
+| **Waiting on the officer** | a question has been asked |
+| **Reviewed** | looked at, understood, nothing further needed right now |
+| **Being acted on** | worth acting on — a case, surveillance, an SIU referral |
+| **Archived** | out of the active queues, still searchable, restorable |
+
+`rejected` folds into archived. It meant "this was not worth anything", which
+is one of the archive reasons — and keeping both meant two ways to say the same
+thing, one of which sounded like an accusation about the officer who sent it.
+**Reviewed is not the end of the road**: something read a week ago starts
+mattering the moment a second report names the same person, so it reopens.
+
+**Archiving needs a reason.** Not because a form should be tedious, but because
+"why is nobody working this?" is a question somebody asks three months later and
+*Unable to corroborate* and *Duplicate of an earlier report* are very different
+answers. Everything is kept — evidence, claims, verdicts, provenance,
+assignment history, SIU handling — and **Restore** puts the record back into
+review with the archive reason retained as history rather than erased.
+
+**Deleting is a different thing, and is treated as one.** It is the
+administrative correction for a record that should not exist at all: a test
+entry, a double submission, a misfire. So:
+
+- It is **soft**. The row stays, invisible to every ordinary reader, with who
+  deleted it, when, and why.
+- It is **refused outright when anything downstream depends on the record** —
+  claim links, verdicts, evidence, messages, assignment history, SIU handling, a
+  linked case, a designated target. The refusal names what is in the way and
+  points at archiving, which is the answer in nearly every case. *A case is
+  never cascade-deleted because the intelligence behind it was.*
+- It is **command and above**. An investigator can archive anything they can
+  see; deciding a record should never have existed is a different call.
+- The external officer who submitted it **can never delete it**, at any point.
+  That is the point: a report is not withdrawable once CID has it.
+- **Undeleting is the Owner's**, not command's — the person who deleted
+  something should not be the only check on whether it comes back. There is a
+  *Deleted* queue only they can see.
+
+None of this is a second copy of the account-deletion system. Removing a person
+from the portal and removing one intelligence record are separate concerns with
+separate authority, and they stay that way.
+
+### Intelligence is one thing
+
+The portal had grown two systems for the same job. **Intel Tips** came first — a
+detective writes down what they were told, grades it, triages it. **Field
+Intelligence** came later for patrol and turned out to be the stronger model:
+structured claims, per-claim verification, evidence, assignment history,
+jurisdiction routing, SIU referral. Then *Add to intelligence* bolted them
+together by **copying** a reviewed submission into a tip, so the same
+information existed twice under two numbers and a detective had to know which
+screen to read.
+
+**The migration this was braced for had nothing to move.** `intelligence_tips`
+holds zero rows; so do its links and its confidential-source table, and nothing
+outside those two children references it. So this is not a data migration with a
+compatibility layer — it is one system absorbing what the other knew how to say.
+
+`field_submissions` is now the single Intelligence record and gains **source**
+(patrol, detective, surveillance, internal intelligence, external agency,
+other), **urgency** and **reliability** — the last two carried over from tips
+with their vocabularies unchanged, because a second grading scale for the same
+judgement means learning two.
+
+**Investigators author intelligence directly.** *New intelligence* opens the
+same structured form a patrol officer fills in, because they produce the same
+kind of record. That is what one entity means in practice, and it is why the
+separate "submit a tip" page is gone. The database decides the two things the
+client should not: who is recorded as the author, and — for anything arriving
+through the external portal — that its source is `patrol`, whatever the client
+sends.
+
+**Grading is the reviewer's, not the author's.** An officer reporting what they
+saw is not the person to say how reliable it is, and somebody grading their own
+account grades it high. Reliability also grades the **source**, not any claim:
+a confirmed source can still say something that turns out wrong, which is
+exactly why claim verdicts exist separately. The detail screen says so out loud.
+
+**Nav is one tab.** *Intel Tips* and *Field Intel* are now **Intelligence**.
+`field_submission_publish()` and *Add to intelligence* are gone with them — the
+report already was intelligence. Reviewers' claim matches are untouched: those
+are matches to real registry records, which was always the part worth keeping.
+
+The tips tables stay in place for a release, empty and unreferenced — the same
+treatment the ticket system got. Nothing writes to them.
+
+One thing is deliberately **refused rather than shipped**: `confidential` as a
+source type. It needs protected storage for the source identity, and offering
+the option before the protection is how a source's name ends up in a summary
+field half the bureau can read. The insert path refuses it until that lands.
+
+
 ### A roster, not a queue — and submitters out of the approval line
 
 Field Intelligence submitters were still turning up in the CID approval queue,
