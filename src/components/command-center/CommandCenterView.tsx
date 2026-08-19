@@ -24,6 +24,7 @@ import { PromotionsTransfers } from './sections/PromotionsTransfers'
 import { DutyStatus } from './sections/DutyStatus'
 import { PermissionsOverview } from './sections/PermissionsOverview'
 import { CommandComms } from './sections/CommandComms'
+import { FieldOfficers } from './sections/FieldOfficers'
 
 export const CC_SECTIONS = [
   { id: 'overview', icon: '🛰️', label: 'Overview', sub: 'Command KPIs and what needs a decision' },
@@ -33,6 +34,7 @@ export const CC_SECTIONS = [
   { id: 'promotions', icon: '🎖️', label: 'Promotions & Transfers', sub: 'Rank + bureau changes, with history' },
   { id: 'duty', icon: '🟢', label: 'Duty Status', sub: 'Who is active or on LOA, by bureau' },
   { id: 'permissions', icon: '🔐', label: 'Permissions', sub: 'Who can do what — the access matrix' },
+  { id: 'field', icon: '🚔', label: 'Field Intelligence Officers', sub: 'Appoint SAHP, BCSO and LSPD accounts — portal access only, never CID' },
   { id: 'comms', icon: '📣', label: 'Announcements & Analytics', sub: 'Post division notices; division analytics' },
 ] as const
 type SectionId = (typeof CC_SECTIONS)[number]['id']
@@ -100,6 +102,7 @@ export function CommandCenterView() {
           {section === 'promotions' && <PromotionsTransfers />}
           {section === 'duty' && <DutyStatus />}
           {section === 'permissions' && <PermissionsOverview />}
+          {section === 'field' && <FieldOfficers />}
           {section === 'comms' && <CommandComms />}
         </section>
       </div>

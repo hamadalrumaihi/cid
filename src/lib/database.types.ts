@@ -2516,6 +2516,79 @@ export type Database = {
           },
         ]
       }
+      field_officers: {
+        Row: {
+          active: boolean
+          agency: string
+          appointed_at: string
+          appointed_by: string | null
+          callsign: string | null
+          created_at: string
+          end_reason: string | null
+          ended_at: string | null
+          ended_by: string | null
+          id: string
+          officer_rank: string | null
+          unit: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          agency: string
+          appointed_at?: string
+          appointed_by?: string | null
+          callsign?: string | null
+          created_at?: string
+          end_reason?: string | null
+          ended_at?: string | null
+          ended_by?: string | null
+          id?: string
+          officer_rank?: string | null
+          unit?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          agency?: string
+          appointed_at?: string
+          appointed_by?: string | null
+          callsign?: string | null
+          created_at?: string
+          end_reason?: string | null
+          ended_at?: string | null
+          ended_by?: string | null
+          id?: string
+          officer_rank?: string | null
+          unit?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_officers_appointed_by_fkey"
+            columns: ["appointed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "field_officers_ended_by_fkey"
+            columns: ["ended_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "field_officers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gang_members: {
         Row: {
           callsign: string | null
@@ -10432,6 +10505,14 @@ export type Database = {
         Args: { p_case: string; p_officer: string; p_reason?: string }
         Returns: undefined
       }
+      end_field_officer: {
+        Args: { p_reason: string; p_user: string }
+        Returns: undefined
+      }
+      my_field_standing: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       membership_request_submit: {
         Args: { p_request: string }
         Returns: Database["public"]["Tables"]["membership_requests"]["Row"]
@@ -10461,6 +10542,16 @@ export type Database = {
           p_request: string
         }
         Returns: Database["public"]["Tables"]["membership_requests"]["Row"]
+      }
+      assign_field_officer: {
+        Args: {
+          p_agency: string
+          p_callsign?: string
+          p_rank?: string
+          p_unit?: string
+          p_user: string
+        }
+        Returns: string
       }
       assign_member: {
         Args: {

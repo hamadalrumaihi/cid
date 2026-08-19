@@ -886,6 +886,30 @@ alter table public.feedback_meta add constraint feedback_meta_priority_check CHE
 alter table public.feedback_meta add constraint feedback_meta_status_check CHECK ((status = ANY (ARRAY['new'::text, 'reviewed'::text, 'triaged'::text, 'planned'::text, 'in_progress'::text, 'waiting'::text, 'resolved'::text, 'duplicate'::text, 'rejected'::text, 'archived'::text])));
 alter table public.feedback_meta enable row level security;
 
+create table public.field_officers (
+  id uuid not null default gen_random_uuid(),
+  user_id uuid not null,
+  agency text not null,
+  callsign text,
+  officer_rank text,
+  unit text,
+  active boolean not null default true,
+  appointed_by uuid,
+  appointed_at timestamp with time zone not null default now(),
+  ended_by uuid,
+  ended_at timestamp with time zone,
+  end_reason text,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.field_officers add constraint field_officers_pkey PRIMARY KEY (id);
+alter table public.field_officers add constraint field_officers_user_id_key UNIQUE (user_id);
+alter table public.field_officers add constraint field_officers_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+alter table public.field_officers add constraint field_officers_appointed_by_fkey FOREIGN KEY (appointed_by) REFERENCES public.profiles(id);
+alter table public.field_officers add constraint field_officers_ended_by_fkey FOREIGN KEY (ended_by) REFERENCES public.profiles(id);
+alter table public.field_officers add constraint field_officers_agency_check CHECK ((agency = ANY (ARRAY['SAHP'::text, 'BCSO'::text, 'LSPD'::text])));
+alter table public.field_officers enable row level security;
+
 create table public.gang_members (
   id uuid not null default gen_random_uuid(),
   gang_id uuid not null,
@@ -3841,6 +3865,9 @@ CREATE INDEX evidence_location_trgm ON public.evidence USING gin (location exten
 CREATE INDEX evidence_notes_trgm ON public.evidence USING gin (notes extensions.gin_trgm_ops);
 CREATE INDEX feedback_created_by_fkey_idx ON public.feedback USING btree (created_by);
 CREATE INDEX feedback_meta_updated_by_idx ON public.feedback_meta USING btree (updated_by);
+CREATE INDEX field_officers_agency_idx ON public.field_officers USING btree (agency) WHERE active;
+CREATE INDEX field_officers_appointed_by_fkey_idx ON public.field_officers USING btree (appointed_by);
+CREATE INDEX field_officers_ended_by_fkey_idx ON public.field_officers USING btree (ended_by);
 CREATE INDEX gang_members_case_id_fkey_idx ON public.gang_members USING btree (case_id);
 CREATE INDEX gang_members_gang_id_fkey_idx ON public.gang_members USING btree (gang_id);
 CREATE INDEX gang_members_person_id_fkey_idx ON public.gang_members USING btree (person_id);
@@ -7315,6 +7342,8 @@ CREATE TRIGGER evidence_audit AFTER INSERT OR DELETE OR UPDATE ON public.evidenc
 CREATE TRIGGER evidence_touch BEFORE UPDATE ON public.evidence FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER feedback_meta_audit AFTER INSERT OR DELETE OR UPDATE ON public.feedback_meta FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER feedback_meta_touch BEFORE UPDATE ON public.feedback_meta FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER field_officers_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_officers FOR EACH ROW EXECUTE FUNCTION private.audit();
+CREATE TRIGGER field_officers_touch BEFORE UPDATE ON public.field_officers FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER gang_members_audit AFTER INSERT OR DELETE OR UPDATE ON public.gang_members FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER gang_members_touch BEFORE UPDATE ON public.gang_members FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER gang_places_audit AFTER INSERT OR DELETE OR UPDATE ON public.gang_places FOR EACH ROW EXECUTE FUNCTION private.audit();
@@ -7861,6 +7890,15 @@ create policy feedback_meta_all on public.feedback_meta
   as permissive for all to authenticated
   using (private.is_owner())
   with check (private.is_owner());
+
+create policy field_officers_sel on public.field_officers
+  as permissive for select to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)) OR private.is_active());
+
+create policy field_officers_cmd on public.field_officers
+  as permissive for all to authenticated
+  using (private.is_command())
+  with check (private.is_command());
 
 create policy gang_members_del on public.gang_members
   as permissive for delete to authenticated
@@ -9174,6 +9212,11 @@ create policy wl_sel on public.watchlist
 --   feedback -> authenticated: DELETE, INSERT, SELECT, UPDATE
 --   feedback_meta -> anon: (none — global revoke + default privileges, 20260908130000)
 --   feedback_meta -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   field_officers -> anon: (none — global revoke + default privileges, 20260908130000)
+--   field_officers -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--     (SELECT was briefly a column-list grant while the table carried a
+--      command-only internal_note; the column was dropped, so the grant is
+--      plain again and RLS alone decides who sees a row — 20260910120000)
 --   gang_members -> anon: (none — global revoke + default privileges, 20260908130000)
 --   gang_members -> authenticated: DELETE, INSERT, SELECT, UPDATE
 --   gang_ranks -> anon: (none — global revoke + default privileges, 20260908130000)
