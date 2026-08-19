@@ -322,7 +322,7 @@ function maybeEscalateStale(rows: CaseRow[], meId: string | null) {
         const cas = await updateWhere('cases', { is: { last_stale_notified_at: null }, eq: { id: c.id } }, { last_stale_notified_at: now })
         if (cas.error || !cas.data?.length) continue
         const targets = activeProfiles()
-          .filter((p) => (p.id === c.lead_detective_id) || (p.division === c.bureau && leadRoles.has(p.role)) || p.role === 'deputy_director')
+          .filter((p) => (p.id === c.lead_detective_id) || (p.division === c.bureau && (!!p.role && leadRoles.has(p.role))) || p.role === 'deputy_director')
           .map((p) => p.id)
         await Promise.all([...new Set(targets)].map((uid) => notify(uid, 'stale_case', { case_id: c.id, case_number: c.case_number })))
       }

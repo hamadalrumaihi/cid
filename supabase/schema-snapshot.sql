@@ -2780,8 +2780,8 @@ create table public.profiles (
   display_name text not null default 'Unassigned Officer'::text,
   avatar_url text,
   badge_number text,
-  division public.bureau not null default 'JTF'::public.bureau,
-  role public.app_role not null default 'detective'::public.app_role,
+  division public.bureau,
+  role public.app_role,
   is_test boolean not null default false,
   active boolean not null default false,
   created_at timestamp with time zone not null default now(),
@@ -7649,6 +7649,16 @@ begin
      and not coalesce(p.is_test, false);
   return tr;
 end $$;
+
+-- Field Intelligence access is created by the officer, not granted by a queue:
+-- the standing grants nothing except the ability to write a report addressed to
+-- CID, and a field officer is not profiles.active, so every investigative table
+-- stays shut. Refuses an active CID account, an existing field officer, a
+-- removed account and a login-denied one.
+create or replace function public.field_access_self_serve(
+  p_agency text, p_callsign text default null,
+  p_rank text default null, p_unit text default null)
+returns jsonb language plpgsql security definer set search_path to '';
 
 create or replace function public.justice_migration_review()
 returns jsonb language sql stable security definer set search_path to '' as $$

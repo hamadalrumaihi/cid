@@ -1,20 +1,26 @@
-/** Asking for Field Intelligence access — the client mirror of
- *  20260916120000_field_access_and_jurisdiction.sql.
+/** Getting Field Intelligence access — the client mirror of
+ *  20260920120000_field_access_class.sql.
  *
- *  ── Why this exists ────────────────────────────────────────────────────────
- *  Until now a field officer could only come into being if command appointed
- *  them out of nowhere, which required command to already know the officer
- *  wanted in. A patrol officer who signed in saw the CID membership application
- *  and nothing else — so their only options were to apply for a job they were
- *  not asking for, or to leave.
+ *  ── There is no queue any more ─────────────────────────────────────────────
+ *  Asking to send CID information is not asking for a job. The access grants
+ *  nothing except the ability to write a report addressed to CID, so a human
+ *  decision in front of it was a delay with no decision in it — the answer was
+ *  always going to be yes. `field_access_self_serve()` creates the standing
+ *  immediately.
  *
- *  ── A request grants nothing ───────────────────────────────────────────────
- *  Approving one calls the SAME assign_field_officer() that already existed, so
- *  there is one way to become a field officer and one audit trail for it. This
- *  is a queue in front of that door, not a second door.
+ *  That is safe because of what the standing IS, not because anybody checked
+ *  it: a field officer is not `profiles.active`, so all 22 is_active()-gated
+ *  intelligence tables stay shut, and they cannot read another officer's
+ *  submission, the review queue, claim verdicts, matching or anything SIU.
+ *  Approval was never the boundary; the access class is.
+ *
+ *  ── The queue below is history ─────────────────────────────────────────────
+ *  `field_access_requests` is kept because rows already filed are a record, and
+ *  because command may still appoint somebody administratively. Nothing files a
+ *  new one.
  */
 
-import { insert, list, rpc, update } from './db'
+import { list, rpc } from './db'
 import type { Tables } from './database.types'
 import { FIELD_AGENCIES, FIELD_AGENCY_NAME, type FieldAgency } from './fieldOfficers'
 
@@ -37,26 +43,20 @@ export async function loadAccessRequests(): Promise<FieldAccessRequestRow[]> {
     .catch(() => [])
 }
 
-/** Ask for access. `user_id` is sent because the INSERT policy checks it, but
- *  the trigger overwrites it with the caller regardless — a client cannot file
- *  a request on somebody else's behalf. */
-export async function requestFieldAccess(
-  userId: string, agency: FieldAgency,
-  callsign?: string, rank?: string, unit?: string,
+/** Create the access. The database stamps the caller as the officer, so a
+ *  client cannot create standing for somebody else, and it refuses an account
+ *  that is already CID, already a field officer, removed, or login-denied —
+ *  that last one is the refusal that matters, because self-service with no
+ *  check against a denial would undo a command decision. */
+export async function selfServeFieldAccess(
+  agency: FieldAgency, callsign?: string, rank?: string, unit?: string,
 ): Promise<string | null> {
-  const res = await insert('field_access_requests', {
-    user_id: userId,
-    agency,
-    callsign: callsign?.trim() || null,
-    officer_rank: rank?.trim() || null,
-    unit: unit?.trim() || null,
+  const res = await rpc('field_access_self_serve', {
+    p_agency: agency,
+    p_callsign: callsign?.trim() || undefined,
+    p_rank: rank?.trim() || undefined,
+    p_unit: unit?.trim() || undefined,
   })
-  return res.error?.message ?? null
-}
-
-/** Take back a request you have not had answered yet. */
-export async function withdrawRequest(id: string): Promise<string | null> {
-  const res = await update('field_access_requests', id, { status: 'withdrawn' })
   return res.error?.message ?? null
 }
 

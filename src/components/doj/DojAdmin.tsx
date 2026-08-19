@@ -23,7 +23,7 @@ import { list, rpc } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { useProfilesStore } from '@/lib/profiles'
-import { ROLE_LABEL } from '@/lib/roles'
+import { roleLabel } from '@/lib/roles'
 import { fmtDateTime, timeAgo } from '@/lib/format'
 import { justiceRoleLabel, type LegalRequest } from '@/lib/justice'
 import { CID_ROUTING_BUREAUS, humanize, type RoutingBureau } from '@/lib/legalWorkflow'
@@ -105,7 +105,7 @@ function AppointModal({ busy, onSubmit, onClose }: {
                   {members.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.display_name || 'Member'} — {m.active
-                        ? `${ROLE_LABEL[m.role] || m.role}${m.division ? ` · ${m.division}` : ''}`
+                        ? `${roleLabel(m.role)}${m.division ? ` · ${m.division}` : ''}`
                         : 'inactive'}
                     </option>
                   ))}

@@ -86,7 +86,9 @@ export function FieldOfficers() {
           persons, vehicles, gangs or any other investigative record.
         </p>
         <p className="mt-2 text-xs text-slate-500">
-          The account must have signed in at least once. Appoint people individually:
+          Officers can give themselves this access from the sign-in screen, so this form
+          is for the cases where somebody needs it set up for them. The account must have
+          signed in at least once. Appoint people individually:
           a shared agency login would make every submission untraceable to the officer
           who actually made it.
         </p>
@@ -155,7 +157,9 @@ export function FieldOfficers() {
                     </span>
                   </p>
                   <p className="text-xs text-slate-500">
-                    Appointed {fmtDateTime(o.appointed_at)}
+                    {/* A self-served officer has no appointer, and saying
+                        "appointed by nobody" would be a small lie. */}
+                    {o.appointed_by ? 'Appointed' : 'Self-registered'} {fmtDateTime(o.appointed_at)}
                     {o.ended_at && ` · ended ${fmtDateTime(o.ended_at)}${o.end_reason ? ` — ${o.end_reason}` : ''}`}
                   </p>
                 </div>

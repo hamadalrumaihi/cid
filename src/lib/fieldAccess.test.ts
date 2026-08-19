@@ -1,12 +1,14 @@
-/** Unit tests for asking for Field Intelligence access.
+/** Unit tests for Field Intelligence access.
  *
- *  The rules are in the database and were probed live — the BEFORE INSERT
- *  trigger overwrites user_id with the caller, refuses an account that already
- *  has portal access, and a unique index allows one pending request per person;
- *  field_access_decide() refuses anybody who is not command and refuses a
- *  decline with no reason. 20260916120000_field_access_and_jurisdiction.sql
- *  records those results. What is pinned here is the client's arithmetic and
- *  wording.
+ *  Access is no longer requested: field_access_self_serve() creates the
+ *  standing immediately, and the rules are in the database and were probed
+ *  live — it refuses an active CID account, a second attempt, a removed account
+ *  and above all a login-denied one, and the officer cannot afterwards edit the
+ *  agency, callsign or rank that every submission snapshots.
+ *  20260920120000_field_access_class.sql records those results, and the
+ *  historical queue's rules are in
+ *  20260916120000_field_access_and_jurisdiction.sql. Pinned here: the client's
+ *  arithmetic and wording.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -25,7 +27,7 @@ const req = (over: Partial<FieldAccessRequestRow> = {}): FieldAccessRequestRow =
   ...over,
 })
 
-describe('what a request needs before it can be filed', () => {
+describe('what the identity form needs before access can be created', () => {
   it('needs an agency, because the appointment is made in one', () => {
     expect(requestProblem('')).toMatch(/agency/)
     expect(requestProblem('FIB')).toMatch(/agency/)
@@ -94,5 +96,14 @@ describe('where a report happened, and where that sends it', () => {
     // submitted report without one.
     expect(jurisdictionLabel(null)).toBe('Not stated')
     expect(jurisdictionRouting(null)).toBe('Not stated')
+  })
+})
+
+describe('the historical queue', () => {
+  it('still reads correctly for rows filed before access became immediate', () => {
+    // The table is kept: a filed request is a record, and a pending one can
+    // still be answered. Nothing files a new one.
+    expect(REQUEST_STATUS_LABEL.withdrawn).toBeTruthy()
+    expect(pendingFirst([req({ status: 'withdrawn' }), req()])[0].status).toBe('pending')
   })
 })

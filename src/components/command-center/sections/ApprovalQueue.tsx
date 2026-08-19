@@ -407,7 +407,7 @@ export function ApprovalQueue() {
               <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-2.5">
                 <div>
                   <p className="text-sm font-semibold text-white">{p.display_name}</p>
-                  <p className="text-[11px] text-slate-400">{ROLE_LABEL[p.role] || p.role} · {p.division}</p>
+                  <p className="text-[11px] text-slate-400">{roleLabel(p.role)} · {bureauLabel(p.division)}</p>
                 </div>
                 {actionable ? (
                   <button onClick={() => void approve(p)} title="Quick approve — activates with the profile's current role and division" className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20">✓ Approve</button>

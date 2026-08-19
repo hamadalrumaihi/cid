@@ -8,6 +8,50 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Field Intelligence is an access class, not a bureau
+
+`profiles.division` defaulted to **JTF** and `profiles.role` to **detective**.
+Nothing was granted by that — `active = false` gates every investigative table —
+but a BCSO deputy who only wanted to send CID a photo appeared in the roster as
+a JTF Detective, because a column default said so. Both columns are now nullable
+with no default: an account nobody has assigned anything to has no bureau and no
+rank, which is the fact. JTF goes back to being what it always was, a joint-case
+designation somebody chooses.
+
+Accounts still carrying the untouched defaults — never activated, never removed,
+never the subject of a recorded role decision — were cleared. Every account with
+a decision behind it keeps what it says, including removed members, whose last
+bureau and rank are history.
+
+### Asking to send CID information is not asking for a job
+
+The access request queue is gone from onboarding. `field_access_self_serve()`
+creates the standing on the spot: choose Submit Intelligence, enter agency,
+callsign, rank and unit, and the Field Intelligence portal opens.
+
+That is safe because of what the standing **is**, not because somebody checked
+it. A field officer is not `profiles.active`, so all 22 `is_active()`-gated
+intelligence tables stay shut; they cannot read another officer's submission,
+the review queue, claim verdicts, entity matching or anything SIU. Approval was
+never the boundary — the access class is, and it is unchanged. Probed live: a
+new BCSO submitter reads 0 persons, 0 vehicles, 0 gangs, 0 cases, 0 places and 0
+intelligence tips, and can file their own report.
+
+The one refusal that genuinely matters is honoured: a **login-denied** account
+cannot self-serve its way back in, and neither can a removed one or an account
+that already holds CID access.
+
+**The reporting identity is not self-editable.** `field_officers` has no client
+UPDATE path at all, so a BCSO Deputy cannot become SAHP Command later and
+rewrite what their old reports say about who filed them — the snapshot each
+submission takes at submit time stays true.
+
+`field_access_requests` is kept, not dropped: rows filed while the queue existed
+are a record, a pending one can still be answered through the same
+`assign_field_officer()`, and command can still appoint somebody
+administratively. It just no longer stands between a patrol officer and the
+ability to tell CID something.
+
 ### SIU reads the network, and nothing gets promoted on its own
 
 Claim verdicts answer whether what an officer reported happened. The SIU

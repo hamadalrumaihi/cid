@@ -8,7 +8,7 @@ import { rpc } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { notify } from '@/lib/notify'
 import type { RosterProfile } from '@/lib/profiles'
-import { ROLE_LABEL, canRestoreMember } from '@/lib/roles'
+import { bureauLabel, canRestoreMember, roleLabel } from '@/lib/roles'
 import { AGENCY_LABEL, justiceRoleLabel } from '@/lib/justice'
 import type { JusticeIdentity } from '@/lib/justiceRoster'
 import { toast } from '@/lib/toast'
@@ -99,8 +99,8 @@ export function AdminPanel({ profiles, emails, justiceByUser = {}, requests = nu
                   </p>
                   <p className="text-[11px] text-slate-500">{emails[p.id] || ''}</p>
                 </td>
-                <td className="px-3 py-2 text-slate-300">{ROLE_LABEL[p.role] || p.role}</td>
-                <td className="px-3 py-2 text-slate-300">{p.division}</td>
+                <td className="px-3 py-2 text-slate-300">{roleLabel(p.role)}</td>
+                <td className="px-3 py-2 text-slate-300">{bureauLabel(p.division)}</td>
                 <td className="px-3 py-2">{p.active ? <span className="text-emerald-300">Yes</span> : <span className="text-amber-300">Pending</span>}</td>
                 <td className="px-3 py-2 text-right">
                   {!p.active && (
@@ -129,7 +129,7 @@ export function AdminPanel({ profiles, emails, justiceByUser = {}, requests = nu
                 <div key={p.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-ink-900 px-3 py-2">
                   <span className="text-sm text-slate-400">
                     <span className="text-slate-300">{p.display_name}</span> ·{' '}
-                    <span className="text-[11px]">CID {ROLE_LABEL[p.role] || p.role} · {p.division} → <span className="text-sky-300">{justiceRoleLabel(j?.justice_role)}{j ? `, ${AGENCY_LABEL[j.agency]}` : ''}</span></span>
+                    <span className="text-[11px]">CID {roleLabel(p.role)} · {bureauLabel(p.division)} → <span className="text-sky-300">{justiceRoleLabel(j?.justice_role)}{j ? `, ${AGENCY_LABEL[j.agency]}` : ''}</span></span>
                   </span>
                 </div>
               )
