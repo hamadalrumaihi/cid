@@ -2786,6 +2786,94 @@ export type Database = {
           },
         ]
       }
+      field_siu_actions: {
+        Row: {
+          action: string
+          actor_id: string
+          category: string | null
+          created_at: string
+          from_user: string | null
+          id: string
+          reason: string | null
+          submission_id: string
+          to_user: string | null
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          category?: string | null
+          created_at?: string
+          from_user?: string | null
+          id?: string
+          reason?: string | null
+          submission_id: string
+          to_user?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          category?: string | null
+          created_at?: string
+          from_user?: string | null
+          id?: string
+          reason?: string | null
+          submission_id?: string
+          to_user?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_siu_actions_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      field_siu_followups: {
+        Row: {
+          clear_reason: string | null
+          cleared_at: string | null
+          cleared_by: string | null
+          created_at: string
+          created_by: string
+          id: string
+          kind: string
+          note: string | null
+          submission_id: string
+        }
+        Insert: {
+          clear_reason?: string | null
+          cleared_at?: string | null
+          cleared_by?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          kind: string
+          note?: string | null
+          submission_id: string
+        }
+        Update: {
+          clear_reason?: string | null
+          cleared_at?: string | null
+          cleared_by?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          kind?: string
+          note?: string | null
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_siu_followups_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       field_submission_evidence: {
         Row: {
           added_by: string | null
@@ -3224,6 +3312,14 @@ export type Database = {
           observed_to: string | null
           officer_id: string
           jurisdiction: string | null
+          siu_assigned_at: string | null
+          siu_assigned_to: string | null
+          siu_category: string | null
+          siu_reason: string | null
+          siu_referred_at: string | null
+          siu_referred_by: string | null
+          siu_sensitive: boolean
+          siu_state: string | null
           snap_agency: string
           snap_callsign: string | null
           snap_rank: string | null
@@ -3246,6 +3342,14 @@ export type Database = {
           observed_to?: string | null
           officer_id?: string
           jurisdiction?: string | null
+          siu_assigned_at?: string | null
+          siu_assigned_to?: string | null
+          siu_category?: string | null
+          siu_reason?: string | null
+          siu_referred_at?: string | null
+          siu_referred_by?: string | null
+          siu_sensitive?: boolean
+          siu_state?: string | null
           snap_agency?: string
           snap_callsign?: string | null
           snap_rank?: string | null
@@ -3268,6 +3372,14 @@ export type Database = {
           observed_to?: string | null
           officer_id?: string
           jurisdiction?: string | null
+          siu_assigned_at?: string | null
+          siu_assigned_to?: string | null
+          siu_category?: string | null
+          siu_reason?: string | null
+          siu_referred_at?: string | null
+          siu_referred_by?: string | null
+          siu_sensitive?: boolean
+          siu_state?: string | null
           snap_agency?: string
           snap_callsign?: string | null
           snap_rank?: string | null
@@ -11252,6 +11364,38 @@ export type Database = {
       }
       field_submission_assign: {
         Args: { p_reason?: string; p_submission: string; p_user: string }
+        Returns: undefined
+      }
+      field_siu_followup_add: {
+        Args: { p_kind: string; p_note?: string; p_submission: string }
+        Returns: string
+      }
+      field_siu_followup_clear: {
+        Args: { p_id: string; p_reason: string }
+        Returns: undefined
+      }
+      field_submission_siu_assign: {
+        Args: { p_reason?: string; p_submission: string; p_user: string }
+        Returns: undefined
+      }
+      field_submission_siu_decide: {
+        Args: { p_accept: boolean; p_note?: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_siu_flag: {
+        Args: { p_category: string; p_note?: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_siu_refer: {
+        Args: { p_category: string; p_reason: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_siu_sensitive: {
+        Args: { p_on: boolean; p_reason: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_siu_unflag: {
+        Args: { p_reason: string; p_submission: string }
         Returns: undefined
       }
       field_submission_counts: {

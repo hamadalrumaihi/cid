@@ -1005,6 +1005,43 @@ alter table public.field_claim_verdicts add constraint field_claim_verdicts_verd
 alter table public.field_claim_verdicts add constraint field_claim_verdicts_one_claim CHECK ((num_nonnulls(person_id, vehicle_id, org_id, location_id, item_id) = 1));
 alter table public.field_claim_verdicts enable row level security;
 
+create table public.field_siu_actions (
+  id uuid not null default gen_random_uuid(),
+  submission_id uuid not null,
+  action text not null,
+  actor_id uuid not null,
+  category text,
+  reason text,
+  from_user uuid,
+  to_user uuid,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.field_siu_actions add constraint field_siu_actions_pkey PRIMARY KEY (id);
+alter table public.field_siu_actions add constraint field_siu_actions_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.field_submissions(id) ON DELETE CASCADE;
+alter table public.field_siu_actions add constraint field_siu_actions_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.profiles(id);
+alter table public.field_siu_actions add constraint field_siu_actions_from_user_fkey FOREIGN KEY (from_user) REFERENCES public.profiles(id);
+alter table public.field_siu_actions add constraint field_siu_actions_to_user_fkey FOREIGN KEY (to_user) REFERENCES public.profiles(id);
+alter table public.field_siu_actions add constraint field_siu_actions_action_check CHECK ((action = ANY (ARRAY['flagged'::text, 'unflagged'::text, 'referred'::text, 'accepted'::text, 'declined'::text, 'assigned'::text, 'reassigned'::text, 'sensitive_on'::text, 'sensitive_off'::text])));
+alter table public.field_siu_actions enable row level security;
+
+create table public.field_siu_followups (
+  id uuid not null default gen_random_uuid(),
+  submission_id uuid not null,
+  kind text not null,
+  note text,
+  created_by uuid not null,
+  created_at timestamp with time zone not null default now(),
+  cleared_by uuid,
+  cleared_at timestamp with time zone,
+  clear_reason text
+);
+alter table public.field_siu_followups add constraint field_siu_followups_pkey PRIMARY KEY (id);
+alter table public.field_siu_followups add constraint field_siu_followups_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.field_submissions(id) ON DELETE CASCADE;
+alter table public.field_siu_followups add constraint field_siu_followups_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.field_siu_followups add constraint field_siu_followups_cleared_by_fkey FOREIGN KEY (cleared_by) REFERENCES public.profiles(id);
+alter table public.field_siu_followups add constraint field_siu_followups_kind_check CHECK ((kind = ANY (ARRAY['surveillance'::text, 'undercover'::text, 'source_development'::text, 'controlled_operation'::text, 'target_development'::text])));
+alter table public.field_siu_followups enable row level security;
+
 create table public.field_submission_evidence (
   id uuid not null default gen_random_uuid(),
   submission_id uuid not null,
@@ -1203,10 +1240,22 @@ create table public.field_submissions (
   submitted_at timestamp with time zone,
   assigned_to uuid,
   assigned_at timestamp with time zone,
+  siu_state text,
+  siu_category text,
+  siu_reason text,
+  siu_referred_by uuid,
+  siu_referred_at timestamp with time zone,
+  siu_assigned_to uuid,
+  siu_assigned_at timestamp with time zone,
+  siu_sensitive boolean not null default false,
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now()
 );
 alter table public.field_submissions add constraint field_submissions_pkey PRIMARY KEY (id);
+alter table public.field_submissions add constraint field_submissions_siu_referred_by_fkey FOREIGN KEY (siu_referred_by) REFERENCES public.profiles(id);
+alter table public.field_submissions add constraint field_submissions_siu_assigned_to_fkey FOREIGN KEY (siu_assigned_to) REFERENCES public.profiles(id);
+alter table public.field_submissions add constraint field_submissions_siu_state_check CHECK (((siu_state IS NULL) OR (siu_state = ANY (ARRAY['flagged'::text, 'referred'::text, 'accepted'::text, 'declined'::text]))));
+alter table public.field_submissions add constraint field_submissions_siu_category_check CHECK (((siu_category IS NULL) OR (siu_category = ANY (ARRAY['organized_crime'::text, 'gang_mc_enterprise'::text, 'narcotics_trafficking'::text, 'firearms_trafficking'::text, 'public_corruption'::text, 'fugitive'::text, 'major_crime_scene'::text, 'cross_jurisdiction'::text, 'other_complex'::text]))));
 alter table public.field_submissions add constraint field_submissions_submission_no_key UNIQUE (submission_no);
 alter table public.field_submissions add constraint field_submissions_officer_id_fkey FOREIGN KEY (officer_id) REFERENCES public.profiles(id);
 alter table public.field_submissions add constraint field_submissions_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.profiles(id);

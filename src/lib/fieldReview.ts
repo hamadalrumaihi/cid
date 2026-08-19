@@ -85,16 +85,46 @@ export const QUEUE_LABEL: Record<QueueFilter, string> = {
   processed: 'Processed',
 }
 
+/** The queues an SIU agent gets on top of the ordinary ones. Same table, same
+ *  reports: SIU is a specialist detachment inside CID, not a separate system
+ *  with its own copy of the intelligence. */
+export const SIU_FILTERS = [
+  'siu_referred', 'siu_assigned', 'siu_organized_crime', 'siu_narcotics',
+  'siu_firearms', 'siu_corruption', 'siu_fugitive',
+] as const
+export type SiuFilter = (typeof SIU_FILTERS)[number]
+
+export const SIU_FILTER_LABEL: Record<SiuFilter, string> = {
+  siu_referred: 'SIU referred',
+  siu_assigned: 'SIU assigned',
+  siu_organized_crime: 'Organized crime',
+  siu_narcotics: 'Narcotics',
+  siu_firearms: 'Firearms',
+  siu_corruption: 'Corruption',
+  siu_fugitive: 'Fugitives',
+}
+
 /** Statuses that are done being triaged. */
 const PROCESSED: readonly string[] = [
   'intel_added', 'linked_existing', 'linked_case', 'archived', 'rejected',
 ]
 
 export function matchesFilter(
-  r: Pick<FieldSubmissionRow, 'status' | 'assigned_to' | 'jurisdiction'>,
-  filter: QueueFilter, me: string | null,
+  r: Pick<FieldSubmissionRow, 'status' | 'assigned_to' | 'jurisdiction'
+    | 'siu_state' | 'siu_category' | 'siu_assigned_to'>,
+  filter: QueueFilter | SiuFilter, me: string | null,
 ): boolean {
   switch (filter) {
+    // The SIU queues. 'siu_referred' is deliberately the ones still waiting on
+    // an answer: a report SIU already took is no longer a referral to work.
+    case 'siu_referred': return r.siu_state === 'referred'
+    case 'siu_assigned': return !!r.siu_assigned_to
+    case 'siu_organized_crime':
+      return r.siu_category === 'organized_crime' || r.siu_category === 'gang_mc_enterprise'
+    case 'siu_narcotics': return r.siu_category === 'narcotics_trafficking'
+    case 'siu_firearms': return r.siu_category === 'firearms_trafficking'
+    case 'siu_corruption': return r.siu_category === 'public_corruption'
+    case 'siu_fugitive': return r.siu_category === 'fugitive'
     case 'all': return true
     // Unclaimed means "waiting for somebody to take it", so a processed report
     // with nobody on it is not in this queue -- nobody needs to take it.

@@ -8,6 +8,63 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### SIU without a second intake queue
+
+SIU is a specialist detachment inside CID, so it works the same reports out of
+the same table. A patrol officer is never asked whether what they saw is a
+bureau matter or a criminal enterprise — they cannot know, and asking produces a
+guess. The report lands in its jurisdiction's queue and an **investigator**
+marks the SIU angle afterwards.
+
+Two strengths of signal, deliberately different: **flagged** is a workflow
+indicator ("this looks like organized crime") that changes nothing about
+handling, and **referred** is a formal ask, with a reason and one of the SOP's
+nine categories. SIU accepts or declines; **X-1 assigns accepted work to Special
+Agents**, and a CID Bureau Lead cannot — once something is in SIU investigative
+handling it follows the SIU chain, not the bureau chain. The CID Director has no
+automatic SIU authority here either.
+
+**Referral is not a disappearance.** Jurisdiction, reporting officer, CID
+assignee and every claim verdict stay exactly as they were, and the report stays
+in its CID queue with the SIU history readable beside it. SIU interest is a
+layer on top.
+
+**One exception: public corruption.** An allegation against a public official or
+a serving officer cannot sit in a queue readable by the bureau it may concern,
+so referring under that category marks the report sensitive server-side and
+narrows it to SIU, the officer who wrote it, the investigator who referred it
+and the investigator holding it — CID command included in what is excluded. The
+person referring is told this **before** they refer, not after.
+
+**Follow-up candidates are SIU-only.** Surveillance, undercover work, source
+development, controlled operations and target development are methods, and a
+method is only useful while its subject does not know it is in use. That table's
+SELECT policy is `private.siu_is_agent()` with no second branch: not the
+submitting officer, not the CID detective holding the report. Marking one starts
+nothing on its own — it records that the report is worth one of these.
+
+SIU agents get their own queues over the same data — SIU referred, SIU assigned,
+Organized crime, Narcotics, Firearms, Corruption, Fugitives. Gang/MC enterprise
+and organized crime share a queue, because an MC **is** an organized-crime
+enterprise and splitting them hides half the picture.
+
+### Four child tables that never reached the parent
+
+Found while probing the sensitive path, and older than SIU.
+`field_submission_messages`, `field_submission_reviews`, `field_claim_verdicts`
+and `field_claim_links` were gated on `private.is_active()` and nothing else —
+so **any** active investigator could read the officer's message thread, the
+reviewer-private notes, the claim verdicts and the claim links of **every**
+report, including reports from a jurisdiction they cannot see. Their sibling
+claim tables reach the parent through an RLS-subject subquery and narrowed
+correctly all along; these four were simply never given the same treatment.
+
+They now use the same `exists()` against `field_submissions`, so they follow the
+parent's rules without restating them. Probed after the fix: an uninvolved LSB
+detective reads 0 messages and 0 reviewer notes on a restricted report and 0
+messages on a Blaine report, while the BCB detective reads that Blaine thread
+and the submitting officer keeps their own.
+
 ### A claim that actually holds
 
 `field_submission_claim()` took the row lock and then wrote `assigned_to`
