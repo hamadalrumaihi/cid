@@ -86,7 +86,9 @@ function LoginBody() {
  *  asks which one it is rather than assuming.
  *
  *  The two answers are not symmetrical, and that is deliberate. Joining CID is
- *  a job application and waits for a human. Sending CID information is not, and
+ *  a job application and waits for a human. It is CID only: SIU is not applied
+ *  for, it is selected from inside CID, so offering it here would invite an
+ *  application nobody can accept. Sending CID information is not, and
  *  does not: the identity form IS the onboarding, and the officer lands in the
  *  Field Intelligence portal on submit. What makes that safe is the access
  *  class -- a field officer is not `profiles.active`, so every investigative
@@ -102,7 +104,7 @@ function WelcomeFork() {
       <p className="text-sm font-semibold text-white">What do you need access for?</p>
       <button onClick={() => setChoice('cid')}
         className="w-full rounded-lg border border-white/10 bg-white/5 p-3 text-left transition hover:bg-white/10">
-        <span className="block text-sm font-semibold text-white">Join CID / SIU</span>
+        <span className="block text-sm font-semibold text-white">Join CID</span>
         <span className="mt-0.5 block text-xs text-slate-400">
           Apply for investigative access. Command reviews the application.
         </span>
