@@ -2589,6 +2589,59 @@ export type Database = {
           },
         ]
       }
+      field_claim_links: {
+        Row: {
+          claim_location_id: string | null
+          claim_org_id: string | null
+          claim_person_id: string | null
+          claim_vehicle_id: string | null
+          gang_id: string | null
+          id: string
+          linked_at: string
+          linked_by: string | null
+          person_id: string | null
+          place_id: string | null
+          submission_id: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          claim_location_id?: string | null
+          claim_org_id?: string | null
+          claim_person_id?: string | null
+          claim_vehicle_id?: string | null
+          gang_id?: string | null
+          id?: string
+          linked_at?: string
+          linked_by?: string | null
+          person_id?: string | null
+          place_id?: string | null
+          submission_id: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          claim_location_id?: string | null
+          claim_org_id?: string | null
+          claim_person_id?: string | null
+          claim_vehicle_id?: string | null
+          gang_id?: string | null
+          id?: string
+          linked_at?: string
+          linked_by?: string | null
+          person_id?: string | null
+          place_id?: string | null
+          submission_id?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_claim_links_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       field_claim_verdicts: {
         Row: {
           decided_at: string
@@ -3611,6 +3664,7 @@ export type Database = {
       }
       intelligence_tips: {
         Row: {
+          field_submission_id: string | null
           assigned_to: string | null
           case_id: string | null
           created_at: string
@@ -3644,6 +3698,7 @@ export type Database = {
           decided_by?: string | null
           details?: string | null
           disposition?: string | null
+          field_submission_id?: string | null
           id?: string
           kind?: string
           location_text?: string | null
@@ -3661,6 +3716,7 @@ export type Database = {
           urgency?: string
         }
         Update: {
+          field_submission_id?: string | null
           assigned_to?: string | null
           case_id?: string | null
           created_at?: string
@@ -11069,6 +11125,14 @@ export type Database = {
         Args: { p_claim: string; p_kind: string; p_note?: string; p_verdict: string }
         Returns: undefined
       }
+      field_claim_link: {
+        Args: { p_claim: string; p_kind: string; p_target: string; p_target_kind: string }
+        Returns: undefined
+      }
+      field_claim_matches: {
+        Args: { p_claim: string; p_kind: string }
+        Returns: Json
+      }
       field_claim_progress: {
         Args: { p_submission: string }
         Returns: Json
@@ -11084,6 +11148,10 @@ export type Database = {
       field_submission_decide: {
         Args: { p_note?: string; p_status: string; p_submission: string }
         Returns: undefined
+      }
+      field_submission_publish: {
+        Args: { p_submission: string }
+        Returns: string
       }
       field_submission_route: {
         Args: { p_reason: string; p_route: string; p_submission: string }

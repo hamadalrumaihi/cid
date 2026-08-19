@@ -910,6 +910,37 @@ alter table public.field_officers add constraint field_officers_ended_by_fkey FO
 alter table public.field_officers add constraint field_officers_agency_check CHECK ((agency = ANY (ARRAY['SAHP'::text, 'BCSO'::text, 'LSPD'::text])));
 alter table public.field_officers enable row level security;
 
+create table public.field_claim_links (
+  id uuid not null default gen_random_uuid(),
+  submission_id uuid not null,
+  claim_person_id uuid,
+  claim_vehicle_id uuid,
+  claim_org_id uuid,
+  claim_location_id uuid,
+  person_id uuid,
+  vehicle_id uuid,
+  gang_id uuid,
+  place_id uuid,
+  linked_by uuid,
+  linked_at timestamp with time zone not null default now()
+);
+alter table public.field_claim_links add constraint field_claim_links_pkey PRIMARY KEY (id);
+alter table public.field_claim_links add constraint field_claim_links_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.field_submissions(id) ON DELETE CASCADE;
+alter table public.field_claim_links add constraint field_claim_links_claim_person_id_fkey FOREIGN KEY (claim_person_id) REFERENCES public.field_submission_persons(id) ON DELETE CASCADE;
+alter table public.field_claim_links add constraint field_claim_links_claim_vehicle_id_fkey FOREIGN KEY (claim_vehicle_id) REFERENCES public.field_submission_vehicles(id) ON DELETE CASCADE;
+alter table public.field_claim_links add constraint field_claim_links_claim_org_id_fkey FOREIGN KEY (claim_org_id) REFERENCES public.field_submission_orgs(id) ON DELETE CASCADE;
+alter table public.field_claim_links add constraint field_claim_links_claim_location_id_fkey FOREIGN KEY (claim_location_id) REFERENCES public.field_submission_locations(id) ON DELETE CASCADE;
+-- ON DELETE SET NULL on the target side, not CASCADE: deleting a person should
+-- not silently erase the fact that a report once pointed at them.
+alter table public.field_claim_links add constraint field_claim_links_person_id_fkey FOREIGN KEY (person_id) REFERENCES public.persons(id) ON DELETE SET NULL;
+alter table public.field_claim_links add constraint field_claim_links_vehicle_id_fkey FOREIGN KEY (vehicle_id) REFERENCES public.vehicles(id) ON DELETE SET NULL;
+alter table public.field_claim_links add constraint field_claim_links_gang_id_fkey FOREIGN KEY (gang_id) REFERENCES public.gangs(id) ON DELETE SET NULL;
+alter table public.field_claim_links add constraint field_claim_links_place_id_fkey FOREIGN KEY (place_id) REFERENCES public.places(id) ON DELETE SET NULL;
+alter table public.field_claim_links add constraint field_claim_links_linked_by_fkey FOREIGN KEY (linked_by) REFERENCES public.profiles(id);
+alter table public.field_claim_links add constraint field_claim_links_one_claim CHECK ((num_nonnulls(claim_person_id, claim_vehicle_id, claim_org_id, claim_location_id) = 1));
+alter table public.field_claim_links add constraint field_claim_links_one_target CHECK ((num_nonnulls(person_id, vehicle_id, gang_id, place_id) = 1));
+alter table public.field_claim_links enable row level security;
+
 create table public.field_claim_verdicts (
   id uuid not null default gen_random_uuid(),
   submission_id uuid not null,
@@ -1329,11 +1360,13 @@ create table public.intelligence_tips (
   decided_by uuid,
   decided_at timestamp with time zone,
   related_observation_id uuid,
+  field_submission_id uuid,
   created_by uuid default auth.uid(),
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now()
 );
 alter table public.intelligence_tips add constraint intelligence_tips_pkey PRIMARY KEY (id);
+alter table public.intelligence_tips add constraint intelligence_tips_field_submission_id_fkey FOREIGN KEY (field_submission_id) REFERENCES public.field_submissions(id) ON DELETE SET NULL;
 alter table public.intelligence_tips add constraint intelligence_tips_place_id_fkey FOREIGN KEY (place_id) REFERENCES public.places(id) ON DELETE SET NULL;
 alter table public.intelligence_tips add constraint intelligence_tips_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE SET NULL;
 alter table public.intelligence_tips add constraint intelligence_tips_operation_id_fkey FOREIGN KEY (operation_id) REFERENCES public.operations(id) ON DELETE SET NULL;
@@ -4104,6 +4137,8 @@ CREATE INDEX feedback_meta_updated_by_idx ON public.feedback_meta USING btree (u
 CREATE INDEX field_officers_agency_idx ON public.field_officers USING btree (agency) WHERE active;
 CREATE INDEX field_officers_appointed_by_fkey_idx ON public.field_officers USING btree (appointed_by);
 CREATE INDEX field_officers_ended_by_fkey_idx ON public.field_officers USING btree (ended_by);
+CREATE INDEX field_claim_links_submission_idx ON public.field_claim_links USING btree (submission_id);
+CREATE INDEX intelligence_tips_field_submission_idx ON public.intelligence_tips USING btree (field_submission_id) WHERE (field_submission_id IS NOT NULL);
 CREATE UNIQUE INDEX field_claim_verdicts_person_uk ON public.field_claim_verdicts USING btree (person_id) WHERE (person_id IS NOT NULL);
 CREATE UNIQUE INDEX field_claim_verdicts_vehicle_uk ON public.field_claim_verdicts USING btree (vehicle_id) WHERE (vehicle_id IS NOT NULL);
 CREATE UNIQUE INDEX field_claim_verdicts_org_uk ON public.field_claim_verdicts USING btree (org_id) WHERE (org_id IS NOT NULL);
@@ -7597,6 +7632,7 @@ CREATE TRIGGER feedback_meta_audit AFTER INSERT OR DELETE OR UPDATE ON public.fe
 CREATE TRIGGER feedback_meta_touch BEFORE UPDATE ON public.feedback_meta FOR EACH ROW EXECUTE FUNCTION private.touch();
 CREATE TRIGGER field_officers_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_officers FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_officers_touch BEFORE UPDATE ON public.field_officers FOR EACH ROW EXECUTE FUNCTION private.touch();
+CREATE TRIGGER field_claim_links_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_claim_links FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_claim_verdicts_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_claim_verdicts FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_evidence_audit AFTER INSERT OR DELETE OR UPDATE ON public.field_submission_evidence FOR EACH ROW EXECUTE FUNCTION private.audit();
 CREATE TRIGGER field_evidence_before_insert BEFORE INSERT ON public.field_submission_evidence FOR EACH ROW EXECUTE FUNCTION private.field_evidence_before_insert();
@@ -8196,6 +8232,16 @@ create policy field_officers_cmd on public.field_officers
 -- Verdicts are reviewer-only, and there is deliberately NO insert or update
 -- policy: they are recorded solely through field_claim_decide(), which audits.
 -- A direct write would be an unrecorded judgement about somebody.
+-- Like verdicts, links have no INSERT policy: they are made only through
+-- field_claim_link(), which audits and checks the target exists.
+create policy field_claim_links_sel on public.field_claim_links
+  as permissive for select to authenticated
+  using (private.is_active());
+
+create policy field_claim_links_del on public.field_claim_links
+  as permissive for delete to authenticated
+  using (private.is_active());
+
 create policy field_claim_verdicts_sel on public.field_claim_verdicts
   as permissive for select to authenticated
   using (private.is_active());
@@ -9595,6 +9641,8 @@ create policy wl_sel on public.watchlist
 --      plain again and RLS alone decides who sees a row — 20260910120000)
 --   field_submissions -> anon: (none — global revoke + default privileges, 20260908130000)
 --   field_submissions -> authenticated: DELETE, INSERT, SELECT, UPDATE
+--   field_claim_links -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
+--     (INSERT/UPDATE are unreachable: no policy grants them)
 --   field_claim_verdicts -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
 --     (INSERT/UPDATE are unreachable: no policy grants them)
 --   field_submission_evidence -> anon: (none) / authenticated: DELETE, INSERT, SELECT, UPDATE
