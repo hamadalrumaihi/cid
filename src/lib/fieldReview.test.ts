@@ -12,9 +12,11 @@ import { FIELD_STATUSES, type FieldSubmissionRow } from './fieldSubmissions'
 import {
   ARCHIVE_REASONS, DELETED_FILTER, OPEN_STATUSES, QUEUE_FILTERS, QUEUE_LABEL,
   assignmentLine, awaitingReviewer, countsSummary, isOpen, matchesFilter,
-  reviewNext, reviewPrompt,
+  repeatLine, reviewNext, reviewPrompt,
 } from './fieldReview'
-import type { FieldAssignmentRow, FieldMessageRow, SubmissionCounts } from './fieldReview'
+import type {
+  FieldAssignmentRow, FieldMessageRow, RepeatSignal, SubmissionCounts,
+} from './fieldReview'
 
 const sub = (over: Partial<FieldSubmissionRow> = {}): FieldSubmissionRow => ({
   id: 's1', submission_no: 'FI-2026-0001', officer_id: 'u1', snap_agency: 'SAHP',
@@ -282,5 +284,25 @@ describe('archive and delete are different things', () => {
 
   it('labels every queue including the archive', () => {
     for (const f of QUEUE_FILTERS) expect(QUEUE_LABEL[f], f).toBeTruthy()
+  })
+})
+
+describe('the repeat signal', () => {
+  const rep = (over: Partial<RepeatSignal> = {}): RepeatSignal => ({
+    kind: 'person', label: 'Marisol Rodriguez', basis: 'named',
+    others: 2, records: ['FI-2026-0003', 'FI-2026-0009'], ...over,
+  })
+
+  it('says how many others, because the count is the whole signal', () => {
+    expect(repeatLine(rep())).toBe('Marisol Rodriguez — also named in 2 other records')
+    expect(repeatLine(rep({ others: 1 }))).toBe('Marisol Rodriguez — also named in 1 other record')
+  })
+
+  it('distinguishes a shared name from a reviewer-confirmed match', () => {
+    // Two people can share a name. Two records matched to the same registry
+    // entry cannot -- a human already decided they were the same, so it reads
+    // as a stronger claim rather than the same sentence.
+    expect(repeatLine(rep({ basis: 'linked' })))
+      .toBe('Marisol Rodriguez — matched to the same registry record in 2 other records')
   })
 })

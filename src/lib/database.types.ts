@@ -11698,6 +11698,20 @@ export type Database = {
         Args: { p_reason: string; p_submission: string }
         Returns: undefined
       }
+      field_submission_repeats: {
+        Args: { p_submission: string }
+        Returns: {
+          basis: string
+          kind: string
+          label: string
+          others: number
+          records: string[]
+        }[]
+      }
+      field_submission_search: {
+        Args: { p_limit?: number; p_query: string }
+        Returns: { matched: string[]; submission_id: string }[]
+      }
       field_submission_create_case: {
         Args: {
           p_bureau: string

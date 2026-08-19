@@ -7825,6 +7825,28 @@ returns void language plpgsql security definer set search_path to '';
 create or replace function public.field_submission_source_reveal(p_submission uuid)
 returns jsonb language plpgsql security definer set search_path to '';
 
+-- One search over the record, its six claim tables and the officer thread --
+-- most of the searchable text is NOT on the record, so a client-side filter
+-- over the queue would miss almost every name somebody looks for. Definer so it
+-- can reach the children; every hit is passed back through
+-- field_submission_readable(), so a search can never reach further than the
+-- queue. ARCHIVED RECORDS ARE INCLUDED: archiving means "not being worked", and
+-- a search that skipped them would break the promise that archiving keeps
+-- everything findable.
+create or replace function public.field_submission_search(
+  p_query text, p_limit int default 100)
+returns table (submission_id uuid, matched text[])
+language sql stable security definer set search_path to '';
+
+-- Have we heard this before: one row per person, plate or organisation this
+-- record names that also appears on another readable record. 'named' is the
+-- same text written twice; 'linked' means a reviewer matched both records to
+-- the SAME registry entry, which is much stronger. Returns the other record
+-- numbers, so the answer is not a count somebody then has to go hunting for.
+create or replace function public.field_submission_repeats(p_submission uuid)
+returns table (kind text, label text, basis text, others int, records text[])
+language plpgsql stable security definer set search_path to '';
+
 create or replace function public.field_access_roster()
 returns table (
   user_id uuid, display_name text, email text, agency text, callsign text,

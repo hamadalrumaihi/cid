@@ -169,6 +169,63 @@ export function reviewPrompt(s: FieldSubmissionRow): string | null {
 // All RLS-scoped. A reviewer's policy returns submitted reports and never a
 // draft, so there is no "exclude drafts" filter here to forget.
 
+/** One search over the record and all six of its child tables, plus the thread
+ *  with the officer. Server-side because the searchable text mostly is NOT on
+ *  the record — somebody looking for "Rodriguez" is almost never looking for a
+ *  report whose summary says Rodriguez — and every hit is passed back through
+ *  the same readability guard the queue uses, so a search can never reach
+ *  further than the queue can.
+ *
+ *  ARCHIVED RECORDS ARE INCLUDED. Archiving means "not being worked", not
+ *  "gone": the promise of archive-over-delete is that the record stays findable,
+ *  and a search that skipped them would break that promise exactly when somebody
+ *  is looking for the report they archived last month.
+ *
+ *  Returns a map of submission id → what matched, so the result list can say
+ *  "matched a person" rather than leaving the reader to guess why a record with
+ *  an unrelated-looking summary is in front of them. */
+export async function searchSubmissions(q: string): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>()
+  if (q.trim().length < 2) return out
+  const res = await rpc('field_submission_search', { p_query: q.trim() })
+  if (res.error || !Array.isArray(res.data)) return out
+  for (const row of res.data as unknown as { submission_id: string; matched: string[] | null }[]) {
+    if (row?.submission_id) out.set(row.submission_id, row.matched ?? [])
+  }
+  return out
+}
+
+/** Have we heard this before?
+ *
+ *  Three unremarkable reports naming the same person are not three unremarkable
+ *  reports, and nobody spots that reading them a week apart. Two strengths of
+ *  signal, kept apart: 'named' is the same text written down twice — cheap,
+ *  noisy, often right — and 'linked' means a reviewer already matched both
+ *  records to the SAME registry entry, which is a human having decided they are
+ *  the same person. */
+export interface RepeatSignal {
+  kind: string
+  label: string
+  basis: 'named' | 'linked'
+  others: number
+  records: string[]
+}
+
+export async function loadRepeats(submissionId: string): Promise<RepeatSignal[]> {
+  const res = await rpc('field_submission_repeats', { p_submission: submissionId })
+  if (res.error || !Array.isArray(res.data)) return []
+  return (res.data as unknown as RepeatSignal[]).filter((r) => r && r.others > 0)
+}
+
+/** How a repeat reads to a reviewer. The count is the point, and the strength
+ *  of the match changes what it means, so both are said. */
+export function repeatLine(r: RepeatSignal): string {
+  const n = `${r.others} other record${r.others === 1 ? '' : 's'}`
+  return r.basis === 'linked'
+    ? `${r.label} — matched to the same registry record in ${n}`
+    : `${r.label} — also named in ${n}`
+}
+
 export async function loadReviewQueue(): Promise<FieldSubmissionRow[]> {
   return list('field_submissions', { order: 'submitted_at', ascending: false })
     .catch(() => [])

@@ -35,7 +35,8 @@ import {
   ARCHIVE_REASONS, DELETED_FILTER, QUEUE_FILTERS, QUEUE_LABEL, SIU_FILTERS,
   SIU_FILTER_LABEL, VERDICTS, VERDICT_LABEL, VERDICT_MEANING, VERDICT_TONE,
   archiveSubmission, askOfficer, assignSubmission, assignmentLine, awaitingReviewer,
-  claimSubmission, deleteSubmission, restoreSubmission, undeleteSubmission,
+  claimSubmission, deleteSubmission, loadRepeats, repeatLine, restoreSubmission,
+  searchSubmissions, undeleteSubmission,
   countsSummary, decideClaim, decideSubmission, loadAssignments,
   loadClaimProgress, loadCounts, loadMessages, loadReviewNotes, loadReviewQueue,
   loadVerdicts, matchesFilter, progressLabel, releaseSubmission, reviewNext, reviewPrompt,
@@ -43,7 +44,8 @@ import {
   verdictFor, type ClaimKind, type ClaimProgress, type EntityMatch,
   type FieldAssignmentRow, type FieldClaimLinkRow, type FieldMessageRow,
   type FieldReviewNoteRow, type FieldVerdictRow, type MatchResult,
-  type QueueFilter, type SiuFilter, type SubmissionCounts, type Verdict,
+  type QueueFilter, type RepeatSignal, type SiuFilter, type SubmissionCounts,
+  type Verdict,
 } from '@/lib/fieldReview'
 import { evidenceLabel, evidenceUrl, loadEvidence, type FieldEvidenceRow } from '@/lib/fieldEvidence'
 import { FieldAccessQueue, countPending, useAccessRequests } from './FieldAccessQueue'
@@ -56,7 +58,7 @@ import { useSiu } from '@/lib/useSiu'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import { Field, Select, Textarea } from '@/components/ui/Field'
+import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { EmptyState, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionTabs } from '@/components/ui/SectionTabs'
@@ -73,6 +75,12 @@ export function FieldReviewView() {
   const [tab, setTab] = useState<
     QueueFilter | SiuFilter | typeof DELETED_FILTER | 'access' | 'legacy'>('unclaimed')
   const [writing, setWriting] = useState(false)
+  // Search is a MODE, not another filter. A reviewer searching has stopped
+  // asking "what is in my queue" and started asking "where is that report", and
+  // the answer must not depend on which tab they happened to be on -- least of
+  // all for an archived record, which is exactly the one somebody searches for.
+  const [query, setQuery] = useState('')
+  const [hits, setHits] = useState<Map<string, string[]> | null>(null)
   const v = useTableVersion('field_submissions')
   const access = useAccessRequests()
   const roster = useFieldRoster()
@@ -87,11 +95,28 @@ export function FieldReviewView() {
     return () => window.clearTimeout(t)
   }, [refresh, v])
 
+  // Debounced, because the search reaches seven tables and a reviewer types
+  // faster than that deserves.
+  useEffect(() => {
+    const q = query.trim()
+    const t = window.setTimeout(() => {
+      if (q.length < 2) { setHits(null); return }
+      void searchSubmissions(q).then(setHits).catch(() => setHits(new Map()))
+    }, 250)
+    return () => window.clearTimeout(t)
+  }, [query, v])
+
   if (state !== 'in') return <Notice text="Sign in to review field intelligence." />
 
   const all = rows ?? []
+  const searching = hits !== null
   const shown = tab === 'access' || tab === 'legacy'
-    ? [] : all.filter((r) => matchesFilter(r, tab, me))
+    ? []
+    // Searching spans every queue INCLUDING the archive, and deliberately keeps
+    // the deleted out -- a deleted record is only ever in the Deleted list.
+    : searching
+      ? all.filter((r) => hits.has(r.id) && !r.deleted_at)
+      : all.filter((r) => matchesFilter(r, tab, me))
   const current = all.find((r) => r.id === selected) ?? null
   const pending = countPending(access.rows ?? [])
 
@@ -135,6 +160,23 @@ export function FieldReviewView() {
       )}
 
       {!current && (
+        <Card>
+          <Field label="Search intelligence"
+            hint="Looks through the report, the people, vehicles, organisations, places and items named in it, and the thread with the officer. Archived records are included — that is the point of archiving rather than deleting.">
+            {(fid) => (
+              <div className="flex gap-2">
+                <Input id={fid} value={query} onChange={(e) => setQuery(e.target.value)}
+                  placeholder="A name, a plate, a street, an FI number…" />
+                {query && (
+                  <Button size="sm" variant="ghost" onClick={() => setQuery('')}>Clear</Button>
+                )}
+              </div>
+            )}
+          </Field>
+        </Card>
+      )}
+
+      {!current && !searching && (
         <SectionTabs
           idBase="field-review"
           ariaLabel="Field Intelligence queues"
@@ -196,18 +238,26 @@ export function FieldReviewView() {
         <Card pad="none" className="overflow-hidden">
           <div className="border-b border-white/5 px-5 py-3">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-              {tab === 'access' ? 'Submitter access'
+              {searching ? `Search — ${shown.length} record${shown.length === 1 ? '' : 's'}`
+                : tab === 'access' ? 'Submitter access'
                 : tab === 'legacy' ? 'Legacy requests'
                 : tab in QUEUE_LABEL ? QUEUE_LABEL[tab as QueueFilter]
                 : SIU_FILTER_LABEL[tab as SiuFilter]}
             </h3>
+            {searching && (
+              <p className="mt-0.5 text-xs text-slate-500">
+                Across every queue, archived included.
+              </p>
+            )}
           </div>
           {rows === null ? (
             <p className="px-5 py-6 text-center text-sm text-slate-500">Loading…</p>
           ) : !shown.length ? (
             <EmptyState
-              title="Nothing here"
-              hint={tab === 'mine'
+              title={searching ? 'Nothing matched' : 'Nothing here'}
+              hint={searching
+                ? 'No record you can open mentions that — in its own text or in anything named in it.'
+                : tab === 'mine'
                 ? 'Nothing is assigned to you. Claim a report from the Unclaimed queue.'
                 : 'No reports match this queue. Try “All”.'}
               className="m-4"
@@ -217,6 +267,7 @@ export function FieldReviewView() {
               {shown.map((r) => (
                 <ReportCard key={r.id} r={r} counts={counts[r.id]} me={me}
                   isCommand={isCommand}
+                  matched={hits?.get(r.id)}
                   onOpen={() => setSelected(r.id)}
                   onChanged={() => void refresh()} />
               ))}
@@ -231,11 +282,15 @@ export function FieldReviewView() {
 /** One report as it reads in a queue: what it is, what is in it, and who has
  *  it. Claim is offered here rather than only inside the report because the
  *  decision to pick something up is made from the list. */
-function ReportCard({ r, counts, me, isCommand, onOpen, onChanged }: {
+function ReportCard({ r, counts, me, isCommand, matched, onOpen, onChanged }: {
   r: FieldSubmissionRow
   counts: SubmissionCounts | undefined
   me: string | null
   isCommand: boolean
+  /** Why this row is in a search result. Without it a reviewer is looking at a
+   *  report whose summary says nothing about what they searched for, left to
+   *  guess whether the search is broken. */
+  matched?: string[]
   onOpen: () => void
   onChanged: () => void
 }) {
@@ -279,6 +334,11 @@ function ReportCard({ r, counts, me, isCommand, onOpen, onChanged }: {
           )}
         </span>
       </div>
+      {matched && matched.length > 0 && (
+        <p className="mt-1 text-xs text-emerald-300/80">
+          Matched {matched.join(', ')}
+        </p>
+      )}
       <button onClick={onOpen} className="mt-1 block w-full text-left">
         <p className="truncate text-sm text-white">{r.summary}</p>
         <p className="mt-0.5 text-xs text-slate-500">
@@ -395,17 +455,19 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
   const [links, setLinks] = useState<FieldClaimLinkRow[]>([])
   const [progress, setProgress] = useState<ClaimProgress | null>(null)
   const [history, setHistory] = useState<FieldAssignmentRow[]>([])
+  const [repeats, setRepeats] = useState<RepeatSignal[]>([])
   const [next, setNext] = useState('')
   const [note, setNote] = useState('')
   const id = submission.id
 
   const load = useCallback(async () => {
-    const [p, e, m, n, v, pr, lk, hist] = await Promise.all([
+    const [p, e, m, n, v, pr, lk, hist, rep] = await Promise.all([
       loadSubmissionParts(id), loadEvidence(id), loadMessages(id), loadReviewNotes(id),
       loadVerdicts(id), loadClaimProgress(id), loadClaimLinks(id), loadAssignments(id),
+      loadRepeats(id).catch(() => []),
     ])
     setParts(p); setEvidence(e); setMessages(m); setNotes(n)
-    setVerdicts(v); setProgress(pr); setLinks(lk); setHistory(hist)
+    setVerdicts(v); setProgress(pr); setLinks(lk); setHistory(hist); setRepeats(rep)
   }, [id])
 
   useEffect(() => {
@@ -517,6 +579,25 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
         </div>
         {submission.details && (
           <p className="mt-3 whitespace-pre-wrap text-sm text-slate-300">{submission.details}</p>
+        )}
+        {/* Have we heard this before? Three unremarkable reports naming the same
+            person are not three unremarkable reports -- and nobody notices that
+            reading them a week apart, which is why it is said here rather than
+            left for somebody to work out. */}
+        {repeats.length > 0 && (
+          <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-amber-300">
+              Seen before
+            </p>
+            <ul className="mt-1 space-y-0.5">
+              {repeats.map((rp) => (
+                <li key={`${rp.kind}-${rp.label}-${rp.basis}`} className="text-sm text-amber-100">
+                  {repeatLine(rp)}
+                  <span className="text-xs text-amber-200/70"> — {rp.records.join(', ')}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </Card>
 

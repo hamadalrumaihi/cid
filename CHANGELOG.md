@@ -8,6 +8,51 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Finding a record, and noticing when the same name keeps coming up
+
+**Search reaches the whole record, not the summary field.** Everything a
+reviewer might search by is spread across seven tables — the people, vehicles,
+organisations, places and items named in a report each live in their own child
+table, and somebody looking for *Rodriguez* is almost never looking for a report
+whose **summary** says Rodriguez. One server-side function now covers the record
+(including the frozen reporting identity, so "who filed this?" is a search), all
+six claim tables, and the thread with the officer.
+
+It cannot see further than the queue can: every hit is passed back through the
+same readability guard the rest of the domain uses, which already knows about
+jurisdiction, SIU sensitivity and soft deletes. A search that reached further
+would be a way to enumerate records you are not allowed to open.
+
+**Archived records are included, deliberately.** Archiving means "not being
+worked", not "gone" — the whole promise of archive-over-delete is that the record
+stays findable, and a search that quietly skipped them would break that promise
+exactly when somebody is looking for the report they archived last month.
+Searching is a *mode*, not another queue filter: the results span every queue,
+because a reviewer who is searching has stopped asking "what is in my queue" and
+started asking "where is that report". Each result says **why** it matched —
+*matched a person*, *matched a vehicle* — so a record whose summary looks
+unrelated does not read as a broken search. Deleted records stay out; they only
+ever appear in the Owner's Deleted list.
+
+**"Seen before" is now said out loud.** Three unremarkable reports naming the
+same person are not three unremarkable reports, and nobody notices that reading
+them a week apart. A record now shows what it names that also appears elsewhere,
+with the other record numbers — *"Marisol Rodriguez — also named in 2 other
+records — FI-2026-0003, FI-2026-0009"* — rather than a bare count somebody then
+has to go hunting for.
+
+Two strengths of signal, kept apart because they mean different things:
+
+- **named** — the same text was written down twice. Cheap, noisy, and often
+  right. Matched on kind as well as text, so a plate that happens to read like an
+  alias does not become a lead.
+- **matched to the same registry record** — a reviewer already linked both
+  reports to the same person, vehicle, gang or place. Slower to accumulate and
+  much stronger, because a human already decided they were the same.
+
+Both sides are RLS-filtered, so the count is of records *you* can open — the
+signal never hints at a report in a jurisdiction you cannot see.
+
 ### What follows from a record that matters
 
 D2 gave a record the status **Being acted on**. It did not say what acting on it
