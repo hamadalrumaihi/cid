@@ -8,6 +8,60 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### A roster, not a queue — and submitters out of the approval line
+
+Field Intelligence submitters were still turning up in the CID approval queue,
+with a green **Approve** button next to them. The cause was one line: the
+applicant pool was "inactive, not removed, no membership request", and a field
+submitter is **inactive by design** — the standing is deliberately not
+`profiles.active`, because 22 intelligence tables are gated on that flag alone.
+So the description fit them perfectly, and command was being asked to approve
+people who had applied for nothing. One click would have made an external
+officer a CID detective.
+
+`pendingMembership()` now takes the set of accounts holding field standing and
+excludes anybody who is a submitter **and** has no open CID request. A submitter
+who later applies to CID is an applicant like anybody else and stays in the
+queue. The same exclusion reaches the nav badge, the Command Overview tile, the
+Action Center, the personnel table (no Approve button — they show as *Field
+Intelligence*) and the inbox count, through one shared predicate rather than six
+copies of the rule.
+
+**Access is still immediate, and now it is also recorded.** Field Intelligence →
+**Submitter access** lists everybody who can send CID intelligence: the identity
+they gave, whether they self-registered or were appointed, when the access was
+created, when they first signed in, how many reports they have sent and when the
+last one arrived. Command additionally sees the sign-in email and last-seen time
+— the same rule member emails have always followed. "Keep their login
+information" means the account identity and the access history; there are no
+credentials here, and there never were any to show.
+
+The **Access requests** tab is gone with its wording: nothing files a request
+any more, so a tab named after one was describing work that does not exist. A
+**Legacy requests** tab appears only while genuinely undecided pre-self-service
+rows remain, and rows belonging to somebody who has since created their own
+access are marked superseded rather than left for somebody to rubber-stamp. The
+rows themselves stay — that is history.
+
+### Permanent deletion where the removal decision is made
+
+The Owner-only deletion protocol was complete and correct and lived at
+`/owner?s=deletion` — a different part of the app from the place anybody
+actually removes a member. It is now rendered in the **Manage Officer** modal's
+danger zone and on the access roster, for the Owner and nobody else.
+
+It is the **same component** in all three places, not a second implementation:
+one preview, one armed five-minute single-use token, one typed
+`DELETE <display name>` confirmation, one ledger. A deletion path that grew its
+own safeguards next to a member list is exactly how two paths end up with two
+different sets of them.
+
+One rename came with it. The soft removal was labelled *"Permanently remove from
+CID"*, which was survivable while it was the most destructive button in the
+modal and misleading the moment a genuinely permanent one appeared beside it.
+It now reads **Remove from portal**, which is what it does.
+
+
 ### Permanent deletion stops being hand-maintained (and starts working again)
 
 Phase B classified every foreign key pointing at `profiles` by hand — a ~90-entry

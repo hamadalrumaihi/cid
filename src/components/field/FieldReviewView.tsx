@@ -43,6 +43,7 @@ import {
 } from '@/lib/fieldReview'
 import { evidenceLabel, evidenceUrl, loadEvidence, type FieldEvidenceRow } from '@/lib/fieldEvidence'
 import { FieldAccessQueue, countPending, useAccessRequests } from './FieldAccessQueue'
+import { FieldAccessRoster, useFieldRoster } from './FieldAccessRoster'
 import { SiuPanel } from './SiuPanel'
 import { siuCategoryLabel, siuStateLabel, siuStateTone } from '@/lib/fieldSiu'
 import { useSiu } from '@/lib/useSiu'
@@ -63,9 +64,10 @@ export function FieldReviewView() {
   const [rows, setRows] = useState<FieldSubmissionRow[] | null>(null)
   const [counts, setCounts] = useState<Record<string, SubmissionCounts>>({})
   const [selected, setSelected] = useState<string | null>(null)
-  const [tab, setTab] = useState<QueueFilter | SiuFilter | 'access'>('unclaimed')
+  const [tab, setTab] = useState<QueueFilter | SiuFilter | 'access' | 'legacy'>('unclaimed')
   const v = useTableVersion('field_submissions')
   const access = useAccessRequests()
+  const roster = useFieldRoster()
   const siu = useSiu()
 
   const refresh = useCallback(async () => {
@@ -80,7 +82,8 @@ export function FieldReviewView() {
   if (state !== 'in') return <Notice text="Sign in to review field intelligence." />
 
   const all = rows ?? []
-  const shown = tab === 'access' ? [] : all.filter((r) => matchesFilter(r, tab, me))
+  const shown = tab === 'access' || tab === 'legacy'
+    ? [] : all.filter((r) => matchesFilter(r, tab, me))
   const current = all.find((r) => r.id === selected) ?? null
   const pending = countPending(access.rows ?? [])
 
@@ -108,31 +111,41 @@ export function FieldReviewView() {
           onChange={setTab}
           tabs={[
             ...QUEUE_FILTERS.map((f) => ({
-              id: f as QueueFilter | SiuFilter | 'access',
+              id: f as QueueFilter | SiuFilter | 'access' | 'legacy',
               label: QUEUE_LABEL[f],
               count: countFor(f),
             })),
             // Same table, same reports: SIU is a specialist detachment inside
             // CID, so these are filters rather than a second application.
             ...(siu.isAgent ? SIU_FILTERS.map((f) => ({
-              id: f as QueueFilter | SiuFilter | 'access',
+              id: f as QueueFilter | SiuFilter | 'access' | 'legacy',
               label: SIU_FILTER_LABEL[f],
               count: countFor(f),
             })) : []),
-            // An officer waiting on an access decision has no other way to
-            // reach CID, so the wait belongs where reviewers already are.
+            // Not a queue: access is immediate. This is the record of who can
+            // send us intelligence, and it belongs where the reports arrive.
             {
               id: 'access' as const,
-              label: 'Access requests',
-              count: pending,
-              marker: pending > 0,
-              markerLabel: 'Officers are waiting for a decision',
+              label: 'Submitter access',
+              count: (roster.rows ?? []).filter((r) => r.standing_active).length,
             },
+            // Only while genuinely undecided requests from before self-service
+            // still exist. Nothing files new ones, so this tab disappears for
+            // good once the last one is answered.
+            ...(pending > 0 ? [{
+              id: 'legacy' as const,
+              label: 'Legacy requests',
+              count: pending,
+              marker: true,
+              markerLabel: 'Requests filed before access became immediate',
+            }] : []),
           ]}
         />
       )}
 
       {!current && tab === 'access' ? (
+        <FieldAccessRoster rows={roster.rows} onChanged={() => void roster.refresh()} />
+      ) : !current && tab === 'legacy' ? (
         <FieldAccessQueue rows={access.rows} onChanged={() => void access.refresh()} />
       ) : current ? (
         <SubmissionDetail
@@ -144,7 +157,8 @@ export function FieldReviewView() {
         <Card pad="none" className="overflow-hidden">
           <div className="border-b border-white/5 px-5 py-3">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-              {tab === 'access' ? 'Access requests'
+              {tab === 'access' ? 'Submitter access'
+                : tab === 'legacy' ? 'Legacy requests'
                 : tab in QUEUE_LABEL ? QUEUE_LABEL[tab as QueueFilter]
                 : SIU_FILTER_LABEL[tab as SiuFilter]}
             </h3>

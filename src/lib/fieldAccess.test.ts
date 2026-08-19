@@ -12,7 +12,11 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { FIELD_AGENCIES, requestLabel, requestProblem, REQUEST_STATUS_LABEL } from './fieldAccess'
+import {
+  FIELD_AGENCIES, REQUEST_STATUS_LABEL, ROSTER_STATUS_LABEL, requestLabel,
+  requestProblem, rosterIdentity, rosterMatches, rosterOrigin, rosterStatus,
+} from './fieldAccess'
+import type { FieldRosterRow } from './fieldAccess'
 import type { FieldAccessRequestRow } from './fieldAccess'
 import { countPending, pendingFirst } from '@/components/field/FieldAccessQueue'
 import {
@@ -105,5 +109,58 @@ describe('the historical queue', () => {
     // still be answered. Nothing files a new one.
     expect(REQUEST_STATUS_LABEL.withdrawn).toBeTruthy()
     expect(pendingFirst([req({ status: 'withdrawn' }), req()])[0].status).toBe('pending')
+  })
+})
+
+const rosterRow = (over: Partial<FieldRosterRow> = {}): FieldRosterRow => ({
+  user_id: 'u1', display_name: 'Tom Wood', email: null,
+  agency: 'BCSO', callsign: '412', officer_rank: 'Deputy', unit: 'Patrol',
+  standing_active: true, self_served: true, appointed_by: null,
+  appointed_at: '2026-08-19T00:00:00Z', ended_at: null, end_reason: null,
+  removed_at: null, login_denied: false,
+  first_seen: '2026-08-01T00:00:00Z', last_seen: null,
+  submissions: 3, last_submission_at: '2026-08-19T00:00:00Z',
+  ...over,
+})
+
+describe('the access roster', () => {
+  it('reports the worst news first', () => {
+    // A denied or removed account is not "active" just because the appointment
+    // row still says true — the login is what they hit first, and the roster
+    // should not tell a supervisor somebody has access when they cannot sign in.
+    expect(rosterStatus(rosterRow())).toBe('active')
+    expect(rosterStatus(rosterRow({ standing_active: false }))).toBe('former')
+    expect(rosterStatus(rosterRow({ removed_at: '2026-08-19T00:00:00Z' }))).toBe('removed')
+    expect(rosterStatus(rosterRow({ login_denied: true }))).toBe('denied')
+    expect(rosterStatus(rosterRow({ login_denied: true, standing_active: true })))
+      .toBe('denied')
+  })
+
+  it('labels every status', () => {
+    for (const s of ['active', 'removed', 'denied', 'former'] as const) {
+      expect(ROSTER_STATUS_LABEL[s], s).toBeTruthy()
+    }
+  })
+
+  it('says how the access came about rather than leaving a blank', () => {
+    // A blank would read as missing data; the fact is that nobody had to
+    // approve it.
+    expect(rosterOrigin(rosterRow())).toBe('Self-registered')
+    expect(rosterOrigin(rosterRow({ self_served: false }))).toBe('Appointed by command')
+  })
+
+  it('joins only the identity parts that were given', () => {
+    expect(rosterIdentity(rosterRow())).toBe('412 · BCSO · Deputy · Patrol')
+    expect(rosterIdentity(rosterRow({ callsign: null, officer_rank: null, unit: null })))
+      .toBe('BCSO')
+  })
+
+  it('searches the things somebody would actually type', () => {
+    const r = rosterRow()
+    expect(rosterMatches(r, '')).toBe(true)
+    expect(rosterMatches(r, '412')).toBe(true)
+    expect(rosterMatches(r, 'bcso')).toBe(true)
+    expect(rosterMatches(r, 'wood')).toBe(true)
+    expect(rosterMatches(r, 'lspd')).toBe(false)
   })
 })

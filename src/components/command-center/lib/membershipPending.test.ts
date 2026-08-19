@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { pendingMembership, type JusticeRequestLite, type ProfileLite, type RequestLite } from './membershipPending'
+import {
+  isFieldOnlyAccount, pendingMembership,
+  type JusticeRequestLite, type ProfileLite, type RequestLite,
+} from './membershipPending'
 
 const profile = (over: Partial<ProfileLite> & { id: string }): ProfileLite => ({
   display_name: 'Applicant', active: false, removed_at: null, is_system: false, ...over,
@@ -292,5 +295,68 @@ describe('justice applicants (the vanionn incident)', () => {
     expect(pm.ghosts).toEqual([])
     expect(pm.corrections).toEqual([])
     expect(pm.awaitingCount).toBe(0)
+  })
+})
+
+describe('Field Intelligence submitters are not applicants', () => {
+  // The whole point: field standing is deliberately NOT profiles.active,
+  // because 22 intelligence tables are gated on that flag. "Inactive, not
+  // removed, no membership request" therefore described a submitter perfectly,
+  // and command was asked to approve people who had applied for nothing.
+  const field = new Set(['f1'])
+
+  it('keeps a submitter out of every bucket and out of the count', () => {
+    const pm = pendingMembership(
+      [profile({ id: 'f1' }), profile({ id: 'a' })], [], NO_JUSTICE, null, field)
+    expect(pm.signIns.map((s) => s.profile.id)).toEqual(['a'])
+    expect(pm.awaitingCount).toBe(1)
+    expect(pm.fieldSubmitters.map((p) => p.id)).toEqual(['f1'])
+    expect(pm.fieldLoaded).toBe(true)
+  })
+
+  it('excludes them from the badge path too, where requests are never loaded', () => {
+    const pm = pendingMembership(
+      [profile({ id: 'f1' }), profile({ id: 'a' })], null, NO_JUSTICE, null, field)
+    expect(pm.signIns.map((s) => s.profile.id)).toEqual(['a'])
+    expect(pm.awaitingCount).toBe(1)
+  })
+
+  it('puts a submitter who HAS applied to CID back in the queue', () => {
+    // Access to submit is not an application to become a detective — but a
+    // submitter who then applies is an applicant like anybody else, and
+    // dropping them would lose a real request.
+    const pm = pendingMembership(
+      [profile({ id: 'f1' })],
+      [request({ id: 'r1', applicant_id: 'f1', status: 'pending' })],
+      NO_JUSTICE, null, field)
+    expect(pm.submitted.map((s) => s.profile.id)).toEqual(['f1'])
+    expect(pm.awaitingCount).toBe(1)
+    expect(pm.fieldSubmitters).toEqual([])
+  })
+
+  it('counts a submitter whose CID application was rejected as neither', () => {
+    // A terminal request is not open work, and they are still a submitter.
+    const pm = pendingMembership(
+      [profile({ id: 'f1' })],
+      [request({ id: 'r1', applicant_id: 'f1', status: 'rejected' })],
+      NO_JUSTICE, null, field)
+    expect(pm.awaitingCount).toBe(0)
+    expect(pm.fieldSubmitters.map((p) => p.id)).toEqual(['f1'])
+  })
+
+  it('behaves exactly as before when field standing could not be read', () => {
+    // A caller that cannot see field_officers must not silently drop
+    // applicants — an over-count is recoverable, a missing applicant is not.
+    const pm = pendingMembership([profile({ id: 'f1' })], [], NO_JUSTICE, null, null)
+    expect(pm.awaitingCount).toBe(1)
+    expect(pm.fieldLoaded).toBe(false)
+    expect(pm.fieldSubmitters).toEqual([])
+  })
+
+  it('answers the shared predicate the same way for the inbox and the table', () => {
+    expect(isFieldOnlyAccount('f1', field)).toBe(true)
+    expect(isFieldOnlyAccount('f1', field, true)).toBe(false)   // has an open CID request
+    expect(isFieldOnlyAccount('a', field)).toBe(false)
+    expect(isFieldOnlyAccount('f1', null)).toBe(false)          // not loaded
   })
 })

@@ -6,6 +6,7 @@
  *  a restore action (they return inactive, pending re-approval). */
 import { rpc } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
+import { useFieldStanding } from '@/lib/fieldStanding'
 import { notify } from '@/lib/notify'
 import type { RosterProfile } from '@/lib/profiles'
 import { bureauLabel, canRestoreMember, roleLabel } from '@/lib/roles'
@@ -33,6 +34,8 @@ interface AdminPanelProps {
 
 export function AdminPanel({ profiles, emails, justiceByUser = {}, requests = null, onManage, onChanged }: AdminPanelProps) {
   const { profile: me } = useAuth()
+  const fieldIds = useFieldStanding((s) => s.ids)
+  const fieldLoaded = useFieldStanding((s) => s.loaded)
   // A deactivated CID member who now holds an active justice identity was moved
   // out by an organization correction — list them separately, never as a
   // pending sign-in with a (re-dual-ing) Approve button.
@@ -44,7 +47,13 @@ export function AdminPanel({ profiles, emails, justiceByUser = {}, requests = nu
   // rejected/withdrawn is not quick-approvable — that would bypass the
   // recorded decision. Empty when requests are null (guard degrades to the
   // server refusal below).
-  const signInById = new Map(pendingMembership(profiles, requests, justiceByUser).signIns.map((s) => [s.profile.id, s]))
+  const pm = pendingMembership(profiles, requests, justiceByUser, null,
+    fieldLoaded ? fieldIds : null)
+  const signInById = new Map(pm.signIns.map((s) => [s.profile.id, s]))
+  // A Field Intelligence submitter is inactive by design and applied for
+  // nothing. Offering command an Approve button on them was an invitation to
+  // make an external officer a CID detective by accident.
+  const fieldOnly = new Set(pm.fieldSubmitters.map((p) => p.id))
 
   // One-click approve for pending sign-ins (keeps their current role/bureau —
   // assign_member is activation-only since v1.16).
@@ -101,9 +110,16 @@ export function AdminPanel({ profiles, emails, justiceByUser = {}, requests = nu
                 </td>
                 <td className="px-3 py-2 text-slate-300">{roleLabel(p.role)}</td>
                 <td className="px-3 py-2 text-slate-300">{bureauLabel(p.division)}</td>
-                <td className="px-3 py-2">{p.active ? <span className="text-emerald-300">Yes</span> : <span className="text-amber-300">Pending</span>}</td>
+                <td className="px-3 py-2">
+                  {p.active ? <span className="text-emerald-300">Yes</span>
+                    : fieldOnly.has(p.id) ? <span className="text-slate-400">Field Intelligence</span>
+                    : <span className="text-amber-300">Pending</span>}
+                </td>
                 <td className="px-3 py-2 text-right">
-                  {!p.active && (
+                  {/* No Approve on a Field Intelligence submitter: they applied
+                      for nothing, and one click here would make an external
+                      officer a CID detective. Manage still opens for them. */}
+                  {!p.active && !fieldOnly.has(p.id) && (
                     <button onClick={() => void approve(p)} className="mr-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20">
                       ✓ Approve
                     </button>

@@ -22,6 +22,9 @@
  *                   (draft/approved/rejected/withdrawn…), annotated with that
  *                   status; `actionable` is false for rejected/withdrawn (the
  *                   one-click approve would bypass the recorded decision).
+ *   · fieldSubmitters — Field Intelligence submitters with no open CID request:
+ *                   NOT applicants, listed so a surface can point at the access
+ *                   roster instead of pretending there is a decision to make.
  *   · ghosts      — `pending`/`correction_requested` requests whose applicant
  *                   profile is already ACTIVE (activated directly, request
  *                   never decided) — needs human reconciliation.
@@ -32,6 +35,18 @@
  *  command-only `admin_membership_requests` RPC): everything derivable from
  *  profiles alone still works — all applicants land in `signIns` and
  *  `requestsLoaded` is false so callers can qualify the number.
+ *
+ *  `fieldOfficerIds` (accounts holding Field Intelligence standing) exists for
+ *  the same reason as `justiceRequests`, and is the second half of the same
+ *  lesson. A Field Intelligence submitter is INACTIVE BY DESIGN — the standing
+ *  is deliberately not `profiles.active`, because 22 intelligence tables are
+ *  gated on that flag — so "inactive with no request" described them perfectly
+ *  and the queue asked command to approve people who had not applied for
+ *  anything. Submitting intelligence is not an application to become a
+ *  detective. A field officer with NO open CID request is excluded from every
+ *  bucket and surfaced separately as `fieldSubmitters`; one who HAS applied is
+ *  an applicant like anybody else and stays in the queue. null → not loaded:
+ *  previous behavior, so a caller that cannot read the roster still works.
  *
  *  `justiceRequests` (open justice_membership_requests rows, readable by
  *  command since jmr_sel gained is_command in 20260731010000) exists because
@@ -107,6 +122,26 @@ export interface PendingMembership<P extends ProfileLite = ProfileLite, R extend
   /** False when `justiceRequests` was null — justice applicants could not be
    *  told apart from CID sign-ins (pre-20260731 behavior). */
   justiceLoaded: boolean
+  /** Field Intelligence submitters who are NOT applying to CID. Never part of
+   *  awaitingCount — they are here so a surface can say "these are submitters,
+   *  the roster is over there" rather than silently dropping them. */
+  fieldSubmitters: P[]
+  /** False when `fieldOfficerIds` was null — field standing was not knowable,
+   *  so submitters may still be counted as sign-ins (pre-20260921 behavior). */
+  fieldLoaded: boolean
+}
+
+/** Does this account hold Field Intelligence standing and nothing pending with
+ *  CID? Exported because the personnel table and the inbox ask the same
+ *  question and must not answer it differently. `openRequest` is whether they
+ *  have an OPEN membership request — a submitter who has applied to CID is an
+ *  applicant, not just a submitter. */
+export function isFieldOnlyAccount(
+  id: string,
+  fieldOfficerIds: ReadonlySet<string> | null,
+  openRequest = false,
+): boolean {
+  return fieldOfficerIds !== null && fieldOfficerIds.has(id) && !openRequest
 }
 
 /** One request per applicant: an OPEN request always wins over a terminal one;
@@ -130,6 +165,7 @@ export function pendingMembership<P extends ProfileLite, R extends RequestLite>(
   requests: readonly R[] | null,
   justiceByUser: Record<string, unknown>,
   justiceRequests: readonly JusticeRequestLite[] | null = null,
+  fieldOfficerIds: ReadonlySet<string> | null = null,
 ): PendingMembership<P, R> {
   // A DOJ/Judiciary applicant's inactive profile shell is not a CID sign-in —
   // their application lives in the Justice portal (Owner/AG authority).
@@ -153,16 +189,25 @@ export function pendingMembership<P extends ProfileLite, R extends RequestLite>(
       && !justiceApplicantIds.has(p.id),
   )
 
+  const fieldLoaded = fieldOfficerIds !== null
+  // Field standing means inactive on purpose. Without requests we cannot tell
+  // whether a submitter has ALSO applied to CID, so they are excluded here:
+  // over-counting a badge is a nuisance, but telling command to approve
+  // somebody who never applied is a wrong instruction.
+  const fieldSubmitters = applicants.filter((p) => isFieldOnlyAccount(p.id, fieldOfficerIds))
+
   if (requests === null) {
     // Submitted and plain sign-ins are indistinguishable without requests —
     // both are inactive applicants, so the total is still right for badges.
-    const signIns = applicants.map((profile) => ({
-      profile, requestStatus: null, request: null as R | null, actionable: true,
-    }))
+    const signIns = applicants
+      .filter((p) => !isFieldOnlyAccount(p.id, fieldOfficerIds))
+      .map((profile) => ({
+        profile, requestStatus: null, request: null as R | null, actionable: true,
+      }))
     return {
       submitted: [], corrections: [], signIns, ghosts: [],
       awaitingCount: signIns.length, requestsLoaded: false,
-      justiceApplicants, justiceLoaded,
+      justiceApplicants, justiceLoaded, fieldSubmitters, fieldLoaded,
     }
   }
 
@@ -175,6 +220,9 @@ export function pendingMembership<P extends ProfileLite, R extends RequestLite>(
     const r = reqByApplicant.get(p.id)
     if (r?.status === 'pending') { submitted.push({ profile: p, request: r }); continue }
     if (r?.status === 'correction_requested') continue // waiting on the applicant → corrections below
+    // A submitter who never applied to CID. Both open statuses are handled
+    // above, so reaching here means there is nothing of theirs to decide.
+    if (isFieldOnlyAccount(p.id, fieldOfficerIds)) continue
     signIns.push({
       profile: p,
       requestStatus: r?.status ?? null,
@@ -198,5 +246,11 @@ export function pendingMembership<P extends ProfileLite, R extends RequestLite>(
   return {
     submitted, corrections, signIns, ghosts, awaitingCount, requestsLoaded: true,
     justiceApplicants, justiceLoaded,
+    // Recomputed here rather than reusing the pre-request list: a submitter
+    // with an OPEN request is an applicant, and belongs in the queue.
+    fieldSubmitters: applicants.filter(
+      (p) => isFieldOnlyAccount(p.id, fieldOfficerIds,
+        OPEN_STATUSES.has(reqByApplicant.get(p.id)?.status ?? ''))),
+    fieldLoaded,
   }
 }

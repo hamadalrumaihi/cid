@@ -15,6 +15,7 @@
 import { useState } from 'react'
 import { rpc, updateNoSelect } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
+import { PermanentDelete } from '@/components/owner/PermanentDelete'
 import type { RosterProfile } from '@/lib/profiles'
 import {
   BUREAUS, PERMANENT_BUREAUS, ROLE_LABEL, bureauLabel, canRemoveMember, canTransfer,
@@ -409,7 +410,7 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
 
         <div className="mt-4 border-t border-white/5 pt-3">
           <p className="mb-1 text-[11px] uppercase tracking-wider text-rose-300/70">Danger zone</p>
-          <p className="mb-2 text-[10px] text-slate-500">Two different actions: <b className="text-slate-400">Deny login</b> blocks the door but keeps the account; <b className="text-slate-400">Permanently remove</b> erases the membership (history preserved).</p>
+          <p className="mb-2 text-[10px] text-slate-500">Three different actions, in order of severity: <b className="text-slate-400">Deny login</b> blocks the door but keeps the account; <b className="text-slate-400">Remove from portal</b> revokes access and keeps every record, and can be undone; <b className="text-slate-400">Permanently delete</b> (Owner only) erases the account itself.</p>
           {canDenyThis && (p.login_denied ? (
             <div className="mb-2">
               <button onClick={() => void restoreLogin()} disabled={busy} className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 py-2.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/10 disabled:opacity-60">
@@ -427,13 +428,41 @@ export function AssignModal({ p, email, onClose, onChanged }: AssignModalProps) 
           ))}
           {canRemoveMember(actor, p) && (
             <>
+              {/* Renamed from "Permanently remove": it is the SOFT removal, and
+                  sitting next to a genuinely permanent delete, the old label
+                  was the more dangerous of the two words. */}
               <button onClick={() => void removePermanently()} disabled={busy} className="w-full rounded-lg border border-rose-500/30 bg-rose-500/5 py-2.5 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-60">
-                Permanently remove from CID
+                Remove from portal
               </button>
               <p className="mt-1.5 text-[10px] text-slate-500">
                 Blocks all access, clears their sign-in email, unassigns their cases and hides them from the roster. Cases, reports and audit history they authored are kept. A director can restore them (they return inactive, pending re-approval).
               </p>
             </>
+          )}
+
+          {/* The Owner's control, and only the Owner's -- rendered here so the
+              one person who can do it does not have to go looking for it in a
+              different part of the app. It is the same armed flow used by the
+              Owner console and the Field Intelligence roster: one deletion
+              system, and the RPC refuses everybody else whatever renders. */}
+          {isOwner && (
+            <div className="mt-3 border-t border-rose-500/20 pt-3">
+              <p className="mb-1 text-[11px] uppercase tracking-wider text-rose-300/70">
+                Owner only
+              </p>
+              <PermanentDelete
+                key={p.id}
+                targetId={p.id}
+                targetName={p.display_name}
+                onDeleted={() => { onClose(); onChanged() }}
+              />
+              <p className="mt-1.5 text-[10px] text-slate-500">
+                Erases the account and its sign-in identity forever. Cases, reports, evidence
+                and Field Intelligence submissions stay, repointed to the shared
+                &ldquo;Deleted Member&rdquo; record. Removing from the portal is reversible and
+                remains the recommended action.
+              </p>
+            </div>
           )}
         </div>
       </div>

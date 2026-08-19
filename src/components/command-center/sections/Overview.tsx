@@ -10,6 +10,7 @@ import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { useProfilesStore } from '@/lib/profiles'
 import { useJusticeRoster } from '@/lib/justiceRoster'
+import { useFieldStanding } from '@/lib/fieldStanding'
 import { useTableVersion } from '@/lib/realtime'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -39,6 +40,9 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
   const profiles = useProfilesStore((s) => s.profiles)
   const fetchProfiles = useProfilesStore((s) => s.fetch)
   const justiceByUser = useJusticeRoster((s) => s.byUser)
+  const fieldIds = useFieldStanding((s) => s.ids)
+  const fieldLoaded = useFieldStanding((s) => s.loaded)
+  const fetchFieldStanding = useFieldStanding((s) => s.fetch)
   const fetchJustice = useJusticeRoster((s) => s.fetch)
   const [cases, setCases] = useState<CaseRow[]>([])
   // null until loaded — the tile then falls back to the profiles-only count.
@@ -56,6 +60,7 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
   const refresh = useCallback(async () => {
     void fetchProfiles()
     void fetchJustice()
+    void fetchFieldStanding()
     try { setCases(await list('cases', {})) } catch { /* stale ok */ }
     if (canAdmin) {
       const rq = await rpc('admin_membership_requests', undefined as never)
@@ -67,7 +72,7 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
         }) as JusticeRequestLite[])
       } catch { /* degrade to the pre-fix blended count */ }
     }
-  }, [fetchProfiles, fetchJustice, canAdmin])
+  }, [fetchProfiles, fetchJustice, fetchFieldStanding, canAdmin])
   useEffect(() => {
     const t = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(t)
@@ -76,7 +81,8 @@ export function CommandCenterOverview({ onGo }: { onGo: (id: string) => void }) 
   const roster = profiles.filter((p) => !p.removed_at)
   // Shared membership model — the tile shows the same awaitingCount as the
   // nav badge, the Approval Queue and the Action Center (lib/membershipPending).
-  const pm = pendingMembership(profiles, requests, justiceByUser, justiceReqs)
+  const pm = pendingMembership(profiles, requests, justiceByUser, justiceReqs,
+    fieldLoaded ? fieldIds : null)
   const pendingHint = pm.requestsLoaded
     ? `${pm.signIns.filter((s) => s.actionable).length} sign-ins · ${pm.submitted.length} requests${pm.ghosts.length ? ` · ${pm.ghosts.length} to reconcile` : ''}${pm.justiceApplicants ? ` · ${pm.justiceApplicants} in Justice portal` : ''}`
     : 'new sign-ins awaiting activation'
