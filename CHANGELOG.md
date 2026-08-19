@@ -8,6 +8,69 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Field Intelligence Review, and the ticket queue goes dormant
+
+Fourth phase. Patrol could file structured, evidence-backed reports; now CID and
+SIU can work them — and the thing this replaces is switched off.
+
+**Reviewer-private notes finally have a home.** P2 and P3 both shipped
+deliberately *without* internal notes, because P1 had already proved the
+tempting implementation does not work: a column-level revoke cannot subtract
+from a table-level SELECT grant, and revoking the table grant locks command out
+too. A private field on a shared table is not achievable that way. So notes are
+a separate table whose SELECT policy is `private.is_active()` and nothing else.
+A field officer is not active — that is the whole design from P1 — so there is
+no row of it they can reach, no column list to maintain, and nothing to get
+wrong when a column is added later.
+
+**Two kinds of writing, kept apart:**
+
+| | who reads it |
+| --- | --- |
+| `field_submission_reviews` | reviewers only — **never** the officer |
+| `field_submission_messages` | reviewer and officer both |
+
+Different tables rather than one table with a *visible to officer* flag, because
+that flag is the sort of thing somebody eventually forgets to set and internal
+reasoning ends up in front of the person it is about.
+
+**Reviewers act through RPCs, not UPDATE.** CID's direct UPDATE on
+`field_submissions` is **removed entirely**. Claim, decide, reroute and ask are
+each SECURITY DEFINER functions that write their own audit row with a reason. If
+a direct update also worked, the audited path would be the polite option rather
+than the only one — and a reroute between CID and SIU would go unrecorded
+exactly when somebody wanted it to. Rerouting requires a reason because which
+unit sees a report about police conduct is not a filing detail.
+
+**Answering a question does not change the review state.** The obvious design —
+an officer's reply bumps `needs_info` back to `reviewing` — was rejected. It
+would need a trigger writing a status the officer is otherwise forbidden to
+write, and more importantly it is not true: an officer answering does not mean a
+reviewer has resumed. The reviewer moves it when they pick it up; the queue
+flags that a reply is waiting.
+
+Probed live, rolled back:
+
+| attempt | result |
+| --- | --- |
+| **officer reads reviewer notes** | **0 rows** — CID sees 1, the officer sees none |
+| officer writes a reviewer note | refused |
+| CID direct `UPDATE` on a submission | **0 rows** — the RPC path is the only path |
+| `reviewing → submitted` | refused: *a submission cannot go from reviewing to submitted* |
+| reroute with a blank reason | refused |
+| officer calls `field_submission_decide` | `not authorized` |
+| officer messages unprompted | refused |
+| officer replies while `needs_info` | allowed, and `from_reviewer` stored **false** despite the client sending `true` |
+
+**The ticket queue is dormant, as a fact rather than a promise.** `public.tickets`
+keeps its definition, its single row and its audit history — deleting them would
+break permanent-deletion repointing and destroy history for nothing. What it
+loses is the ability to grow: INSERT, UPDATE and DELETE are revoked from
+`authenticated`, so no client can create a ticket whatever the interface offers.
+Verified: CID reads the 1 existing ticket and is refused both insert and update.
+`TicketQueue.tsx` and its constants are gone; the agency→bureau mapping they held
+now lives where it is actually used, in `fieldOfficers.ts`.
+
 ### Evidence, and the project's first Supabase Storage bucket
 
 Third phase of the Field Intelligence portal. Patrol can now back a report up

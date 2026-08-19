@@ -19,7 +19,6 @@ import { AttentionWidget } from './AttentionWidget'
 import { Encourage } from './Encourage'
 import { JumpBack } from './JumpBack'
 import { RaidComp } from './RaidComp'
-import { TicketQueue } from './TicketQueue'
 import { Trackers } from './Trackers'
 import { Card } from '@/components/ui/Card'
 import {
@@ -342,8 +341,6 @@ export function CommandView() {
           <div className="mt-4"><Analytics cases={data.cases} persons={data.persons} gangs={data.gangs} evidence={data.evidence} /></div>
         </details>
       )}
-
-      <TicketQueue cases={data.cases} onCaseCreated={() => void refresh()} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card pad="lg" className="lg:col-span-2">

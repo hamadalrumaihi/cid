@@ -2776,6 +2776,41 @@ export type Database = {
           },
         ]
       }
+      field_submission_messages: {
+        Row: {
+          author_id: string | null
+          body: string
+          created_at: string
+          from_reviewer: boolean
+          id: string
+          submission_id: string
+        }
+        Insert: {
+          author_id?: string | null
+          body: string
+          created_at?: string
+          from_reviewer?: boolean
+          id?: string
+          submission_id: string
+        }
+        Update: {
+          author_id?: string | null
+          body?: string
+          created_at?: string
+          from_reviewer?: boolean
+          id?: string
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_submission_messages_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       field_submission_orgs: {
         Row: {
           basis: string
@@ -2878,6 +2913,38 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "field_submission_persons_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "field_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      field_submission_reviews: {
+        Row: {
+          author_id: string | null
+          created_at: string
+          id: string
+          note: string
+          submission_id: string
+        }
+        Insert: {
+          author_id?: string | null
+          created_at?: string
+          id?: string
+          note: string
+          submission_id: string
+        }
+        Update: {
+          author_id?: string | null
+          created_at?: string
+          id?: string
+          note?: string
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_submission_reviews_submission_id_fkey"
             columns: ["submission_id"]
             isOneToOne: false
             referencedRelation: "field_submissions"
@@ -10946,6 +11013,22 @@ export type Database = {
       }
       end_field_officer: {
         Args: { p_reason: string; p_user: string }
+        Returns: undefined
+      }
+      field_submission_ask: {
+        Args: { p_question: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_claim: {
+        Args: { p_submission: string }
+        Returns: undefined
+      }
+      field_submission_decide: {
+        Args: { p_note?: string; p_status: string; p_submission: string }
+        Returns: undefined
+      }
+      field_submission_route: {
+        Args: { p_reason: string; p_route: string; p_submission: string }
         Returns: undefined
       }
       my_field_standing: {

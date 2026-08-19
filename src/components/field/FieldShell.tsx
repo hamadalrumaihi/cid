@@ -28,9 +28,12 @@ import {
   fieldStatusLabel, fieldStatusMeaning, isEditableByOfficer, loadMySubmissions,
   submissionRef, type FieldSubmissionRow,
 } from '@/lib/fieldSubmissions'
+import { loadMessages, replyAsOfficer, type FieldMessageRow } from '@/lib/fieldReview'
+import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { Input } from '@/components/ui/Field'
 import { EmptyState } from '@/components/ui/Notice'
 import { FieldSubmitForm } from './FieldSubmitForm'
 
@@ -180,6 +183,57 @@ export function FieldShell() {
   )
 }
 
+/** The question a reviewer asked, and the officer's answer.
+ *
+ *  Shown only while the report is in 'needs_info', which is exactly when the
+ *  INSERT policy allows the officer to write — so the control appears precisely
+ *  when it would work. The officer sees this thread and nothing else of the
+ *  review: internal notes live in a table their account cannot read at all. */
+function OfficerThread({ submissionId }: { submissionId: string }) {
+  const [messages, setMessages] = useState<FieldMessageRow[]>([])
+  const [body, setBody] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const refresh = useCallback(async () => {
+    setMessages(await loadMessages(submissionId))
+  }, [submissionId])
+  useEffect(() => {
+    const t = window.setTimeout(() => { void refresh() }, 0)
+    return () => window.clearTimeout(t)
+  }, [refresh])
+
+  const send = async () => {
+    setBusy(true)
+    const err = await replyAsOfficer(submissionId, body)
+    setBusy(false)
+    if (err) { toast(err, 'danger'); return }
+    setBody('')
+    await refresh()
+    toast('Answer sent.', 'success')
+  }
+
+  return (
+    <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+      <ul className="space-y-2">
+        {messages.map((m) => (
+          <li key={m.id} className="text-sm">
+            <p className="text-[11px] uppercase tracking-wider text-slate-500">
+              {m.from_reviewer ? 'Investigator' : 'You'} · {fmtDateTime(m.created_at)}
+            </p>
+            <p className="mt-0.5 whitespace-pre-wrap text-slate-200">{m.body}</p>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-2 flex gap-2">
+        <Input value={body} onChange={(e) => setBody(e.target.value)}
+          placeholder="Your answer…" disabled={busy} />
+        <Button size="sm" variant="primary" disabled={busy || !body.trim()}
+          onClick={() => void send()}>Send</Button>
+      </div>
+    </div>
+  )
+}
+
 function SubmissionList({ rows, title, empty }: {
   rows: FieldSubmissionRow[]; title: string; empty: string
 }) {
@@ -207,6 +261,7 @@ function SubmissionList({ rows, title, empty }: {
               <p className="mt-1 text-[11px] text-slate-600">
                 {r.submitted_at ? `Sent ${fmtDateTime(r.submitted_at)}` : `Started ${fmtDateTime(r.created_at)}`}
               </p>
+              {r.status === 'needs_info' && <OfficerThread submissionId={r.id} />}
             </li>
           ))}
         </ul>

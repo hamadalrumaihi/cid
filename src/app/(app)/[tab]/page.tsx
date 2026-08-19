@@ -26,6 +26,7 @@ import { CalendarView } from '@/components/calendar/CalendarView'
 import { AnalyticsView } from '@/components/analytics/AnalyticsView'
 import { IndicatorsView } from '@/components/indicators/IndicatorsView'
 import { TipsView } from '@/components/tips/TipsView'
+import { FieldReviewView } from '@/components/field/FieldReviewView'
 import { ProfileView } from '@/components/profile/ProfileView'
 import { CommandCenterView } from '@/components/command-center/CommandCenterView'
 import { LegalView } from '@/components/legal/LegalView'
@@ -270,6 +271,13 @@ export default async function TabPage({ params }: { params: Promise<{ tab: strin
     return (
       <Suspense fallback={<ViewPlaceholder tab="indicators" />}>
         <IndicatorsView />
+      </Suspense>
+    )
+  }
+  if (tab === 'field-review') {
+    return (
+      <Suspense fallback={<ViewPlaceholder tab="field-review" />}>
+        <FieldReviewView />
       </Suspense>
     )
   }
