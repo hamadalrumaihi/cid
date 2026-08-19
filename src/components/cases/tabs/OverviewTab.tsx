@@ -9,6 +9,7 @@ import { Field, Input, Textarea } from '@/components/ui/Field'
 import { insert, list, deleteWithUndo, rpc } from '@/lib/db'
 import { caseLink } from '@/lib/caseLinks'
 import { fmtDate, timeAgo } from '@/lib/format'
+import { CaseProvenance } from '../CaseProvenance'
 import { useAuth } from '@/lib/auth'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useAction } from '@/lib/useAction'
@@ -110,6 +111,9 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
             <Stat label="Opened" value={fmtDate(c.created_at)} />
             <Stat label="Updated" value={timeAgo(c.updated_at).toUpperCase()} />
           </div>
+          {/* Why this investigation exists. Renders nothing when the case was
+              not built on intelligence, which is most of them. */}
+          <CaseProvenance caseId={c.id} />
           {/* JTF-assigned cases: the operational unit vs the responsible bureau
               that routes legal requests (originating_bureau — RPC-managed). */}
           {isJtfAssigned(c) && (

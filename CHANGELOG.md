@@ -8,6 +8,81 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### What follows from a record that matters
+
+D2 gave a record the status **Being acted on**. It did not say what acting on it
+looks like. Three things follow from a report worth acting on, and all three
+already existed — on other screens, which a reviewer had to leave the record to
+reach, retyping from memory what they had just finished reading. That is how a
+case ends up titled *follow up* with an empty summary.
+
+All three are now one action from the record, prefilled from it.
+
+**Opening a case records permanent provenance.** The case number continues the
+bureau's own established series — the same generator the New case form uses,
+because a second numbering scheme for cases that happen to start from
+intelligence would be a second numbering scheme. The link it leaves behind is
+marked `originated` and **nobody can remove it**: not the person who made it,
+not command, not the Owner. It is a fact about how the case came to exist, and
+it does not stop being true because it later becomes inconvenient. The case's
+Overview now carries a **Where this came from** panel, so in a year — when the
+detective who opened it has moved on and somebody asks why this investigation
+exists — the answer is on the case rather than in somebody's memory.
+
+**Linking to an existing case keeps history.** A link somebody added afterwards
+can be taken back, because somebody will link the wrong case. Taking it back
+**stamps the row rather than deleting it**, so the record reads "linked on the
+4th, unlinked on the 9th, wrong Rodriguez" instead of losing both events. A pair
+can be linked, unlinked and linked again; the live one is unique, the history
+keeps all of it.
+
+**Surveillance observations cite the report that put them on the board.** An
+observation belongs to a case, so the record has to be linked to that case first
+— not a technicality, but what keeps every route from intelligence to a case
+visible in the same link history instead of a third one nobody thinks to check.
+Confidence defaults to the record's own reliability grade, since it is the same
+judgement about the same information, and **`confirmed` is not on offer**: a
+report *of* something is not a confirmation of it. Observations logged before
+anybody realised which report they answered can be adopted the other way round.
+
+Both link tables refuse a case the caller cannot open, from either direction —
+linking to a case you cannot see would tell you it exists, and would put a
+record you can read onto a screen you should not be reading. The link history is
+**investigators only**, which is not the same thing: an external officer can read
+their own report, so without that rule they would learn that CID opened a case
+off the back of it. What happens to a report after it is filed is not the
+submitter's to see, the same rule the SIU flags and the reviewer notes follow.
+
+### Confidential sources, and the protection arriving with the option
+
+D1 **refused** `confidential` as a source type rather than ship the option
+without the protection, on the grounds that offering it first is how a source's
+name ends up in a summary field half the bureau can read. This is the protection.
+
+The identity lives in a table with **row-level security on, no policy at all, and
+every privilege revoked** — PostgREST returns nothing to anybody, at any rank,
+through any query. It is reachable only through an RPC that admits the handler
+and the Owner and writes an audit row naming who looked. **Rank does not open
+it**: command can see that a source exists and what it is called, because that is
+on the record, and that is as far as rank gets you. A table command can read
+directly is a table whose reads leave no trace.
+
+What the record carries is the **codename**, which is what a reviewer actually
+needs — *"CS-14 has been right four times"* is how you weigh what CS-14 says, and
+it requires knowing nothing about who CS-14 is.
+
+The ordering is enforced, not merely encouraged: the before-update trigger
+refuses to let a record call itself confidential unless a protected source row
+already exists for it — on a draft as much as on a sent record, since a draft is
+freely editable by its author and that is exactly where the claim would be made.
+The option and the protection cannot come apart again.
+
+**One thing D2 left open, closed here.** `field_submission_readable()` — the
+guard every RPC in this domain uses — had never learned about the soft delete, so
+a caller holding the id of a deleted record could still archive it, grade it, and
+would now have been able to link it to a case. It is brought into line with the
+SELECT policy that already said exactly this.
+
 ### One lifecycle, and the difference between archiving and deleting
 
 The statuses an intelligence record could hold were still describing the system

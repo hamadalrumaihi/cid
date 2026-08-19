@@ -1252,6 +1252,58 @@ alter table public.field_submission_vehicles add constraint field_submission_veh
 alter table public.field_submission_vehicles add constraint field_submission_vehicles_basis_check CHECK ((basis = ANY (ARRAY['observed'::text, 'reported'::text, 'unknown'::text])));
 alter table public.field_submission_vehicles enable row level security;
 
+create table public.field_submission_cases (
+  id uuid not null default gen_random_uuid(),
+  submission_id uuid not null,
+  case_id uuid not null,
+  relation text not null,
+  submission_no text,
+  note text,
+  linked_by uuid,
+  linked_at timestamptz not null default now(),
+  unlinked_by uuid,
+  unlinked_at timestamptz,
+  unlink_reason text
+);
+alter table public.field_submission_cases add constraint field_submission_cases_pkey PRIMARY KEY (id);
+alter table public.field_submission_cases add constraint field_submission_cases_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.field_submissions(id) ON DELETE CASCADE;
+alter table public.field_submission_cases add constraint field_submission_cases_case_id_fkey FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE CASCADE;
+alter table public.field_submission_cases add constraint field_submission_cases_linked_by_fkey FOREIGN KEY (linked_by) REFERENCES public.profiles(id);
+alter table public.field_submission_cases add constraint field_submission_cases_unlinked_by_fkey FOREIGN KEY (unlinked_by) REFERENCES public.profiles(id);
+alter table public.field_submission_cases add constraint field_submission_cases_relation_check CHECK ((relation = ANY (ARRAY['originated'::text, 'linked'::text])));
+create unique index field_submission_cases_live_idx ON public.field_submission_cases USING btree (submission_id, case_id) WHERE (unlinked_at IS NULL);
+create index field_submission_cases_case_idx ON public.field_submission_cases USING btree (case_id);
+create index field_submission_cases_submission_idx ON public.field_submission_cases USING btree (submission_id, linked_at DESC);
+alter table public.field_submission_cases enable row level security;
+-- 'originated' is provenance and is permanent; 'linked' is an association
+-- somebody made and can take back. Unlinking stamps the row rather than
+-- removing it, so the history keeps both events. Written only by
+-- field_submission_create_case/_link_case/_unlink_case -- there is no insert,
+-- update or delete policy and the table-level grants are select-only.
+
+create table public.field_submission_sources (
+  submission_id uuid not null,
+  codename text not null,
+  source_name text,
+  source_contact text,
+  handler_notes text,
+  handler_id uuid not null,
+  created_by uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.field_submission_sources add constraint field_submission_sources_pkey PRIMARY KEY (submission_id);
+alter table public.field_submission_sources add constraint field_submission_sources_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.field_submissions(id) ON DELETE CASCADE;
+alter table public.field_submission_sources add constraint field_submission_sources_handler_id_fkey FOREIGN KEY (handler_id) REFERENCES public.profiles(id);
+alter table public.field_submission_sources add constraint field_submission_sources_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.field_submission_sources enable row level security;
+-- SENSITIVE source identity. RLS is enabled with NO policy and every privilege
+-- is revoked from authenticated and anon, so the table is unreachable through
+-- PostgREST by anybody at any rank. It is read only by
+-- field_submission_source_reveal(), which admits the handler and the Owner and
+-- writes an audit row saying who looked. The record itself carries only the
+-- codename, which is what a reviewer needs to weigh the information.
+
 create table public.field_submissions (
   id uuid not null default gen_random_uuid(),
   submission_no text,
@@ -1284,6 +1336,7 @@ create table public.field_submissions (
   source_type text not null default 'patrol'::text,
   urgency text,
   reliability text,
+  source_codename text,
   created_by uuid,
   archived_at timestamp with time zone,
   archived_by uuid,
@@ -3919,6 +3972,7 @@ create table public.surveillance_observations (
   promoted_at timestamp with time zone,
   promoted_by uuid,
   ingestion_id uuid,
+  field_submission_id uuid,
   created_by uuid default auth.uid(),
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now()
@@ -3933,6 +3987,8 @@ alter table public.surveillance_observations add constraint surveillance_observa
 alter table public.surveillance_observations add constraint surveillance_observations_promoted_by_fkey FOREIGN KEY (promoted_by) REFERENCES public.profiles(id);
 alter table public.surveillance_observations add constraint surveillance_observations_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
 alter table public.surveillance_observations add constraint surveillance_observations_ingestion_fkey FOREIGN KEY (ingestion_id) REFERENCES public.bridge_ingestion_events(id) ON DELETE SET NULL;
+alter table public.surveillance_observations add constraint surveillance_observations_field_submission_id_fkey FOREIGN KEY (field_submission_id) REFERENCES public.field_submissions(id) ON DELETE SET NULL;
+create index surveillance_observations_field_submission_idx ON public.surveillance_observations USING btree (field_submission_id) WHERE (field_submission_id IS NOT NULL);
 alter table public.surveillance_observations add constraint surveillance_observations_source_type_check CHECK ((source_type = ANY (ARRAY['detective_manual'::text, 'patrol_submission'::text, 'fixed_camera'::text, 'mobile_camera'::text, 'alpr'::text, 'vehicle_sensor'::text, 'property_monitor'::text, 'fivem_bridge'::text, 'imported'::text, 'other'::text])));
 alter table public.surveillance_observations add constraint surveillance_observations_activity_check CHECK ((length(btrim(activity)) > 0));
 alter table public.surveillance_observations add constraint surveillance_observations_confidence_check CHECK ((confidence = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text])));
@@ -7723,6 +7779,52 @@ returns void language plpgsql security definer set search_path to '';
 create or replace function public.field_submission_undelete(p_submission uuid)
 returns void language plpgsql security definer set search_path to '';
 
+-- What follows from a record that matters. Opening a case from one records
+-- PERMANENT provenance ('originated'), which nobody can unlink; linking to a
+-- case somebody already opened is an association that can be taken back, and
+-- unlinking stamps the history row rather than deleting it. Both refuse a case
+-- the caller cannot open, so neither end leaks the other's access.
+create or replace function public.field_submission_create_case(
+  p_submission uuid, p_bureau text, p_title text,
+  p_summary text default null, p_lead uuid default null)
+returns uuid language plpgsql security definer set search_path to '';
+
+create or replace function public.field_submission_link_case(
+  p_submission uuid, p_case uuid, p_note text default null)
+returns uuid language plpgsql security definer set search_path to '';
+
+create or replace function public.field_submission_unlink_case(
+  p_link uuid, p_reason text)
+returns void language plpgsql security definer set search_path to '';
+
+-- An observation belongs to a case, so both of these require the record to be
+-- linked to that case already -- otherwise they would be a third, invisible way
+-- for intelligence to reach a case. The observation keeps a back-link to the
+-- record that put it on the board.
+create or replace function public.field_submission_create_observation(
+  p_submission uuid, p_case uuid, p_activity text,
+  p_observed_at timestamptz default null, p_location text default null,
+  p_confidence text default null)
+returns uuid language plpgsql security definer set search_path to '';
+
+create or replace function public.field_submission_link_observation(
+  p_submission uuid, p_observation uuid)
+returns void language plpgsql security definer set search_path to '';
+
+-- Registering a confidential source stores the identity in the unreadable
+-- field_submission_sources table and, only then, lets the record call itself
+-- confidential -- the before-update trigger checks for the source row, so the
+-- option and the protection cannot be separated. Revealing the identity admits
+-- the handler and the Owner, and writes an audit row saying who looked.
+create or replace function public.field_submission_set_source(
+  p_submission uuid, p_codename text, p_name text default null,
+  p_contact text default null, p_notes text default null,
+  p_handler uuid default null)
+returns void language plpgsql security definer set search_path to '';
+
+create or replace function public.field_submission_source_reveal(p_submission uuid)
+returns jsonb language plpgsql security definer set search_path to '';
+
 create or replace function public.field_access_roster()
 returns table (
   user_id uuid, display_name text, email text, agency text, callsign text,
@@ -8509,6 +8611,18 @@ create policy field_submission_items_del on public.field_submission_items
 
 -- field_submission_locations, _orgs, _persons and _vehicles carry the same
 -- four policies with the same predicates; only the table name differs.
+
+create policy field_submission_cases_sel on public.field_submission_cases
+  as permissive for select to authenticated
+  using ((private.is_active() AND ((EXISTS ( SELECT 1
+   FROM public.field_submissions s
+  WHERE (s.id = field_submission_cases.submission_id))) OR (EXISTS ( SELECT 1
+   FROM public.cases c
+  WHERE (c.id = field_submission_cases.case_id))))));
+-- Readable from either end by an INVESTIGATOR, and both subqueries are
+-- themselves RLS-subject: a link to a case you cannot see is simply not there.
+-- is_active() is what keeps the external submitting officer out -- they can read
+-- their own report, and without it would learn that CID opened a case from it.
 
 create policy field_submissions_sel on public.field_submissions
   as permissive for select to authenticated

@@ -151,9 +151,10 @@ export const SOURCE_LABEL: Record<SourceType, string> = {
 }
 
 /** What an investigator may pick when authoring a record. 'patrol' is stamped
- *  by the database, and 'confidential' is refused until its protected identity
- *  storage exists — offering it before then would mean a source's name sitting
- *  in a summary field. */
+ *  by the database. 'confidential' is still absent, but no longer because it is
+ *  unavailable: it is now set by registering the source (see fieldActions), and
+ *  the database refuses the claim until that protected row exists. Picking it
+ *  from a dropdown would put the choice before the protection. */
 export const AUTHORABLE_SOURCES: readonly SourceType[] = [
   'detective', 'surveillance', 'internal', 'external', 'other',
 ]

@@ -48,6 +48,7 @@ import {
 import { evidenceLabel, evidenceUrl, loadEvidence, type FieldEvidenceRow } from '@/lib/fieldEvidence'
 import { FieldAccessQueue, countPending, useAccessRequests } from './FieldAccessQueue'
 import { FieldAccessRoster, useFieldRoster } from './FieldAccessRoster'
+import { IntelActions } from './IntelActions'
 import { SiuPanel } from './SiuPanel'
 import { FieldSubmitForm } from './FieldSubmitForm'
 import { siuCategoryLabel, siuStateLabel, siuStateTone } from '@/lib/fieldSiu'
@@ -557,6 +558,13 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
           </ul>
         </Card>
       )}
+
+      {/* What acting on the record actually looks like: a case, a link to one
+          somebody already opened, a surveillance entry, the source behind it.
+          Placed above the SIU panel because it is the CID path, and below the
+          decision controls because the decision comes first. */}
+      <IntelActions submission={submission}
+        onChanged={() => { void load(); onChanged() }} />
 
       <SiuPanel submission={submission} parts={parts}
         onChanged={() => { void load(); onChanged() }} />
