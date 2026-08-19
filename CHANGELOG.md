@@ -8,6 +8,56 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Intelligence is one thing
+
+The portal had grown two systems for the same job. **Intel Tips** came first — a
+detective writes down what they were told, grades it, triages it. **Field
+Intelligence** came later for patrol and turned out to be the stronger model:
+structured claims, per-claim verification, evidence, assignment history,
+jurisdiction routing, SIU referral. Then *Add to intelligence* bolted them
+together by **copying** a reviewed submission into a tip, so the same
+information existed twice under two numbers and a detective had to know which
+screen to read.
+
+**The migration this was braced for had nothing to move.** `intelligence_tips`
+holds zero rows; so do its links and its confidential-source table, and nothing
+outside those two children references it. So this is not a data migration with a
+compatibility layer — it is one system absorbing what the other knew how to say.
+
+`field_submissions` is now the single Intelligence record and gains **source**
+(patrol, detective, surveillance, internal intelligence, external agency,
+other), **urgency** and **reliability** — the last two carried over from tips
+with their vocabularies unchanged, because a second grading scale for the same
+judgement means learning two.
+
+**Investigators author intelligence directly.** *New intelligence* opens the
+same structured form a patrol officer fills in, because they produce the same
+kind of record. That is what one entity means in practice, and it is why the
+separate "submit a tip" page is gone. The database decides the two things the
+client should not: who is recorded as the author, and — for anything arriving
+through the external portal — that its source is `patrol`, whatever the client
+sends.
+
+**Grading is the reviewer's, not the author's.** An officer reporting what they
+saw is not the person to say how reliable it is, and somebody grading their own
+account grades it high. Reliability also grades the **source**, not any claim:
+a confirmed source can still say something that turns out wrong, which is
+exactly why claim verdicts exist separately. The detail screen says so out loud.
+
+**Nav is one tab.** *Intel Tips* and *Field Intel* are now **Intelligence**.
+`field_submission_publish()` and *Add to intelligence* are gone with them — the
+report already was intelligence. Reviewers' claim matches are untouched: those
+are matches to real registry records, which was always the part worth keeping.
+
+The tips tables stay in place for a release, empty and unreferenced — the same
+treatment the ticket system got. Nothing writes to them.
+
+One thing is deliberately **refused rather than shipped**: `confidential` as a
+source type. It needs protected storage for the source identity, and offering
+the option before the protection is how a source's name ends up in a summary
+field half the bureau can read. The insert path refuses it until that lands.
+
+
 ### A roster, not a queue — and submitters out of the approval line
 
 Field Intelligence submitters were still turning up in the CID approval queue,

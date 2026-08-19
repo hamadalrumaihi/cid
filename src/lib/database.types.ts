@@ -3390,6 +3390,10 @@ export type Database = {
           officer_id: string
           jurisdiction: string | null
           siu_case_id: string | null
+          created_by: string | null
+          reliability: string | null
+          source_type: string
+          urgency: string | null
           siu_assigned_at: string | null
           siu_assigned_to: string | null
           siu_category: string | null
@@ -3422,6 +3426,10 @@ export type Database = {
           officer_id?: string
           jurisdiction?: string | null
           siu_case_id?: string | null
+          created_by?: string | null
+          reliability?: string | null
+          source_type?: string
+          urgency?: string | null
           siu_assigned_at?: string | null
           siu_assigned_to?: string | null
           siu_category?: string | null
@@ -3454,6 +3462,10 @@ export type Database = {
           officer_id?: string
           jurisdiction?: string | null
           siu_case_id?: string | null
+          created_by?: string | null
+          reliability?: string | null
+          source_type?: string
+          urgency?: string | null
           siu_assigned_at?: string | null
           siu_assigned_to?: string | null
           siu_category?: string | null
@@ -11557,6 +11569,10 @@ export type Database = {
         Args: { p_reason: string; p_submission: string }
         Returns: undefined
       }
+      field_submission_grade: {
+        Args: { p_reliability?: string; p_submission: string; p_urgency?: string }
+        Returns: undefined
+      }
       field_submission_counts: {
         Args: Record<PropertyKey, never>
         Returns: {
@@ -11572,10 +11588,6 @@ export type Database = {
       field_submission_release: {
         Args: { p_reason: string; p_submission: string }
         Returns: undefined
-      }
-      field_submission_publish: {
-        Args: { p_submission: string }
-        Returns: string
       }
       my_field_access: {
         Args: Record<PropertyKey, never>

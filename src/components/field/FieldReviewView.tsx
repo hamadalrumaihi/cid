@@ -25,9 +25,11 @@ import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import {
-  fieldStatusLabel, jurisdictionLabel, jurisdictionRouting, loadSubmissionParts,
-  submissionRef,
-  type FieldSubmissionRow, type SubmissionParts,
+  RELIABILITIES, RELIABILITY_LABEL, RELIABILITY_MEANING, URGENCIES, URGENCY_LABEL,
+  fieldStatusLabel, gradeSubmission, isExternalSource, jurisdictionLabel,
+  jurisdictionRouting, loadSubmissionParts, reliabilityLabel, sourceLabel,
+  submissionRef, urgencyLabel, urgencyTone,
+  type FieldSubmissionRow, type Reliability, type SubmissionParts, type Urgency,
 } from '@/lib/fieldSubmissions'
 import {
   QUEUE_FILTERS, QUEUE_LABEL, SIU_FILTERS, SIU_FILTER_LABEL, VERDICTS, VERDICT_LABEL, VERDICT_MEANING, VERDICT_TONE,
@@ -35,7 +37,7 @@ import {
   countsSummary, decideClaim, decideSubmission, loadAssignments,
   loadClaimProgress, loadCounts, loadMessages, loadReviewNotes, loadReviewQueue,
   loadVerdicts, matchesFilter, progressLabel, releaseSubmission, reviewNext, reviewPrompt,
-  linkClaim, linkFor, loadClaimLinks, loadMatches, publishSubmission,
+  linkClaim, linkFor, loadClaimLinks, loadMatches,
   verdictFor, type ClaimKind, type ClaimProgress, type EntityMatch,
   type FieldAssignmentRow, type FieldClaimLinkRow, type FieldMessageRow,
   type FieldReviewNoteRow, type FieldVerdictRow, type MatchResult,
@@ -45,6 +47,7 @@ import { evidenceLabel, evidenceUrl, loadEvidence, type FieldEvidenceRow } from 
 import { FieldAccessQueue, countPending, useAccessRequests } from './FieldAccessQueue'
 import { FieldAccessRoster, useFieldRoster } from './FieldAccessRoster'
 import { SiuPanel } from './SiuPanel'
+import { FieldSubmitForm } from './FieldSubmitForm'
 import { siuCategoryLabel, siuStateLabel, siuStateTone } from '@/lib/fieldSiu'
 import { useSiu } from '@/lib/useSiu'
 import { Badge } from '@/components/ui/Badge'
@@ -65,6 +68,7 @@ export function FieldReviewView() {
   const [counts, setCounts] = useState<Record<string, SubmissionCounts>>({})
   const [selected, setSelected] = useState<string | null>(null)
   const [tab, setTab] = useState<QueueFilter | SiuFilter | 'access' | 'legacy'>('unclaimed')
+  const [writing, setWriting] = useState(false)
   const v = useTableVersion('field_submissions')
   const access = useAccessRequests()
   const roster = useFieldRoster()
@@ -97,11 +101,34 @@ export function FieldReviewView() {
   return (
     <div className="space-y-5">
       <Card>
-        <PageHeader
-          title="📻 Field Intelligence Review"
-          subtitle="Reports from SAHP, BCSO and LSPD officers. Review what was sent, decide what it means."
-        />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <PageHeader
+            title="📻 Intelligence"
+            subtitle="Everything that comes into CID as information — patrol, detectives, surveillance and outside agencies. Review what arrived, decide what it means."
+          />
+          {!writing && (
+            <Button variant="primary" onClick={() => setWriting(true)}>
+              + New intelligence
+            </Button>
+          )}
+        </div>
       </Card>
+
+      {/* The same structured form a patrol officer fills in. An investigator
+          writing something down produces the same kind of record -- that is
+          what "one Intelligence entity" means in practice, and it is why the
+          separate "submit a tip" page is gone. */}
+      {writing && (
+        <Card>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+              New intelligence
+            </h3>
+            <Button size="sm" variant="ghost" onClick={() => setWriting(false)}>Cancel</Button>
+          </div>
+          <FieldSubmitForm asInvestigator onDone={() => { setWriting(false); void refresh() }} />
+        </Card>
+      )}
 
       {!current && (
         <SectionTabs
@@ -220,7 +247,12 @@ function ReportCard({ r, counts, me, isCommand, onOpen, onChanged }: {
           {submissionRef(r)}
         </button>
         <span className="flex flex-wrap items-center gap-2">
-          <Badge tone="neutral">{r.snap_agency}</Badge>
+          {/* An external report is badged by the agency that sent it; anything
+              written inside CID is badged by what kind of information it is. */}
+          <Badge tone="neutral">
+            {isExternalSource(r.source_type) ? r.snap_agency : sourceLabel(r.source_type)}
+          </Badge>
+          {r.urgency && <Badge tone={urgencyTone(r.urgency)}>{urgencyLabel(r.urgency)}</Badge>}
           <Badge tone="accent">{jurisdictionLabel(r.jurisdiction)}</Badge>
           <Badge tone={r.status === 'needs_info' ? 'warn' : 'accent'}>
             {fieldStatusLabel(r.status)}
@@ -407,6 +439,7 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
               {submission.submitted_at && `Sent ${fmtDateTime(submission.submitted_at)}`}
               {submission.mdt_reference && ` · their report ${submission.mdt_reference}`}
               {` · ${jurisdictionRouting(submission.jurisdiction)}`}
+              {` · ${sourceLabel(submission.source_type)}`}
             </p>
           </div>
           <Button size="sm" variant="ghost" onClick={onBack}>Back to queue</Button>
@@ -502,19 +535,41 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
             </Button>
           )}
           <Button size="sm" variant="ghost" onClick={() => void ask()}>Ask the officer</Button>
-          <Button size="sm" variant="ghost"
-            onClick={() => void (async () => {
-              await after(await publishSubmission(id),
-                'Added to the intelligence database, with this report as its source.')
+          {/* Grading is a REVIEWER's judgement. An officer reporting what they
+              saw is not the person to say how reliable it is, and somebody
+              grading their own account grades it high -- so the RPC takes it
+              from whoever is reviewing, not from the author. */}
+          <Select value={submission.urgency ?? ''} aria-label="Urgency" className="text-xs"
+            onChange={(e) => void (async () => {
+              await after(await gradeSubmission(id, e.target.value as Urgency), 'Urgency set.')
             })()}>
-            Add to intelligence
-          </Button>
+            <option value="">Urgency…</option>
+            {URGENCIES.map((u) => <option key={u} value={u}>{URGENCY_LABEL[u]}</option>)}
+          </Select>
+          <Select value={submission.reliability ?? ''} aria-label="Reliability" className="text-xs"
+            onChange={(e) => void (async () => {
+              await after(await gradeSubmission(id, undefined, e.target.value as Reliability),
+                'Reliability set.')
+            })()}>
+            <option value="">Reliability…</option>
+            {RELIABILITIES.map((r) => <option key={r} value={r}>{RELIABILITY_LABEL[r]}</option>)}
+          </Select>
+          {/* "Add to intelligence" is gone. It copied this record into a second
+              one so it could "become intelligence" -- but it already IS
+              intelligence, and the copy existed only because there were two
+              systems. The claim matches you make are the part that mattered,
+              and they are recorded where you make them. */}
         </div>
-        <p className="mt-2 text-xs text-slate-500">
-          Adding to intelligence creates one tip carrying this report&rsquo;s number, plus a
-          link for each claim you matched to an existing record. It creates no new
-          persons, vehicles, gangs or cases &mdash; and never a case.
-        </p>
+        {submission.reliability && (
+          <p className="mt-2 text-xs text-slate-500">
+            {/* Spelled out because it is the distinction most easily lost:
+                reliability grades the SOURCE, a verdict grades one CLAIM. A
+                confirmed source can still say something that is wrong. */}
+            <b className="text-slate-400">{reliabilityLabel(submission.reliability)}</b>
+            {' — '}{RELIABILITY_MEANING[submission.reliability as Reliability] ?? ''}
+            {' This grades the source, not any individual claim below.'}
+          </p>
+        )}
 
         {edges.length > 0 ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">

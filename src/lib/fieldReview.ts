@@ -460,16 +460,13 @@ export async function linkClaim(
   return res.error?.message ?? null
 }
 
-/** Put the report into the intelligence database: one `intelligence_tips` row
- *  carrying the submission id, plus a tip link per linked claim.
- *
- *  The tip arrives as `new` / `unverified` whatever a reviewer decided about
- *  individual claims. A tip's own triage is a separate judgement, and an
- *  external submission arriving pre-accepted is the thing to avoid. */
-export async function publishSubmission(id: string): Promise<string | null> {
-  const res = await rpc('field_submission_publish', { p_submission: id })
-  return res.error?.message ?? null
-}
+// "Add to intelligence" is gone, and so is publishSubmission(). It copied a
+// reviewed report into an intelligence_tips row so the report could "become
+// intelligence" -- but the report already WAS intelligence, and the copy
+// existed only because there were two systems. What it produced was the same
+// information twice, under two numbers, with a detective having to know which
+// screen to read. The claim links a reviewer makes are untouched: those are
+// matches to real registry records, which was always the part worth keeping.
 
 /** Whether a claim has already been matched to a record. */
 export function linkFor(

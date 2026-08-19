@@ -40,6 +40,7 @@ const sub = (over: Partial<FieldSubmissionRow> = {}): FieldSubmissionRow => ({
   siu_referred_by: null, siu_referred_at: null,
   siu_assigned_to: null, siu_assigned_at: null, siu_sensitive: false,
   siu_case_id: null,
+  source_type: 'patrol', urgency: null, reliability: null, created_by: null,
   created_at: '2026-08-19T00:00:00Z', updated_at: '2026-08-19T00:00:00Z',
   ...over,
 })

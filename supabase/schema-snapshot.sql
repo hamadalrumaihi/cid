@@ -1281,6 +1281,10 @@ create table public.field_submissions (
   siu_assigned_at timestamp with time zone,
   siu_sensitive boolean not null default false,
   siu_case_id uuid,
+  source_type text not null default 'patrol'::text,
+  urgency text,
+  reliability text,
+  created_by uuid,
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now()
 );
@@ -1288,6 +1292,10 @@ alter table public.field_submissions add constraint field_submissions_pkey PRIMA
 alter table public.field_submissions add constraint field_submissions_siu_referred_by_fkey FOREIGN KEY (siu_referred_by) REFERENCES public.profiles(id);
 alter table public.field_submissions add constraint field_submissions_siu_assigned_to_fkey FOREIGN KEY (siu_assigned_to) REFERENCES public.profiles(id);
 alter table public.field_submissions add constraint field_submissions_siu_case_id_fkey FOREIGN KEY (siu_case_id) REFERENCES public.cases(id);
+alter table public.field_submissions add constraint field_submissions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id);
+alter table public.field_submissions add constraint field_submissions_source_type_check CHECK ((source_type = ANY (ARRAY['patrol'::text, 'detective'::text, 'confidential'::text, 'surveillance'::text, 'internal'::text, 'external'::text, 'other'::text])));
+alter table public.field_submissions add constraint field_submissions_urgency_check CHECK (((urgency IS NULL) OR (urgency = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text]))));
+alter table public.field_submissions add constraint field_submissions_reliability_check CHECK (((reliability IS NULL) OR (reliability = ANY (ARRAY['confirmed'::text, 'probable'::text, 'possible'::text, 'unverified'::text, 'disproven'::text]))));
 alter table public.field_submissions add constraint field_submissions_siu_state_check CHECK (((siu_state IS NULL) OR (siu_state = ANY (ARRAY['flagged'::text, 'referred'::text, 'accepted'::text, 'declined'::text]))));
 alter table public.field_submissions add constraint field_submissions_siu_category_check CHECK (((siu_category IS NULL) OR (siu_category = ANY (ARRAY['organized_crime'::text, 'gang_mc_enterprise'::text, 'narcotics_trafficking'::text, 'firearms_trafficking'::text, 'public_corruption'::text, 'fugitive'::text, 'major_crime_scene'::text, 'cross_jurisdiction'::text, 'other_complex'::text]))));
 alter table public.field_submissions add constraint field_submissions_submission_no_key UNIQUE (submission_no);
@@ -7674,6 +7682,13 @@ returns jsonb language plpgsql security definer set search_path to '';
 -- it still stands and how much they have sent. A roster, not a queue -- access
 -- is immediate. Any active investigator may read it; the sign-in email and the
 -- last sign-in time come back null for anybody who is not command.
+-- Grading a record: a reviewer's judgement of urgency and source reliability,
+-- audited. Not the author's -- somebody grading their own account grades it
+-- high. Vocabularies carried unchanged from the retired intelligence_tips.
+create or replace function public.field_submission_grade(
+  p_submission uuid, p_urgency text default null, p_reliability text default null)
+returns void language plpgsql security definer set search_path to '';
+
 create or replace function public.field_access_roster()
 returns table (
   user_id uuid, display_name text, email text, agency text, callsign text,
