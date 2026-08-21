@@ -15,8 +15,9 @@
 
 import { describe, expect, it } from 'vitest'
 import {
-  MIN_REASON, compartmentTypeLabel, reasonIsUsable, restrictPreview,
-  revealPreview, reviewRank, visibilityActionLabel, visibilityLabel,
+  MIN_REASON, SECTIONS, compartmentTypeLabel, reasonIsUsable, restrictPreview,
+  revealPreview, reviewRank, sectionLabel, sectionsFor, visibilityActionLabel,
+  visibilityLabel,
 } from './siuVisibility'
 
 const row = (over: Partial<Parameters<typeof visibilityLabel>[0]> = {}) => ({
@@ -148,5 +149,89 @@ describe('naming the registries', () => {
 
   it('passes an unknown type through instead of showing a blank', () => {
     expect(compartmentTypeLabel('evidence')).toBe('evidence')
+  })
+})
+
+describe('the two restrictions are never described as the same thing', () => {
+  it('does not call a section restriction "SIU only"', () => {
+    // The whole point of the second mode is that CID KEEPS the profile.
+    // Labelling it "SIU only" would tell the person who applied it that they
+    // hid a record they did not hide.
+    expect(visibilityLabel({
+      state: 'siu_only', scope: 'sections',
+      hidden_sections: ['relationships', 'gang_membership'],
+      revealed_to_case_id: null, revealed_to_user_id: null,
+    })).toBe('2 sections restricted')
+  })
+
+  it('counts one section in the singular', () => {
+    expect(visibilityLabel({
+      state: 'siu_only', scope: 'sections', hidden_sections: ['media'],
+      revealed_to_case_id: null, revealed_to_user_id: null,
+    })).toBe('1 section restricted')
+  })
+
+  it('still says SIU only for a whole-record restriction', () => {
+    expect(visibilityLabel({
+      state: 'siu_only', scope: 'record', hidden_sections: [],
+      revealed_to_case_id: null, revealed_to_user_id: null,
+    })).toBe('SIU only')
+  })
+
+  it('treats a row with no scope as a whole-record restriction', () => {
+    // Every ledger row written before the second mode existed defaults to
+    // 'record', which is exactly how it already behaved.
+    expect(visibilityLabel({
+      state: 'siu_only', revealed_to_case_id: null, revealed_to_user_id: null,
+    })).toBe('SIU only')
+  })
+})
+
+describe('only sections a record can actually have are offered', () => {
+  it('offers a person their associations, not gang territory', () => {
+    const ids = sectionsFor('person').map((s) => s.id)
+    expect(ids).toContain('relationships')
+    expect(ids).toContain('addresses')
+    // Territory belongs to an organisation. A checkbox for it on a person is a
+    // control that can only ever do nothing -- the same defect as an
+    // "Arrest required" filter against a code that records no arrests.
+    expect(ids).not.toContain('gang_turf')
+  })
+
+  it('offers an organisation its structure and territory', () => {
+    const ids = sectionsFor('gang').map((s) => s.id)
+    expect(ids).toEqual(expect.arrayContaining(['gang_turf', 'gang_ranks', 'gang_places']))
+    expect(ids).not.toContain('addresses')
+  })
+
+  it('offers nothing for a record with no separable parts', () => {
+    // An indicator is a leaf. The screen has to say so rather than showing an
+    // empty box that looks broken.
+    expect(sectionsFor('indicator')).toHaveLength(0)
+  })
+
+  it('returns nothing for a type that cannot be compartmented', () => {
+    expect(sectionsFor('report')).toHaveLength(0)
+  })
+
+  it('every offered section is one the database actually enforces', () => {
+    // The vocabulary is shared with the RLS conjuncts one-for-one. A section
+    // offered here that no policy checks would be a checkbox that protects
+    // nothing, which is worse than not offering it.
+    const known = new Set<string>(SECTIONS.map((s) => s.id))
+    for (const t of ['person', 'gang', 'vehicle', 'place', 'account']) {
+      for (const sec of sectionsFor(t)) expect(known.has(sec.id)).toBe(true)
+    }
+  })
+})
+
+describe('naming sections', () => {
+  it('uses the words an investigator would use', () => {
+    expect(sectionLabel('gang_membership')).toBe('Organisation membership')
+    expect(sectionLabel('relationships')).toBe('Known associates')
+  })
+
+  it('passes an unknown section through rather than showing a blank', () => {
+    expect(sectionLabel('something_new')).toBe('something_new')
   })
 })

@@ -9460,6 +9460,7 @@ export type Database = {
           created_by: string | null
           entity_id: string
           entity_type: string
+          hidden_sections: string[]
           needs_review: boolean
           reveal_reason: string | null
           revealed_at: string | null
@@ -9468,6 +9469,7 @@ export type Database = {
           revealed_to_case_id: string | null
           revealed_to_user_id: string | null
           review_note: string | null
+          scope: string
           siu_case_id: string | null
           state: string
           updated_at: string
@@ -9477,6 +9479,7 @@ export type Database = {
           created_by?: string | null
           entity_id: string
           entity_type: string
+          hidden_sections?: string[]
           needs_review?: boolean
           reveal_reason?: string | null
           revealed_at?: string | null
@@ -9485,6 +9488,7 @@ export type Database = {
           revealed_to_case_id?: string | null
           revealed_to_user_id?: string | null
           review_note?: string | null
+          scope?: string
           siu_case_id?: string | null
           state?: string
           updated_at?: string
@@ -9494,6 +9498,7 @@ export type Database = {
           created_by?: string | null
           entity_id?: string
           entity_type?: string
+          hidden_sections?: string[]
           needs_review?: boolean
           reveal_reason?: string | null
           revealed_at?: string | null
@@ -9502,6 +9507,7 @@ export type Database = {
           revealed_to_case_id?: string | null
           revealed_to_user_id?: string | null
           review_note?: string | null
+          scope?: string
           siu_case_id?: string | null
           state?: string
           updated_at?: string
@@ -9554,7 +9560,9 @@ export type Database = {
           entity_type: string
           from_state: string | null
           id: string
+          impact: Json | null
           reason: string
+          scope: string | null
           sections: string[]
           to_case_id: string | null
           to_state: string | null
@@ -9569,7 +9577,9 @@ export type Database = {
           entity_type: string
           from_state?: string | null
           id?: string
+          impact?: Json | null
           reason: string
+          scope?: string | null
           sections?: string[]
           to_case_id?: string | null
           to_state?: string | null
@@ -9584,7 +9594,9 @@ export type Database = {
           entity_type?: string
           from_state?: string | null
           id?: string
+          impact?: Json | null
           reason?: string
+          scope?: string | null
           sections?: string[]
           to_case_id?: string | null
           to_state?: string | null
@@ -12142,6 +12154,15 @@ export type Database = {
         }
         Returns: undefined
       }
+      siu_reserve_visibility: {
+        Args: {
+          p_id: string
+          p_reason: string
+          p_type: string
+          p_visibility: string
+        }
+        Returns: undefined
+      }
       siu_resolve_review: {
         Args: {
           p_id: string
@@ -12150,6 +12171,22 @@ export type Database = {
           p_type: string
         }
         Returns: undefined
+      }
+      siu_restrict: {
+        Args: {
+          p_acknowledge_cid_impact?: boolean
+          p_case_id?: string
+          p_id: string
+          p_mode: string
+          p_reason: string
+          p_sections?: string[]
+          p_type: string
+        }
+        Returns: Json
+      }
+      siu_restriction_impact: {
+        Args: { p_id: string; p_type: string }
+        Returns: Json
       }
       siu_restrict_to_siu: {
         Args: { p_id: string; p_reason: string; p_type: string }

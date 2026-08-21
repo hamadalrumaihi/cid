@@ -16,6 +16,8 @@ import { deleteWithUndo, insert, list, update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { activeProfiles, officerName } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
+import { useSiu } from '@/lib/useSiu'
+import { reserveVisibility } from '@/lib/siuVisibility'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
@@ -75,6 +77,14 @@ interface PersonModalProps {
 
 export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: PersonModalProps) {
   const { profile, canDelete } = useAuth()
+  const siu = useSiu()
+  // A new record created by somebody with SIU standing needs a deliberate
+  // visibility choice -- SIU Only by default, because an SIU-created record
+  // must never appear in CID by accident. Null for everybody else, and for
+  // every edit: this is a decision made once, at creation.
+  const offerVisibility = !record && siu.canAccess
+  const [siuChoice, setSiuChoice] =
+    useState<'siu_only' | 'cid' | null>(offerVisibility ? 'siu_only' : null)
   // Identity
   const [name, setName] = useState(record?.name || prefillName || '')
   const [alias, setAlias] = useState(record?.alias || '')
@@ -156,9 +166,29 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
       payload.bolo_issued_by = profile?.id ?? null
       payload.bolo_issued_at = new Date().toISOString()
     }
+    if (!record && siuChoice) {
+      // The ledger row is written FIRST, against an id we choose here, so a
+      // record created SIU Only is never visible to CID -- not even for the
+      // moment between the insert landing and a restriction being applied.
+      // siu_visibility.entity_id deliberately carries no foreign key, which is
+      // what makes writing it ahead of the record possible.
+      const newId = crypto.randomUUID()
+      if (siuChoice === 'siu_only') {
+        try {
+          await reserveVisibility('person', newId, 'siu_only',
+            'Created in the SIU workspace as SIU Only.')
+        } catch (e) {
+          toast(e instanceof Error ? e.message : String(e), 'danger')
+          return
+        }
+      }
+      payload.id = newId
+    }
     const res = record ? await update('persons', record.id, payload) : await insert('persons', payload)
     if (res.error) { toast(`Save failed: ${res.error.message}`, 'danger'); return }
-    toast(record ? 'Person updated' : 'Person created', 'success')
+    toast(record ? 'Person updated'
+      : siuChoice === 'siu_only' ? 'Person created, SIU Only. CID cannot see it.'
+      : 'Person created', 'success')
     onSaved()
   }
 
@@ -260,6 +290,36 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
             <Field label="VCH">{(id) => <Input id={id} type="number" value={vch} onChange={(e) => setVch(e.target.value)} />}</Field>
             <Field label="Felonies">{(id) => <Input id={id} type="number" value={felonies} onChange={(e) => setFelonies(e.target.value)} />}</Field>
           </div>
+          {offerVisibility && (
+            <fieldset className="sm:col-span-2 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
+              <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-violet-300">
+                Who can see this record
+              </legend>
+              <div className="mt-1 space-y-1.5">
+                {([
+                  ['siu_only', 'SIU Only',
+                   'Recommended. CID cannot see it at all — not in search, the graph, counts or exports.'],
+                  ['cid', 'Shared with CID',
+                   'An ordinary registry record, visible to every active investigator.'],
+                ] as const).map(([v, label, hint]) => (
+                  <label key={v} className="flex cursor-pointer gap-2.5">
+                    <input
+                      type="radio"
+                      name="siu-visibility"
+                      checked={siuChoice === v}
+                      onChange={() => setSiuChoice(v)}
+                      className="mt-0.5 accent-violet-400"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-white">{label}</span>
+                      <span className="block text-xs text-slate-400">{hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
           <Field label="Notes" className="sm:col-span-2">
             {(id) => <Textarea id={id} rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />}
           </Field>

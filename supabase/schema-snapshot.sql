@@ -3572,6 +3572,8 @@ create table public.siu_visibility (
   entity_type text not null,
   entity_id uuid not null,
   state text not null default 'siu_only'::text,
+  scope text not null default 'record'::text,
+  hidden_sections text[] not null default '{}'::text[],
   siu_case_id uuid,
   revealed_sections text[] not null default '{}'::text[],
   revealed_to_case_id uuid,
@@ -3592,7 +3594,9 @@ alter table public.siu_visibility add constraint siu_visibility_revealed_to_case
 alter table public.siu_visibility add constraint siu_visibility_revealed_to_user_id_fkey FOREIGN KEY (revealed_to_user_id) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.siu_visibility add constraint siu_visibility_siu_case_id_fkey FOREIGN KEY (siu_case_id) REFERENCES cases(id) ON DELETE SET NULL;
 alter table public.siu_visibility add constraint siu_visibility_state_check CHECK ((state = ANY (ARRAY['siu_only'::text, 'revealed'::text, 'partial'::text, 'unclassified'::text])));
-alter table public.siu_visibility add constraint siu_visibility_entity_type_check CHECK ((entity_type = ANY (ARRAY['person'::text, 'vehicle'::text, 'gang'::text, 'place'::text, 'case'::text, 'intelligence'::text, 'target'::text, 'report'::text, 'note'::text, 'evidence'::text, 'media'::text, 'task'::text, 'legal_request'::text, 'timeline_event'::text, 'relationship'::text, 'alert'::text, 'comment'::text, 'activity'::text])));
+alter table public.siu_visibility add constraint siu_visibility_scope_check CHECK ((scope = ANY (ARRAY['record'::text, 'sections'::text])));
+alter table public.siu_visibility add constraint siu_visibility_sections_named_check CHECK (((scope <> 'sections'::text) OR (state <> 'siu_only'::text) OR (array_length(hidden_sections, 1) >= 1)));
+alter table public.siu_visibility add constraint siu_visibility_entity_type_check CHECK ((entity_type = ANY (ARRAY['person'::text, 'vehicle'::text, 'gang'::text, 'place'::text, 'account'::text, 'indicator'::text, 'case'::text, 'intelligence'::text, 'target'::text, 'report'::text, 'note'::text, 'evidence'::text, 'media'::text, 'task'::text, 'legal_request'::text, 'timeline_event'::text, 'relationship'::text, 'alert'::text, 'comment'::text, 'activity'::text])));
 alter table public.siu_visibility add constraint siu_visibility_partial_sections_check CHECK (((state <> 'partial'::text) OR (array_length(revealed_sections, 1) >= 1)));
 alter table public.siu_visibility add constraint siu_visibility_release_recorded_check CHECK (((state = ANY (ARRAY['siu_only'::text, 'unclassified'::text])) OR ((revealed_by IS NOT NULL) AND (COALESCE(btrim(reveal_reason), ''::text) <> ''::text))));
 create index siu_visibility_state_idx ON public.siu_visibility USING btree (state) WHERE (state <> 'siu_only'::text);
@@ -3621,6 +3625,8 @@ create table public.siu_visibility_events (
   actor_id uuid,
   actor_standing text,
   reason text not null,
+  scope text,
+  impact jsonb,
   created_at timestamp with time zone not null default now()
 );
 alter table public.siu_visibility_events add constraint siu_visibility_events_pkey PRIMARY KEY (id);
@@ -8052,28 +8058,28 @@ CREATE TRIGGER vehicles_touch BEFORE UPDATE ON public.vehicles FOR EACH ROW EXEC
 
 create policy account_handles_sel on public.account_handles
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('account'::text, account_id, 'accounts'::text)));
 
 create policy account_links_del on public.account_links
   as permissive for delete to authenticated
-  using (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('account'::text, account_id, 'accounts'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'accounts'::text)));
 
 create policy account_links_ins on public.account_links
   as permissive for insert to authenticated
-  with check (private.is_active());
+  with check ((private.is_active()) AND (NOT private.siu_blocked('account'::text, account_id, 'accounts'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'accounts'::text)));
 
 create policy account_links_sel on public.account_links
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('account'::text, account_id, 'accounts'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'accounts'::text)));
 
 create policy account_links_upd on public.account_links
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('account'::text, account_id, 'accounts'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'accounts'::text)))
+  with check ((private.is_active()) AND (NOT private.siu_blocked('account'::text, account_id, 'accounts'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'accounts'::text)));
 
 create policy accounts_del on public.accounts
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((private.can_delete()) AND (NOT private.siu_blocked('account'::text, id, NULL::text)));
 
 create policy accounts_ins on public.accounts
   as permissive for insert to authenticated
@@ -8081,12 +8087,12 @@ create policy accounts_ins on public.accounts
 
 create policy accounts_sel on public.accounts
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('account'::text, id, NULL::text)));
 
 create policy accounts_upd on public.accounts
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('account'::text, id, NULL::text)))
+  with check ((private.is_active()) AND (NOT private.siu_blocked('account'::text, id, NULL::text)));
 
 create policy ann_del on public.announcements
   as permissive for delete to authenticated
@@ -8115,20 +8121,20 @@ create policy audit_sel on public.audit_log
 
 create policy ballistic_footprints_del on public.ballistic_footprints
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((private.can_delete()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'ballistics'::text)));
 
 create policy ballistic_footprints_ins on public.ballistic_footprints
   as permissive for insert to authenticated
-  with check (private.is_active());
+  with check ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'ballistics'::text)));
 
 create policy ballistic_footprints_sel on public.ballistic_footprints
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'ballistics'::text)));
 
 create policy ballistic_footprints_upd on public.ballistic_footprints
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'ballistics'::text)))
+  with check ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'ballistics'::text)));
 
 create policy ballistics_benches_del on public.ballistics_benches
   as permissive for delete to authenticated
@@ -8679,71 +8685,71 @@ create policy field_submissions_del on public.field_submissions
 
 create policy gang_members_del on public.gang_members
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((private.can_delete()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_membership'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'gang_membership'::text)));
 
 create policy gang_members_ins on public.gang_members
   as permissive for insert to authenticated
-  with check (private.is_active());
+  with check ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_membership'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'gang_membership'::text)));
 
 create policy gang_members_sel on public.gang_members
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_membership'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'gang_membership'::text)));
 
 create policy gang_members_upd on public.gang_members
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_membership'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'gang_membership'::text)))
+  with check ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_membership'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'gang_membership'::text)));
 
 create policy gang_ranks_del on public.gang_ranks
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((private.can_delete()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_ranks'::text)));
 
 create policy gang_ranks_ins on public.gang_ranks
   as permissive for insert to authenticated
-  with check (private.is_active());
+  with check ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_ranks'::text)));
 
 create policy gang_ranks_sel on public.gang_ranks
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_ranks'::text)));
 
 create policy gang_ranks_upd on public.gang_ranks
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_ranks'::text)))
+  with check ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_ranks'::text)));
 
 create policy gang_places_del on public.gang_places
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((private.can_delete()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_places'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'gang_places'::text)));
 
 create policy gang_places_ins on public.gang_places
   as permissive for insert to authenticated
-  with check (private.is_active());
+  with check ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_places'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'gang_places'::text)));
 
 create policy gang_places_sel on public.gang_places
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_places'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'gang_places'::text)));
 
 create policy gang_places_upd on public.gang_places
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_places'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'gang_places'::text)))
+  with check ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_places'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'gang_places'::text)));
 
 create policy gang_turf_del on public.gang_turf
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((private.can_delete()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_turf'::text)));
 
 create policy gang_turf_ins on public.gang_turf
   as permissive for insert to authenticated
-  with check (private.is_active());
+  with check ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_turf'::text)));
 
 create policy gang_turf_sel on public.gang_turf
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_turf'::text)));
 
 create policy gang_turf_upd on public.gang_turf
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_turf'::text)))
+  with check ((private.is_active()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'gang_turf'::text)));
 
 create policy gangs_del on public.gangs
   as permissive for delete to authenticated
@@ -8764,7 +8770,7 @@ create policy gangs_upd on public.gangs
 
 create policy indicators_del on public.indicators
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((private.can_delete()) AND (NOT private.siu_blocked('indicator'::text, id, NULL::text)));
 
 create policy indicators_ins on public.indicators
   as permissive for insert to authenticated
@@ -8772,12 +8778,12 @@ create policy indicators_ins on public.indicators
 
 create policy indicators_sel on public.indicators
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('indicator'::text, id, NULL::text)));
 
 create policy indicators_upd on public.indicators
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('indicator'::text, id, NULL::text)))
+  with check ((private.is_active()) AND (NOT private.siu_blocked('indicator'::text, id, NULL::text)));
 
 
 
@@ -8791,9 +8797,9 @@ create policy indicators_upd on public.indicators
 
 create policy jmrh_sel on public.justice_membership_request_history
   as permissive for select to authenticated
-  using ((((NOT internal) AND (EXISTS ( SELECT 1
+  using (((((NOT internal) AND (EXISTS ( SELECT 1
    FROM justice_membership_requests r
-  WHERE ((r.id = justice_membership_request_history.request_id) AND (r.applicant_id = ( SELECT auth.uid() AS uid)))))) OR (private.justice_role() = ANY (ARRAY['district_attorney'::text, 'attorney_general'::text])) OR private.is_owner()));
+  WHERE ((r.id = justice_membership_request_history.request_id) AND (r.applicant_id = ( SELECT auth.uid() AS uid)))))) OR (private.justice_role() = ANY (ARRAY['district_attorney'::text, 'attorney_general'::text])) OR private.is_owner())) AND (NOT private.siu_blocked('indicator'::text, id, NULL::text)));
 
 create policy jmr_ins on public.justice_membership_requests
   as permissive for insert to authenticated
@@ -8860,20 +8866,20 @@ create policy mdt_exports_sel on public.mdt_exports
 
 create policy media_del on public.media
   as permissive for delete to authenticated
-  using ((private.can_delete_case_child(case_id) AND ((case_id IS NULL) OR (NOT private.case_has_active_hold(case_id)))));
+  using (((private.can_delete_case_child(case_id) AND ((case_id IS NULL) OR (NOT private.case_has_active_hold(case_id))))) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text)));
 
 create policy media_ins on public.media
   as permissive for insert to authenticated
-  with check ((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id))));
+  with check (((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)))) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text)));
 
 create policy media_sel on public.media
   as permissive for select to authenticated
-  using ((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel() OR private.has_media_break_glass(case_id, ( SELECT auth.uid() AS uid)))));
+  using (((private.is_active() AND ((case_id IS NULL) OR private.can_read_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel() OR private.has_media_break_glass(case_id, ( SELECT auth.uid() AS uid))))) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text)));
 
 create policy media_upd on public.media
   as permissive for update to authenticated
-  using ((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel())))
-  with check ((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel())));
+  using (((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel()))) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text)))
+  with check (((private.is_active() AND ((case_id IS NULL) OR private.can_access_case(case_id)) AND ((NOT restricted) OR private.can_edit_narcotics_intel()))) AND (NOT private.siu_blocked('gang'::text, gang_id, 'media'::text)) AND (NOT private.siu_blocked('person'::text, person_id, 'media'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'media'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'media'::text)));
 
 create policy member_transfers_sel on public.member_transfers
   as permissive for select to authenticated
@@ -8919,83 +8925,83 @@ create policy narcotic_aliases_upd on public.narcotic_aliases
 
 create policy narcotic_gangs_del on public.narcotic_gangs
   as permissive for delete to authenticated
-  using (private.can_edit_narcotics_intel());
+  using ((private.can_edit_narcotics_intel()) AND (NOT private.siu_blocked('gang'::text, gang_id, 'narcotics'::text)));
 
 create policy narcotic_gangs_ins on public.narcotic_gangs
   as permissive for insert to authenticated
-  with check ((private.is_active() AND (EXISTS ( SELECT 1
+  with check (((private.is_active() AND (EXISTS ( SELECT 1
    FROM public.narcotics n
-  WHERE (n.id = narcotic_gangs.narcotic_id)))));
+  WHERE (n.id = narcotic_gangs.narcotic_id))))) AND (NOT private.siu_blocked('gang'::text, gang_id, 'narcotics'::text)));
 
 create policy narcotic_gangs_sel on public.narcotic_gangs
   as permissive for select to authenticated
-  using ((private.is_active() AND (EXISTS ( SELECT 1
+  using (((private.is_active() AND (EXISTS ( SELECT 1
    FROM public.narcotics n
-  WHERE (n.id = narcotic_gangs.narcotic_id)))));
+  WHERE (n.id = narcotic_gangs.narcotic_id))))) AND (NOT private.siu_blocked('gang'::text, gang_id, 'narcotics'::text)));
 
 create policy narcotic_gangs_upd on public.narcotic_gangs
   as permissive for update to authenticated
-  using ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))))
-  with check ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))));
+  using (((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid))))) AND (NOT private.siu_blocked('gang'::text, gang_id, 'narcotics'::text)))
+  with check (((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid))))) AND (NOT private.siu_blocked('gang'::text, gang_id, 'narcotics'::text)));
 
 create policy narcotic_hotspots_del on public.narcotic_hotspots
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((private.can_delete()) AND (NOT private.siu_blocked('place'::text, place_id, 'narcotics'::text)));
 
 create policy narcotic_hotspots_ins on public.narcotic_hotspots
   as permissive for insert to authenticated
-  with check (private.is_active());
+  with check ((private.is_active()) AND (NOT private.siu_blocked('place'::text, place_id, 'narcotics'::text)));
 
 create policy narcotic_hotspots_sel on public.narcotic_hotspots
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('place'::text, place_id, 'narcotics'::text)));
 
 create policy narcotic_hotspots_upd on public.narcotic_hotspots
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('place'::text, place_id, 'narcotics'::text)))
+  with check ((private.is_active()) AND (NOT private.siu_blocked('place'::text, place_id, 'narcotics'::text)));
 
 create policy narcotic_persons_del on public.narcotic_persons
   as permissive for delete to authenticated
-  using (private.can_edit_narcotics_intel());
+  using ((private.can_edit_narcotics_intel()) AND (NOT private.siu_blocked('person'::text, person_id, 'narcotics'::text)));
 
 create policy narcotic_persons_ins on public.narcotic_persons
   as permissive for insert to authenticated
-  with check ((private.is_active() AND (EXISTS ( SELECT 1
+  with check (((private.is_active() AND (EXISTS ( SELECT 1
    FROM public.narcotics n
-  WHERE (n.id = narcotic_persons.narcotic_id)))));
+  WHERE (n.id = narcotic_persons.narcotic_id))))) AND (NOT private.siu_blocked('person'::text, person_id, 'narcotics'::text)));
 
 create policy narcotic_persons_sel on public.narcotic_persons
   as permissive for select to authenticated
-  using ((private.is_active() AND (EXISTS ( SELECT 1
+  using (((private.is_active() AND (EXISTS ( SELECT 1
    FROM public.narcotics n
-  WHERE (n.id = narcotic_persons.narcotic_id)))));
+  WHERE (n.id = narcotic_persons.narcotic_id))))) AND (NOT private.siu_blocked('person'::text, person_id, 'narcotics'::text)));
 
 create policy narcotic_persons_upd on public.narcotic_persons
   as permissive for update to authenticated
-  using ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))))
-  with check ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))));
+  using (((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid))))) AND (NOT private.siu_blocked('person'::text, person_id, 'narcotics'::text)))
+  with check (((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid))))) AND (NOT private.siu_blocked('person'::text, person_id, 'narcotics'::text)));
 
 create policy narcotic_places_del on public.narcotic_places
   as permissive for delete to authenticated
-  using (private.can_edit_narcotics_intel());
+  using ((private.can_edit_narcotics_intel()) AND (NOT private.siu_blocked('place'::text, place_id, 'narcotics'::text)));
 
 create policy narcotic_places_ins on public.narcotic_places
   as permissive for insert to authenticated
-  with check ((private.is_active() AND (EXISTS ( SELECT 1
+  with check (((private.is_active() AND (EXISTS ( SELECT 1
    FROM public.narcotics n
-  WHERE (n.id = narcotic_places.narcotic_id)))));
+  WHERE (n.id = narcotic_places.narcotic_id))))) AND (NOT private.siu_blocked('place'::text, place_id, 'narcotics'::text)));
 
 create policy narcotic_places_sel on public.narcotic_places
   as permissive for select to authenticated
-  using ((private.is_active() AND (EXISTS ( SELECT 1
+  using (((private.is_active() AND (EXISTS ( SELECT 1
    FROM public.narcotics n
-  WHERE (n.id = narcotic_places.narcotic_id)))));
+  WHERE (n.id = narcotic_places.narcotic_id))))) AND (NOT private.siu_blocked('place'::text, place_id, 'narcotics'::text)));
 
 create policy narcotic_places_upd on public.narcotic_places
   as permissive for update to authenticated
-  using ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))))
-  with check ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))));
+  using (((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid))))) AND (NOT private.siu_blocked('place'::text, place_id, 'narcotics'::text)))
+  with check (((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid))))) AND (NOT private.siu_blocked('place'::text, place_id, 'narcotics'::text)));
 
 create policy narcotic_precursors_del on public.narcotic_precursors
   as permissive for delete to authenticated
@@ -9106,24 +9112,24 @@ create policy narcotic_suggestions_sel on public.narcotic_suggestions
 
 create policy narcotic_vehicles_del on public.narcotic_vehicles
   as permissive for delete to authenticated
-  using (private.can_edit_narcotics_intel());
+  using ((private.can_edit_narcotics_intel()) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'narcotics'::text)));
 
 create policy narcotic_vehicles_ins on public.narcotic_vehicles
   as permissive for insert to authenticated
-  with check ((private.is_active() AND (EXISTS ( SELECT 1
+  with check (((private.is_active() AND (EXISTS ( SELECT 1
    FROM public.narcotics n
-  WHERE (n.id = narcotic_vehicles.narcotic_id)))));
+  WHERE (n.id = narcotic_vehicles.narcotic_id))))) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'narcotics'::text)));
 
 create policy narcotic_vehicles_sel on public.narcotic_vehicles
   as permissive for select to authenticated
-  using ((private.is_active() AND (EXISTS ( SELECT 1
+  using (((private.is_active() AND (EXISTS ( SELECT 1
    FROM public.narcotics n
-  WHERE (n.id = narcotic_vehicles.narcotic_id)))));
+  WHERE (n.id = narcotic_vehicles.narcotic_id))))) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'narcotics'::text)));
 
 create policy narcotic_vehicles_upd on public.narcotic_vehicles
   as permissive for update to authenticated
-  using ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))))
-  with check ((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid)))));
+  using (((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid))))) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'narcotics'::text)))
+  with check (((private.can_edit_narcotics_intel() OR (private.is_active() AND (created_by = ( SELECT auth.uid() AS uid))))) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'narcotics'::text)));
 
 create policy narcotics_del on public.narcotics
   as permissive for delete to authenticated
@@ -9185,54 +9191,54 @@ create policy operations_upd on public.operations
 
 create policy person_places_del on public.person_places
   as permissive for delete to authenticated
-  using ((private.can_delete() OR (created_by = ( SELECT auth.uid() AS uid))));
+  using (((private.can_delete() OR (created_by = ( SELECT auth.uid() AS uid)))) AND (NOT private.siu_blocked('person'::text, person_id, 'addresses'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'addresses'::text)));
 
 create policy person_places_ins on public.person_places
   as permissive for insert to authenticated
-  with check (private.is_active());
+  with check ((private.is_active()) AND (NOT private.siu_blocked('person'::text, person_id, 'addresses'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'addresses'::text)));
 
 create policy person_places_sel on public.person_places
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('person'::text, person_id, 'addresses'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'addresses'::text)));
 
 create policy person_places_upd on public.person_places
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('person'::text, person_id, 'addresses'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'addresses'::text)))
+  with check ((private.is_active()) AND (NOT private.siu_blocked('person'::text, person_id, 'addresses'::text)) AND (NOT private.siu_blocked('place'::text, place_id, 'addresses'::text)));
 
 create policy person_relationships_del on public.person_relationships
   as permissive for delete to authenticated
-  using ((private.can_delete() OR (created_by = ( SELECT auth.uid() AS uid))));
+  using (((private.can_delete() OR (created_by = ( SELECT auth.uid() AS uid)))) AND (NOT private.siu_blocked('person'::text, person_a, 'relationships'::text)) AND (NOT private.siu_blocked('person'::text, person_b, 'relationships'::text)));
 
 create policy person_relationships_ins on public.person_relationships
   as permissive for insert to authenticated
-  with check (private.is_active());
+  with check ((private.is_active()) AND (NOT private.siu_blocked('person'::text, person_a, 'relationships'::text)) AND (NOT private.siu_blocked('person'::text, person_b, 'relationships'::text)));
 
 create policy person_relationships_sel on public.person_relationships
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('person'::text, person_a, 'relationships'::text)) AND (NOT private.siu_blocked('person'::text, person_b, 'relationships'::text)));
 
 create policy person_relationships_upd on public.person_relationships
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('person'::text, person_a, 'relationships'::text)) AND (NOT private.siu_blocked('person'::text, person_b, 'relationships'::text)))
+  with check ((private.is_active()) AND (NOT private.siu_blocked('person'::text, person_a, 'relationships'::text)) AND (NOT private.siu_blocked('person'::text, person_b, 'relationships'::text)));
 
 create policy person_vehicles_del on public.person_vehicles
   as permissive for delete to authenticated
-  using ((private.can_delete() OR (created_by = ( SELECT auth.uid() AS uid))));
+  using (((private.can_delete() OR (created_by = ( SELECT auth.uid() AS uid)))) AND (NOT private.siu_blocked('person'::text, person_id, 'vehicles'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'vehicles'::text)));
 
 create policy person_vehicles_ins on public.person_vehicles
   as permissive for insert to authenticated
-  with check (private.is_active());
+  with check ((private.is_active()) AND (NOT private.siu_blocked('person'::text, person_id, 'vehicles'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'vehicles'::text)));
 
 create policy person_vehicles_sel on public.person_vehicles
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('person'::text, person_id, 'vehicles'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'vehicles'::text)));
 
 create policy person_vehicles_upd on public.person_vehicles
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('person'::text, person_id, 'vehicles'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'vehicles'::text)))
+  with check ((private.is_active()) AND (NOT private.siu_blocked('person'::text, person_id, 'vehicles'::text)) AND (NOT private.siu_blocked('vehicle'::text, vehicle_id, 'vehicles'::text)));
 
 create policy persons_del on public.persons
   as permissive for delete to authenticated
@@ -9253,20 +9259,20 @@ create policy persons_upd on public.persons
 
 create policy place_process_steps_del on public.place_process_steps
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((private.can_delete()) AND (NOT private.siu_blocked('place'::text, place_id, 'process'::text)));
 
 create policy place_process_steps_ins on public.place_process_steps
   as permissive for insert to authenticated
-  with check (private.is_active());
+  with check ((private.is_active()) AND (NOT private.siu_blocked('place'::text, place_id, 'process'::text)));
 
 create policy place_process_steps_sel on public.place_process_steps
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('place'::text, place_id, 'process'::text)));
 
 create policy place_process_steps_upd on public.place_process_steps
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active()) AND (NOT private.siu_blocked('place'::text, place_id, 'process'::text)))
+  with check ((private.is_active()) AND (NOT private.siu_blocked('place'::text, place_id, 'process'::text)));
 
 create policy places_del on public.places
   as permissive for delete to authenticated
@@ -10210,6 +10216,51 @@ create policy wl_sel on public.watchlist
 -- public.publish_reading_campaign(uuid, text, jsonb, timestamptz, text),
 -- public.close_reading_campaign(uuid, text),
 -- public.document_ack_summary(uuid),
+-- 20260929120000_siu_two_mode_restriction + _registry_reach + _restriction_controls:
+-- TWO restrictions, not one. siu_visibility.scope is 'record' (the record and
+-- everything under it leaves CID) or 'sections' (the record stays; the named
+-- hidden_sections leave). private.siu_blocked(text, uuid, text) is the single
+-- predicate for both -- a whole-record restriction blocks every section, so one
+-- call serves both modes; private.siu_hidden is now a thin wrapper over it and
+-- keeps its S1 signature so the twelve S1 policies needed no re-emission.
+-- private.siu_may_control_visibility() now covers all three SIU ranks, the
+-- Owner AND the Director. The Director cannot be reached through
+-- private.siu_standing(), which returns NULL for them by deliberate design
+-- (20260902120000 removed the director branch so the head of CID could not
+-- command the unit investigating CID), so they are matched on profiles.role
+-- directly. Control implies read -- you cannot release what you cannot see --
+-- so private.siu_sees_compartmented() admits them to compartmented REGISTRY
+-- material; siu_targets, siu_case_notes, siu_sources and siu_watchlist keep
+-- their own predicates and are NOT widened.
+-- The predicate is now carried by ~71 policies across nineteen tables:
+-- accounts and indicators as registries, plus account_handles, account_links,
+-- ballistic_footprints, gang_members, gang_places, gang_ranks, gang_turf,
+-- narcotic_gangs/hotspots/persons/places/vehicles, person_places,
+-- person_relationships (person_a AND person_b), person_vehicles,
+-- place_process_steps and media -- SELECT, UPDATE, DELETE and INSERT. INSERT
+-- matters: without it CID could attach a row to a hidden person and learn from
+-- the success that the person exists. The two registries keep an unguarded
+-- INSERT because a brand new record has no ledger row for the predicate to
+-- fire on. All of it is mirrored above.
+-- New RPCs: public.siu_restriction_impact(text, uuid) [the confirmation
+-- screen's data AND the server's own guard, so the figure on the page and the
+-- figure in the guard are one figure], public.siu_restrict(text, uuid, text,
+-- text, text[], boolean, uuid) [p_acknowledge_cid_impact is the second
+-- confirmation as a PARAMETER -- a dialog enforces nothing] and
+-- public.siu_reserve_visibility(text, uuid, text, text) [writes the ledger row
+-- BEFORE the record exists, which entity_id's deliberate lack of a foreign key
+-- makes possible, so an SIU-created record is never briefly visible].
+-- public.siu_mark_origin now delegates to siu_restrict in 'record' mode and no
+-- longer refuses outright when CID holds the record -- warn and confirm
+-- replaced refuse.
+-- KNOWN RESIDUAL: persons.gang_id and vehicles.gang_id are COLUMNS. When a gang
+-- is restricted its row disappears but a visible person still carries the uuid,
+-- so what leaks is "a gang exists with this id that you cannot see" -- no name,
+-- no members, no places. RLS cannot null a column conditionally; closing it
+-- needs a masking view. Recorded rather than left to be discovered.
+-- Definitive SQL in supabase/migrations/20260929120000_siu_two_mode_restriction.sql,
+-- 20260929120100_siu_registry_reach.sql and
+-- 20260929120200_siu_restriction_controls.sql.
 -- 20260928120300_siu_visibility_forget: private.siu_visibility_forget()
 -- [trigger fn] with AFTER DELETE triggers persons_visibility_forget,
 -- vehicles_visibility_forget, gangs_visibility_forget and
