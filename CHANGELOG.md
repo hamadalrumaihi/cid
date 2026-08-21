@@ -8,6 +8,48 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### The Penal Code becomes browsable
+
+359 statutes in one flat searchable list: fine if you already knew the code you
+wanted, close to useless for *what covers this*. Offenses are now **grouped by
+the title of the code** they sit under — which is how the statute book is
+actually organised — filterable, and comparable **side by side**, with only the
+rows where two offenses genuinely differ picked out.
+
+**All of it came from data the portal was already fetching and discarding.**
+`penal_current_charges()` has always returned the title of the code, the
+judge-set penalty flags, the PD exemption, the substance schedule and the
+statutory notes; the client catalog dropped five of them on the way in. No new
+tables, no new columns, nothing authored.
+
+**"A judge decides" is not zero.** Eight offenses in the published code carry a
+null penalty beside a `judge_set` flag — the database keeps them that way
+precisely so a total can never quietly count a judge-set penalty as nothing. The
+old row rendered an empty cell, which reads as *no fine*. The card now says
+**Set by the judge**, and distinguishes that from *Not stated* and from *No
+custodial term*.
+
+The same care applies to arrest: `arrest_required` is nullable because a version
+that says nothing is not a version that permits a citation. The card says **"The
+code does not say"** rather than implying either.
+
+**And a filter is only offered when the code in force can satisfy it.** Checking
+the real data first turned up that the 2026 code records an arrest requirement
+for **none of its 195 published offenses** — so an *Arrest required* checkbox
+could only ever return an empty list. Availability is derived from the loaded
+catalog rather than hardcoded, so a future version that does record arrests
+lights the filter up on its own. This is the same defect, and the same fix, as
+the RICO predicate picker offered against a code that designates no predicates.
+
+**What is deliberately absent.** The brief asks each charge card to show
+required legal elements, the evidence that commonly supports them, applicable
+enhancements, and lesser or mutually exclusive offenses. None of that exists as
+data anywhere in the portal — those would have to be authored by somebody with
+the authority to say what the elements of an offense are. Generating them would
+mean inventing legal requirements and setting them beside real statutory text
+with nothing on screen to tell the two apart. The card says what the code says,
+and the gap is stated on the page rather than filled in.
+
 ### Documents stop being isolated
 
 `document_relations` has held **zero rows** since document governance shipped,
