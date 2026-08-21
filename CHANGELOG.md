@@ -8,6 +8,93 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Two ways to restrict, and a compartment that reaches the whole graph
+
+S1 hid four registry tables. That closes the front door and leaves the windows
+open: `gang_members` still said *somebody is in this organisation* with the
+hidden person's id attached, `person_relationships` still drew the edge,
+`account_links` still tied them to a handle, `media` still listed their
+photographs. Any one of those establishes that a person exists and who they
+associate with — most of what hiding them was for.
+
+The predicate now sits on **~71 policies across nineteen tables** — accounts and
+indicators as registries in their own right, plus every link and child table
+that names one: relationships, memberships, addresses, vehicles, accounts and
+handles, organisation structure and territory, narcotics intelligence,
+ballistics, site processing and media. **SELECT, UPDATE, DELETE and INSERT.**
+Insert matters as much as the rest: without it a CID user could attach a row to
+a hidden person and learn from the success that the person exists.
+
+**Two restrictions, named for what they do.** *Restrict Entire Record* takes the
+record and everything under it. *Restrict Selected Intelligence Only* leaves the
+profile with CID and takes only the sections named. The second exists because
+the common case is a person CID has known for months who becomes the subject of
+an SIU file — hiding them removes CID's own work, leaving everything exposed
+exposes the investigation, and neither is right. The server computes which is
+recommended (`sections` whenever CID already has a stake) so the screen never
+re-derives the rule and gets it subtly different.
+
+**The second confirmation is a parameter, not a dialog.** Restricting a whole
+record CID already builds on is permitted and costly. A dialog enforces nothing,
+so the acknowledgement travels as `p_acknowledge_cid_impact`; without it the RPC
+refuses *and* returns the impact, which is exactly what the confirmation screen
+renders. `siu_restriction_impact()` is both the screen's data and the server's
+guard, so the figure on the page and the figure in the guard are one figure.
+
+**Who may do this, and the trap in asking.** All three SIU ranks, the Director
+and the Owner. `siu_is_command()` is *not* that set — it is X-1 and the Owner
+only — and the Director cannot be reached through `siu_standing()`, which
+returns NULL for them by deliberate design: migration `20260902120000` removed
+the director branch precisely so the head of CID could not command the unit
+that investigates CID. So the Director is matched on `profiles.role` directly,
+in one shared function used by every policy and RPC.
+
+Including them has a cost, stated plainly: you cannot release what you cannot
+see, so control implies read. The Director now sees compartmented **registry**
+material. They do **not** gain SIU case material — `siu_targets`,
+`siu_case_notes`, `siu_sources` and `siu_watchlist` keep their own predicates,
+untouched. That containment is the difference between *the Director can audit
+what SIU hid from CID* and *the Director can read the file on themselves*.
+
+**A record can be born hidden.** "SIU-created records must never automatically
+appear in CID" cannot be met by marking a record after inserting it — between
+those two statements it is live and visible. `siu_visibility.entity_id`
+deliberately carries no foreign key, so the ledger row is written **first**,
+against a client-chosen uuid, and the insert lands already compartmented.
+Creating a person with SIU standing now asks the question, defaulting to
+SIU Only. Nothing is inferred: there is still no trigger that marks a record
+because an SIU member created it.
+
+**Live proof**, each assertion run as the real account:
+
+| Probe | Result |
+|---|---|
+| Baseline: CID sees the person and the graph edge | 1 / 1 |
+| Preview: CID has contributed / recommended mode | true / `sections` |
+| Preview: graph edges that would be lost | 5 |
+| Whole-record restrict with no acknowledgement | refused — *contains information created or currently used by CID* |
+| Mode 2: profile stays visible | 1 row |
+| Mode 2: restricted sections (relationships, membership) | 0 / 0 |
+| Mode 2: sections left alone (vehicles, addresses) | 1 / 1 |
+| Mode 1: direct select / autocomplete / person search | 0 / 0 / 0 |
+| Mode 1: graph edge, membership, vehicle, address, account link | 0 across all five |
+| Mode 1: `search_all` on a unique tag, before → after | 1 → 0, no row carrying the id |
+| Mode 1: CID creates an edge to the hidden person | refused |
+| A detective calls `siu_restrict` / reads the impact preview | refused / refused |
+| Director sees the restricted record / may reveal | 1 row / accepted |
+| Director reads SIU case targets | 0 rows |
+| Reserve then insert: SIU sees it / CID ever saw it | 1 row / 0 rows |
+
+Production was restored exactly afterwards: 95 flags, zero restrictions, zero
+audit rows, every registry count unchanged.
+
+**One residual, recorded rather than left to be found.** `persons.gang_id` and
+`vehicles.gang_id` are columns, not rows. When an organisation is restricted its
+row disappears but a visible person still carries the uuid, so what leaks is
+*a gang exists with this id that you cannot see* — no name, no members, no
+places. RLS cannot null a column conditionally; closing it properly needs a
+masking view over both tables.
+
 ### SIU compartmentation — the registry stops being one shared list
 
 `persons`, `vehicles`, `gangs` and `places` were each `using

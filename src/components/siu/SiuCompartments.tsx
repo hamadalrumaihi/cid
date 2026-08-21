@@ -25,10 +25,12 @@ import { withRetry } from '@/lib/db'
 import { useSiu } from '@/lib/useSiu'
 import {
   COMPARTMENT_TYPES, compartmentTypeLabel, fetchCompartments, fetchReviewQueue,
-  fetchVisibilityHistory, markOrigin, reasonIsUsable, resolveReview,
-  restrictPreview, restrictToSiu, revealPreview, revealToCid, reviewRank,
-  visibilityActionLabel, visibilityLabel, visibilityTint,
-  type CompartmentType, type VisibilityEvent, type VisibilityRow,
+  fetchVisibilityHistory, reasonIsUsable, resolveReview, restrict,
+  restrictionImpact, restrictPreview, restrictToSiu, revealPreview, revealToCid,
+  reviewRank, sectionLabel, sectionsFor, visibilityActionLabel, visibilityLabel,
+  visibilityTint,
+  type RestrictMode, type RestrictionImpact, type VisibilityEvent,
+  type VisibilityRow,
 } from '@/lib/siuVisibility'
 import {
   SiuRegistryPicker, choiceIsComplete, emptyChoice, type SiuRegistryChoice,
@@ -78,28 +80,81 @@ function preview(act: Act): string {
   }
 }
 
-/** Taking a record INTO a compartment -- the act that has no home anywhere else,
- *  because a registry record is shared with CID by default and only leaves that
- *  view here.
+/** The confirmation screen for taking a record out of CID's view.
  *
- *  The refusal this most often meets is the shared-record rule: a person CID
- *  already holds does not become SIU property because SIU opens a file on them.
- *  That check is in the RPC, and its message is shown verbatim, because it
- *  explains the rule where a generic failure would just read as broken. */
-function TakeDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+ *  The brief calls for "move record" to be banned as wording, and it is right:
+ *  the two restrictions do very different things and the difference is not
+ *  recoverable once somebody has clicked. So the screen states, before either
+ *  button is live, who created the record, whether CID has contributed to it,
+ *  what CID currently has attached, and — separately for each mode — exactly
+ *  what CID loses and exactly what CID keeps.
+ *
+ *  Every number comes from siu_restriction_impact(), which is the same function
+ *  the server consults when it decides whether to demand the second
+ *  confirmation. The figure on the page and the figure in the guard are one
+ *  figure. A screen that computed its own would eventually disagree, and the
+ *  disagreement would surface as a refusal nobody could explain.
+ */
+function Dep({ n, label }: { n: number; label: string }) {
+  if (!n) return null
+  return (
+    <li className="flex items-baseline gap-2 text-xs">
+      <span className="min-w-[2rem] text-right font-semibold text-white">{n}</span>
+      <span className="text-slate-400">{label}</span>
+    </li>
+  )
+}
+
+function RestrictDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [choice, setChoice] = useState<SiuRegistryChoice>(emptyChoice)
+  const [impact, setImpact] = useState<RestrictionImpact | null>(null)
+  const [mode, setMode] = useState<RestrictMode | null>(null)
+  const [sections, setSections] = useState<string[]>([])
   const [reason, setReason] = useState('')
+  const [ack, setAck] = useState(false)
   const [busy, setBusy] = useState(false)
+
   const picked = choiceIsComplete(choice) && choice.entityId
     && (COMPARTMENT_TYPES as readonly string[]).includes(choice.entityType)
-  const ok = !!picked && reasonIsUsable(reason)
+
+  // Load the cost as soon as a record is chosen, and let the SERVER pick the
+  // recommended mode rather than re-deriving the rule here.
+  useEffect(() => {
+    let live = true
+    const id = choice.entityId
+    // Every state write happens after an await, so the effect body itself never
+    // triggers a synchronous cascading render (the ShiftsView pattern).
+    void (async () => {
+      const i = picked && id
+        ? await restrictionImpact(choice.entityType, id).catch(() => null)
+        : null
+      if (!live) return
+      setImpact(i)
+      setMode(i?.recommended_mode ?? null)
+      setSections([])
+      setAck(false)
+    })()
+    return () => { live = false }
+  }, [picked, choice.entityType, choice.entityId])
+
+  const offered = useMemo(() => sectionsFor(choice.entityType), [choice.entityType])
+  const needsAck = !!impact?.cid_authored && mode === 'record'
+  const ok = !!picked && !!impact && !!mode && reasonIsUsable(reason)
+    && (mode !== 'sections' || sections.length > 0)
+    && (!needsAck || ack)
 
   const go = async () => {
-    if (!choice.entityId) return
+    if (!choice.entityId || !mode) return
     setBusy(true)
     try {
-      await markOrigin(choice.entityType as CompartmentType, choice.entityId, reason)
-      toast('Compartmented. CID can no longer see this record.', 'success')
+      await restrict({
+        type: choice.entityType, id: choice.entityId, mode, reason,
+        sections: mode === 'sections' ? sections : undefined,
+        acknowledge: ack,
+      })
+      toast(mode === 'record'
+        ? 'Restricted. CID can no longer see this record.'
+        : 'Restricted. CID keeps the profile; the selected sections are hidden.', 'success')
       onDone()
       onClose()
     } catch (e) {
@@ -107,43 +162,186 @@ function TakeDialog({ onClose, onDone }: { onClose: () => void; onDone: () => vo
     } finally { setBusy(false) }
   }
 
+  const toggle = (id: string) =>
+    setSections((v) => v.includes(id) ? v.filter((x) => x !== id) : [...v, id])
+
   return (
-    <Modal open onClose={onClose} dirty={() => reason.trim().length > 0 || !!choice.entityId}>
-      <ModalHeader title="Take a record into the compartment" onClose={onClose} />
-      <p className="text-sm leading-relaxed text-slate-300">
-        After this, the record disappears from CID entirely — their lists, their
-        counts, and any link that pointed at it. It is refused if CID material
-        already references the record: that record stays shared, and it is the
-        SIU intelligence about it that gets compartmented instead.
-      </p>
-      <form
-        className="mt-4 space-y-3"
-        onSubmit={(e) => { e.preventDefault(); if (ok && !busy) void go() }}
-      >
-        <SiuRegistryPicker
-          value={choice}
-          onChange={setChoice}
-          allowUnknown={false}
-          types={COMPARTMENT_TYPES}
-        />
-        <Field label="Why" required hint="Recorded permanently against your name. A sentence, not a word.">
-          {(id) => (
-            <Textarea
-              id={id}
-              rows={3}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Subject of an active integrity investigation."
-            />
+    <Modal open onClose={onClose} wide dirty={() => reason.trim().length > 0 || !!choice.entityId}>
+      <ModalHeader title="Restrict to SIU" onClose={onClose} />
+
+      <SiuRegistryPicker
+        value={choice}
+        onChange={setChoice}
+        allowUnknown={false}
+        types={COMPARTMENT_TYPES}
+      />
+
+      {impact && mode && (
+        <div className="mt-4 space-y-4">
+          {/* Who and what — the identity of the thing being acted on. */}
+          <div className="rounded-xl border border-white/10 bg-ink-900 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge>{compartmentTypeLabel(impact.entity_type)}</Badge>
+              <span className="text-sm font-semibold text-white">{impact.name ?? 'Unnamed record'}</span>
+              <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${visibilityTint(impact.current_state)}`}>
+                {impact.current_state === 'cid' ? 'Shared with CID' : impact.current_state}
+              </span>
+            </div>
+            <p className="mt-1.5 text-xs text-slate-400">
+              Created by {impact.created_by_name ?? 'an unknown account'} on {fmtWhen(impact.created_at)}.
+              {impact.cid_authored
+                ? ' CID has contributed information to this record.'
+                : ' No CID material is attached to it.'}
+            </p>
+          </div>
+
+          {/* What CID currently has. Silence here is meaningful, so it is stated. */}
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              What CID currently has attached
+            </h4>
+            <ul className="mt-1.5 space-y-1">
+              <Dep n={impact.cases} label="CID cases" />
+              <Dep n={impact.reports} label="reports" />
+              <Dep n={impact.legal_requests} label="legal requests" />
+              <Dep n={impact.evidence} label="evidence items" />
+              <Dep n={impact.media} label="photographs and media" />
+              <Dep n={impact.watchlists} label="watchlist entries" />
+              <Dep n={impact.relationships} label="graph relationships" />
+              <Dep n={impact.linked_persons} label="linked people" />
+              <Dep n={impact.linked_gangs} label="linked organisations" />
+              <Dep n={impact.linked_vehicles} label="linked vehicles" />
+              <Dep n={impact.linked_places} label="linked places" />
+            </ul>
+            {impact.relationships === 0 && impact.cases === 0 && impact.media === 0 && (
+              <p className="mt-1 text-xs text-slate-500">Nothing is attached to this record.</p>
+            )}
+          </div>
+
+          {/* The choice, with the consequence of each spelled out. */}
+          <fieldset>
+            <legend className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              How much to restrict
+            </legend>
+            <div className="mt-2 space-y-2">
+              {(['sections', 'record'] as RestrictMode[]).map((m) => (
+                <label
+                  key={m}
+                  className={`block cursor-pointer rounded-xl border p-3 transition ${
+                    mode === m ? 'border-badge-500 bg-badge-500/5' : 'border-white/10 bg-ink-900'}`}
+                >
+                  <span className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="restrict-mode"
+                      checked={mode === m}
+                      onChange={() => setMode(m)}
+                      className="accent-badge-500"
+                    />
+                    <span className="text-sm font-semibold text-white">
+                      {m === 'record' ? 'Restrict Entire Record' : 'Restrict Selected Intelligence Only'}
+                    </span>
+                    {impact.recommended_mode === m && <Badge tone="good">Recommended</Badge>}
+                  </span>
+                  <span className="mt-1.5 block pl-6 text-xs leading-relaxed text-slate-400">
+                    {m === 'record' ? (
+                      <>
+                        <strong className="text-rose-300">CID loses:</strong> the record itself and
+                        everything under it — search, autocomplete, the graph, counts, exports and
+                        every link above. CID gets an ordinary “not found”, with no indication that
+                        anything was withheld.{' '}
+                        <strong className="text-slate-300">CID keeps:</strong> nothing.
+                      </>
+                    ) : (
+                      <>
+                        <strong className="text-rose-300">CID loses:</strong> only the sections you
+                        name below, and no indication that anything is missing.{' '}
+                        <strong className="text-slate-300">CID keeps:</strong> the profile itself and
+                        every section you leave unticked.
+                      </>
+                    )}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          {mode === 'sections' && (
+            <fieldset>
+              <legend className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Sections to hide from CID
+              </legend>
+              {offered.length === 0 ? (
+                <p className="mt-1.5 text-xs text-slate-500">
+                  This record type has no separable sections — restrict the entire record or cancel.
+                </p>
+              ) : (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {offered.map((sec) => (
+                    <label
+                      key={sec.id}
+                      className={`cursor-pointer rounded-lg border px-2.5 py-1.5 text-xs transition ${
+                        sections.includes(sec.id)
+                          ? 'border-badge-500 bg-badge-500/10 text-badge-100'
+                          : 'border-white/10 bg-ink-900 text-slate-300'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={sections.includes(sec.id)}
+                        onChange={() => toggle(sec.id)}
+                        className="mr-1.5 accent-badge-500"
+                      />
+                      {sec.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </fieldset>
           )}
-        </Field>
-        <div className="flex justify-end gap-2">
-          <Button type="button" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={!ok || busy}>
-            {busy ? 'Working…' : 'Compartment it'}
-          </Button>
+
+          {/* The second confirmation. Shown only when it is really needed, so it
+              stays meaningful rather than becoming another box to tick. */}
+          {needsAck && (
+            <label className="flex cursor-pointer gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3">
+              <input
+                type="checkbox"
+                checked={ack}
+                onChange={(e) => setAck(e.target.checked)}
+                className="mt-0.5 accent-amber-400"
+              />
+              <span className="text-xs leading-relaxed text-amber-200">
+                This record contains information created or currently used by CID.
+                Restricting the entire record will remove CID access to that information
+                and may affect active investigations. I have read what CID will lose.
+              </span>
+            </label>
+          )}
+
+          <form
+            className="space-y-3"
+            onSubmit={(e) => { e.preventDefault(); if (ok && !busy) void go() }}
+          >
+            <Field label="Reason" required hint="Recorded permanently against your name, with the impact above.">
+              {(id) => (
+                <Textarea
+                  id={id}
+                  rows={3}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Subject of an active integrity investigation."
+                />
+              )}
+            </Field>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" onClick={onClose}>Cancel</Button>
+              <Button variant={mode === 'record' ? 'danger' : 'primary'} disabled={!ok || busy}>
+                {busy ? 'Working…'
+                  : mode === 'record' ? 'Restrict Entire Record' : 'Restrict Selected Intelligence Only'}
+              </Button>
+            </div>
+          </form>
         </div>
-      </form>
+      )}
     </Modal>
   )
 }
@@ -269,7 +467,15 @@ function Row({ row, onAct }: { row: VisibilityRow; onAct: (a: Act) => void }) {
       )}
       {row.revealed_sections.length > 0 && (
         <p className="mt-1 text-xs text-slate-500">
-          Sections shared: {row.revealed_sections.join(', ')}
+          Sections shared with CID: {row.revealed_sections.map(sectionLabel).join(', ')}
+        </p>
+      )}
+      {row.scope === 'sections' && row.hidden_sections.length > 0 && (
+        <p className="mt-1 text-xs text-slate-500">
+          {/* Naming what is hidden matters more than naming what is not: this is
+              the line somebody reads to check the restriction did what they meant. */}
+          Hidden from CID: {row.hidden_sections.map(sectionLabel).join(', ')}
+          {' \u00b7 '}the profile itself stays visible
         </p>
       )}
 
@@ -379,7 +585,7 @@ export function SiuCompartmentsSection() {
       </Card>
 
       {taking && (
-        <TakeDialog onClose={() => setTaking(false)} onDone={() => { void load() }} />
+        <RestrictDialog onClose={() => setTaking(false)} onDone={() => { void load() }} />
       )}
 
       {acting && (

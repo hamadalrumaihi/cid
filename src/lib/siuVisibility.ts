@@ -17,6 +17,16 @@
  *  failure mode: a bug in this code leaves SIU material visible to SIU, rather
  *  than deleting CID's registry.
  *
+ *  ── Two restrictions, named for what they do ──────────────────────────────
+ *  `record`   the record and everything under it leaves CID.
+ *  `sections` the record stays; the named sections leave CID.
+ *
+ *  The second exists because the common case is a person CID has known for
+ *  months who becomes the subject of an SIU file. Hiding them removes CID's own
+ *  work; leaving everything exposes the investigation. Neither is right, so
+ *  neither is the only option — and `sections` is recommended (by the server,
+ *  which computes it) whenever CID already has a stake in the record.
+ *
  *  ── The state nobody chose ────────────────────────────────────────────────
  *  `unclassified` is the flag for a record whose origin could not be
  *  established. It does NOT hide. That distinction is load-bearing: both active
@@ -35,6 +45,78 @@ import type { Tables } from './database.types'
 // call site while pretending to a narrowing the wire never gives us.
 export type CompartmentType = 'person' | 'vehicle' | 'gang' | 'place'
 
+/** Whether a restriction takes the whole record or only named sections. */
+export type RestrictMode = 'record' | 'sections'
+
+/** The sections a Mode 2 restriction can name. Each maps to one link table, so
+ *  the vocabulary cannot drift from what the policies actually check — a
+ *  section nobody enforces would be a checkbox that protects nothing. */
+export const SECTIONS = [
+  { id: 'relationships',   label: 'Known associates' },
+  { id: 'gang_membership', label: 'Organisation membership' },
+  { id: 'addresses',       label: 'Addresses and places' },
+  { id: 'vehicles',        label: 'Vehicles' },
+  { id: 'accounts',        label: 'Accounts and handles' },
+  { id: 'media',           label: 'Photographs and media' },
+  { id: 'narcotics',       label: 'Narcotics intelligence' },
+  { id: 'ballistics',      label: 'Ballistics' },
+  { id: 'gang_places',     label: 'Organisation locations' },
+  { id: 'gang_ranks',      label: 'Organisation structure' },
+  { id: 'gang_turf',       label: 'Territory' },
+  { id: 'process',         label: 'Site processing' },
+] as const
+
+// Deliberately no exported SectionId union: the column is text[], so a row
+// always arrives as strings, and a union here would add casts at every call
+// site while promising a narrowing the wire never delivers.
+
+export const sectionLabel = (id: string): string =>
+  SECTIONS.find((s) => s.id === id)?.label ?? id
+
+/** Which sections are worth offering for a given registry type. Offering
+ *  "Territory" on a vehicle is a control that can only ever do nothing. */
+export function sectionsFor(type: string): readonly { id: string; label: string }[] {
+  const ids: Record<string, string[]> = {
+    person:  ['relationships', 'gang_membership', 'addresses', 'vehicles', 'accounts', 'media', 'narcotics'],
+    gang:    ['gang_membership', 'gang_places', 'gang_ranks', 'gang_turf', 'media', 'narcotics', 'ballistics'],
+    vehicle: ['vehicles', 'media', 'narcotics'],
+    place:   ['addresses', 'gang_places', 'process', 'media', 'narcotics'],
+    account: ['accounts'],
+    indicator: [],
+  }
+  const allowed = ids[type] ?? []
+  return SECTIONS.filter((s) => allowed.includes(s.id))
+}
+
+/** What restricting a record would cost, computed by the server so the screen
+ *  and the guard cannot disagree. */
+export interface RestrictionImpact {
+  entity_type: string
+  entity_id: string
+  name: string | null
+  created_by_name: string | null
+  created_at: string
+  current_state: string
+  current_scope: string
+  current_hidden_sections: string[]
+  /** True when CID authored or currently uses material attached to this record. */
+  cid_authored: boolean
+  /** 'sections' whenever CID has a stake. A recommendation, not a rule. */
+  recommended_mode: RestrictMode
+  cases: number
+  reports: number
+  evidence: number
+  legal_requests: number
+  tasks: number
+  media: number
+  watchlists: number
+  relationships: number
+  linked_persons: number
+  linked_gangs: number
+  linked_vehicles: number
+  linked_places: number
+}
+
 export type VisibilityRow = Tables<'siu_visibility'>
 export type VisibilityEvent = Tables<'siu_visibility_events'>
 
@@ -52,9 +134,18 @@ export const compartmentTypeLabel = (t: string): string =>
  *  about a classification level, and conflating the two invites the wrong
  *  mental model. */
 export function visibilityLabel(row: Pick<VisibilityRow,
-  'state' | 'revealed_to_case_id' | 'revealed_to_user_id'>): string {
+  'state' | 'revealed_to_case_id' | 'revealed_to_user_id'> &
+  { scope?: string | null; hidden_sections?: string[] | null }): string {
   switch (row.state) {
-    case 'siu_only': return 'SIU only'
+    case 'siu_only':
+      // A section restriction is NOT "SIU only" -- CID can still see the
+      // profile. Saying otherwise would misdescribe what is protected, in the
+      // one place somebody checks.
+      if (row.scope === 'sections') {
+        const n = row.hidden_sections?.length ?? 0
+        return n === 1 ? '1 section restricted' : `${n} sections restricted`
+      }
+      return 'SIU only'
     case 'unclassified': return 'Origin not established'
     case 'partial':
     case 'revealed':
@@ -161,16 +252,46 @@ export async function fetchVisibilityHistory(
  *  refusal text. The messages are written to be read by the person who hit
  *  them -- "CID already holds this record, so it stays shared" explains the
  *  rule, where a generic failure would just look broken. */
-async function call(fn: 'siu_mark_origin' | 'siu_reveal_to_cid'
-  | 'siu_restrict_to_siu' | 'siu_resolve_review',
+async function call(fn: 'siu_reveal_to_cid' | 'siu_restrict_to_siu'
+  | 'siu_resolve_review' | 'siu_reserve_visibility',
   args: Record<string, unknown>): Promise<void> {
   const res = await rpc(fn, args as never)
   if (res.error) throw new Error(res.error.message)
 }
 
-export const markOrigin = (type: CompartmentType, id: string, reason: string, caseId?: string) =>
-  call('siu_mark_origin', { p_type: type, p_id: id, p_reason: reason,
-    ...(caseId ? { p_case_id: caseId } : {}) })
+/** What CID would lose. Read before the confirmation screen renders, and read
+ *  again by the server when the restriction is applied — the same function
+ *  both times, so the number on the page is the number in the guard. */
+export async function restrictionImpact(
+  type: string, id: string): Promise<RestrictionImpact> {
+  const res = await rpc('siu_restriction_impact', { p_type: type, p_id: id })
+  if (res.error) throw new Error(res.error.message)
+  return res.data as unknown as RestrictionImpact
+}
+
+/** Apply a restriction. `acknowledge` is the second confirmation, and it is a
+ *  parameter rather than a dialog because a dialog enforces nothing: without it
+ *  the server refuses any whole-record restriction on a record CID uses. */
+export async function restrict(opts: {
+  type: string; id: string; mode: RestrictMode; reason: string
+  sections?: string[]; acknowledge?: boolean; caseId?: string
+}): Promise<RestrictionImpact> {
+  const res = await rpc('siu_restrict', {
+    p_type: opts.type, p_id: opts.id, p_mode: opts.mode, p_reason: opts.reason,
+    ...(opts.sections?.length ? { p_sections: opts.sections } : {}),
+    ...(opts.acknowledge ? { p_acknowledge_cid_impact: true } : {}),
+    ...(opts.caseId ? { p_case_id: opts.caseId } : {}),
+  })
+  if (res.error) throw new Error(res.error.message)
+  return res.data as unknown as RestrictionImpact
+}
+
+/** Compartment an id BEFORE the record behind it exists, so a new SIU record is
+ *  never briefly visible to CID between insert and restriction. */
+export const reserveVisibility = (
+  type: CompartmentType, id: string, visibility: 'siu_only' | 'cid', reason: string) =>
+  call('siu_reserve_visibility',
+    { p_type: type, p_id: id, p_visibility: visibility, p_reason: reason })
 
 export const revealToCid = (type: string, id: string, reason: string, opts: {
   sections?: string[]; toCaseId?: string; toUserId?: string } = {}) =>
