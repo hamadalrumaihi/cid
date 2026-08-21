@@ -10216,6 +10216,17 @@ create policy wl_sel on public.watchlist
 -- public.publish_reading_campaign(uuid, text, jsonb, timestamptz, text),
 -- public.close_reading_campaign(uuid, text),
 -- public.document_ack_summary(uuid),
+-- 20260930120000_siu_context_may_control_visibility:
+-- public.siu_department_context() gains 'may_control_visibility'
+-- (private.siu_may_control_visibility()). S2 gave the Director restrict/reveal
+-- authority but the only UI exposing it sat inside the SIU workspace, gated on
+-- siu_available -> siu_operates() -> siu_standing() is not null, which is NULL
+-- for a Director -- so the authority was real and unreachable. siu_available is
+-- deliberately NOT widened: that would hand the head of CID the whole SIU
+-- workspace, the arrangement 20260902120000 exists to prevent. The narrow
+-- capability travels on its own so a "Restrict to SIU" action can appear on a
+-- record without opening any SIU screen. Definitive SQL in
+-- supabase/migrations/20260930120000_siu_context_may_control_visibility.sql.
 -- 20260929120000_siu_two_mode_restriction + _registry_reach + _restriction_controls:
 -- TWO restrictions, not one. siu_visibility.scope is 'record' (the record and
 -- everything under it leaves CID) or 'sections' (the record stays; the named

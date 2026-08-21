@@ -25,6 +25,7 @@ import { Card } from '@/components/ui/Card'
 import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { WatchButton } from '@/components/cases/WatchButton'
+import { RestrictToSiuButton } from '@/components/siu/RestrictToSiu'
 import { EntityLegalPanel } from '@/components/justice/EntityLegalSection'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
 import { VehicleModal, type GangOption, type PersonOption } from './VehiclesView'
@@ -282,6 +283,7 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
         <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
           <WatchButton type="vehicle" id={id} label={v?.plate} />
           {canEdit && v && <Button onClick={() => setEditing(true)}>Edit</Button>}
+          <RestrictToSiuButton type="vehicle" id={id} />
         </div>
       </div>
 

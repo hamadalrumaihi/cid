@@ -8,6 +8,35 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Restrict to SIU, on the record you are looking at
+
+Two defects in how S2 shipped, both about reach rather than enforcement.
+
+**The action was in the wrong place.** To hide a person you had to leave their
+profile, open the SIU workspace, find Compartments and search the registry for
+the record you were already reading. Every one of those steps is a chance to
+pick the wrong person, and the cost of picking the wrong person here is that CID
+silently loses access to somebody. **Restrict to SIU** now sits on the record
+itself — person, vehicle and organisation profiles — with the subject already
+chosen and unmistakable. The workspace entry point stays for when you are
+working from a list.
+
+**The Director could not reach the authority they had just been given.** S2
+widened `siu_may_control_visibility()` to include them and proved live that they
+could restrict and reveal. What that probe never asked is whether they could
+ever *get* there: the only screen exposing it lived inside the SIU workspace,
+gated on `siu_available` → `siu_operates()` → `siu_standing() is not null` —
+which is NULL for a Director by deliberate design. The permission was real and
+uninvokable.
+
+The fix is deliberately not to widen `siu_available`. That would hand the head
+of CID the entire SIU workspace — intake, investigations, targets, sources —
+which is the precise arrangement migration `20260902120000` exists to prevent.
+Instead `siu_department_context()` carries `may_control_visibility` as its own
+narrow capability, so the action can appear on a record without opening a single
+SIU screen. It never fails open: absent, the client reads false and shows
+nothing.
+
 ### Two ways to restrict, and a compartment that reaches the whole graph
 
 S1 hid four registry tables. That closes the front door and leaves the windows

@@ -19,6 +19,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { deleteWithUndo, list, update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { SiuPersonActions } from '@/components/siu/SiuPersonActions'
+import { RestrictToSiuButton } from '@/components/siu/RestrictToSiu'
 import { downloadDocx } from '@/lib/docx'
 import { fmtDate, slug, todayISO } from '@/lib/format'
 import { officerName, useProfilesStore } from '@/lib/profiles'
@@ -441,6 +442,10 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
                 {mayEdit && <Button onClick={() => setAttachOpen(true)}>Attach to case</Button>}
                 {mayEdit && <Button onClick={() => setSummaryOpen(true)}>Add intelligence</Button>}
                 {mayEdit && <Button onClick={() => setAddMedia(true)}>Add media</Button>}
+                {/* Hiding a person from CID is done FROM the person, not by
+                    finding them again inside the SIU workspace. Renders
+                    nothing without the capability. */}
+                <RestrictToSiuButton type="person" id={p.id} />
                 <ActionMenu items={menuItems} />
               </div>
             </div>

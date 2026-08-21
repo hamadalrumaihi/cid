@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import { ErrorNotice, EmptyState } from '@/components/ui/Notice'
 import { ActionMenu } from '@/components/ui/ActionMenu'
+import { RestrictToSiuButton } from '@/components/siu/RestrictToSiu'
 import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
 import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTimeline'
@@ -569,6 +570,7 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
             {canEdit && <button onClick={() => setMemberEditor('new')} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Add member</button>}
             {canEdit && <button onClick={onEdit} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-blue-200 hover:bg-white/10">Add intelligence</button>}
             {canEdit && <button onClick={() => setAttachOpen(true)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-blue-200 hover:bg-white/10">Attach to case</button>}
+            <RestrictToSiuButton type="gang" id={gang.id} />
             <ActionMenu items={menuItems} />
           </div>
         </div>
