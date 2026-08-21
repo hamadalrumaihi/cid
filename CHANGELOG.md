@@ -8,6 +8,90 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### SIU compartmentation — the registry stops being one shared list
+
+`persons`, `vehicles`, `gangs` and `places` were each `using
+(private.is_active())`: every active investigator saw every row. An SIU agent
+who added a person mid-investigation published them to all of CID the moment
+they hit save. That is now closed by a conjunct — `not
+private.siu_hidden(type, id)` — on the **SELECT, UPDATE and DELETE** policies of
+all four. Update and delete matter as much as select: a row hidden from a query
+but still updatable leaks its own existence, because an UPDATE reporting one row
+affected confirms exactly what the SELECT denied.
+
+**Origin is recorded going forward, never inferred backwards.** The obvious
+migration — "rows created by an SIU member are SIU material" — is wrong here and
+dangerously so. Both active SIU members are *also* senior CID staff: one is a
+BCB bureau lead, the other is the Director. Classifying by creator would have
+hidden **49 of 54 gangs, all 10 vehicles, 20 persons and 16 places** from CID
+overnight, records those two built in their CID capacity. Membership is a
+property of a person; origin is a property of an act.
+
+So the migration classifies **nothing** retroactively. The 95 registry records
+created by an SIU member are flagged `unclassified` — a state that is queued for
+a decision and deliberately **does not hide** — and the flag records the
+*evidence* rather than a conclusion: whether SIU material references the record,
+whether CID's does, or neither. Only 2 of the 95 look SIU in origin; 69 are
+demonstrably shared. **Absence of a ledger row means CID-visible**, so the
+failure mode of a bug here is "SIU material stays visible to SIU", not "CID
+loses its registry".
+
+**The shared-record rule is enforced, not suggested.** A person CID already
+holds does not become SIU property because SIU opens a file on them.
+`siu_mark_origin` refuses outright — in the SECURITY DEFINER function, not in a
+disabled button — and says why: the record stays shared, and it is the SIU
+intelligence *about* it that gets compartmented.
+
+**Who may do this.** Any active SIU standing plus the Owner. Not `oversight`,
+which watches SIU rather than feeding it to CID. And **not the Director**, who
+heads CID: letting them authorise release of SIU material into their own
+division would invert the arrangement, most sharply for an integrity
+investigation into CID personnel. The existing model already withholds SIU
+command from them and this follows it.
+
+**The audit.** `siu_visibility_events` records from-state, to-state, sections,
+audience, the reason, and the authority the actor held *at the time* — roles
+change, and the record of who was allowed to do this must not change with them.
+It has no insert, update or delete policy at all, so nothing in the application
+can rewrite or erase a disclosure.
+
+A live role probe caught a real defect before this shipped: a wide release later
+pulled back to a single named officer was being logged as **`expanded`**. Breadth
+has two independent axes — audience and sections — that do not reduce to one
+number, so each is now compared, and a move that is neither wider nor narrower
+(one case to another, one officer to another) is named `redirected` rather than
+guessed at. An audit that overstates a disclosure is worse than no audit,
+because it will be believed.
+
+**Live proof**, every assertion run as the real account:
+
+| Probe | Result |
+|---|---|
+| CID persons before / after one record is compartmented | 264 / 263 |
+| CID selects the hidden record by its exact id | 0 rows |
+| CID updates it by id | 0 rows affected |
+| CID deletes it by id | 0 rows affected |
+| CID reads the ledger / the audit | 0 rows / 0 rows |
+| CID calls `siu_mark_origin` | refused — *only SIU may compartment a record* |
+| Director calls `siu_reveal_to_cid` | refused — *only SIU may release a compartmented record* |
+| SAC compartments a record CID already holds | refused — *CID already holds this record, so it stays shared* |
+| After reveal, CID sees it | 1 row |
+| After narrowing to one officer: other detective / that officer | 0 rows / 1 row |
+| SAC rewrites the audit | refused — permission denied |
+| Eight-act audit trail | marked → revealed → reduced → redirected → expanded → reduced → expanded → restricted |
+
+A compartment also no longer outlives its subject: `entity_id` carries no
+foreign key (it points at one of four registries), so deleting a person used to
+strand its ledger row — dead weight, and a row that would hide a *different*
+record if that uuid were ever reused. The audit is deliberately left standing:
+that SIU compartmented something stays true after the record is gone.
+
+New in the SIU workspace: a **Compartments** section with the review queue
+ordered so the genuinely ambiguous records come first, per-record history, and
+reveal / restrict / take-in actions that each demand a written reason and state,
+in a sentence, exactly who will be able to see the record afterwards — including
+that restricting "removes access, not knowledge".
+
 ### Ask the library — retrieval, not generation
 
 The portal has **no AI infrastructure**: no server-side model, no embeddings, no

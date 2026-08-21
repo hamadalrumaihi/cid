@@ -9454,6 +9454,152 @@ export type Database = {
         }
         Relationships: []
       }
+      siu_visibility: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          entity_id: string
+          entity_type: string
+          needs_review: boolean
+          reveal_reason: string | null
+          revealed_at: string | null
+          revealed_by: string | null
+          revealed_sections: string[]
+          revealed_to_case_id: string | null
+          revealed_to_user_id: string | null
+          review_note: string | null
+          siu_case_id: string | null
+          state: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          entity_id: string
+          entity_type: string
+          needs_review?: boolean
+          reveal_reason?: string | null
+          revealed_at?: string | null
+          revealed_by?: string | null
+          revealed_sections?: string[]
+          revealed_to_case_id?: string | null
+          revealed_to_user_id?: string | null
+          review_note?: string | null
+          siu_case_id?: string | null
+          state?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          entity_id?: string
+          entity_type?: string
+          needs_review?: boolean
+          reveal_reason?: string | null
+          revealed_at?: string | null
+          revealed_by?: string | null
+          revealed_sections?: string[]
+          revealed_to_case_id?: string | null
+          revealed_to_user_id?: string | null
+          review_note?: string | null
+          siu_case_id?: string | null
+          state?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "siu_visibility_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "siu_visibility_revealed_by_fkey"
+            columns: ["revealed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "siu_visibility_revealed_to_case_id_fkey"
+            columns: ["revealed_to_case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "siu_visibility_revealed_to_user_id_fkey"
+            columns: ["revealed_to_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "siu_visibility_siu_case_id_fkey"
+            columns: ["siu_case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      siu_visibility_events: {
+        Row: {
+          action: string
+          actor_id: string | null
+          actor_standing: string | null
+          created_at: string
+          entity_id: string
+          entity_type: string
+          from_state: string | null
+          id: string
+          reason: string
+          sections: string[]
+          to_case_id: string | null
+          to_state: string | null
+          to_user_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          actor_standing?: string | null
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          from_state?: string | null
+          id?: string
+          reason: string
+          sections?: string[]
+          to_case_id?: string | null
+          to_state?: string | null
+          to_user_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          actor_standing?: string | null
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          from_state?: string | null
+          id?: string
+          reason?: string
+          sections?: string[]
+          to_case_id?: string | null
+          to_state?: string | null
+          to_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "siu_visibility_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       siu_watchlist: {
         Row: {
           account_id: string | null
@@ -11985,6 +12131,39 @@ export type Database = {
       }
       siu_revoke_disclosure: {
         Args: { p_id: string; p_reason: string }
+        Returns: undefined
+      }
+      siu_mark_origin: {
+        Args: {
+          p_case_id?: string
+          p_id: string
+          p_reason: string
+          p_type: string
+        }
+        Returns: undefined
+      }
+      siu_resolve_review: {
+        Args: {
+          p_id: string
+          p_reason: string
+          p_siu_origin: boolean
+          p_type: string
+        }
+        Returns: undefined
+      }
+      siu_restrict_to_siu: {
+        Args: { p_id: string; p_reason: string; p_type: string }
+        Returns: undefined
+      }
+      siu_reveal_to_cid: {
+        Args: {
+          p_id: string
+          p_reason: string
+          p_sections?: string[]
+          p_to_case_id?: string
+          p_to_user_id?: string
+          p_type: string
+        }
         Returns: undefined
       }
       siu_roster: {
