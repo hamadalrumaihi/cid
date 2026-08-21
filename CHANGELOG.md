@@ -8,6 +8,46 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Documents stop being isolated
+
+`document_relations` has held **zero rows** since document governance shipped,
+and the reason turned out to be embarrassing rather than complicated: the table,
+its RLS and the reader's "Related" panel all existed, but **nothing in the portal
+could ever create a relation**. The feature shipped read-only. Every promise
+resting on it — related documents, "used in this workflow", conflict detection
+between documents — was resting on an empty table.
+
+**A document can now say what it relates to.** Whoever may edit a document can
+link it to another document (*supersedes*, *see also*, *checklist for*) or to a
+**place in the portal** where it applies. The second kind is the one that
+matters: the evidence screen does not maintain a list of relevant policies, and
+never needs updating when one is written. Documents declare their own relevance;
+screens ask who declared it.
+
+Routes are a fixed list rather than free text, because a typo in a route is a
+relation that silently never appears anywhere.
+
+**Contextual help follows from that**, on the Intelligence workspace and the
+legal-request wizard — placed before the stepper there, because the standard you
+have to meet is something you read *before* drafting, not after being refused.
+It **renders nothing** when no document has claimed the route, which is the
+honest state today: an empty "Related policies" heading on every screen would be
+worse than silence.
+
+**And links that have gone stale are now reported.** A document still citing
+guidance that has since been archived or superseded is the quiet failure — the
+workflow reads fine and points at something nobody maintains. Oversight now
+flags it, as a warning for a human, never an automatic edit to either document.
+A target the viewer cannot see is treated as unknown rather than stale: guessing
+would leak the fact that the document exists.
+
+Nothing here widens access. Writes are governed by the existing
+`doc_rel_ins`/`doc_rel_del`, which admit only an editor of the *owning*
+document; reads follow that document's own visibility. Probed live: an editor
+linked a route and the lookup found it; a detective who cannot edit that
+document was **refused** the insert, matched **zero rows** on delete, and could
+still read the relation — which is exactly the intended shape.
+
 ### Search that lands on the paragraph
 
 Ask the library "what evidence is required for a search warrant" and it returned

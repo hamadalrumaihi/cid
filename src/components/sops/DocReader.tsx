@@ -37,6 +37,7 @@ import {
 } from './docModel'
 import { DocToc, scrollToHeading, useActiveHeading } from './DocToc'
 import { DocMetaRail, type CampaignLite, type MyAckLite, type RelationRow, type RelatedDocMeta } from './DocMetaRail'
+import { RelationEditor } from './RelationEditor'
 import { DocEditorModal } from './DocEditor'
 import { DocHistoryModal } from './DocHistory'
 import {
@@ -379,6 +380,15 @@ export function DocReader(props: {
     />
   )
 
+  // The half of relations that never shipped. Only an editor of THIS document
+  // sees it, and doc_rel_ins re-decides on write -- the control is not the
+  // authority, it is just the only place the authority could ever be used.
+  const relationEditor = canEdit ? (
+    <div className="mt-4 rounded-xl border border-white/10 bg-ink-950/40 p-3">
+      <RelationEditor documentId={docId} onChanged={bump} />
+    </div>
+  ) : null
+
   return (
     <div className={ackPending ? 'pb-28 lg:pb-0' : ''}>
       <Breadcrumbs className="mb-4" items={[{ label: 'Back to library', onClick: onBack }, { label: title }]} />
@@ -468,7 +478,7 @@ export function DocReader(props: {
             <summary className="flex min-h-[44px] cursor-pointer select-none items-center px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Document details
             </summary>
-            <div className="px-4 pb-4">{metaRail}</div>
+            <div className="px-4 pb-4">{metaRail}{relationEditor}</div>
           </details>
           <Card pad="lg">
             <article className="mx-auto w-full max-w-[70ch] text-[15px] leading-7">
@@ -478,7 +488,7 @@ export function DocReader(props: {
         </div>
 
         <div className="hidden xl:block">
-          <div className="sticky top-4">{metaRail}</div>
+          <div className="sticky top-4">{metaRail}{relationEditor}</div>
         </div>
       </div>
 
