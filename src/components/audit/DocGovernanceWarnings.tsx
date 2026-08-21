@@ -12,6 +12,7 @@ import { list } from '@/lib/db'
 import { fmtDate } from '@/lib/format'
 import { useNow } from '@/lib/useNow'
 import { Badge } from '@/components/ui/Badge'
+import { relationLabel, staleTargets, type RelationRow } from '@/lib/docRelations'
 import {
   SHELF_COLS, docTitle, isExpired, reviewState,
   type ShelfDoc, type SyncStatus, SYNC_LABEL,
@@ -24,6 +25,7 @@ interface Warning { key: string; docId: string; title: string; label: string; de
 export function DocGovernanceWarnings() {
   const [docs, setDocs] = useState<ShelfDoc[] | null>(null)
   const [campaigns, setCampaigns] = useState<CampaignLite[]>([])
+  const [relations, setRelations] = useState<RelationRow[]>([])
   const nowMs = useNow()
 
   useEffect(() => {
@@ -33,6 +35,7 @@ export function DocGovernanceWarnings() {
         setCampaigns(await list('document_reading_campaigns', {
           select: 'id,document_id,deadline,status', eq: { status: 'active' },
         }).catch(() => []) as CampaignLite[])
+        setRelations(await list('document_relations', {}).catch(() => []))
       } catch { setDocs([]) }
     }, 0)
     return () => window.clearTimeout(t)
@@ -60,6 +63,25 @@ export function DocGovernanceWarnings() {
       warnings.push({ key: `sync:${d.id}`, docId: d.id, title, tone: 'danger', label: SYNC_LABEL[d.sync_status as SyncStatus], detail: 'Resolve from the document page' })
     }
   }
+  // A document still citing guidance that has since been archived or superseded
+  // is the quiet failure: the workflow reads fine, and points at something
+  // nobody maintains. A warning for a human to chase -- never an automatic
+  // edit to either document.
+  for (const { relation, targetStatus } of staleTargets(
+    relations, Object.fromEntries(docs.map((d) => [d.id, d.status])))) {
+    const owner = byId.get(relation.document_id)
+    const target = byId.get(relation.target_document_id as string)
+    warnings.push({
+      key: `rel:${relation.id}`,
+      docId: relation.document_id,
+      title: owner ? docTitle(owner.name) : 'A document',
+      tone: 'warn',
+      label: `Links to a ${targetStatus} document`,
+      detail: `${relationLabel(relation.relation)} ${target ? docTitle(target.name) : 'a document'}`
+        + ` — which is ${targetStatus}. Point it at the current version or remove the link.`,
+    })
+  }
+
   for (const c of campaigns) {
     if (c.deadline && Date.parse(c.deadline) < nowMs) {
       const d = byId.get(c.document_id)

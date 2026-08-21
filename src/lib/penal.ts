@@ -58,6 +58,21 @@ export interface PenalCharge {
   /** Designated as a predicate act by the published code. Null in the database
    *  means the code says nothing, which is why this is separate from `rico`. */
   predicate?: true
+  /** The title of the code this offense sits under, e.g. "Title 5C". The RPC
+   *  has always returned it and the catalog has always thrown it away, which is
+   *  why the list could only ever be flat. */
+  penalTitle?: string
+  /** "A judge decides" is NOT zero. The database keeps the penalty null and
+   *  raises these flags precisely so a total can never quietly count a
+   *  judge-set penalty as nothing; the card has to say so too. */
+  judgeFine?: true
+  judgeJail?: true
+  /** Not chargeable by PD. */
+  pdExempt?: true
+  /** Controlled-substance schedule, 1-3, where the offense names one. */
+  schedule?: number
+  /** What the code says about this offense beyond its definition. */
+  notes?: string
 }
 
 /** Row shape returned by public.penal_current_charges(). */
@@ -72,6 +87,12 @@ interface PenalRow {
   is_modifier: boolean
   stackable: boolean
   arrest_required: boolean | null
+  penal_title: string | null
+  judge_set_fine: boolean
+  judge_set_jail: boolean
+  pd_exempt: boolean
+  substance_schedule: number | null
+  special_notes: string | null
   is_rico: boolean
   is_rico_predicate: boolean | null
   version_name: string
@@ -103,6 +124,12 @@ function toCharge(r: PenalRow): PenalCharge {
     arrest: r.arrest_required || undefined,
     rico: penalRicoFlag(r),
     predicate: r.is_rico_predicate || undefined,
+    penalTitle: r.penal_title ?? undefined,
+    judgeFine: r.judge_set_fine || undefined,
+    judgeJail: r.judge_set_jail || undefined,
+    pdExempt: r.pd_exempt || undefined,
+    schedule: r.substance_schedule ?? undefined,
+    notes: r.special_notes ?? undefined,
   }
 }
 

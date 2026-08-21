@@ -8,6 +8,180 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Ask the library — retrieval, not generation
+
+The portal has **no AI infrastructure**: no server-side model, no embeddings, no
+vector store. The one thing calling itself an assistant is an Owner-only
+page-agent that ships inert and, when configured, sends whatever is on screen to
+an external LLM — which is precisely what must not happen to document content.
+
+So this answers by **retrieval**. Ask a question in ordinary language and it
+returns the actual sections of the actual documents, quoted from the database,
+each cited with its document, section heading, version and effective date, and
+linked straight to the paragraph. It cannot invent a legal requirement because
+it never writes a sentence, and no document text leaves the database because
+there is nowhere for it to go. The honest limit, stated on the panel: it finds
+**where something is written**, not what it means.
+
+**Confirmed and possible are kept visibly apart.** Two passes over the same
+RLS-bounded search: sections containing *everything* asked about, and sections
+mentioning *some* of it — labelled "Possibly relevant… this is not an answer".
+A tool that presented both with equal confidence would be worse than no tool,
+because people would stop checking.
+
+When neither pass returns anything, the answer is **"No confirmed answer
+found"**, naming the words it searched — and saying explicitly that this is *not
+the same as "no such rule exists"*, it means the library does not record one.
+
+**The access proof.** The SIU-classified SOP and its 19 sections, probed live
+across every role available in this database:
+
+| Role | Document | Sections | Search |
+|---|---|---|---|
+| Owner | 1 | 19 | 2 |
+| Director | 0 | 0 | 0 |
+| Bureau lead | 0 | 0 | 0 |
+| SIU Special Agent in Charge | 1 | 19 | 2 |
+| Detective (LSB and BCB) | 0 | 0 | 0 |
+| Field-intelligence submitter | 0 | 0 | 0 |
+
+Rank does not open it: a Director and a Bureau Lead see nothing. Every path
+agrees because they are the same path — the table, the search RPC and the
+assistant all resolve through the owning document's own RLS, so there is no
+route that reaches further than the reader could by hand.
+
+### The Penal Code becomes browsable
+
+359 statutes in one flat searchable list: fine if you already knew the code you
+wanted, close to useless for *what covers this*. Offenses are now **grouped by
+the title of the code** they sit under — which is how the statute book is
+actually organised — filterable, and comparable **side by side**, with only the
+rows where two offenses genuinely differ picked out.
+
+**All of it came from data the portal was already fetching and discarding.**
+`penal_current_charges()` has always returned the title of the code, the
+judge-set penalty flags, the PD exemption, the substance schedule and the
+statutory notes; the client catalog dropped five of them on the way in. No new
+tables, no new columns, nothing authored.
+
+**"A judge decides" is not zero.** Eight offenses in the published code carry a
+null penalty beside a `judge_set` flag — the database keeps them that way
+precisely so a total can never quietly count a judge-set penalty as nothing. The
+old row rendered an empty cell, which reads as *no fine*. The card now says
+**Set by the judge**, and distinguishes that from *Not stated* and from *No
+custodial term*.
+
+The same care applies to arrest: `arrest_required` is nullable because a version
+that says nothing is not a version that permits a citation. The card says **"The
+code does not say"** rather than implying either.
+
+**And a filter is only offered when the code in force can satisfy it.** Checking
+the real data first turned up that the 2026 code records an arrest requirement
+for **none of its 195 published offenses** — so an *Arrest required* checkbox
+could only ever return an empty list. Availability is derived from the loaded
+catalog rather than hardcoded, so a future version that does record arrests
+lights the filter up on its own. This is the same defect, and the same fix, as
+the RICO predicate picker offered against a code that designates no predicates.
+
+**What is deliberately absent.** The brief asks each charge card to show
+required legal elements, the evidence that commonly supports them, applicable
+enhancements, and lesser or mutually exclusive offenses. None of that exists as
+data anywhere in the portal — those would have to be authored by somebody with
+the authority to say what the elements of an offense are. Generating them would
+mean inventing legal requirements and setting them beside real statutory text
+with nothing on screen to tell the two apart. The card says what the code says,
+and the gap is stated on the page rather than filled in.
+
+### Documents stop being isolated
+
+`document_relations` has held **zero rows** since document governance shipped,
+and the reason turned out to be embarrassing rather than complicated: the table,
+its RLS and the reader's "Related" panel all existed, but **nothing in the portal
+could ever create a relation**. The feature shipped read-only. Every promise
+resting on it — related documents, "used in this workflow", conflict detection
+between documents — was resting on an empty table.
+
+**A document can now say what it relates to.** Whoever may edit a document can
+link it to another document (*supersedes*, *see also*, *checklist for*) or to a
+**place in the portal** where it applies. The second kind is the one that
+matters: the evidence screen does not maintain a list of relevant policies, and
+never needs updating when one is written. Documents declare their own relevance;
+screens ask who declared it.
+
+Routes are a fixed list rather than free text, because a typo in a route is a
+relation that silently never appears anywhere.
+
+**Contextual help follows from that**, on the Intelligence workspace and the
+legal-request wizard — placed before the stepper there, because the standard you
+have to meet is something you read *before* drafting, not after being refused.
+It **renders nothing** when no document has claimed the route, which is the
+honest state today: an empty "Related policies" heading on every screen would be
+worse than silence.
+
+**And links that have gone stale are now reported.** A document still citing
+guidance that has since been archived or superseded is the quiet failure — the
+workflow reads fine and points at something nobody maintains. Oversight now
+flags it, as a warning for a human, never an automatic edit to either document.
+A target the viewer cannot see is treated as unknown rather than stale: guessing
+would leak the fact that the document exists.
+
+Nothing here widens access. Writes are governed by the existing
+`doc_rel_ins`/`doc_rel_del`, which admit only an editor of the *owning*
+document; reads follow that document's own visibility. Probed live: an editor
+linked a route and the lookup found it; a detective who cannot edit that
+document was **refused** the insert, matched **zero rows** on delete, and could
+still read the relation — which is exactly the intended shape.
+
+### Search that lands on the paragraph
+
+Ask the library "what evidence is required for a search warrant" and it returned
+*Criminal Investigation Division (CID) Standard Operating Procedure* — 39,479
+characters, somewhere inside which the answer sits. The reader already had a
+table of contents, per-section anchors and copy-link-to-section; search could
+not reach any of it, because `search_documents()` ranks whole **documents**.
+
+Search now answers with a **section**: which heading matched, a highlighted
+excerpt from that section, the document's version and effective date, and a link
+that drops the reader on the paragraph rather than the title. The same query now
+returns *"Title 5C | Evidence Handling & Chain of Custody"*.
+
+**Why the index is not built in SQL.** The obvious move is to parse markdown
+headings server-side. It does not survive contact with the data: **six of the
+fifteen documents contain no `#` headings at all**, including the
+15,891-character CID SOP and the Case Building Playbook. Their structure comes
+from the renderer's heuristics — a short ALL-CAPS or trailing-colon line is a
+heading, the lead line above a pipe table is a heading — and anchors carry a
+de-duplication suffix from a counter running across every heading in document
+order. Reimplementing that in plpgsql would put a subtle renderer in a second
+language, and the day the two disagreed every copied section link would rot
+silently. So there is no second parser: `renderDocumentMarkdown()` already
+returns the exact headings it emitted, and a unit test pins the submitted
+anchors to the rendered ones so drift fails CI instead of breaking links.
+
+**Which raises the obvious question — if a reader submits the index, a reader can
+lie**, and the lie would surface in *other people's* search results. So the
+client never sends document text. It sends anchors and heading titles; the
+server finds each heading in its own stored body and slices the section out of
+that. Probed live: a genuine heading indexed 39,477 characters of real text, a
+forged one indexed an **empty** section. Direct writes to the index are refused
+outright — there is no insert, update or delete policy — and indexing a document
+you cannot open is refused by the same test the SELECT policy applies.
+
+Section visibility is the document's own, reached through an RLS-subject
+subquery, so the two cannot drift apart: a section of a document you cannot open
+does not exist for you, in the table or through the search.
+
+The index repairs itself — whoever opens a document whose body changed since it
+was last indexed rebuilds it for everybody, including documents rewritten by the
+Drive sync, which nobody ever renders. Command also gets an explicit **Rebuild
+search index** sweep for documents nobody has opened yet. It is not privileged:
+it indexes exactly the documents that viewer could open by hand.
+
+**Also fixed:** the snapshot's `documents_classification_check` was missing
+`'siu'`, which the live constraint has allowed for some time and which one
+published document already uses. `check:schema` compares columns only, so it
+never noticed — the same blind spot could have hidden a policy change.
+
 ### Accounts could not be permanently deleted, and Intel Tips is gone
 
 **The bug.** Freezing the reporting officer on an intelligence record was right —

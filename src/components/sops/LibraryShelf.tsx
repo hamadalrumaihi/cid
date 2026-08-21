@@ -16,6 +16,7 @@
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { rpc } from '@/lib/db'
+import { highlightRuns, searchSections, type SectionHit } from '@/lib/docSections'
 import { fmtDate } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import type { Database } from '@/lib/database.types'
@@ -88,7 +89,15 @@ function Headline({ text }: { text: string }) {
 
 /** Search hit rendered in the DocCard visual language (no bookmark — the RPC
  *  row carries no per-user reading state). */
-function SearchHitCard({ r, onOpen }: { r: SearchRow; onOpen: () => void }) {
+function SearchHitCard({ r, onOpen, sections = [], onOpenSection }: {
+  r: SearchRow
+  onOpen: () => void
+  /** Where inside the document the query matched. Empty when the document has
+   *  not been indexed yet -- the card still works, it just cannot offer to
+   *  drop the reader on the paragraph. */
+  sections?: SectionHit[]
+  onOpenSection?: (anchor: string) => void
+}) {
   const status = r.status as DocumentStatus
   const category = r.category && (CATEGORY_ORDER as readonly string[]).includes(r.category)
     ? CATEGORY_LABEL[r.category as DocumentCategory]
@@ -111,6 +120,30 @@ function SearchHitCard({ r, onOpen }: { r: SearchRow; onOpen: () => void }) {
         <Badge tone="neutral">{TYPE_LABEL[r.document_type as DocumentType] ?? r.document_type}</Badge>
       </span>
       {r.headline && <Headline text={r.headline} />}
+      {sections.length > 0 && onOpenSection && (
+        <ul className="space-y-1 border-l border-white/10 pl-2">
+          {sections.map((h) => (
+            <li key={h.anchor}>
+              <button
+                type="button"
+                onClick={() => onOpenSection(h.anchor)}
+                className="min-h-[44px] w-full rounded text-left text-xs text-slate-300 transition hover:text-badge-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-500"
+              >
+                <span className="block font-semibold text-slate-200">{h.heading}</span>
+                {h.headline && (
+                  <span className="block text-slate-400">
+                    {highlightRuns(h.headline).map((part, i) => (
+                      i % 2 === 1
+                        ? <mark key={i} className="rounded bg-badge-500/25 px-0.5 text-badge-100">{part}</mark>
+                        : <span key={i}>{part}</span>
+                    ))}
+                  </span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       <p className="mt-auto pt-2 text-[11px] tabular-nums text-slate-400">Updated {fmtDate(r.updated_at)}</p>
     </Card>
   )
@@ -267,18 +300,23 @@ function FilterPopover({ filters, sort, activeCount, onFilters, onSort, onClear 
 export function LibraryShelf({
   view, q, onView, onQuery, onOpenDoc,
   canSuggest = false, canReviewSuggestions = false, onSuggest, onReviewSuggestions,
+  canReindex = false, onReindex,
 }: {
   view: LibraryView
   /** Initial ?q= — seeds the input; further changes flow UP via onQuery. */
   q: string
   onView: (v: LibraryView) => void
   onQuery: (q: string) => void
-  onOpenDoc: (id: string) => void
+  /** `anchor` drops the reader on that section instead of the top. */
+  onOpenDoc: (id: string, anchor?: string) => void
   /** Active members may suggest an improvement; managers may open the review. */
   canSuggest?: boolean
   canReviewSuggestions?: boolean
   onSuggest?: () => void
   onReviewSuggestions?: () => void
+  /** Command-only sweep that rebuilds the section search index. */
+  canReindex?: boolean
+  onReindex?: () => void
 }) {
   const { isCommand, isOwner } = useAuth()
   const lib = useLibrary()
@@ -305,7 +343,8 @@ export function LibraryShelf({
   // ── Server search (?q=): debounced 300ms, sequenced against races. The URL
   // update rides the same debounce; onQuery lives in a ref so URL churn from
   // our own replace() doesn't re-trigger the effect. ────────────────────────
-  const [search, setSearch] = useState<{ q: string; results: SearchRow[] } | null>(null)
+  const [search, setSearch] = useState<
+    { q: string; results: SearchRow[]; sections: Map<string, SectionHit[]> } | null>(null)
   const [searchError, setSearchError] = useState<string | null>(null)
   const [searchTick, setSearchTick] = useState(0)
   const searchSeq = useRef(0)
@@ -320,11 +359,22 @@ export function LibraryShelf({
       onQueryRef.current(qt)
       if (qt.length < 2) { setSearch(null); setSearchError(null); return }
       void (async () => {
-        const res = await rpc('search_documents', { p_query: qt, p_limit: 30 })
+        // Two questions, asked together: which documents match, and WHERE in
+        // them. The section pass is what turns "the CID SOP, somewhere in
+        // 15,891 characters" into a paragraph the reader can be dropped on.
+        const [res, sections] = await Promise.all([
+          rpc('search_documents', { p_query: qt, p_limit: 30 }),
+          searchSections(qt, 40),
+        ])
         if (seq !== searchSeq.current) return
         if (res.error) { setSearchError(res.error.message); return }
         setSearchError(null)
-        setSearch({ q: qt, results: res.data ?? [] })
+        const byDoc = new Map<string, SectionHit[]>()
+        for (const h of sections) {
+          const list = byDoc.get(h.document_id) ?? []
+          if (list.length < 3) { list.push(h); byDoc.set(h.document_id, list) }
+        }
+        setSearch({ q: qt, results: res.data ?? [], sections: byDoc })
       })()
     }, 300)
     return () => window.clearTimeout(t)
@@ -420,6 +470,13 @@ export function LibraryShelf({
               {canReviewSuggestions && onReviewSuggestions && (
                 <Button onClick={onReviewSuggestions}>Review suggestions</Button>
               )}
+              {/* A document nobody has opened since it was written has never
+                  been indexed, and one rewritten by the Drive sync is never
+                  rendered by anyone -- reading repairs the index, but only for
+                  documents somebody reads. This is the deliberate sweep. */}
+              {canReindex && onReindex && (
+                <Button onClick={onReindex}>Rebuild search index</Button>
+              )}
               {canSuggest && onSuggest && (
                 <Button onClick={onSuggest}>Suggest an improvement</Button>
               )}
@@ -462,7 +519,11 @@ export function LibraryShelf({
                 {search.results.length} result{search.results.length === 1 ? '' : 's'} for “{search.q}”
               </p>
               <div className={GRID}>
-                {search.results.map((r) => <SearchHitCard key={r.id} r={r} onOpen={() => onOpenDoc(r.id)} />)}
+                {search.results.map((r) => (
+                  <SearchHitCard key={r.id} r={r} onOpen={() => onOpenDoc(r.id)}
+                    sections={search.sections.get(r.id) ?? []}
+                    onOpenSection={(anchor) => onOpenDoc(r.id, anchor)} />
+                ))}
               </div>
             </div>
           ) : (

@@ -46,6 +46,7 @@ import { uiConfirm } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { EmptyState, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { RelatedGuidance } from '@/components/sops/RelatedGuidance'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
 import { Row, sanitizeStash, type DraftShape } from '@/components/justice/dossier/dossierShared'
 
@@ -671,6 +672,11 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
           : 'A guided draft — requirements are checked before submission.'}
         actions={<Button onClick={onCancel}>Cancel</Button>}
       />
+
+      {/* Warrant and subpoena guidance, if any has been written and linked to
+          this work. Placed before the stepper because the standard to meet is
+          something you read BEFORE drafting, not after being refused. */}
+      <RelatedGuidance route="legal" />
 
       {/* ── Stepper (keyboard: every reachable step is a real button) ───────── */}
       <ol aria-label="Wizard steps" className="flex flex-wrap gap-1.5">

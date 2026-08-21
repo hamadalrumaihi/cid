@@ -15,6 +15,7 @@ import type { Tables, TablesUpdate } from '@/lib/database.types'
 import { insert, list, rpc, updateWhere, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { renderDocumentMarkdown } from '@/lib/markdown'
+import { indexSections, sectionsStale } from '@/lib/docSections'
 import { copyText, fmtDate, fmtDateTime } from '@/lib/format'
 import { useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
@@ -36,6 +37,7 @@ import {
 } from './docModel'
 import { DocToc, scrollToHeading, useActiveHeading } from './DocToc'
 import { DocMetaRail, type CampaignLite, type MyAckLite, type RelationRow, type RelatedDocMeta } from './DocMetaRail'
+import { RelationEditor } from './RelationEditor'
 import { DocEditorModal } from './DocEditor'
 import { DocHistoryModal } from './DocHistory'
 import {
@@ -198,6 +200,28 @@ export function DocReader(props: {
   }, [state, docId, uid])
 
   const body = doc ? bodyOf(doc) : ''
+
+  // ── Keep the search index honest ──────────────────────────────────────────
+  // The reader is the only place the heading rule exists, so it is also the
+  // only place that can record it. Whoever opens a document whose body has
+  // changed since it was last indexed repairs the index for everybody --
+  // including documents rewritten by the Drive sync, which never renders
+  // anything. Failure is silent on purpose: a stale index makes search worse,
+  // it does not stop anyone reading.
+  const indexed = useRef<string>('')
+  useEffect(() => {
+    if (state !== 'in' || !doc || !body) return
+    const key = `${docId}:${body.length}`
+    if (indexed.current === key) return
+    indexed.current = key
+    const t = window.setTimeout(() => {
+      void (async () => {
+        if (await sectionsStale(docId)) await indexSections(docId, body)
+      })()
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [state, doc, docId, body])
+
   const { nodes, headings } = useMemo(() => renderDocumentMarkdown(body), [body])
   const activeId = useActiveHeading(docId, headings)
 
@@ -356,6 +380,15 @@ export function DocReader(props: {
     />
   )
 
+  // The half of relations that never shipped. Only an editor of THIS document
+  // sees it, and doc_rel_ins re-decides on write -- the control is not the
+  // authority, it is just the only place the authority could ever be used.
+  const relationEditor = canEdit ? (
+    <div className="mt-4 rounded-xl border border-white/10 bg-ink-950/40 p-3">
+      <RelationEditor documentId={docId} onChanged={bump} />
+    </div>
+  ) : null
+
   return (
     <div className={ackPending ? 'pb-28 lg:pb-0' : ''}>
       <Breadcrumbs className="mb-4" items={[{ label: 'Back to library', onClick: onBack }, { label: title }]} />
@@ -445,7 +478,7 @@ export function DocReader(props: {
             <summary className="flex min-h-[44px] cursor-pointer select-none items-center px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Document details
             </summary>
-            <div className="px-4 pb-4">{metaRail}</div>
+            <div className="px-4 pb-4">{metaRail}{relationEditor}</div>
           </details>
           <Card pad="lg">
             <article className="mx-auto w-full max-w-[70ch] text-[15px] leading-7">
@@ -455,7 +488,7 @@ export function DocReader(props: {
         </div>
 
         <div className="hidden xl:block">
-          <div className="sticky top-4">{metaRail}</div>
+          <div className="sticky top-4">{metaRail}{relationEditor}</div>
         </div>
       </div>
 
