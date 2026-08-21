@@ -8,6 +8,56 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Search that lands on the paragraph
+
+Ask the library "what evidence is required for a search warrant" and it returned
+*Criminal Investigation Division (CID) Standard Operating Procedure* — 39,479
+characters, somewhere inside which the answer sits. The reader already had a
+table of contents, per-section anchors and copy-link-to-section; search could
+not reach any of it, because `search_documents()` ranks whole **documents**.
+
+Search now answers with a **section**: which heading matched, a highlighted
+excerpt from that section, the document's version and effective date, and a link
+that drops the reader on the paragraph rather than the title. The same query now
+returns *"Title 5C | Evidence Handling & Chain of Custody"*.
+
+**Why the index is not built in SQL.** The obvious move is to parse markdown
+headings server-side. It does not survive contact with the data: **six of the
+fifteen documents contain no `#` headings at all**, including the
+15,891-character CID SOP and the Case Building Playbook. Their structure comes
+from the renderer's heuristics — a short ALL-CAPS or trailing-colon line is a
+heading, the lead line above a pipe table is a heading — and anchors carry a
+de-duplication suffix from a counter running across every heading in document
+order. Reimplementing that in plpgsql would put a subtle renderer in a second
+language, and the day the two disagreed every copied section link would rot
+silently. So there is no second parser: `renderDocumentMarkdown()` already
+returns the exact headings it emitted, and a unit test pins the submitted
+anchors to the rendered ones so drift fails CI instead of breaking links.
+
+**Which raises the obvious question — if a reader submits the index, a reader can
+lie**, and the lie would surface in *other people's* search results. So the
+client never sends document text. It sends anchors and heading titles; the
+server finds each heading in its own stored body and slices the section out of
+that. Probed live: a genuine heading indexed 39,477 characters of real text, a
+forged one indexed an **empty** section. Direct writes to the index are refused
+outright — there is no insert, update or delete policy — and indexing a document
+you cannot open is refused by the same test the SELECT policy applies.
+
+Section visibility is the document's own, reached through an RLS-subject
+subquery, so the two cannot drift apart: a section of a document you cannot open
+does not exist for you, in the table or through the search.
+
+The index repairs itself — whoever opens a document whose body changed since it
+was last indexed rebuilds it for everybody, including documents rewritten by the
+Drive sync, which nobody ever renders. Command also gets an explicit **Rebuild
+search index** sweep for documents nobody has opened yet. It is not privileged:
+it indexes exactly the documents that viewer could open by hand.
+
+**Also fixed:** the snapshot's `documents_classification_check` was missing
+`'siu'`, which the live constraint has allowed for some time and which one
+published document already uses. `check:schema` compares columns only, so it
+never noticed — the same blind spot could have hidden a policy change.
+
 ### Accounts could not be permanently deleted, and Intel Tips is gone
 
 **The bug.** Freezing the reporting officer on an intelligence record was right —

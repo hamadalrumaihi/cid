@@ -1840,6 +1840,54 @@ export type Database = {
           },
         ]
       }
+      document_sections: {
+        Row: {
+          anchor: string
+          body: string
+          content_hash: string
+          depth: number
+          document_id: string
+          heading: string
+          id: string
+          indexed_at: string
+          ordinal: number
+          search_tsv: unknown | null
+          version_number: number
+        }
+        Insert: {
+          anchor: string
+          body?: string
+          content_hash: string
+          depth?: number
+          document_id: string
+          heading: string
+          id?: string
+          indexed_at?: string
+          ordinal: number
+          version_number: number
+        }
+        Update: {
+          anchor?: string
+          body?: string
+          content_hash?: string
+          depth?: number
+          document_id?: string
+          heading?: string
+          id?: string
+          indexed_at?: string
+          ordinal?: number
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_sections_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_suggestion_comments: {
         Row: {
           author_id: string
@@ -12462,6 +12510,32 @@ export type Database = {
       close_reading_campaign: {
         Args: { p_campaign: string; p_reason?: string }
         Returns: Database["public"]["Tables"]["document_reading_campaigns"]["Row"]
+      }
+      document_sections_index: {
+        Args: { p_document: string; p_headings: Json }
+        Returns: number
+      }
+      document_sections_stale: {
+        Args: { p_document: string }
+        Returns: boolean
+      }
+      search_document_sections: {
+        Args: { p_limit?: number; p_query: string }
+        Returns: {
+          anchor: string
+          category: string | null
+          classification: string
+          document_id: string
+          document_name: string
+          document_type: string
+          effective_at: string | null
+          headline: string | null
+          heading: string
+          ordinal: number
+          rank: number
+          status: string
+          version_number: number
+        }[]
       }
       document_ack_summary: {
         Args: { p_document: string }

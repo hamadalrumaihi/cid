@@ -15,6 +15,9 @@ import dynamic from 'next/dynamic'
 import { useCallback, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
+import { list } from '@/lib/db'
+import { toast } from '@/lib/toast'
+import { reindexLibrary } from '@/lib/docSections'
 import { Store } from '@/lib/store'
 import { Notice } from '@/components/ui/Notice'
 import { DetailSkeleton } from '@/components/ui/Skeleton'
@@ -114,6 +117,20 @@ export function SopsView() {
     )
   }
 
+  // Indexes exactly the documents this viewer could open one at a time; the
+  // server refuses anything else, so the sweep can never widen what they read.
+  const reindexAll = async () => {
+    const docs = await list('documents', { select: 'id', limit: 500 }).catch(() => [])
+    if (!docs.length) { toast('No documents to index.', 'warn'); return }
+    toast(`Rebuilding the index for ${docs.length} document${docs.length === 1 ? '' : 's'}...`, 'info')
+    const r = await reindexLibrary(docs.map((d) => d.id))
+    toast(
+      `Indexed ${r.indexed} document${r.indexed === 1 ? '' : 's'} into ${r.sections} sections`
+      + (r.refused ? `; ${r.refused} skipped (empty or not yours to index)` : '') + '.',
+      r.indexed ? 'success' : 'warn',
+    )
+  }
+
   return (
     <>
       <LibraryShelf
@@ -121,11 +138,18 @@ export function SopsView() {
         q={q}
         onView={(v) => setParams({ view: v })}
         onQuery={(next) => setParams({ q: next || null })}
-        onOpenDoc={(id) => setParams({ doc: id }, true)}
+        onOpenDoc={(id, anchor) => {
+          setParams({ doc: id }, true)
+          // The hash is what DocReader already listens to for section jumps,
+          // so a search hit lands on the paragraph rather than the title.
+          if (anchor) window.location.hash = anchor
+        }}
         canSuggest={canSuggest}
         canReviewSuggestions={canReview}
         onSuggest={() => setSuggest({ kind: 'general' })}
         onReviewSuggestions={() => setParams({ view: 'suggestions' })}
+        canReindex={canReview}
+        onReindex={() => void reindexAll()}
       />
       {suggestModal}
     </>

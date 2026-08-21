@@ -15,6 +15,7 @@ import type { Tables, TablesUpdate } from '@/lib/database.types'
 import { insert, list, rpc, updateWhere, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { renderDocumentMarkdown } from '@/lib/markdown'
+import { indexSections, sectionsStale } from '@/lib/docSections'
 import { copyText, fmtDate, fmtDateTime } from '@/lib/format'
 import { useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
@@ -198,6 +199,28 @@ export function DocReader(props: {
   }, [state, docId, uid])
 
   const body = doc ? bodyOf(doc) : ''
+
+  // ── Keep the search index honest ──────────────────────────────────────────
+  // The reader is the only place the heading rule exists, so it is also the
+  // only place that can record it. Whoever opens a document whose body has
+  // changed since it was last indexed repairs the index for everybody --
+  // including documents rewritten by the Drive sync, which never renders
+  // anything. Failure is silent on purpose: a stale index makes search worse,
+  // it does not stop anyone reading.
+  const indexed = useRef<string>('')
+  useEffect(() => {
+    if (state !== 'in' || !doc || !body) return
+    const key = `${docId}:${body.length}`
+    if (indexed.current === key) return
+    indexed.current = key
+    const t = window.setTimeout(() => {
+      void (async () => {
+        if (await sectionsStale(docId)) await indexSections(docId, body)
+      })()
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [state, doc, docId, body])
+
   const { nodes, headings } = useMemo(() => renderDocumentMarkdown(body), [body])
   const activeId = useActiveHeading(docId, headings)
 

@@ -645,6 +645,32 @@ alter table public.document_relations enable row level security;
 -- target_id has NO FK on purpose (polymorphic case/person/gang/place/vehicle/
 -- report/legal_request target); the table-level CHECK pins one target shape.
 
+create table public.document_sections (
+  id uuid not null default gen_random_uuid(),
+  document_id uuid not null,
+  version_number integer not null,
+  ordinal integer not null,
+  depth integer not null default 2,
+  anchor text not null,
+  heading text not null,
+  body text not null default ''::text,
+  content_hash text not null,
+  indexed_at timestamptz not null default now(),
+  search_tsv tsvector generated always as ((setweight(to_tsvector('english'::regconfig, COALESCE(heading, ''::text)), 'A'::"char") || setweight(to_tsvector('english'::regconfig, COALESCE(body, ''::text)), 'B'::"char"))) stored
+);
+alter table public.document_sections add constraint document_sections_pkey PRIMARY KEY (id);
+alter table public.document_sections add constraint document_sections_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.documents(id) ON DELETE CASCADE;
+create unique index document_sections_doc_ordinal_idx ON public.document_sections USING btree (document_id, ordinal);
+create index document_sections_doc_idx ON public.document_sections USING btree (document_id);
+create index document_sections_search_idx ON public.document_sections USING gin (search_tsv);
+alter table public.document_sections enable row level security;
+-- The searchable structure of a document, one row per rendered heading. Written
+-- ONLY by document_sections_index(), which slices each section's text out of the
+-- stored body rather than trusting the caller -- a client submitting a heading
+-- the document does not contain indexes an EMPTY section, never a forged one.
+-- Visibility is the document's own, reached through an RLS-subject subquery, so
+-- the two can never drift apart.
+
 create table public.document_suggestion_comments (
   id uuid not null default gen_random_uuid(),
   suggestion_id uuid not null,
@@ -789,7 +815,7 @@ alter table public.documents add constraint documents_reviewed_by_fkey FOREIGN K
 alter table public.documents add constraint documents_category_check CHECK (((category IS NULL) OR (category = ANY (ARRAY['sops'::text, 'investigative'::text, 'command'::text, 'justice'::text, 'technical'::text]))));
 alter table public.documents add constraint documents_document_type_check CHECK ((document_type = ANY (ARRAY['sop'::text, 'policy'::text, 'guide'::text, 'checklist'::text, 'reference'::text, 'legal_guidance'::text, 'technical'::text, 'template'::text])));
 alter table public.documents add constraint documents_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'in_review'::text, 'approved'::text, 'published'::text, 'superseded'::text, 'archived'::text])));
-alter table public.documents add constraint documents_classification_check CHECK ((classification = ANY (ARRAY['internal'::text, 'restricted'::text, 'command'::text, 'justice'::text, 'owner'::text])));
+alter table public.documents add constraint documents_classification_check CHECK ((classification = ANY (ARRAY['internal'::text, 'restricted'::text, 'command'::text, 'justice'::text, 'siu'::text, 'owner'::text])));
 alter table public.documents add constraint documents_review_outcome_check CHECK (((review_outcome IS NULL) OR (review_outcome = ANY (ARRAY['no_change'::text, 'editorial_update'::text, 'material_update'::text, 'legal_review'::text, 'supersede'::text, 'archive'::text]))));
 alter table public.documents add constraint documents_source_system_check CHECK ((source_system = ANY (ARRAY['portal'::text, 'google_drive'::text, 'imported'::text])));
 alter table public.documents add constraint documents_canonical_source_check CHECK ((canonical_source = ANY (ARRAY['portal'::text, 'google_drive'::text])));
@@ -8344,6 +8370,12 @@ create policy doc_state_upd on public.document_user_state
   using ((user_id = ( SELECT auth.uid() AS uid)))
   with check ((user_id = ( SELECT auth.uid() AS uid)));
 
+create policy document_sections_sel on public.document_sections
+  as permissive for select to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM public.documents d
+  WHERE (d.id = document_sections.document_id))));
+
 create policy document_suggestion_comments_sel on public.document_suggestion_comments
   as permissive for select to authenticated
   using ((EXISTS ( SELECT 1
@@ -10101,6 +10133,17 @@ create policy wl_sel on public.watchlist
 -- public.publish_reading_campaign(uuid, text, jsonb, timestamptz, text),
 -- public.close_reading_campaign(uuid, text),
 -- public.document_ack_summary(uuid),
+-- 20260927120000_document_sections: public.document_sections (mirrored above,
+-- with its SELECT policy) plus public.document_sections_index(uuid, jsonb)
+-- [SECURITY DEFINER, the table's only writer -- it takes the anchors and
+-- heading titles the READER rendered, because six of the fifteen documents
+-- carry no '#' headings and the renderer's heuristics are the only structure
+-- they have, then slices the section text out of the stored body so a forged
+-- heading indexes empty], public.document_sections_stale(uuid) [SECURITY
+-- INVOKER, caller-relative on purpose] and
+-- public.search_document_sections(text, integer) [SECURITY INVOKER, like
+-- search_documents]. Definitive SQL in
+-- supabase/migrations/20260927120000_document_sections.sql.
 -- public.search_documents(text, integer, integer) (SECURITY INVOKER —
 -- caller RLS decides which rows exist). feedback_kind_check now admits
 -- 'document'. Definitive SQL in
