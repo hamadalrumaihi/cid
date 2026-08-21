@@ -37,6 +37,12 @@ jobs:
         run: npm run check:freshness
       - name: Dead exports / dead deps (knip)
         run: npm run check:dead
+      - name: Inert form submit buttons
+        # Button defaults to type="button", so a <Button> inside a form with
+        # onSubmit and no type="submit" is silently unclickable. Typechecks,
+        # lints and screenshots fine; shipped three times before anyone tried
+        # to press one (scripts/check-submit-buttons.mjs).
+        run: npm run check:submit
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Lint (zero warnings)
