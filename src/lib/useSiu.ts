@@ -36,6 +36,7 @@ interface DeptContext {
   may_switch: boolean
   callsign: string | null
   siu_role: string | null
+  may_control_visibility: boolean
 }
 
 let cache: { uid: string; promise: Promise<DeptContext | null> } | null = null
@@ -78,6 +79,15 @@ export interface SiuAccess {
   canAppoint: boolean
   /** Broad, read-only visibility of CID investigations. */
   canReadCid: boolean
+  /** May restrict a record to SIU, or reveal one back to CID.
+   *
+   *  Deliberately NOT the same question as `canAccess`. All three SIU ranks,
+   *  the Director and the Owner may control visibility — but the Director has
+   *  no SIU standing at all and must never be handed the SIU workspace, which
+   *  is the arrangement migration 20260902120000 exists to protect. So this is
+   *  its own capability: it lights up a Restrict action on a record without
+   *  opening a single SIU screen. */
+  mayControlVisibility: boolean
   /** Holds both contexts, so a deliberate switch is offered (Owner / AG). */
   maySwitch: boolean
   /** `siu_settings.enabled_for_non_owner` — false during the build phase. */
@@ -98,7 +108,8 @@ export interface SiuAccess {
 const NO_ACCESS: SiuAccess = {
   department: 'cid', viewing: 'cid', inSiu: false,
   standing: null, canAccess: false, isAgent: false, isCommand: false,
-  canAppoint: false, canReadCid: false, maySwitch: false, releaseOpen: false,
+  canAppoint: false, canReadCid: false, mayControlVisibility: false,
+  maySwitch: false, releaseOpen: false,
   callsign: null, membership: null, loading: false,
   setViewing: () => {},
   caseReadOnly: () => false,
@@ -185,6 +196,9 @@ export function useSiu(): SiuAccess {
     isCommand: siuIsCommand(capCtx),
     canAppoint: siuCanAppoint(capCtx),
     canReadCid: siuCanReadCid(capCtx),
+    // Server-resolved only: there is no client-side mirror, because the
+    // Director branch this depends on exists nowhere in siu.ts by design.
+    mayControlVisibility: ctx?.may_control_visibility ?? false,
     maySwitch,
     releaseOpen: !!ctx?.release_open,
     callsign: ctx?.callsign ?? null,
