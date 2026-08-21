@@ -8,6 +8,27 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Three buttons that did nothing
+
+`Button` renders `type={type ?? 'button'}` — a deliberate default, since most
+buttons in this app are not submits. The consequence is that a `<Button>` inside
+`<form onSubmit={...}>` with no `type="submit"` and no `onClick` is completely
+inert: not disabled, not erroring, just silently unclickable.
+
+Three had shipped that way, found when somebody tried to press one:
+
+- **Restrict Entire Record** / **Restrict Selected Intelligence Only** — the
+  whole compartmentation confirmation.
+- The reveal / restrict / resolve confirmation in the SIU workspace.
+- **Ask the library**, which had been dead since the day it merged.
+
+Every other gate passed all three. It typechecks, it lints, it renders, and the
+visual suite screenshots an inert button as happily as a working one. So there
+is now a gate that reads what the other gates cannot: `check:submit` fails the
+build if a `<Button>` inside a form with `onSubmit` declares neither
+`type="submit"` nor its own handler. It was verified against the real defect
+before being wired in — a check that cannot fail is not a check.
+
 ### Restrict to SIU, on the record you are looking at
 
 Two defects in how S2 shipped, both about reach rather than enforcement.

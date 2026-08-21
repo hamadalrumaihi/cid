@@ -121,7 +121,7 @@ function ActDialog({ act, row, onClose, onDone }: {
         </Field>
         <div className="flex justify-end gap-2">
           <Button type="button" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={!ok || busy}>
+          <Button type="submit" variant="primary" disabled={!ok || busy}>
             {busy ? 'Working…' : ACT_VERB[act]}
           </Button>
         </div>

@@ -85,7 +85,7 @@ export function AskLibrary({ onOpenSection }: {
           aria-label="Ask the document library a question"
           className="min-w-[14rem] flex-1 rounded-lg border border-white/10 bg-ink-850 px-3 py-2 text-sm text-slate-200 outline-none transition focus:border-badge-500"
         />
-        <Button variant="primary" disabled={!question.trim() || busy}>
+        <Button type="submit" variant="primary" disabled={!question.trim() || busy}>
           {busy ? 'Searching…' : 'Ask'}
         </Button>
       </form>

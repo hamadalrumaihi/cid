@@ -21,6 +21,7 @@
     "gen:guide": "node scripts/generate-guide.mjs",
     "check:schema": "node scripts/check-schema-sync.mjs",
     "check:dead": "knip",
+    "check:submit": "node scripts/check-submit-buttons.mjs",
     "check:freshness": "node scripts/check-snapshot-freshness.mjs",
     "check:bundle": "node scripts/check-bundle-budget.mjs",
     "import:cid-general": "node scripts/import-cid-general.mjs",

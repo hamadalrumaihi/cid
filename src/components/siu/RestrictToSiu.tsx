@@ -308,7 +308,7 @@ export function RestrictDialog({ target, onClose, onDone }: {
             </Field>
             <div className="flex flex-wrap justify-end gap-2">
               <Button type="button" onClick={onClose}>Cancel</Button>
-              <Button variant={mode === 'record' ? 'danger' : 'primary'} disabled={!ok || busy}>
+              <Button type="submit" variant={mode === 'record' ? 'danger' : 'primary'} disabled={!ok || busy}>
                 {busy ? 'Working…'
                   : mode === 'record' ? 'Restrict Entire Record' : 'Restrict Selected Intelligence Only'}
               </Button>
