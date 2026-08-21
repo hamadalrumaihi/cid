@@ -3568,6 +3568,75 @@ create index siu_conflicts_ack_fkey_idx ON public.siu_conflicts USING btree (ack
 -- through can_access_case(). Only public.siu_resolve_conflict() can lift it, and
 -- it refuses the agent who declared it.
 
+create table public.siu_visibility (
+  entity_type text not null,
+  entity_id uuid not null,
+  state text not null default 'siu_only'::text,
+  siu_case_id uuid,
+  revealed_sections text[] not null default '{}'::text[],
+  revealed_to_case_id uuid,
+  revealed_to_user_id uuid,
+  revealed_at timestamp with time zone,
+  revealed_by uuid,
+  reveal_reason text,
+  needs_review boolean not null default false,
+  review_note text,
+  created_by uuid,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.siu_visibility add constraint siu_visibility_pkey PRIMARY KEY (entity_type, entity_id);
+alter table public.siu_visibility add constraint siu_visibility_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id);
+alter table public.siu_visibility add constraint siu_visibility_revealed_by_fkey FOREIGN KEY (revealed_by) REFERENCES profiles(id);
+alter table public.siu_visibility add constraint siu_visibility_revealed_to_case_id_fkey FOREIGN KEY (revealed_to_case_id) REFERENCES cases(id) ON DELETE SET NULL;
+alter table public.siu_visibility add constraint siu_visibility_revealed_to_user_id_fkey FOREIGN KEY (revealed_to_user_id) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.siu_visibility add constraint siu_visibility_siu_case_id_fkey FOREIGN KEY (siu_case_id) REFERENCES cases(id) ON DELETE SET NULL;
+alter table public.siu_visibility add constraint siu_visibility_state_check CHECK ((state = ANY (ARRAY['siu_only'::text, 'revealed'::text, 'partial'::text, 'unclassified'::text])));
+alter table public.siu_visibility add constraint siu_visibility_entity_type_check CHECK ((entity_type = ANY (ARRAY['person'::text, 'vehicle'::text, 'gang'::text, 'place'::text, 'case'::text, 'intelligence'::text, 'target'::text, 'report'::text, 'note'::text, 'evidence'::text, 'media'::text, 'task'::text, 'legal_request'::text, 'timeline_event'::text, 'relationship'::text, 'alert'::text, 'comment'::text, 'activity'::text])));
+alter table public.siu_visibility add constraint siu_visibility_partial_sections_check CHECK (((state <> 'partial'::text) OR (array_length(revealed_sections, 1) >= 1)));
+alter table public.siu_visibility add constraint siu_visibility_release_recorded_check CHECK (((state = ANY (ARRAY['siu_only'::text, 'unclassified'::text])) OR ((revealed_by IS NOT NULL) AND (COALESCE(btrim(reveal_reason), ''::text) <> ''::text))));
+create index siu_visibility_state_idx ON public.siu_visibility USING btree (state) WHERE (state <> 'siu_only'::text);
+create index siu_visibility_review_idx ON public.siu_visibility USING btree (entity_type) WHERE needs_review;
+create index siu_visibility_case_idx ON public.siu_visibility USING btree (siu_case_id) WHERE (siu_case_id IS NOT NULL);
+alter table public.siu_visibility enable row level security;
+-- The compartment ledger. ABSENCE OF A ROW MEANS CID-VISIBLE: there is no
+-- visibility column on any registry table and nothing was backfilled as hidden,
+-- so a bug here leaves SIU material visible to SIU rather than deleting CID's
+-- registry. 'unclassified' is the flag for a record whose origin could not be
+-- established and deliberately does NOT hide -- both active SIU members are
+-- also senior CID staff, so "created by an SIU member" would have hidden all
+-- ten vehicles and 49 of 54 gangs. Written only by the definer RPCs; no write
+-- policy exists.
+
+create table public.siu_visibility_events (
+  id uuid not null default gen_random_uuid(),
+  entity_type text not null,
+  entity_id uuid not null,
+  action text not null,
+  from_state text,
+  to_state text,
+  sections text[] not null default '{}'::text[],
+  to_case_id uuid,
+  to_user_id uuid,
+  actor_id uuid,
+  actor_standing text,
+  reason text not null,
+  created_at timestamp with time zone not null default now()
+);
+alter table public.siu_visibility_events add constraint siu_visibility_events_pkey PRIMARY KEY (id);
+alter table public.siu_visibility_events add constraint siu_visibility_events_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES profiles(id);
+alter table public.siu_visibility_events add constraint siu_visibility_events_action_check CHECK ((action = ANY (ARRAY['marked'::text, 'revealed'::text, 'expanded'::text, 'reduced'::text, 'redirected'::text, 'restricted'::text, 'flagged'::text])));
+create index siu_visibility_events_entity_idx ON public.siu_visibility_events USING btree (entity_type, entity_id, created_at DESC);
+create index siu_visibility_events_actor_idx ON public.siu_visibility_events USING btree (actor_id, created_at DESC);
+alter table public.siu_visibility_events enable row level security;
+-- The disclosure audit. Immutable through the portal: no insert, update or
+-- delete policy exists, so the only writer is the definer RPC. actor_standing
+-- records the authority held AT THE TIME, because roles change and the record
+-- of who was allowed to do this must not change with them. 'redirected' exists
+-- because a move from one case to another is neither wider nor narrower, and
+-- guessing between 'expanded' and 'reduced' would put a false claim in a
+-- permanent record.
+
 create table public.siu_watchlist (
   id uuid not null default gen_random_uuid(),
   entity_type text not null,
@@ -8678,7 +8747,7 @@ create policy gang_turf_upd on public.gang_turf
 
 create policy gangs_del on public.gangs
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((private.can_delete() AND (NOT private.siu_hidden('gang'::text, id))));
 
 create policy gangs_ins on public.gangs
   as permissive for insert to authenticated
@@ -8686,12 +8755,12 @@ create policy gangs_ins on public.gangs
 
 create policy gangs_sel on public.gangs
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active() AND (NOT private.siu_hidden('gang'::text, id))));
 
 create policy gangs_upd on public.gangs
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active() AND (NOT private.siu_hidden('gang'::text, id))))
+  with check ((private.is_active() AND (NOT private.siu_hidden('gang'::text, id))));
 
 create policy indicators_del on public.indicators
   as permissive for delete to authenticated
@@ -9167,7 +9236,7 @@ create policy person_vehicles_upd on public.person_vehicles
 
 create policy persons_del on public.persons
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((private.can_delete() AND (NOT private.siu_hidden('person'::text, id))));
 
 create policy persons_ins on public.persons
   as permissive for insert to authenticated
@@ -9175,12 +9244,12 @@ create policy persons_ins on public.persons
 
 create policy persons_sel on public.persons
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active() AND (NOT private.siu_hidden('person'::text, id))));
 
 create policy persons_upd on public.persons
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active() AND (NOT private.siu_hidden('person'::text, id))))
+  with check ((private.is_active() AND (NOT private.siu_hidden('person'::text, id))));
 
 create policy place_process_steps_del on public.place_process_steps
   as permissive for delete to authenticated
@@ -9201,7 +9270,7 @@ create policy place_process_steps_upd on public.place_process_steps
 
 create policy places_del on public.places
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((private.can_delete() AND (NOT private.siu_hidden('place'::text, id))));
 
 create policy places_ins on public.places
   as permissive for insert to authenticated
@@ -9209,12 +9278,12 @@ create policy places_ins on public.places
 
 create policy places_sel on public.places
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active() AND (NOT private.siu_hidden('place'::text, id))));
 
 create policy places_upd on public.places
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active() AND (NOT private.siu_hidden('place'::text, id))))
+  with check ((private.is_active() AND (NOT private.siu_hidden('place'::text, id))));
 
 create policy predicate_acts_del on public.predicate_acts
   as permissive for delete to authenticated
@@ -9492,6 +9561,14 @@ create policy siu_conflicts_sel on public.siu_conflicts
   as permissive for select to authenticated
   using (((agent_id = ( SELECT auth.uid() AS uid)) OR private.siu_case_command(case_id)));
 
+create policy siu_visibility_sel on public.siu_visibility
+  as permissive for select to authenticated
+  using (private.siu_operates());
+
+create policy siu_visibility_events_sel on public.siu_visibility_events
+  as permissive for select to authenticated
+  using (private.siu_operates());
+
 create policy siu_watchlist_sel on public.siu_watchlist
   as permissive for select to authenticated
   using (private.siu_is_agent());
@@ -9689,7 +9766,7 @@ create policy tr_sel on public.transfer_requests
 
 create policy vehicles_del on public.vehicles
   as permissive for delete to authenticated
-  using (private.can_delete());
+  using ((private.can_delete() AND (NOT private.siu_hidden('vehicle'::text, id))));
 
 create policy vehicles_ins on public.vehicles
   as permissive for insert to authenticated
@@ -9697,12 +9774,12 @@ create policy vehicles_ins on public.vehicles
 
 create policy vehicles_sel on public.vehicles
   as permissive for select to authenticated
-  using (private.is_active());
+  using ((private.is_active() AND (NOT private.siu_hidden('vehicle'::text, id))));
 
 create policy vehicles_upd on public.vehicles
   as permissive for update to authenticated
-  using (private.is_active())
-  with check (private.is_active());
+  using ((private.is_active() AND (NOT private.siu_hidden('vehicle'::text, id))))
+  with check ((private.is_active() AND (NOT private.siu_hidden('vehicle'::text, id))));
 
 create policy wl_del on public.watchlist
   as permissive for delete to authenticated
@@ -10133,6 +10210,43 @@ create policy wl_sel on public.watchlist
 -- public.publish_reading_campaign(uuid, text, jsonb, timestamptz, text),
 -- public.close_reading_campaign(uuid, text),
 -- public.document_ack_summary(uuid),
+-- 20260928120300_siu_visibility_forget: private.siu_visibility_forget()
+-- [trigger fn] with AFTER DELETE triggers persons_visibility_forget,
+-- vehicles_visibility_forget, gangs_visibility_forget and
+-- places_visibility_forget -- siu_visibility.entity_id carries NO foreign key
+-- (it points at one of four registries by entity_type), so without these a
+-- deleted person stranded its ledger row: dead weight, and a row that would
+-- hide a DIFFERENT record if that uuid were ever reused. The audit is
+-- deliberately NOT swept: that SIU compartmented something stays true after the
+-- record is gone. Also public.rls_test_cleanup_visibility() [SECURITY DEFINER,
+-- same caller check as rls_test_cleanup() -- a separate function rather than a
+-- re-emit of that 200-line body, which is how a regression gets introduced into
+-- something no test covers]. Definitive SQL in
+-- supabase/migrations/20260928120300_siu_visibility_forget.sql.
+-- 20260928120000_siu_compartmentation + _registry + _action_precision:
+-- public.siu_visibility and public.siu_visibility_events (both mirrored above
+-- with their SELECT policies; neither has any write policy). New predicates:
+-- private.siu_may_control_visibility() [any active SIU standing plus the Owner
+-- -- NOT the Director, who heads CID and must not authorise release of SIU
+-- material into their own division, and NOT 'oversight', which watches SIU
+-- rather than feeding it to CID], private.siu_hidden(text, uuid) [the conjunct
+-- now carried by the SELECT, UPDATE and DELETE policies of persons, vehicles,
+-- gangs and places -- UPDATE and DELETE too, because a hidden row that still
+-- reports "1 row affected" confirms what the SELECT denied],
+-- private.siu_entity_exists(text, uuid), private.siu_cid_attached(text, uuid)
+-- [enforces the shared-record rule: a person CID already holds does not become
+-- SIU property because SIU opens a file on them], private.siu_side_attached
+-- (text, uuid) [annotates the review queue only; decides nothing] and
+-- private.siu_audience_rank(uuid, uuid). New RPCs, all SECURITY DEFINER with
+-- the standing check in the body: public.siu_mark_origin(text, uuid, text,
+-- uuid), public.siu_reveal_to_cid(text, uuid, text, text[], uuid, uuid),
+-- public.siu_restrict_to_siu(text, uuid, text) and
+-- public.siu_resolve_review(text, uuid, boolean, text). The migration
+-- classifies NOTHING retroactively: it flags the 95 registry records created by
+-- an SIU member as 'unclassified' + needs_review, which does not hide them.
+-- Definitive SQL in supabase/migrations/20260928120000_siu_compartmentation.sql,
+-- 20260928120100_siu_compartmentation_registry.sql and
+-- 20260928120200_siu_visibility_action_precision.sql.
 -- 20260927120000_document_sections: public.document_sections (mirrored above,
 -- with its SELECT policy) plus public.document_sections_index(uuid, jsonb)
 -- [SECURITY DEFINER, the table's only writer -- it takes the anchors and

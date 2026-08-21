@@ -43,6 +43,7 @@ import {
   siuCredibilityLabel, siuCredibilityTint,
   siuReliabilityLabel, siuReviewOutcomeLabel, siuSourceTypeLabel,
 } from '@/lib/siu'
+import { SiuCompartmentsSection } from './SiuCompartments'
 import { SiuDisclosuresSection } from './SiuDisclosures'
 import { SiuIntakeSection } from './SiuIntake'
 import { SiuWatchlistSection } from './SiuWatchlist'
@@ -68,7 +69,8 @@ import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 
 type CaseRow = Tables<'cases'>
 type Section = 'overview' | 'intake' | 'investigations' | 'targets' | 'operations' | 'intelligence'
-  | 'watchlist' | 'tradecraft' | 'disclosure' | 'command' | 'oversight' | 'agents' | 'activity'
+  | 'watchlist' | 'tradecraft' | 'compartments' | 'disclosure' | 'command' | 'oversight'
+  | 'agents' | 'activity'
 type OperationRow = Tables<'operations'>
 
 const SECTIONS = [
@@ -80,6 +82,7 @@ const SECTIONS = [
   { id: 'intelligence' as const, label: 'Intelligence' },
   { id: 'watchlist' as const, label: 'Watchlist' },
   { id: 'tradecraft' as const, label: 'Tradecraft' },
+  { id: 'compartments' as const, label: 'Compartments' },
   { id: 'disclosure' as const, label: 'Released to CID' },
   { id: 'command' as const, label: 'Command' },
   { id: 'oversight' as const, label: 'Oversight' },
@@ -169,6 +172,7 @@ export function SiuView() {
       {section === 'intelligence' && <IntelligenceSection />}
       {section === 'watchlist' && <SiuWatchlistSection />}
       {section === 'tradecraft' && <SiuTradecraftSection />}
+      {section === 'compartments' && <SiuCompartmentsSection />}
       {section === 'disclosure' && <SiuDisclosuresSection />}
       {section === 'command' && <SiuCommandSection />}
       {section === 'oversight' && <SiuOversightSection />}
