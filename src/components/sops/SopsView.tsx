@@ -23,6 +23,7 @@ import { Notice } from '@/components/ui/Notice'
 import { DetailSkeleton } from '@/components/ui/Skeleton'
 import { VIEWS, type LibraryView } from './docModel'
 import type { SuggestChangeContext } from './docSuggestions'
+import { AskLibrary } from './AskLibrary'
 import { LibraryShelf } from './LibraryShelf'
 
 // Lazy reader (RichEditor pattern) — full document bodies, versions and the
@@ -132,7 +133,14 @@ export function SopsView() {
   }
 
   return (
-    <>
+    <div className="space-y-5">
+      {/* Retrieval, not generation: real sections of real documents, cited and
+          version-stamped, bounded by the asker's own RLS. Nothing is sent
+          anywhere and nothing is written, so it cannot invent a rule. */}
+      <AskLibrary onOpenSection={(id, anchor) => {
+        setParams({ doc: id }, true)
+        window.location.hash = anchor
+      }} />
       <LibraryShelf
         view={view}
         q={q}
@@ -152,6 +160,6 @@ export function SopsView() {
         onReindex={() => void reindexAll()}
       />
       {suggestModal}
-    </>
+    </div>
   )
 }

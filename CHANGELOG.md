@@ -8,6 +8,48 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Ask the library — retrieval, not generation
+
+The portal has **no AI infrastructure**: no server-side model, no embeddings, no
+vector store. The one thing calling itself an assistant is an Owner-only
+page-agent that ships inert and, when configured, sends whatever is on screen to
+an external LLM — which is precisely what must not happen to document content.
+
+So this answers by **retrieval**. Ask a question in ordinary language and it
+returns the actual sections of the actual documents, quoted from the database,
+each cited with its document, section heading, version and effective date, and
+linked straight to the paragraph. It cannot invent a legal requirement because
+it never writes a sentence, and no document text leaves the database because
+there is nowhere for it to go. The honest limit, stated on the panel: it finds
+**where something is written**, not what it means.
+
+**Confirmed and possible are kept visibly apart.** Two passes over the same
+RLS-bounded search: sections containing *everything* asked about, and sections
+mentioning *some* of it — labelled "Possibly relevant… this is not an answer".
+A tool that presented both with equal confidence would be worse than no tool,
+because people would stop checking.
+
+When neither pass returns anything, the answer is **"No confirmed answer
+found"**, naming the words it searched — and saying explicitly that this is *not
+the same as "no such rule exists"*, it means the library does not record one.
+
+**The access proof.** The SIU-classified SOP and its 19 sections, probed live
+across every role available in this database:
+
+| Role | Document | Sections | Search |
+|---|---|---|---|
+| Owner | 1 | 19 | 2 |
+| Director | 0 | 0 | 0 |
+| Bureau lead | 0 | 0 | 0 |
+| SIU Special Agent in Charge | 1 | 19 | 2 |
+| Detective (LSB and BCB) | 0 | 0 | 0 |
+| Field-intelligence submitter | 0 | 0 | 0 |
+
+Rank does not open it: a Director and a Bureau Lead see nothing. Every path
+agrees because they are the same path — the table, the search RPC and the
+assistant all resolve through the owning document's own RLS, so there is no
+route that reaches further than the reader could by hand.
+
 ### The Penal Code becomes browsable
 
 359 statutes in one flat searchable list: fine if you already knew the code you
