@@ -17,7 +17,7 @@ import {
   SIU_OPERATION_CATEGORIES, SIU_PRIORITY_DESIGNATIONS,
   siuDesignationLabel, siuNoteTypeLabel, siuOperationCategoryLabel,
   siuAssignableClassifications, siuCanAppoint, siuCanAppointRole, siuCanReadCid,
-  siuCanRemove, siuCaseAccess, siuCaseReadOnly, mayCreateCidCase, siuIsAgent, siuIsCommand, siuOperates, siuStanding,
+  siuCanRemove, siuCaseAccess, siuCaseReadOnly, siuIsAgent, siuIsCommand, siuOperates, siuStanding,
   siuMayRequestAccess, siuAccessStatusLabel,
   SIU_ACCESS_REQUEST_STATUSES, SIU_ACCESS_REQUEST_STATUS_LABEL,
   siuAuditLabel, siuCallsign, siuClassificationLabel, siuRoleLabel,
@@ -1021,13 +1021,12 @@ describe('cross-department write gates — read is not write', () => {
   const cidCase = { case_authority: 'cid' }
   const siuCase = { case_authority: 'siu' }
 
-  it('makes every CID case read-only for an SIU department member', () => {
-    // The server refuses these by matching ZERO ROWS, not by erroring — so an
-    // Edit control left visible would appear to save and change nothing. This
-    // is the client half of can_access_case()'s `not is_siu_department()`.
+  it('no longer makes a CID case read-only for an SIU member', () => {
+    // It used to, mirroring can_access_case()'s `not is_siu_department()`.
+    // That conjunct is gone, so an SIU member works CID like anyone else and a
+    // read-only badge here would contradict a database that accepts the edit.
     const agent = { department: 'siu' as const, standing: 'special_agent' as const }
-    expect(siuCaseReadOnly(agent, cidCase)).toBe(true)
-    // …and their OWN department's work is untouched.
+    expect(siuCaseReadOnly(agent, cidCase)).toBe(false)
     expect(siuCaseReadOnly(agent, siuCase)).toBe(false)
   })
 
@@ -1047,7 +1046,9 @@ describe('cross-department write gates — read is not write', () => {
     expect(siuCaseReadOnly(cid, siuCase)).toBe(false)
     // A missing authority reads as CID, like caseDepartment() everywhere else.
     expect(siuCaseReadOnly(cid, {})).toBe(false)
-    expect(siuCaseReadOnly({ department: 'siu', standing: 'special_agent' }, {})).toBe(true)
+    // A missing authority reads as a CID case, which is now editable by an
+    // SIU member like any other.
+    expect(siuCaseReadOnly({ department: 'siu', standing: 'special_agent' }, {})).toBe(false)
   })
 
   it('keeps the owner writing CID cases while they browse the SIU workspace', () => {
@@ -1057,15 +1058,23 @@ describe('cross-department write gates — read is not write', () => {
     const owner = { department: 'cid' as const, standing: 'owner' as const }
     expect(siuCaseReadOnly(owner, cidCase)).toBe(false)
     expect(siuCaseReadOnly(owner, siuCase)).toBe(false)
-    expect(mayCreateCidCase('cid')).toBe(true)
   })
 
-  it('withholds CID case creation from SIU department members', () => {
-    // can_create_case() never excluded them, but the guard trigger forces
-    // case_authority='cid' and can_access_case() then locks them out of what
-    // they just made. Creating a case that vanishes is worse than no button.
-    expect(mayCreateCidCase('siu')).toBe(false)
-    expect(mayCreateCidCase('cid')).toBe(true)
+  it('lets every active SIU rank work a CID case', () => {
+    // It used to be read-only: can_access_case() excluded the SIU department,
+    // so an SIU member would edit a CID case and match zero rows. The exclusion
+    // is gone (siu_members_work_cid), so the control is real.
+    for (const r of ['special_agent', 'senior_special_agent', 'special_agent_in_charge', 'owner'] as const) {
+      expect(siuCaseReadOnly({ department: 'siu', standing: r }, cidCase), r).toBe(false)
+    }
+  })
+
+  it('keeps oversight out of SIU work without touching their CID rights', () => {
+    // The Attorney General supervises SIU and works none of its
+    // investigations. Their CID rights come from their own CID role, and this
+    // gate must not quietly strip them.
+    expect(siuCaseReadOnly({ department: 'cid', standing: 'oversight' }, siuCase)).toBe(true)
+    expect(siuCaseReadOnly({ department: 'cid', standing: 'oversight' }, cidCase)).toBe(false)
   })
 })
 

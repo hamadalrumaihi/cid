@@ -31,14 +31,31 @@ import {
 } from './caseCharges'
 
 const MIGRATION = 'supabase/migrations/20260905130000_case_charges.sql'
+/** The migration that removed command review and re-emitted the constraint. */
+const APPROVAL_REMOVED =
+  'supabase/migrations/20261001120000_charges_need_no_command_approval.sql'
 
 describe('the vocabulary matches the database constraint', () => {
   it('lists exactly the statuses case_charges_status_check allows', () => {
-    const sql = readFileSync(MIGRATION, 'utf8')
-    const block = /status text not null default 'proposed' check \(status in \(([\s\S]*?)\)\)/.exec(sql)
+    // 20261001120000 re-emitted the constraint when command review was removed,
+    // so it -- not the table's original migration -- is now the authority on
+    // which statuses exist. Reading the wrong file would let the client
+    // vocabulary drift from the database without this test noticing.
+    const sql = readFileSync(APPROVAL_REMOVED, 'utf8')
+    const block = /add constraint case_charges_status_check\s*\n\s*check \(status in \(([\s\S]*?)\)\)/.exec(sql)
     expect(block, 'the status check constraint moved or was renamed').not.toBeNull()
     const fromSql = [...block![1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort()
     expect(fromSql).toEqual([...CASE_CHARGE_STATUSES].sort())
+  })
+
+  it('no longer admits the two command-queue states', () => {
+    // They existed solely to hold a charge in a Bureau Lead's queue. Removed
+    // from the CHECK, not merely made unreachable -- a state nothing can enter
+    // but the constraint still admits is an invitation for something to write
+    // it later.
+    const all = [...CASE_CHARGE_STATUSES] as string[]
+    expect(all).not.toContain('proposed')
+    expect(all).not.toContain('under_review')
   })
 
   it('gives every status a label and a meaning', () => {
@@ -78,26 +95,27 @@ describe('the transition table mirrors private.case_charge_transition_ok()', () 
     }
   })
 
-  it('refuses the moves that would skip review or the court', () => {
-    expect(caseChargeCanMove('proposed', 'convicted')).toBe(false)
-    expect(caseChargeCanMove('proposed', 'approved')).toBe(false)
-    expect(caseChargeCanMove('proposed', 'filed')).toBe(false)
+  it('still refuses the moves that would skip the court', () => {
+    // Removing INTERNAL command review did not open the court lane. A charge
+    // cannot leap from the case straight to a conviction.
     expect(caseChargeCanMove('approved', 'convicted')).toBe(false)
+    expect(caseChargeCanMove('approved', 'dismissed')).toBe(false)
     // and cannot resurrect a finished charge
-    expect(caseChargeCanMove('convicted', 'proposed')).toBe(false)
-    expect(caseChargeCanMove('withdrawn', 'proposed')).toBe(false)
+    expect(caseChargeCanMove('convicted', 'approved')).toBe(false)
+    expect(caseChargeCanMove('withdrawn', 'approved')).toBe(false)
     expect(caseChargeCanMove('dismissed', 'filed')).toBe(false)
   })
 
-  it('allows the review return path', () => {
-    // A reviewer sending a charge back for rework is a legal move, not a
-    // withdrawal — losing it would force reviewers to reject outright.
-    expect(caseChargeCanMove('under_review', 'proposed')).toBe(true)
+  it('has no command-review stage left to pass through', () => {
+    // 'proposed' and 'under_review' existed solely to hold a charge in a
+    // command queue. They are gone from the type, so this is really a
+    // compile-time assertion; the runtime check is that nothing reintroduces
+    // them as a reachable state.
+    const reachable = new Set(CASE_CHARGE_STATUSES.flatMap((s) => [...caseChargeNext(s)]))
+    expect([...reachable].sort()).toEqual(['convicted', 'dismissed', 'filed', 'withdrawn'])
   })
 
-  it('allows withdrawal from every pre-court stage and none after', () => {
-    expect(caseChargeCanMove('proposed', 'withdrawn')).toBe(true)
-    expect(caseChargeCanMove('under_review', 'withdrawn')).toBe(true)
+  it('allows withdrawal before the court and never after', () => {
     expect(caseChargeCanMove('approved', 'withdrawn')).toBe(true)
     // Once it is before a court, only the court disposes of it.
     expect(caseChargeCanMove('filed', 'withdrawn')).toBe(false)
@@ -105,27 +123,37 @@ describe('the transition table mirrors private.case_charge_transition_ok()', () 
 })
 
 describe('who makes each move', () => {
-  it('routes approval and filing away from the case for both lanes', () => {
-    expect(caseChargeActor('approved')).toBe('command')
+  it('keeps the COURT away from the case, but not command', () => {
+    // Adding a charge is ordinary casework now. Filing and disposing are not,
+    // and removing internal command review did nothing to those.
+    expect(caseChargeActor('approved')).toBe('case')
+    expect(caseChargeActor('withdrawn')).toBe('case')
     expect(caseChargeActor('filed')).toBe('attorney')
     expect(caseChargeActor('convicted')).toBe('judge')
     expect(caseChargeActor('dismissed')).toBe('judge')
   })
 
-  it('never names a CID Bureau Lead or a prosecutor on an SIU case', () => {
-    // The standing rule: SIU goes Special Agent -> X-1 -> Attorney General ->
-    // Judge, and never through a CID Bureau Lead or a prosecutor queue.
-    const siuApprove = caseChargeActorLabel('approved', true)
+  it('never names a CID prosecutor on an SIU case', () => {
+    // The SIU court lane still goes to the Attorney General, never a
+    // prosecutor queue. Only the command step in front of it was removed.
     const siuFile = caseChargeActorLabel('filed', true)
-    expect(siuApprove).toContain('X-1')
-    expect(siuApprove).not.toMatch(/bureau lead/i)
     expect(siuFile).toContain('Attorney General')
     expect(siuFile).not.toMatch(/prosecut/i)
   })
 
-  it('names the CID authorities on a CID case', () => {
-    expect(caseChargeActorLabel('approved', false)).toMatch(/bureau lead/i)
+  it('names nobody in command for adding a charge, in either lane', () => {
+    for (const siu of [true, false]) {
+      const label = caseChargeActorLabel('approved', siu)
+      expect(label).toBe('anyone working the case')
+      expect(label).not.toMatch(/bureau lead|X-1|command/i)
+    }
+  })
+
+  it('names the CID prosecutor on a CID case', () => {
+    // The Bureau Lead is gone from this sentence because they are gone from
+    // the workflow. The prosecutor is not.
     expect(caseChargeActorLabel('filed', false)).toMatch(/prosecut/i)
+    expect(caseChargeActorLabel('approved', false)).not.toMatch(/bureau lead/i)
   })
 })
 
@@ -164,7 +192,7 @@ describe('totals', () => {
     charges: 2, counts: 3, months: 120, fine: 270000,
     judge_jail_pending: 0, judge_fine_pending: 0,
     rico: 0, modifiers: 0, convicted: 0,
-    cap_months: null, over_cap: null, by_status: { proposed: 2 },
+    cap_months: null, over_cap: null, by_status: { approved: 2 },
   }
 
   it('flags a total as provisional while a judge has yet to rule', () => {
@@ -190,8 +218,7 @@ describe('totals', () => {
 describe('status ordering', () => {
   it('lists the workflow in order, so a UI can render it as a track', () => {
     const order: CaseChargeStatus[] = [
-      'proposed', 'under_review', 'approved', 'filed',
-      'convicted', 'dismissed', 'withdrawn',
+      'approved', 'filed', 'convicted', 'dismissed', 'withdrawn',
     ]
     expect([...CASE_CHARGE_STATUSES]).toEqual(order)
   })

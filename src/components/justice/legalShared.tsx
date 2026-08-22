@@ -260,6 +260,7 @@ export function buildLegalViewer(
     myId: p?.id ?? null,
     cidActive: p?.active ?? false,
     cidRole: p?.role ?? null,
+    cidDivision: p?.division ?? null,
     justiceRole: justiceRole !== undefined ? justiceRole : effectiveJusticeRole(auth.justiceRole),
     isOwner: auth.isOwner,
     prosecutorBureaus,

@@ -565,20 +565,18 @@ export function siuCaseReadOnly(
   viewer: { department: Department; standing: SiuStanding | null },
   caseRow: { case_authority?: string | null },
 ): boolean {
-  if (caseDepartment(caseRow) === 'cid') return viewer.department === 'siu'
+  // A CID case is read-only for NOBODY on account of SIU standing any more.
+  // An active SIU member is an ordinary investigator there --
+  // private.can_access_case() admits them directly (siu_members_work_cid) --
+  // and oversight is not an SIU member at all: the Attorney General's CID
+  // rights come from their own CID role and were never this gate's business.
+  // Returning true here for oversight would silently strip those.
+  if (caseDepartment(caseRow) === 'cid') return false
+  // An SIU investigation is still read-only for oversight: they read the
+  // unit's work and do none of it.
   return viewer.standing === 'oversight'
 }
 
-/** May this viewer create a CID case? An SIU department member technically
- *  can — `private.can_create_case()` never excluded them — but the case is
- *  forced to `case_authority = 'cid'` by the guard trigger, and
- *  `can_access_case()` then refuses them access to it. They would create a
- *  case and watch it vanish. Offering the control is worse than not.
- *
- *  NOTE this is a UX guard over a real server-side oddity, not a fix for it:
- *  the INSERT itself is still permitted. Recorded rather than quietly patched,
- *  because changing `can_create_case()` touches CID's own create path. */
-export const mayCreateCidCase = (department: Department) => department !== 'siu'
 
 /** §14. Who may work the intake queue. Field standing only, NOT oversight: a
  *  referral may name the Director of CID, and reading the queue would hand its
