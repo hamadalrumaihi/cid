@@ -247,7 +247,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
     && status === 'submitted_to_doj' && (!me || r.assigned_ada_id !== me)
   const currentVersion = versions.find((x) => x.id === r.current_version_id) ?? versions[0] ?? null
 
-  const viewer = buildLegalViewer(auth, prosecutorBureaus, dojRole)
+  const viewer = buildLegalViewer(auth, prosecutorBureaus, dojRole, siu.isCommand)
   const disposition = dispositionFor(r, viewer, now)
   // "Current owner" — the named holder when one exists, else the responsible
   // role (the queue, the bench, the investigator, …).

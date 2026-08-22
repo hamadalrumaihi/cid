@@ -139,7 +139,7 @@ export function DocHistoryModal({ doc, canEdit, onClose, onChanged }: {
                         <span aria-hidden className="absolute left-[6px] top-4 -bottom-3 w-px bg-white/10" />
                       )}
                       <span aria-hidden className={`absolute left-[2px] top-3 h-3 w-3 rounded-full border-2 ${latest ? 'border-badge-500 bg-badge-500/30' : 'border-white/20 bg-ink-900'}`} />
-                      <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-3">
+                      <div className="rounded-lg border border-white/5 bg-ink-900/60 p-3">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-mono text-xs font-bold text-blue-300">v{v.version_number ?? '?'}</span>
                           {latest && <Badge tone="accent">Latest</Badge>}
@@ -176,7 +176,7 @@ export function DocHistoryModal({ doc, canEdit, onClose, onChanged }: {
           </section>
 
           {restoreTarget && (
-            <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+            <section className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
               <h4 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-amber-300">
                 Restore {vName(restoreTarget)}
               </h4>

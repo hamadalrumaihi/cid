@@ -103,10 +103,11 @@ export const NAV_CATEGORIES: NavCategory[] = [
  *     indicators, media, and the analysis screens over them) are one master
  *     dataset for the platform. SIU reads and writes them exactly as CID does;
  *     their policies are `private.is_active()`.
- *   * CASE SURFACES are readable via the SIU read superset
- *     (`private.siu_oversight_read()` → `can_read_case`) and NOT writable —
- *     `can_access_case()`'s CID branch ends with `not is_siu_department()`.
- *     The case screen renders read-only accordingly (`useSiu().caseReadOnly`).
+ *   * CASE SURFACES are fully workable: since siu_members_work_cid
+ *     (20261001120200) an ACTIVE SIU member is admitted by
+ *     `private.can_access_case()` directly and works CID cases as an
+ *     ordinary investigator. Only oversight standing (the AG's SIU hat)
+ *     remains read-only on the unit's own investigations.
  *   * OWNER/COMMAND-ONLY surfaces (audit, devdocs, and the command staff parts
  *     of Central Command) self-gate exactly as they do for a CID detective who
  *     lacks the rank. An SIU account sees the ordinary nothing-here surface,

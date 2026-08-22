@@ -13,7 +13,7 @@ import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
-import { XMarkIcon } from '@/components/shell/icons'
+import { AlertIcon, GangIcon, PersonIcon, RadioIcon, VehicleIcon, XMarkIcon } from '@/components/shell/icons'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -155,8 +155,8 @@ export function VehiclesView() {
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-                  {owner ? <span className="rounded-md bg-blue-500/10 px-2 py-1 text-blue-300">👤 {owner}</span> : <span className="rounded-md bg-white/5 px-2 py-1 text-slate-500">owner unknown</span>}
-                  {gang && <span className="rounded-md bg-violet-500/10 px-2 py-1 text-violet-300">🚩 {gang}</span>}
+                  {owner ? <span className="inline-flex items-center gap-1 rounded-md bg-blue-500/10 px-2 py-1 text-blue-300"><PersonIcon size={11} />{owner}</span> : <span className="rounded-md bg-white/5 px-2 py-1 text-slate-500">owner unknown</span>}
+                  {gang && <span className="inline-flex items-center gap-1 rounded-md bg-violet-500/10 px-2 py-1 text-violet-300"><GangIcon size={11} />{gang}</span>}
                 </div>
                 {v.notes && <p className="mt-3 text-xs text-slate-400">{v.notes}</p>}
               </Card>
@@ -277,7 +277,7 @@ export function VehicleModal({ record, persons, gangs, onClose, onSaved }: {
    more different cases. A failed scan shows a Retry banner — it must never
    masquerade as an authoritative "no matches" (dangerous false negative). */
 
-interface CrossrefAlert { icon: string; label: string; kind: string; cases: string[] }
+interface CrossrefAlert { icon: React.ReactNode; label: string; kind: string; cases: string[] }
 
 function CrossrefPanel({ vehicles, persons, ownerName }: {
   vehicles: VehicleRow[]
@@ -326,7 +326,7 @@ function CrossrefPanel({ vehicles, persons, ownerName }: {
         for (const ph of new Set(m)) (phoneCases[ph] = phoneCases[ph] ?? new Set()).add(cid)
       }
       for (const [ph, s] of Object.entries(phoneCases)) {
-        if (s.size >= 2) found.push({ icon: '📞', label: ph, kind: 'Phone number', cases: [...s] })
+        if (s.size >= 2) found.push({ icon: <RadioIcon size={13} className="inline align-[-2px]" />, label: ph, kind: 'Phone number', cases: [...s] })
       }
 
       // Registered plates mentioned in 2+ cases' reports.
@@ -336,7 +336,7 @@ function CrossrefPanel({ vehicles, persons, ownerName }: {
         const hits = caseIds.filter((cid) => re.test(textByCase[cid].toUpperCase()))
         if (hits.length >= 2) {
           const owner = ownerName(v.owner_id)
-          found.push({ icon: '🚗', label: v.plate + (owner ? ` — ${owner}` : ''), kind: 'Registered plate', cases: hits })
+          found.push({ icon: <VehicleIcon size={13} className="inline align-[-2px]" />, label: v.plate + (owner ? ` — ${owner}` : ''), kind: 'Registered plate', cases: hits })
         }
       }
 
@@ -347,7 +347,7 @@ function CrossrefPanel({ vehicles, persons, ownerName }: {
       }
       for (const [pid, s] of Object.entries(personCases)) {
         if (s.size < 2) continue
-        found.push({ icon: '👤', label: persons.find((p) => p.id === pid)?.name ?? 'Linked person', kind: 'Person in multiple cases', cases: [...s] })
+        found.push({ icon: <PersonIcon size={13} className="inline align-[-2px]" />, label: persons.find((p) => p.id === pid)?.name ?? 'Linked person', kind: 'Person in multiple cases', cases: [...s] })
       }
 
       setAlerts(found)
@@ -378,7 +378,7 @@ function CrossrefPanel({ vehicles, persons, ownerName }: {
   }
   return (
     <div className="mb-6">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-amber-300/80">⚡ Cross-reference alerts ({alerts.length})</p>
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-amber-300/80"><AlertIcon size={12} className="inline align-[-2px]" /> Cross-reference alerts ({alerts.length})</p>
       <div className="space-y-2">
         {alerts.map((a, i) => (
           <div key={`${a.kind}:${a.label}:${i}`} className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">

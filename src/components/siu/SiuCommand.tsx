@@ -146,7 +146,7 @@ export function SiuCommandSection() {
                   <tr key={w.user_id} className="border-t border-white/5">
                     <td className="py-2 pr-3">
                       <span className="text-slate-100">{w.display_name ?? 'Unknown'}</span>
-                      <span className="ml-2 text-[10px] text-slate-500">
+                      <span className="ml-2 text-[11px] text-slate-500">
                         {w.callsign ? `${w.callsign} · ` : ''}{siuRoleLabel(w.siu_role)}
                       </span>
                     </td>

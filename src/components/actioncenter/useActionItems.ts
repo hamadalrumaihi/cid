@@ -22,6 +22,7 @@ import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { pendingMembership, type JusticeRequestLite } from '@/components/command-center/lib/membershipPending'
 import { buildLegalViewer, useMyProsecutorBureaus } from '@/components/justice/legalShared'
+import { useSiu } from '@/lib/useSiu'
 
 /* Column projections — each mirrors its Ac* Pick in lib/actionItems exactly
  * (the model documents that the loader builds selects from those lists).
@@ -121,6 +122,7 @@ export interface ActionItemsResult {
 
 export function useActionItems(): ActionItemsResult {
   const auth = useAuth()
+  const siu = useSiu()
   const { profile, state, isCommand, isOwner, justiceRole } = auth
   // The legal branch's disposition viewer needs live prosecutor bureaus so
   // bureau-awareness rows are recognised (and never shown as assigned work).
@@ -304,7 +306,7 @@ export function useActionItems(): ActionItemsResult {
         accessRequests,
         membershipPending,
         legal,
-        legalViewer: buildLegalViewer(auth, prosecutorBureaus),
+        legalViewer: buildLegalViewer(auth, prosecutorBureaus, undefined, siu.isCommand),
         justiceRole: effectiveJusticeRole(justiceMembershipRows, nowMs),
         memberTransfers,
         blockers,
@@ -324,7 +326,7 @@ export function useActionItems(): ActionItemsResult {
     } finally {
       setRefreshing(false)
     }
-  }, [state, profile, isCommand, isOwner, justiceRole, fetchProfiles, auth, prosecutorBureaus])
+  }, [state, profile, isCommand, isOwner, justiceRole, fetchProfiles, auth, prosecutorBureaus, siu.isCommand])
 
   useEffect(() => {
     // A version-driven refetch fans out ~13 queries — pointless while the tab

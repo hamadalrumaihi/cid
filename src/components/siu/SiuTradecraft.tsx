@@ -125,7 +125,7 @@ function SourcesLane() {
         <ul className="mt-3 space-y-2">
           {rows.map((r) => (
             <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] p-3">
-              <span className="font-mono text-sm font-semibold tracking-wide text-violet-200">{r.codename}</span>
+              <span className="font-mono text-sm font-semibold tracking-wide text-slate-100">{r.codename}</span>
               <Badge tint={statusTint(r.status)}>{siuSourceStatusLabel(r.status)}</Badge>
               <Badge tone="neutral">{siuReliabilityLabel(r.reliability)}</Badge>
               {r.tasking && <span className="text-xs text-slate-400">{r.tasking}</span>}

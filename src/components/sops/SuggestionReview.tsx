@@ -216,7 +216,7 @@ function SuggestionDrawer({ suggestion, docName, allSuggestions, canManage, onOp
         </p>
 
         {/* Target document */}
-        <div className="mt-4 rounded-xl border border-white/10 bg-ink-900/60 px-4 py-3">
+        <div className="mt-4 rounded-lg border border-white/10 bg-ink-900/60 px-4 py-3">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Target</p>
           {s.document_id ? (
             <button
@@ -249,7 +249,7 @@ function SuggestionDrawer({ suggestion, docName, allSuggestions, canManage, onOp
 
         {/* Decision controls (managers only) */}
         {canManage && (
-          <section className="mt-5 space-y-4 rounded-xl border border-white/10 bg-ink-900/40 p-4">
+          <section className="mt-5 space-y-4 rounded-lg border border-white/10 bg-ink-900/40 p-4">
             <SectionHeader title="Review decision" className="!mb-0" />
             <p className="text-xs text-slate-400">
               Recording a decision does not edit the SOP. Accepting assigns a responsible editor; the change is made
@@ -470,7 +470,6 @@ export function SuggestionReview({ onBack, onOpenDoc, openId }: {
         <CardGridSkeleton cols="sm:grid-cols-2 xl:grid-cols-3" />
       ) : rows.length === 0 ? (
         <EmptyState
-          icon="🗂"
           title="No suggestions yet"
           hint="Improvement requests from readers appear here for review."
         />

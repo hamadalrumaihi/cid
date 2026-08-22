@@ -156,7 +156,7 @@ function CategoryPill({ label, active, onClick }: { label: string; active: boole
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={`min-h-[40px] rounded-full border px-4 py-1.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-500 ${
+      className={`min-h-[40px] rounded-md border px-4 py-1.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-500 ${
         active ? CHIP_ON : CHIP_OFF
       }`}
     >
@@ -233,7 +233,7 @@ function FilterPopover({ filters, sort, activeCount, onFilters, onSort, onClear 
       >
         <span aria-hidden>⚙</span> Filters
         {activeCount > 0 && (
-          <span className="rounded-full bg-badge-500 px-1.5 text-[11px] font-bold tabular-nums text-ink-950">{activeCount}</span>
+          <span className="rounded bg-badge-500 px-1.5 text-[11px] font-bold tabular-nums text-ink-950">{activeCount}</span>
         )}
       </button>
       {open && (
@@ -242,7 +242,7 @@ function FilterPopover({ filters, sort, activeCount, onFilters, onSort, onClear 
           role="dialog"
           aria-label="Filter and sort documents"
           onKeyDown={onPanelKey}
-          className="absolute right-0 z-30 mt-2 w-[min(20rem,90vw)] space-y-3 rounded-2xl border border-white/10 bg-ink-850 p-4 shadow-glow"
+          className="absolute right-0 z-30 mt-2 w-[min(20rem,90vw)] space-y-3 rounded-lg border border-white/10 bg-ink-850 p-4 shadow-glow"
         >
           <Field label="Type">
             {(id) => (
@@ -278,7 +278,7 @@ function FilterPopover({ filters, sort, activeCount, onFilters, onSort, onClear 
                     type="button"
                     aria-pressed={on}
                     onClick={() => setBool(t.key, !on)}
-                    className={`min-h-[36px] rounded-full border px-3 py-1 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-500 ${on ? CHIP_ON : CHIP_OFF}`}
+                    className={`min-h-[36px] rounded-md border px-3 py-1 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-500 ${on ? CHIP_ON : CHIP_OFF}`}
                   >
                     {t.label}
                   </button>
@@ -502,7 +502,7 @@ export function LibraryShelf({
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search the library"
           placeholder="Search titles and document content…"
-          className="min-h-[48px] w-full rounded-xl border border-white/10 bg-ink-850 px-4 py-3 text-sm text-slate-200 outline-none transition focus:border-badge-500"
+          className="min-h-[48px] w-full rounded-lg border border-white/10 bg-ink-850 px-4 py-3 text-sm text-slate-200 outline-none transition focus:border-badge-500"
         />
       </div>
 

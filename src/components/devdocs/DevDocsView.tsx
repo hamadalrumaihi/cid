@@ -24,11 +24,6 @@ interface Content { pages: HandbookPage[]; updated: string }
 
 interface SearchResult { slug: string; title: string; section: string; anchor: string | null; context: string }
 
-const SECTION_ICON: Record<string, string> = {
-  'Getting started': '🧭', 'The codebase': '🗂', 'Features & pages': '🧩',
-  'Data & API': '🗄', 'Security & auth': '🛡', 'Working on it': '🔧', 'Reference': '📖',
-}
-
 export function DevDocsView() {
   const { state, isOwner } = useAuth()
   const router = useRouter()
@@ -112,7 +107,7 @@ export function DevDocsView() {
   if (state !== 'in') return <Notice text="Sign in to view the Developer Handbook." />
   if (!isOwner) {
     return (
-      <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-amber-200">
+      <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-amber-200">
         Restricted — the Developer Handbook is owner-only.
       </div>
     )
@@ -127,7 +122,7 @@ export function DevDocsView() {
       {/* breadcrumbs + search */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-slate-400">
-          <button onClick={() => goTo('home', null)} className="font-bold text-slate-300 hover:text-white">📘 Developer Handbook</button>
+          <button onClick={() => goTo('home', null)} className="font-bold text-slate-300 hover:text-white">Developer Handbook</button>
           {page && <><span aria-hidden className="text-slate-600">/</span><span>{page.section}</span><span aria-hidden className="text-slate-600">/</span><span className="font-semibold text-white">{page.title}</span></>}
           {!page && slug !== 'home' && <><span aria-hidden className="text-slate-600">/</span><span className="text-rose-300">unknown page</span></>}
         </nav>
@@ -144,7 +139,7 @@ export function DevDocsView() {
             />
           </div>
           {results.length > 0 && (
-            <div className="absolute right-0 top-full z-20 mt-1 max-h-80 w-full overflow-y-auto rounded-xl border border-white/10 bg-ink-900 p-1 shadow-2xl sm:w-96">
+            <div className="absolute right-0 top-full z-20 mt-1 max-h-80 w-full overflow-y-auto rounded-lg border border-white/10 bg-ink-900 p-1 shadow-2xl sm:w-96">
               {results.map((r, i) => (
                 <button
                   key={`${r.slug}-${i}`}
@@ -165,12 +160,12 @@ export function DevDocsView() {
         <button
           onClick={() => setNavOpen((v) => !v)}
           aria-expanded={navOpen}
-          className="w-full rounded-xl border border-white/10 bg-ink-900/60 px-4 py-2.5 text-left text-sm font-bold text-white"
+          className="w-full rounded-lg border border-white/10 bg-ink-900/60 px-4 py-2.5 text-left text-sm font-bold text-white"
         >
           ☰ {page ? page.title : 'Handbook home'} <span className="float-right text-slate-500">{navOpen ? '▲' : '▼'}</span>
         </button>
         {navOpen && (
-          <div className="mt-2 rounded-xl border border-white/10 bg-ink-900/90 p-3">
+          <div className="mt-2 rounded-lg border border-white/10 bg-ink-900/90 p-3">
             <DocsNav sections={sections} active={slug} onGo={goTo} />
           </div>
         )}
@@ -196,7 +191,7 @@ export function DevDocsView() {
 }
 
 function Notice({ text }: { text: string }) {
-  return <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
+  return <div className="rounded-lg border border-white/5 bg-ink-900/60 p-8 text-center text-sm text-slate-400">{text}</div>
 }
 
 /* ---- sidebar --------------------------------------------------------- */
@@ -212,13 +207,11 @@ function DocsNav({ sections, active, onGo }: {
         onClick={() => onGo('home', null)}
         className={`block w-full rounded-lg px-3 py-1.5 text-left text-xs font-bold transition ${active === 'home' ? 'bg-blue-500/15 text-white' : 'text-slate-300 hover:bg-white/5'}`}
       >
-        🏠 Home
+        Home
       </button>
       {sections.map((s) => (
         <div key={s.title}>
-          <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-            <span aria-hidden>{SECTION_ICON[s.title] ?? '·'}</span> {s.title}
-          </p>
+          <p className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">{s.title}</p>
           <div className="space-y-0.5">
             {s.pages.map((p) => (
               <button
@@ -242,12 +235,12 @@ function DocsNav({ sections, active, onGo }: {
 const STACK = ['Next.js 16', 'React 19', 'TypeScript', 'Tailwind v4', 'Supabase', 'zustand', 'React Flow', '@react-pdf', 'Tiptap', 'vitest']
 
 const QUICK_LINKS: { slug: string; anchor: string | null; label: string; sub: string }[] = [
-  { slug: 'learning-path', anchor: null, label: '🧭 Learning Path', sub: 'New here? Start with the first-two-weeks checklist.' },
-  { slug: 'change-impact', anchor: null, label: '⚠️ Change Impact', sub: '"If I change X, what else must I check?"' },
-  { slug: 'debugging', anchor: null, label: '🔧 Debugging', sub: 'Symptom → likely cause → where to look.' },
-  { slug: 'database', anchor: null, label: '🗄 Database', sub: 'All 47 tables, policies, triggers.' },
-  { slug: 'faq', anchor: null, label: '❓ FAQ', sub: 'First-week questions, answered for this repo.' },
-  { slug: 'dependency-map', anchor: null, label: '🕸 Dependency Explorer', sub: 'What depends on what — interactive.' },
+  { slug: 'learning-path', anchor: null, label: 'Learning Path', sub: 'New here? Start with the first-two-weeks checklist.' },
+  { slug: 'change-impact', anchor: null, label: 'Change Impact', sub: '"If I change X, what else must I check?"' },
+  { slug: 'debugging', anchor: null, label: 'Debugging', sub: 'Symptom → likely cause → where to look.' },
+  { slug: 'database', anchor: null, label: 'Database', sub: 'All 47 tables, policies, triggers.' },
+  { slug: 'faq', anchor: null, label: 'FAQ', sub: 'First-week questions, answered for this repo.' },
+  { slug: 'dependency-map', anchor: null, label: 'Dependency Explorer', sub: 'What depends on what — interactive.' },
 ]
 
 function HomePage({ content, sections, onGo }: {
@@ -257,7 +250,7 @@ function HomePage({ content, sections, onGo }: {
 }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <div className="rounded-lg border border-white/5 bg-ink-900/60 p-6">
         <p className="t-readout mb-3 inline-flex items-center gap-2 rounded border border-blue-400/20 bg-blue-500/10 px-2 py-1 text-[10px] uppercase tracking-widest text-blue-200">
           <span className="t-dot t-dot-cyan" /> Internal documentation · updated {content.updated}
         </p>
@@ -273,9 +266,9 @@ function HomePage({ content, sections, onGo }: {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <div className="rounded-lg border border-white/5 bg-ink-900/60 p-6">
         <h3 className="mb-3 text-sm font-black uppercase tracking-wider text-slate-400">Architecture at a glance</h3>
-        <pre className="overflow-x-auto rounded-xl border border-white/10 bg-ink-950 p-4 font-mono text-[11px] leading-relaxed text-slate-300">{`┌───────────────────────────┐         ┌──────────────────────────────┐
+        <pre className="overflow-x-auto rounded-lg border border-white/10 bg-ink-950 p-4 font-mono text-[11px] leading-relaxed text-slate-300">{`┌───────────────────────────┐         ┌──────────────────────────────┐
 │  The web app (this repo)  │  HTTPS  │  Supabase (hosted backend)   │
 │  Next.js + React + TS     │ ──────► │  Postgres DB + Auth +        │
 │  runs in the browser,     │ ◄────── │  auto-REST API + Realtime    │
@@ -295,19 +288,19 @@ function HomePage({ content, sections, onGo }: {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {QUICK_LINKS.map((q) => (
-          <button key={q.slug} onClick={() => onGo(q.slug, q.anchor)} className="rounded-xl border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
+          <button key={q.slug} onClick={() => onGo(q.slug, q.anchor)} className="rounded-lg border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
             <p className="text-sm font-black text-white">{q.label}</p>
             <p className="mt-1 text-xs text-slate-400">{q.sub}</p>
           </button>
         ))}
       </div>
 
-      <div className="rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+      <div className="rounded-lg border border-white/5 bg-ink-900/60 p-6">
         <h3 className="mb-3 text-sm font-black uppercase tracking-wider text-slate-400">All chapters</h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {sections.map((s) => (
             <div key={s.title}>
-              <p className="mb-1 text-xs font-bold text-slate-300"><span aria-hidden>{SECTION_ICON[s.title] ?? '·'}</span> {s.title}</p>
+              <p className="mb-1 text-xs font-bold text-slate-300">{s.title}</p>
               <ul className="space-y-0.5">
                 {s.pages.map((p) => (
                   <li key={p.slug}>
@@ -341,7 +334,7 @@ function ArticlePage({ page, onGo }: { page: HandbookPage; onGo: (slug: string |
       {/* prose — capped to a readable measure and centred in its space; wide
           blocks (tables, code) keep their own overflow-x-auto and scroll. */}
       <div className="order-2 min-w-0 flex-1 xl:order-1">
-        <article className="mx-auto max-w-3xl rounded-2xl border border-white/5 bg-ink-900/60 p-6">
+        <article className="mx-auto max-w-3xl rounded-lg border border-white/5 bg-ink-900/60 p-6">
           <h1 className="text-xl font-black text-white">{page.title}</h1>
           <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{page.section}</p>
           {rendered}
@@ -395,7 +388,7 @@ export function DepExplorer() {
       </div>
 
       {sel && (
-        <div ref={panelRef} className="mt-4 rounded-xl border border-white/10 bg-ink-950/60 p-4">
+        <div ref={panelRef} className="mt-4 rounded-lg bg-ink-950/60 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-sm font-black text-white">{sel.label}
@@ -410,7 +403,7 @@ export function DepExplorer() {
             <DepList title="Depends on" nodes={depsOf(sel.id)} empty="Nothing in this map — a foundation node." onPick={pick} />
             <DepList title="Depended on by" nodes={dependentsOf(sel.id)} empty="Nothing depends on it directly." onPick={pick} />
           </div>
-          <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+          <div className="mt-3 rounded-lg bg-amber-500/5 px-3 py-2">
             <p className="text-[10px] font-bold uppercase tracking-wider text-amber-300/80">If I change this…</p>
             <p className="mt-0.5 text-xs text-slate-300">{sel.ifChanged}</p>
           </div>

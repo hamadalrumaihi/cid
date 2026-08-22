@@ -15,10 +15,11 @@
  *  unknown-tab notice, never a "restricted" banner that would confirm SIU
  *  exists. RLS and the SIU RPCs are the real enforcement.
  *
- *  Visual language: the portal's own dark investigative surfaces with a violet
- *  authority accent and small classification chips. No stamps, no glow, no
- *  hacker aesthetic — the difference between CID and SIU is authority and
- *  information access, not decoration. */
+ *  Visual language: the portal's own dark investigative surfaces. Violet is
+ *  reserved for identity and state markers — standing/classification/
+ *  visibility chips — never washed over panels, borders or ordinary actions.
+ *  No stamps, no glow, no hacker aesthetic — the difference between CID and
+ *  SIU is authority and information access, not decoration. */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -128,7 +129,7 @@ export function SiuView() {
 
   return (
     <div>
-      <Card pad="lg" className="mb-5 border-violet-500/20">
+      <Card pad="lg" className="mb-5">
         <PageHeader
           eyebrow="Special Investigation Unit"
           title="SIU Workspace"
@@ -295,13 +296,13 @@ function InvestigationRow({ row }: { row: CaseRow }) {
         onClick={() => router.push(`/cases?case=${row.id}`)}
         className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-white/5 bg-white/5 px-3 py-2 text-left transition hover:bg-white/10"
       >
-        <span className="font-mono text-xs font-semibold text-violet-300">{row.case_number}</span>
+        <span className="font-mono text-xs font-semibold text-blue-300">{row.case_number}</span>
         <span className="min-w-0 flex-1 truncate text-sm text-white">{row.title || 'Untitled investigation'}</span>
         <Badge tint={siuClassificationTint(row.siu_classification)}>
           {siuClassificationLabel(row.siu_classification)}
         </Badge>
         <Badge tone={row.status === 'closed' ? 'neutral' : 'accent'}>{row.status}</Badge>
-        <span className="text-[10px] text-slate-400">{fmtDate(row.updated_at)}</span>
+        <span className="text-[11px] text-slate-400">{fmtDate(row.updated_at)}</span>
       </button>
     </li>
   )
@@ -785,7 +786,7 @@ function OperationsSection() {
                 </Badge>
               )}
               <Badge tone={o.status === 'active' ? 'accent' : 'neutral'}>{o.status}</Badge>
-              <span className="text-[10px] text-slate-400">{fmtDate(o.created_at)}</span>
+              <span className="text-[11px] text-slate-400">{fmtDate(o.created_at)}</span>
             </li>
           ))}
         </ul>
@@ -895,7 +896,7 @@ function IntelligenceSection() {
                 {n.review_overdue && (
                   <Badge tint="bg-amber-500/15 text-amber-300">Review overdue</Badge>
                 )}
-                <span className="ml-auto text-[10px] text-slate-400">{fmtWhen(n.created_at)}</span>
+                <span className="ml-auto text-[11px] text-slate-400">{fmtWhen(n.created_at)}</span>
               </div>
 
               {/* Which case this is ABOUT, said out loud. A concern against a CID
@@ -931,7 +932,7 @@ function IntelligenceSection() {
                   )}
                   <button
                     type="button"
-                    className="ml-auto text-violet-300 underline-offset-2 hover:underline"
+                    className="ml-auto text-sky-300 underline-offset-2 hover:underline"
                     onClick={() => setGrading(n)}
                   >
                     {n.info_credibility ? 'Regrade' : 'Grade'}
@@ -1059,7 +1060,7 @@ function RecordIntelligenceModal({ onClose, onDone }: { onClose: () => void; onD
         </Field>
 
         {aboutCid && (
-          <p className="rounded-lg border border-violet-500/25 bg-violet-500/5 px-3 py-2 text-[11px] leading-relaxed text-violet-200/90">
+          <p className="rounded-lg border border-violet-500/25 bg-violet-500/5 px-3 py-2 text-xs leading-relaxed text-violet-200/90">
             This note sits on a <strong className="font-semibold">CID investigation</strong>. Its own
             detectives and CID command will not see that it exists — that is what makes recording a
             concern about an investigation possible without alerting the people running it. Every SIU
@@ -1337,17 +1338,17 @@ function AgentsSection() {
                           {r.user_id === profile?.id && (
                             <span className="ml-1 rounded bg-blue-500/15 px-1.5 text-[10px] font-semibold uppercase text-blue-300">you</span>
                           )}
-                          {r.badge_number && <span className="ml-1 text-[10px] text-slate-400">#{r.badge_number}</span>}
+                          {r.badge_number && <span className="ml-1 text-[11px] text-slate-400">#{r.badge_number}</span>}
                         </td>
                         <td className="px-2 py-2">
                           <Badge tint="bg-violet-500/15 text-violet-300">
                             {r.oversight_only ? 'SIU Oversight' : siuRoleLabel(r.siu_role)}
                           </Badge>
                         </td>
-                        <td className="px-2 py-2 font-mono text-violet-300">{siuCallsign(r.callsign)}</td>
+                        <td className="px-2 py-2 font-mono text-slate-200">{siuCallsign(r.callsign)}</td>
                         <td className="px-2 py-2 text-slate-300">
                           {fmtDate(r.appointed_at)}
-                          {r.appointed_by_name && <span className="block text-[10px] text-slate-400">by {r.appointed_by_name}</span>}
+                          {r.appointed_by_name && <span className="block text-[11px] text-slate-400">by {r.appointed_by_name}</span>}
                         </td>
                         {/* History, never authority — no SIU rule reads it. */}
                         <td className="px-2 py-2 text-slate-400">
@@ -1458,7 +1459,7 @@ function InviteAgentModal({ onClose, onDone }: { onClose: () => void; onDone: ()
               type="button"
               onClick={() => setPicked(c)}
               className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition hover:bg-white/10 ${
-                picked?.id === c.id ? 'bg-violet-500/15' : ''
+                picked?.id === c.id ? 'bg-white/10' : ''
               }`}
             >
               <span className="flex-1 truncate text-white">{c.display_name || 'Member'}</span>
@@ -1538,7 +1539,7 @@ function ActivitySection() {
         <ul className="mt-3 space-y-1.5">
           {rows.map((r) => (
             <li key={r.id} className="flex flex-wrap items-baseline gap-2 border-t border-white/5 py-1.5 text-xs">
-              <span className="w-36 shrink-0 text-[10px] text-slate-400">{fmtWhen(r.created_at)}</span>
+              <span className="w-36 shrink-0 text-[11px] text-slate-400">{fmtWhen(r.created_at)}</span>
               <span className="font-medium text-white">{siuAuditLabel(r.action)}</span>
               {r.actor_name && <span className="text-slate-400">by {r.actor_name}</span>}
               {typeof r.detail?.reason === 'string' && (

@@ -23,6 +23,7 @@ import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { safeUrl } from '@/lib/safeUrl'
 import { initials } from '@/lib/format'
 import { deptLabel, roleLabel } from '@/lib/roles'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Notice } from '@/components/ui/Notice'
 import { toast } from '@/lib/toast'
@@ -30,10 +31,10 @@ import { toast } from '@/lib/toast'
 /* eslint-disable @next/next/no-img-element -- small external avatar (OAuth/FiveManage CDN) */
 
 const SECTIONS = [
-  { id: 'profile', label: 'Profile', icon: '🪪' },
-  { id: 'appearance', label: 'Appearance', icon: '🎨' },
-  { id: 'account', label: 'Account & security', icon: '🔐' },
-  { id: 'notifications', label: 'Notifications', icon: '🔔' },
+  { id: 'profile', label: 'Profile' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'account', label: 'Account & security' },
+  { id: 'notifications', label: 'Notifications' },
 ] as const
 type SectionId = (typeof SECTIONS)[number]['id']
 
@@ -79,7 +80,7 @@ export function ProfileView() {
               section === s.id ? 'border-badge-500/50 bg-badge-500/15 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
             }`}
           >
-            {s.icon} {s.label}
+            {s.label}
           </button>
         ))}
       </nav>
@@ -94,14 +95,14 @@ export function ProfileView() {
   function IdentityHeader() {
     const dot = profile!.loa ? { cls: 'bg-amber-400', t: 'On LOA' } : { cls: 'bg-emerald-400', t: 'On duty' }
     return (
-      <section className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-5">
-        <div className="grid h-20 w-20 flex-shrink-0 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-slate-600 to-slate-700 text-2xl font-bold text-white">
-          {avatar ? <img src={avatar} className="h-20 w-20 rounded-2xl object-cover" alt="" /> : initials(profile!.display_name)}
+      <section className="flex flex-wrap items-center gap-4 rounded-lg border border-white/5 bg-ink-900/60 p-5">
+        <div className="grid h-20 w-20 flex-shrink-0 place-items-center overflow-hidden rounded-lg bg-slate-700 text-2xl font-bold text-white">
+          {avatar ? <img src={avatar} className="h-20 w-20 rounded-lg object-cover" alt="" /> : initials(profile!.display_name)}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-black text-white">{profile!.display_name || 'Officer'}</h1>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-300">
+            <span className="inline-flex items-center gap-1.5 rounded bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-300">
               <span className={`h-2 w-2 rounded-full ${dot.cls}`} /> {dot.t}
             </span>
           </div>
@@ -182,10 +183,10 @@ function ProfileSection() {
   }
 
   return (
-    <section className="space-y-4 rounded-2xl border border-white/5 bg-ink-900/45 p-5">
+    <section className="space-y-4 rounded-lg border border-white/5 bg-ink-900/45 p-5">
       <div className="flex flex-wrap items-center gap-4">
-        <div className="grid h-16 w-16 flex-shrink-0 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-slate-600 to-slate-700 text-lg font-bold text-white">
-          {preview ? <img src={preview} className="h-16 w-16 rounded-2xl object-cover" alt="Avatar preview" /> : initials(name)}
+        <div className="grid h-16 w-16 flex-shrink-0 place-items-center overflow-hidden rounded-lg bg-slate-700 text-lg font-bold text-white">
+          {preview ? <img src={preview} className="h-16 w-16 rounded-lg object-cover" alt="Avatar preview" /> : initials(name)}
         </div>
         <div className="flex flex-wrap gap-2">
           {fmConfigured() && (
@@ -245,7 +246,7 @@ function AppearanceSection() {
   const pickDensity = (k: string) => { Store.set('density', k); setDen(k); applyAppearance() }
 
   return (
-    <section className="space-y-5 rounded-2xl border border-white/5 bg-ink-900/45 p-5">
+    <section className="space-y-5 rounded-lg border border-white/5 bg-ink-900/45 p-5">
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Accent</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -303,7 +304,7 @@ function AccountSection() {
 
   return (
     <section className="space-y-4">
-      <div className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
+      <div className="rounded-lg border border-white/5 bg-ink-900/45 p-5">
         <h3 className="mb-1 font-bold text-white">Account</h3>
         <AccountRow k="Email" v={<span className="font-mono">{user?.email || profile?.email || '—'}</span>} />
         <AccountRow k="Sign-in method" v={<span className="flex gap-1.5">{providers.map((p) => <span key={p} className="rounded bg-white/5 px-2 py-0.5 text-xs capitalize text-slate-300">{p}</span>)}</span>} />
@@ -313,7 +314,7 @@ function AccountSection() {
         <p className="mt-3 text-[11px] text-slate-500">Sign-in is handled by your provider (Google, Discord, or an email magic link) — there’s no password to manage here.</p>
       </div>
 
-      <div className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
+      <div className="rounded-lg border border-white/5 bg-ink-900/45 p-5">
         <h3 className="mb-2 font-bold text-white">Sessions</h3>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => void signOut()} className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">Sign out</button>
@@ -334,21 +335,21 @@ function NotificationsSection() {
   const router = useRouter()
   const linked = !!profile?.discord_id
   return (
-    <section className="space-y-3 rounded-2xl border border-white/5 bg-ink-900/45 p-5">
-      <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-ink-950/50 p-4">
+    <section className="space-y-3 rounded-lg border border-white/5 bg-ink-900/45 p-5">
+      <div className="flex items-center justify-between gap-2 rounded-lg bg-ink-950/50 p-4">
         <div>
           <p className="font-semibold text-white">In-app notifications</p>
           <p className="text-xs text-slate-400">Mentions, sign-off pings and follows — the 🔔 bell in the top bar. Always on.</p>
         </div>
-        <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold text-emerald-300">On</span>
+        <Badge tone="good">On</Badge>
       </div>
-      <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-ink-950/50 p-4">
+      <div className="flex items-center justify-between gap-2 rounded-lg bg-ink-950/50 p-4">
         <div>
           <p className="font-semibold text-white">Discord DM notifications</p>
           <p className="text-xs text-slate-400">{linked ? 'Your Discord is linked — eligible notifications are also DM’d to you.' : 'Add your Discord ID on the Profile tab to also receive DMs.'}</p>
         </div>
         {linked
-          ? <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold text-emerald-300">Linked</span>
+          ? <Badge tone="good">Linked</Badge>
           : <button onClick={() => router.replace('/profile?s=profile')} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10">Link Discord</button>}
       </div>
       <p className="text-[11px] text-slate-500">Per-type notification controls aren’t available yet — they’d sync to your account (a future update).</p>

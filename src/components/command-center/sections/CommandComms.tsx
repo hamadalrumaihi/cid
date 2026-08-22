@@ -9,7 +9,7 @@ import { useState } from 'react'
 import { AnnounceView } from '@/components/announce/AnnounceView'
 import { AnalyticsView } from '@/components/analytics/AnalyticsView'
 
-const TABS = [['announce', '📣 Announcements'], ['analytics', '📊 Analytics']] as const
+const TABS = [['announce', 'Announcements'], ['analytics', 'Analytics']] as const
 type Tab = (typeof TABS)[number][0]
 
 export function CommandComms() {

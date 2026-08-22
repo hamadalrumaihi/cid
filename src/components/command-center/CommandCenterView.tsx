@@ -27,15 +27,15 @@ import { CommandComms } from './sections/CommandComms'
 import { FieldOfficers } from './sections/FieldOfficers'
 
 export const CC_SECTIONS = [
-  { id: 'overview', icon: '🛰️', label: 'Overview', sub: 'Command KPIs and what needs a decision' },
-  { id: 'chain', icon: '🏛️', label: 'Chain of Command', sub: 'Roles, bureaus and the sign-off chain' },
-  { id: 'personnel', icon: '👥', label: 'Personnel & Admin', sub: 'Approve, manage, promote, transfer, remove' },
-  { id: 'approvals', icon: '✅', label: 'Approval Queue', sub: 'Pending member approvals + sign-offs awaiting you' },
-  { id: 'promotions', icon: '🎖️', label: 'Promotions & Transfers', sub: 'Rank + bureau changes, with history' },
-  { id: 'duty', icon: '🟢', label: 'Duty Status', sub: 'Who is active or on LOA, by bureau' },
-  { id: 'permissions', icon: '🔐', label: 'Permissions', sub: 'Who can do what — the access matrix' },
-  { id: 'field', icon: '🚔', label: 'Field Intelligence Officers', sub: 'Appoint SAHP, BCSO and LSPD accounts — portal access only, never CID' },
-  { id: 'comms', icon: '📣', label: 'Announcements & Analytics', sub: 'Post division notices; division analytics' },
+  { id: 'overview', label: 'Overview', sub: 'Command KPIs and what needs a decision' },
+  { id: 'chain', label: 'Chain of Command', sub: 'Roles, bureaus and the sign-off chain' },
+  { id: 'personnel', label: 'Personnel & Admin', sub: 'Approve, manage, promote, transfer, remove' },
+  { id: 'approvals', label: 'Approval Queue', sub: 'Pending member approvals + sign-offs awaiting you' },
+  { id: 'promotions', label: 'Promotions & Transfers', sub: 'Rank + bureau changes, with history' },
+  { id: 'duty', label: 'Duty Status', sub: 'Who is active or on LOA, by bureau' },
+  { id: 'permissions', label: 'Permissions', sub: 'Who can do what — the access matrix' },
+  { id: 'field', label: 'Field Intelligence Officers', sub: 'Appoint SAHP, BCSO and LSPD accounts — portal access only, never CID' },
+  { id: 'comms', label: 'Announcements & Analytics', sub: 'Post division notices; division analytics' },
 ] as const
 type SectionId = (typeof CC_SECTIONS)[number]['id']
 
@@ -61,7 +61,7 @@ export function CommandCenterView() {
   }
   if (!canAccess) {
     return (
-      <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-amber-200">
+      <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-amber-200">
         <p className="font-semibold text-amber-100">Command access required</p>
         <p className="mt-1">The Command Center is for command staff (Bureau Lead and above) and the portal owner. Your account doesn’t hold a command role. Contact Command if you believe this is an error.</p>
       </div>
@@ -72,7 +72,7 @@ export function CommandCenterView() {
     <div className="space-y-5">
       <Card>
         <PageHeader
-          title="🛡️ Command Center"
+          title="Command Center"
           subtitle={`The single home for command administration — ${active.sub.toLowerCase()}.`}
         />
       </Card>
@@ -88,7 +88,6 @@ export function CommandCenterView() {
                 section === s.id ? 'border-badge-500/50 bg-badge-500/15 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
               }`}
             >
-              <span aria-hidden>{s.icon}</span>
               <span className="whitespace-nowrap lg:whitespace-normal">{s.label}</span>
             </button>
           ))}

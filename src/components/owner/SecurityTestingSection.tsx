@@ -40,7 +40,7 @@ export function SecurityTestingSection() {
   if (error) {
     return (
       <div className="space-y-3">
-        <p className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-200">
+        <p className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-200">
           Could not load the security overview: {error}
         </p>
         <Button onClick={() => void load()}>Retry</Button>
@@ -66,14 +66,14 @@ export function SecurityTestingSection() {
       <section className="space-y-2">
         <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Latest runs</h3>
         {latestBySuite.size === 0 && (
-          <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-500">
+          <p className="rounded-lg border border-dashed border-white/10 p-4 text-sm text-slate-500">
             No reported runs yet — run <code>npm run test:rls</code> locally or add the fixture-password
             secrets so CI reports here.
           </p>
         )}
         <div className="grid gap-3 md:grid-cols-2">
           {Array.from(latestBySuite.values()).map((r) => (
-            <div key={r.id} className="rounded-xl border border-white/10 bg-ink-900/60 p-4">
+            <div key={r.id} className="rounded-lg border border-white/10 bg-ink-900/60 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-bold text-white">{r.suite}</span>
                 <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${r.failed > 0 ? 'border-rose-500/25 bg-rose-500/10 text-rose-300' : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300'}`}>
@@ -114,7 +114,7 @@ export function SecurityTestingSection() {
           Fixture health <span className="normal-case tracking-normal text-slate-500">({data.fixtures.length - unhealthy.length}/{data.fixtures.length} healthy)</span>
         </h3>
         {unhealthy.length === 0
-          ? <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-emerald-200">All rls-test fixtures match their expected identity.</p>
+          ? <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-emerald-200">All rls-test fixtures match their expected identity.</p>
           : (
             <div className="space-y-1.5">
               {unhealthy.map((f) => (
@@ -131,9 +131,9 @@ export function SecurityTestingSection() {
       <section className="space-y-2">
         <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Leftover test data</h3>
         {leftoverEntries.length === 0
-          ? <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-emerald-200">No test-authored records remain — the suites cleaned up after themselves.</p>
+          ? <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-emerald-200">No test-authored records remain — the suites cleaned up after themselves.</p>
           : (
-            <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-sm text-amber-100/90">
+            <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-sm text-amber-100/90">
               <p className="mb-1 font-semibold text-amber-200">A crashed run may have left residue (the next suite run purges it at startup):</p>
               <p className="font-mono text-xs">{leftoverEntries.map(([k, n]) => `${k}: ${n}`).join(' · ')}</p>
             </div>
@@ -143,7 +143,7 @@ export function SecurityTestingSection() {
       {/* Expected access matrix (documentation, verified by the suites) */}
       <section className="space-y-2">
         <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Expected access matrix</h3>
-        <div className="overflow-x-auto rounded-xl border border-white/10">
+        <div className="overflow-x-auto rounded-lg border border-white/10">
           <table className="w-full min-w-[640px] text-left text-xs">
             <thead className="bg-ink-950/60 text-slate-400">
               <tr>

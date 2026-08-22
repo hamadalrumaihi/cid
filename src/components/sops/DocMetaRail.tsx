@@ -47,7 +47,7 @@ function KV({ label, children }: { label: string; children: React.ReactNode }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-white/5 bg-ink-900/60 p-4">
+    <section className="rounded-lg border border-white/5 bg-ink-900/60 p-4">
       <h2 className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">{title}</h2>
       {children}
     </section>

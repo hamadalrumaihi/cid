@@ -305,7 +305,6 @@ export function DocReader(props: {
   if (load === 'missing' || !doc) {
     return (
       <EmptyState
-        icon="📄"
         title="This document isn’t available"
         hint="It may have been removed, or your role doesn’t have access to it."
         action={{ label: 'Back to library', onClick: onBack }}
@@ -384,7 +383,7 @@ export function DocReader(props: {
   // sees it, and doc_rel_ins re-decides on write -- the control is not the
   // authority, it is just the only place the authority could ever be used.
   const relationEditor = canEdit ? (
-    <div className="mt-4 rounded-xl border border-white/10 bg-ink-950/40 p-3">
+    <div className="mt-4 rounded-lg border border-white/10 bg-ink-950/40 p-3">
       <RelationEditor documentId={docId} onChanged={bump} />
     </div>
   ) : null
@@ -429,7 +428,7 @@ export function DocReader(props: {
       </Card>
 
       {ackPending && (
-        <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
           <p className="text-sm font-semibold text-amber-200">
             {ack === 'reack_needed' ? 'This document changed — please read it again.' : 'Reading acknowledgement required.'}
             {deadline ? ` Due ${fmtDate(deadline)}.` : ''}
@@ -442,7 +441,7 @@ export function DocReader(props: {
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <button
             onClick={() => { scrollToHeading(resumeAnchor); setResumeAnchor(null) }}
-            className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10"
+            className="inline-flex min-h-[40px] items-center gap-2 rounded-md border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10"
           >
             <span aria-hidden>↳</span>
             Resume reading — {headings.find((h) => h.id === resumeAnchor)?.text}
@@ -474,7 +473,7 @@ export function DocReader(props: {
               </Button>
             </div>
           )}
-          <details className="mb-4 rounded-2xl border border-white/5 bg-ink-900/60 xl:hidden">
+          <details className="mb-4 rounded-lg border border-white/5 bg-ink-900/60 xl:hidden">
             <summary className="flex min-h-[44px] cursor-pointer select-none items-center px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Document details
             </summary>

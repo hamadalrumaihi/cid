@@ -72,7 +72,9 @@ describe('parallel-lane rendering', () => {
 describe('judge claim eligibility (mirror of claim_legal_request_as_judge)', () => {
   const judge = viewer({ myId: 'j-1', justiceRole: 'judge' })
   it('eligible: judge, judge-routed, non-sealed, waiting, no judge yet, not creator', () => {
-    expect(judgeClaimEligible(req(), judge)).toBe(true)
+    // ONLY submitted_to_judge — claim_legal_request_as_judge refuses the
+    // legacy submitted_to_doj parking state, so the mirror must too.
+    expect(judgeClaimEligible(req(), judge)).toBe(false)
     expect(judgeClaimEligible(req({ review_status: 'submitted_to_judge' }), judge)).toBe(true)
   })
   it('rejects sealed', () => {
@@ -149,10 +151,10 @@ describe('next-action derivation + grouping', () => {
   })
   it('a judge sees an eligible request as available-to-claim', () => {
     const judge = viewer({ myId: 'j-1', justiceRole: 'judge' })
-    const d = dispositionFor(req(), judge, NOW)
+    const d = dispositionFor(req({ review_status: 'submitted_to_judge' }), judge, NOW)
     expect(d.viewerCanClaim).toBe(true)
     expect(d.group).toBe('available_to_claim')
-    expect(d.nextAction).toBe('Take for judicial review')
+    expect(d.nextAction).toBe('Claim for judicial review')
   })
   it('an uninvolved viewer sees waiting, never action', () => {
     const other = viewer({ myId: 'x', cidActive: true, cidRole: 'detective' })

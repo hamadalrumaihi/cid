@@ -22,7 +22,7 @@ import { Card } from '@/components/ui/Card'
 
 function Hit({ h, onOpen }: { h: SectionHit; onOpen: (h: SectionHit) => void }) {
   return (
-    <li className="rounded-xl border border-white/10 bg-ink-900 p-3">
+    <li className="rounded-lg border border-white/10 bg-ink-900 p-3">
       <button
         type="button"
         onClick={() => onOpen(h)}
@@ -128,7 +128,7 @@ export function AskLibrary({ onOpenSection }: {
           )}
 
           {!answer.answered && (
-            <div className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+            <div className="rounded-lg border border-white/10 bg-ink-950/50 p-3">
               <p className="text-sm font-semibold text-slate-200">No confirmed answer found</p>
               <p className="mt-1 text-xs text-slate-400">{noAnswerText(answer.terms)}</p>
             </div>

@@ -24,7 +24,7 @@ export function RecusalBanner({ message, onDismiss }: {
   return (
     <div
       role="alert"
-      className="flex items-start justify-between gap-3 rounded-2xl border border-rose-500/25 bg-rose-500/5 px-4 py-3"
+      className="flex items-start justify-between gap-3 rounded-lg border border-rose-500/25 bg-rose-500/5 px-4 py-3"
     >
       <div className="min-w-0">
         <p className="text-xs font-bold uppercase tracking-[0.14em] text-rose-300">Recusal required</p>

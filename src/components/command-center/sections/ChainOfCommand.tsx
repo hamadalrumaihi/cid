@@ -15,7 +15,7 @@ const BUREAU_KEYS = ['LSB', 'BCB', 'SAB', 'JTF'] as const
 function Person({ p }: { p: RosterProfile }) {
   return (
     <span className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-ink-950/50 px-2.5 py-1.5 text-sm">
-      <span className="grid h-6 w-6 place-items-center rounded-full bg-gradient-to-br from-slate-600 to-slate-700 text-[10px] font-bold text-white">{initials(p.display_name)}</span>
+      <span className="grid h-6 w-6 place-items-center rounded-full bg-slate-700 text-[10px] font-bold text-white">{initials(p.display_name)}</span>
       <span className="text-white">{p.display_name}</span>
       {p.loa && <span className="rounded bg-amber-500/15 px-1 text-[10px] font-bold uppercase text-amber-300">LOA</span>}
     </span>
@@ -24,7 +24,7 @@ function Person({ p }: { p: RosterProfile }) {
 
 function Tier({ title, people, tint }: { title: string; people: RosterProfile[]; tint: string }) {
   return (
-    <div className={`rounded-xl border ${tint} p-3`}>
+    <div className={`rounded-lg border ${tint} p-3`}>
       <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-300">{title} <span className="text-slate-500">({people.length})</span></p>
       {people.length ? <div className="flex flex-wrap gap-2">{people.map((p) => <Person key={p.id} p={p} />)}</div> : <p className="text-xs text-slate-500">Vacant.</p>}
     </div>
@@ -58,7 +58,7 @@ export function ChainOfCommand() {
             const seniors = inB.filter((p) => p.role === 'senior_detective')
             const dets = inB.filter((p) => p.role === 'detective')
             return (
-              <div key={b} className="rounded-2xl border border-white/5 bg-ink-900/45 p-4">
+              <div key={b} className="rounded-lg border border-white/5 bg-ink-900/45 p-4">
                 <p className="font-bold text-white">{b} <span className="text-xs font-normal text-slate-500">· {BUREAUS[b]} ({DEPT_OF_BUREAU[b]})</span></p>
                 <div className="mt-3 space-y-3">
                   <Tier title="Bureau Lead" people={leads} tint="border-blue-500/25 bg-blue-500/5" />
@@ -71,7 +71,7 @@ export function ChainOfCommand() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/5 bg-ink-900/45 p-4">
+      <div className="rounded-lg border border-white/5 bg-ink-900/45 p-4">
         <h3 className="mb-2 font-bold text-white">Case sign-off chain</h3>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           {['Detective (submits)', 'Bureau Lead', 'Deputy Director', 'Director'].map((step, i) => (

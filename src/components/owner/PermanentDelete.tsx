@@ -76,7 +76,7 @@ const FRESHNESS_RE = /fresh sign-in/i
 /** Server errors verbatim + the sign-out/in hint on freshness failures. */
 export function ServerError({ message }: { message: string }) {
   return (
-    <div className="rounded-xl border border-rose-500/25 bg-rose-500/10 p-3">
+    <div className="rounded-lg border border-rose-500/25 bg-rose-500/10 p-3">
       <p className="text-sm text-rose-200">{message}</p>
       {FRESHNESS_RE.test(message) && (
         <p className="mt-1 text-xs text-rose-300/80">
@@ -151,7 +151,7 @@ export function PermanentDelete({ targetId, targetName, renderPreview, onDeleted
   }
 
   return (
-    <div className="mt-2 w-full space-y-3 rounded-xl border border-rose-500/25 bg-rose-500/5 p-3">
+    <div className="mt-2 w-full space-y-3 rounded-lg border border-rose-500/25 bg-rose-500/5 p-3">
       <div>
         <p className="text-sm font-bold text-rose-200">
           This permanently deletes {targetName}&rsquo;s account login and cannot be undone.

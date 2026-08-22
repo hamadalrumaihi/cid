@@ -260,7 +260,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const prosecutorBureaus = useMyProsecutorBureaus()
   const legalNow = useNow()
   const legalNeedsAction = useMemo(
-    () => (wf ? countViewerActionable(wf.legal, buildLegalViewer(auth, prosecutorBureaus), legalNow) : 0),
+    () => (wf ? countViewerActionable(wf.legal, buildLegalViewer(auth, prosecutorBureaus, undefined, siu.isCommand), legalNow) : 0),
     [wf, auth, prosecutorBureaus, legalNow],
   )
 

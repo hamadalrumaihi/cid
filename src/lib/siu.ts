@@ -536,16 +536,16 @@ export function siuCaseAccess(
 
 /** Is this case READ-ONLY for this viewer because of the departmental split?
  *
- *  Mirrors the two places the server refuses a write outright, and nothing
- *  else — it narrows `useAuth().canEdit`, never widens it:
+ *  Mirrors the ONE place the server still refuses a write outright, and
+ *  nothing else — it narrows `useAuth().canEdit`, never widens it:
  *
- *   * An SIU DEPARTMENT member looking at a CID case. `private.can_access_case()`
- *     ends its CID branch with `not private.is_siu_department()`, so every
- *     write is refused. SIU's broad CID visibility is a READ grant
- *     (`siu_oversight_read()` feeding `can_read_case`) and always was.
  *   * OVERSIGHT standing looking at an SIU investigation. `siu_case_access()`
- *     admits only owner/field standing, so the Director of CID and the AG read
- *     the unit's standard investigations and work none of them.
+ *     admits only owner/field standing, so the AG reads the unit's standard
+ *     investigations and works none of them.
+ *
+ *  (The old first case — an SIU member on a CID case — was REMOVED by
+ *  siu_members_work_cid, 20261001120200: an active SIU member is now an
+ *  ordinary CID investigator and `can_access_case()` admits them directly.)
  *
  *  This exists because the alternative is worse than a missing button. RLS
  *  refuses those writes by returning ZERO ROWS, not by erroring — so an Edit

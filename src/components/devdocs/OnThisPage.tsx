@@ -85,7 +85,7 @@ export function OnThisPage({ headings, activeId, onGo }: OnThisPageProps) {
   return (
     <>
       {/* below xl: collapsible block placed above the article content */}
-      <details className="order-1 mb-4 rounded-xl border border-white/10 bg-ink-900/60 xl:hidden">
+      <details className="order-1 mb-4 rounded-lg border border-white/10 bg-ink-900/60 xl:hidden">
         <summary className="flex min-h-[44px] cursor-pointer select-none items-center px-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">
           On this page
         </summary>

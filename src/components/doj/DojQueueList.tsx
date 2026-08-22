@@ -41,7 +41,7 @@ export function DojQueueList({ rows, onOpen, ageOf, ageLabel = 'waiting', action
   }
 
   return (
-    <ul className="divide-y divide-white/5 rounded-2xl border border-white/5 bg-ink-900/60">
+    <ul className="divide-y divide-white/5 rounded-lg border border-white/5 bg-ink-900/60">
       {rows.map((r) => {
         const sealed = r.classification === 'sealed'
         const a = action?.(r) ?? null

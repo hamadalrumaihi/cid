@@ -170,7 +170,7 @@ export function SiuIntakeSection() {
                   {!r.opened_case_id && (
                     <button
                       type="button"
-                      className="ml-auto text-violet-300 underline-offset-2 hover:underline"
+                      className="ml-auto text-sky-300 underline-offset-2 hover:underline"
                       onClick={() => setReviewing(r)}
                     >
                       Review

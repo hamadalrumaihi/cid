@@ -120,11 +120,15 @@ const NO_BUREAUS: readonly string[] = []
 let bureauCache: { key: string; value: readonly string[] } | null = null
 export function useMyProsecutorBureaus(): readonly string[] {
   const { profile, justiceRole } = useAuth()
-  // Only DOJ prosecutors can hold live routing assignments.
-  const key = (justiceRole === 'assistant_district_attorney' || justiceRole === 'district_attorney')
-    ? profile?.id ?? null
-    : null
-  const v = useTableVersion('prosecutor_bureau_assignments')
+  // Live prosecutors read the CURRENT sources: justice_memberships home
+  // bureau + unexpired prosecutor_coverage (the same pair behind the server's
+  // private.prosecutor_bureaus_of). Legacy ADA/DA roles keep the retired
+  // prosecutor_bureau_assignments read so historical views still resolve.
+  // Keyed on the legacy table only would leave a current-role prosecutor with
+  // an always-empty list — the bureau-awareness lane was dead code.
+  const legacy = justiceRole === 'assistant_district_attorney' || justiceRole === 'district_attorney'
+  const key = legacy || justiceRole === 'prosecutor' ? profile?.id ?? null : null
+  const v = useTableVersion(legacy ? 'prosecutor_bureau_assignments' : 'prosecutor_coverage')
   const [bureaus, setBureaus] = useState<readonly string[]>(
     () => (key && bureauCache?.key === key ? bureauCache.value : NO_BUREAUS),
   )
@@ -133,19 +137,34 @@ export function useMyProsecutorBureaus(): readonly string[] {
     let cancelled = false
     void (async () => {
       try {
-        const rows = await list('prosecutor_bureau_assignments', {
-          select: 'bureau,starts_at,ends_at', eq: { prosecutor_id: key },
-        })
         const now = Date.now()
-        const live = [...new Set(
-          rows.filter((r) => !r.ends_at && Date.parse(r.starts_at) <= now).map((r) => String(r.bureau)),
-        )]
+        let live: string[]
+        if (legacy) {
+          const rows = await list('prosecutor_bureau_assignments', {
+            select: 'bureau,starts_at,ends_at', eq: { prosecutor_id: key },
+          })
+          live = [...new Set(
+            rows.filter((r) => !r.ends_at && Date.parse(r.starts_at) <= now).map((r) => String(r.bureau)),
+          )]
+        } else {
+          const [memberships, coverage] = await Promise.all([
+            list('justice_memberships', { select: 'prosecutor_bureau', eq: { user_id: key } }),
+            list('prosecutor_coverage', { select: 'bureau,starts_at,ended_at,expires_at', eq: { prosecutor_id: key } }),
+          ])
+          const home = memberships.map((m) => (m.prosecutor_bureau ? String(m.prosecutor_bureau) : null)).filter((b): b is string => !!b)
+          const covered = coverage
+            .filter((c) => !c.ended_at
+              && Date.parse(c.starts_at) <= now
+              && (!c.expires_at || Date.parse(c.expires_at) > now))
+            .map((c) => String(c.bureau))
+          live = [...new Set([...home, ...covered])]
+        }
         bureauCache = { key, value: live }
         if (!cancelled) setBureaus(live)
       } catch { /* transient — the awareness lane just stays quiet */ }
     })()
     return () => { cancelled = true }
-  }, [key, v])
+  }, [key, legacy, v])
   return key ? bureaus : NO_BUREAUS
 }
 

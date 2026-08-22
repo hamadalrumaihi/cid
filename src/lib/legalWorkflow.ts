@@ -191,7 +191,20 @@ export function laneThatAdvanced(r: LegalReqLike): 'judicial' | 'prosecutorial' 
 export { reviewStatusLabel, REVIEW_STATUS_LABEL }
 
 export function stageLabel(r: LegalReqLike): string {
-  return STAGE_LABEL[currentStage(r)]
+  return stageDisplayLabel(currentStage(r), r)
+}
+
+/** Stage label, SIU-aware: an SIU request sitting in (or returned from) SIU
+ *  command review must never be captioned "CID Review" — the one wording the
+ *  SIU lane migration forbids. The lane is inferred from the request's own
+ *  status; for SIU requests in later stages the shared slot still reads
+ *  "CID Review" because the row alone cannot prove the lane there. */
+export function stageDisplayLabel(stage: StageId, r: LegalReqLike): string {
+  if (stage === 'cid_review'
+    && (r.review_status === 'siu_command_review' || r.review_status === 'returned_by_siu_command')) {
+    return 'SIU Command Review'
+  }
+  return STAGE_LABEL[stage]
 }
 
 /* ── Judge claim eligibility (client mirror of claim_legal_request_as_judge) ─ */
@@ -203,7 +216,9 @@ export function judgeClaimEligible(r: LegalReqLike, v: LegalViewer): boolean {
     !r.assigned_judge_id &&
     (r.approval_route ?? 'judge') === 'judge' &&
     r.classification !== 'sealed' &&
-    ['submitted_to_doj', 'submitted_to_judge'].includes(r.review_status)
+    // claim_legal_request_as_judge accepts ONLY submitted_to_judge — the old
+    // submitted_to_doj parallel lane painted a claim the server refuses.
+    r.review_status === 'submitted_to_judge'
   )
 }
 
@@ -399,7 +414,7 @@ export function dispositionFor(r: LegalReqLike, v: LegalViewer, now: number): Le
 
   return {
     stage,
-    stageLabel: STAGE_LABEL[stage],
+    stageLabel: stageDisplayLabel(stage, r),
     statusLabel: reviewStatusLabel(s),
     responsibleRole: respRole,
     responsibleRoleLabel: RESPONSIBLE_ROLE_LABEL[respRole],

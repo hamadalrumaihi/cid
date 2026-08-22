@@ -96,7 +96,11 @@ export function MediaView() {
 
   if (state !== 'in') return <Notice text="Sign in to view the evidence vault." />
 
-  const chips: [string, string][] = [['all', 'All'], ['case', 'By Case'], ['gang', 'By Gang'], ...PRESET_TAGS.map((t) => [`tag:${t}`, `🏷️ ${t}`] as [string, string]), ['archived', 'Archived']]
+  const chips: [string, React.ReactNode][] = [
+    ['all', 'All'], ['case', 'By Case'], ['gang', 'By Gang'],
+    ...PRESET_TAGS.map((t) => [`tag:${t}`, <span key={t} className="inline-flex items-center gap-1"><IndicatorIcon size={12} />{t}</span>] as [string, React.ReactNode]),
+    ['archived', 'Archived'],
+  ]
 
   return (
     <div>
@@ -124,7 +128,7 @@ export function MediaView() {
           <ErrorNotice message="Could not load the media vault." onRetry={() => { void refresh() }} />
         ) : (
           <EmptyState
-            icon="🖼️"
+            icon={<PhotoIcon size={28} />}
             title="No media yet"
             hint={canEdit ? 'Ingest an image, video, or CDN embed to start building the evidence vault.' : 'No media has been added to the vault yet.'}
             action={canEdit ? { label: '+ Ingest Media', onClick: () => setIngest(true) } : undefined}
@@ -180,10 +184,10 @@ function TagChips({ m, caseNum, gangName, onCase }: { m: MediaRow; caseNum: (id:
           {cn}
         </button>
       )}
-      {gn && <span className="rounded bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-300">🚩 {gn}</span>}
-      {!!t.location && <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-300">📍 {String(t.location)}</span>}
-      {!!t.person && <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-300">👤 {String(t.person)}</span>}
-      {labelsOf(m).map((l) => <span key={l} className="rounded bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] text-fuchsia-300">🏷️ {l}</span>)}
+      {gn && <span className="inline-flex items-center gap-1 rounded bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-300"><GangIcon size={10} />{gn}</span>}
+      {!!t.location && <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-300"><PlaceIcon size={10} />{String(t.location)}</span>}
+      {!!t.person && <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-300"><PersonIcon size={10} />{String(t.person)}</span>}
+      {labelsOf(m).map((l) => <span key={l} className="inline-flex items-center gap-1 rounded bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] text-fuchsia-300"><IndicatorIcon size={10} />{l}</span>)}
     </>
   )
 }
@@ -210,10 +214,10 @@ function MediaCard({ m, canEdit, caseNum, gangName, onOpen, onCase, onForward, o
           <img src={safe} alt="" onError={() => setImgFailed(true)} className="h-40 w-full object-cover" />
         </button>
       ) : m.type === 'video' ? (
-        <button onClick={onOpen} className="flex h-40 w-full items-center justify-center bg-ink-800 text-4xl" aria-label={`Preview ${m.title}`}>🎬</button>
+        <button onClick={onOpen} className="flex h-40 w-full items-center justify-center bg-ink-800 text-slate-400" aria-label={`Preview ${m.title}`}><FileTypeIcon type="video" size={36} /></button>
       ) : (
         <button onClick={onOpen} className="flex h-40 w-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-ink-800 to-ink-700" aria-label={`Preview ${m.title}`}>
-          <span className="text-3xl" aria-hidden>📡</span>
+          <span className="text-slate-400" aria-hidden><RadioIcon size={30} /></span>
           <span className="max-w-full truncate px-3 font-mono text-[10px] text-slate-400">{src || 'fivemanage'}</span>
         </button>
       )}
@@ -226,8 +230,8 @@ function MediaCard({ m, canEdit, caseNum, gangName, onOpen, onCase, onForward, o
         {(canEdit || onDelete) && (
           <div className="mt-3 flex items-center gap-2">
             {canEdit && <Button size="sm" className="flex-1" onClick={onForward}>↗ Forward to Case</Button>}
-            {canEdit && <button onClick={onTags} title="Edit tags" className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-fuchsia-200 transition hover:bg-white/10">🏷️</button>}
-            {onDelete && <button onClick={onDelete} title="Delete from vault" aria-label={`Delete ${m.title}`} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10">🗑️</button>}
+            {canEdit && <button onClick={onTags} title="Edit tags" aria-label={`Edit tags for ${m.title}`} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-fuchsia-200 transition hover:bg-white/10"><IndicatorIcon size={14} /></button>}
+            {onDelete && <button onClick={onDelete} title="Delete from vault" aria-label={`Delete ${m.title}`} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10"><TrashIcon size={14} /></button>}
           </div>
         )}
       </div>
@@ -245,7 +249,7 @@ function Lightbox({ m, caseNum, gangName, onClose }: { m: MediaRow; caseNum: (id
     <Modal open onClose={onClose} wide>
       <ModalHeader title={m.title} onClose={onClose} />
       {!safe ? (
-        <div className="flex h-64 items-center justify-center rounded-lg bg-ink-800 text-5xl" aria-hidden>📡</div>
+        <div className="flex h-64 items-center justify-center rounded-lg bg-ink-800 text-slate-400" aria-hidden><RadioIcon size={44} /></div>
       ) : m.type === 'image' ? (
         // eslint-disable-next-line @next/next/no-img-element -- external evidence URL
         <img src={safe} alt={m.title} className="max-h-[70vh] w-full rounded-lg object-contain" />
@@ -395,7 +399,7 @@ function IngestModal({ cases, gangs, onClose, onSaved }: { cases: CaseOption[]; 
             <div className="mt-1.5">
               <input ref={fileRef} type="file" accept="image/*,video/*,audio/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = '' }} />
               <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-blue-200 transition hover:bg-white/10 disabled:opacity-60">
-                {uploading ? 'Uploading…' : '📤 Upload a file instead (FiveManage)'}
+                {uploading ? 'Uploading…' : 'Upload a file instead (FiveManage)'}
               </button>
             </div>
           ) : (
