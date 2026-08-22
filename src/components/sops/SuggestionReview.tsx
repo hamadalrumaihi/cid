@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { ArchiveIcon } from '@/components/shell/icons'
 import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
 import { PageHeader, SectionHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
@@ -470,6 +471,7 @@ export function SuggestionReview({ onBack, onOpenDoc, openId }: {
         <CardGridSkeleton cols="sm:grid-cols-2 xl:grid-cols-3" />
       ) : rows.length === 0 ? (
         <EmptyState
+          icon={<ArchiveIcon size={26} />}
           title="No suggestions yet"
           hint="Improvement requests from readers appear here for review."
         />

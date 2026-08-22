@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
-import { SearchIcon } from '@/components/shell/icons'
+import { SearchIcon, XMarkIcon } from '@/components/shell/icons'
 import { anchorId, docHeadings, renderDocMarkdown } from './docMarkdown'
 import { OnThisPage, useActiveHeading } from './OnThisPage'
 import { DEP_KIND_META, DEP_NODES, dependentsOf, depsOf, type DepNode } from './depGraph'
@@ -397,7 +397,7 @@ export function DepExplorer() {
               </p>
               <p className="mt-1 text-xs text-slate-400">{sel.about}</p>
             </div>
-            <button onClick={() => setSel(null)} aria-label="Close details" className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-300 hover:bg-white/10">✕</button>
+            <button onClick={() => setSel(null)} aria-label="Close details" className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-300 hover:bg-white/10"><XMarkIcon size={14} /></button>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <DepList title="Depends on" nodes={depsOf(sel.id)} empty="Nothing in this map — a foundation node." onPick={pick} />

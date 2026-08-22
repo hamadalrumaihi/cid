@@ -8,6 +8,7 @@
  *  paraphrasing them loses the recorded reason. Dismissable; presentation
  *  only — the refusal already happened server-side. */
 import { Button } from '@/components/ui/Button'
+import { XMarkIcon } from '@/components/shell/icons'
 
 /** True when an RPC error is the server's conflict/recusal refusal (the
  *  literal raise strings in 20260816120000: 'recusal required',
@@ -36,7 +37,7 @@ export function RecusalBanner({ message, onDismiss }: {
       </div>
       {onDismiss && (
         <Button size="sm" variant="ghost" aria-label="Dismiss recusal notice" onClick={onDismiss}>
-          ✕
+          <XMarkIcon size={16} />
         </Button>
       )}
     </div>

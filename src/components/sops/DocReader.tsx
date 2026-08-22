@@ -22,6 +22,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Badge } from '@/components/ui/Badge'
+import { DocumentIcon } from '@/components/shell/icons'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -305,6 +306,7 @@ export function DocReader(props: {
   if (load === 'missing' || !doc) {
     return (
       <EmptyState
+        icon={<DocumentIcon size={26} />}
         title="This document isn’t available"
         hint="It may have been removed, or your role doesn’t have access to it."
         action={{ label: 'Back to library', onClick: onBack }}

@@ -28,7 +28,7 @@ import { SectionHeader } from '@/components/ui/PageHeader'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { Badge } from '@/components/ui/Badge'
 import { inputCls, labelCls } from '@/components/ui/Field'
-import { SearchIcon } from '@/components/shell/icons'
+import { ArchiveIcon, SearchIcon } from '@/components/shell/icons'
 import { DepExplorer } from '@/components/devdocs/DevDocsView'
 import {
   ENV_VARS, FB_PRIORITIES, FB_PRIORITY_TINT, FB_STATUSES, FB_STATUS_TINT, FB_TYPES,
@@ -779,7 +779,7 @@ function FeedbackInbox() {
 
         {loading ? <p className="text-sm text-slate-400">Loading submissions…</p>
           : err ? <ErrorNotice message={err} onRetry={() => void refresh()} />
-          : !shown.length ? <EmptyState title="Nothing in this view." hint="Try another filter or clear the search." />
+          : !shown.length ? <EmptyState icon={<ArchiveIcon size={26} />} title="Nothing in this view." hint="Try another filter or clear the search." />
           : (
             <div className="space-y-2">
               {shown.map((i) => (
