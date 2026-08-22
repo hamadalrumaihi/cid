@@ -168,9 +168,6 @@ export const CalendarIcon = (p: IconProps) => (
 export const StarIcon = (p: IconProps) => (
   <T {...p}><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z" /></T>
 )
-export const EditIcon = (p: IconProps) => (
-  <T {...p}><path d="M4 20h4l11-11a2.1 2.1 0 0 0-4-4L4 16z" /><path d="M13.5 6.5l4 4" /></T>
-)
 export const TrashIcon = (p: IconProps) => (
   <T {...p}><path d="M4.5 6.5h15M9.5 3.5h5M6.5 6.5l1 13.5a1.5 1.5 0 0 0 1.5 1.4h6a1.5 1.5 0 0 0 1.5-1.4l1-13.5" /><path d="M10 10.5v6M14 10.5v6" /></T>
 )
@@ -194,9 +191,6 @@ export const ArchiveIcon = (p: IconProps) => (
 )
 export const UndoIcon = (p: IconProps) => (
   <T {...p}><path d="M8.5 5.5L4 10l4.5 4.5" /><path d="M4 10h10a6 6 0 0 1 0 12h-3" /></T>
-)
-export const DownloadIcon = (p: IconProps) => (
-  <T {...p}><path d="M12 4v11M7.5 11l4.5 4.5L16.5 11" /><path d="M4.5 19.5h15" /></T>
 )
 export const FilterIcon = (p: IconProps) => (
   <T {...p}><path d="M4 6h16M7 12h10M10 18h4" /></T>

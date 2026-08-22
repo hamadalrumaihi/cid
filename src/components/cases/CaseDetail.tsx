@@ -261,7 +261,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const legalNow = useNow()
   const legalNeedsAction = useMemo(
     () => (wf ? countViewerActionable(wf.legal, buildLegalViewer(auth, prosecutorBureaus, undefined, siu.isCommand), legalNow) : 0),
-    [wf, auth, prosecutorBureaus, legalNow],
+    [wf, auth, prosecutorBureaus, legalNow, siu.isCommand],
   )
 
   // Conditional RICO tab: visible with data, after an explicit session enable,
