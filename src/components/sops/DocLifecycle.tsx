@@ -267,7 +267,7 @@ export function ReadingCampaignModal({ doc, campaign, onClose, onDone }: {
       <ModalHeader title={`Required reading — ${docTitle(doc.name)}`} onClose={onClose} />
       <div className="space-y-5">
         {campaign ? (
-          <section className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+          <section className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-amber-200">Required reading active</p>
               <p className="mt-0.5 text-xs text-slate-300">
@@ -338,7 +338,7 @@ export function ReadingCampaignModal({ doc, campaign, onClose, onDone }: {
               </p>
               <ul className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
                 {summary.map((r) => (
-                  <li key={r.user_id} className="rounded-xl border border-white/5 bg-ink-900/60 px-3 py-2">
+                  <li key={r.user_id} className="rounded-lg border border-white/5 bg-ink-900/60 px-3 py-2">
                     <div className="flex items-center justify-between gap-2">
                       <span className="min-w-0 truncate text-sm text-slate-200">{r.display_name}</span>
                       {r.acknowledged_at

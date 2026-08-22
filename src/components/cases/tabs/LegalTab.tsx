@@ -21,6 +21,7 @@ import { EmptyState } from '@/components/ui/Notice'
 import { ListSkeleton } from '@/components/ui/Skeleton'
 import { LegalRequestCard } from '@/components/justice/LegalRequestCard'
 import { buildLegalViewer, useMyProsecutorBureaus } from '@/components/justice/legalShared'
+import { useSiu } from '@/lib/useSiu'
 
 /** Registry triage order (LegalView) + the awareness lane last. */
 const GROUP_ORDER: OpGroup[] = [
@@ -31,12 +32,13 @@ const GROUP_ORDER: OpGroup[] = [
 
 export function LegalTab({ rows }: { rows: LegalRequest[] | null }) {
   const auth = useAuth()
+  const siu = useSiu()
   const router = useRouter()
   const prosecutorBureaus = useMyProsecutorBureaus()
   const now = useNow()
   const viewer = useMemo(
-    () => buildLegalViewer(auth, prosecutorBureaus),
-    [auth, prosecutorBureaus],
+    () => buildLegalViewer(auth, prosecutorBureaus, undefined, siu.isCommand),
+    [auth, prosecutorBureaus, siu.isCommand],
   )
 
   const grouped = useMemo(() => {

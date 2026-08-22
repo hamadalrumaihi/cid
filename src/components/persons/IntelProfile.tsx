@@ -14,6 +14,7 @@ import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import { useWatchlistStore } from '@/lib/watchlist'
 import { safeUrl } from '@/lib/safeUrl'
+import { DocumentIcon, FileTypeIcon, GangIcon, PersonIcon, PlaceIcon, TraceIcon } from '@/components/shell/icons'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { WatchButton } from '@/components/cases/WatchButton'
@@ -26,7 +27,6 @@ type GangMemberRow = Tables<'gang_members'>
 type MediaRow = Tables<'media'>
 type EvidenceRow = Tables<'evidence'>
 
-const MEDIA_ICON: Record<string, string> = { photo: '🖼️', video: '🎞️', document: '📄', audio: '🎧' }
 const uniq = <T,>(arr: T[]): T[] => [...new Set(arr)]
 
 interface ProfileData {
@@ -164,8 +164,11 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-white/10 bg-ink-850 px-6 py-4">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">Intel profile</p>
-            <h3 className="truncate text-xl font-bold text-white">
-              {p ? `👤 ${p.name || 'Person'}` : g ? `🚩 ${g.name || 'Gang'}` : 'Loading…'}
+            <h3 className="flex items-center gap-2 text-xl font-bold text-white">
+              {(p || g) && (
+                <span aria-hidden className="flex-shrink-0 text-slate-400">{p ? <PersonIcon size={18} /> : <GangIcon size={18} />}</span>
+              )}
+              <span className="truncate">{p ? p.name || 'Person' : g ? g.name || 'Gang' : 'Loading…'}</span>
             </h3>
             <p className="text-xs text-slate-400">
               {p ? [p.alias ? `"${p.alias}"` : '', p.status || ''].filter(Boolean).join(' · ')
@@ -182,7 +185,7 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
                 title="Open the full dossier page (sections, legal, export)"
                 onClick={() => { onClose(); router.push(`/persons?person=${encodeURIComponent(target.id)}`) }}
               >
-                📇 Full profile
+                <span className="inline-flex items-center gap-1.5"><DocumentIcon size={14} /> Full profile</span>
               </Button>
             )}
             <button aria-label="Close" onClick={onClose} className="-m-2 p-2 text-2xl leading-none text-slate-400 hover:text-white">&times;</button>
@@ -212,7 +215,8 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
               <Section title="Known properties" count={props.length}>
                 {props.map((pr, i) => (
                   <div key={i} className="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm text-slate-200">
-                    🏠 {pr.address || '—'}{pr.type ? <span className="text-slate-500"> · {pr.type}</span> : null}
+                    <span aria-hidden className="mr-1 inline-block align-[-2px] text-slate-400"><PlaceIcon size={13} /></span>
+                    {pr.address || '—'}{pr.type ? <span className="text-slate-500"> · {pr.type}</span> : null}
                     {pr.notes && <><br /><span className="text-[11px] text-slate-400">{pr.notes}</span></>}
                   </div>
                 ))}
@@ -221,7 +225,8 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
                 {data.members.map((m) => (
                   <div key={m.id} className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm">
                     <span className="min-w-0 truncate text-slate-200">
-                      🚩 {m.gang_id
+                      <span aria-hidden className="mr-1 inline-block align-[-2px] text-slate-400"><GangIcon size={13} /></span>
+                      {m.gang_id
                         ? <button onClick={() => setTarget({ type: 'gang', id: m.gang_id })} className="text-blue-300 hover:text-blue-200">{gangName(m.gang_id) || 'Gang'}</button>
                         : 'Gang'}{' '}
                       <span className="text-slate-500">· {m.rank || m.status || 'member'}</span>
@@ -270,7 +275,7 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
               <Section title="Properties" count={data.places.length}>
                 {data.places.map((pl) => (
                   <div key={pl.id} className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm">
-                    <span className="min-w-0 truncate text-slate-200">📍 {pl.name} <span className="text-slate-500">· {pl.type || ''}</span></span>
+                    <span className="min-w-0 truncate text-slate-200"><span aria-hidden className="mr-1 inline-block align-[-2px] text-slate-400"><PlaceIcon size={13} /></span>{pl.name} <span className="text-slate-500">· {pl.type || ''}</span></span>
                     {caseTag(pl.case_id)}
                   </div>
                 ))}
@@ -278,7 +283,7 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
               <Section title="Ballistic footprints" count={data.footprints.length}>
                 {data.footprints.map((f) => (
                   <div key={f.id} className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm">
-                    <span className="min-w-0 truncate text-slate-200">🧬 {f.signature || '—'}{f.weapon ? <span className="text-slate-500"> · {f.weapon}</span> : null}</span>
+                    <span className="min-w-0 truncate text-slate-200"><span aria-hidden className="mr-1 inline-block align-[-2px] text-slate-400"><TraceIcon size={13} /></span>{f.signature || '—'}{f.weapon ? <span className="text-slate-500"> · {f.weapon}</span> : null}</span>
                     {caseTag(f.case_id)}
                   </div>
                 ))}
@@ -300,7 +305,7 @@ function MediaSection({ media, caseTag }: { media: MediaRow[]; caseTag: (id: str
       {media.map((m) => (
         <div key={m.id} className="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-sm">
           <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-slate-200">{MEDIA_ICON[m.type] || '📎'} {m.title || m.kind || 'Media'}</span>
+            <span className="truncate text-slate-200"><span aria-hidden className="mr-1 inline-block align-[-2px] text-slate-400"><FileTypeIcon type={m.type} size={13} /></span>{m.title || m.kind || 'Media'}</span>
             {m.external_url && safeUrl(m.external_url) && (
               <a href={safeUrl(m.external_url)} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-[11px] text-blue-300 hover:text-blue-200">open ↗</a>
             )}

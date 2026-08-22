@@ -110,7 +110,7 @@ function OperationCard({ op, cases, onOpen }: { op: OperationRow; cases: OpsCase
   const counts = OP_STATUSES.map((s) => cases.filter((c) => c.status === s).length)
   const total = Math.max(1, cases.length)
   return (
-    <button onClick={onOpen} className="rounded-2xl border border-white/5 bg-ink-900/60 p-4 text-left transition hover:border-badge-400/50">
+    <button onClick={onOpen} className="rounded-lg border border-white/5 bg-ink-900/60 p-4 text-left transition hover:border-badge-400/50">
       <div className="flex items-start justify-between gap-3">
         <h3 className="text-lg font-black text-white">{op.name}</h3>
         <Badge tint={opStatusTint(op.status)} className="uppercase">{op.status}</Badge>
@@ -237,7 +237,7 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
       <Breadcrumbs items={[{ label: 'Operations', onClick: onBack }, { label: op.name }]} />
 
       {/* ── Overview ─────────────────────────────────────────────────────── */}
-      <section className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+      <section className="rounded-lg border border-white/5 bg-ink-900/60 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -274,11 +274,11 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
 
       {/* ── Participating bureaus (JTF) ──────────────────────────────────── */}
       {jtf && (
-        <section className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+        <section className="rounded-lg border border-white/5 bg-ink-900/60 p-5">
           <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Participating bureaus</h2>
           <div className="space-y-2">
             {bureaus.filter((b) => !b.left_at).map((b) => (
-              <div key={b.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3">
+              <div key={b.id} className="flex flex-wrap items-center gap-3 rounded-lg bg-ink-950/50 p-3">
                 <Badge tint={b.bureau === op.lead_bureau ? 'bg-violet-500/15 text-violet-300' : undefined}>
                   {deptLabel(b.bureau)}{b.bureau === op.lead_bureau ? ' · LEAD' : ''}
                 </Badge>
@@ -309,10 +309,10 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
       )}
 
       {/* ── Cases ────────────────────────────────────────────────────────── */}
-      <section className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+      <section className="rounded-lg border border-white/5 bg-ink-900/60 p-5">
         <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Cases</h2>
         {linkable.length > 0 && !isOpEnded(op.status) && (
-          <div className="mb-3 flex gap-2 rounded-2xl border border-white/5 bg-ink-900/50 p-3">
+          <div className="mb-3 flex gap-2 rounded-lg bg-ink-900/50 p-3">
             <select value={pick} onChange={(e) => setPick(e.target.value)} className={`${CONTROL} min-w-0 flex-1`} aria-label="Link a case">
               <option value="">{jtf ? 'Add one of your cases to this JTF…' : 'Link a case…'}</option>
               {linkable.map((c) => <option key={c.id} value={c.id}>{c.case_number} - {c.title}{jtf ? ` (${deptLabel(c.bureau)})` : ''}</option>)}
@@ -322,11 +322,11 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
         )}
         <div className="space-y-2">
           {cases.map((c) => (
-            <div key={c.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3">
+            <div key={c.id} className="flex items-center gap-3 rounded-lg bg-ink-950/50 p-3">
               <button onClick={() => router.push(`/cases?case=${c.id}`)} className="min-w-0 flex-1 text-left">
                 <p className="flex flex-wrap items-center gap-2 font-mono text-sm font-bold text-badge-200">
                   {c.case_number}
-                  {jtf && <span className="rounded-full bg-violet-500/15 px-1.5 py-0.5 font-sans text-[10px] font-bold uppercase text-violet-300">Joint</span>}
+                  {jtf && <span className="rounded bg-violet-500/15 px-1.5 py-0.5 font-sans text-[10px] font-bold uppercase text-violet-300">Joint</span>}
                 </p>
                 <p className="font-semibold text-white">{c.title || 'Untitled case'}</p>
                 <p className="text-xs text-slate-500">{deptLabel(c.bureau)} - {c.status} - {officerName(c.lead_detective_id) || 'Unassigned'}</p>
@@ -359,11 +359,11 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
 
       {/* ── Personnel (derived from linked cases) ────────────────────────── */}
       {jtf && personnel.length > 0 && (
-        <section className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+        <section className="rounded-lg border border-white/5 bg-ink-900/60 p-5">
           <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Personnel</h2>
           <div className="flex flex-wrap gap-2">
             {personnel.map((p) => (
-              <span key={p.name} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200">
+              <span key={p.name} className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200">
                 <span className="font-semibold">{p.name}</span>
                 <span className="text-slate-500">{deptLabel(p.bureau)} · {p.caseCount} case{p.caseCount === 1 ? '' : 's'}</span>
               </span>
@@ -373,11 +373,11 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
       )}
 
       {/* ── Timeline (derived) ───────────────────────────────────────────── */}
-      <section className="rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+      <section className="rounded-lg border border-white/5 bg-ink-900/60 p-5">
         <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Timeline</h2>
         <div className="space-y-2">
           {timeline.map((e, i) => (
-            <div key={`${e.at}-${i}`} className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+            <div key={`${e.at}-${i}`} className="rounded-lg bg-ink-950/50 p-3">
               <p className="font-semibold text-white">{e.label}</p>
               <p className="text-sm text-slate-400">{timeAgo(e.at)}{e.sub ? ` - ${e.sub}` : ''}</p>
             </div>

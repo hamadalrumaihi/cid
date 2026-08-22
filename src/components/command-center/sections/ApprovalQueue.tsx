@@ -168,7 +168,7 @@ function DecisionModal({ req, kind, onClose, onDone }: {
     <Modal open onClose={onClose} dirty={() => !!(note.trim() || internal.trim())}>
       <div className="p-6">
         <ModalHeader title={TITLE[kind]} onClose={onClose} />
-        <div className="space-y-1.5 rounded-xl border border-white/10 bg-ink-950/50 p-4">
+        <div className="space-y-1.5 rounded-lg bg-ink-950/50 p-4">
           <SummaryRow label="Applicant" value={req.display_name} />
           <SummaryRow label="Requested" value={`${bureauLabel(req.requested_bureau)} — ${roleLabel(req.requested_role)}`} />
           {approving && <SummaryRow label="Final Assignment" value={`${bureauLabel(finalBureau)} — ${roleLabel(finalRole)}`} />}
@@ -329,13 +329,13 @@ export function ApprovalQueue() {
         <ErrorNotice message={reqError} onRetry={() => void refresh()} />
       ) : (
         <>
-      <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
+      <section className="rounded-lg border border-white/5 bg-ink-900/45 p-5">
         <h3 className="mb-1 font-bold text-white">Pending membership requests <span className="text-slate-500">({pm.submitted.length})</span></h3>
         <p className="mb-3 text-xs text-slate-400">Submitted department requests awaiting a Command decision. Approval activates the account atomically.</p>
         {pm.submitted.length ? (
           <div className="space-y-3">
             {pm.submitted.map(({ profile: p, request: r }) => (
-              <div key={r.id} className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+              <div key={r.id} className="rounded-lg bg-amber-500/5 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold text-white">{r.display_name}</p>
@@ -369,7 +369,7 @@ export function ApprovalQueue() {
             <p className="mb-2 text-xs font-semibold text-slate-400">Waiting on applicant ({pm.corrections.length}) — corrections requested, no action needed until they resubmit.</p>
             <div className="space-y-2">
               {pm.corrections.map((r) => (
-                <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/5 bg-ink-950/40 px-4 py-2.5 opacity-80">
+                <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-ink-950/40 px-4 py-2.5 opacity-80">
                   <div>
                     <p className="text-sm font-semibold text-slate-300">{r.display_name}</p>
                     <p className="text-[11px] text-slate-400">{bureauLabel(r.requested_bureau)} · {roleLabel(r.requested_role)}</p>
@@ -383,12 +383,12 @@ export function ApprovalQueue() {
       </section>
 
       {pm.ghosts.length > 0 && (
-        <section className="rounded-2xl border border-amber-500/20 bg-ink-900/45 p-5">
+        <section className="rounded-lg border border-amber-500/20 bg-ink-900/45 p-5">
           <h3 className="mb-1 font-bold text-white">Open requests for already-active members <span className="text-slate-500">({pm.ghosts.length})</span></h3>
           <p className="mb-3 text-xs text-slate-400">These members are already active but their request was never closed. Review &amp; close to finish the record.</p>
           <div className="space-y-2">
             {pm.ghosts.map((r) => (
-              <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-2.5">
+              <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-500/5 px-4 py-2.5">
                 <div>
                   <p className="text-sm font-semibold text-white">{r.display_name}</p>
                   <p className="text-[11px] text-slate-400">{bureauLabel(r.requested_bureau)} · {roleLabel(r.requested_role)} · submitted {fmtDateTime(r.submitted_at)}</p>
@@ -404,13 +404,13 @@ export function ApprovalQueue() {
         </section>
       )}
 
-      <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
+      <section className="rounded-lg border border-white/5 bg-ink-900/45 p-5">
         <h3 className="mb-1 font-bold text-white">Pending member approvals <span className="text-slate-500">({pm.signIns.length})</span></h3>
         <p className="mb-3 text-xs text-slate-400">New sign-ins without a membership request. Quick approve activates them with their current role and division.</p>
         {pm.signIns.length ? (
           <div className="space-y-2">
             {pm.signIns.map(({ profile: p, requestStatus, request, actionable }) => (
-              <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-2.5">
+              <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-500/5 px-4 py-2.5">
                 <div>
                   <p className="text-sm font-semibold text-white">{p.display_name}</p>
                   <p className="text-[11px] text-slate-400">{roleLabel(p.role)} · {bureauLabel(p.division)}</p>
@@ -430,7 +430,7 @@ export function ApprovalQueue() {
       </section>
 
       {justicePending.length > 0 && (
-        <section className="rounded-2xl border border-sky-500/20 bg-ink-900/45 p-5">
+        <section className="rounded-lg border border-sky-500/20 bg-ink-900/45 p-5">
           <h3 className="mb-1 font-bold text-white">DOJ / Judiciary applications <span className="text-slate-500">({justicePending.length})</span></h3>
           <p className="mb-3 text-xs text-slate-400">
             Legacy applicants who signed up for the Department of Justice or the Judiciary — not CID.
@@ -439,7 +439,7 @@ export function ApprovalQueue() {
           </p>
           <div className="space-y-2">
             {justicePending.map((j) => (
-              <div key={j.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-500/20 bg-sky-500/5 px-4 py-2.5">
+              <div key={j.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-sky-500/5 px-4 py-2.5">
                 <div>
                   <p className="text-sm font-semibold text-white">{j.display_name}</p>
                   <p className="text-[11px] text-slate-400">
@@ -457,13 +457,13 @@ export function ApprovalQueue() {
         </>
       )}
 
-      <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
+      <section className="rounded-lg border border-white/5 bg-ink-900/45 p-5">
         <h3 className="mb-1 font-bold text-white">Sign-offs awaiting your decision <span className="text-slate-500">({reviews.length})</span></h3>
         <p className="mb-3 text-xs text-slate-400">Cases at a stage your role can decide. Opens the case Sign-off tab, where the decision is recorded.</p>
         {reviews.length ? (
           <div className="space-y-2">
             {reviews.map((c) => (
-              <button key={c.id} onClick={() => router.push(`/cases?case=${c.id}&tab=signoff`)} className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-ink-950/50 px-4 py-2.5 text-left transition hover:border-badge-400/50">
+              <button key={c.id} onClick={() => router.push(`/cases?case=${c.id}&tab=signoff`)} className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-ink-950/50 px-4 py-2.5 text-left transition hover:border-badge-400/50">
                 <div><p className="font-mono text-sm font-bold text-white">{c.case_number}</p><p className="text-[11px] text-slate-400">{c.title || 'Untitled'} · {c.bureau}</p></div>
                 <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${signoffTint(c.signoff_status)}`}>{signoffLabel(c.signoff_status)}</span>
               </button>

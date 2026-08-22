@@ -24,9 +24,9 @@ export function MetricStrip({ metrics, className = '' }: { metrics: Metric[]; cl
       {metrics.map((m, i) => {
         const body = (
           <>
-            <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-400">{m.label}</p>
+            <p className="truncate text-[11px] font-semibold uppercase tracking-wider text-slate-400">{m.label}</p>
             <p className={`mt-0.5 text-lg font-bold leading-6 tabular-nums ${m.tint ? `inline-flex rounded px-1.5 ${m.tint}` : 'text-white'}`}>{m.value}</p>
-            {m.hint && <p className="truncate text-[10px] text-slate-400">{m.hint}</p>}
+            {m.hint && <p className="truncate text-[11px] text-slate-400">{m.hint}</p>}
           </>
         )
         // gap-px over the bg-white/5 wrapper draws the hairline separators in

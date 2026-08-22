@@ -12,7 +12,7 @@
  *  Light-tactical identity: slate text, a single amber-accent (bg-badge-500)
  *  active node, thin white/10 connectors. No seals, no gavels. */
 import {
-  STAGE_LABEL, STAGE_ORDER, currentStage, stageLabel, stagesForRequest,
+  STAGE_LABEL, STAGE_ORDER, currentStage, stageDisplayLabel, stageLabel, stagesForRequest,
   laneThatAdvanced, type LegalReqLike, type StageId,
 } from '@/lib/legalWorkflow'
 
@@ -167,7 +167,7 @@ export function LegalStageTracker({ request, className = '' }: {
             <div className="min-w-0 sm:mt-0.5">
               {item.kind === 'stage' ? (
                 <>
-                  <span className={labelClass(stageState(item.stage))}>{STAGE_LABEL[item.stage]}</span>
+                  <span className={labelClass(stageState(item.stage))}>{stageDisplayLabel(item.stage, request)}</span>
                   <span className="sr-only"> — {STATE_WORD[stageState(item.stage)]}</span>
                   {item.stage === 'doj_intake' && parallel && (
                     <p className="mt-0.5 text-[11px] leading-tight text-slate-400">

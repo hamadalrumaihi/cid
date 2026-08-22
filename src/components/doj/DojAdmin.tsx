@@ -527,7 +527,7 @@ export function DojAdmin({ requests, onOpen, reload, onConflict }: {
           subtitle="Prosecutors, judges, and the Attorney General. Deactivating a member auto-returns their unfinished work to the queues."
           actions={<Button size="sm" variant="primary" onClick={() => setAppointOpen(true)}>Appoint member…</Button>}
         />
-        <ul className="divide-y divide-white/5 rounded-2xl border border-white/5 bg-ink-900/60">
+        <ul className="divide-y divide-white/5 rounded-lg border border-white/5 bg-ink-900/60">
           {directory.map((d) => {
             const m = membershipOf(d.user_id)
             const expired = !!m?.expires_at && Date.parse(m.expires_at) <= now
@@ -570,7 +570,7 @@ export function DojAdmin({ requests, onOpen, reload, onConflict }: {
           subtitle="Cross-bureau prosecutor coverage — explicit, dated, audited, endable. Your authority cannot bypass bureau eligibility; coverage is the path."
           actions={<Button size="sm" variant="primary" onClick={() => setCoverageOpen(true)}>Grant coverage…</Button>}
         />
-        <ul className="divide-y divide-white/5 rounded-2xl border border-white/5 bg-ink-900/60">
+        <ul className="divide-y divide-white/5 rounded-lg border border-white/5 bg-ink-900/60">
           {activeCoverage.map((c) => (
             <li key={c.id} className="flex min-h-[48px] flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
               <div className="min-w-0 flex-1">
@@ -599,7 +599,7 @@ export function DojAdmin({ requests, onOpen, reload, onConflict }: {
           title="Member transfers"
           subtitle="CID ↔ DOJ organizational transfers — same account, same history. CID Command authorizes; you accept; activation is one transaction gated on the handover."
         />
-        <ul className="divide-y divide-white/5 rounded-2xl border border-white/5 bg-ink-900/60">
+        <ul className="divide-y divide-white/5 rounded-lg border border-white/5 bg-ink-900/60">
           {openTransfers.map((t) => (
             <li key={t.id} className="space-y-1.5 px-3 py-2.5">
               <div className="flex flex-wrap items-center gap-2">
@@ -662,7 +662,7 @@ export function DojAdmin({ requests, onOpen, reload, onConflict }: {
           title="Held prosecutorial work"
           subtitle="Claimed reviews, oldest hold first. Reassign a stalled request (reason required) or return it to the shared queue."
         />
-        <ul className="divide-y divide-white/5 rounded-2xl border border-white/5 bg-ink-900/60">
+        <ul className="divide-y divide-white/5 rounded-lg border border-white/5 bg-ink-900/60">
           {held.map((r) => (
             <li key={r.id} className="flex min-h-[48px] flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
               <button

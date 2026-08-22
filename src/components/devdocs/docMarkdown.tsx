@@ -102,7 +102,7 @@ export function renderDocMarkdown(body: string, onLink: LinkFn): ReactNode {
       while (i < lines.length && !lines[i].startsWith('```')) { buf.push(lines[i]); i++ }
       i++
       blocks.push(
-        <pre key={key++} className="my-4 overflow-x-auto rounded-xl border border-white/10 bg-ink-950 p-4 font-mono text-[12px] leading-relaxed text-slate-300">
+        <pre key={key++} className="my-4 overflow-x-auto rounded-lg border border-white/10 bg-ink-950 p-4 font-mono text-[12px] leading-relaxed text-slate-300">
           {buf.join('\n')}
         </pre>,
       )
@@ -155,7 +155,7 @@ export function renderDocMarkdown(body: string, onLink: LinkFn): ReactNode {
       const rows: string[][] = []
       while (i < lines.length && lines[i].includes('|') && lines[i].trim()) { rows.push(splitRow(lines[i])); i++ }
       blocks.push(
-        <div key={key++} className="my-4 overflow-x-auto rounded-xl border border-white/10">
+        <div key={key++} className="my-4 overflow-x-auto rounded-lg border border-white/10">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/10 bg-white/[0.03]">

@@ -41,6 +41,7 @@ import type { Tables } from '@/lib/database.types'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { SiuPersonDossierModal } from './SiuPersonDossier'
@@ -85,8 +86,10 @@ export function SiuPersonActions({ personId, personName }: {
   const intel = d?.siu_intelligence ?? []
 
   return (
-    <div className="rounded-2xl border border-violet-500/25 bg-violet-500/[0.04] p-4">
+    <Card variant="flat" pad="sm">
       <div className="flex flex-wrap items-center gap-2">
+        {/* The one violet mark on the panel: the unit's identity chip. The
+            surface itself stays a standard flat card. */}
         <Badge tint="bg-violet-500/15 text-violet-300">SIU</Badge>
         <span className="text-sm font-semibold text-slate-200">Unit actions</span>
 
@@ -148,7 +151,7 @@ export function SiuPersonActions({ personId, personName }: {
       {dossierOpen && (
         <SiuPersonDossierModal personId={personId} onClose={() => setDossierOpen(false)} />
       )}
-    </div>
+    </Card>
   )
 }
 

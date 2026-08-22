@@ -118,14 +118,14 @@ export function PromotionsTransfers() {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
+      <section className="rounded-lg border border-white/5 bg-ink-900/45 p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-bold text-white">Change rank or bureau</h3>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find officer…" aria-label="Find officer" className="w-52 rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500" />
         </div>
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.slice(0, 24).map((p) => (
-            <button key={p.id} onClick={() => setTarget(p)} className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-ink-950/50 px-3 py-2 text-left transition hover:border-badge-400/50">
+            <button key={p.id} onClick={() => setTarget(p)} className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-ink-950/50 px-3 py-2 text-left transition hover:border-badge-400/50">
               <span><span className="block text-sm font-semibold text-white">{p.display_name}</span><span className="text-[11px] text-slate-400">{roleLabel(p.role)} · {p.division}</span></span>
               <span className="text-xs font-semibold text-badge-200">Manage</span>
             </button>
@@ -135,7 +135,7 @@ export function PromotionsTransfers() {
         <p className="mt-3 text-[11px] text-slate-500">Promotions and demotions go through <b>Change role</b> (audited, reason required); department moves go through <b>Transfer department</b> and apply immediately. Every change is recorded with who, why, and when.</p>
       </section>
 
-      <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
+      <section className="rounded-lg border border-white/5 bg-ink-900/45 p-5">
         <h3 className="mb-1 font-bold text-white">Open transfers <span className="text-slate-500">({open.length})</span></h3>
         <p className="mb-3 text-xs text-slate-400">Cross-bureau moves awaiting approval. Bureau Leads decide for their own bureau; Deputy Director+ may complete or reject directly.</p>
         {open.length ? (
@@ -148,7 +148,7 @@ export function PromotionsTransfers() {
               const canReject = (canDecideTransferSide(actor, t.from_bureau) || canDecideTransferSide(actor, t.to_bureau)) && t.target_id !== actor.id
               const canCancel = t.requested_by === actor.id || isHigherCommand
               return (
-                <div key={t.id} className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+                <div key={t.id} className="rounded-lg bg-amber-500/5 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-white">
@@ -182,7 +182,7 @@ export function PromotionsTransfers() {
         ) : <p className="text-sm text-emerald-300">✓ No open transfers.</p>}
       </section>
 
-      <section className="rounded-2xl border border-white/5 bg-ink-900/45 p-5">
+      <section className="rounded-lg border border-white/5 bg-ink-900/45 p-5">
         <h3 className="mb-1 font-bold text-white">Role & assignment history <span className="text-slate-500">({events.length})</span></h3>
         {events.length ? (
           <div className="space-y-1.5">

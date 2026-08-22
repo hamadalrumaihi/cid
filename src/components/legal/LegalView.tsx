@@ -19,6 +19,7 @@
 import { Suspense, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
+import { useSiu } from '@/lib/useSiu'
 import { timeAgo } from '@/lib/format'
 import { SUBPOENA_TYPES, WARRANT_TYPES, isEditableDraft, type LegalRequest } from '@/lib/justice'
 import {
@@ -64,6 +65,7 @@ export function LegalView() {
 
 function LegalViewInner() {
   const auth = useAuth()
+  const siu = useSiu()
   const router = useRouter()
   const params = useSearchParams()
   const openId = params.get('request')
@@ -102,7 +104,7 @@ function LegalViewInner() {
   // One disposition per request per render — the model resolves the canonical
   // group, claim eligibility, awareness and urgency for this viewer.
   const prosecutorBureaus = useMyProsecutorBureaus()
-  const viewer = buildLegalViewer(auth, prosecutorBureaus, dojRole)
+  const viewer = buildLegalViewer(auth, prosecutorBureaus, dojRole, siu.isCommand)
   const now = useNow()
   const entries = useMemo(
     () => requests.map((r) => ({ r, d: dispositionFor(r, viewer, now) })),

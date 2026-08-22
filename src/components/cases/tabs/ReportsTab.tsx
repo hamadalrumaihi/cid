@@ -26,6 +26,20 @@ import { Drafts } from '@/lib/drafts'
 import { toast } from '@/lib/toast'
 import { WarrantPrintButton } from './WarrantPrint'
 import type { CaseRow, EvidenceRow, MediaRow, PersonRow, ReportRow } from './shared'
+import { DocumentIcon, EyeIcon, RadioIcon, ReceiptIcon, ReportIcon, ScaleIcon, SearchIcon } from '@/components/shell/icons'
+
+/** Report-template glyphs, drawn from the shared icon set (was an emoji map in lib/forms). */
+function TemplateIcon({ id }: { id: string }) {
+  switch (id) {
+    case 'raid_seizure': return <ReceiptIcon size={14} />
+    case 'uc_operation': return <EyeIcon size={14} />
+    case 'arrest_warrant': case 'subpoena': return <ScaleIcon size={14} />
+    case 'search_warrant': return <SearchIcon className="h-3.5 w-3.5" />
+    case 'wiretap_warrant': case 'surveillance_report': return <RadioIcon size={14} />
+    case 'cid_investigative_report': return <ReportIcon size={14} />
+    default: return <DocumentIcon size={14} />
+  }
+}
 
 export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: CaseRow; canEdit: boolean; canDelete: boolean; holdActive?: boolean }) {
   const router = useRouter()
@@ -106,7 +120,7 @@ export function ReportsTab({ c, canEdit, canDelete, holdActive = false }: { c: C
           onChanged={() => void refresh()}
           onDelete={() => { void deleteWithUndo('reports', open, { label: reportTitle(open), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }); setOpenId(null) }} />
       ) : (<>
-        {canEdit && <div className="flex flex-wrap gap-2">{REPORT_TEMPLATES.map((tpl) => <Button key={tpl.id} onClick={() => openEditor(tpl.id)}>{tpl.icon} {tpl.name}</Button>)}</div>}
+        {canEdit && <div className="flex flex-wrap gap-2">{REPORT_TEMPLATES.map((tpl) => <Button key={tpl.id} onClick={() => openEditor(tpl.id)}><TemplateIcon id={tpl.id} /> {tpl.name}</Button>)}</div>}
         <div className="space-y-2">
           {reports.map((r) => <div key={r.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3"><button onClick={() => setOpenId(r.id)} className="min-w-0 flex-1 text-left"><p className="font-bold text-white">{reportTitle(r)}</p><p className="text-xs text-slate-500">{r.finalized ? 'Finalized' : 'Draft'} - {timeAgo(r.created_at)}</p></button>{!r.finalized && canEdit && <Button size="sm" variant="success" onClick={() => setConfirm({ kind: 'finalize', r })}>Finalize</Button>}{!r.finalized && canEdit && <button onClick={() => openEditor(r.template, r)} className="text-sm font-bold text-badge-200">Edit</button>}{canDelete && (holdActive ? <span title="A legal hold preserves this case's reports" className="text-sm font-bold text-rose-300/50">Held</span> : <button onClick={() => { void deleteWithUndo('reports', r, { label: reportTitle(r), setNullRefs: [{ table: 'media', column: 'report_id' }], after: refresh }) }} className="text-sm font-bold text-rose-300">Delete</button>)}</div>)}
           {!reports.length && <p className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-500">No reports yet.</p>}

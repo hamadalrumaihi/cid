@@ -54,13 +54,14 @@ Approval is atomic: request decided + `profiles.role/division/active` flipped + 
 
 ## 2. Justice membership (DOJ / Judiciary)
 
-> **RETIRED (Phase 1) — 2026-07-22.** Justice memberships are **retired and
-> deactivated** — all `justice_memberships` rows are set inactive (preserved for
-> history), the justice-membership RPCs are EXECUTE-revoked, and the DOJ/Judiciary
-> signup path is removed. No new justice memberships are created or approved.
-> Legal-request approval is now **Bureau Lead+** (`private.is_command()`) — see
-> §5 and the [DOJ-INTEGRATION.md](DOJ-INTEGRATION.md) Phase-1 banner. The workflow
-> below is historical.
+> **Status.** The open DOJ/Judiciary *signup path* was retired 2026-07-22
+> ([`20260808140000`](../supabase/migrations/20260808140000_legal_lead_approval.sql))
+> and justice seats were then **revived as appointment-only** by
+> [`20260816120000_minimal_doj_revival.sql`](../supabase/migrations/20260816120000_minimal_doj_revival.sql):
+> live roles are `prosecutor`, `judge` and `attorney_general` (legacy
+> ADA/DA rows resolve to `prosecutor` via `private.justice_role_effective`),
+> created by `justice_appoint` — there is still no public application form.
+> The request/approval workflow below is historical.
 
 Migration [`20260714010000_justice_identity.sql`](../supabase/migrations/20260714010000_justice_identity.sql); overview in [DOJ-INTEGRATION.md](DOJ-INTEGRATION.md#identity-model). Same statuses and shape as §1 (draft → pending → correction_requested / approved / approved_with_changes / rejected / withdrawn; same applicant-owned RPC pair `justice_membership_request_submit()` / `justice_membership_request_withdraw()`), but a **separate identity domain**: approval upserts `justice_memberships` and never touches the CID profile.
 
@@ -118,22 +119,21 @@ Reports belong to a case (`private.can_access_case` gates everything). Lifecycle
 - **Lockdown** — `private.block_direct_report_finalize()` rejects any direct client write to `finalized`/`signature`, and locks a finalized report's `fields` entirely.
 - **CID warrant-report tracker** (distinct from the DOJ legal workflow in §5): reports on warrant templates carry a `fields._warrant_status` of `draft → signed → executed → returned`, movable only via `warrant_set_status()` (status whitelist, warrant templates only, actor stamped server-side into `fields._warrant_log`).
 
-## 5. Warrants & subpoenas (CID legal review)
+## 5. Warrants & subpoenas (legal review)
 
-> **RETIRED (Phase 1) — 2026-07-22.** The multi-stage DOJ pipeline
-> (`not_submitted → … → ada_review → judicial_review → approved`) shown in the
-> legacy block below is **retired** (migration
-> [`20260808140000`](../supabase/migrations/20260808140000_legal_lead_approval.sql)).
-> Legal-request approval is now **Bureau Lead+** (`private.is_command()`). The
-> ADA/DA/AG/Judge review RPCs are EXECUTE-revoked and `justice_memberships` are
-> deactivated. Historical requests may still **display** the old stages
-> read-only, but nothing new moves through them.
+> **Status.** The original ADA→DA→AG pipeline was retired 2026-07-22
+> ([`20260808140000`](../supabase/migrations/20260808140000_legal_lead_approval.sql));
+> what runs today is the **revived prosecutor + judicial pipeline** below
+> ([`20260816120000_minimal_doj_revival.sql`](../supabase/migrations/20260816120000_minimal_doj_revival.sql)
+> onward). Only the legacy per-role RPCs (`review_legal_request_as_ada/_as_da/_as_ag`,
+> `set_legal_approval_route`) remain EXECUTE-revoked; historical requests still
+> display their old stages read-only.
 
 Full narrative in [DOJ-INTEGRATION.md](DOJ-INTEGRATION.md); server surface in [`20260714040000_legal_workflow.sql`](../supabase/migrations/20260714040000_legal_workflow.sql) + [`20260714045000_legal_workflow_review.sql`](../supabase/migrations/20260714045000_legal_workflow_review.sql). `legal_requests` carries three **independent** status dimensions — every legal table is SELECT-only for clients, so all transitions are definer RPCs:
 
 - `document_status`: `draft / finalized / reopened`
 - `review_status`: the review pipeline below
-- `fulfilment_status`: post-approval lifecycle (warrant: `unissued / issued / executed / returned / expired / revoked / closed`; subpoena: `served / compliance_pending / records_received / testimony_completed / non_compliance / return_recorded / closed`)
+- `fulfilment_status`: post-approval lifecycle — one 13-value CHECK shared by both instrument types (`20260714030000_legal_core.sql`): `unissued / issued / executed / returned / expired / revoked / closed / served / compliance_pending / records_received / testimony_completed / non_compliance / return_recorded`. Warrants walk the execute/return arm, subpoenas the serve/comply arm; `service_status` and `compliance_status` are further independent dimensions.
 
 **Active pipeline (both warrants and subpoenas).** CID review hands off to the
 DOJ ([`20260816120000_minimal_doj_revival.sql`](../supabase/migrations/20260816120000_minimal_doj_revival.sql)),
@@ -177,6 +177,37 @@ p_change_summary, p_material_change)` sends a corrected judge-/prosecutor-return
 request **straight back to its bureau's prosecutor queue** unless the investigator
 sets `p_material_change=true` — the declaration is logged
 (`material_change_declared`) and the request re-enters full CID review.
+
+Since [`20261001120100_legal_review_records_rank.sql`](../supabase/migrations/20261001120100_legal_review_records_rank.sql)
+every CID-stage decision also records the reviewer's rank **at decision time**
+(`legal_requests.cid_reviewed_role`, plus `actor_rank` in the audit payloads) —
+the review history answers "who acted, and as what" without re-deriving it from
+today's roster.
+
+### The SIU lane ([`20260903170000_siu_legal_lane.sql`](../supabase/migrations/20260903170000_siu_legal_lane.sql))
+
+A request on a case with `case_authority = 'siu'` runs a **different chain inside
+the same state machine** — it never enters `cid_supervisor_review` or any bureau
+prosecutor queue:
+
+```
+Special Agent draft → siu_command_review (X-1 / the case's lead agent; never the author)
+                    → ag_review (Attorney General) → submitted_to_judge → judicial_review → approved
+```
+
+- Submission fan-out stays inside the unit (SACs only, compartment- and
+  recusal-aware); with no SIU commander seated the **Attorney General** is
+  alerted — never CID command.
+- Returns use `returned_by_siu_command`; the judge/prosecutor **fast lane does
+  not apply** to SIU requests — every resubmission re-enters SIU command review.
+- Authority is `private.siu_case_command()` (SIU command **or** the
+  investigation's lead agent), signature action `siu_command_approval`.
+
+> **Known gap (reported, not yet fixed):** `review_legal_request_as_ag` — the
+> RPC that moves an SIU request out of `ag_review` — has been EXECUTE-revoked
+> since [`20260808140000`](../supabase/migrations/20260808140000_legal_lead_approval.sql)
+> and no migration re-grants it, and no workspace surface lists `ag_review`.
+> An SIU request approved by X-1 currently stalls at the Attorney General step.
 
 Key rules (all server-enforced):
 
@@ -292,6 +323,32 @@ stateDiagram-v2
 | **Permanently deleted** (profile + auth row erased; historical FKs repointed to the system tombstone) | The irreversible exception path when a member must be **erased**, not just deactivated — soft remove stays the default. Members referenced by immutable records (legal paper, sign-off history, tracker signatures, report authorship, custody transfers, evidence collection, justice identity, prosecutor assignments) are **hard-blocked** and can only be deactivated; active-work pointers must be reassigned first. An owner-only `deleted_member_ledger` row snapshots identity, reason, the full reference map, and the member's `role_events` history | `permanent_delete_preview()` → `permanent_delete_arm(target, reason)` → `permanent_delete_execute(token, confirm)` — Owner only, each step requiring a **fresh sign-in** (< 5-minute session), a 5-minute single-use token, and a typed `DELETE <display name>` confirmation ([`20260726010000`](../supabase/migrations/20260726010000_phase_b_permanent_deletion.sql); details in [AUTHORIZATION.md §4](AUTHORIZATION.md)) |
 
 Every transition writes `role_events` and/or `audit_log` plus a notification to the affected member.
+
+## 11. Intelligence intake (field submissions)
+
+One entity for everything that arrives as *information* — patrol, detectives,
+surveillance, outside agencies (`field_submissions` + per-entity claim tables;
+`src/lib/fieldSubmissions.ts`, `src/components/field/`). Two authoring doors:
+
+- **Intelligence-only submitters** — SAHP/BCSO/LSPD personnel appointed via the
+  self-serve onboarding fork ("What do you need access for?" → *Submit
+  Intelligence*, `field_access_self_serve()`): immediate access, submission-only
+  interface (Home · Submit Intelligence · My Reports · Drafts). Safety comes
+  from the access class (a field officer is not `profiles.active`), not a queue.
+- **Investigators** author the same structured record via **+ New intelligence**
+  on the review screen.
+
+Lifecycle (author-facing labels): `draft` Draft → `new` Sent → `reviewing`
+Being reviewed → `needs_info` Question for you → `reviewed` / `actionable`
+Being acted on / `archived` Filed, no action. Reviewers claim/release/assign,
+verify **per claim** (Verified / Unverified / Disputed / Rejected — reliability
+grades the source, a verdict grades one claim), match claims to existing
+registry records (`field_claim_link` — asserts identity, edits neither side),
+convert (open a case, link a case, cite a surveillance observation, register a
+confidential source), archive with a reason, or — command only — soft-delete
+(Owner-only undelete). SIU referral: flag → refer (category; `public_corruption`
+restricts the report immediately) → SIU accepts/declines and assigns its own
+agent — a Bureau Lead cannot make that assignment.
 
 ## Related workflows documented elsewhere
 

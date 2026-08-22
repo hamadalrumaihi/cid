@@ -123,7 +123,7 @@ function DialogCard({ dialog, finish }: { dialog: PendingDialog; finish: (v: boo
     >
       <div
         ref={cardRef}
-        className="w-full max-w-[26rem] rounded-2xl border border-white/10 bg-ink-850 p-6 shadow-glow"
+        className="w-full max-w-[26rem] rounded-2xl border border-white/10 bg-ink-850 p-6 shadow-2xl shadow-black/50"
         role="dialog"
         aria-modal="true"
         aria-labelledby={dialog.title ? 'cid-dialog-title' : undefined}
@@ -152,7 +152,7 @@ function DialogCard({ dialog, finish }: { dialog: PendingDialog; finish: (v: boo
           <button
             ref={okRef}
             onClick={() => finish(isPrompt ? val.trim() : true)}
-            className={`rounded-lg ${okCls} px-4 py-2 text-sm font-semibold text-white shadow-glow transition`}
+            className={`rounded-lg ${okCls} px-4 py-2 text-sm font-semibold text-white transition`}
           >
             {dialog.confirmText || (isPrompt ? 'OK' : 'Confirm')}
           </button>

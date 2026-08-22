@@ -29,6 +29,9 @@ import { priorityTint, statusTint } from '@/lib/tint'
 import { toast } from '@/lib/toast'
 import { useNow } from '@/lib/useNow'
 import { useWatchlistStore } from '@/lib/watchlist'
+import {
+  AlertIcon, ArchiveIcon, DocumentIcon, NetworkIcon, PersonIcon, PlaceIcon, ScaleIcon, StarIcon, TraceIcon, TrashIcon, UndoIcon, VehicleIcon,
+} from '@/components/shell/icons'
 import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Badge } from '@/components/ui/Badge'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
@@ -359,20 +362,20 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
   ]
 
   const menuItems: ActionItem[] = [
-    { label: watching ? 'Unfollow' : 'Follow for updates', icon: watching ? '★' : '☆', onClick: () => { void toggleWatch('person', id, p?.name) } },
-    { label: 'Open in network graph', icon: '🕸', onClick: () => router.push(`/network?focus=p:${encodeURIComponent(id)}`) },
+    { label: watching ? 'Unfollow' : 'Follow for updates', icon: <StarIcon size={14} className={watching ? 'text-amber-300' : undefined} />, onClick: () => { void toggleWatch('person', id, p?.name) } },
+    { label: 'Open in network graph', icon: <NetworkIcon size={14} />, onClick: () => router.push(`/network?focus=p:${encodeURIComponent(id)}`) },
     ...(mayEdit ? [
-      { label: 'Manage BOLO…', icon: '🚨', onClick: () => setBoloOpen(true), separatorBefore: true },
-      { label: 'Link associate…', icon: '👥', onClick: () => { setSection('relationships'); setLinkAssociate(true) } },
-      { label: 'Link vehicle…', icon: '🚗', onClick: () => { setSection('vehicles'); setLinkVehicle(true) } },
-      { label: 'Link place…', icon: '📍', onClick: () => { setSection('locations'); setLinkPlace({}) } },
+      { label: 'Manage BOLO…', icon: <AlertIcon size={14} />, onClick: () => setBoloOpen(true), separatorBefore: true },
+      { label: 'Link associate…', icon: <PersonIcon size={14} />, onClick: () => { setSection('relationships'); setLinkAssociate(true) } },
+      { label: 'Link vehicle…', icon: <VehicleIcon size={14} />, onClick: () => { setSection('vehicles'); setLinkVehicle(true) } },
+      { label: 'Link place…', icon: <PlaceIcon size={14} />, onClick: () => { setSection('locations'); setLinkPlace({}) } },
     ] : []),
-    { label: 'Export dossier…', icon: '📇', onClick: () => setExportOpen(true), separatorBefore: true },
-    { label: 'Review duplicates…', icon: '🧬', onClick: () => setDupOpen(true) },
+    { label: 'Export dossier…', icon: <DocumentIcon size={14} />, onClick: () => setExportOpen(true), separatorBefore: true },
+    { label: 'Review duplicates…', icon: <TraceIcon size={14} />, onClick: () => setDupOpen(true) },
     ...(mayEdit ? [p?.lifecycle === 'archived'
-      ? { label: 'Restore to active', icon: '↺', onClick: () => { void setLifecycle('active') }, separatorBefore: true }
-      : { label: 'Archive person', icon: '🗄', onClick: () => { void setLifecycle('archived', 'Archive this person? The record stays on file and searchable, marked inactive.') }, separatorBefore: true }] : []),
-    ...(mayDelete ? [{ label: 'Delete person', icon: '🗑', danger: true, onClick: () => { void del() }, separatorBefore: !mayEdit }] : []),
+      ? { label: 'Restore to active', icon: <UndoIcon size={14} />, onClick: () => { void setLifecycle('active') }, separatorBefore: true }
+      : { label: 'Archive person', icon: <ArchiveIcon size={14} />, onClick: () => { void setLifecycle('archived', 'Archive this person? The record stays on file and searchable, marked inactive.') }, separatorBefore: true }] : []),
+    ...(mayDelete ? [{ label: 'Delete person', icon: <TrashIcon size={14} />, danger: true, onClick: () => { void del() }, separatorBefore: !mayEdit }] : []),
   ]
 
   const mug = p ? safeUrl(p.mugshot_url ?? '') : ''
@@ -409,13 +412,13 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
                   /* eslint-disable-next-line @next/next/no-img-element -- external mugshot CDN */
                   <img src={mug} alt={`${p.name} photo`} onError={() => setImgBroken(true)} className="h-20 w-20 flex-shrink-0 rounded-xl border border-white/10 object-cover" />
                 ) : (
-                  <div className="grid h-20 w-20 flex-shrink-0 place-items-center rounded-xl bg-ink-700 text-3xl" aria-hidden>👤</div>
+                  <div className="grid h-20 w-20 flex-shrink-0 place-items-center rounded-xl bg-ink-700 text-slate-500" aria-hidden><PersonIcon size={32} /></div>
                 )}
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h1 className="text-2xl font-black text-white">
                       {p.name}
-                      {flag && <span title="≥8 violent felonies"> 🚨</span>}
+                      {flag && <span title="≥8 violent felonies" role="img" aria-label="8 or more violent felonies" className="ml-1.5 inline-block align-[-2px] text-rose-400"><AlertIcon size={18} /></span>}
                     </h1>
                     {p.alias && <span className="text-sm text-slate-400">&ldquo;{p.alias}&rdquo;</span>}
                   </div>
@@ -423,7 +426,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
                     <Badge tone="neutral">{p.classification ? classificationLabel(p.classification) : p.status || 'Person of interest'}</Badge>
                     <BoloStateBadge person={p} today={today} />
                     {legalBuckets.activeCount > 0 && (
-                      <Badge tone="danger" title="Active legal instruments naming this person">⚖ {legalBuckets.activeCount} active legal</Badge>
+                      <Badge tone="danger" title="Active legal instruments naming this person"><ScaleIcon size={12} />{legalBuckets.activeCount} active legal</Badge>
                     )}
                     {gang && <EntityLink kind="gang" id={gang.id} label={gang.name} />}
                     {p.confidence && <ConfidenceBadge confidence={p.confidence} />}
@@ -556,8 +559,8 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
               Compiles the full profile — identity, gang ties, legal instruments, properties, vehicles, linked cases, evidence &amp; media (only what you can access).
             </p>
             <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => void exportDocx()} className="rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm font-semibold text-white transition hover:bg-white/10">📄<br />.docx</button>
-              <button onClick={() => void exportPdf()} disabled={pdfBusy} className="rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60">📕<br />{pdfBusy ? 'Rendering…' : '.pdf'}</button>
+              <button onClick={() => void exportDocx()} className="rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm font-semibold text-white transition hover:bg-white/10"><DocumentIcon size={20} className="mx-auto mb-1 text-slate-400" />.docx</button>
+              <button onClick={() => void exportPdf()} disabled={pdfBusy} className="rounded-lg border border-white/10 bg-white/5 px-3 py-4 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60"><DocumentIcon size={20} className="mx-auto mb-1 text-slate-400" />{pdfBusy ? 'Rendering…' : '.pdf'}</button>
             </div>
           </div>
         </Modal>

@@ -17,6 +17,7 @@ import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { caseStatusTint } from '@/lib/signoff'
+import { CaseIcon, FilterIcon, GangIcon, MapIcon, OperationIcon, PlaceIcon } from '@/components/shell/icons'
 import { Notice, EmptyState } from '@/components/ui/Notice'
 
 type CaseRow = Tables<'cases'>
@@ -27,10 +28,10 @@ type GangRow = Tables<'gangs'>
 type GangPlaceRow = Tables<'gang_places'>
 
 const LAYER_META = [
-  { key: 'cases', icon: '📂', label: 'Cases', w: 3 },
-  { key: 'raids', icon: '💥', label: 'Raids', w: 3 },
-  { key: 'turf', icon: '🚩', label: 'Turf', w: 2 },
-  { key: 'places', icon: '📍', label: 'Places', w: 1 },
+  { key: 'cases', icon: CaseIcon, label: 'Cases', w: 3 },
+  { key: 'raids', icon: OperationIcon, label: 'Raids', w: 3 },
+  { key: 'turf', icon: GangIcon, label: 'Turf', w: 2 },
+  { key: 'places', icon: PlaceIcon, label: 'Places', w: 1 },
 ] as const
 type LayerKey = (typeof LAYER_META)[number]['key']
 
@@ -192,7 +193,7 @@ export function HeatmapView() {
               onClick={() => setLayers((prev) => ({ ...prev, [L.key]: !prev[L.key] }))}
               className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${layers[L.key] ? 'border-blue-500/40 bg-blue-500/15 text-white' : 'border-white/10 bg-white/5 text-slate-500'}`}
             >
-              {L.icon} {L.label}
+              <L.icon size={13} className="inline align-[-2px]" /> {L.label}
             </button>
           ))}
         </div>
@@ -225,10 +226,10 @@ export function HeatmapView() {
       {loading ? (
         <Notice text="Loading heatmap data…" />
       ) : !enabled.length ? (
-        <EmptyState icon="🗂️" title="No layers selected" hint="Enable at least one layer above to plot the heatmap." />
+        <EmptyState icon={<FilterIcon size={28} />} title="No layers selected" hint="Enable at least one layer above to plot the heatmap." />
       ) : !rows.length ? (
         <EmptyState
-          icon="🗺️"
+          icon={<MapIcon size={28} />}
           title="No area data in this window"
           hint="Widen the time range, enable more layers, or add an Area to cases, places, or gang turf."
         />
@@ -238,7 +239,7 @@ export function HeatmapView() {
             <div className="mb-4 flex flex-wrap gap-2">
               {rows.slice(0, 3).map((r, i) => (
                 <button key={r.area} onClick={() => setSel(r.area)} className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-left transition hover:bg-amber-500/10">
-                  <span className="text-lg" aria-hidden>{['🥇', '🥈', '🥉'][i]}</span>
+                  <span className="font-mono text-sm font-black text-amber-300" aria-hidden>#{i + 1}</span>
                   <span>
                     <span className="block text-sm font-bold text-white">{r.area}</span>
                     <span className="text-[11px] text-amber-200/80">intensity {Math.round((r.score / max) * 100)}<Trend r={r} /></span>
@@ -263,7 +264,7 @@ export function HeatmapView() {
                   <div className="flex items-center justify-between"><h4 className="text-base font-bold text-white">{r.area}</h4><span className="font-mono text-lg font-bold text-white">{pct}<Trend r={r} /></span></div>
                   <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-ink-900"><div className="hm-bar" style={{ width: `${pct}%` }} /></div>
                   <div className="mt-3 grid grid-cols-2 gap-1 text-[11px] text-slate-300">
-                    {enabled.map((L) => <span key={L.key}>{L.icon} {r.v[L.key]} {L.label.toLowerCase()}</span>)}
+                    {enabled.map((L) => <span key={L.key}><L.icon size={12} className="inline align-[-2px] text-slate-400" /> {r.v[L.key]} {L.label.toLowerCase()}</span>)}
                   </div>
                 </button>
               )
@@ -360,11 +361,11 @@ function AreaDetail({ area, data, win, loadedAt, onClose }: {
   return (
     <div className="mb-6 rounded-2xl border border-blue-500/20 bg-ink-900/70 p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="text-base font-bold text-white">📌 {area} <span className="ml-1 text-xs font-medium text-slate-400">{WINDOWS[win].label}</span></h3>
+        <h3 className="text-base font-bold text-white"><span aria-hidden className="mr-1 inline-block align-[-2px] text-slate-400"><PlaceIcon size={15} /></span>{area} <span className="ml-1 text-xs font-medium text-slate-400">{WINDOWS[win].label}</span></h3>
         <button onClick={onClose} aria-label="Close area details" className="-my-1 rounded-md border border-white/10 bg-white/5 p-2 text-xs font-semibold text-slate-300 hover:bg-white/10">✕ Close</button>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <DetailBlock title={`📂 Cases (${cases.length})`}>
+        <DetailBlock title={<><CaseIcon size={12} className="inline align-[-2px]" /> Cases ({cases.length})</>}>
           {cases.map((c) => (
             <Link key={c.id} href={`/cases?case=${encodeURIComponent(c.id)}`} className="flex items-center gap-2 rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-sm hover:border-blue-300/30">
               <span className="font-mono text-xs font-bold text-blue-300">{c.case_number}</span>
@@ -373,7 +374,7 @@ function AreaDetail({ area, data, win, loadedAt, onClose }: {
             </Link>
           ))}
         </DetailBlock>
-        <DetailBlock title={`💥 Raids (${raids.length})`}>
+        <DetailBlock title={<><OperationIcon size={12} className="inline align-[-2px]" /> Raids ({raids.length})</>}>
           {raids.map((r) => {
             const c = r.case_id ? caseById.get(r.case_id) : null
             return (
@@ -384,7 +385,7 @@ function AreaDetail({ area, data, win, loadedAt, onClose }: {
             )
           })}
         </DetailBlock>
-        <DetailBlock title={`🚩 Turf (${turf.length})`}>
+        <DetailBlock title={<><GangIcon size={12} className="inline align-[-2px]" /> Turf ({turf.length})</>}>
           {turf.map((t) => (
             <div key={t.id} className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-sm text-slate-200">
               {t.block}{t.hotspot_area ? ` · ${t.hotspot_area}` : ''} — <span className="text-rose-300">{gangName(t.gang_id)}</span>
@@ -392,7 +393,7 @@ function AreaDetail({ area, data, win, loadedAt, onClose }: {
             </div>
           ))}
         </DetailBlock>
-        <DetailBlock title={`📍 Places (${places.length})`}>
+        <DetailBlock title={<><PlaceIcon size={12} className="inline align-[-2px]" /> Places ({places.length})</>}>
           {places.map((p) => (
             <div key={p.id} className="rounded border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-sm text-slate-200">
               {p.name} <span className="text-[10px] uppercase text-slate-500">{p.type}</span>
@@ -405,7 +406,7 @@ function AreaDetail({ area, data, win, loadedAt, onClose }: {
   )
 }
 
-function DetailBlock({ title, children }: { title: string; children: React.ReactNode[] }) {
+function DetailBlock({ title, children }: { title: React.ReactNode; children: React.ReactNode[] }) {
   return (
     <div>
       <h4 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-400">{title}</h4>

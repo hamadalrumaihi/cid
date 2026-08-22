@@ -28,7 +28,7 @@ import { SectionHeader } from '@/components/ui/PageHeader'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { Badge } from '@/components/ui/Badge'
 import { inputCls, labelCls } from '@/components/ui/Field'
-import { SearchIcon } from '@/components/shell/icons'
+import { ArchiveIcon, SearchIcon } from '@/components/shell/icons'
 import { DepExplorer } from '@/components/devdocs/DevDocsView'
 import {
   ENV_VARS, FB_PRIORITIES, FB_PRIORITY_TINT, FB_STATUSES, FB_STATUS_TINT, FB_TYPES,
@@ -45,21 +45,21 @@ type FeedbackRow = Tables<'feedback'>
 type MetaRow = Tables<'feedback_meta'>
 interface FbItem { fb: FeedbackRow; meta: MetaRow | null }
 
-const SECTIONS: { id: string; icon: string; label: string; sub: string }[] = [
-  { id: 'home', icon: '🏠', label: 'Overview', sub: 'What this portal is and where everything lives' },
-  { id: 'health', icon: '🩺', label: 'Health & statistics', sub: 'Service checks, safety warnings & live counts' },
-  { id: 'security', icon: '🛡️', label: 'Security Testing', sub: 'Live RLS suite results, fixture health & the access matrix' },
-  { id: 'ops', icon: '📋', label: 'Production status', sub: 'Workflow health, Justice coverage, manual actions & recovery' },
-  { id: 'feedback', icon: '📨', label: 'Feedback & Bugs', sub: 'The owner inbox — triage, catalog, resolve' },
-  { id: 'suggestions', icon: '💡', label: 'Suggestions', sub: 'The improvement roadmap from the repo analysis' },
-  { id: 'impact', icon: '🎯', label: 'Change Impact', sub: '"If I change this, what else must I check?"' },
-  { id: 'architecture', icon: '🏗️', label: 'Architecture', sub: 'The system at a glance + deep links' },
-  { id: 'routes', icon: '🗺️', label: 'Routes', sub: 'Every screen, its access rule and risk' },
-  { id: 'env', icon: '🔐', label: 'Environment', sub: 'Variables — configured or not, never values' },
-  { id: 'realtime', icon: '📡', label: 'Realtime', sub: 'Channels, session activity & failure points' },
-  { id: 'workflow', icon: '🚦', label: 'Workflow', sub: 'Safe development, deploys, rollback & permissions' },
-  { id: 'learning', icon: '🎓', label: 'Learning Center', sub: 'Paths, common mistakes, what to avoid early' },
-  { id: 'deletion', icon: '🗑️', label: 'Permanent deletion', sub: 'Irreversible member erasure — arm, confirm, execute' },
+const SECTIONS: { id: string; label: string; sub: string }[] = [
+  { id: 'home', label: 'Overview', sub: 'What this portal is and where everything lives' },
+  { id: 'health', label: 'Health & statistics', sub: 'Service checks, safety warnings & live counts' },
+  { id: 'security', label: 'Security Testing', sub: 'Live RLS suite results, fixture health & the access matrix' },
+  { id: 'ops', label: 'Production status', sub: 'Workflow health, Justice coverage, manual actions & recovery' },
+  { id: 'feedback', label: 'Feedback & Bugs', sub: 'The owner inbox — triage, catalog, resolve' },
+  { id: 'suggestions', label: 'Suggestions', sub: 'The improvement roadmap from the repo analysis' },
+  { id: 'impact', label: 'Change Impact', sub: '"If I change this, what else must I check?"' },
+  { id: 'architecture', label: 'Architecture', sub: 'The system at a glance + deep links' },
+  { id: 'routes', label: 'Routes', sub: 'Every screen, its access rule and risk' },
+  { id: 'env', label: 'Environment', sub: 'Variables — configured or not, never values' },
+  { id: 'realtime', label: 'Realtime', sub: 'Channels, session activity & failure points' },
+  { id: 'workflow', label: 'Workflow', sub: 'Safe development, deploys, rollback & permissions' },
+  { id: 'learning', label: 'Learning Center', sub: 'Paths, common mistakes, what to avoid early' },
+  { id: 'deletion', label: 'Permanent deletion', sub: 'Irreversible member erasure — arm, confirm, execute' },
 ]
 
 /** Desktop rail grouping — same section ids + deep-links, grouped by purpose. */
@@ -110,7 +110,7 @@ export function OwnerView() {
   if (state !== 'in') return <Notice text="Sign in to view the Owner Portal." />
   if (!isOwner) {
     return (
-      <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-amber-200">
+      <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-amber-200">
         Restricted — the Owner Portal is owner-only. If you believe you should have access,
         ownership is granted on the database profile, not in the app.
       </div>
@@ -124,7 +124,7 @@ export function OwnerView() {
       {/* breadcrumbs + global portal search */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-slate-400">
-          <button onClick={() => go('home')} className="font-bold text-slate-300 hover:text-white">🛠️ Owner Portal</button>
+          <button onClick={() => go('home')} className="font-bold text-slate-300 hover:text-white">Owner Portal</button>
           {active.id !== 'home' && <><span aria-hidden className="text-slate-600">/</span><span className="font-semibold text-white">{active.label}</span></>}
         </nav>
         <div className="relative w-full sm:w-80">
@@ -138,7 +138,7 @@ export function OwnerView() {
             />
           </div>
           {results.length > 0 && (
-            <div className="absolute right-0 top-full z-20 mt-1 max-h-80 w-full overflow-y-auto rounded-xl border border-white/10 bg-ink-900 p-1 shadow-2xl">
+            <div className="absolute right-0 top-full z-20 mt-1 max-h-80 w-full overflow-y-auto rounded-lg border border-white/10 bg-ink-900 p-1 shadow-2xl">
               {results.map((r, i) => (
                 <button key={i} onClick={() => { setQuery(''); r.go() }} className="block w-full rounded-lg px-3 py-2 text-left transition hover:bg-white/5">
                   <p className="text-sm font-bold text-white">
@@ -169,7 +169,7 @@ export function OwnerView() {
                       aria-current={activeItem ? 'page' : undefined}
                       className={`block w-full rounded-lg border-l-2 py-1.5 pl-2.5 pr-3 text-left text-xs transition ${activeItem ? 'border-badge-500 bg-badge-500/15 font-bold text-white' : 'border-transparent text-slate-400 hover:bg-white/5 hover:text-white'}`}
                     >
-                      <span aria-hidden>{s.icon}</span> {s.label}
+                      {s.label}
                     </button>
                   )
                 })}
@@ -183,9 +183,9 @@ export function OwnerView() {
           <div className="mb-4 lg:hidden">
             <select
               value={active.id} onChange={(e) => go(e.target.value)} aria-label="Owner Portal section"
-              className="w-full rounded-xl border border-white/10 bg-ink-900 px-3 py-2.5 text-sm font-bold text-white outline-none"
+              className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm font-bold text-white outline-none"
             >
-              {SECTIONS.map((s) => <option key={s.id} value={s.id}>{s.icon} {s.label}</option>)}
+              {SECTIONS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </div>
 
@@ -277,17 +277,17 @@ function HomeSection({ onGo }: { onGo: (s: string) => void }) {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {SECTIONS.filter((s) => s.id !== 'home').map((s) => (
-          <button key={s.id} onClick={() => onGo(s.id)} className="rounded-xl border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
-            <p className="text-sm font-black text-white"><span aria-hidden>{s.icon}</span> {s.label}</p>
+          <button key={s.id} onClick={() => onGo(s.id)} className="rounded-lg border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
+            <p className="text-sm font-black text-white">{s.label}</p>
             <p className="mt-1 text-sm text-slate-400">{s.sub}</p>
           </button>
         ))}
-        <button onClick={() => router.push('/devdocs')} className="rounded-xl border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
-          <p className="text-sm font-black text-white"><span aria-hidden>📘</span> Developer Handbook</p>
+        <button onClick={() => router.push('/devdocs')} className="rounded-lg border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
+          <p className="text-sm font-black text-white">Developer Handbook</p>
           <p className="mt-1 text-sm text-slate-400">The reference library — 24 chapters, searchable, generated from the repo docs.</p>
         </button>
-        <button onClick={() => router.push('/audit')} className="rounded-xl border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
-          <p className="text-sm font-black text-white"><span aria-hidden>🧾</span> Audit Log</p>
+        <button onClick={() => router.push('/audit')} className="rounded-lg border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
+          <p className="text-sm font-black text-white">Audit Log</p>
           <p className="mt-1 text-sm text-slate-400">Every mutation, trigger-written, exportable to CSV (owner-only screen).</p>
         </button>
       </div>
@@ -304,7 +304,7 @@ function KpiCard({ label, value, detail, tone, onClick }: {
 }) {
   const valueColor = tone === 'good' ? 'text-emerald-300' : tone === 'bad' ? 'text-rose-300' : tone === 'accent' ? 'text-white' : 'text-slate-400'
   return (
-    <button onClick={onClick} className="rounded-2xl border border-white/5 bg-ink-900/60 p-4 text-left transition hover:border-white/10 hover:bg-white/[0.03]">
+    <button onClick={onClick} className="rounded-lg border border-white/5 bg-ink-900/60 p-4 text-left transition hover:border-white/10 hover:bg-white/[0.03]">
       <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
       <p className={`mt-1 font-mono text-2xl font-black ${valueColor}`}>{value}</p>
       <p className="mt-0.5 text-xs text-slate-400">{detail}</p>
@@ -385,7 +385,7 @@ function HealthSection() {
         {loading && !h ? <p className="text-sm text-slate-400">Counting…</p> : (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
             {STAT_TABLES.map((t) => (
-              <div key={t} className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+              <div key={t} className="rounded-lg bg-ink-950/50 p-3">
                 <p className="font-mono text-lg font-black text-white">{h?.counts[t] ?? '—'}</p>
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t.replace(/_/g, ' ')}</p>
               </div>
@@ -433,7 +433,7 @@ function ClientErrorsPanel() {
       ) : (
         <div className="space-y-2">
           {rows.map((r) => (
-            <details key={r.id} className="rounded-xl border border-rose-400/20 bg-rose-500/5 p-3">
+            <details key={r.id} className="rounded-lg bg-rose-500/5 p-3">
               <summary className="cursor-pointer text-sm text-slate-200">
                 <span className="font-bold text-rose-200">{r.message.slice(0, 120)}</span>
                 <span className="ml-2 text-slate-400">{r.route || ''} · {officerName(r.reporter_id) || 'unknown'} · {timeAgo(r.created_at)}</span>
@@ -453,7 +453,7 @@ function ClientErrorsPanel() {
 
 function HealthCard({ label, ok, detail }: { label: string; ok: boolean | null; detail: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-ink-950/50 p-4">
+    <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
       <p className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-400">
         <span className={`t-dot ${ok === true ? 't-dot-green' : ok === false ? 't-dot-rose' : 't-dot-amber'}`} /> {label}
       </p>
@@ -573,7 +573,7 @@ function OpsSection() {
               const unresolvable = !!covererId && roster.length > 0 && !holder
               const status: OpsStatus = !covererId ? 'action' : unresolvable ? 'warning' : name ? 'healthy' : 'unknown'
               return (
-                <div key={c.bureau} className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+                <div key={c.bureau} className="rounded-lg bg-ink-950/50 p-3">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-bold text-white">{bureauLabel(c.bureau)}</p>
                     <OpsChip status={status} />
@@ -623,7 +623,7 @@ function OpsSection() {
         {openActions.length === 0 && <p className="text-sm text-emerald-300">✓ Nothing outstanding.</p>}
         <div className="space-y-2">
           {MANUAL_ACTIONS.map((a) => (
-            <div key={a.title} className={`rounded-xl border p-3 ${a.done ? 'border-white/10 bg-ink-950/40' : 'border-amber-500/20 bg-amber-500/5'}`}>
+            <div key={a.title} className={`rounded-lg p-3 ${a.done ? 'bg-ink-950/40' : 'bg-amber-500/5'}`}>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="min-w-0 flex-1 text-sm font-bold text-white">{a.title}</p>
                 {a.done
@@ -655,7 +655,7 @@ function OpsCountCard({ label, value, status, detail, onClick }: {
   onClick: () => void
 }) {
   return (
-    <button onClick={onClick} className="rounded-xl border border-white/10 bg-ink-950/50 p-3 text-left transition hover:border-blue-400/30">
+    <button onClick={onClick} className="rounded-lg border border-white/10 bg-ink-950/50 p-3 text-left transition hover:border-blue-400/30">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
         <OpsChip status={status} />
@@ -680,6 +680,19 @@ const FB_VIEWS: { id: string; label: string; match: (i: FbItem) => boolean }[] =
   { id: 'resolved', label: 'Resolved', match: (i) => i.meta?.status === 'resolved' },
   { id: 'archived', label: 'Archived', match: (i) => i.meta?.status === 'archived' },
 ]
+
+/** Stroke glyph for the inbox rows — bug report vs. idea/request. Local to
+ *  this owner-only surface; follows the shell icon idiom (currentColor,
+ *  aria-hidden, sits beside a text label). */
+function KindGlyph({ bug }: { bug: boolean }) {
+  return (
+    <svg aria-hidden="true" width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-slate-400">
+      {bug
+        ? <><rect x="8" y="7" width="8" height="11" rx="4" /><path d="M9 4l1.5 2M15 4l-1.5 2M3.5 9.5L8 11M3.5 17l4.5-1.5M20.5 9.5L16 11M20.5 17L16 15.5M12 7v11" /></>
+        : <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" />}
+    </svg>
+  )
+}
 
 function FeedbackInbox() {
   const [items, setItems] = useState<FbItem[]>([])
@@ -740,7 +753,7 @@ function FeedbackInbox() {
   return (
     <div className="space-y-4">
       <Panel title="Feedback & Bugs — owner inbox" sub="Submissions come in through the existing Feedback screen (unchanged). Cataloging lives in an owner-only side table (feedback_meta) so internal notes can never reach submitters; every triage action is audit-logged automatically.">
-        <div className="mb-3 flex flex-wrap gap-1 rounded-xl border border-white/10 bg-ink-950/40 p-1" role="group" aria-label="Feedback views">
+        <div className="mb-3 flex flex-wrap gap-1 rounded-lg bg-ink-950/40 p-1" role="group" aria-label="Feedback views">
           {FB_VIEWS.map((v) => {
             const n = items.filter((i) => v.match(i)).length
             const on = view === v.id
@@ -766,13 +779,13 @@ function FeedbackInbox() {
 
         {loading ? <p className="text-sm text-slate-400">Loading submissions…</p>
           : err ? <ErrorNotice message={err} onRetry={() => void refresh()} />
-          : !shown.length ? <EmptyState icon="📭" title="Nothing in this view." hint="Try another filter or clear the search." />
+          : !shown.length ? <EmptyState icon={<ArchiveIcon size={26} />} title="Nothing in this view." hint="Try another filter or clear the search." />
           : (
             <div className="space-y-2">
               {shown.map((i) => (
-                <button key={i.fb.id} onClick={() => setDetail(i)} className="block w-full rounded-xl border border-white/10 bg-ink-950/50 p-3 text-left transition hover:border-blue-400/30">
+                <button key={i.fb.id} onClick={() => setDetail(i)} className="block w-full rounded-lg border border-white/10 bg-ink-950/50 p-3 text-left transition hover:border-blue-400/30">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span aria-hidden>{(i.meta?.type ?? i.fb.kind) === 'bug' ? '🐞' : '✨'}</span>
+                    <KindGlyph bug={(i.meta?.type ?? i.fb.kind) === 'bug'} />
                     <p className="min-w-0 flex-1 truncate text-sm font-bold text-white">{i.fb.title}</p>
                     <Badge tint={FB_STATUS_TINT[i.meta?.status ?? 'new']}>{fbLabel(i.meta?.status ?? 'new')}</Badge>
                     {i.meta?.priority && <Badge tint={FB_PRIORITY_TINT[i.meta.priority]}>{fbLabel(i.meta.priority)}</Badge>}
@@ -853,7 +866,7 @@ function FeedbackDetailModal({ item, onClose, onSaved }: { item: FbItem; onClose
         public kind: {item.fb.kind}
       </p>
       {item.fb.details && (
-        <div className="mb-4 rounded-xl border border-white/10 bg-ink-950/60 p-3">
+        <div className="mb-4 rounded-lg bg-ink-950/60 p-3">
           <p className="whitespace-pre-wrap text-sm text-slate-300">{item.fb.details}</p>
         </div>
       )}
@@ -928,7 +941,7 @@ function SuggestionsSection() {
       </div>
       <div className="space-y-2">
         {shown.map((s) => (
-          <div key={s.title} className="rounded-xl border border-white/10 bg-ink-950/50 p-3">
+          <div key={s.title} className="rounded-lg bg-ink-950/50 p-3">
             <div className="flex flex-wrap items-center gap-2">
               <p className="min-w-0 flex-1 text-sm font-bold text-white">{s.title}</p>
               <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] uppercase text-slate-400">{s.group}</span>
@@ -978,7 +991,7 @@ function ArchitectureSection() {
   return (
     <div className="space-y-4">
       <Panel title="The system at a glance">
-        <pre className="overflow-x-auto rounded-xl border border-white/10 bg-ink-950 p-4 font-mono text-[11px] leading-relaxed text-slate-300">{`Browser (Next.js SPA, static)          Supabase (the backend)
+        <pre className="overflow-x-auto rounded-lg border border-white/10 bg-ink-950 p-4 font-mono text-[11px] leading-relaxed text-slate-300">{`Browser (Next.js SPA, static)          Supabase (the backend)
   36 screens ── shell ── ui             Auth ─ profiles trigger
        │                                PostgREST ─ RLS ─ 91 tables
    lib/auth ─ lib/nav ─ lib/toast       114 RPCs ─ private.* helpers
@@ -1105,7 +1118,7 @@ function RealtimeSection() {
 function WorkflowSection() {
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
+      <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
         <p className="text-sm font-bold text-amber-200">⚠ All code changes go through a branch + PR preview first.</p>
         <p className="mt-1 text-sm text-amber-200/80">Production tracks main. A broken merge deploys immediately — the preview deployment IS the safe development version. {WORKFLOW.notVerified}</p>
       </div>

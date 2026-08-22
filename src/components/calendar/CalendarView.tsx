@@ -13,6 +13,7 @@ import { caseLink } from '@/lib/caseLinks'
 import { todayISO } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
+import { CheckIcon, ClockIcon, ReportIcon, ScaleIcon } from '@/components/shell/icons'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Notice } from '@/components/ui/Notice'
@@ -32,7 +33,7 @@ const LEGAL_DONE_REVIEW = new Set(['denied', 'withdrawn', 'closed'])
 
 interface DayItem {
   key: string
-  icon: string
+  icon: React.ReactNode
   label: string
   sub: string
   href: string
@@ -92,25 +93,25 @@ export function CalendarView() {
     const caseById = new Map(data.cases.map((c) => [c.id, c]))
     for (const c of data.cases) {
       if (c.follow_up_at && c.status !== 'closed') {
-        push(c.follow_up_at, { icon: '📌', label: `${c.case_number} follow-up`, sub: c.title || 'Untitled', href: caseLink(c.id), tone: 'amber' })
+        push(c.follow_up_at, { icon: <ClockIcon size={12} className="inline align-[-2px]" />, label: `${c.case_number} follow-up`, sub: c.title || 'Untitled', href: caseLink(c.id), tone: 'amber' })
       }
     }
     for (const t of data.tasks) {
       if (t.due && !t.done) {
         const c = caseById.get(t.case_id)
-        push(t.due, { icon: '☑️', label: t.title, sub: c ? `${c.case_number} task` : 'Case task', href: c ? caseLink(c.id, 'tasks', { task: t.id }) : '/cases', tone: 'blue' })
+        push(t.due, { icon: <CheckIcon size={12} className="inline align-[-2px]" />, label: t.title, sub: c ? `${c.case_number} task` : 'Case task', href: c ? caseLink(c.id, 'tasks', { task: t.id }) : '/cases', tone: 'blue' })
       }
     }
     for (const s of data.shifts) {
-      push(s.week_start, { icon: '📝', label: `Shift report — ${s.author_name || 'Officer'}`, sub: `Week of ${s.week_start}`, href: '/shifts', tone: 'slate' })
+      push(s.week_start, { icon: <ReportIcon size={12} className="inline align-[-2px]" />, label: `Shift report — ${s.author_name || 'Officer'}`, sub: `Week of ${s.week_start}`, href: '/shifts', tone: 'slate' })
     }
     // Legal deadlines are read-only entries deep-linking into the request;
     // resolved requests keep a quiet history and stay off the calendar.
     for (const lr of data.legal) {
       if (LEGAL_DONE_FULFILMENT.has(lr.fulfilment_status) || LEGAL_DONE_REVIEW.has(lr.review_status)) continue
       const href = `/legal?request=${encodeURIComponent(lr.id)}`
-      if (lr.response_deadline) push(lr.response_deadline, { icon: '⚖️', label: `${lr.request_number} response due`, sub: lr.title, href, tone: 'rose' })
-      if (lr.expires_at) push(lr.expires_at, { icon: '⚖️', label: `${lr.request_number} expires`, sub: lr.title, href, tone: 'rose' })
+      if (lr.response_deadline) push(lr.response_deadline, { icon: <ScaleIcon size={12} className="inline align-[-2px]" />, label: `${lr.request_number} response due`, sub: lr.title, href, tone: 'rose' })
+      if (lr.expires_at) push(lr.expires_at, { icon: <ScaleIcon size={12} className="inline align-[-2px]" />, label: `${lr.request_number} expires`, sub: lr.title, href, tone: 'rose' })
     }
     return map
   }, [data])
@@ -200,7 +201,7 @@ export function CalendarView() {
       )}
 
       <p className="mt-4 text-[11px] text-slate-400">
-        📌 case follow-ups · ☑️ open task deadlines · ⚖️ legal-request deadlines · 📝 shift-report weeks. Scoped to records you can access; days in red have overdue items. Click a day for details.
+        <ClockIcon size={12} className="inline align-[-2px]" /> case follow-ups · <CheckIcon size={12} className="inline align-[-2px]" /> open task deadlines · <ScaleIcon size={12} className="inline align-[-2px]" /> legal-request deadlines · <ReportIcon size={12} className="inline align-[-2px]" /> shift-report weeks. Scoped to records you can access; days in red have overdue items. Click a day for details.
       </p>
     </div>
   )

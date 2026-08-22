@@ -45,7 +45,7 @@ function PreviewBucket({ title, sub, counts, tone }: {
   tone: 'blocker' | 'info'
 }) {
   return (
-    <div className={`rounded-xl border p-3 ${tone === 'blocker' ? 'border-rose-500/25 bg-rose-500/5' : 'border-white/10 bg-ink-950/50'}`}>
+    <div className={`rounded-lg border p-3 ${tone === 'blocker' ? 'border-rose-500/25 bg-rose-500/5' : 'border-white/10 bg-ink-950/50'}`}>
       <p className={`text-xs font-black uppercase tracking-wider ${tone === 'blocker' ? 'text-rose-300' : 'text-slate-400'}`}>{title}</p>
       <p className="mb-2 mt-0.5 text-xs text-slate-400">{sub}</p>
       <CountList counts={counts} tone={tone} />
@@ -99,7 +99,7 @@ export function PermanentDeletionSection() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-rose-500/25 bg-rose-500/5 p-4">
+      <div className="rounded-lg border border-rose-500/25 bg-rose-500/5 p-4">
         <p className="text-sm font-bold text-rose-200">This is irreversible.</p>
         <p className="mt-1 text-sm text-rose-200/80">
           Deactivating or removing a member (Command Center) remains the default and keeps history

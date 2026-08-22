@@ -18,24 +18,25 @@ export interface SearchHit {
   rank: number
 }
 
-/** Section metadata per result kind: display order, heading, icon, and the
- *  destination tab. Kinds arrive from the RPC; charges are added locally. */
-export const SEARCH_KINDS: Record<string, { title: string; icon: string; tab: string }> = {
-  case:      { title: 'Cases',      icon: '📁', tab: 'cases' },
-  report:    { title: 'Reports',    icon: '📝', tab: 'cases' },
-  evidence:  { title: 'Evidence',   icon: '🧾', tab: 'cases' },
-  operation: { title: 'Operations', icon: '🎯', tab: 'operations' },
-  legal:     { title: 'Legal Requests', icon: '⚖️', tab: 'legal' },
-  person:    { title: 'Persons',    icon: '👤', tab: 'persons' },
-  gang:      { title: 'Gangs',      icon: '🚩', tab: 'gangs' },
-  place:     { title: 'Places',     icon: '📍', tab: 'places' },
-  vehicle:   { title: 'Vehicles',   icon: '🚗', tab: 'vehicles' },
-  account:   { title: 'Accounts',   icon: '🌐', tab: 'accounts' },
-  narcotic:  { title: 'Narcotics',  icon: '💊', tab: 'narcotics' },
-  bench:     { title: 'Ballistics', icon: '🔫', tab: 'ballistics' },
-  footprint: { title: 'Ballistics', icon: '🧬', tab: 'ballistics' },
-  document:  { title: 'Documents',  icon: '📄', tab: 'sops' },
-  charge:    { title: 'Charges',    icon: '⚖️', tab: 'penal' },
+/** Section metadata per result kind: display order, heading and destination
+ *  tab. Kinds arrive from the RPC; charges are added locally. The glyph for
+ *  each kind lives with the icon set (shell/icons KindIcon), not here. */
+export const SEARCH_KINDS: Record<string, { title: string; tab: string }> = {
+  case:      { title: 'Cases',      tab: 'cases' },
+  report:    { title: 'Reports',    tab: 'cases' },
+  evidence:  { title: 'Evidence',   tab: 'cases' },
+  operation: { title: 'Operations', tab: 'operations' },
+  legal:     { title: 'Legal Requests', tab: 'legal' },
+  person:    { title: 'Persons',    tab: 'persons' },
+  gang:      { title: 'Gangs',      tab: 'gangs' },
+  place:     { title: 'Places',     tab: 'places' },
+  vehicle:   { title: 'Vehicles',   tab: 'vehicles' },
+  account:   { title: 'Accounts',   tab: 'accounts' },
+  narcotic:  { title: 'Narcotics',  tab: 'narcotics' },
+  bench:     { title: 'Ballistics', tab: 'ballistics' },
+  footprint: { title: 'Ballistics', tab: 'ballistics' },
+  document:  { title: 'Documents',  tab: 'sops' },
+  charge:    { title: 'Charges',    tab: 'penal' },
 }
 
 export const SEARCH_SECTION_ORDER = ['case', 'report', 'evidence', 'operation', 'legal', 'person', 'gang', 'place', 'vehicle', 'account', 'narcotic', 'bench', 'document', 'charge'] as const

@@ -36,19 +36,21 @@ const SIZES: Record<Size, string> = {
 }
 
 const VARIANTS: Record<Variant, string> = {
-  // Accent gradient — the primary call to action. shadow-glow + brightness on
-  // hover is the established primary treatment.
-  primary: 'bg-gradient-to-r from-badge-500 to-blue-700 text-white shadow-glow hover:brightness-110',
+  // Solid accent — the primary call to action. Flat and unglowing on purpose:
+  // this is an investigative records system, and emphasis comes from the one
+  // saturated fill on the screen, not from bloom. (bg-badge-500 is remapped by
+  // the accent theme in globals.css, so the primary follows the user accent.)
+  primary: 'bg-badge-500 text-white hover:brightness-110',
   // Outline chip — the default for secondary actions.
   secondary: 'border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10',
   // Destructive — one canonical rose shade (was rose-500 / rose-600 split).
-  danger: 'bg-rose-600 text-white shadow-glow hover:bg-rose-500',
+  danger: 'bg-rose-600 text-white hover:bg-rose-500',
   // Confirming/positive — Finalize, Approve, Complete. Mirrors danger's
   // structure so the semantic solids read as one family.
-  success: 'bg-emerald-600 text-white shadow-glow hover:bg-emerald-500',
+  success: 'bg-emerald-600 text-white hover:bg-emerald-500',
   // Cautionary — Reopen, Escalate, Submit-for-review. Amber counterpart of
   // success; NOT for destructive actions (that's danger).
-  warn: 'bg-amber-600 text-white shadow-glow hover:bg-amber-500',
+  warn: 'bg-amber-600 text-white hover:bg-amber-500',
   // Bare — no chrome until hover; for low-emphasis inline actions.
   ghost: 'text-slate-300 hover:bg-white/5 hover:text-white',
 }

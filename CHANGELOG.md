@@ -8,6 +8,61 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### User Guide rewrite + CID/SIU visual redesign
+
+**The User Guide describes the portal that exists.** `docs/USER-GUIDE.md` is
+rewritten as an operational manual (workspaces → first five minutes → navigation
+→ running a CID case → running an SIU investigation → intelligence intake →
+legal requests → records → reports & sign-off → troubleshooting). Gone with it:
+the claim that legal review "terminates at Bureau Lead+ with no Judge, ADA, DA
+or AG step" (the revived prosecutor + judicial pipeline has been live for
+weeks), the retired-on-date development history, the assumption that every new
+person applies for CID membership (intelligence-only submitters have their own
+immediate path), and a case-tab walkthrough naming tabs that no longer exist.
+The in-app guide (`GuideView`) now renders the REAL case tab rail from the same
+module `CaseDetail` routes with (`caseTabs.ts`), shows both legal lanes (CID:
+command review → prosecutor queue → prosecutorial review → judicial review;
+SIU: X-1 → Attorney General → Judge), the access fork, SIU orientation with
+the visibility states, and files My Desk under Command where it lives.
+`WORKFLOWS.md` and `AUTHORIZATION.md` lose the RETIRED banners that the code
+contradicted and gain the SIU legal lane, the intake workflow, the
+`siu_members_work_cid` reversal and the registry-compartmentation authority.
+
+**One disciplined design system.** Three surface levels, 4–8px corners for
+routine records (large rounding reserved for modals), no glows on ordinary
+elements (`shadow-glow` left Button/Toaster/Modal/dialog/ActionMenu for real
+elevation shadows), the primary button is a solid accent instead of a gradient,
+badges are squared record chips, nothing operational renders below 11px, and
+the sub-tab underline finally follows the user's accent instead of hardcoded
+blue. A ~40-icon professional stroke set (`shell/icons`) replaces emoji
+wherever a glyph functioned as an interface control — the command palette,
+cross-record chips, toasts, report-template buttons, calendar markers, action
+menus and evidence type markers; decorative emoji in user content is untouched.
+
+**Evidence reads like a record system.** The case Photos & Media tab shows
+photographs as a gallery and video/audio/documents/links as compact records
+with file-type icons, evidence number, category, uploader, time and linked
+report — no more head-height empty tiles containing one emoji. Case tabs are
+grouped into the three areas a detective thinks in (Investigation · Evidence &
+Case Record · Coordination & Closure) with routes untouched, and the content
+column caps at 1600px so 2560-px monitors stop stretching panels edge to edge.
+
+**SIU looks restricted, not purple.** Violet is reserved for identity and
+visibility-state markers (crest, classification chips, compartment states); the
+purple washes over ordinary SIU panels are gone, and a compact status strip
+under the header names the workspace and the standing you act under whenever
+you are inside SIU. To CID, nothing about SIU rendering changed — a restricted
+record is still an ordinary "not found".
+
+**Legal UI mirrors stop lying** (display accuracy only — no authority moved):
+an SIU request in command review is never captioned "CID Review"; X-1 sees SIU
+requests as actionable in the Action Center, the case Legal tab and the
+dossier; the judge-claim mirror accepts only what the server accepts; and
+`useMyProsecutorBureaus` reads the live coverage tables, so a current-role
+prosecutor's bureau-awareness lane works. One production gap is documented
+rather than papered over: `review_legal_request_as_ag` remains EXECUTE-revoked,
+so an SIU request approved by X-1 has no reachable Attorney General action yet.
+
 ### Portal edits — layout and permissions
 
 **The legal-request form is one centred column.** The wizard root was full width

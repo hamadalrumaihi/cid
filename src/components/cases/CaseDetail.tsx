@@ -8,7 +8,8 @@ import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Button } from '@/components/ui/Button'
 import { DetailSkeleton } from '@/components/ui/Skeleton'
 import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
-import { SectionTabs, panelDomId, tabDomId, type SectionTab, type SectionTabGroup } from '@/components/ui/SectionTabs'
+import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
+import { CASE_TABS, CASE_TAB_GROUPS, CASE_TAB_LABELS, type CaseTabId } from './caseTabs'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { countRows, list, rpc, update, withRetry } from '@/lib/db'
@@ -62,30 +63,12 @@ const CaseGraphTab = dynamic(() => import('./CaseGraphTab').then((m) => m.CaseGr
   loading: () => <p className="py-10 text-center text-sm text-slate-500">Building the link chart…</p>,
 })
 
-const TABS = ['overview', 'graph', 'media', 'intel', 'surveillance', 'extractions', 'charges', 'rico', 'reports', 'tasks', 'legal', 'signoff', 'chat', 'timeline'] as const
-type TabId = (typeof TABS)[number]
-
-const TAB_LABELS: Record<TabId, string> = {
-  overview: 'Brief', graph: 'Graph', media: 'Photos & Media', intel: 'Intel & Notes',
-  surveillance: 'Surveillance',
-  extractions: 'Extractions', charges: 'Charges', rico: 'RICO', reports: 'Reports', tasks: 'Tasks',
-  legal: 'Legal', signoff: 'Sign-off', chat: 'Chat', timeline: 'Timeline',
-}
-
-// Visual grouping only — the 8-area case-jacket IA. `?tab=` URL values match
-// the ids (legacy `tab=evidence`/`tab=notes` links resolve via
-// normalizeCaseTab), so every deep link keeps working. RICO is conditional
-// (ricoTabVisible): the Operations group simply skips it when hidden.
-const TAB_GROUPS: ReadonlyArray<SectionTabGroup<TabId>> = [
-  { label: 'Brief', tabs: ['overview'] },
-  { label: 'Investigation', tabs: ['intel', 'surveillance', 'extractions', 'timeline'] },
-  { label: 'Subjects & Links', tabs: ['graph'] },
-  { label: 'Evidence', tabs: ['media', 'charges'] },
-  { label: 'Reports', tabs: ['reports'] },
-  { label: 'Legal', tabs: ['legal'] },
-  { label: 'Operations', tabs: ['tasks', 'rico'] },
-  { label: 'Record', tabs: ['signoff', 'chat'] },
-]
+// Tab ids/labels/grouping live in caseTabs.ts so the in-app User Guide renders
+// the real rail (aliased here to keep the 30+ existing references unchanged).
+const TABS = CASE_TABS
+type TabId = CaseTabId
+const TAB_LABELS = CASE_TAB_LABELS
+const TAB_GROUPS = CASE_TAB_GROUPS
 
 /** Slim media projection — enough for the metric count + Overview recap. */
 type WfMediaRow = Pick<Tables<'media'>, 'id' | 'created_at' | 'archived_at'>
@@ -277,8 +260,8 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const prosecutorBureaus = useMyProsecutorBureaus()
   const legalNow = useNow()
   const legalNeedsAction = useMemo(
-    () => (wf ? countViewerActionable(wf.legal, buildLegalViewer(auth, prosecutorBureaus), legalNow) : 0),
-    [wf, auth, prosecutorBureaus, legalNow],
+    () => (wf ? countViewerActionable(wf.legal, buildLegalViewer(auth, prosecutorBureaus, undefined, siu.isCommand), legalNow) : 0),
+    [wf, auth, prosecutorBureaus, legalNow, siu.isCommand],
   )
 
   // Conditional RICO tab: visible with data, after an explicit session enable,
