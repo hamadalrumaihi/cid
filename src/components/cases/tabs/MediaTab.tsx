@@ -20,6 +20,9 @@ import { useSearchParams } from 'next/navigation'
 import type { Json, Tables } from '@/lib/database.types'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import {
+  FileTypeIcon, GangIcon, LockIcon, NarcoticIcon, PersonIcon, PhotoIcon, PlaceIcon, StarIcon, VehicleIcon,
+} from '@/components/shell/icons'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -30,7 +33,7 @@ import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
 import { caseLink } from '@/lib/caseLinks'
 import { CASE_MEDIA_CATEGORIES, caseMediaCategoryLabel, filterCaseMedia, legacyEvidenceRef } from '@/lib/caseMedia'
 import { fmConfigured } from '@/lib/fivemanage'
-import { fmtDate, fmtDateTime } from '@/lib/format'
+import { fmtDate, fmtDateTime, timeAgo } from '@/lib/format'
 import { reportTitle } from '@/lib/forms'
 import { parseFormValues } from '@/lib/jsonShapes'
 import { useAuth } from '@/lib/auth'
@@ -244,7 +247,7 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
               key={cat.id}
               onClick={() => pickCategory(cat.id)}
               aria-pressed={category === cat.id}
-              className={`flex-shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition ${category === cat.id ? 'border-badge-500 bg-blue-500/10 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}`}
+              className={`flex-shrink-0 whitespace-nowrap rounded-md border px-3 py-1.5 text-xs font-semibold transition ${category === cat.id ? 'border-badge-500 bg-blue-500/10 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}`}
             >
               {cat.label}
             </button>
@@ -254,7 +257,7 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
           <button
             onClick={() => { setShowArchived((v) => !v); setPage(1) }}
             aria-pressed={showArchived}
-            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${showArchived ? 'border-amber-400/40 bg-amber-500/10 text-amber-200' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}`}
+            className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition ${showArchived ? 'border-amber-400/40 bg-amber-500/10 text-amber-200' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}`}
           >
             Archived
           </button>
@@ -267,7 +270,7 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
           to 0), so its countdown banner renders on its own branch. */}
       {myLive ? (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-400/25 bg-emerald-500/[0.06] px-4 py-3">
-          <span aria-hidden className="text-lg">🔓</span>
+          <LockIcon size={20} className="flex-shrink-0 text-emerald-300" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-emerald-100">Temporary restricted access active</p>
             <p className="text-xs text-emerald-200/70">
@@ -278,7 +281,7 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
         </div>
       ) : hiddenRestricted > 0 ? (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-rose-400/30 bg-rose-500/[0.07] px-4 py-3">
-          <span aria-hidden className="text-lg">🔒</span>
+          <LockIcon size={20} className="flex-shrink-0 text-rose-300" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-rose-100">
               {hiddenRestricted} restricted {hiddenRestricted === 1 ? 'item is' : 'items are'} hidden
@@ -343,7 +346,8 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
         </section>
       )}
 
-      {/* Gallery grid — cards are buttons (keyboard-navigable), lazy images. */}
+      {/* Media sections — photographs in a gallery grid, everything else as
+          compact records; every card/row is a button (keyboard-navigable). */}
       {loading ? (
         <CardGridSkeleton count={8} cols="sm:grid-cols-3 xl:grid-cols-4" />
       ) : !rows.length && loadError ? (
@@ -355,13 +359,7 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
               <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                 Evidence <span className="tabular-nums">({evidenceRows.length})</span>
               </h3>
-              <ul className="grid list-none grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-                {evidenceRows.map((m) => (
-                  <li key={m.id} className="min-w-0">
-                    <MediaCard m={m} names={names} vehicles={vehicles} reportLabel={reportLabel} onOpen={() => setDetailId(m.id)} />
-                  </li>
-                ))}
-              </ul>
+              <MediaGroup items={evidenceRows} names={names} vehicles={vehicles} reportLabel={reportLabel} onOpen={setDetailId} />
             </section>
           )}
           {visibleGeneral.length > 0 && (
@@ -371,13 +369,7 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
                   General uploads <span className="tabular-nums">({generalRows.length})</span>
                 </h3>
               )}
-              <ul className="grid list-none grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-                {visibleGeneral.map((m) => (
-                  <li key={m.id} className="min-w-0">
-                    <MediaCard m={m} names={names} vehicles={vehicles} reportLabel={reportLabel} onOpen={() => setDetailId(m.id)} />
-                  </li>
-                ))}
-              </ul>
+              <MediaGroup items={visibleGeneral} names={names} vehicles={vehicles} reportLabel={reportLabel} onOpen={setDetailId} />
             </section>
           )}
           {hasMore && (
@@ -387,12 +379,12 @@ export function MediaTab({ c, canEdit, canDelete, holdActive = false }: { c: Cas
           )}
         </>
       ) : rows.length ? (
-        <p className="rounded-xl border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-400">
+        <p className="rounded-lg border border-white/10 bg-ink-950/50 p-8 text-center text-sm text-slate-400">
           No {showArchived ? '' : 'active '}media in this category.
         </p>
       ) : (
         <EmptyState
-          icon="🖼️"
+          icon={<PhotoIcon size={28} />}
           title="No case photos yet"
           hint={canEdit ? 'Add scene shots, documents, surveillance stills — anything visual the case relies on.' : 'No photos or media have been added to this case yet.'}
           action={canEdit ? { label: '＋ Add photos', onClick: () => setAddOpen(true) } : undefined}
@@ -520,12 +512,113 @@ function RequestAccessModal({ c, hiddenCount, onClose, onRequested }: {
   )
 }
 
-/* ── Card ─────────────────────────────────────────────────────────────────── */
+/* ── Cards & records ──────────────────────────────────────────────────────────
+ * Two presentations for one media set: photographs (anything with a renderable
+ * thumbnail) keep the gallery grid; video/audio/documents/links render as
+ * compact single-column records — a small type icon beside the metadata line
+ * instead of a giant blank tile. Both open the same detail lightbox. */
 
-function typeGlyph(m: MediaRow): string {
-  if (m.type === 'video') return '🎬'
-  if (m.type === 'document') return '📄'
-  return '📡'
+type FileKind = 'image' | 'video' | 'audio' | 'document' | 'link'
+
+const FILE_KIND_LABEL: Record<FileKind, string> = {
+  image: 'Image', video: 'Video', audio: 'Audio', document: 'Document', link: 'Link',
+}
+
+/** UI file kind for the stroke icon set — media.type plus the same extension
+ *  sniffing the detail player uses ('fivemanage' rows are the audio pilot). */
+function fileKind(m: MediaRow): FileKind {
+  const src = mediaSrc(m)
+  if (m.type === 'video' || /\.(mp4|webm|mov|m4v)($|\?)/i.test(src)) return 'video'
+  if (m.type === 'fivemanage' || /\.(mp3|wav|ogg|m4a)($|\?)/i.test(src)) return 'audio'
+  if (m.type === 'document') return 'document'
+  if (m.type === 'image') return 'image'
+  return 'link'
+}
+
+/** Gallery membership: an image row with a loadable-looking URL. Everything
+ *  else (and images with no safe URL) drops to the record list. */
+const hasThumb = (m: MediaRow) => fileKind(m) === 'image' && !!safeUrl(mediaSrc(m))
+
+function MediaGroup({ items, names, vehicles, reportLabel, onOpen }: {
+  items: MediaRow[]
+  names: NameMaps
+  vehicles: VehicleLite[]
+  reportLabel: (id: string | null) => string | null
+  onOpen: (id: string) => void
+}) {
+  const gallery = items.filter(hasThumb)
+  const records = items.filter((m) => !hasThumb(m))
+  return (
+    <>
+      {gallery.length > 0 && (
+        <ul className="grid list-none grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+          {gallery.map((m) => (
+            <li key={m.id} className="min-w-0">
+              <MediaCard m={m} names={names} vehicles={vehicles} reportLabel={reportLabel} onOpen={() => onOpen(m.id)} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {records.length > 0 && (
+        <ul className="list-none space-y-1.5">
+          {records.map((m) => (
+            <li key={m.id}>
+              <MediaListRow m={m} reportLabel={reportLabel} onOpen={() => onOpen(m.id)} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  )
+}
+
+/** Compact record row for non-photographic media — type icon, title, one
+ *  metadata line, access badges. Same click target as a gallery card. */
+function MediaListRow({ m, reportLabel, onOpen }: {
+  m: MediaRow
+  reportLabel: (id: string | null) => string | null
+  onOpen: () => void
+}) {
+  const linkedReport = reportLabel(m.report_id)
+  const uploader = officerName(m.uploaded_by)
+  return (
+    <button
+      onClick={onOpen}
+      className={`flex w-full items-center gap-3 rounded-lg border border-white/10 bg-ink-950/50 px-3 py-2 text-left transition hover:border-white/20 hover:bg-ink-950/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-400 ${m.archived_at ? 'opacity-70' : ''}`}
+    >
+      <span aria-hidden className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md bg-white/5 text-slate-300">
+        <FileTypeIcon type={fileKind(m)} size={18} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold text-white">{m.title}</span>
+        <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-slate-400">
+          {m.evidence_ref && (
+            <>
+              <span className="font-mono font-semibold text-emerald-300">{m.evidence_ref}</span>
+              <span aria-hidden>·</span>
+            </>
+          )}
+          <span>{caseMediaCategoryLabel(m.category)}</span>
+          {uploader && (
+            <>
+              <span aria-hidden>·</span>
+              <span className="truncate">{uploader}</span>
+            </>
+          )}
+          <span aria-hidden>·</span>
+          <span title={fmtDateTime(m.created_at)}>{timeAgo(m.created_at)}</span>
+          {linkedReport && <Badge tone="accent" title={linkedReport}>Report media</Badge>}
+        </span>
+      </span>
+      {(m.restricted || m.featured || m.archived_at) && (
+        <span className="flex flex-shrink-0 flex-wrap justify-end gap-1">
+          {m.restricted && <Badge tone="danger">Restricted</Badge>}
+          {m.featured && <Badge tone="warn">Featured</Badge>}
+          {m.archived_at && <Badge tone="neutral">Archived</Badge>}
+        </span>
+      )}
+    </button>
+  )
 }
 
 function MediaCard({ m, names, vehicles, reportLabel, onOpen }: {
@@ -537,23 +630,25 @@ function MediaCard({ m, names, vehicles, reportLabel, onOpen }: {
 }) {
   const [imgFailed, setImgFailed] = useState(false)
   const safe = safeUrl(mediaSrc(m))
-  const chips: string[] = []
-  if (m.vehicle_id) { const v = vehicles.find((x) => x.id === m.vehicle_id); if (v) chips.push(`🚗 ${v.plate}`) }
-  if (m.person_id && names.persons.get(m.person_id)) chips.push(`👤 ${names.persons.get(m.person_id)}`)
-  if (m.gang_id && names.gangs.get(m.gang_id)) chips.push(`🏴 ${names.gangs.get(m.gang_id)}`)
-  if (m.place_id && names.places.get(m.place_id)) chips.push(`📍 ${names.places.get(m.place_id)}`)
-  if (m.narcotic_id && names.narcotics.get(m.narcotic_id)) chips.push(`💊 ${names.narcotics.get(m.narcotic_id)}`)
+  const chips: { key: string; icon: React.ReactNode; label: string }[] = []
+  if (m.vehicle_id) { const v = vehicles.find((x) => x.id === m.vehicle_id); if (v) chips.push({ key: 'vehicle', icon: <VehicleIcon size={11} />, label: v.plate }) }
+  if (m.person_id && names.persons.get(m.person_id)) chips.push({ key: 'person', icon: <PersonIcon size={11} />, label: names.persons.get(m.person_id)! })
+  if (m.gang_id && names.gangs.get(m.gang_id)) chips.push({ key: 'gang', icon: <GangIcon size={11} />, label: names.gangs.get(m.gang_id)! })
+  if (m.place_id && names.places.get(m.place_id)) chips.push({ key: 'place', icon: <PlaceIcon size={11} />, label: names.places.get(m.place_id)! })
+  if (m.narcotic_id && names.narcotics.get(m.narcotic_id)) chips.push({ key: 'narcotic', icon: <NarcoticIcon size={11} />, label: names.narcotics.get(m.narcotic_id)! })
   const linkedReport = reportLabel(m.report_id)
   return (
     <button
       onClick={onOpen}
-      className={`block w-full overflow-hidden rounded-2xl border border-white/10 bg-ink-950/50 text-left transition hover:border-white/20 hover:bg-ink-950/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-400 ${m.archived_at ? 'opacity-70' : ''}`}
+      className={`block w-full overflow-hidden rounded-lg border border-white/10 bg-ink-950/50 text-left transition hover:border-white/20 hover:bg-ink-950/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-400 ${m.archived_at ? 'opacity-70' : ''}`}
     >
-      {m.type === 'image' && safe && !imgFailed ? (
+      {safe && !imgFailed ? (
         // eslint-disable-next-line @next/next/no-img-element -- external media URL
         <img src={safe} alt={m.title} loading="lazy" onError={() => setImgFailed(true)} className="h-36 w-full object-cover" />
       ) : (
-        <span aria-hidden className="flex h-36 w-full items-center justify-center bg-ink-800 text-4xl">{typeGlyph(m)}</span>
+        <span aria-hidden className="flex h-36 w-full items-center justify-center bg-ink-800 text-slate-500">
+          <FileTypeIcon type={fileKind(m)} size={28} />
+        </span>
       )}
       <span className="block p-3">
         <span className="block truncate text-sm font-semibold text-white">{m.title}</span>
@@ -583,7 +678,10 @@ function MediaCard({ m, names, vehicles, reportLabel, onOpen }: {
         {chips.length > 0 && (
           <span className="mt-1.5 flex flex-wrap gap-1">
             {chips.map((chip) => (
-              <span key={chip} className="rounded-full bg-white/5 px-1.5 py-0.5 text-[10px] text-slate-300">{chip}</span>
+              <span key={chip.key} className="inline-flex items-center gap-1 rounded-full bg-white/5 px-1.5 py-0.5 text-[11px] text-slate-300">
+                {chip.icon}
+                {chip.label}
+              </span>
             ))}
           </span>
         )}
@@ -593,6 +691,18 @@ function MediaCard({ m, names, vehicles, reportLabel, onOpen }: {
 }
 
 /* ── Detail lightbox ──────────────────────────────────────────────────────── */
+
+/** Short preview stand-in for items with nothing to render inline — the type
+ *  icon plus its name, not a viewport-height blank. */
+function TypePlaceholder({ m }: { m: MediaRow }) {
+  const kind = fileKind(m)
+  return (
+    <div className="flex h-24 flex-col items-center justify-center gap-1.5 rounded-lg bg-ink-800 text-slate-400">
+      <FileTypeIcon type={kind} size={40} />
+      <span className="text-[11px] font-semibold uppercase tracking-wider">{FILE_KIND_LABEL[kind]}</span>
+    </div>
+  )
+}
 
 function MediaDetailModal({ m, c, canEdit, canDelete, holdActive, names, vehicles, reports, onClose, onChanged, onDeleted }: {
   m: MediaRow
@@ -682,7 +792,7 @@ function MediaDetailModal({ m, c, canEdit, canDelete, holdActive, names, vehicle
       <div className="p-5">
         <ModalHeader title={m.title} onClose={onClose} />
         {!safe ? (
-          <div aria-hidden className="flex h-64 items-center justify-center rounded-lg bg-ink-800 text-5xl">{typeGlyph(m)}</div>
+          <TypePlaceholder m={m} />
         ) : m.type === 'image' ? (
           // eslint-disable-next-line @next/next/no-img-element -- external media URL
           <img src={safe} alt={m.title} className="max-h-[55vh] w-full rounded-lg bg-black object-contain" />
@@ -691,7 +801,7 @@ function MediaDetailModal({ m, c, canEdit, canDelete, holdActive, names, vehicle
         ) : isAud ? (
           <div className="rounded-lg bg-ink-800 p-6"><audio src={safe} controls className="w-full" /></div>
         ) : (
-          <div className="flex h-40 items-center justify-center rounded-lg bg-ink-800 text-5xl" aria-hidden>{typeGlyph(m)}</div>
+          <TypePlaceholder m={m} />
         )}
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -775,7 +885,7 @@ function MediaDetailModal({ m, c, canEdit, canDelete, holdActive, names, vehicle
             <Button size="sm" onAction={designateEvidence}>Designate as evidence…</Button>
           ))}
           {canEdit && (
-            <Button size="sm" onClick={toggleFeatured}>{m.featured ? '★ Unfeature' : '☆ Feature'}</Button>
+            <Button size="sm" onClick={toggleFeatured}><StarIcon size={14} />{m.featured ? 'Unfeature' : 'Feature'}</Button>
           )}
           {canEdit && (
             <Button size="sm" variant={m.archived_at ? 'success' : 'warn'} onClick={toggleArchived}>
@@ -932,12 +1042,14 @@ function AddPhotosModal({ c, uploaderId, reports, vehicles, onClose }: {
             {items.map((item) => {
               const thumb = safeUrl(mediaSrc(item.row))
               return (
-                <div key={item.row.id} className="flex gap-3 rounded-xl border border-white/10 bg-ink-950/50 p-3">
+                <div key={item.row.id} className="flex gap-3 rounded-lg border border-white/10 bg-ink-950/50 p-3">
                   {item.row.type === 'image' && thumb ? (
                     // eslint-disable-next-line @next/next/no-img-element -- external media URL
                     <img src={thumb} alt={item.row.title} loading="lazy" className="h-16 w-16 flex-shrink-0 rounded-lg object-cover" />
                   ) : (
-                    <span aria-hidden className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg bg-ink-800 text-2xl">{typeGlyph(item.row)}</span>
+                    <span aria-hidden className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg bg-ink-800 text-slate-400">
+                      <FileTypeIcon type={fileKind(item.row)} size={24} />
+                    </span>
                   )}
                   <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
                     <Field label="Caption">{(id) => <Input id={id} value={item.caption} onChange={(e) => setItem(item.row.id, { caption: e.target.value })} />}</Field>

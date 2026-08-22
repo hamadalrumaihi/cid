@@ -9,7 +9,7 @@
 import { humanizeError } from '@/lib/toast'
 import { Button } from './Button'
 
-const CARD = 'rounded-2xl border border-white/5 bg-ink-900/60 p-8 text-center'
+const CARD = 'rounded-lg border border-white/5 bg-ink-900/60 p-8 text-center'
 
 export function Notice({ text, className = '' }: { text: string; className?: string }) {
   return <div className={`${CARD} text-sm text-slate-400 ${className}`}>{text}</div>
@@ -24,7 +24,9 @@ export function EmptyState({
   action,
   className = '',
 }: {
-  icon?: string
+  /** An icon element (shell/icons) — or, legacy, an emoji string while call
+   *  sites migrate to the professional set. */
+  icon?: React.ReactNode
   title: string
   hint?: string
   action?: { label: string; onClick: () => void }
@@ -33,7 +35,7 @@ export function EmptyState({
   return (
     <div className={`${CARD} ${className}`}>
       {icon && (
-        <div className="mb-2 text-2xl" aria-hidden>
+        <div className={`mb-2 flex justify-center ${typeof icon === 'string' ? 'text-2xl' : 'text-slate-500'}`} aria-hidden>
           {icon}
         </div>
       )}

@@ -66,7 +66,7 @@ function OfficerCard() {
           </p>
         </div>
         {profile?.loa && (
-          <span className="sidebar-hide flex-shrink-0 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-300" title="On Leave of Absence">
+          <span className="sidebar-hide flex-shrink-0 rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-300" title="On Leave of Absence">
             LOA
           </span>
         )}
@@ -196,13 +196,13 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
                 {/* Vanilla puts all three badges on the Command button
                     (#pending/#ann/#signoff-nav-badge). */}
                 {c.id === 'command' && badges.pending > 0 && (
-                  <span role="status" aria-label={`${badges.pending} member${badges.pending === 1 ? '' : 's'} awaiting approval`} className="ml-1 rounded-full bg-amber-500 px-1.5 text-[9px] font-bold text-white" title="Members awaiting approval">{badges.pending}</span>
+                  <span role="status" aria-label={`${badges.pending} member${badges.pending === 1 ? '' : 's'} awaiting approval`} className="ml-1 rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white" title="Members awaiting approval">{badges.pending}</span>
                 )}
                 {c.id === 'command' && badges.announcements > 0 && (
-                  <span className="ml-1 rounded-full bg-rose-500 px-1.5 text-[9px] font-bold text-white" title="Unread announcements">{badges.announcements > 9 ? '9+' : badges.announcements}</span>
+                  <span className="ml-1 rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white" title="Unread announcements">{badges.announcements > 9 ? '9+' : badges.announcements}</span>
                 )}
                 {c.id === 'command' && badges.signoff > 0 && (
-                  <span className="ml-1 rounded-full bg-badge-500 px-1.5 text-[9px] font-bold text-white" title="Sign-off actions awaiting you">{badges.signoff}</span>
+                  <span className="ml-1 rounded-full bg-badge-500 px-1.5 text-[10px] font-bold text-white" title="Sign-off actions awaiting you">{badges.signoff}</span>
                 )}
               </span>
             </button>

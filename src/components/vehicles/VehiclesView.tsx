@@ -13,6 +13,7 @@ import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { XMarkIcon } from '@/components/shell/icons'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -150,7 +151,7 @@ export function VehiclesView() {
                     <WatchButton type="vehicle" id={v.id} label={v.plate} compact />
                     <button onClick={() => router.push(`/vehicles?vehicle=${v.id}`)} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Profile</button>
                     {canEdit && <button onClick={() => setEditor({ record: v })} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
-                    {canDelete && <button onClick={() => void onDelete(v)} aria-label="Delete vehicle" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10">✕</button>}
+                    {canDelete && <button onClick={() => void onDelete(v)} aria-label="Delete vehicle" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10"><XMarkIcon size={14} /></button>}
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2 text-[11px]">

@@ -33,7 +33,7 @@ export function BottomNav() {
             <span className="relative leading-none">
               <CategoryIcon cat={c.id} size={20} />
               {c.id === 'command' && badges.command > 0 && (
-                <span className="absolute -right-1.5 -top-1 grid h-3.5 min-w-[14px] place-items-center rounded-full bg-rose-500 px-0.5 text-[8px] font-bold text-white" aria-label={`${badges.command} items need attention`}>
+                <span className="absolute -right-1.5 -top-1 grid h-3.5 min-w-[14px] place-items-center rounded-full bg-rose-500 px-0.5 text-[10px] font-bold text-white" aria-label={`${badges.command} items need attention`}>
                   {badges.command > 9 ? '9+' : badges.command}
                 </span>
               )}

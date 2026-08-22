@@ -16,6 +16,9 @@ import { copyText } from '@/lib/format'
 import { officerName } from '@/lib/profiles'
 import { parseIntelSummary } from '@/lib/jsonShapes'
 import { statusTint, threatTint } from '@/lib/tint'
+import {
+  ArchiveIcon, DocumentIcon, GangIcon, MapIcon, NarcoticIcon, NetworkIcon, PlaceIcon, ReceiptIcon, TrashIcon, UndoIcon, VehicleIcon, VideoIcon,
+} from '@/components/shell/icons'
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
@@ -217,7 +220,9 @@ function TerritorySection({ gangId, turf, canEdit, canDelete, onAdd, onDelete, n
 }
 
 // ── Places ───────────────────────────────────────────────────────────────────
-const PLACE_ICON: Record<string, string> = { drug_lab: '⚗️', stash_house: '📦', dead_drop: '📮', front_business: '🏪', chop_shop: '🔧' }
+const PLACE_ICON: Record<string, (p: { size?: number; className?: string }) => React.ReactElement> = {
+  drug_lab: NarcoticIcon, stash_house: ArchiveIcon, dead_drop: DocumentIcon, front_business: ReceiptIcon, chop_shop: VehicleIcon,
+}
 
 function PlacesSection({ linked, media, canEdit, canDelete, onLink, onUnlink }: {
   linked: LinkedPlace[]; media: MediaRow[]; canEdit: boolean; canDelete: boolean; onLink: () => void; onUnlink: (l: GangPlaceRow) => void
@@ -237,13 +242,14 @@ function PlacesSection({ linked, media, canEdit, canDelete, onLink, onUnlink }: 
           {linked.map(({ place, link, via }) => {
             const photo = photoFor(place.id)
             const src = photo ? safeUrl(photo.external_url || photo.storage_path || '') : ''
+            const PlaceGlyph = PLACE_ICON[place.type] ?? PlaceIcon
             return (
               <Card key={`${place.id}-${via}`} pad="sm" className="flex gap-3">
                 {src ? (
                   // eslint-disable-next-line @next/next/no-img-element -- external media CDN
                   <img src={src} alt="" className="h-16 w-20 flex-shrink-0 rounded-md object-cover" />
                 ) : (
-                  <div className="grid h-16 w-20 flex-shrink-0 place-items-center rounded-md bg-ink-700 text-xl" aria-hidden>{PLACE_ICON[place.type] ?? '📍'}</div>
+                  <div className="grid h-16 w-20 flex-shrink-0 place-items-center rounded-md bg-ink-700 text-slate-400" aria-hidden><PlaceGlyph size={22} /></div>
                 )}
                 <div className="min-w-0 flex-1">
                   <button onClick={() => router.push(`/places?q=${encodeURIComponent(place.name)}`)} className="truncate text-left text-sm font-semibold text-white hover:text-blue-200" title="Open place">{place.name}</button>
@@ -359,7 +365,7 @@ function MediaSection({ media, canEdit, onAdd, onOpen }: { media: MediaRow[]; ca
                   // eslint-disable-next-line @next/next/no-img-element -- external media CDN
                   <img src={src} alt={m.title} className="h-28 w-full object-cover transition group-hover:opacity-90" />
                 ) : (
-                  <div className="grid h-28 w-full place-items-center text-2xl" aria-hidden>{m.type === 'video' ? '🎬' : '📄'}</div>
+                  <div className="grid h-28 w-full place-items-center text-slate-400" aria-hidden>{m.type === 'video' ? <VideoIcon size={28} /> : <DocumentIcon size={28} />}</div>
                 )}
                 <span className="block truncate px-1.5 py-1 text-left text-[11px] text-slate-400">{m.title}</span>
               </button>
@@ -535,13 +541,13 @@ export function GangDossier({ gang, caseOptions, canEdit, canDelete, onBack, onR
   }
 
   const menuItems = [
-    { label: 'Open intel profile', onClick: onProfile, icon: '🗂' },
-    { label: 'Open in Network', onClick: () => router.push(`/network?focus=g:${gang.id}`), icon: '🕸' },
-    { label: 'View on map', onClick: () => router.push(`/heatmap?gang=${encodeURIComponent(gang.id)}`), icon: '🗺' },
+    { label: 'Open intel profile', onClick: onProfile, icon: <ArchiveIcon size={14} /> },
+    { label: 'Open in Network', onClick: () => router.push(`/network?focus=g:${gang.id}`), icon: <NetworkIcon size={14} /> },
+    { label: 'View on map', onClick: () => router.push(`/heatmap?gang=${encodeURIComponent(gang.id)}`), icon: <MapIcon size={14} /> },
     ...(canEdit ? [gang.status === 'disbanded'
-      ? { label: 'Mark active', onClick: () => void setLifecycle('active'), icon: '↺', separatorBefore: true }
-      : { label: 'Mark disbanded', onClick: () => void setLifecycle('disbanded'), icon: '⚑', separatorBefore: true }] : []),
-    ...(canDelete ? [{ label: 'Delete gang', onClick: onDelete, danger: true, icon: '🗑', separatorBefore: !canEdit }] : []),
+      ? { label: 'Mark active', onClick: () => void setLifecycle('active'), icon: <UndoIcon size={14} />, separatorBefore: true }
+      : { label: 'Mark disbanded', onClick: () => void setLifecycle('disbanded'), icon: <GangIcon size={14} />, separatorBefore: true }] : []),
+    ...(canDelete ? [{ label: 'Delete gang', onClick: onDelete, danger: true, icon: <TrashIcon size={14} />, separatorBefore: !canEdit }] : []),
   ]
 
   return (

@@ -24,7 +24,7 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
 export function Badge({ tint, tone = 'neutral', className = '', children, ...rest }: BadgeProps) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+      className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold ${
         tint ?? TONES[tone]
       } ${className}`}
       {...rest}

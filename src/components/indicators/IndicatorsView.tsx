@@ -15,6 +15,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { useRegistry } from '@/lib/useRegistry'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
+import { AlertIcon, LockIcon, XMarkIcon } from '@/components/shell/icons'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
@@ -143,7 +144,7 @@ export function IndicatorsView() {
       {!loading && !err && (
         alerts.length ? (
           <div className="mb-6">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-amber-300/80">⚡ Deconfliction alerts ({alerts.length})</p>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-amber-300/80"><AlertIcon size={12} className="inline align-[-2px]" /> Deconfliction alerts ({alerts.length})</p>
             <div className="space-y-2">
               {alerts.map((a) => (
                 <div key={matchKey(a.sample.kind, a.sample.value)} className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
@@ -161,7 +162,7 @@ export function IndicatorsView() {
                           {c ? (
                             <button onClick={() => router.push(`/cases?case=${cid}`)} className="font-mono text-blue-300 hover:underline">{c.case_number}</button>
                           ) : (
-                            <span className="font-mono text-slate-500" title="Logged on a case outside your access — contact its bureau lead to coordinate.">🔒 restricted case</span>
+                            <span className="font-mono text-slate-500" title="Logged on a case outside your access — contact its bureau lead to coordinate."><LockIcon size={12} className="inline align-[-2px]" /> restricted case</span>
                           )}
                         </span>
                       )
@@ -212,19 +213,19 @@ export function IndicatorsView() {
                     <p className="break-all font-mono text-sm font-bold text-white">{KIND_META[r.kind]?.icon ?? '🏷️'} {r.value}</p>
                     <p className="mt-1.5 flex flex-wrap gap-2 text-[11px]">
                       <span className="rounded-md bg-white/5 px-2 py-1 uppercase text-slate-400">{KIND_META[r.kind]?.label ?? r.kind}</span>
-                      {hot && <span className="rounded-md bg-amber-500/10 px-2 py-1 text-amber-300">⚡ multi-case</span>}
+                      {hot && <span className="rounded-md bg-amber-500/10 px-2 py-1 text-amber-300"><AlertIcon size={12} className="inline align-[-2px]" /> multi-case</span>}
                     </p>
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-2">
                     {canEdit && <button onClick={() => setEditor({ record: r })} className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10 sm:min-h-0">Edit</button>}
-                    {canDelete && <button onClick={() => void onDelete(r)} aria-label="Delete indicator" className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10 sm:min-h-0">✕</button>}
+                    {canDelete && <button onClick={() => void onDelete(r)} aria-label="Delete indicator" className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10 sm:min-h-0"><XMarkIcon size={14} /></button>}
                   </div>
                 </div>
                 <p className="mt-3 text-xs">
                   {c ? (
                     <button onClick={() => router.push(`/cases?case=${r.case_id}`)} className="font-mono text-blue-300 hover:underline">{c.case_number}</button>
                   ) : (
-                    <span className="text-slate-500" title="Logged on a case outside your access.">🔒 restricted case</span>
+                    <span className="text-slate-500" title="Logged on a case outside your access."><LockIcon size={12} className="inline align-[-2px]" /> restricted case</span>
                   )}
                   {c?.title && <span className="text-slate-500"> — {c.title}</span>}
                 </p>

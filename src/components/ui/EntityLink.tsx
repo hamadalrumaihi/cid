@@ -9,6 +9,7 @@
  *  the far side, never a leak. */
 import { useRouter } from 'next/navigation'
 import { caseLink } from '@/lib/caseLinks'
+import { KindIcon } from '@/components/shell/icons'
 
 export type EntityKind = 'person' | 'vehicle' | 'case' | 'gang' | 'place' | 'narcotic'
 
@@ -24,10 +25,6 @@ export function entityHref(kind: EntityKind, ref: { id?: string; label?: string 
     case 'place': return `/places?q=${enc(ref.label ?? '')}`
     case 'narcotic': return `/narcotics?drug=${enc(ref.id ?? '')}`
   }
-}
-
-const ICON: Record<EntityKind, string> = {
-  person: '👤', vehicle: '🚗', case: '📁', gang: '🚩', place: '📍', narcotic: '💊',
 }
 
 export function EntityLink({
@@ -51,7 +48,7 @@ export function EntityLink({
       title={title ?? `Open ${label}`}
       className={`inline-flex max-w-full items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-xs font-medium text-blue-200 transition hover:bg-white/10 ${className}`}
     >
-      <span aria-hidden className="flex-shrink-0">{ICON[kind]}</span>
+      <span aria-hidden className="flex-shrink-0 text-slate-400"><KindIcon kind={kind} size={13} /></span>
       <span className="truncate">{label}</span>
     </button>
   )

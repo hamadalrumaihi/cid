@@ -346,26 +346,25 @@ export const FORM_SCHEMAS: Record<string, FormSchema> = {
 /** The fillable CID forms ARE the canonical report templates (persons.js:31). */
 export interface ReportTemplate {
   id: string
-  icon: string
   isDefault: boolean
   name: string
   schema: FormSchema
 }
 
-const TEMPLATE_META: { id: string; icon: string; isDefault?: boolean }[] = [
-  { id: 'cid_investigative_report', icon: '📄', isDefault: true },
-  { id: 'raid_seizure', icon: '💰' },
-  { id: 'uc_operation', icon: '🕶️' },
-  { id: 'arrest_warrant', icon: '⚖️' },
-  { id: 'search_warrant', icon: '🔍' },
-  { id: 'wiretap_warrant', icon: '📡' },
-  { id: 'subpoena', icon: '📜' },
-  { id: 'surveillance_report', icon: '🛰️' },
+const TEMPLATE_META: { id: string; isDefault?: boolean }[] = [
+  { id: 'cid_investigative_report', isDefault: true },
+  { id: 'raid_seizure' },
+  { id: 'uc_operation' },
+  { id: 'arrest_warrant' },
+  { id: 'search_warrant' },
+  { id: 'wiretap_warrant' },
+  { id: 'subpoena' },
+  { id: 'surveillance_report' },
 ]
 
 export const REPORT_TEMPLATES: ReportTemplate[] = TEMPLATE_META
   .filter((t) => FORM_SCHEMAS[t.id])
-  .map((t) => ({ id: t.id, icon: t.icon, isDefault: !!t.isDefault, name: FORM_SCHEMAS[t.id].title, schema: FORM_SCHEMAS[t.id] }))
+  .map((t) => ({ id: t.id, isDefault: !!t.isDefault, name: FORM_SCHEMAS[t.id].title, schema: FORM_SCHEMAS[t.id] }))
 
 export const tplById = (id: string | null | undefined): ReportTemplate | undefined =>
   REPORT_TEMPLATES.find((t) => t.id === id)

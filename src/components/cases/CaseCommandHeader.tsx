@@ -254,12 +254,12 @@ export function CaseCommandHeader({
             <button
               onClick={() => copyText(c.case_number, 'Case number')}
               title="Copy case number"
-              className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-white/5 px-2.5 font-mono text-sm font-bold tabular-nums text-badge-200 transition hover:bg-white/10 sm:min-h-0 sm:py-1"
+              className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-white/5 px-2.5 font-mono text-base font-bold tabular-nums text-badge-200 transition hover:bg-white/10 sm:min-h-0 sm:py-1"
             >
               {c.case_number}
-              <span aria-hidden className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">copy</span>
+              <span aria-hidden className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">copy</span>
             </button>
-            <h1 className="min-w-0 truncate text-lg font-black text-white">{c.title || 'Untitled case'}</h1>
+            <h1 className="min-w-0 truncate text-xl font-black text-white">{c.title || 'Untitled case'}</h1>
           </div>
           <ActionMenu items={items} label="More case actions" buttonClassName="h-10 px-3.5" />
         </div>

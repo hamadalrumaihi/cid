@@ -35,7 +35,7 @@ export function Subtabs() {
         onClick={() => navigate(t)}
         className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
           on
-            ? 'bg-blue-500/15 text-white shadow-[inset_0_-2px_0_0_#3b82f6]'
+            ? 'bg-blue-500/15 text-white shadow-[inset_0_-2px_0_0_rgb(var(--acc-500))]'
             : 'text-slate-400 hover:bg-white/5 hover:text-white'
         }`}
       >

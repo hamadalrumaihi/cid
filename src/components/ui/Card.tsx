@@ -26,7 +26,9 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 const VARIANT: Record<NonNullable<CardProps['variant']>, string> = {
-  default: 'rounded-2xl border border-white/5 bg-ink-900/60',
+  // 8px corners across both variants — record surfaces, not app-store tiles.
+  // Large rounding is reserved for major dialogs (Modal keeps rounded-2xl).
+  default: 'rounded-lg border border-white/5 bg-ink-900/60',
   flat: 'rounded-lg border border-white/10 bg-ink-900/40',
 }
 

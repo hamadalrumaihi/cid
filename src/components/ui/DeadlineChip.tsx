@@ -19,7 +19,7 @@ export function DeadlineChip({ at, kind = 'due', now, className = '' }: {
       ? 'border-amber-500/25 bg-amber-500/10 text-amber-300'
       : 'border-white/10 bg-white/5 text-slate-300'
   return (
-    <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${tone} ${className}`}>
+    <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-semibold ${tone} ${className}`}>
       {info.text}
     </span>
   )

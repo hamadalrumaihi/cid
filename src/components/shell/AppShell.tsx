@@ -10,6 +10,7 @@ import { ConnBanner } from './ConnBanner'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 import { Subtabs } from './Subtabs'
+import { SiuStatusStrip } from './SiuStatusStrip'
 import { useNav } from './useNav'
 import { PortalAssistant } from '@/components/assistant/PortalAssistant'
 
@@ -54,7 +55,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="grid-texture min-w-0 flex-1 lg:ml-64">
         <Header onOpenDrawer={() => setDrawerOpen(true)} />
         <Subtabs />
-        <div className="p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8">{children}</div>
+        <SiuStatusStrip />
+        {/* Content column is capped: on very wide monitors (2560px+) panels
+            stop stretching edge to edge. Galleries, graphs and boards still
+            get the full 1600px; text-heavy views add their own tighter cap. */}
+        <div className="mx-auto w-full max-w-[100rem] p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8">{children}</div>
       </main>
       <BottomNav />
       <ConnBanner />

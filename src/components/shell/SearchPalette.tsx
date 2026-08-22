@@ -21,6 +21,7 @@ import { caseLink } from '@/lib/caseLinks'
 import { PAGE_META, TAB_LABEL } from '@/lib/nav'
 import { recentSearches, rememberSearch, runSearch, SEARCH_KINDS, SEARCH_SECTION_ORDER, type SearchHit } from '@/lib/search'
 import { toast } from '@/lib/toast'
+import { CalendarIcon, ChevronIcon, ClockIcon, KindIcon, PlusIcon, XMarkIcon } from '@/components/shell/icons'
 
 interface Row {
   hit: SearchHit
@@ -30,7 +31,7 @@ interface Row {
 
 interface Action {
   id: string
-  icon: string
+  icon: React.ReactNode
   label: string
   keywords: string
   run: () => void | Promise<void>
@@ -91,9 +92,9 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
   const actions = useMemo<Action[]>(() => {
     const go = (path: string) => { onClose(); router.push(path) }
     const out: Action[] = []
-    if (canEdit) out.push({ id: 'new-case', icon: '📂', label: 'New case…', keywords: 'new create case open file', run: () => go('/cases?new=1') })
+    if (canEdit) out.push({ id: 'new-case', icon: <PlusIcon size={15} />, label: 'New case…', keywords: 'new create case open file', run: () => go('/cases?new=1') })
     out.push({
-      id: 'loa', icon: '🌴',
+      id: 'loa', icon: <CalendarIcon size={15} />,
       label: onLoa ? 'Clear LOA — back in rotation' : 'Set LOA — mark yourself away',
       keywords: 'loa leave absence away rotation',
       run: async () => {
@@ -103,10 +104,10 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
         else toast(onLoa ? 'LOA cleared — you are back in rotation.' : 'Marked On LOA — sign-off routing will skip you.', 'success')
       },
     })
-    out.push({ id: 'signout', icon: '🚪', label: 'Sign out', keywords: 'sign out log out exit quit', run: async () => { onClose(); await signOut() } })
+    out.push({ id: 'signout', icon: <XMarkIcon size={15} />, label: 'Sign out', keywords: 'sign out log out exit quit', run: async () => { onClose(); await signOut() } })
     for (const [tab, meta] of Object.entries(PAGE_META)) {
       out.push({
-        id: `go:${tab}`, icon: '➜',
+        id: `go:${tab}`, icon: <ChevronIcon dir="right" />,
         label: `Go to ${meta.title}`,
         keywords: `go open ${tab} ${TAB_LABEL[tab] ?? ''} ${meta.title}`.toLowerCase(),
         run: () => go(`/${tab}`),
@@ -217,7 +218,7 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
                   onMouseEnter={() => setSel(i)}
                   className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${i === sel ? 'bg-emerald-500/15 text-white' : 'text-slate-200 hover:bg-white/5'}`}
                 >
-                  <span aria-hidden className="w-5 text-center">{a.icon}</span>
+                  <span aria-hidden className="flex w-5 justify-center text-slate-400">{a.icon}</span>
                   <span className="min-w-0 flex-1 truncate">{a.label}</span>
                   <span className="flex-shrink-0 text-[10px] uppercase tracking-wider text-slate-600">command</span>
                 </button>
@@ -231,8 +232,8 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
             <>
               <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Recent searches</p>
               {recents.map((r) => (
-                <button key={r} onClick={() => setQuery(r)} className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5">
-                  🕘 {r}
+                <button key={r} onClick={() => setQuery(r)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5">
+                  <span aria-hidden className="text-slate-500"><ClockIcon size={14} /></span> {r}
                 </button>
               ))}
             </>
@@ -248,7 +249,7 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
                   onMouseEnter={() => setSel(gi)}
                   className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${gi === sel ? 'bg-blue-500/15 text-white' : 'text-slate-200 hover:bg-white/5'}`}
                 >
-                  <span aria-hidden>{SEARCH_KINDS[row.hit.kind]?.icon ?? '🔎'}</span>
+                  <span aria-hidden className="flex w-5 justify-center text-slate-400"><KindIcon kind={row.hit.kind} /></span>
                   <span className="min-w-0 flex-1 truncate">{row.hit.label}</span>
                   {row.hit.sublabel && <span className="max-w-[40%] flex-shrink-0 truncate text-[11px] text-slate-500">{row.hit.sublabel}</span>}
                 </button>

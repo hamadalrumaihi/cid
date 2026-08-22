@@ -101,7 +101,7 @@ export function ActionMenu({
           id={menuId}
           aria-label={label}
           onKeyDown={onMenuKey}
-          className={`absolute top-full z-30 mt-1 min-w-[12rem] overflow-hidden rounded-xl border border-white/10 bg-ink-850 py-1 shadow-glow ${align === 'right' ? 'right-0' : 'left-0'}`}
+          className={`absolute top-full z-30 mt-1 min-w-[12rem] overflow-hidden rounded-lg border border-white/10 bg-ink-850 py-1 shadow-xl shadow-black/40 ${align === 'right' ? 'right-0' : 'left-0'}`}
         >
           {items.map((it, i) => (
             <div key={i}>
