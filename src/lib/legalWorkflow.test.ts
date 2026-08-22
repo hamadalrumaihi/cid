@@ -141,7 +141,7 @@ describe('next-action derivation + grouping', () => {
     expect(ret.group).toBe('returned_to_you')
   })
   it('CID supervisor can act on cid_supervisor_review (not the creator)', () => {
-    const sup = viewer({ myId: 'sup-1', cidActive: true, cidRole: 'bureau_lead' })
+    const sup = viewer({ myId: 'sup-1', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'SAB' })
     const d = dispositionFor(req({ review_status: 'cid_supervisor_review', created_by: 'inv-1' }), sup, NOW)
     expect(d.viewerCanAct).toBe(true)
     expect(d.nextAction).toBe('Review as Bureau Lead')
@@ -661,5 +661,61 @@ describe('§9 why is this stuck — the CID lane names who can act', () => {
   it('says nothing about the author when there is no viewer', () => {
     // Queue/list surfaces render the explanation with no viewer context.
     expect(routingExplanation(pending())).not.toMatch(/You raised/i)
+  })
+})
+
+describe('who may decide a CID legal request', () => {
+  const pending = (over = {}) =>
+    req({ review_status: 'cid_supervisor_review', created_by: 'inv-1', responsible_bureau: 'SAB', ...over })
+  const acts = (v: LegalViewer, r = pending()) => dispositionFor(r, v, NOW).viewerCanAct
+
+  it('lets the responsible bureau lead decide their own bureau', () => {
+    expect(acts(viewer({ myId: 'u-lead', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'SAB' })))
+      .toBe(true)
+  })
+
+  it('does not offer another bureau lead a button the database refuses', () => {
+    // can_approve_legal() requires division = responsible_bureau. The client
+    // used to admit ANY bureau_lead, so a BCB lead saw an Approve control on an
+    // SAB request and got an exception on click.
+    expect(acts(viewer({ myId: 'u-lead', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'BCB' })))
+      .toBe(false)
+  })
+
+  it('widens to any bureau lead on a joint case', () => {
+    expect(acts(
+      viewer({ myId: 'u-lead', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'BCB' }),
+      pending({ case_bureau: 'JTF' }),
+    )).toBe(true)
+  })
+
+  it('lets higher command act on any bureau, immediately', () => {
+    // The whole point of part 3: a request must not stall because the bureau's
+    // own lead is on LOA, unassigned, or does not exist. Neither role carries a
+    // division test, and nothing requires the lead to be marked unavailable
+    // first.
+    for (const role of ['deputy_director', 'director']) {
+      expect(acts(viewer({ myId: 'u-cmd', cidActive: true, cidRole: role, cidDivision: 'BCB' })), role)
+        .toBe(true)
+    }
+    expect(acts(viewer({ myId: 'u-own', cidActive: true, cidRole: null, isOwner: true }))).toBe(true)
+  })
+
+  it('is not blocked when the request names no responsible bureau at all', () => {
+    const orphan = pending({ responsible_bureau: null })
+    expect(acts(viewer({ myId: 'u-cmd', cidActive: true, cidRole: 'director' }), orphan)).toBe(true)
+  })
+
+  it('still refuses the author, whatever their rank', () => {
+    // Separation of duties survives everything above. A Bureau Lead who raises
+    // a request in their own bureau escalates; they do not self-approve.
+    for (const role of ['bureau_lead', 'deputy_director', 'director']) {
+      expect(acts(viewer({ myId: 'inv-1', cidActive: true, cidRole: role, cidDivision: 'SAB' })), role)
+        .toBe(false)
+    }
+  })
+
+  it('refuses an inactive account holding a command rank', () => {
+    expect(acts(viewer({ myId: 'u-cmd', cidActive: false, cidRole: 'director' }))).toBe(false)
   })
 })

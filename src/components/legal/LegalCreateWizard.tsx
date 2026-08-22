@@ -663,7 +663,13 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
       }))
 
   return (
-    <div className="space-y-4">
+    /* One centred column for the whole workflow -- header, stepper, restore
+       banners, form card and navigation. Before this the root was full width
+       and only SOME children were capped at max-w-3xl, none of them centred,
+       so the form sat hard against the left edge with the rest of the row
+       empty. Centring the CONTAINER only: nothing inside is text-centred,
+       because a centred label above a left-aligned input reads as a mistake. */
+    <div className="mx-auto w-full max-w-3xl space-y-4">
       <PageHeader
         eyebrow="Legal requests"
         title={isEdit ? 'Revise legal request' : 'File legal request'}
@@ -704,14 +710,14 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
 
       {/* ── Never-lose-work restore banners (user-triggered, never auto) ────── */}
       {!isEdit && pendingStash && (
-        <div className="flex max-w-3xl flex-wrap items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
           <span className="min-w-0 flex-1">Draft from {timeAgo(pendingStash.at)} found — restore your unsaved {requestType === 'subpoena' ? 'subpoena' : 'warrant request'}?</span>
           <Button size="sm" variant="secondary" onClick={restoreStash}>Restore</Button>
           <Button size="sm" variant="ghost" onClick={discardStash}>Discard</Button>
         </div>
       )}
       {isEdit && row && editPending && editPending.at > Date.parse(row.updated_at) && (
-        <div className="flex max-w-3xl flex-wrap items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
           <span className="min-w-0 flex-1">
             An unsaved draft from {timeAgo(editPending.at)} was found on this device (newer than the saved request).
           </span>
@@ -725,7 +731,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
         </div>
       )}
 
-      <div className="max-w-3xl space-y-4">
+      <div className="space-y-4">
         <h2 ref={headingRef} tabIndex={-1} className="text-lg font-bold text-white outline-none">
           Step {stepIdx + 1} of {steps.length} — {step.label}
         </h2>

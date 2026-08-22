@@ -8,6 +8,90 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Portal edits — layout and permissions
+
+**The legal-request form is one centred column.** The wizard root was full width
+while only *some* children carried `max-w-3xl` and none were centred, so the
+form sat hard against the left edge with the rest of the row empty. Header,
+stepper, restore banners, form card and navigation now share one
+`mx-auto w-full max-w-3xl` container. The container is centred; the content is
+not — a centred label above a left-aligned input reads as a mistake, and centred
+narrative text is hard to write in.
+
+**Charges no longer wait for a Bureau Lead.** `proposed` and `under_review`
+existed solely to hold a charge in a command queue and are gone from the CHECK
+constraint, not merely made unreachable. A charge is live the moment an
+authorised investigator adds it. The self-approval bar went *with* the approval
+step: a charge is now live when its author adds it, so a rule saying "you may
+not approve your own" would make every charge unaddable.
+
+The **court lane is untouched, deliberately**, and that is the half worth
+stating: `filed` still requires a prosecutor, ADA, DA or Attorney General, and
+`convicted`/`dismissed` still require a judge. Removing internal command review
+is not the same as letting a detective record a conviction. 30 live charges (29
+`proposed`, 1 `under_review`) were migrated to `approved` with the row trigger
+disabled for that one statement — it enforces the very transition being removed
+— and re-enabled immediately.
+
+**Legal-request review: mostly already there, two real gaps closed.** Worth
+being straight about — `can_approve_legal()` already admitted Deputy Directors,
+Directors and the Owner for *any* bureau, there is no claim or assignment gate
+on CID review at all, and a `command_fallback` line was already logged naming
+who stood in. Higher command could always act immediately. What was missing:
+
+- **Rank was never recorded.** `cid_reviewed_role` now captures the reviewer's
+  CID rank *at the time*, because reading `profiles.role` at render time answers
+  a different question and goes wrong on the first promotion. Historical rows
+  stay NULL rather than being backfilled from today's roles — that would be
+  inventing a fact about the past.
+- **The client was more permissive than the server.** `viewerOwnsAction` admitted
+  *any* `bureau_lead` for `cid_supervisor_review`, while the database requires
+  their division to match the responsible bureau (or a JTF case). A BCB lead saw
+  an Approve button on an SAB request and got an exception on click — the exact
+  inverse of the SIU mistake the code comment right below it warns about.
+
+**Every active SIU member works CID.** The wall was not where it looked: the
+shared registries all gate on `is_active()`, which SIU members always passed, so
+they could already create and edit persons, gangs, vehicles, places, accounts,
+indicators, narcotics and ballistics. The read-only feeling came from exactly
+**two functions** — `can_access_case` and `can_access_case_row` — each carrying
+`not is_siu_department()`. That one conjunct removed CID cases and everything
+scoped to a case. Zero RLS policies referenced it directly, which is why a large
+change is a small migration.
+
+`private.siu_member_active()` replaces it, and is deliberately **not**
+`siu_operates()`: that is true for `oversight` (the Attorney General), who
+supervises SIU and is not a member of it. It inherits
+`siu_membership_role()`'s active / not-removed / not-oversight-only checks, so a
+suspended or removed member loses this immediately with no second check to keep
+in sync. No CID role is required.
+
+Two client helpers built on the old wall were corrected rather than patched
+around. `siuCaseReadOnly` no longer marks a CID case read-only for an SIU member
+— and, caught by an existing test, must *not* strip an Attorney General's CID
+rights either. `mayCreateCidCase` is deleted: its own comment recorded that it
+existed only to hide a control because of "a real server-side oddity, not a fix
+for it". The oddity is fixed, so the guard is empty.
+
+**Live proof**, run as the real accounts:
+
+| Probe | Result |
+|---|---|
+| SIU member sees / edits a CID case in another bureau | 1 row / 1 row changed |
+| SIU member adds a task, a report, a case post | accepted / accepted / accepted |
+| Charge added by its own author lands as | `approved` |
+| Same investigator files it / convicts it | refused (attorney only) / refused (court only) |
+| Same investigator withdraws it | 1 row changed |
+| CID detective reads SIU targets / ledger / notes / watchlist | 0 / 0 / 0 / 0 |
+| SIU SAC promotes a member to Director | role unchanged (`detective` → `detective`) |
+| SIU SAC grants themselves Owner | `is_owner` still false |
+
+That role probe is worth keeping: the first version asserted the **affected-row
+count** and read "1 row changed", which looked like SIU could promote people. An
+UPDATE that matches a row and is silently reverted by a trigger still reports one
+row affected. Reading the value back showed nothing had changed. Row counts prove
+a match, not a mutation.
+
 ### Three buttons that did nothing
 
 `Button` renders `type={type ?? 'button'}` — a deliberate default, since most

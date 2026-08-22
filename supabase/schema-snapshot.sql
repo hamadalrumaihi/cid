@@ -1770,6 +1770,7 @@ create table public.legal_requests (
   case_number_snapshot text,
   case_title_snapshot text,
   cid_reviewed_by uuid,
+  cid_reviewed_role text,
   cid_reviewed_at timestamp with time zone,
   decision text,
   decision_note text,
@@ -10272,6 +10273,42 @@ create policy wl_sel on public.watchlist
 -- Definitive SQL in supabase/migrations/20260929120000_siu_two_mode_restriction.sql,
 -- 20260929120100_siu_registry_reach.sql and
 -- 20260929120200_siu_restriction_controls.sql.
+-- 20261001120000_charges_need_no_command_approval: case_charges loses internal
+-- command review. 'proposed' and 'under_review' existed SOLELY to hold a charge
+-- in a Bureau Lead's queue and are removed from case_charges_status_check
+-- (mirrored above), not merely made unreachable. private.case_charge_may() now
+-- answers private.can_access_case() for 'approved' and 'withdrawn' instead of
+-- private.is_command() / siu_case_command(); the COURT lane is untouched --
+-- 'filed' still requires prosecutor/ADA/DA/AG and 'convicted'/'dismissed' still
+-- require a judge. case_charge_transition_ok() is now approved -> filed |
+-- withdrawn, filed -> convicted | dismissed. The insert trigger lands a charge
+-- at 'approved' rather than 'proposed', and the "nobody approves their own
+-- proposal" bar is removed WITH the approval step -- a charge is live when its
+-- author adds it, so that rule would make every charge unaddable. 30 live rows
+-- (29 proposed, 1 under_review) were migrated to 'approved' with the row
+-- trigger disabled for that single statement and re-enabled immediately, since
+-- it enforces the very transition being removed. 'approved' keeps its name
+-- deliberately: renaming a live column for cosmetics would touch the court
+-- lane, the partial unique index and every client label.
+-- 20261001120100_legal_review_records_rank: legal_requests.cid_reviewed_role
+-- (mirrored above) records the reviewer's CID rank AT THE TIME, because reading
+-- profiles.role at render time answers a different question and goes wrong on
+-- the first promotion. Historical rows stay NULL rather than being backfilled
+-- from today's roles. public.review_legal_request_as_cid() sets it on the deny,
+-- SIU-approve and CID-approve paths and adds 'actor_rank' to its audit
+-- payloads. NOTE the hierarchy itself was already present: can_approve_legal()
+-- already admitted deputy_director/director/Owner for any bureau, there is no
+-- claim gate on CID review, and command_fallback was already logged.
+-- 20261001120200_siu_members_work_cid: private.siu_member_active() (active SIU
+-- MEMBERSHIP -- excludes 'oversight', and inherits siu_membership_role()'s
+-- active/not-removed/not-oversight_only checks). private.can_access_case() and
+-- can_access_case_row() drop `not private.is_siu_department()` and gain an
+-- explicit `or private.siu_member_active()` branch, so an active SIU member
+-- works CID cases and everything scoped to one. Those two functions were the
+-- ENTIRE read-only wall -- zero RLS policies referenced is_siu_department
+-- directly, and the shared registries never did (they gate on is_active(),
+-- which SIU members always passed). The SIU -> CID direction is untouched, and
+-- Owner-only administration still gates on profiles.is_owner.
 -- 20260928120300_siu_visibility_forget: private.siu_visibility_forget()
 -- [trigger fn] with AFTER DELETE triggers persons_visibility_forget,
 -- vehicles_visibility_forget, gangs_visibility_forget and
@@ -12368,7 +12405,7 @@ alter table public.case_charges add constraint case_charges_version_id_fkey FORE
 alter table public.case_charges add constraint case_charges_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.profiles(id);
 alter table public.case_charges add constraint case_charges_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id);
 alter table public.case_charges add constraint case_charges_imposed_by_fkey FOREIGN KEY (imposed_by) REFERENCES public.profiles(id);
-alter table public.case_charges add constraint case_charges_status_check CHECK (status in ('proposed', 'under_review', 'approved', 'filed', 'convicted', 'dismissed', 'withdrawn'));
+alter table public.case_charges add constraint case_charges_status_check CHECK (status in ('approved', 'filed', 'convicted', 'dismissed', 'withdrawn'));
 alter table public.case_charges add constraint case_charges_counts_check CHECK (counts between 1 and 999);
 -- Substance detail belongs only on a scheduled-substance charge.
 alter table public.case_charges add constraint case_charges_substance_check CHECK ((substance_quantity is null and substance_unit is null and substance_note is null) or snap_substance_schedule is not null);

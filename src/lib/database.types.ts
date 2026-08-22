@@ -4614,6 +4614,7 @@ export type Database = {
           case_title_snapshot: string | null
           cid_reviewed_at: string | null
           cid_reviewed_by: string | null
+          cid_reviewed_role: string | null
           citizen_id_snapshot: string | null
           classification: string
           close_note: string | null
@@ -4698,6 +4699,7 @@ export type Database = {
           case_title_snapshot?: string | null
           cid_reviewed_at?: string | null
           cid_reviewed_by?: string | null
+          cid_reviewed_role?: string | null
           citizen_id_snapshot?: string | null
           classification?: string
           close_note?: string | null
@@ -4782,6 +4784,7 @@ export type Database = {
           case_title_snapshot?: string | null
           cid_reviewed_at?: string | null
           cid_reviewed_by?: string | null
+          cid_reviewed_role?: string | null
           citizen_id_snapshot?: string | null
           classification?: string
           close_note?: string | null

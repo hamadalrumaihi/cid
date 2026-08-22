@@ -218,6 +218,7 @@ export function legalRequestRow(
     case_title_snapshot: 'Mock Case',
     cid_reviewed_at: null,
     cid_reviewed_by: null,
+    cid_reviewed_role: null,
     citizen_id_snapshot: null,
     classification: 'standard',
     close_note: null,

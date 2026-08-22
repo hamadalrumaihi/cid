@@ -44,6 +44,11 @@ export interface LegalViewer {
   isOwner: boolean
   /** Bureaus this viewer is a live prosecutor for (SAB/LSB/BCB). */
   prosecutorBureaus?: readonly string[]
+  /** CID bureau (profiles.division). A Bureau Lead may only decide requests
+   *  whose responsible bureau is their own -- can_approve_legal() enforces it,
+   *  and without this the client showed every Bureau Lead an approve button on
+   *  every bureau's requests. */
+  cidDivision?: string | null
   /** SIU command standing — the client mirror of private.siu_is_command().
    *
    *  Optional so every existing viewer and fixture stays valid; absent reads
@@ -70,12 +75,14 @@ export type LegalReqLike = Pick<
   queue_entered_at?: string | null
   amends_request_id?: string | null
   superseded_by_id?: string | null
+  /** The BUREAU OF THE CASE, which is not on legal_requests and so is only
+   *  present where a case is already in context. can_approve_legal() widens
+   *  approval to any Bureau Lead on a JTF case; without this the client cannot
+   *  tell, and errs towards hiding rather than towards offering a button the
+   *  server refuses. */
+  case_bureau?: string | null
 }
 
-// Legal-request approval is Bureau Lead+ (Phase 1 — mirrors private.is_command()
-// / can_approve_legal on the server). Senior detectives can author/submit but
-// no longer approve.
-const LEGAL_APPROVER_ROLES = new Set(['bureau_lead', 'deputy_director', 'director'])
 const DECIDED = new Set(['approved', 'denied', 'withdrawn'])
 /** Administrative/prosecutorial terminals (minimal-DOJ): closed like DECIDED
  *  but recorded separately — declined is a prosecutorial refusal, cancelled an
@@ -300,7 +307,18 @@ function viewerOwnsAction(r: LegalReqLike, v: LegalViewer): boolean {
   const isCreator = mine && r.created_by === v.myId
   if (s === 'not_submitted' || RETURNED.has(s)) return isCreator
   if (s === 'cid_supervisor_review') {
-    return v.cidActive && !isCreator && (v.isOwner || LEGAL_APPROVER_ROLES.has(v.cidRole ?? ''))
+    if (!v.cidActive || isCreator) return false
+    if (v.isOwner) return true
+    const role = v.cidRole ?? ''
+    // Higher command decides any bureau's request, immediately -- no claim, no
+    // waiting for the bureau's own lead to be marked unavailable.
+    if (role === 'deputy_director' || role === 'director') return true
+    if (role !== 'bureau_lead') return false
+    // A Bureau Lead decides their OWN bureau, or any bureau on a joint case.
+    // This branch used to be absent, so the client offered every Bureau Lead an
+    // approve button on every bureau's requests and the database refused it --
+    // the exact inverse of the SIU mistake warned about just below.
+    return v.cidDivision === r.responsible_bureau || r.case_bureau === 'JTF'
   }
   // SIU command review. A CID rank confers nothing here — the server gate is
   // private.siu_case_command(), so the only honest client mirror is SIU

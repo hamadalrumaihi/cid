@@ -51,8 +51,6 @@ import { Button } from '@/components/ui/Button'
 import { Stat, type CaseRow } from './shared'
 
 const STATUS_TINT: Record<CaseChargeStatus, string> = {
-  proposed: 'border-white/10 bg-white/5 text-slate-300',
-  under_review: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
   approved: 'border-blue-500/30 bg-blue-500/10 text-blue-300',
   filed: 'border-badge-500/30 bg-badge-500/10 text-badge-200',
   convicted: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
@@ -239,7 +237,7 @@ export function ChargesTab({ c, canEdit, onChanged }: { c: CaseRow; canEdit: boo
                       disabled={busy}
                       title={`${caseChargeActorLabel(to, siu)} does this`}
                       onClick={() => void move(ch.id, to)}>
-                      {to === 'proposed' ? 'Send back' : caseChargeStatusLabel(to)}
+                      {caseChargeStatusLabel(to)}
                     </Button>
                   ))}
                   {ch.substance_schedule != null && (

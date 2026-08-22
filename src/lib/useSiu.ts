@@ -23,7 +23,7 @@ import { rpc } from './db'
 import { Store } from './store'
 import {
   maySwitchDepartment, siuCanAppoint, siuCanReadCid, siuIsAgent, siuIsCommand,
-  siuOperates, siuStanding, userDepartment, mayCreateCidCase, siuCaseReadOnly,
+  siuOperates, siuStanding, userDepartment, siuCaseReadOnly,
   type Department, type SiuContext, type SiuMembership, type SiuStanding,
 } from './siu'
 
@@ -100,8 +100,14 @@ export interface SiuAccess {
   /** Is this case read-only for me purely because of the departmental split?
    *  Narrows `useAuth().canEdit` — never widens it. See `siuCaseReadOnly`. */
   caseReadOnly: (caseRow: { case_authority?: string | null }) => boolean
-  /** May I create a CID case? False for SIU department members, who would
-   *  create one and immediately lose access to it. */
+  /** May I create a CID case?
+   *
+   *  Always true now. It was false for SIU department members, who would
+   *  create a case and immediately lose access to it because
+   *  can_access_case() excluded their department. That exclusion is gone
+   *  (siu_members_work_cid), so nothing about SIU standing withholds CID case
+   *  creation -- and the field stays on the API because the answer is a
+   *  capability the UI asks for, not because it is currently interesting. */
   mayCreateCase: boolean
 }
 
@@ -209,6 +215,6 @@ export function useSiu(): SiuAccess {
     // be looking at: an Owner browsing the SIU workspace is still CID by
     // department and keeps their CID write rights.
     caseReadOnly: (caseRow) => siuCaseReadOnly({ department, standing }, caseRow),
-    mayCreateCase: mayCreateCidCase(department),
+    mayCreateCase: true,
   }
 }

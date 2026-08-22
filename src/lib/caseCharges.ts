@@ -32,8 +32,6 @@ import { insert, rpc, update } from './db'
 
 /** Mirrors the `case_charges_status_check` constraint, in workflow order. */
 export const CASE_CHARGE_STATUSES = [
-  'proposed',
-  'under_review',
   'approved',
   'filed',
   'convicted',
@@ -52,9 +50,10 @@ export const CASE_CHARGE_TERMINAL: readonly CaseChargeStatus[] = [
 ]
 
 const STATUS_LABEL: Record<CaseChargeStatus, string> = {
-  proposed: 'Proposed',
-  under_review: 'Under review',
-  approved: 'Approved',
+  // 'approved' is the stored value and stays that way -- renaming a live column
+  // for cosmetics is churn. Nobody approves anything any more, so the word
+  // shown is what is actually true: the charge is on the case and fileable.
+  approved: 'Active',
   filed: 'Filed',
   convicted: 'Convicted',
   dismissed: 'Dismissed',
@@ -67,9 +66,7 @@ export function caseChargeStatusLabel(s: CaseChargeStatus): string {
 
 /** What each status means in one line, for a tooltip or an empty state. */
 const STATUS_MEANING: Record<CaseChargeStatus, string> = {
-  proposed: 'An investigator has put this charge forward. Nobody has reviewed it.',
-  under_review: 'Sent up for review. Awaiting a decision from command.',
-  approved: 'Command approved it. It is ready to be filed by an attorney.',
+  approved: 'On the case and ready to be filed by an attorney. No command approval is required.',
   filed: 'Filed with the court. Only the court disposes of it now.',
   convicted: 'The court found for this charge.',
   dismissed: 'The court did not sustain this charge.',
@@ -85,9 +82,6 @@ export function caseChargeStatusMeaning(s: CaseChargeStatus): string {
 // ---------------------------------------------------------------------------
 
 const NEXT: Record<CaseChargeStatus, readonly CaseChargeStatus[]> = {
-  proposed: ['under_review', 'withdrawn'],
-  // 'proposed' here is a RETURN: a reviewer sending it back for rework.
-  under_review: ['approved', 'proposed', 'withdrawn'],
   approved: ['filed', 'withdrawn'],
   filed: ['convicted', 'dismissed'],
   convicted: [],
@@ -109,13 +103,14 @@ export function caseChargeIsTerminal(s: CaseChargeStatus): boolean {
 
 /** Who makes a given move — for wording a disabled control ("an attorney
  *  files this"), never for deciding whether the move is allowed. */
-export type CaseChargeActor = 'case' | 'command' | 'attorney' | 'judge'
+export type CaseChargeActor = 'case' | 'attorney' | 'judge'
 
 const ACTOR: Record<CaseChargeStatus, CaseChargeActor> = {
-  proposed: 'case',
-  under_review: 'case',
   withdrawn: 'case',
-  approved: 'command',
+  // Adding and withdrawing a charge is ordinary casework. The command step
+  // between the two is gone; what remains is the COURT, which is a different
+  // thing entirely and is still enforced.
+  approved: 'case',
   filed: 'attorney',
   convicted: 'judge',
   dismissed: 'judge',
@@ -132,8 +127,6 @@ export function caseChargeActorLabel(to: CaseChargeStatus, siu: boolean): string
   switch (ACTOR[to]) {
     case 'case':
       return 'anyone working the case'
-    case 'command':
-      return siu ? 'SIU command (X-1)' : 'a Bureau Lead or above'
     case 'attorney':
       return siu ? 'the Attorney General' : 'a prosecuting attorney'
     case 'judge':

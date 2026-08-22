@@ -567,6 +567,10 @@ export function buildActionItems(s: ActionSources): ActionQueue {
   const legalViewer: LegalViewer = s.legalViewer ?? {
     myId: s.me, cidActive: true, cidRole: s.role, justiceRole: null,
     isOwner: s.isOwner ?? false, prosecutorBureaus: [],
+    // A Bureau Lead only decides their OWN bureau's requests. Without this the
+    // fallback viewer showed every lead a review item for every bureau, which
+    // can_approve_legal() then refuses.
+    cidDivision: s.division,
   }
   for (const l of s.legal) {
     const d = dispositionFor(l, legalViewer, s.nowMs)
