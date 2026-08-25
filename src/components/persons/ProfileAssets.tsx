@@ -7,7 +7,6 @@
  *  ever migrated to Places by a human via the per-row "Link to Place…" action
  *  — never automatically, and the legacy row always stays. */
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { insert, list, remove, update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
@@ -23,6 +22,7 @@ import { Field, Input, Select } from '@/components/ui/Field'
 import { ConfidenceBadge, ProvenanceBadge } from '@/components/ui/IntelBadges'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/Notice'
+import { useToolNav } from '@/components/tools/useToolNav'
 import { PROVENANCE_KINDS, humanize } from '@/components/gangs/gangIntel'
 import { CONFIDENCE_LEVELS, LINK_STATUSES, PLACE_ROLES, VEHICLE_ROLES, linkStatusLabel, placeRoleLabel, vehicleRoleLabel } from './personIntel'
 import { parseProperties, type PersonRow, type PersonProperty } from './PersonModal'
@@ -46,7 +46,7 @@ export function PersonVehiclesSection({ data, canEdit, onLink, onRefresh }: {
   onLink: () => void
   onRefresh: () => void
 }) {
-  const router = useRouter()
+  const nav = useToolNav()
   const { profile, isCommand } = useAuth()
 
   const unlink = async (l: PersonVehicleRow) => {
@@ -59,7 +59,7 @@ export function PersonVehiclesSection({ data, canEdit, onLink, onRefresh }: {
 
   const plateChip = (v: VehicleLite | undefined) => (
     <button
-      onClick={() => v && router.push(`/vehicles?vehicle=${encodeURIComponent(v.id)}`)}
+      onClick={() => v && nav.openRecord('vehicles', v.id, v.plate || undefined)}
       className="flex-shrink-0 rounded bg-white/5 px-1.5 py-0.5 font-mono text-[11px] font-bold text-badge-200 hover:bg-white/10"
       title="Open in the vehicle registry"
     >

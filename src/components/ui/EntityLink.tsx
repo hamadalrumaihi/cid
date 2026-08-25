@@ -7,9 +7,9 @@
  *  and prevents each view from re-deriving them. Visibility is still enforced
  *  by RLS server-side; a link the caller can't access resolves to nothing on
  *  the far side, never a leak. */
-import { useRouter } from 'next/navigation'
 import { caseLink } from '@/lib/caseLinks'
 import { KindIcon } from '@/components/shell/icons'
+import { useToolNav } from '@/components/tools/useToolNav'
 
 export type EntityKind = 'person' | 'vehicle' | 'case' | 'gang' | 'place' | 'narcotic'
 
@@ -40,11 +40,13 @@ export function EntityLink({
   className?: string
   title?: string
 }) {
-  const router = useRouter()
+  // Workspace-aware: tool hrefs open as tabs inside /tools (and land there
+  // from anywhere else); non-tool hrefs (cases) fall through to router.push.
+  const nav = useToolNav()
   return (
     <button
       type="button"
-      onClick={() => router.push(entityHref(kind, { id, label }))}
+      onClick={() => nav.openHref(entityHref(kind, { id, label }))}
       title={title ?? `Open ${label}`}
       className={`inline-flex max-w-full items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-xs font-medium text-blue-200 transition hover:bg-white/10 ${className}`}
     >

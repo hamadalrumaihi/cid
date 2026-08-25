@@ -200,26 +200,45 @@ export function ToolsView() {
       const url = new URL(href, window.location.origin)
       if (url.origin === window.location.origin) {
         const seg = url.pathname.split('/')[1] || ''
-        if (isToolTab(seg)) {
-          const param = RECORD_PARAM[seg]
-          const id = param ? url.searchParams.get(param) : null
-          if (id && hasRecordTabs(seg)) openRecord(seg, id)
-          else openTool(seg)
-          return
+        // Normalize both accepted forms: `/<tool>?…` and `/tools?tool=…`.
+        let tool: ToolId | null = null
+        if (isToolTab(seg)) tool = seg
+        else if (seg === 'tools') {
+          const t = url.searchParams.get('tool')
+          if (t && isToolTab(t)) tool = t
         }
-        if (seg === 'tools') {
-          const tool = url.searchParams.get('tool')
-          if (tool && isToolTab(tool)) {
-            const rec = url.searchParams.get('record')
-            if (rec && hasRecordTabs(tool)) openRecord(tool, rec)
-            else openTool(tool)
+        if (tool) {
+          const toolId = tool
+          const param = RECORD_PARAM[toolId]
+          const record = url.searchParams.get('record') ?? (param ? url.searchParams.get(param) : null)
+          const seeds = new URLSearchParams(url.searchParams)
+          seeds.delete('tool'); seeds.delete('record')
+          if (param) seeds.delete(param)
+          if (record && hasRecordTabs(toolId)) {
+            if (seeds.toString() && !ws.tabs.some((t) => t.key === keyOf(toolId, record))) {
+              seeds.set('tool', toolId)
+              seeds.set('record', record)
+              router.replace(`/tools?${seeds.toString()}`, { scroll: false })
+            } else openRecord(toolId, record)
             return
           }
+          if (param && record) seeds.set(param, record) // record param without a record tab stays a list seed
+          // Leftover params (?q=…, ?place=…) are mount-time seeds: a tool that
+          // is not open yet reads them at first mount, so land it through the
+          // URL and let the intake effect open the tab while the seeds are
+          // still in the query string — exactly how ToolTabRedirect lands old
+          // deep links. An already-mounted keep-alive tab cannot consume
+          // seeds, so it is simply focused.
+          if (seeds.toString() && !ws.tabs.some((t) => t.key === toolId)) {
+            seeds.set('tool', toolId)
+            router.replace(`/tools?${seeds.toString()}`, { scroll: false })
+          } else openTool(toolId)
+          return
         }
       }
     } catch { /* not a parseable href — let the router handle it */ }
     router.push(href)
-  }, [openRecord, openTool, router])
+  }, [ws.tabs, openRecord, openTool, router])
 
   /* ── Restore (once, per signed-in user; ids only) ─────────────────────── */
 
@@ -391,6 +410,7 @@ export function ToolsView() {
         return (
           <div
             key={tab.key}
+            className="tools-pane"
             data-state={active ? 'active' : 'inactive'}
             style={active ? undefined : { display: 'none' }}
             aria-hidden={active ? undefined : true}

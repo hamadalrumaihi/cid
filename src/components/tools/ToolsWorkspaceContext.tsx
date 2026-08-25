@@ -26,8 +26,10 @@ export interface ToolsWorkspace {
   /** Open/focus a record tab (dedupe by toolId+recordId). Title optional —
    *  the tool label shows until setTabTitle or the restore fetch resolves. */
   openRecord: (toolId: ToolId, recordId: string, title?: string) => void
-  /** Parse an internal href (`/<tool>` or `/<tool>?<recordParam>=<id>`) and
-   *  open it as a tab; any other href falls back to router.push. */
+  /** Parse an internal href (`/<tool>?…` or `/tools?tool=…`) and open it as
+   *  a tab. Extra query params (`?q=…`) seed a NOT-yet-open tab through the
+   *  URL; an already-open tab is just focused (keep-alive views read seeds
+   *  once at mount). Any other href falls back to router.push. */
   openHref: (href: string) => void
   closeTab: (key: string) => void
   closeOthers: (key: string) => void

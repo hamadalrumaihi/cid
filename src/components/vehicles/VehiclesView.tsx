@@ -22,6 +22,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { inputCls, labelCls } from '@/components/ui/Field'
 import { WatchButton } from '@/components/cases/WatchButton'
+import { useToolNav } from '@/components/tools/useToolNav'
 import { VehicleProfile } from './VehicleProfile'
 
 type VehicleRow = Tables<'vehicles'>
@@ -32,6 +33,7 @@ interface CaseOption { id: string; case_number: string }
 export function VehiclesView() {
   const { state, canEdit, canDelete } = useAuth()
   const router = useRouter()
+  const nav = useToolNav()
   const sp = useSearchParams()
   const [vehicles, setVehicles] = useState<VehicleRow[]>([])
   const [persons, setPersons] = useState<PersonOption[]>([])
@@ -89,7 +91,9 @@ export function VehiclesView() {
 
   if (state !== 'in') return <Notice text="Live vehicle records require sign-in." />
 
-  if (vehicleId) return <VehicleProfile id={vehicleId} onBack={() => router.push('/vehicles')} />
+  // Standalone only — inside the workspace a profile is its own record tab
+  // (openProfile below) and this list tab never swaps itself out.
+  if (vehicleId && !nav.inWorkspace) return <VehicleProfile id={vehicleId} onBack={() => router.push('/vehicles')} />
 
   return (
     <div>
@@ -149,7 +153,7 @@ export function VehiclesView() {
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-2">
                     <WatchButton type="vehicle" id={v.id} label={v.plate} compact />
-                    <button onClick={() => router.push(`/vehicles?vehicle=${v.id}`)} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Profile</button>
+                    <button onClick={() => { if (nav.inWorkspace) nav.openRecord('vehicles', v.id, v.plate); else router.push(`/vehicles?vehicle=${v.id}`) }} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Profile</button>
                     {canEdit && <button onClick={() => setEditor({ record: v })} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
                     {canDelete && <button onClick={() => void onDelete(v)} aria-label="Delete vehicle" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10"><XMarkIcon size={14} /></button>}
                   </div>

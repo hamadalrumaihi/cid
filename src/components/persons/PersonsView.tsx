@@ -35,6 +35,7 @@ import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
+import { useToolNav } from '@/components/tools/useToolNav'
 import { PersonProfile } from './PersonProfile'
 import { PERSON_NULL_REFS, PersonModal, type PersonRow } from './PersonModal'
 import { boloState, classificationLabel, PERSON_REVIEW_DAYS } from './personIntel'
@@ -84,6 +85,7 @@ const narrowSnapshot = (): boolean => window.matchMedia(NARROW_MQ).matches
 export function PersonsView() {
   const { state, canEdit, canDelete } = useAuth()
   const router = useRouter()
+  const nav = useToolNav()
   const sp = useSearchParams()
   const now = useNow()
   const today = todayISO()
@@ -277,7 +279,12 @@ export function PersonsView() {
     })
   }
 
-  const openProfile = (id: string) => router.push(`/persons?person=${encodeURIComponent(id)}`)
+  // Inside the workspace a profile opens as a NEW record tab (this list tab
+  // never swaps itself out); standalone keeps the `?person=` drill-down.
+  const openProfile = (id: string, name?: string) => {
+    if (nav.inWorkspace) nav.openRecord('persons', id, name)
+    else router.push(`/persons?person=${encodeURIComponent(id)}`)
+  }
 
   // Table columns — value() is the plain text (sort/filter/CSV), render() the
   // chips. Plain consts (closures over the rollups); cheap to rebuild and
@@ -339,14 +346,14 @@ export function PersonsView() {
       value: () => '',
       render: (p) => (
         <span className="flex gap-1.5">
-          <Button size="sm" onClick={() => openProfile(p.id)}>Profile</Button>
+          <Button size="sm" onClick={() => openProfile(p.id, p.name)}>Profile</Button>
           {canEdit && <Button size="sm" onClick={() => setEditor({ record: p })}>Edit</Button>}
         </span>
       ),
     },
   ]
 
-  if (personId) {
+  if (personId && !nav.inWorkspace) {
     if (state !== 'in') return <Notice text="Live person records require sign-in." />
     return <PersonProfile id={personId} onBack={() => router.push('/persons')} />
   }
@@ -368,7 +375,7 @@ export function PersonsView() {
           canDelete={canDelete}
           selected={selected.has(p.id)}
           onSelect={(on) => toggleSelect(p.id, on)}
-          onProfile={() => openProfile(p.id)}
+          onProfile={() => openProfile(p.id, p.name)}
           onEdit={() => setEditor({ record: p })}
           onDelete={() => void deleteOne(p)}
           onAttach={() => setAttach(p)}

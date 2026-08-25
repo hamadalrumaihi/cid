@@ -86,9 +86,14 @@ describe('toolsModel — record deep-link maps', () => {
     for (const t of TOOL_TABS) {
       expect(hasRecordTabs(t), `hasRecordTabs('${t}')`).toBe(RECORD_TAB_TOOLS.includes(t))
     }
-    // The current contract: standalone record profiles exist for persons and
-    // vehicles only (toolRegistry). Growing this list is fine — deliberately.
-    expect([...RECORD_TAB_TOOLS].sort()).toEqual(['persons', 'vehicles'])
+    // The list is deliberately NOT pinned to exact members: it grows as tools
+    // gain standalone record components (toolRegistry). The structural
+    // invariants above (param + title source per entry) are the contract.
+    expect(new Set(RECORD_TAB_TOOLS).size).toBe(RECORD_TAB_TOOLS.length)
+    // The founding pair can never regress out — their record deep links
+    // (`?person=` / `?vehicle=`) predate the workspace.
+    expect(RECORD_TAB_TOOLS).toContain('persons')
+    expect(RECORD_TAB_TOOLS).toContain('vehicles')
   })
 })
 

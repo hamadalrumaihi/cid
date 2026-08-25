@@ -249,6 +249,20 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
 }
 .tools-tabstrip::-webkit-scrollbar { display: none; }
 
+/* Inside a workspace tool pane, the views' own sticky toolbars (`top-0`
+   section navs, `top-2` bulk-select bars) must clear the sticky tab strip:
+   header (4.5rem, sm 4.75rem — ToolTabBar's own offsets) + strip height
+   (py-1.5 + h-10 + 1px border). `:not(.fixed *)` leaves sticky headers inside
+   fixed overlays (modals, slide-overs) untouched. Standalone routes have no
+   .tools-pane wrapper, so nothing changes there. */
+.tools-pane { --tools-tabbar-h: 3.3125rem; }
+.tools-pane .sticky.top-0:not(.fixed *) { top: calc(4.5rem + var(--tools-tabbar-h)); }
+.tools-pane .sticky.top-2:not(.fixed *) { top: calc(4.5rem + var(--tools-tabbar-h) + 0.5rem); }
+@media (min-width: 640px) {
+  .tools-pane .sticky.top-0:not(.fixed *) { top: calc(4.75rem + var(--tools-tabbar-h)); }
+  .tools-pane .sticky.top-2:not(.fixed *) { top: calc(4.75rem + var(--tools-tabbar-h) + 0.5rem); }
+}
+
 /* Commander Heatmap tiles — ported from the vanilla hand-written layer. */
 .hm-tile{border:1px solid rgba(255,255,255,.06);border-radius:1rem;padding:1.25rem;background:linear-gradient(135deg,rgba(100,116,139,.12),rgba(30,41,59,.04))}
 .hm-tile.lvl1{background:linear-gradient(135deg,rgba(59,130,246,.18),rgba(29,78,216,.04));border-color:rgba(59,130,246,.28)}

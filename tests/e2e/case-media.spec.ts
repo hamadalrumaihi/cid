@@ -350,8 +350,9 @@ test.describe('case workspace — Photos & Media / Intel & Notes / Graph / RICO 
     // Card chip (🚗 plate) renders on the gallery card.
     await expect(page.getByText(`🚗 ${fx().vehiclePlate}`)).toBeVisible({ timeout: 15_000 })
 
-    // Vehicle profile — Photos panel with the linked image, deep link back.
-    await page.goto(`/vehicles?vehicle=${fx().vehicleId}`)
+    // Vehicle profile (a workspace record tab) — Photos panel with the linked
+    // image, deep link back.
+    await page.goto(`/tools?tool=vehicles&record=${fx().vehicleId}`)
     await expect(page.getByRole('heading', { name: 'Photos' })).toBeVisible({ timeout: 30_000 })
     const tile = page.getByRole('link', { name: `${fx().media.scene.title} — open source case` })
     await expect(tile).toBeVisible()

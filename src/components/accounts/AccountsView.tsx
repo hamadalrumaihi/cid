@@ -12,7 +12,6 @@
  *  tombstones (lifecycle='merged') and drop out of the registry. In-RP
  *  platforms only (Birdy / InstaPic). */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
 import { countRows, ilikeAny, insert, list, remove, rpc, update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
@@ -30,6 +29,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
+import { useToolNav } from '@/components/tools/useToolNav'
 
 type Account = Tables<'accounts'>
 type AccountHandle = Tables<'account_handles'>
@@ -191,7 +191,7 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
   account: Account; canEdit: boolean; isCommand: boolean; expanded: boolean
   onToggle: () => void; onEdit: () => void; onMerge: () => void
 }) {
-  const router = useRouter()
+  const nav = useToolNav()
   const [handles, setHandles] = useState<AccountHandle[] | null>(null)
   const [links, setLinks] = useState<AccountLink[] | null>(null)
   const [names, setNames] = useState<Record<string, string>>({})
@@ -333,7 +333,7 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
                   <li key={l.id} className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
                     <Badge tone="neutral" className="uppercase">{l.subject_kind}</Badge>
                     {l.subject_kind === 'person' ? (
-                      <button onClick={() => router.push(`/persons?person=${encodeURIComponent(l.subject_id)}`)} className="font-medium text-badge-300 hover:underline">{nameOf(l.subject_id)}</button>
+                      <button onClick={() => nav.openRecord('persons', l.subject_id, names[l.subject_id])} className="font-medium text-badge-300 hover:underline">{nameOf(l.subject_id)}</button>
                     ) : <span className="font-medium text-white">{nameOf(l.subject_id)}</span>}
                     {canEdit ? (
                       <select value={l.ownership_confidence} onChange={(e) => void setConfidence(l, e.target.value)} className="min-h-[44px] rounded border border-white/10 bg-ink-950 px-1.5 py-0.5 text-xs text-white sm:min-h-0" aria-label="Confidence">

@@ -43,9 +43,9 @@ export const RECORD_PARAM: Partial<Record<ToolId, string>> = {
 
 /** Tools whose record param maps to a dedicated workspace RECORD TAB (a
  *  standalone profile component with an `id` prop exists — see toolRegistry).
- *  The others keep their original param untouched so their list view's own
- *  deep-link handling (e.g. GangsView's `?gang=`) still works inside /tools. */
-export const RECORD_TAB_TOOLS: readonly ToolId[] = ['persons', 'vehicles']
+ *  Places stays list-level: it has no dossier view, `?place=` only seeds the
+ *  list filter, so its param is carried through untouched instead. */
+export const RECORD_TAB_TOOLS: readonly ToolId[] = ['persons', 'vehicles', 'gangs', 'narcotics']
 
 export const hasRecordTabs = (tool: ToolId): boolean => RECORD_TAB_TOOLS.includes(tool)
 

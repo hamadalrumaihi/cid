@@ -18,6 +18,7 @@ import { DocumentIcon, FileTypeIcon, GangIcon, PersonIcon, PlaceIcon, TraceIcon 
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { WatchButton } from '@/components/cases/WatchButton'
+import { useToolNav } from '@/components/tools/useToolNav'
 import type { GangRow, PersonRow } from './PersonModal'
 import { parseProperties } from './PersonModal'
 import { loadPersonRollup } from './profileLoad'
@@ -101,6 +102,7 @@ export interface IntelTarget { type: 'person' | 'gang'; id: string }
 
 export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget; gangs: GangRow[]; onClose: () => void }) {
   const router = useRouter()
+  const nav = useToolNav()
   const [target, setTarget] = useState<IntelTarget>(initial)
   const [data, setData] = useState<ProfileData | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -183,7 +185,7 @@ export function IntelProfile({ initial, gangs, onClose }: { initial: IntelTarget
                 size="sm"
                 className="-my-1"
                 title="Open the full dossier page (sections, legal, export)"
-                onClick={() => { onClose(); router.push(`/persons?person=${encodeURIComponent(target.id)}`) }}
+                onClick={() => { onClose(); nav.openRecord('persons', target.id, p?.name || undefined) }}
               >
                 <span className="inline-flex items-center gap-1.5"><DocumentIcon size={14} /> Full profile</span>
               </Button>

@@ -7,13 +7,13 @@
  *  ranks are never hidden. A member row opens the linked person's intel profile
  *  when one is linked. */
 import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { rpc } from '@/lib/db'
 import { toast } from '@/lib/toast'
 import { safeUrl } from '@/lib/safeUrl'
 import { Badge } from '@/components/ui/Badge'
 import { ProvenanceBadge } from '@/components/ui/IntelBadges'
 import { EmptyState } from '@/components/ui/Notice'
+import { useToolNav } from '@/components/tools/useToolNav'
 import {
   findDuplicateMembers, groupByTier, humanize, normalizeName,
   rankTier, tierMeta, type DuplicateCluster, type TierId,
@@ -37,7 +37,7 @@ function Mug({ url, size = 'h-10 w-10' }: { url: string | null; size?: string })
   return <div className={`${size} grid flex-shrink-0 place-items-center rounded-md bg-ink-700 text-[10px] font-semibold text-slate-400`} aria-hidden="true">POI</div>
 }
 
-function MemberName({ m, name, dup, router }: { m: MemberRow; name: string; dup: boolean; router: ReturnType<typeof useRouter> }) {
+function MemberName({ m, name, dup, openPerson }: { m: MemberRow; name: string; dup: boolean; openPerson: (id: string, name?: string) => void }) {
   const inner = (
     <>
       {name}
@@ -48,7 +48,7 @@ function MemberName({ m, name, dup, router }: { m: MemberRow; name: string; dup:
   return m.person_id ? (
     <button
       type="button"
-      onClick={() => router.push(`/persons?person=${encodeURIComponent(m.person_id!)}`)}
+      onClick={() => openPerson(m.person_id!, name)}
       className="text-left font-semibold text-white hover:text-blue-200"
       title="Open linked person profile"
     >
@@ -77,15 +77,15 @@ function ReviewDot({ m }: { m: MemberRow }) {
     : <span title="Not yet reviewed" className="text-amber-400">●</span>
 }
 
-function MemberLine({ m, name, dup, router, canEdit, onEdit, onReview, reviewing }: {
-  m: MemberRow; name: string; dup: boolean; router: ReturnType<typeof useRouter>
+function MemberLine({ m, name, dup, openPerson, canEdit, onEdit, onReview, reviewing }: {
+  m: MemberRow; name: string; dup: boolean; openPerson: (id: string, name?: string) => void
   canEdit: boolean; onEdit: () => void; onReview: () => void; reviewing: boolean
 }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-white/5 bg-ink-850 p-2.5">
       <Mug url={m.mugshot_url} />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm"><MemberName m={m} name={name} dup={dup} router={router} /></div>
+        <div className="truncate text-sm"><MemberName m={m} name={name} dup={dup} openPerson={openPerson} /></div>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-400">
           {m.callsign && <span>“{m.callsign}”</span>}
           <span className="inline-flex items-center gap-1"><ReviewDot m={m} />{m.status || 'Status unknown'}</span>
@@ -128,7 +128,8 @@ export function RosterSection({ members, personNames, canEdit, canDelete, onAddM
   /** Reload the roster after a merge (also re-fires after an undo re-insert). */
   onRefresh: () => void
 }) {
-  const router = useRouter()
+  const nav = useToolNav()
+  const openPerson = (id: string, name?: string) => nav.openRecord('persons', id, name)
   const [view, setView] = useState<'hierarchy' | 'table'>('hierarchy')
   const [q, setQ] = useState('')
   const [tier, setTier] = useState<TierId | 'any'>('any')
@@ -351,7 +352,7 @@ export function RosterSection({ members, personNames, canEdit, canDelete, onAddM
                     <div className="flex items-center gap-2">
                       <Mug url={m.mugshot_url} size="h-8 w-8" />
                       <div className="min-w-0">
-                        <div className="truncate"><MemberName m={m} name={displayName(m, personNames)} dup={dupIds.has(m.id)} router={router} /></div>
+                        <div className="truncate"><MemberName m={m} name={displayName(m, personNames)} dup={dupIds.has(m.id)} openPerson={openPerson} /></div>
                         {m.callsign && <p className="truncate text-[11px] text-slate-500">“{m.callsign}”</p>}
                       </div>
                     </div>
@@ -387,7 +388,7 @@ export function RosterSection({ members, personNames, canEdit, canDelete, onAddM
               </p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {rows.map((m) => (
-                  <MemberLine key={m.id} m={m} name={displayName(m, personNames)} dup={dupIds.has(m.id)} router={router}
+                  <MemberLine key={m.id} m={m} name={displayName(m, personNames)} dup={dupIds.has(m.id)} openPerson={openPerson}
                     canEdit={canEdit} onEdit={() => onEditMember(m)} onReview={() => void reviewMember(m)} reviewing={reviewing.has(m.id)} />
                 ))}
               </div>

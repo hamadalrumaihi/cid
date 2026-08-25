@@ -28,6 +28,7 @@ import { WatchButton } from '@/components/cases/WatchButton'
 import { RestrictToSiuButton } from '@/components/siu/RestrictToSiu'
 import { EntityLegalPanel } from '@/components/justice/EntityLegalSection'
 import { ObservationHistory } from '@/components/shared/ObservationHistory'
+import { useToolNav } from '@/components/tools/useToolNav'
 import { VehicleModal, type GangOption, type PersonOption } from './VehiclesView'
 
 type VehicleRow = Tables<'vehicles'>
@@ -233,7 +234,7 @@ function VehiclePhotosPanel({ vehicleId }: { vehicleId: string }) {
 
 export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void }) {
   const { state, canEdit } = useAuth()
-  const router = useRouter()
+  const nav = useToolNav()
   const [vehicle, setVehicle] = useState<VehicleRow | null>(null)
   const [persons, setPersons] = useState<PersonOption[]>([])
   const [gangs, setGangs] = useState<GangOption[]>([])
@@ -351,7 +352,7 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
                 <Row label="Owner">
                   {owner && v.owner_id ? (
                     <button
-                      onClick={() => router.push(`/persons?person=${v.owner_id}`)}
+                      onClick={() => nav.openRecord('persons', v.owner_id!, owner)}
                       className="-my-1 rounded px-1 py-1 text-blue-300 transition hover:text-blue-200"
                     >
                       👤 {owner}
@@ -363,7 +364,7 @@ export function VehicleProfile({ id, onBack }: { id: string; onBack: () => void 
                 <Row label="Gang">
                   {gang ? (
                     <button
-                      onClick={() => router.push(`/gangs?q=${encodeURIComponent(gang)}`)}
+                      onClick={() => nav.openHref(`/gangs?q=${encodeURIComponent(gang)}`)}
                       className="rounded-md bg-violet-500/10 px-2 py-1 text-[11px] text-violet-300 transition hover:bg-violet-500/20"
                     >
                       🚩 {gang}

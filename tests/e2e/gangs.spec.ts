@@ -4,8 +4,8 @@
  *  sticky section nav, the roster hierarchy/table toggle, and deep-link section
  *  state. Screenshots land in the scratchpad for the implementation report.
  *  The Gangs view now lives inside the Investigative Tools workspace
- *  (/tools?tool=gangs); its own `?gang=`/`?section=` deep-link params are
- *  unchanged (gangs has no standalone record tab — the list view handles them).
+ *  (/tools?tool=gangs); dossiers open as workspace record tabs (`&record=<id>`
+ *  — legacy /gangs?gang=<id> redirects there), `?section=` carried unchanged.
  *  Self-skips when the fixture password is absent. */
 import { test, expect, type Page } from '@playwright/test'
 import fs from 'node:fs'

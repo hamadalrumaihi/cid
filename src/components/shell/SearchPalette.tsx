@@ -15,13 +15,13 @@
  *  move the selection, Enter opens/runs, Esc closes. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { caseLink } from '@/lib/caseLinks'
 import { PAGE_META, TAB_LABEL } from '@/lib/nav'
 import { recentSearches, rememberSearch, runSearch, SEARCH_KINDS, SEARCH_SECTION_ORDER, type SearchHit } from '@/lib/search'
 import { toast } from '@/lib/toast'
 import { CalendarIcon, ChevronIcon, ClockIcon, KindIcon, PlusIcon, XMarkIcon } from '@/components/shell/icons'
+import { useToolNav } from '@/components/tools/useToolNav'
 
 interface Row {
   hit: SearchHit
@@ -45,7 +45,9 @@ const Q_SEEDED_TABS = new Set(['persons', 'gangs', 'vehicles', 'penal'])
 const QUICK_IDS = new Set(['new-case', 'go:inbox', 'go:calendar', 'loa', 'signout'])
 
 export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; initialQuery: string; onClose: () => void }) {
-  const router = useRouter()
+  // Workspace-aware push: tool hrefs land as Investigative Tools tabs, every
+  // other href behaves exactly like router.push.
+  const { openHref } = useToolNav()
   const { profile, canEdit, signOut, setMyLoa } = useAuth()
   const [query, setQuery] = useState(initialQuery)
   const [hits, setHits] = useState<SearchHit[]>([])
@@ -90,7 +92,7 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
 
   const onLoa = !!profile?.loa
   const actions = useMemo<Action[]>(() => {
-    const go = (path: string) => { onClose(); router.push(path) }
+    const go = (path: string) => { onClose(); openHref(path) }
     const out: Action[] = []
     if (canEdit) out.push({ id: 'new-case', icon: <PlusIcon size={15} />, label: 'New case…', keywords: 'new create case open file', run: () => go('/cases?new=1') })
     out.push({
@@ -114,7 +116,7 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
       })
     }
     return out
-  }, [canEdit, onLoa, onClose, router, setMyLoa, signOut])
+  }, [canEdit, onLoa, onClose, openHref, setMyLoa, signOut])
 
   const matchedActions = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -142,20 +144,20 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
     if (!meta) return
     // Reports and evidence live inside a case — search_all returns the CASE id
     // for those kinds, so open the case on the matching tab.
-    if (hit.kind === 'case') router.push(caseLink(hit.id))
-    else if (hit.kind === 'report') router.push(caseLink(hit.id, 'reports'))
+    if (hit.kind === 'case') openHref(caseLink(hit.id))
+    else if (hit.kind === 'report') openHref(caseLink(hit.id, 'reports'))
     // Legacy evidence hits land on the Photos & Media tab (its new home).
-    else if (hit.kind === 'evidence') router.push(caseLink(hit.id, 'media'))
-    else if (hit.kind === 'legal') router.push(`/legal?request=${encodeURIComponent(hit.id)}`)
+    else if (hit.kind === 'evidence') openHref(caseLink(hit.id, 'media'))
+    else if (hit.kind === 'legal') openHref(`/legal?request=${encodeURIComponent(hit.id)}`)
     // Documents deep-link straight into the reader (SopsView reads ?doc=).
-    else if (hit.kind === 'document') router.push(`/sops?doc=${encodeURIComponent(hit.id)}`)
+    else if (hit.kind === 'document') openHref(`/sops?doc=${encodeURIComponent(hit.id)}`)
     // Narcotics drill into the dossier by id (registry reads ?drug=).
-    else if (hit.kind === 'narcotic') router.push(`/narcotics?drug=${encodeURIComponent(hit.id)}`)
+    else if (hit.kind === 'narcotic') openHref(`/narcotics?drug=${encodeURIComponent(hit.id)}`)
     // Accounts have no per-record deep link yet — land on the registry.
-    else if (hit.kind === 'account') router.push('/accounts')
-    else if (hit.term && Q_SEEDED_TABS.has(meta.tab)) router.push(`/${meta.tab}?q=${encodeURIComponent(hit.term)}`)
-    else router.push(`/${meta.tab}`)
-  }, [onClose, query, router])
+    else if (hit.kind === 'account') openHref('/accounts')
+    else if (hit.term && Q_SEEDED_TABS.has(meta.tab)) openHref(`/${meta.tab}?q=${encodeURIComponent(hit.term)}`)
+    else openHref(`/${meta.tab}`)
+  }, [onClose, query, openHref])
 
   const activate = useCallback((i: number) => {
     if (i < matchedActions.length) void matchedActions[i].run()

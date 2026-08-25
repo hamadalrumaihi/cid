@@ -37,8 +37,10 @@ export interface RecordComponentProps {
 
 /** Standalone record profiles with a clean `{ id, onBack }` contract. Tools
  *  absent here don't get workspace record tabs (their list views keep their
- *  own inline detail handling — e.g. GangDossier needs the loaded row plus
- *  registry context, so it stays inside GangsView for now). */
+ *  own inline detail handling — e.g. Places has no dossier view at all, its
+ *  `?place=` only seeds the list filter). Gangs load through GangRecordTab (a
+ *  thin wrapper that fetches the row + case options GangDossier needs);
+ *  narcotics adapts NarcoticsDossier's `{ drugId, onClose }` props inline. */
 export const TOOL_RECORD_COMPONENT: Partial<Record<ToolId, React.ComponentType<RecordComponentProps>>> = {
   persons: dynamic<RecordComponentProps>(
     () => import('@/components/persons/PersonProfile').then((m) => m.PersonProfile),
@@ -47,5 +49,19 @@ export const TOOL_RECORD_COMPONENT: Partial<Record<ToolId, React.ComponentType<R
   vehicles: dynamic<RecordComponentProps>(
     () => import('@/components/vehicles/VehicleProfile').then((m) => m.VehicleProfile),
     { ssr: false, loading: () => <ViewPlaceholder tab="vehicles" /> },
+  ),
+  gangs: dynamic<RecordComponentProps>(
+    () => import('@/components/gangs/GangRecordTab').then((m) => m.GangRecordTab),
+    { ssr: false, loading: () => <ViewPlaceholder tab="gangs" /> },
+  ),
+  narcotics: dynamic<RecordComponentProps>(
+    () => import('@/components/narcotics/NarcoticsDossier').then((m) => {
+      const Dossier = m.NarcoticsDossier
+      function NarcoticsRecordTab({ id, onBack }: RecordComponentProps) {
+        return <Dossier drugId={id} onClose={onBack} />
+      }
+      return NarcoticsRecordTab
+    }),
+    { ssr: false, loading: () => <ViewPlaceholder tab="narcotics" /> },
   ),
 }

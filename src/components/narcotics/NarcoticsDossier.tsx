@@ -30,6 +30,7 @@ import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { Notice, ErrorNotice } from '@/components/ui/Notice'
 import { SectionTabs, panelDomId, tabDomId, type SectionTab } from '@/components/ui/SectionTabs'
 import { GangPhotoLightbox } from '@/components/gangs/gangModals'
+import { useToolNav } from '@/components/tools/useToolNav'
 import {
   NARCOTIC_REVIEW_DAYS, buildNarcoticActivity, categoryLabel, isNarcoticStale, sectionFromParam,
   statusLabel, statusTintKey, type SectionId,
@@ -92,23 +93,35 @@ export function NarcoticsDossier({ drugId, onClose }: { drugId: string; onClose:
     + useTableVersion('narcotic_sale_observations')
     + useTableVersion('narcotic_sale_stacks')
 
-  const section = sectionFromParam(sp.get('section'))
+  // Inside the workspace, section + sale are LOCAL state (a URL write would
+  // route back through the redirect shim and remount every open tab); the
+  // query string still seeds the initial section/sale so old deep links land
+  // right. Standalone keeps the URL-addressed navigation unchanged.
+  const nav = useToolNav()
+  const inWorkspace = nav.inWorkspace
+  const [localSection, setLocalSection] = useState<SectionId | null>(null)
+  // undefined = untouched (fall back to the query string), null = cleared.
+  const [localSale, setLocalSale] = useState<string | null | undefined>(undefined)
+  const section = inWorkspace && localSection ? localSection : sectionFromParam(sp.get('section'))
+  const openSaleId = inWorkspace && localSale !== undefined ? localSale : sp.get('sale')
   const setSection = useCallback((next: SectionId) => {
+    if (inWorkspace) { setLocalSection(next); return }
     const params = new URLSearchParams(sp.toString())
     params.set('drug', drugId)
     params.set('section', next)
     router.replace(`/narcotics?${params.toString()}`)
-  }, [sp, drugId, router])
+  }, [inWorkspace, sp, drugId, router])
 
   // Deep-link an individual sale observation: ?…&section=sales&sale=<id>.
   const setSale = useCallback((saleId: string | null) => {
+    if (inWorkspace) { setLocalSection('sales'); setLocalSale(saleId); return }
     const params = new URLSearchParams(sp.toString())
     params.set('drug', drugId)
     params.set('section', 'sales')
     if (saleId) params.set('sale', saleId)
     else params.delete('sale')
     router.replace(`/narcotics?${params.toString()}`)
-  }, [sp, drugId, router])
+  }, [inWorkspace, sp, drugId, router])
 
   // ── Core (header) — seq-guarded so `?drug=` can switch in place ────────────
   const seqRef = useRef(0)
@@ -323,7 +336,7 @@ export function NarcoticsDossier({ drugId, onClose }: { drugId: string; onClose:
                 ? <SalesSection
                     narcotic={n}
                     data={slices.sales}
-                    openSaleId={sp.get('sale')}
+                    openSaleId={openSaleId}
                     onOpenSale={setSale}
                     onOpenMedia={setLightbox}
                     onChanged={refresh}
