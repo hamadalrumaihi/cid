@@ -131,9 +131,9 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
   useEffect(() => {
     if (record) return // edit mode — the record IS the existing one
     const q = name.trim()
-    if (q.length < 2) { setDupes([]); return }
     let live = true
     const t = window.setTimeout(async () => {
+      if (q.length < 2) { if (live) setDupes([]); return }
       const res = await rpc('search_persons', { p_q: q, p_limit: 5 })
       const hits = (res.data ?? []).map((h) => h.id)
       if (!hits.length) { if (live) setDupes([]); return }

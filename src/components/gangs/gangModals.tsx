@@ -50,9 +50,9 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
   useEffect(() => {
     if (record) return // edit mode — the record IS the existing one
     const q = name.trim()
-    if (q.length < 2) { setDupes([]); return }
     let live = true
     const t = window.setTimeout(async () => {
+      if (q.length < 2) { if (live) setDupes([]); return }
       const or = ilikeAny(['name', 'aliases'], q)
       if (!or) { if (live) setDupes([]); return }
       const rows = await list('gangs', { select: 'id,name,aliases', or, limit: 5 })

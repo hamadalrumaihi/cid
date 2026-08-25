@@ -207,9 +207,9 @@ export function VehicleModal({ record, persons, gangs, onClose, onSaved }: {
   useEffect(() => {
     if (record) return
     const p = plate.trim().toUpperCase()
-    if (p.length < 2) { setDupes([]); return }
     let live = true
     const t = window.setTimeout(async () => {
+      if (p.length < 2) { if (live) setDupes([]); return }
       const or = ilikeAny(['plate'], p)
       if (!or) { if (live) setDupes([]); return }
       const rows = await list('vehicles', { select: 'id,plate', or, limit: 3 })
