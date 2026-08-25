@@ -236,3 +236,34 @@ signatures, decisions, court packets) are preserved untouched.
 | 174 | `20260808360000` | `20260808360000_advisor_hardening.sql` | Phase 9 — advisor hardening: clear anon EXECUTE drift (51 RPCs + 1 trigger fn), pin search_path, one policy fix, add FK indexes (no behavior change). |
 | 175 | `20260808380000` | `20260808380000_historical_cleanup.sql` | Phase 10 — historical-data cleanup (~5 non-judicial rows via idempotent predicates; all judicial records preserved) + an RLS test-cleanup recurrence fix. |
 | 176 | `20260808400000` | `20260808400000_search_hardening.sql` | Search hardening (in-Postgres Meilisearch alternative): 30 trgm GIN indexes, index-served `<%` fuzzy operators, multi-word AND matching, account-handle history hits ('formerly @handle'); search_all stays SECURITY INVOKER. |
+
+## Bureau restructure (2026-08-25, applied via MCP)
+
+The 2026-08-25 bureau restructure — LSB/BCB/SAB retired in favor of
+`major_crimes` (Major Crimes Bureau) and `street_crimes` (Street Crimes
+Bureau), the SIU renamed the Special Investigations Bureau (SIB), legacy case
+numbers preserved — was applied to the live project as a series of staged
+migrations via MCP. Their contents are consolidated into two repo files; as
+with the frozen-snapshot block above, the mapping is by content, not
+timestamp.
+
+| Version (live) | Name | Repo file |
+|---|---|---|
+| — | bureau_restructure_core | `20260825120000_bureau_restructure.sql` |
+| — | bureau_restructure_helpers | `20260825120000_bureau_restructure.sql` |
+| — | bureau_restructure_member_rpcs | `20260825120000_bureau_restructure.sql` |
+| — | bureau_restructure_membership_rpcs | `20260825120000_bureau_restructure.sql` |
+| — | bureau_restructure_justice_coverage | `20260825120000_bureau_restructure.sql` |
+| — | bureau_restructure_justice_appoint | `20260825120000_bureau_restructure.sql` |
+| — | bureau_restructure_sib_case_creation | `20260825120000_bureau_restructure.sql` |
+| — | bureau_restructure_doj_activate | `20260825120000_bureau_restructure.sql` |
+| — | bureau_restructure_security_overview | `20260825120000_bureau_restructure.sql` |
+| — | bureau_restructure_legal_review | `20260825120000_bureau_restructure.sql` |
+| — | bureau_restructure_legal_submit | `20260825120000_bureau_restructure.sql` |
+| — | bureau_restructure_sib_wording | `20260825121000_bureau_restructure_finalize.sql` |
+| — | bureau_restructure_constraints | `20260825121000_bureau_restructure_finalize.sql` |
+| — | bureau_restructure_sop_rename | `20260825121000_bureau_restructure_finalize.sql` |
+| — | bureau_restructure_history_sab | `20260825121000_bureau_restructure_finalize.sql` |
+| — | bureau_restructure_history_lsb_bcb | `20260825121000_bureau_restructure_finalize.sql` |
+| — | bureau_restructure_command_notice | `20260825121000_bureau_restructure_finalize.sql` |
+| — | bureau_restructure_coverage_fieldcase | `20260825120000_bureau_restructure.sql` |
