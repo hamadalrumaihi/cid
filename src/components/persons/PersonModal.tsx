@@ -10,9 +10,9 @@
  *  and the repeatable Known Properties rows — are preserved verbatim, as is
  *  the gang-preservation guard (a stale gangs cache can't null gang_id).
  *  Mounted fresh per open. */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Json, Tables, TablesInsert } from '@/lib/database.types'
-import { deleteWithUndo, insert, list, update } from '@/lib/db'
+import { deleteWithUndo, insert, list, rpc, update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { activeProfiles, officerName } from '@/lib/profiles'
 import { toast } from '@/lib/toast'
@@ -22,6 +22,7 @@ import { uiConfirm } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import {
   CONFIDENCE_LEVELS, PERSON_CLASSIFICATIONS, PERSON_LIFECYCLES, PERSON_PRIORITIES,
   classificationLabel, confidenceLabel, lifecycleLabel, parsePersonIdentity, priorityLabel,
@@ -123,6 +124,31 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
   const detectives = activeProfiles()
   const leadKnown = !leadId || detectives.some((p) => p.id === leadId)
 
+  // Duplicate hint at create time — debounced name search through the indexed,
+  // RLS-safe `search_persons` RPC (the LinkAssociateModal pattern). Purely
+  // advisory: it never blocks Save; the merge flow handles real duplicates.
+  const [dupes, setDupes] = useState<DuplicateMatch[]>([])
+  useEffect(() => {
+    if (record) return // edit mode — the record IS the existing one
+    const q = name.trim()
+    if (q.length < 2) { setDupes([]); return }
+    let live = true
+    const t = window.setTimeout(async () => {
+      const res = await rpc('search_persons', { p_q: q, p_limit: 5 })
+      const hits = (res.data ?? []).map((h) => h.id)
+      if (!hits.length) { if (live) setDupes([]); return }
+      const rows = await list('persons', { select: 'id,name,alias,lifecycle', in: { id: hits } })
+        .then((r) => r as unknown as Pick<PersonRow, 'id' | 'name' | 'alias' | 'lifecycle'>[])
+        .catch(() => [] as Pick<PersonRow, 'id' | 'name' | 'alias' | 'lifecycle'>[])
+      if (!live) return
+      setDupes(rows
+        .filter((r) => r.lifecycle !== 'merged')
+        .slice(0, 3)
+        .map((r) => ({ type: 'person', id: r.id, label: r.name || 'Person', sublabel: r.alias ? `“${r.alias}”` : undefined })))
+    }, 400)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [name, record])
+
   const setProp = (i: number, patch: Partial<PersonProperty>) =>
     setProps((rows) => rows.map((r, x) => (x === i ? { ...r, ...patch } : r)))
 
@@ -216,7 +242,14 @@ export function PersonModal({ record, prefillName, gangs, onClose, onSaved }: Pe
       <div className="p-6">
         <ModalHeader title={`${record ? 'Edit' : 'New'} Person`} onClose={onClose} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Name" required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} />}</Field>
+          <Field label="Name" required>
+            {(id) => (
+              <>
+                <Input id={id} value={name} onChange={(e) => setName(e.target.value)} />
+                {!record && <DuplicateMatchNotice matches={dupes} />}
+              </>
+            )}
+          </Field>
           <Field label="Alias">{(id) => <Input id={id} value={alias} onChange={(e) => setAlias(e.target.value)} />}</Field>
           <Field label="Phone">{(id) => <Input id={id} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="555-0100" />}</Field>
           <Field label="Date of birth">{(id) => <Input id={id} type="date" value={dob} onChange={(e) => setDob(e.target.value)} />}</Field>

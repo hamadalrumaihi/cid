@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { insert, list, rpc, update } from '@/lib/db'
+import { ilikeAny, insert, list, rpc, update } from '@/lib/db'
 import type { TablesInsert } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/lib/toast'
@@ -11,7 +11,9 @@ import { parseIntelSummary } from '@/lib/jsonShapes'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
+import { searchCaseOptions } from '@/components/persons/ProfileRelations'
 import { useToolNav } from '@/components/tools/useToolNav'
 import {
   CONFIDENCE_LEVELS, GANG_CLASSIFICATIONS, GANG_STATUSES, PROVENANCE_KINDS, SUMMARY_SECTIONS, TURF_STATUSES, humanize,
@@ -42,6 +44,24 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
       .then((r) => setOfficers(r as unknown as Officer[]))
       .catch(() => setOfficers([]))
   }, [])
+
+  // Duplicate hint at create time — bounded ilike name search, never blocking.
+  const [dupes, setDupes] = useState<DuplicateMatch[]>([])
+  useEffect(() => {
+    if (record) return // edit mode — the record IS the existing one
+    const q = name.trim()
+    if (q.length < 2) { setDupes([]); return }
+    let live = true
+    const t = window.setTimeout(async () => {
+      const or = ilikeAny(['name', 'aliases'], q)
+      if (!or) { if (live) setDupes([]); return }
+      const rows = await list('gangs', { select: 'id,name,aliases', or, limit: 5 })
+        .then((r) => r as unknown as { id: string; name: string; aliases: string | null }[]).catch(() => [])
+      if (!live) return
+      setDupes(rows.slice(0, 3).map((g) => ({ type: 'gang', id: g.id, label: g.name, sublabel: g.aliases ? `aka ${g.aliases}` : undefined })))
+    }, 400)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [name, record])
 
   const setSection = (k: string, v: string) => setSummary((s) => ({ ...s, [k]: v }))
 
@@ -93,7 +113,11 @@ export function GangModal({ record, onClose, onSaved }: { record: GangRow | null
       <div className="max-h-[85vh] overflow-y-auto p-6">
         <ModalHeader title={`${record ? 'Edit' : 'New'} Gang`} onClose={onClose} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div><label htmlFor="gang-name" className={label}>Name *</label><input id="gang-name" value={name} onChange={(e) => setName(e.target.value)} className={input} /></div>
+          <div>
+            <label htmlFor="gang-name" className={label}>Name *</label>
+            <input id="gang-name" value={name} onChange={(e) => setName(e.target.value)} className={input} />
+            {!record && <DuplicateMatchNotice matches={dupes} />}
+          </div>
           <div><label htmlFor="gang-aliases" className={label}>Aliases</label><input id="gang-aliases" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="OneS, 1s" className={input} /></div>
           <div><label htmlFor="gang-colors" className={label}>Colors</label><input id="gang-colors" value={colors} onChange={(e) => setColors(e.target.value)} placeholder="Black and Gold" className={input} /></div>
           <div>
@@ -503,25 +527,27 @@ export function TurfModal({ gangId, onClose, onSaved }: { gangId: string; onClos
 }
 
 /** Durable attach-to-case — creates a structured case_intel_links row (kind=gang)
- *  instead of an unstructured chat message. Prevents duplicate attachment and
- *  optionally also posts a channel note. */
-export function AttachGangModal({ gang, caseOptions, onClose, onSaved }: { gang: GangRow; caseOptions: CaseOption[]; onClose: () => void; onSaved?: () => void }) {
+ *  instead of an unstructured chat message. The case picker is a bounded
+ *  server-backed search (ilikeAny + limit 20 — never a whole-table load);
+ *  duplicate attachment is blocked by the unique (case_id, kind, ref_id) key. */
+export function AttachGangModal({ gang, onClose, onSaved }: { gang: GangRow; onClose: () => void; onSaved?: () => void }) {
   const { profile } = useAuth()
-  const sorted = useMemo(() => caseOptions.slice().sort((a, b) => (a.case_number || '').localeCompare(b.case_number || '')), [caseOptions])
-  const [caseId, setCaseId] = useState(sorted[0]?.id || '')
+  const [picked, setPicked] = useState<PickedRecord | null>(null)
   const [role, setRole] = useState('Subject')
   const [note, setNote] = useState('')
   const [alsoPost, setAlsoPost] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const go = async () => {
-    if (!caseId) return
+    if (!picked) return
     setBusy(true)
-    // Dedupe: unique (case_id, kind, ref_id) also enforces this server-side.
-    const existing = await list('case_intel_links', { eq: { case_id: caseId, kind: 'gang', ref_id: gang.id } }).catch(() => [])
-    if (existing.length) { toast('This gang is already linked to that case.', 'warn'); setBusy(false); return }
+    const caseId = picked.id
     const res = await insert('case_intel_links', { case_id: caseId, kind: 'gang', ref_id: gang.id, role: role.trim() || null, note: note.trim() || null })
-    if (res.error) { toast(`Attach failed: ${res.error.message}`, 'danger'); setBusy(false); return }
+    if (res.error) {
+      toast(res.error.code === '23505' ? 'This gang is already linked to that case.' : `Attach failed: ${res.error.message}`, 'danger')
+      setBusy(false)
+      return
+    }
     if (alsoPost) {
       await insert('case_messages', {
         case_id: caseId, author_name: profile?.display_name || 'CID',
@@ -530,55 +556,64 @@ export function AttachGangModal({ gang, caseOptions, onClose, onSaved }: { gang:
       }).catch(() => {})
     }
     setBusy(false)
-    const num = sorted.find((c) => c.id === caseId)?.case_number || 'case'
-    toast(`Gang linked to ${num}`, 'success')
+    toast(`Gang linked to ${picked.label || 'case'}`, 'success')
     onSaved?.()
     onClose()
   }
 
   return (
-    <Modal open onClose={onClose}>
+    <Modal open onClose={onClose} dirty={() => !!picked || !!note.trim()}>
       <div className="p-6">
         <ModalHeader title="Attach to case" onClose={onClose} />
         <p className="mb-3 text-sm text-slate-400">Creates a durable intel link (shows in the case&rsquo;s Intel &amp; Graph tabs) for <span className="text-white">{gang.name}</span>.</p>
-        {sorted.length ? (
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="attach-case" className={label}>Case</label>
-              <select id="attach-case" value={caseId} onChange={(e) => setCaseId(e.target.value)} className={input}>
-                {sorted.map((c) => <option key={c.id} value={c.id}>{c.case_number} · {c.title || ''}</option>)}
-              </select>
-            </div>
-            <div><label htmlFor="attach-role" className={label}>Gang role in the case</label><input id="attach-role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="Subject, suspect org, rival…" className={input} /></div>
-            <div><label htmlFor="attach-note" className={label}>Note (optional)</label><input id="attach-note" value={note} onChange={(e) => setNote(e.target.value)} className={input} /></div>
-            <label className="flex items-center gap-2 text-xs text-slate-400"><input type="checkbox" checked={alsoPost} onChange={(e) => setAlsoPost(e.target.checked)} className="h-4 w-4 accent-badge-500" />Also post a note in the case channel</label>
-            <Button variant="primary" className="w-full" loading={busy} onClick={() => void go()}>{busy ? 'Linking…' : 'Create case link'}</Button>
-          </div>
-        ) : (
-          <p className="text-sm text-slate-400">No cases available to attach to.</p>
-        )}
+        <div className="space-y-3">
+          <RecordSearchPicker
+            label="Case"
+            required
+            placeholder="Search case number or title…"
+            value={picked}
+            onChange={setPicked}
+            search={searchCaseOptions}
+          />
+          <div><label htmlFor="attach-role" className={label}>Gang role in the case</label><input id="attach-role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="Subject, suspect org, rival…" className={input} /></div>
+          <div><label htmlFor="attach-note" className={label}>Note (optional)</label><input id="attach-note" value={note} onChange={(e) => setNote(e.target.value)} className={input} /></div>
+          <label className="flex items-center gap-2 text-xs text-slate-400"><input type="checkbox" checked={alsoPost} onChange={(e) => setAlsoPost(e.target.checked)} className="h-4 w-4 accent-badge-500" />Also post a note in the case channel</label>
+          <Button variant="primary" className="w-full" loading={busy} disabled={!picked} onClick={() => void go()}>{busy ? 'Linking…' : 'Create case link'}</Button>
+        </div>
       </div>
     </Modal>
   )
 }
 
-/** Link an existing place to the gang with a role/confidence/provenance. */
-export function LinkPlaceModal({ gang, places, existing, onClose, onSaved }: {
-  gang: GangRow; places: PlaceRow[]; existing: GangPlaceRow[]; onClose: () => void; onSaved: () => void
+/** Link an existing place to the gang with a role/confidence/provenance. The
+ *  place picker is a bounded server-backed search (ilikeAny + limit 20);
+ *  already-linked places are excluded and the unique key backs the friendly
+ *  duplicate message. */
+export function LinkPlaceModal({ gang, existing, onClose, onSaved }: {
+  gang: GangRow; existing: GangPlaceRow[]; onClose: () => void; onSaved: () => void
 }) {
   const linkedIds = useMemo(() => new Set(existing.map((g) => g.place_id)), [existing])
-  const options = useMemo(() => places.filter((p) => !linkedIds.has(p.id)).sort((a, b) => a.name.localeCompare(b.name)), [places, linkedIds])
-  const [placeId, setPlaceId] = useState(options[0]?.id || '')
+  const [picked, setPicked] = useState<PickedRecord | null>(null)
   const [role, setRole] = useState('')
   const [confidence, setConfidence] = useState('')
   const [provenance, setProvenance] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
 
+  const searchPlaces = useCallback(async (q: string): Promise<PickedRecord[]> => {
+    const or = ilikeAny(['name', 'area'], q)
+    const rows = await list('places', { select: 'id,name,type,area', order: 'name', limit: 20, ...(or ? { or } : {}) })
+      .then((r) => r as unknown as Pick<PlaceRow, 'id' | 'name' | 'type' | 'area'>[])
+      .catch(() => [] as Pick<PlaceRow, 'id' | 'name' | 'type' | 'area'>[])
+    return rows
+      .filter((p) => !linkedIds.has(p.id))
+      .map((p) => ({ id: p.id, label: p.name, sublabel: [humanize(p.type), p.area].filter(Boolean).join(' · ') || undefined }))
+  }, [linkedIds])
+
   const go = async () => {
-    if (!placeId) return
+    if (!picked) return
     setBusy(true)
-    const res = await insert('gang_places', { gang_id: gang.id, place_id: placeId, role: role.trim() || null, confidence: confidence || null, provenance: provenance || null, note: note.trim() || null })
+    const res = await insert('gang_places', { gang_id: gang.id, place_id: picked.id, role: role.trim() || null, confidence: confidence || null, provenance: provenance || null, note: note.trim() || null })
     setBusy(false)
     if (res.error) {
       toast(res.error.code === '23505' ? 'That place is already linked.' : `Link failed: ${res.error.message}`, 'danger')
@@ -588,34 +623,33 @@ export function LinkPlaceModal({ gang, places, existing, onClose, onSaved }: {
   }
 
   return (
-    <Modal open onClose={onClose}>
+    <Modal open onClose={onClose} dirty={() => !!picked || !!note.trim()}>
       <div className="p-6">
         <ModalHeader title="Link a place" onClose={onClose} />
-        {options.length ? (
-          <div className="space-y-3">
+        <div className="space-y-3">
+          <RecordSearchPicker
+            label="Place"
+            required
+            placeholder="Search name or area…"
+            value={picked}
+            onChange={setPicked}
+            search={searchPlaces}
+            emptyState="No matching unlinked places. Create the place in the Places area first, then link it here."
+          />
+          <div><label htmlFor="lp-role" className={label}>Role</label><input id="lp-role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="clubhouse, stash, laundering…" className={input} /></div>
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor="lp-place" className={label}>Place</label>
-              <select id="lp-place" value={placeId} onChange={(e) => setPlaceId(e.target.value)} className={input}>
-                {options.map((p) => <option key={p.id} value={p.id}>{p.name} · {humanize(p.type)}{p.area ? ` · ${p.area}` : ''}</option>)}
-              </select>
+              <label htmlFor="lp-conf" className={label}>Confidence</label>
+              <select id="lp-conf" value={confidence} onChange={(e) => setConfidence(e.target.value)} className={input}><option value="">—</option>{CONFIDENCE_LEVELS.map((c) => <option key={c} value={c}>{humanize(c)}</option>)}</select>
             </div>
-            <div><label htmlFor="lp-role" className={label}>Role</label><input id="lp-role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="clubhouse, stash, laundering…" className={input} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="lp-conf" className={label}>Confidence</label>
-                <select id="lp-conf" value={confidence} onChange={(e) => setConfidence(e.target.value)} className={input}><option value="">—</option>{CONFIDENCE_LEVELS.map((c) => <option key={c} value={c}>{humanize(c)}</option>)}</select>
-              </div>
-              <div>
-                <label htmlFor="lp-prov" className={label}>Source</label>
-                <select id="lp-prov" value={provenance} onChange={(e) => setProvenance(e.target.value)} className={input}><option value="">—</option>{PROVENANCE_KINDS.map((p) => <option key={p} value={p}>{humanize(p)}</option>)}</select>
-              </div>
+            <div>
+              <label htmlFor="lp-prov" className={label}>Source</label>
+              <select id="lp-prov" value={provenance} onChange={(e) => setProvenance(e.target.value)} className={input}><option value="">—</option>{PROVENANCE_KINDS.map((p) => <option key={p} value={p}>{humanize(p)}</option>)}</select>
             </div>
-            <div><label htmlFor="lp-note" className={label}>Note</label><input id="lp-note" value={note} onChange={(e) => setNote(e.target.value)} className={input} /></div>
-            <Button variant="primary" className="w-full" loading={busy} onClick={() => void go()}>{busy ? 'Linking…' : 'Link place'}</Button>
           </div>
-        ) : (
-          <p className="text-sm text-slate-400">All existing places are already linked, or none exist yet. Create places in the Places area first.</p>
-        )}
+          <div><label htmlFor="lp-note" className={label}>Note</label><input id="lp-note" value={note} onChange={(e) => setNote(e.target.value)} className={input} /></div>
+          <Button variant="primary" className="w-full" loading={busy} disabled={!picked} onClick={() => void go()}>{busy ? 'Linking…' : 'Link place'}</Button>
+        </div>
       </div>
     </Modal>
   )

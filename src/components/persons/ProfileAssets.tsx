@@ -6,8 +6,8 @@
  *  Legacy `persons.properties` addresses are listed separately and are only
  *  ever migrated to Places by a human via the per-row "Link to Place…" action
  *  — never automatically, and the legacy row always stays. */
-import { useEffect, useMemo, useState } from 'react'
-import { insert, list, remove, update } from '@/lib/db'
+import { useCallback, useMemo, useState } from 'react'
+import { ilikeAny, insert, list, remove, update } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { fmConfigured, fmUpload } from '@/lib/fivemanage'
 import { fmtDate } from '@/lib/format'
@@ -19,21 +19,21 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EntityLink } from '@/components/ui/EntityLink'
 import { Field, Input, Select } from '@/components/ui/Field'
-import { ConfidenceBadge, ProvenanceBadge } from '@/components/ui/IntelBadges'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/Notice'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { LinkEditPopover, LinkStatusBadge } from '@/components/shared/LinkEditPopover'
+import { RecordPeekButton } from '@/components/shared/RecordPeekButton'
+import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
 import { useToolNav } from '@/components/tools/useToolNav'
 import { PROVENANCE_KINDS, humanize } from '@/components/gangs/gangIntel'
-import { CONFIDENCE_LEVELS, LINK_STATUSES, PLACE_ROLES, VEHICLE_ROLES, linkStatusLabel, placeRoleLabel, vehicleRoleLabel } from './personIntel'
+import { CONFIDENCE_LEVELS, LINK_STATUSES, PLACE_ROLES, VEHICLE_ROLES, placeRoleLabel, vehicleRoleLabel } from './personIntel'
 import { parseProperties, type PersonRow, type PersonProperty } from './PersonModal'
 import {
   PLACE_LITE_COLS, VEHICLE_LITE_COLS,
   type MediaRow, type PersonPlaceRow, type PersonVehicleRow, type PlaceLite, type PlacesData,
   type VehicleLite, type VehiclesData,
 } from './profileLoad'
-
-const linkStatusTint = (s: string) =>
-  s === 'current' ? 'bg-emerald-500/15 text-emerald-300' : s === 'disputed' ? 'bg-rose-500/15 text-rose-300' : 'bg-white/5 text-slate-400'
 
 function canRemoveLink(createdBy: string | null, meId: string | undefined, isCommand: boolean): boolean {
   return isCommand || (!!createdBy && createdBy === meId)
@@ -48,9 +48,10 @@ export function PersonVehiclesSection({ data, canEdit, onLink, onRefresh }: {
 }) {
   const nav = useToolNav()
   const { profile, isCommand } = useAuth()
+  const [editLink, setEditLink] = useState<PersonVehicleRow | null>(null)
 
   const unlink = async (l: PersonVehicleRow) => {
-    if (!(await uiConfirm('Unlink this vehicle from the person? The vehicle record itself is kept.', { confirmText: 'Unlink' }))) return
+    if (!(await uiConfirm('Remove this vehicle link? If the association simply ended, prefer editing the link and marking it Historical — the vehicle record itself is kept either way.', { confirmText: 'Unlink' }))) return
     const res = await remove('person_vehicles', l.id)
     if (res.error) { toast(`Unlink failed: ${res.error.message}`, 'danger'); return }
     toast('Vehicle unlinked', 'success')
@@ -88,16 +89,18 @@ export function PersonVehiclesSection({ data, canEdit, onLink, onRefresh }: {
           ))}
           {data.links.map((l) => {
             const v = data.vehicles.get(l.vehicle_id)
+            const mayManage = canRemoveLink(l.created_by, profile?.id, isCommand)
             return (
               <Card key={l.id} pad="sm" className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
                     {plateChip(v)}
+                    <RecordPeekButton type="vehicle" id={l.vehicle_id} label={v?.plate ?? 'Vehicle'} />
                     <span className="text-sm text-slate-200">{[v?.model, v?.color].filter(Boolean).join(' · ')}</span>
                     <Badge tone="neutral">{vehicleRoleLabel(l.role)}</Badge>
-                    <Badge tint={linkStatusTint(l.link_status)}>{linkStatusLabel(l.link_status)}</Badge>
-                    <ConfidenceBadge confidence={l.confidence} />
-                    <ProvenanceBadge provenance={l.provenance} />
+                    <LinkStatusBadge status={l.link_status} />
+                    <StatusBadge domain="confidence" value={l.confidence ?? 'unverified'} />
+                    {l.provenance && <StatusBadge domain="provenance" value={l.provenance} />}
                   </div>
                   <p className="mt-1 text-[11px] text-slate-400">
                     {l.first_observed ? `First seen ${fmtDate(l.first_observed)} · ` : ''}
@@ -106,29 +109,49 @@ export function PersonVehiclesSection({ data, canEdit, onLink, onRefresh }: {
                   </p>
                   {l.note && <p className="mt-0.5 text-xs text-slate-400">{l.note}</p>}
                 </div>
-                {canRemoveLink(l.created_by, profile?.id, isCommand) && (
-                  <button onClick={() => void unlink(l)} className="flex-shrink-0 text-[11px] text-rose-300 hover:text-rose-200">Unlink</button>
-                )}
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  {canEdit && mayManage && (
+                    <button onClick={() => setEditLink(l)} className="text-[11px] font-semibold text-blue-300 hover:text-blue-200" title="Edit role, confidence, status, or note">Edit</button>
+                  )}
+                  {mayManage && (
+                    <button onClick={() => void unlink(l)} className="text-[11px] text-rose-300 hover:text-rose-200">Unlink</button>
+                  )}
+                </div>
               </Card>
             )
           })}
         </div>
       )}
+      {editLink && (
+        <LinkEditPopover
+          title="Edit vehicle link"
+          table="person_vehicles"
+          id={editLink.id}
+          role={editLink.role}
+          roleOptions={VEHICLE_ROLES}
+          roleLabel={vehicleRoleLabel}
+          roleRequired
+          status={editLink.link_status}
+          confidence={editLink.confidence}
+          note={editLink.note}
+          onClose={() => setEditLink(null)}
+          onSaved={() => { setEditLink(null); onRefresh() }}
+        />
+      )}
     </div>
   )
 }
 
-/** Link vehicle — projected plate search + a REQUIRED role (person_vehicles
- *  is for non-owner relations; ownership is edited on the vehicle itself). */
+/** Link vehicle — bounded server-backed plate search (ilikeAny + limit 20) +
+ *  a REQUIRED role (person_vehicles is for non-owner relations; ownership is
+ *  edited on the vehicle itself). */
 export function LinkVehicleModal({ person, existing, onClose, onSaved }: {
   person: PersonRow
   existing: PersonVehicleRow[]
   onClose: () => void
   onSaved: () => void
 }) {
-  const [pool, setPool] = useState<VehicleLite[] | null>(null)
-  const [q, setQ] = useState('')
-  const [vehicleId, setVehicleId] = useState('')
+  const [picked, setPicked] = useState<PickedRecord | null>(null)
   const [role, setRole] = useState<string>('seen_using')
   const [linkStatus, setLinkStatus] = useState('current')
   const [confidence, setConfidence] = useState('')
@@ -136,30 +159,22 @@ export function LinkVehicleModal({ person, existing, onClose, onSaved }: {
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    let live = true
-    void list('vehicles', { select: VEHICLE_LITE_COLS, order: 'plate' })
-      .then((r) => { if (live) setPool(r as unknown as VehicleLite[]) })
-      .catch(() => { if (live) setPool([]) })
-    return () => { live = false }
-  }, [])
-
   const linked = useMemo(() => new Set(existing.map((l) => l.vehicle_id)), [existing])
-  const needle = q.trim().toLowerCase()
-  const options = useMemo(
-    () => (pool ?? [])
+  const searchVehicles = useCallback(async (q: string): Promise<PickedRecord[]> => {
+    const or = ilikeAny(['plate', 'model', 'color'], q)
+    const rows = await list('vehicles', { select: VEHICLE_LITE_COLS, order: 'plate', limit: 20, ...(or ? { or } : {}) })
+      .then((r) => r as unknown as VehicleLite[]).catch(() => [] as VehicleLite[])
+    return rows
       .filter((v) => !linked.has(v.id) && v.owner_id !== person.id)
-      .filter((v) => !needle || [v.plate, v.model, v.color].some((s) => (s || '').toLowerCase().includes(needle)))
-      .slice(0, 20),
-    [pool, linked, needle, person.id],
-  )
+      .map((v) => ({ id: v.id, label: v.plate || 'Vehicle', sublabel: [v.model, v.color].filter(Boolean).join(' · ') || undefined }))
+  }, [linked, person.id])
 
   const save = async () => {
-    if (!vehicleId) { toast('Pick a vehicle first.', 'warn'); return }
+    if (!picked) { toast('Pick a vehicle first.', 'warn'); return }
     setBusy(true)
     const res = await insert('person_vehicles', {
       person_id: person.id,
-      vehicle_id: vehicleId,
+      vehicle_id: picked.id,
       role,
       link_status: linkStatus,
       confidence: confidence || null,
@@ -176,28 +191,19 @@ export function LinkVehicleModal({ person, existing, onClose, onSaved }: {
   }
 
   return (
-    <Modal open onClose={onClose} dirty={() => !!vehicleId || !!note.trim()}>
+    <Modal open onClose={onClose} dirty={() => !!picked || !!note.trim()}>
       <div className="max-h-[85vh] overflow-y-auto p-6">
         <ModalHeader title={`Link vehicle — ${person.name}`} onClose={onClose} />
         <div className="space-y-3">
-          <Field label="Search plate / model">
-            {(id) => <Input id={id} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ABC123…" />}
-          </Field>
-          {pool === null ? (
-            <p className="text-sm text-slate-400">Loading vehicles…</p>
-          ) : options.length ? (
-            <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-white/5 bg-ink-900 p-1.5" role="listbox" aria-label="Vehicle results">
-              {options.map((v) => (
-                <button key={v.id} role="option" aria-selected={vehicleId === v.id} onClick={() => setVehicleId(v.id)}
-                  className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition ${vehicleId === v.id ? 'bg-badge-500/20 text-white' : 'text-slate-200 hover:bg-white/5'}`}>
-                  <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[11px] font-bold text-badge-200">{v.plate}</span>
-                  <span className="min-w-0 truncate">{[v.model, v.color].filter(Boolean).join(' · ') || 'Vehicle'}</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-400">No unlinked vehicles match. Registered vehicles are already listed; new plates are added in the Vehicle Registry.</p>
-          )}
+          <RecordSearchPicker
+            label="Vehicle"
+            required
+            placeholder="Search plate, model, color…"
+            value={picked}
+            onChange={setPicked}
+            search={searchVehicles}
+            emptyState="No unlinked vehicles match. Registered vehicles are already listed; new plates are added in the Vehicle Registry."
+          />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Role" required hint="Ownership is set on the vehicle record itself.">
               {(id) => (
@@ -231,7 +237,7 @@ export function LinkVehicleModal({ person, existing, onClose, onSaved }: {
             </Field>
           </div>
           <Field label="Note">{(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} />}</Field>
-          <Button variant="primary" className="w-full" loading={busy} disabled={!vehicleId} onClick={() => void save()}>Link vehicle</Button>
+          <Button variant="primary" className="w-full" loading={busy} disabled={!picked} onClick={() => void save()}>Link vehicle</Button>
         </div>
       </div>
     </Modal>
@@ -249,9 +255,10 @@ export function PersonPlacesSection({ person, data, canEdit, onLink, onRefresh }
 }) {
   const { profile, isCommand } = useAuth()
   const legacy = useMemo(() => parseProperties(person.properties), [person.properties])
+  const [editLink, setEditLink] = useState<PersonPlaceRow | null>(null)
 
   const unlink = async (l: PersonPlaceRow) => {
-    if (!(await uiConfirm('Unlink this place from the person? The place record itself is kept.', { confirmText: 'Unlink' }))) return
+    if (!(await uiConfirm('Remove this place link? If the association simply ended, prefer editing the link and marking it Historical — the place record itself is kept either way.', { confirmText: 'Unlink' }))) return
     const res = await remove('person_places', l.id)
     if (res.error) { toast(`Unlink failed: ${res.error.message}`, 'danger'); return }
     toast('Place unlinked', 'success')
@@ -270,16 +277,20 @@ export function PersonPlacesSection({ person, data, canEdit, onLink, onRefresh }
         <div className="space-y-2">
           {data.links.map((l) => {
             const pl: PlaceLite | undefined = data.places.get(l.place_id)
+            const mayManage = canRemoveLink(l.created_by, profile?.id, isCommand)
             return (
               <Card key={l.id} pad="sm" className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
+                    {/* Places are `?q=`-addressed (no id route) — the label-href
+                        form is correct here; the peek resolves by id. */}
                     <EntityLink kind="place" label={pl?.name ?? 'Place'} />
+                    <RecordPeekButton type="place" id={l.place_id} label={pl?.name ?? 'Place'} />
                     {pl && <span className="text-[11px] text-slate-400">{humanize(pl.type)}{pl.area ? ` · ${pl.area}` : ''}</span>}
                     <Badge tone="neutral">{placeRoleLabel(l.role)}</Badge>
-                    <Badge tint={linkStatusTint(l.link_status)}>{linkStatusLabel(l.link_status)}</Badge>
-                    <ConfidenceBadge confidence={l.confidence} />
-                    <ProvenanceBadge provenance={l.provenance} />
+                    <LinkStatusBadge status={l.link_status} />
+                    <StatusBadge domain="confidence" value={l.confidence ?? 'unverified'} />
+                    {l.provenance && <StatusBadge domain="provenance" value={l.provenance} />}
                   </div>
                   <p className="mt-1 text-[11px] text-slate-400">
                     {l.first_observed ? `First seen ${fmtDate(l.first_observed)} · ` : ''}
@@ -288,13 +299,33 @@ export function PersonPlacesSection({ person, data, canEdit, onLink, onRefresh }
                   </p>
                   {l.note && <p className="mt-0.5 text-xs text-slate-400">{l.note}</p>}
                 </div>
-                {canRemoveLink(l.created_by, profile?.id, isCommand) && (
-                  <button onClick={() => void unlink(l)} className="flex-shrink-0 text-[11px] text-rose-300 hover:text-rose-200">Unlink</button>
-                )}
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  {canEdit && mayManage && (
+                    <button onClick={() => setEditLink(l)} className="text-[11px] font-semibold text-blue-300 hover:text-blue-200" title="Edit role, confidence, status, or note">Edit</button>
+                  )}
+                  {mayManage && (
+                    <button onClick={() => void unlink(l)} className="text-[11px] text-rose-300 hover:text-rose-200">Unlink</button>
+                  )}
+                </div>
               </Card>
             )
           })}
         </div>
+      )}
+      {editLink && (
+        <LinkEditPopover
+          title="Edit place link"
+          table="person_places"
+          id={editLink.id}
+          role={editLink.role}
+          roleOptions={PLACE_ROLES}
+          roleLabel={placeRoleLabel}
+          status={editLink.link_status}
+          confidence={editLink.confidence}
+          note={editLink.note}
+          onClose={() => setEditLink(null)}
+          onSaved={() => { setEditLink(null); onRefresh() }}
+        />
       )}
 
       {/* Older free-text addresses — migrated only through explicit reviewer
@@ -334,9 +365,7 @@ export function LinkPersonPlaceModal({ person, existing, legacy, onClose, onSave
   onClose: () => void
   onSaved: () => void
 }) {
-  const [pool, setPool] = useState<PlaceLite[] | null>(null)
-  const [q, setQ] = useState(() => legacy?.address || '')
-  const [placeId, setPlaceId] = useState('')
+  const [picked, setPicked] = useState<PickedRecord | null>(null)
   const [role, setRole] = useState<string>(() => (legacy?.type === 'Residence' ? 'residence' : legacy?.type === 'Stash House' ? 'stash' : 'other'))
   const [linkStatus, setLinkStatus] = useState('current')
   const [confidence, setConfidence] = useState('')
@@ -344,30 +373,22 @@ export function LinkPersonPlaceModal({ person, existing, legacy, onClose, onSave
   const [note, setNote] = useState(() => (legacy ? `Legacy address: ${legacy.address}${legacy.notes ? ` — ${legacy.notes}` : ''}` : ''))
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    let live = true
-    void list('places', { select: PLACE_LITE_COLS, order: 'name' })
-      .then((r) => { if (live) setPool(r as unknown as PlaceLite[]) })
-      .catch(() => { if (live) setPool([]) })
-    return () => { live = false }
-  }, [])
-
   const linked = useMemo(() => new Set(existing.map((l) => l.place_id)), [existing])
-  const needle = q.trim().toLowerCase()
-  const options = useMemo(
-    () => (pool ?? [])
+  const searchPlaces = useCallback(async (q: string): Promise<PickedRecord[]> => {
+    const or = ilikeAny(['name', 'area'], q)
+    const rows = await list('places', { select: PLACE_LITE_COLS, order: 'name', limit: 20, ...(or ? { or } : {}) })
+      .then((r) => r as unknown as PlaceLite[]).catch(() => [] as PlaceLite[])
+    return rows
       .filter((p) => !linked.has(p.id))
-      .filter((p) => !needle || [p.name, p.area].some((s) => (s || '').toLowerCase().includes(needle)))
-      .slice(0, 20),
-    [pool, linked, needle],
-  )
+      .map((p) => ({ id: p.id, label: p.name, sublabel: [humanize(p.type), p.area].filter(Boolean).join(' · ') || undefined }))
+  }, [linked])
 
   const save = async () => {
-    if (!placeId) { toast('Pick a place first.', 'warn'); return }
+    if (!picked) { toast('Pick a place first.', 'warn'); return }
     setBusy(true)
     const res = await insert('person_places', {
       person_id: person.id,
-      place_id: placeId,
+      place_id: picked.id,
       role: role || null,
       link_status: linkStatus,
       confidence: confidence || null,
@@ -384,7 +405,7 @@ export function LinkPersonPlaceModal({ person, existing, legacy, onClose, onSave
   }
 
   return (
-    <Modal open onClose={onClose} dirty={() => !!placeId}>
+    <Modal open onClose={onClose} dirty={() => !!picked}>
       <div className="max-h-[85vh] overflow-y-auto p-6">
         <ModalHeader title={`Link place — ${person.name}`} onClose={onClose} />
         {legacy && (
@@ -393,24 +414,16 @@ export function LinkPersonPlaceModal({ person, existing, legacy, onClose, onSave
           </p>
         )}
         <div className="space-y-3">
-          <Field label="Search places">
-            {(id) => <Input id={id} type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or area…" />}
-          </Field>
-          {pool === null ? (
-            <p className="text-sm text-slate-400">Loading places…</p>
-          ) : options.length ? (
-            <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-white/5 bg-ink-900 p-1.5" role="listbox" aria-label="Place results">
-              {options.map((p) => (
-                <button key={p.id} role="option" aria-selected={placeId === p.id} onClick={() => setPlaceId(p.id)}
-                  className={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-sm transition ${placeId === p.id ? 'bg-badge-500/20 text-white' : 'text-slate-200 hover:bg-white/5'}`}>
-                  <span className="min-w-0 truncate">📍 {p.name}<span className="text-slate-400"> · {humanize(p.type)}{p.area ? ` · ${p.area}` : ''}</span></span>
-                  {placeId === p.id && <span aria-hidden className="flex-shrink-0 text-badge-500">✓</span>}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-400">No matching unlinked places. Create the place in the Places area first, then link it here.</p>
-          )}
+          <RecordSearchPicker
+            label="Place"
+            required
+            placeholder="Search name or area…"
+            initialQuery={legacy?.address || undefined}
+            value={picked}
+            onChange={setPicked}
+            search={searchPlaces}
+            emptyState="No matching unlinked places. Create the place in the Places area first, then link it here."
+          />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Role">
               {(id) => (
@@ -444,7 +457,7 @@ export function LinkPersonPlaceModal({ person, existing, legacy, onClose, onSave
             </Field>
           </div>
           <Field label="Note">{(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} />}</Field>
-          <Button variant="primary" className="w-full" loading={busy} disabled={!placeId} onClick={() => void save()}>Link place</Button>
+          <Button variant="primary" className="w-full" loading={busy} disabled={!picked} onClick={() => void save()}>Link place</Button>
         </div>
       </div>
     </Modal>

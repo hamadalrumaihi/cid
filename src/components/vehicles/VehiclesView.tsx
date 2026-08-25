@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
-import { deleteWithUndo, insert, list, update, withRetry } from '@/lib/db'
+import { deleteWithUndo, ilikeAny, insert, list, update, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
@@ -22,6 +22,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { inputCls, labelCls } from '@/components/ui/Field'
 import { WatchButton } from '@/components/cases/WatchButton'
+import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
 import { useToolNav } from '@/components/tools/useToolNav'
 import { VehicleProfile } from './VehicleProfile'
 
@@ -200,6 +201,27 @@ export function VehicleModal({ record, persons, gangs, onClose, onSaved }: {
   const [notes, setNotes] = useState(record?.notes ?? '')
   const [busy, setBusy] = useState(false)
 
+  // Duplicate hint at create time — an exact normalized-plate match against a
+  // bounded ilike lookup. Advisory only (the UNIQUE plate key still guards).
+  const [dupes, setDupes] = useState<DuplicateMatch[]>([])
+  useEffect(() => {
+    if (record) return
+    const p = plate.trim().toUpperCase()
+    if (p.length < 2) { setDupes([]); return }
+    let live = true
+    const t = window.setTimeout(async () => {
+      const or = ilikeAny(['plate'], p)
+      if (!or) { if (live) setDupes([]); return }
+      const rows = await list('vehicles', { select: 'id,plate', or, limit: 3 })
+        .then((r) => r as unknown as { id: string; plate: string }[]).catch(() => [])
+      if (!live) return
+      setDupes(rows
+        .filter((v) => (v.plate || '').trim().toUpperCase() === p)
+        .map((v) => ({ type: 'vehicle', id: v.id, label: v.plate })))
+    }, 400)
+    return () => { live = false; window.clearTimeout(t) }
+  }, [plate, record])
+
   // FK-preservation guard (vanilla vehicles.js): if the linked owner/gang
   // isn't in the loaded options (fetch failed / stale), keep a synthetic
   // option so an unrelated save can't silently null the link.
@@ -233,6 +255,7 @@ export function VehicleModal({ record, persons, gangs, onClose, onSaved }: {
           <div>
             <label htmlFor="vehicle-plate" className={labelCls}>Plate *</label>
             <input id="vehicle-plate" value={plate} onChange={(e) => setPlate(e.target.value)} className={`${inputCls} font-mono uppercase tracking-widest`} />
+            {!record && <DuplicateMatchNotice matches={dupes} />}
           </div>
           <div>
             <label htmlFor="vehicle-model" className={labelCls}>Model</label>
