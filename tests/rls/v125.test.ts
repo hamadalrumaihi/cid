@@ -134,7 +134,7 @@ describe.skipIf(!enabled)('v1.25 — Phase B permanent deletion: owner-only arm/
 
   it('active work blocks arming: the disposable leads a case', async () => {
     const c = await lsb.from('cases')
-      .insert({ case_number: `V125-${tag.toUpperCase()}`, title: 'v1.25 deletion blocker case', bureau: 'LSB', lead_detective_id: dispId })
+      .insert({ case_number: `V125-${tag.toUpperCase()}`, title: 'v1.25 deletion blocker case', bureau: 'major_crimes', lead_detective_id: dispId })
       .select('id')
     if (c.error) throw new Error(c.error.message)
     caseId = c.data![0].id as string

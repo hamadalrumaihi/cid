@@ -17,8 +17,8 @@
  *     0.6 GUC default, so this also proves the function-level threshold SET
  *     took; a hit at the default would need ≥ 0.6).
  *   - INVOKER PRESERVED (mirrors v114's cross-visibility assertions): the same
- *     multi-word query that hits for the LSB creator returns NO case hit for a
- *     BCB detective — search follows the caller's own case RLS.
+ *     multi-word query that hits for the MCB creator returns NO case hit for a
+ *     SCB detective — search follows the caller's own case RLS.
  *   - MERGED EXCLUSION: after person_merge, the victim tombstone stays out of
  *     search while the survivor still surfaces.
  *   - HANDLE HISTORY: after a client rename (accounts_track_handle flips the
@@ -27,7 +27,7 @@
  *     not carry the marker; a term matching both old and new handles returns
  *     the account exactly ONCE (dedupe by construction).
  *
- *  Fixtures (v155 shape): lsb (active LSB detective — creates the case/persons/
+ *  Fixtures (v155 shape): lsb (active MCB detective — creates the case/persons/
  *  account), bcb (the cross-bureau stranger), lead (command — person_merge),
  *  owner (teardown of the account: accounts are NOT swept by rls_test_cleanup,
  *  so the owner deletes it explicitly — account_handles cascade). Persons and
@@ -98,7 +98,7 @@ describe.skipIf(!enabled)('v1.61 — search hardening (live)', () => {
       case_number: `V161-${tag}`,
       title: '[rls-test] v161 pier case',
       summary: `Cargo pilferage${tag2} logged dockside`,
-      bureau: 'LSB',
+      bureau: 'major_crimes',
     }).select('id')
     if (c.error) throw new Error(`case insert: ${c.error.message}`)
     caseId = c.data![0].id as string

@@ -559,7 +559,7 @@ function OpsSection() {
       <Panel title="Justice coverage" sub="Each bureau needs an active prosecutor (primary or acting) or its classified legal requests go unseen at the DOJ — exactly the failure repaired in July 2026.">
         {ops?.coverage === null && <p className="text-sm text-slate-400"><OpsChip status="unknown" /> The assignment table could not be read — retry, and check Supabase if it persists.</p>}
         {ops?.coverage && (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {ops.coverage.map((c) => {
               const covererId = c.primaryId ?? c.actingId
               // A held slot whose holder is invisible on the roster is a real

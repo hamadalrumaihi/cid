@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
+import { bureauLabel } from '@/lib/roles'
 import { list } from '@/lib/db'
 import { fmtDateTime } from '@/lib/format'
 import { officerName } from '@/lib/profiles'
@@ -323,7 +324,7 @@ function OpenCase({ submission, defaultLead, onCancel, onDone }: {
   onCancel: () => void
   onDone: (err: string | null) => Promise<void>
 }) {
-  const [bureau, setBureau] = useState<CaseBureau>('LSB')
+  const [bureau, setBureau] = useState<CaseBureau>('major_crimes')
   // Prefilled from the record, which is the entire point: the reviewer has just
   // read it, and the case should say what it said.
   const [title, setTitle] = useState(submission.summary ?? '')
@@ -336,7 +337,7 @@ function OpenCase({ submission, defaultLead, onCancel, onDone }: {
         {(fid) => (
           <Select id={fid} value={bureau}
             onChange={(e) => setBureau(e.target.value as CaseBureau)}>
-            {CASE_BUREAUS.map((b) => <option key={b} value={b}>{b}</option>)}
+            {CASE_BUREAUS.map((b) => <option key={b} value={b}>{bureauLabel(b)}</option>)}
           </Select>
         )}
       </Field>

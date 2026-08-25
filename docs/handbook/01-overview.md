@@ -18,8 +18,9 @@ without refreshing.
 Division members in four effective tiers (§[Ch. 9](09-auth.md) has the
 full model): regular members (`detective`, `senior_detective`), bureau
 leads, deputy directors, and command (`director`). Members also belong to a
-**bureau** — `LSB`, `BCB`, `SAB`, or `JTF` — and case visibility is
-bureau-scoped.
+**bureau** — `major_crimes` (Major Crimes), `street_crimes` (Street Crimes), or
+`JTF` — and case visibility is bureau-scoped (`special_investigations` marks
+SIB-authority cases).
 
 ## Main workflows
 

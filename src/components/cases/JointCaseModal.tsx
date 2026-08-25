@@ -13,7 +13,7 @@ import { Field, Input, Select } from '@/components/ui/Field'
 import { rpc } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useProfilesStore, type RosterProfile } from '@/lib/profiles'
-import { BUREAUS, bureauLabel, roleLabel } from '@/lib/roles'
+import { PERMANENT_BUREAUS, bureauLabel, roleLabel } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import type { Json } from '@/lib/database.types'
 import type { AssignmentRow, CaseRow } from './tabs/shared'
@@ -246,7 +246,10 @@ export function JointCaseModal({ open, onClose, c, mode, existingAssignments, on
                 {(id) => (
                   <Select id={id} value={bureauFilter} onChange={(e) => { setBureauFilter(e.target.value); setActiveIdx(0) }}>
                     <option value="all">All departments</option>
-                    {Object.keys(BUREAUS).map((b) => <option key={b} value={b}>{bureauLabel(b)}</option>)}
+                    {/* Roster divisions only: the permanent bureaus + the JTF
+                        pre-approval default. SIB membership is compartmented
+                        and never appears in this picker. */}
+                    {[...PERMANENT_BUREAUS, 'JTF'].map((b) => <option key={b} value={b}>{bureauLabel(b)}</option>)}
                   </Select>
                 )}
               </Field>

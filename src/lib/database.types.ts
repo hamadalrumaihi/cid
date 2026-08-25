@@ -8556,10 +8556,10 @@ export type Database = {
           created_at: string
           id: string
           new_active: boolean | null
-          new_division: Database["public"]["Enums"]["bureau"] | null
+          new_division: string | null
           new_role: Database["public"]["Enums"]["app_role"] | null
           old_active: boolean | null
-          old_division: Database["public"]["Enums"]["bureau"] | null
+          old_division: string | null
           old_role: Database["public"]["Enums"]["app_role"] | null
           reason: string | null
           source: string | null
@@ -8571,10 +8571,10 @@ export type Database = {
           created_at?: string
           id?: string
           new_active?: boolean | null
-          new_division?: Database["public"]["Enums"]["bureau"] | null
+          new_division?: string | null
           new_role?: Database["public"]["Enums"]["app_role"] | null
           old_active?: boolean | null
-          old_division?: Database["public"]["Enums"]["bureau"] | null
+          old_division?: string | null
           old_role?: Database["public"]["Enums"]["app_role"] | null
           reason?: string | null
           source?: string | null
@@ -8586,10 +8586,10 @@ export type Database = {
           created_at?: string
           id?: string
           new_active?: boolean | null
-          new_division?: Database["public"]["Enums"]["bureau"] | null
+          new_division?: string | null
           new_role?: Database["public"]["Enums"]["app_role"] | null
           old_active?: boolean | null
-          old_division?: Database["public"]["Enums"]["bureau"] | null
+          old_division?: string | null
           old_role?: Database["public"]["Enums"]["app_role"] | null
           reason?: string | null
           source?: string | null
@@ -13075,7 +13075,7 @@ export type Database = {
         | "deputy_director"
       assign_role: "primary" | "support"
       bench_type: "street" | "organized"
-      bureau: "LSB" | "BCB" | "SAB" | "JTF"
+      bureau: "major_crimes" | "street_crimes" | "special_investigations" | "JTF"
       case_status: "open" | "active" | "cold" | "closed"
       density: "low" | "medium" | "high"
       doc_kind: "doc" | "sheet" | "pdf" | "zip"
@@ -13228,7 +13228,7 @@ export const Constants = {
       ],
       assign_role: ["primary", "support"],
       bench_type: ["street", "organized"],
-      bureau: ["LSB", "BCB", "SAB", "JTF"],
+      bureau: ["major_crimes", "street_crimes", "special_investigations", "JTF"],
       case_status: ["open", "active", "cold", "closed"],
       density: ["low", "medium", "high"],
       doc_kind: ["doc", "sheet", "pdf", "zip"],

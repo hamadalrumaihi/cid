@@ -150,7 +150,7 @@ function FieldAccessForm() {
   return (
     <div className="mt-3 space-y-2">
       <p className="text-xs text-slate-400">
-        This gives you a way to send information and evidence to CID/SIU. It does not
+        This gives you a way to send information and evidence to CID/SIB. It does not
         give access to case files or the intelligence database.
       </p>
       <select value={f.agency} onChange={(e) => setF({ ...f, agency: e.target.value })}

@@ -4,7 +4,7 @@
  *  Background: assign_ada_to_bureau's replace path ends the live
  *  primary/acting assignment for a bureau. Because the RLS suites exercise
  *  routing against the real bureaus, fixture-initiated replaces repeatedly
- *  terminated a REAL prosecutor's SAB assignment in production (2026-07-14
+ *  terminated a REAL prosecutor's assignment (then-SAB) in production (2026-07-14
  *  through 2026-07-17), leaving submitted warrants with no routing owner.
  *  The server now refuses fixture actors (profiles.is_test) that would end
  *  or replace a non-fixture assignment; fixture-vs-fixture stays legal so
@@ -89,7 +89,7 @@ describe.skipIf(!enabled)('v1.40 — prosecutor-assignment fixture guard (live)'
     const realPrimary = realLive.find((a) => a.assignment_type === 'primary')
     if (!realPrimary) { ctx.skip(); return }
     const r = await da.rpc('assign_ada_to_bureau', {
-      p_prosecutor: adaSabId, p_bureau: realPrimary.bureau as 'LSB', p_type: 'primary',
+      p_prosecutor: adaSabId, p_bureau: realPrimary.bureau as 'major_crimes', p_type: 'primary',
       p_note: '[rls-test] v140 must fail',
     })
     expect(r.error).not.toBeNull()
@@ -116,7 +116,7 @@ describe.skipIf(!enabled)('v1.40 — prosecutor-assignment fixture guard (live)'
     // Pick a bureau with no live real primary so the positive path never
     // touches real coverage.
     const takenByReal = new Set(realLive.filter((a) => a.assignment_type === 'primary').map((a) => a.bureau))
-    const bureau = (['LSB', 'BCB', 'SAB'] as const).find((b) => !takenByReal.has(b))
+    const bureau = (['major_crimes', 'street_crimes'] as const).find((b) => !takenByReal.has(b))
     expect(bureau).toBeTruthy()
     const first = await da.rpc('assign_ada_to_bureau', {
       p_prosecutor: adaSabId, p_bureau: bureau!, p_type: 'primary', p_note: '[rls-test] v140 fixture primary',

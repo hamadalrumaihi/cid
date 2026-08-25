@@ -7,7 +7,7 @@
  *    RR_SHOTS=1 PW_SUPABASE_SHIM=1 npx playwright test \
  *      tests/e2e/records-requests-shots.spec.ts --workers=1
  *
- *  Fixtures ride on legalFixtures (a real LSB case + person + a warrant in
+ *  Fixtures ride on legalFixtures (a real Major Crimes case + person + a warrant in
  *  the shared prosecutor queue — the minimal-DOJ revival, migration
  *  20260816120000, means no ISSUED warrant is reachable without the DOJ
  *  fixture accounts; the D3 execution/seized-items shot is skipped until they

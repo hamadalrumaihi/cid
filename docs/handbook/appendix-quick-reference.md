@@ -35,7 +35,7 @@ rollback via Vercel dashboard → Deployments → Rollback).
 | Member | detective, senior_detective | ✓ | ✗ |
 | Command | bureau_lead, deputy_director, director | ✓ | ✓ |
 
-Bureaus: `LSB` · `BCB` · `SAB` · `JTF`. Sign-off chain:
+Bureaus: `major_crimes` (MCB) · `street_crimes` (SCB) · `special_investigations` (SIB, appointment-only) · `JTF` (temporary joint designation). Sign-off chain:
 bureau_lead → deputy_director → director.
 
 ## The db.ts contract

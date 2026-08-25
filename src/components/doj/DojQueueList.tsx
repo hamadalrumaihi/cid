@@ -6,6 +6,7 @@
  *  Sealed rows follow the existing list convention — number + type only,
  *  never a title or target (RLS already trimmed who sees the row at all). */
 import { useState } from 'react'
+import { bureauShort } from '@/lib/roles'
 import { timeAgo } from '@/lib/format'
 import type { LegalRequest } from '@/lib/justice'
 import { humanize } from '@/lib/legalWorkflow'
@@ -61,7 +62,7 @@ export function DojQueueList({ rows, onOpen, ageOf, ageLabel = 'waiting', action
               {!sealed && r.case_number_snapshot && (
                 <span className="font-mono text-xs tabular-nums text-slate-300">{r.case_number_snapshot}</span>
               )}
-              {r.responsible_bureau && <Badge tone="neutral">{r.responsible_bureau}</Badge>}
+              {r.responsible_bureau && <Badge tone="neutral">{bureauShort(r.responsible_bureau)}</Badge>}
               {r.classification !== 'standard' && <ClassificationBadge value={r.classification} />}
             </button>
             <span className="flex-shrink-0 text-xs text-slate-400" title={at ?? undefined}>

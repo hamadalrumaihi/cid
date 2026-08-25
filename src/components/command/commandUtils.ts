@@ -67,8 +67,10 @@ export const fmtAvgDays = (avg: number | null): string =>
 // but 20260913120000 revoked insert/update/delete from `authenticated`, so
 // nothing can create a ticket any more. Field Intelligence Review replaced it.
 //
-// The agency -> bureau mapping these held (LSPD->LSB, BCSO->BCB, SAHP->SAB) now
-// lives where it is actually used: FIELD_AGENCIES in src/lib/fieldOfficers.ts.
+// The agency list these held (LSPD/BCSO/SAHP — external field agencies, not
+// CID bureaus) now lives where it is actually used: FIELD_AGENCIES in
+// src/lib/fieldOfficers.ts. The old agency -> bureau routing died with the
+// bureau restructure (all active CID members see all field submissions).
 
 /* ---- Raid compensation (core.js:25-32) ------------------------------------ */
 export const BRACKETS = [

@@ -15,6 +15,7 @@ import { rpc } from '@/lib/db'
 import { fmtDate } from '@/lib/format'
 import type { LegalRequest } from '@/lib/justice'
 import { CID_ROUTING_BUREAUS } from '@/lib/legalWorkflow'
+import { bureauLabel, bureauShort } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
 import { SectionHeader } from '@/components/ui/PageHeader'
@@ -89,7 +90,7 @@ export function DojWorkspace({ view, role, myId, lists, requests, onOpen, reload
   const [assignBusy, setAssignBusy] = useState(false)
   // Bureau queues (20260818120000): a prosecutor works their home bureau +
   // live coverage (the server already filters visibility — these chips only
-  // LABEL the queue); the AG oversees all three queues, grouped by bureau.
+  // LABEL the queue); the AG oversees every bureau queue, grouped by bureau.
   const scope = useMyBureauScope()
 
   /** Run a definer RPC; a conflict/recusal refusal raises the banner with the
@@ -155,15 +156,15 @@ export function DojWorkspace({ view, role, myId, lists, requests, onOpen, reload
             <SectionHeader
               title={role === 'attorney_general' ? 'Prosecutor queues' : 'Prosecutor queue'}
               subtitle={role === 'attorney_general'
-                ? 'All three bureau queues, oldest first. Assignment is yours; sealed requests reach the bench only through you.'
+                ? 'Every bureau queue, oldest first. Assignment is yours; sealed requests reach the bench only through you.'
                 : 'Your bureau queue (home + any temporary coverage), oldest first. Claiming is atomic — if a request vanishes, a colleague claimed it first.'}
             />
             {role === 'prosecutor' && (scope.home || scope.coverage.length > 0) && (
               <div className="flex flex-wrap items-center gap-1.5" aria-label="Your bureau coverage">
-                {scope.home && <Badge tone="good">Home: {scope.home}</Badge>}
+                {scope.home && <Badge tone="good">Home: {bureauShort(scope.home)}</Badge>}
                 {scope.coverage.map((c) => (
                   <Badge key={c.id} tone="warn">
-                    Coverage: {c.bureau}{c.expires_at ? ` until ${fmtDate(c.expires_at)}` : ''}
+                    Coverage: {bureauShort(c.bureau)}{c.expires_at ? ` until ${fmtDate(c.expires_at)}` : ''}
                   </Badge>
                 ))}
               </div>
@@ -175,7 +176,7 @@ export function DojWorkspace({ view, role, myId, lists, requests, onOpen, reload
                   return (
                     <section key={b} className="space-y-2">
                       <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
-                        {b} queue
+                        {bureauLabel(b)} queue
                         <span className="rounded bg-white/10 px-1.5 text-[10px] font-bold text-slate-300">{rows.length}</span>
                       </h3>
                       <DojQueueList
@@ -183,7 +184,7 @@ export function DojWorkspace({ view, role, myId, lists, requests, onOpen, reload
                         onOpen={onOpen}
                         ageOf={(r) => r.queue_entered_at ?? r.submitted_to_doj_at}
                         ageLabel="queued"
-                        empty={`The ${b} queue is empty.`}
+                        empty={`The ${bureauLabel(b)} queue is empty.`}
                         action={queueAction}
                       />
                     </section>

@@ -51,7 +51,7 @@ import {
 
 const profile = (over: Partial<Profile> = {}): Profile => ({
   id: 'u1', display_name: 'Officer', avatar_url: null, badge_number: '101',
-  division: 'SAB', role: 'detective', active: true,
+  division: 'major_crimes', role: 'detective', active: true,
   created_at: '2026-01-01', updated_at: '2026-01-01',
   loa: false, loa_since: null, discord_id: null, is_owner: false,
   login_denied: false, login_denied_reason: null,
@@ -459,7 +459,7 @@ describe('department model — one platform, two departments', () => {
     expect(caseDepartment({})).toBe('cid')
 
     expect(termsFor('siu').lead).toBe('Lead Agent')
-    expect(termsFor('siu').caseHeading).toBe('SIU INVESTIGATION')
+    expect(termsFor('siu').caseHeading).toBe('SIB INVESTIGATION')
     expect(termsFor('cid').lead).toBe('Lead Detective')
     expect(termsFor('cid').caseHeading).toBe('CID CASE')
     // An unknown/absent authority reads as CID rather than throwing.
@@ -551,9 +551,9 @@ describe('display helpers', () => {
   })
 
   it('falls back to the base level for an unknown classification', () => {
-    expect(siuClassificationLabel('siu_restricted')).toBe('SIU Restricted')
-    expect(siuClassificationLabel('nonsense')).toBe('SIU')
-    expect(siuClassificationLabel(null)).toBe('SIU')
+    expect(siuClassificationLabel('siu_restricted')).toBe('SIB Restricted')
+    expect(siuClassificationLabel('nonsense')).toBe('SIB')
+    expect(siuClassificationLabel(null)).toBe('SIB')
   })
 
   it('shows an unrecognised audit action rather than dropping the row', () => {

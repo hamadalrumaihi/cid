@@ -10,6 +10,7 @@ import type { Tables } from '@/lib/database.types'
 import { insert, list, update, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
+import { bureauShort } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -80,7 +81,7 @@ export function ShiftsView() {
               <Card key={s.id}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <span className="font-mono text-sm font-semibold text-blue-300">{s.bureau}</span>
+                    <span className="font-mono text-sm font-semibold text-blue-300">{bureauShort(s.bureau)}</span>
                     {' · '}
                     <span className="text-sm text-white">{s.author_name || 'Officer'}</span>
                     <span className="ml-1 text-[11px] text-slate-400">week of {s.week_start}</span>
@@ -193,7 +194,7 @@ function ShiftModal({ record, onClose, onSaved }: { record: ShiftRow | null; onC
         </div>
         <div className="sm:col-span-2">
           <label htmlFor="shift-cases" className={labelCls}>Cases worked</label>
-          <input id="shift-cases" value={casesWorked} onChange={(e) => setCasesWorked(e.target.value)} placeholder="SAB-900001, SAB-900007 …" className={inputCls} />
+          <input id="shift-cases" value={casesWorked} onChange={(e) => setCasesWorked(e.target.value)} placeholder="MCB-4000001, SCB-5000007 …" className={inputCls} />
         </div>
         <div>
           <label htmlFor="shift-evidence" className={labelCls}>Evidence collected (#)</label>

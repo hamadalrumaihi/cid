@@ -9,32 +9,32 @@
  *  the trg_sync_case_operation_link trigger; JTF lifecycle is RPC-only.
  *
  *  Pins (§authorization matrix):
- *   - baseline: an unlinked LSB case is invisible to the BCB detective;
+ *   - baseline: an unlinked MCB case is invisible to the SCB detective;
  *   - direct inserts are guarded: a detective-created operation is stamped
  *     normal + creator's bureau, and op_type/lead_bureau cannot be set or
  *     changed by direct writes (column freeze);
  *   - operation_convert_to_jtf is command-only (detective call rejected);
- *   - after conversion (LSB lead, LSB+BCB participants) and the creator
- *     linking their case: the BCB detective CAN read the linked LSB case and
- *     its reports — and still CANNOT read the unlinked sibling LSB case;
- *   - a same-bureau NON-managing detective (target, LSB) cannot link a case
+ *   - after conversion (MCB lead, MCB+SCB participants) and the creator
+ *     linking their case: the SCB detective CAN read the linked MCB case and
+ *     its reports — and still CANNOT read the unlinked sibling MCB case;
+ *   - a same-bureau NON-managing detective (target, MCB) cannot link a case
  *     they neither lead nor created (trigger rejects);
- *   - the BCB detective links their OWN BCB case (creator authority) without
+ *   - the SCB detective links their OWN SCB case (creator authority) without
  *     any lead-bureau involvement;
  *   - search_all follows the wall (SECURITY INVOKER): the linked case is
- *     findable by the BCB detective, the unlinked one is not;
- *   - RESOLUTION: status → resolved ends BCB's access but KEEPS
+ *     findable by the SCB detective, the unlinked one is not;
+ *   - RESOLUTION: status → resolved ends SCB's access but KEEPS
  *     cases.operation_id, the active link rows, and was_jtf (historical
  *     joint marker survives closure);
  *   - MANUAL REMOVAL (after reactivation): unlinking stamps removed_at/by
  *     and access ends, but the was_jtf history row remains;
  *   - STRICTER WALLS: a legal-request draft on the linked case stays
- *     invisible to the op-joint BCB viewer (can_view_legal_request is its
+ *     invisible to the op-joint SCB viewer (can_view_legal_request is its
  *     own wall — JTF access never overrides it).
  *
- *  Fixtures (tests/rls/README.md): lsb (LSB detective, case creator), bcb
- *  (BCB detective), target (throwaway LSB detective — the non-managing
- *  linker), lead (LSB bureau_lead), director (SAB director — command for
+ *  Fixtures (tests/rls/README.md): lsb (MCB detective, case creator), bcb
+ *  (SCB detective), target (throwaway MCB detective — the non-managing
+ *  linker), lead (MCB bureau_lead), director (major_crimes director — command for
  *  conversion/lifecycle). rls_test_cleanup() runs at start AND teardown; the
  *  20260810120000 re-emit sweeps test-created operations too (bureau/link
  *  children cascade). Requires migration 20260810120000 applied. */
@@ -63,9 +63,9 @@ describe.skipIf(!enabled)('v1.38 — JTF operations: operation-scoped joint acce
   let targetId = ''
   const tag = Math.random().toString(36).slice(2, 8).toUpperCase()
   let opId = ''       // the operation under test (director-created)
-  let caseAId = ''    // LSB case, linked to the op
-  let caseBId = ''    // LSB case, NEVER linked — the isolation control
-  let caseCId = ''    // BCB case, linked by its own creator
+  let caseAId = ''    // MCB case, linked to the op
+  let caseBId = ''    // MCB case, NEVER linked — the isolation control
+  let caseCId = ''    // SCB case, linked by its own creator
   let reportId = ''   // report on case A — child-resource pin
   let legalId = ''    // legal draft on case A — stricter-wall pin
 
@@ -88,22 +88,22 @@ describe.skipIf(!enabled)('v1.38 — JTF operations: operation-scoped joint acce
     }
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
-    const base = await resetTarget('detective', 'LSB')
+    const base = await resetTarget('detective', 'major_crimes')
     if (base.error) throw new Error(`target baseline failed: ${base.error.message}`)
 
-    // Fixture cases: two LSB (creator: lsb), one BCB (creator: bcb).
+    // Fixture cases: two MCB (creator: lsb), one SCB (creator: bcb).
     const a = await lsb.from('cases')
-      .insert({ case_number: `V138A-${tag}`, title: '[rls-test] v138 linked case', bureau: 'LSB' })
+      .insert({ case_number: `V138A-${tag}`, title: '[rls-test] v138 linked case', bureau: 'major_crimes' })
       .select('id')
     if (a.error) throw new Error(`case A: ${a.error.message}`)
     caseAId = a.data![0].id
     const b = await lsb.from('cases')
-      .insert({ case_number: `V138B-${tag}`, title: '[rls-test] v138 unlinked case', bureau: 'LSB' })
+      .insert({ case_number: `V138B-${tag}`, title: '[rls-test] v138 unlinked case', bureau: 'major_crimes' })
       .select('id')
     if (b.error) throw new Error(`case B: ${b.error.message}`)
     caseBId = b.data![0].id
     const c = await bcb.from('cases')
-      .insert({ case_number: `V138C-${tag}`, title: '[rls-test] v138 bcb case', bureau: 'BCB' })
+      .insert({ case_number: `V138C-${tag}`, title: '[rls-test] v138 bcb case', bureau: 'street_crimes' })
       .select('id')
     if (c.error) throw new Error(`case C: ${c.error.message}`)
     caseCId = c.data![0].id
@@ -125,7 +125,7 @@ describe.skipIf(!enabled)('v1.38 — JTF operations: operation-scoped joint acce
 
   afterAll(async () => {
     if (!lsb) return
-    if (director && targetId) await resetTarget('detective', 'LSB')
+    if (director && targetId) await resetTarget('detective', 'major_crimes')
     // Cleanup sweeps rls-test cases AND operations (20260810120000 re-emit);
     // operation_bureaus / operation_case_links cascade with their parents.
     const { data, error } = await lsb.rpc('rls_test_cleanup')
@@ -136,7 +136,7 @@ describe.skipIf(!enabled)('v1.38 — JTF operations: operation-scoped joint acce
 
   /* ── 0. baseline + direct-write guards ─────────────────────────────────── */
 
-  it('baseline: the BCB detective cannot see either LSB case', async () => {
+  it('baseline: the SCB detective cannot see either MCB case', async () => {
     for (const id of [caseAId, caseBId]) {
       const r = await bcb.from('cases').select('id').eq('id', id)
       expect(r.error).toBeNull()
@@ -146,16 +146,16 @@ describe.skipIf(!enabled)('v1.38 — JTF operations: operation-scoped joint acce
 
   it('a detective-created operation is stamped normal + creator bureau; jtf fields cannot be set directly', async () => {
     const ins = await lsb.from('operations')
-      .insert({ name: `[rls-test] v138 det op ${tag}`, op_type: 'jtf', lead_bureau: 'LSB' })
+      .insert({ name: `[rls-test] v138 det op ${tag}`, op_type: 'jtf', lead_bureau: 'major_crimes' })
       .select('id, op_type, bureau, lead_bureau')
     expect(ins.error).toBeNull()
     // Guard: direct insert can never mint a JTF op or a lead bureau.
-    expect(ins.data![0]).toMatchObject({ op_type: 'normal', bureau: 'LSB', lead_bureau: null })
+    expect(ins.data![0]).toMatchObject({ op_type: 'normal', bureau: 'major_crimes', lead_bureau: null })
   })
 
   it('operation_convert_to_jtf is command-only', async () => {
     const r = await lsb.rpc('operation_convert_to_jtf', {
-      p_op: opId, p_lead: 'LSB', p_bureaus: ['LSB', 'BCB'],
+      p_op: opId, p_lead: 'major_crimes', p_bureaus: ['major_crimes', 'street_crimes'],
     })
     expect(r.error).not.toBeNull()
     expect(r.error!.message).toMatch(/command/i)
@@ -163,20 +163,20 @@ describe.skipIf(!enabled)('v1.38 — JTF operations: operation-scoped joint acce
 
   /* ── 1. conversion + linking ───────────────────────────────────────────── */
 
-  it('director converts to JTF (LSB lead, LSB+BCB); participation rows appear', async () => {
+  it('director converts to JTF (MCB lead, MCB+SCB); participation rows appear', async () => {
     const r = await director.rpc('operation_convert_to_jtf', {
-      p_op: opId, p_lead: 'LSB', p_bureaus: ['LSB', 'BCB'],
+      p_op: opId, p_lead: 'major_crimes', p_bureaus: ['major_crimes', 'street_crimes'],
     })
     expect(r.error).toBeNull()
-    expect(r.data).toMatchObject({ op_type: 'jtf', lead_bureau: 'LSB' })
+    expect(r.data).toMatchObject({ op_type: 'jtf', lead_bureau: 'major_crimes' })
     const parts = await lsb.from('operation_bureaus')
       .select('bureau, left_at').eq('operation_id', opId).is('left_at', null)
     expect(parts.error).toBeNull()
-    expect((parts.data ?? []).map((x) => x.bureau).sort()).toEqual(['BCB', 'LSB'])
+    expect((parts.data ?? []).map((x) => x.bureau).sort()).toEqual(['street_crimes', 'major_crimes'])
   })
 
   it('a non-managing same-bureau detective cannot link someone else’s case', async () => {
-    // target is an LSB detective with bureau access to case B, but is neither
+    // target is an MCB detective with bureau access to case B, but is neither
     // its lead nor creator nor command — the sync trigger rejects the link.
     const r = await target.from('cases').update({ operation_id: opId }).eq('id', caseBId).select('id')
     expect(r.error).not.toBeNull()
@@ -196,11 +196,11 @@ describe.skipIf(!enabled)('v1.38 — JTF operations: operation-scoped joint acce
 
   /* ── 2. the wall: operation-scoped access ──────────────────────────────── */
 
-  it('the BCB detective now reads the LINKED case A — and its reports', async () => {
+  it('the SCB detective now reads the LINKED case A — and its reports', async () => {
     const r = await bcb.from('cases').select('id, case_number, bureau').eq('id', caseAId)
     expect(r.error).toBeNull()
     expect(r.data).toHaveLength(1)
-    expect(r.data![0].bureau).toBe('LSB') // ownership never moved
+    expect(r.data![0].bureau).toBe('major_crimes') // ownership never moved
     const rep = await bcb.from('reports').select('id').eq('id', reportId)
     expect(rep.error).toBeNull()
     expect(rep.data).toHaveLength(1)
@@ -212,7 +212,7 @@ describe.skipIf(!enabled)('v1.38 — JTF operations: operation-scoped joint acce
     expect(r.data ?? []).toHaveLength(0)
   })
 
-  it('search_all follows the same wall for the BCB viewer', async () => {
+  it('search_all follows the same wall for the SCB viewer', async () => {
     const hitA = await bcb.rpc('search_all', { q: `V138A-${tag}` })
     expect(hitA.error).toBeNull()
     expect((hitA.data ?? []).some((x: { kind: string; id: string }) => x.kind === 'case' && x.id === caseAId)).toBe(true)
@@ -221,11 +221,11 @@ describe.skipIf(!enabled)('v1.38 — JTF operations: operation-scoped joint acce
     expect((hitB.data ?? []).some((x: { id: string }) => x.id === caseBId)).toBe(false)
   })
 
-  it('the BCB creator adds their OWN case without lead-bureau involvement', async () => {
+  it('the SCB creator adds their OWN case without lead-bureau involvement', async () => {
     const r = await bcb.from('cases').update({ operation_id: opId }).eq('id', caseCId).select('id, operation_id')
     expect(r.error).toBeNull()
     expect(r.data![0].operation_id).toBe(opId)
-    // Now the LSB detective (participating bureau) can read the BCB case.
+    // Now the MCB detective (participating bureau) can read the SCB case.
     const x = await lsb.from('cases').select('id').eq('id', caseCId)
     expect(x.error).toBeNull()
     expect(x.data).toHaveLength(1)
@@ -302,9 +302,9 @@ describe.skipIf(!enabled)('v1.38 — JTF operations: operation-scoped joint acce
   /* ── 6. lifecycle guard rails ──────────────────────────────────────────── */
 
   it('direct updates cannot flip a JTF operation back to normal (column freeze)', async () => {
-    const up = await director.from('operations').update({ op_type: 'normal', lead_bureau: 'BCB' }).eq('id', opId).select('op_type, lead_bureau')
+    const up = await director.from('operations').update({ op_type: 'normal', lead_bureau: 'street_crimes' }).eq('id', opId).select('op_type, lead_bureau')
     expect(up.error).toBeNull()
-    expect(up.data![0]).toMatchObject({ op_type: 'jtf', lead_bureau: 'LSB' })
+    expect(up.data![0]).toMatchObject({ op_type: 'jtf', lead_bureau: 'major_crimes' })
   })
 
   it('a plain detective cannot update a JTF operation at all (RLS)', async () => {
@@ -314,16 +314,16 @@ describe.skipIf(!enabled)('v1.38 — JTF operations: operation-scoped joint acce
   })
 
   it('removing a bureau with linked cases is refused; after unlink it succeeds and history stays', async () => {
-    const no = await director.rpc('operation_remove_bureau', { p_op: opId, p_bureau: 'BCB' })
+    const no = await director.rpc('operation_remove_bureau', { p_op: opId, p_bureau: 'street_crimes' })
     expect(no.error).not.toBeNull()
     expect(no.error!.message).toMatch(/linked case/i)
 
     const un = await bcb.from('cases').update({ operation_id: null }).eq('id', caseCId)
     expect(un.error).toBeNull()
-    const ok = await director.rpc('operation_remove_bureau', { p_op: opId, p_bureau: 'BCB', p_reason: 'v138 teardown' })
+    const ok = await director.rpc('operation_remove_bureau', { p_op: opId, p_bureau: 'street_crimes', p_reason: 'v138 teardown' })
     expect(ok.error).toBeNull()
     const hist = await lsb.from('operation_bureaus')
-      .select('bureau, left_at').eq('operation_id', opId).eq('bureau', 'BCB')
+      .select('bureau, left_at').eq('operation_id', opId).eq('bureau', 'street_crimes')
     expect(hist.error).toBeNull()
     expect(hist.data).toHaveLength(1)
     expect(hist.data![0].left_at).not.toBeNull() // history kept, not deleted

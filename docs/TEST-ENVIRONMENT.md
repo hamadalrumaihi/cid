@@ -9,7 +9,7 @@
 > `e2e-visual` CI job self-skips without `TEST_*` secrets and is
 > `continue-on-error`, so nothing in CI depends on any of this today.
 >
-> **Adding a feature to production creates no obligation here.** Shipping SIU
+> **Adding a feature to production creates no obligation here.** Shipping SIB
 > (or anything else) to `cid` does not mean a test database must be built or
 > refreshed. The only trigger for provisioning is deciding to run the
 > destructive suites in §2/§3 below.
@@ -77,7 +77,7 @@ nothing, so removing them cost nothing.
 **The rule.** A row is deleted only if it is fixture-owned **and** deleting it
 cannot alter a record belonging to someone else. Reports and surveillance rows
 live *inside* a case, so they are case-scoped. Operations are top-level and
-fixture-created, so they are cleanup's. SIU rows go the other way deliberately:
+fixture-created, so they are cleanup's. SIB rows go the other way deliberately:
 a fixture-authored `siu_case_note` or `siu_disclosure` on a real case is
 invisible to CID, so leaving it means live, division-visible test intelligence —
 strictly worse than removing it, and it has no real co-author. Those are deleted
@@ -105,17 +105,17 @@ Verified live, in rolled-back transactions:
 ### Residual: fixture accounts with production authority
 
 Two fixtures hold real authority in `cid`, by design, and both are worth
-knowing about now that the SIU release gate is open:
+knowing about now that the SIB release gate is open:
 
 - **`rls-test-owner@cidportal.test` carries `profiles.is_owner`.** It therefore
   satisfies `private.is_owner()` and can call `public.siu_set_release()` — a
-  test fixture can open or close the production SIU release gate, and holds
-  `owner` SIU standing unconditionally. This is **pre-existing and
+  test fixture can open or close the production SIB release gate, and holds
+  `owner` SIB standing unconditionally. This is **pre-existing and
   load-bearing**: the entire v166/v167 owner lane is built on it. Narrowing it
   means giving those suites another route to owner paths — a design decision,
   not a patch. Whoever holds `RLS_TEST_PASSWORD_OWNER` holds this.
 - **`rls-test-director@cidportal.test` was silently armed** by the SOP chain
-  change, which granted every active `role = 'director'` profile SIU oversight
+  change, which granted every active `role = 'director'` profile SIB oversight
   *ex officio* — and oversight carries appointment authority. Closed by
   migration `20260829120000`: both ex-officio branches (Director, Attorney
   General) now require `not profiles.is_test`. Deliberate grants — an explicit
@@ -135,7 +135,7 @@ kind rather than dependency order, it is not replayed by `supabase db reset`,
 and its grants/ACL sections are comments rather than statements. Concretely, it
 carries **none** of the ten `private.siu_*` predicate function bodies or any
 `public.siu_*` RPC — only the policies that call them — so a snapshot rebuild
-fails at the first SIU policy.
+fails at the first SIB policy.
 
 The authoritative rebuild is a replay of `supabase/migrations/*.sql` in
 timestamp order. The set is self-sufficient: it starts from the full platform

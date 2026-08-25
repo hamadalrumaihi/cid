@@ -86,8 +86,8 @@ describe.skipIf(!enabled)('v1.72 — designating and recording (live)', () => {
     siuCase = s.data as string
 
     const c = await lsb.from('cases').insert({
-      case_number: `LSB-${Date.now().toString().slice(-6)}`,
-      title: tag('cid case under concern'), bureau: 'LSB',
+      case_number: `MCB-${Date.now().toString().slice(-6)}`,
+      title: tag('cid case under concern'), bureau: 'major_crimes',
     }).select('id').single()
     expect(c.error, c.error?.message).toBeNull()
     cidCase = c.data!.id as string

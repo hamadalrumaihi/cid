@@ -13,7 +13,7 @@ import { CaseProvenance } from '../CaseProvenance'
 import { useAuth } from '@/lib/auth'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useAction } from '@/lib/useAction'
-import { bureauLabel, roleLabel } from '@/lib/roles'
+import { bureauLabel, bureauShort, roleLabel } from '@/lib/roles'
 import { useTableVersion } from '@/lib/realtime'
 import type { CaseAssessment, ClosureChecklistItem, NextAction } from '@/lib/caseWorkflow'
 import { isJtfAssigned, isRoutingBureau } from '@/lib/legalWorkflow'
@@ -125,7 +125,7 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
               <div className="flex items-start justify-between gap-3 py-0.5">
                 <span className="text-xs uppercase tracking-[0.16em] text-slate-500">Responsible bureau</span>
                 {isRoutingBureau(c.originating_bureau)
-                  ? <span className="text-right text-sm text-slate-200">{c.originating_bureau} — routes legal requests</span>
+                  ? <span className="text-right text-sm text-slate-200">{bureauShort(c.originating_bureau)} — routes legal requests</span>
                   : <span className="text-right text-sm text-amber-300">Not set — required for legal routing</span>}
               </div>
             </div>

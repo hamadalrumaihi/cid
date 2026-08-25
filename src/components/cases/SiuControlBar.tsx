@@ -1,11 +1,11 @@
 'use client'
 
-/** §14 — assuming and releasing SIU control of a case, plus the §15 export
- *  control on an SIU investigation.
+/** §14 — assuming and releasing SIB control of a case, plus the §15 export
+ *  control on an SIB investigation.
  *
- *  Renders nothing without SIU command standing, so an ordinary CID member
+ *  Renders nothing without SIB command standing, so an ordinary CID member
  *  never sees a control they cannot use, and — more importantly — a case that
- *  SIU has never touched is visually identical to any other case.
+ *  SIB has never touched is visually identical to any other case.
  *
  *  Nothing here is the security boundary. `siu_assume_control` and
  *  `siu_release_control` both re-check authority server-side, and the two
@@ -59,15 +59,15 @@ export function SiuControlBar({ caseRow, onChanged }: { caseRow: CaseRow; onChan
 
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-xl border border-violet-500/20 bg-violet-500/[0.03] px-4 py-2.5">
-      <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-300">SIU Command</span>
+      <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-300">SIB Command</span>
 
       {!isSiu && (
         <>
           <span className="text-xs text-slate-300">
-            This is a CID case. SIU can assume control of it without moving, copying or renumbering anything.
+            This is a CID case. SIB can assume control of it without moving, copying or renumbering anything.
           </span>
           <Button size="sm" variant="primary" className="ml-auto" onClick={() => setTaking(true)}>
-            Assume SIU control
+            Assume SIB control
           </Button>
         </>
       )}
@@ -84,7 +84,7 @@ export function SiuControlBar({ caseRow, onChanged }: { caseRow: CaseRow; onChan
 
       {isSiu && !wasAssumed && (
         <span className="text-xs text-slate-400">
-          Opened by SIU. A natively-SIU investigation is never handed to CID wholesale — release a
+          Opened by SIB. A natively-SIB investigation is never handed to CID wholesale — release a
           specific item instead.
         </span>
       )}
@@ -104,7 +104,7 @@ export function SiuControlBar({ caseRow, onChanged }: { caseRow: CaseRow; onChan
   )
 }
 
-/** §15/§17/§32/§33 — stage, category, closure and recusal on an SIU
+/** §15/§17/§32/§33 — stage, category, closure and recusal on an SIB
  *  investigation.
  *
  *  Separate from SiuControlBar because the audiences differ. Promotion,
@@ -236,7 +236,7 @@ function CloseModal({ caseRow, onClose, onDone }: {
     <Modal open onClose={onClose} dirty={() => !!note}>
       <ModalHeader title={`Close ${caseRow.case_number}`} onClose={onClose} />
       <div className="space-y-3">
-        <Field label="Reason" required hint="Every closed SIU investigation carries why, from a fixed list.">
+        <Field label="Reason" required hint="Every closed SIB investigation carries why, from a fixed list.">
           {(id) => (
             <Select id={id} value={reason} onChange={(e) => setReason(e.target.value)}>
               {SIU_CLOSURE_REASONS.map((r) => (
@@ -268,7 +268,7 @@ function CloseModal({ caseRow, onClose, onDone }: {
  *  restricted case, not wonder where it went.
  *
  *  What a grant actually confers is stated on screen every time, because the
- *  person clicking it is deciding to show a CID officer an SIU file and should
+ *  person clicking it is deciding to show a CID officer an SIB file and should
  *  not have to remember the boundary. `private.siu_temp_access()` is spliced
  *  into can_access_case()/_row() and never into siu_case_access(), so the
  *  holder gets the case file and no tradecraft table at all. */
@@ -342,7 +342,7 @@ function SiuSupportingAccess({ caseRow }: { caseRow: CaseRow }) {
       )}
 
       {!live.length ? (
-        standard && <p className="mt-2 text-[11px] text-slate-500">Nobody outside SIU has access.</p>
+        standard && <p className="mt-2 text-[11px] text-slate-500">Nobody outside SIB has access.</p>
       ) : (
         <ul className="mt-2 space-y-1.5">
           {live.map((t) => (
@@ -412,8 +412,8 @@ function GrantAccessModal({ caseRow, people, onClose, onDone }: {
           <ul className="mt-1 list-disc space-y-0.5 pl-4 text-amber-200/80">
             <li>This investigation only — its reports, evidence, media and tasks.</li>
             <li><strong>Not</strong> sources, undercover operations, financial or communications
-              intelligence, integrity reviews, targets, disclosures or SIU intelligence notes.</li>
-            <li>No SIU workspace, no roster, no other investigation, no SIU standing.</li>
+              intelligence, integrity reviews, targets, disclosures or SIB intelligence notes.</li>
+            <li>No SIB workspace, no roster, no other investigation, no SIB standing.</li>
             <li>Access ends automatically at the expiry date, and immediately if the
               investigation is reclassified above standard.</li>
           </ul>
@@ -463,7 +463,7 @@ function AssumeModal({ caseRow, onClose, onDone }: {
   const [busy, setBusy] = useState(false)
 
   const save = async () => {
-    if (!reason.trim()) { toast('Record why SIU is taking this case.', 'warn'); return }
+    if (!reason.trim()) { toast('Record why SIB is taking this case.', 'warn'); return }
     setBusy(true)
     const res = await rpc('siu_assume_control', {
       p_case: caseRow.id,
@@ -472,13 +472,13 @@ function AssumeModal({ caseRow, onClose, onDone }: {
     })
     setBusy(false)
     if (res.error) { toast(res.error.message, 'danger'); return }
-    toast('SIU control assumed.', 'success')
+    toast('SIB control assumed.', 'success')
     onDone()
   }
 
   return (
     <Modal open onClose={onClose} dirty={() => !!reason}>
-      <ModalHeader title={`Assume SIU control of ${caseRow.case_number}`} onClose={onClose} />
+      <ModalHeader title={`Assume SIB control of ${caseRow.case_number}`} onClose={onClose} />
       <div className="space-y-3">
         <Field label="Reason" required hint="Recorded on the case and in the audit log, against your name.">
           {(id) => (

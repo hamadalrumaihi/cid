@@ -23,7 +23,7 @@ import { AGENCY_LABEL, justiceRoleLabel, type JusticeAgency } from '@/lib/justic
 import { useJusticeRoster } from '@/lib/justiceRoster'
 import { useFieldStanding } from '@/lib/fieldStanding'
 import { useTableVersion } from '@/lib/realtime'
-import { PERMANENT_BUREAUS, ROLE_LABEL, ROLE_ORDER, bureauLabel, canApproveRequestedRole, roleLabel, type RoleParty } from '@/lib/roles'
+import { PERMANENT_BUREAUS, ROLE_LABEL, ROLE_ORDER, bureauLabel, bureauShort, canApproveRequestedRole, roleLabel, type RoleParty } from '@/lib/roles'
 import { signoffLabel, signoffTint } from '@/lib/signoff'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
@@ -49,7 +49,9 @@ type Bureau = RequestRow['requested_bureau']
 type Role = RequestRow['requested_role']
 type Decision = 'approve' | 'approve_with_changes' | 'request_correction' | 'reject'
 
-/** JTF is never a final assignment offered here — same list the applicant saw. */
+/** JTF (temporary joint-case designation) and SIB (appointed via the SIB
+ *  workflow) are never final assignments offered here — same list the
+ *  applicant saw. */
 const FINAL_BUREAUS = PERMANENT_BUREAUS as readonly Bureau[]
 
 const TITLE: Record<Decision, string> = {
@@ -464,7 +466,7 @@ export function ApprovalQueue() {
           <div className="space-y-2">
             {reviews.map((c) => (
               <button key={c.id} onClick={() => router.push(`/cases?case=${c.id}&tab=signoff`)} className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-ink-950/50 px-4 py-2.5 text-left transition hover:border-badge-400/50">
-                <div><p className="font-mono text-sm font-bold text-white">{c.case_number}</p><p className="text-[11px] text-slate-400">{c.title || 'Untitled'} · {c.bureau}</p></div>
+                <div><p className="font-mono text-sm font-bold text-white">{c.case_number}</p><p className="text-[11px] text-slate-400">{c.title || 'Untitled'} · {bureauShort(c.bureau)}</p></div>
                 <span className={`rounded px-2 py-0.5 text-[11px] font-bold ${signoffTint(c.signoff_status)}`}>{signoffLabel(c.signoff_status)}</span>
               </button>
             ))}

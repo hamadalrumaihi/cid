@@ -79,8 +79,8 @@ describe.skipIf(!enabled)('v1.67 — SIU takeover, disclosure and tradecraft (li
     await signInWithRetry(director, 'rls-test-director@cidportal.test', PW.director!)
 
     const c = await lsb.from('cases').insert({
-      case_number: `LSB-${Date.now().toString().slice(-6)}`,
-      title: tag('takeover subject'), bureau: 'LSB', summary: 'CID-owned.',
+      case_number: `MCB-${Date.now().toString().slice(-6)}`,
+      title: tag('takeover subject'), bureau: 'major_crimes', summary: 'CID-owned.',
     }).select('id').single()
     expect(c.error, c.error?.message).toBeNull()
     cidCase = c.data!.id as string
@@ -92,8 +92,8 @@ describe.skipIf(!enabled)('v1.67 — SIU takeover, disclosure and tradecraft (li
     cidReport = r.data!.id as string
 
     const o = await lsb.from('cases').insert({
-      case_number: `LSB-${(Date.now() + 1).toString().slice(-6)}`,
-      title: tag('unrelated'), bureau: 'LSB',
+      case_number: `MCB-${(Date.now() + 1).toString().slice(-6)}`,
+      title: tag('unrelated'), bureau: 'major_crimes',
     }).select('id').single()
     otherCase = o.data!.id as string
 
@@ -163,7 +163,7 @@ describe.skipIf(!enabled)('v1.67 — SIU takeover, disclosure and tradecraft (li
     expect(after.error, after.error?.message).toBeNull()
     expect(after.data!.case_authority).toBe('siu')
     expect(after.data!.siu_classification).toBe('siu_restricted')
-    expect(after.data!.bureau, 'the originating bureau is not rewritten').toBe('LSB')
+    expect(after.data!.bureau, 'the originating bureau is not rewritten').toBe('major_crimes')
     expect(after.data!.lead_detective_id, 'the CID lead detective is preserved').toBe(lsbId)
     expect(after.data!.siu_assumed_at).not.toBeNull()
     expect(after.data!.siu_assumption_reason).toContain('Integrity concern')
@@ -231,7 +231,7 @@ describe.skipIf(!enabled)('v1.67 — SIU takeover, disclosure and tradecraft (li
   })
 
   it('an unaddressed investigator sees nothing, and cannot acknowledge it', async () => {
-    // The Bureau Lead is not on the LSB case in this fixture set.
+    // The Bureau Lead is not on the MCB case in this fixture set.
     const theirs = await lead.rpc('siu_released_intelligence', { p_case: cidCase })
     const ids = ((theirs.data ?? []) as Array<{ id: string }>).map((r) => r.id)
     if (ids.includes(disclosureToCase)) {

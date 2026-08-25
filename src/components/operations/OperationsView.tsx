@@ -23,7 +23,7 @@ import {
   OPERATION_STATUSES, activeBureaus, canLinkCaseToOp, canManageOperation, canUnlinkCaseFromOp,
   isJtf, isOpEnded, operationTimeline, type OpBureauRow, type OpCaseLinkRow, type OpViewer,
 } from '@/lib/opsJoint'
-import { PERMANENT_BUREAUS, bureauLabel, deptLabel } from '@/lib/roles'
+import { PERMANENT_BUREAUS, bureauLabel, bureauShort } from '@/lib/roles'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { timeAgo } from '@/lib/format'
@@ -117,8 +117,8 @@ function OperationCard({ op, cases, onOpen }: { op: OperationRow; cases: OpsCase
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-1.5">
         {isJtf(op)
-          ? <Badge tint="bg-violet-500/15 text-violet-300">JTF{op.lead_bureau ? ` · Lead ${deptLabel(op.lead_bureau)}` : ''}</Badge>
-          : op.bureau && <Badge>{deptLabel(op.bureau)}</Badge>}
+          ? <Badge tint="bg-violet-500/15 text-violet-300">JTF{op.lead_bureau ? ` · Lead ${bureauShort(op.lead_bureau)}` : ''}</Badge>
+          : op.bureau && <Badge>{bureauShort(op.bureau)}</Badge>}
       </div>
       <p className="mt-2 line-clamp-3 min-h-[3.75rem] text-sm text-slate-400">{op.description || 'No description recorded.'}</p>
       <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-white/5">
@@ -243,16 +243,16 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <Badge tint={opStatusTint(op.status)} className="uppercase">{op.status}</Badge>
               {jtf
-                ? <Badge tint="bg-violet-500/15 text-violet-300">Joint Task Force · Lead {deptLabel(op.lead_bureau)}</Badge>
+                ? <Badge tint="bg-violet-500/15 text-violet-300">Joint Task Force · Lead {bureauShort(op.lead_bureau)}</Badge>
                 : op.bureau
-                  ? <Badge>{deptLabel(op.bureau)} operation</Badge>
+                  ? <Badge>{bureauShort(op.bureau)} operation</Badge>
                   : <Badge>Operation</Badge>}
             </div>
             <h1 className="text-2xl font-black text-white">{op.name}</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-300">{op.description || 'No description recorded.'}</p>
             {jtf && (
               <p className="mt-2 text-xs text-slate-500">
-                Cases linked here are joint for the participating bureaus. {deptLabel(op.lead_bureau)} coordinates the operation — linked cases keep their owning bureau and lead detective.
+                Cases linked here are joint for the participating bureaus. {bureauLabel(op.lead_bureau)} coordinates the operation — linked cases keep their owning bureau and lead detective.
               </p>
             )}
           </div>
@@ -280,7 +280,7 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
             {bureaus.filter((b) => !b.left_at).map((b) => (
               <div key={b.id} className="flex flex-wrap items-center gap-3 rounded-lg bg-ink-950/50 p-3">
                 <Badge tint={b.bureau === op.lead_bureau ? 'bg-violet-500/15 text-violet-300' : undefined}>
-                  {deptLabel(b.bureau)}{b.bureau === op.lead_bureau ? ' · LEAD' : ''}
+                  {bureauShort(b.bureau)}{b.bureau === op.lead_bureau ? ' · LEAD' : ''}
                 </Badge>
                 <span className="text-xs text-slate-500">
                   {bureauLabel(b.bureau)} — joined {timeAgo(b.joined_at)}{b.joined_by ? ` by ${officerName(b.joined_by)}` : ''}
@@ -315,7 +315,7 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
           <div className="mb-3 flex gap-2 rounded-lg bg-ink-900/50 p-3">
             <select value={pick} onChange={(e) => setPick(e.target.value)} className={`${CONTROL} min-w-0 flex-1`} aria-label="Link a case">
               <option value="">{jtf ? 'Add one of your cases to this JTF…' : 'Link a case…'}</option>
-              {linkable.map((c) => <option key={c.id} value={c.id}>{c.case_number} - {c.title}{jtf ? ` (${deptLabel(c.bureau)})` : ''}</option>)}
+              {linkable.map((c) => <option key={c.id} value={c.id}>{c.case_number} - {c.title}{jtf ? ` (${bureauShort(c.bureau)})` : ''}</option>)}
             </select>
             <Button variant="primary" onClick={() => void linkCase()}>{jtf ? 'Add Case' : 'Link'}</Button>
           </div>
@@ -329,7 +329,7 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
                   {jtf && <span className="rounded bg-violet-500/15 px-1.5 py-0.5 font-sans text-[10px] font-bold uppercase text-violet-300">Joint</span>}
                 </p>
                 <p className="font-semibold text-white">{c.title || 'Untitled case'}</p>
-                <p className="text-xs text-slate-500">{deptLabel(c.bureau)} - {c.status} - {officerName(c.lead_detective_id) || 'Unassigned'}</p>
+                <p className="text-xs text-slate-500">{bureauShort(c.bureau)} - {c.status} - {officerName(c.lead_detective_id) || 'Unassigned'}</p>
               </button>
               {canUnlinkCaseFromOp(viewer, c, op) && (
                 <button onClick={() => void unlink(c)} className="text-sm font-bold text-rose-300">{jtf ? 'Remove' : 'Unlink'}</button>
@@ -365,7 +365,7 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
             {personnel.map((p) => (
               <span key={p.name} className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200">
                 <span className="font-semibold">{p.name}</span>
-                <span className="text-slate-500">{deptLabel(p.bureau)} · {p.caseCount} case{p.caseCount === 1 ? '' : 's'}</span>
+                <span className="text-slate-500">{bureauShort(p.bureau)} · {p.caseCount} case{p.caseCount === 1 ? '' : 's'}</span>
               </span>
             ))}
           </div>

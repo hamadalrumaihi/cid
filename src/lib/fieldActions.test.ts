@@ -73,6 +73,6 @@ describe('vocabularies', () => {
   })
 
   it('offers exactly the bureaus a case can belong to', () => {
-    expect([...CASE_BUREAUS]).toEqual(['LSB', 'BCB', 'SAB', 'JTF'])
+    expect([...CASE_BUREAUS]).toEqual(['major_crimes', 'street_crimes', 'JTF'])
   })
 })

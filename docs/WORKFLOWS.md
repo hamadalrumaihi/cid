@@ -10,7 +10,7 @@ Roles: **Det** = Detective, **SrDet** = Senior Detective, **BL** = Bureau Lead, 
 
 ## 1. CID membership requests
 
-Migration [`20260713030000_membership_requests.sql`](../supabase/migrations/20260713030000_membership_requests.sql), tightened by the v1.16 unified matrix [`20260718010000_unified_role_policy.sql`](../supabase/migrations/20260718010000_unified_role_policy.sql). One request per applicant (`unique (applicant_id)`); requested bureau locked to LSB/BCB/SAB (JTF is never a permanent department); since v1.16 any normal CID role (detective … director) may be *requested* — requesting grants nothing.
+Migration [`20260713030000_membership_requests.sql`](../supabase/migrations/20260713030000_membership_requests.sql), tightened by the v1.16 unified matrix [`20260718010000_unified_role_policy.sql`](../supabase/migrations/20260718010000_unified_role_policy.sql). One request per applicant (`unique (applicant_id)`); requested bureau locked to the permanent bureaus — `major_crimes` / `street_crimes` since the 2026-08-25 restructure (JTF is never a permanent department, and SIB membership is appointed, never requested); since v1.16 any normal CID role (detective … director) may be *requested* — requesting grants nothing.
 
 ```mermaid
 stateDiagram-v2
@@ -184,7 +184,7 @@ every CID-stage decision also records the reviewer's rank **at decision time**
 the review history answers "who acted, and as what" without re-deriving it from
 today's roster.
 
-### The SIU lane ([`20260903170000_siu_legal_lane.sql`](../supabase/migrations/20260903170000_siu_legal_lane.sql))
+### The SIB lane ([`20260903170000_siu_legal_lane.sql`](../supabase/migrations/20260903170000_siu_legal_lane.sql))
 
 A request on a case with `case_authority = 'siu'` runs a **different chain inside
 the same state machine** — it never enters `cid_supervisor_review` or any bureau
@@ -196,18 +196,18 @@ Special Agent draft → siu_command_review (X-1 / the case's lead agent; never t
 ```
 
 - Submission fan-out stays inside the unit (SACs only, compartment- and
-  recusal-aware); with no SIU commander seated the **Attorney General** is
+  recusal-aware); with no SIB commander seated the **Attorney General** is
   alerted — never CID command.
 - Returns use `returned_by_siu_command`; the judge/prosecutor **fast lane does
-  not apply** to SIU requests — every resubmission re-enters SIU command review.
-- Authority is `private.siu_case_command()` (SIU command **or** the
+  not apply** to SIB requests — every resubmission re-enters SIB command review.
+- Authority is `private.siu_case_command()` (SIB command **or** the
   investigation's lead agent), signature action `siu_command_approval`.
 
 > **Known gap (reported, not yet fixed):** `review_legal_request_as_ag` — the
-> RPC that moves an SIU request out of `ag_review` — has been EXECUTE-revoked
+> RPC that moves an SIB request out of `ag_review` — has been EXECUTE-revoked
 > since [`20260808140000`](../supabase/migrations/20260808140000_legal_lead_approval.sql)
 > and no migration re-grants it, and no workspace surface lists `ag_review`.
-> An SIU request approved by X-1 currently stalls at the Attorney General step.
+> An SIB request approved by X-1 currently stalls at the Attorney General step.
 
 Key rules (all server-enforced):
 
@@ -346,8 +346,8 @@ grades the source, a verdict grades one claim), match claims to existing
 registry records (`field_claim_link` — asserts identity, edits neither side),
 convert (open a case, link a case, cite a surveillance observation, register a
 confidential source), archive with a reason, or — command only — soft-delete
-(Owner-only undelete). SIU referral: flag → refer (category; `public_corruption`
-restricts the report immediately) → SIU accepts/declines and assigns its own
+(Owner-only undelete). SIB referral: flag → refer (category; `public_corruption`
+restricts the report immediately) → SIB accepts/declines and assigns its own
 agent — a Bureau Lead cannot make that assignment.
 
 ## Related workflows documented elsewhere

@@ -33,7 +33,7 @@
  *      an SIU case by INSERT and cannot promote a CID case by UPDATE.
  *   5. The SIU tables carry no client write policy at all.
  *   6. The Owner's own path works end to end: create → classify → roster →
- *      audit feed → overview, with the SIU-8000000 number series.
+ *      audit feed → overview, with the SIB-8000000 number series (legacy SIU- numbers preserved).
  *   7. Compartment mechanics: no self-removal, and a compartment can never be
  *      emptied — so the allow-list cannot be dissolved to reopen a case.
  *  10. Phase 2 (20260822120000): an SIU note on a CID case is invisible to
@@ -118,13 +118,13 @@ describe.skipIf(!enabled)('v1.66 — SIU Phase 1 (live)', () => {
 
     const num = await owner.from('cases').select('case_number').eq('id', plainCase).single()
     plainNumber = (num.data?.case_number as string) ?? ''
-    expect(plainNumber).toMatch(/^SIU-\d+$/)
+    expect(plainNumber).toMatch(/^SIB-8\d{6}$/) // new numbers continue the legacy SIU-8000000 series as SIB-
 
     // An ordinary CID case owned by the detective — proves the chokepoint
     // re-emit did not narrow anything for CID.
     const c = await lsb.from('cases').insert({
-      case_number: `LSB-${Date.now().toString().slice(-6)}`,
-      title: tag('cid control'), bureau: 'LSB',
+      case_number: `MCB-${Date.now().toString().slice(-6)}`,
+      title: tag('cid control'), bureau: 'major_crimes',
     }).select('id').single()
     expect(c.error, c.error?.message).toBeNull()
     cidCase = c.data!.id as string
@@ -247,8 +247,8 @@ describe.skipIf(!enabled)('v1.66 — SIU Phase 1 (live)', () => {
 
   it('a client cannot mint an SIU case by INSERT — the guard forces it back to CID', async () => {
     const ins = await lsb.from('cases').insert({
-      case_number: `LSB-${Date.now().toString().slice(-6)}`,
-      title: tag('insert probe'), bureau: 'LSB',
+      case_number: `MCB-${Date.now().toString().slice(-6)}`,
+      title: tag('insert probe'), bureau: 'major_crimes',
       case_authority: 'siu', siu_classification: 'siu_command',
     }).select('id,case_authority,siu_classification').single()
     // The insert succeeds as an ORDINARY CID case: the guard rewrites the two
@@ -346,7 +346,8 @@ describe.skipIf(!enabled)('v1.66 — SIU Phase 1 (live)', () => {
     const ids = (mine.data ?? []).map((r: { id: string }) => r.id)
     expect(ids).toContain(plainCase)
     expect(ids).toContain(compCase)
-    for (const r of mine.data ?? []) expect(r.case_number).toMatch(/^SIU-\d+$/)
+    // Legacy investigations keep their SIU- numbers verbatim; new ones mint SIB-.
+    for (const r of mine.data ?? []) expect(r.case_number).toMatch(/^(SIU|SIB)-\d+$/)
 
     const reclass = await owner.rpc('siu_set_case_classification', {
       p_case: plainCase, p_classification: 'siu_restricted', p_reason: 'fixture reclassification',
@@ -440,7 +441,7 @@ describe.skipIf(!enabled)('v1.66 — SIU Phase 1 (live)', () => {
     const mine = await owner.from('documents').select('name').eq('classification', 'siu')
     expect(mine.error, mine.error?.message).toBeNull()
     expect((mine.data ?? []).map((d: { name: string }) => d.name))
-      .toContain('Special Investigation Unit SOP')
+      .toContain('Special Investigations Bureau SOP')
   })
 
   /* ── 10. Phase 2 — the SIU-only layer on a CID case (20260822120000) ────── */
@@ -555,8 +556,8 @@ describe.skipIf(!released)('v1.66 — SIU production model (live, post-release)'
     await signInWithRetry(director, 'rls-test-director@cidportal.test', PW.director!)
 
     const c = await lsb.from('cases').insert({
-      case_number: `LSB-${Date.now().toString().slice(-6)}`,
-      title: tag('oversight target'), bureau: 'LSB', summary: 'CID-owned.',
+      case_number: `MCB-${Date.now().toString().slice(-6)}`,
+      title: tag('oversight target'), bureau: 'major_crimes', summary: 'CID-owned.',
     }).select('id').single()
     cidCase = c.data!.id as string
 

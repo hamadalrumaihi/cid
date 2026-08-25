@@ -24,8 +24,8 @@
  *
  *  ── Fixture / env contract ─────────────────────────────────────────────────
  *  `rls-test-owner` is the SIU actor (siu_standing() returns 'owner' from its
- *  first branch, before the release gate). `rls-test-lsb` is an LSB detective,
- *  `rls-test-bcb` a BCB detective, `rls-test-lead` an LSB Bureau Lead and
+ *  first branch, before the release gate). `rls-test-lsb` is an MCB detective,
+ *  `rls-test-bcb` a SCB detective, `rls-test-lead` an MCB Bureau Lead and
  *  `rls-test-director` the CID Director.
  *
  *  ── Cleanup ────────────────────────────────────────────────────────────────
@@ -66,8 +66,8 @@ describe.skipIf(!enabled)('v1.77 — charges, legal hierarchy, SIU inside CID (l
     await signInWithRetry(director, 'rls-test-director@cidportal.test', PW.director!)
 
     const c = await lsb.from('cases').insert({
-      case_number: `LSB-${Date.now().toString().slice(-6)}`,
-      title: `[rls-test] v177 ${RUN}`, bureau: 'LSB',
+      case_number: `MCB-${Date.now().toString().slice(-6)}`,
+      title: `[rls-test] v177 ${RUN}`, bureau: 'major_crimes',
     }).select('id').single()
     expect(c.error, c.error?.message).toBeNull()
     caseId = c.data!.id as string

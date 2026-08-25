@@ -108,7 +108,7 @@ test.describe('case media — screenshot capture', () => {
     const c = await insertRow<{ id: string }>(lsb, 'cases', {
       case_number: `SHOT-${tag}`,
       title: `[rls-test] ${tag} Harbor freight skim ring`,
-      bureau: 'LSB',
+      bureau: 'major_crimes',
       summary: 'Coordinated cargo skims out of Terminal 4; three linked crews, one fence.',
       notes: `## Working theory\n\nThe **Terminal 4** crew rotates plates weekly; the fence takes Friday drops.\n\n- CI report puts the ledger in the back office\n- Two clean plate reads match the fixture sedan`,
     })

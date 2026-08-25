@@ -8,7 +8,7 @@
  *     account_id, no expires_at);
  *   - SELF-APPROVAL is prohibited: lead proposing then approving their OWN
  *     export is rejected (/proposer/) and the row stays proposed, while lead
- *     approving LSB's proposal succeeds (proposer ≠ approver);
+ *     approving MCB's proposal succeeds (proposer ≠ approver);
  *   - an 'account' export is the CID-only lane: patrol_visible is FORCED false
  *     even when proposed with p_patrol_visible=true, it targets an accounts
  *     row, and a second live export on the same account is refused (the new
@@ -30,8 +30,8 @@
  *     weakened to make the feed callable from here — service_role is a
  *     server-side secret the RLS suite deliberately does not hold.
  *
- *  Fixtures (v155/v156 shape): lsb (active LSB detective — proposes), lead
- *  (LSB bureau_lead = command — approves/clears, and the self-approval probe),
+ *  Fixtures (v155/v156 shape): lsb (active MCB detective — proposes), lead
+ *  (MCB bureau_lead = command — approves/clears, and the self-approval probe),
  *  owner (teardown), anon (denied). CLEANUP: rls_test_cleanup does NOT sweep
  *  mdt_exports or accounts, but mdt_exports' person_id/account_id FKs are ON
  *  DELETE CASCADE — so teardown lead-clears every export (best effort, keeps
@@ -143,7 +143,7 @@ describe.skipIf(!enabled)('v1.57 — MDT & FiveM bridge expansion (live)', () =>
     expect(still.data).toMatchObject({ status: 'proposed', exported_by: null })
   })
 
-  it("lead approves LSB's proposal (a different proposer) → exported", async () => {
+  it("lead approves MCB's proposal (a different proposer) → exported", async () => {
     const r = await lead.rpc('mdt_export_approve', { p_export: personBoloId })
     expect(r.error, r.error?.message).toBeNull()
     expect(r.data).toMatchObject({ status: 'exported', exported_by: ids.lead, patrol_visible: true })

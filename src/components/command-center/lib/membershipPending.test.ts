@@ -9,7 +9,7 @@ const profile = (over: Partial<ProfileLite> & { id: string }): ProfileLite => ({
 })
 
 const request = (over: Partial<RequestLite> & { id: string; applicant_id: string }): RequestLite => ({
-  display_name: 'Applicant', status: 'pending', requested_bureau: 'LSB',
+  display_name: 'Applicant', status: 'pending', requested_bureau: 'major_crimes',
   requested_role: 'detective', submitted_at: '2026-07-10T12:00:00Z',
   updated_at: '2026-07-10T12:00:00Z', ...over,
 })

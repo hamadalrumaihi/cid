@@ -18,7 +18,7 @@
  *   - anon is denied throughout.
  *
  *  Fixtures (v153/v154 shape): lsb (active detective — creates accounts/links,
- *  the non-command actor), lead (LSB bureau_lead = command — confirms, merges,
+ *  the non-command actor), lead (MCB bureau_lead = command — confirms, merges,
  *  places/lifts holds), owner (teardown), anon (denied). Accounts/links are NOT
  *  swept by rls_test_cleanup, so teardown owner-deletes the accounts (cascading
  *  account_links + account_handles); the fixture case (and its case_intel_links)
@@ -66,7 +66,7 @@ describe.skipIf(!enabled)('v1.55 — accounts expansion (live)', () => {
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
 
     // A case + a person + a gang to hang links on.
-    const c = await lsb.from('cases').insert({ case_number: `V155-${tag}`, title: `[rls-test] v155 accounts case ${tag}`, bureau: 'LSB' }).select('id')
+    const c = await lsb.from('cases').insert({ case_number: `V155-${tag}`, title: `[rls-test] v155 accounts case ${tag}`, bureau: 'major_crimes' }).select('id')
     if (c.error) throw new Error(`case insert: ${c.error.message}`)
     caseId = c.data![0].id as string
     const pe = await lsb.from('persons').insert({ name: `[rls-test] v155 person ${tag}` }).select('id')

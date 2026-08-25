@@ -7,7 +7,7 @@ import { list, update } from '@/lib/db'
 import { caseLink } from '@/lib/caseLinks'
 import { todayISO, timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
-import { ROLE_LABEL } from '@/lib/roles'
+import {ROLE_LABEL, bureauShort} from '@/lib/roles'
 import { notifDetail, notifSub, notifTitle } from '@/lib/notifText'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
@@ -66,7 +66,7 @@ function resolveWatchItems(data: InboxData, seen: Record<string, string>): Watch
     let it: Omit<WatchItem, 'fresh' | 'w'> | null = null
     if (w.target_type === 'case') {
       const c = data.cases.find((x) => x.id === w.target_id)
-      if (c) it = { icon: '🗂️', title: `${c.case_number} · ${c.title || 'Untitled'}`, sub: `${c.bureau} · ${c.status}`, ts: c.updated_at, href: caseHref(c.id) }
+      if (c) it = { icon: '🗂️', title: `${c.case_number} · ${c.title || 'Untitled'}`, sub: `${bureauShort(c.bureau)} · ${c.status}`, ts: c.updated_at, href: caseHref(c.id) }
     } else if (w.target_type === 'person') {
       const p = data.persons.find((x) => x.id === w.target_id)
       if (p) it = { icon: '👤', title: p.name || 'Person', sub: [p.alias ? `“${p.alias}”` : '', p.status || ''].filter(Boolean).join(' · ') || 'Person of interest', ts: p.updated_at, href: `/persons?q=${encodeURIComponent(p.name ?? '')}` }

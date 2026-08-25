@@ -14,7 +14,7 @@
  *   - _warrant_log entries now carry `authority` (command | legal_approved |
  *     override) so the basis of a signature is structural.
  *
- *  Fixtures (tests/rls/README.md): lsb (LSB detective, case owner), lead (LSB
+ *  Fixtures (tests/rls/README.md): lsb (MCB detective, case owner), lead (MCB
  *  bureau_lead = command), director (command; two clients for the concurrency
  *  race), da / adaLsb / judge for the legal-approval positive path. Same
  *  conventions as the sibling suites; rls_test_cleanup at start + teardown;
@@ -80,15 +80,15 @@ describe.skipIf(!enabled)('v1.20 — warrant lifecycle: signing authority, order
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
 
     const c = await lsb.from('cases')
-      .insert({ case_number: `V120-${tag}`, title: 'v1.20 warrant lifecycle case (LSB)', bureau: 'LSB' })
+      .insert({ case_number: `V120-${tag}`, title: 'v1.20 warrant lifecycle case (MCB)', bureau: 'major_crimes' })
       .select('id')
     if (c.error) throw new Error(c.error.message)
     caseId = c.data![0].id
     const p = await lsb.from('persons').insert({ name: `RLS V120 Subject ${tag}` }).select('id')
     if (p.error) throw new Error(p.error.message)
     personId = p.data![0].id
-    // Cover LSB with a primary ADA so a CID approval auto-routes to `adaLsb`.
-    const cov = await da.rpc('set_primary_ada', { p_prosecutor: ids.adaLsb, p_bureau: 'LSB' })
+    // Cover MCB with a primary ADA so a CID approval auto-routes to `adaLsb`.
+    const cov = await da.rpc('set_primary_ada', { p_prosecutor: ids.adaLsb, p_bureau: 'major_crimes' })
     if (cov.error) throw new Error(`ADA coverage setup failed: ${cov.error.message}`)
   })
 
@@ -200,7 +200,7 @@ describe.skipIf(!enabled)('v1.20 — warrant lifecycle: signing authority, order
     const sub = await lsb.rpc('submit_legal_request_to_cid', { p_request: reqId })
     expect(sub.error).toBeNull()
     const cid = await lead.rpc('review_legal_request_as_cid', { p_request: reqId, p_decision: 'approve', p_signature: 'RLS Lead' })
-    expect(cid.error).toBeNull() // auto-routes to the LSB primary ADA
+    expect(cid.error).toBeNull() // auto-routes to the MCB primary ADA
     const toJudge = await adaLsb.rpc('review_legal_request_as_ada', { p_request: reqId, p_decision: 'submit_to_judge', p_signature: 'RLS ADA' })
     expect(toJudge.error).toBeNull()
     const asg = await adaLsb.rpc('assign_judge', { p_request: reqId, p_judge: ids.judge })

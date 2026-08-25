@@ -53,12 +53,12 @@ export const PAGE_META: Record<string, PageMeta> = {
   accounts:   { title: 'Account Registry', sub: 'Social-media & online accounts, handle history & ownership' },
   guide:      { title: 'User Guide', sub: 'How to sign in, navigate & work a case — new member orientation' },
   calendar:   { title: 'Division Calendar', sub: 'Follow-ups, task deadlines & shift weeks at a glance' },
-  // Special Investigation Unit — a SEPARATE investigative authority, not a CID
+  // Special Investigations Bureau — a SEPARATE investigative authority, not a CID
   // category. It is deliberately absent from NAV_CATEGORIES: the sidebar
   // renders it as a standalone leaf only for accounts with SIU standing
   // (useSiu()), and the view itself renders the ordinary nothing-here surface
   // for everyone else. RLS is the real wall.
-  siu:        { title: 'Special Investigation Unit', sub: 'SIU investigations, personnel & oversight of CID activity' },
+  siu:        { title: 'Special Investigations Bureau', sub: 'SIB investigations, personnel & oversight of CID activity' },
   // The CID-facing door into SIU intake (§14). Deliberately NOT named after
   // SIU: a route labelled for the unit would disclose it to every detective,
   // and to the subjects of its investigations. See ConcernView.
@@ -85,7 +85,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
   { id: 'oversight', label: 'Oversight',    tabs: ['calendar', 'shifts', 'audit'] },
 ]
 
-/** ── Special Investigation Unit navigation ────────────────────────────────
+/** ── Special Investigations Bureau navigation ─────────────────────────────
  *  SIU is a separate DEPARTMENT, so it gets its own navigation rather than a
  *  button inside the CID sidebar. It deliberately reuses the shared registry
  *  routes (persons, vehicles, gangs, places, network, media, legal …) — those
@@ -117,7 +117,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
 export const SIU_NAV_CATEGORIES: NavCategory[] = [
   // The SIU-owned workspace leads. Everything after it is CID's own navigation,
   // tab for tab, in CID's order.
-  { id: 'siu-unit',      label: 'Unit',         tabs: ['siu'] },
+  { id: 'siu-unit',      label: 'Bureau',       tabs: ['siu'] },
   { id: 'siu-command',   label: 'Command',      tabs: ['inbox', 'action', 'command', 'analytics', 'announce', 'heatmap', 'personnel'] },
   { id: 'siu-cases',     label: 'Cases',        tabs: ['cases', 'operations', 'legal', 'case-files', 'rico'] },
   { id: 'siu-intel',     label: 'Intelligence', tabs: ['persons', 'bolo', 'gangs', 'places', 'vehicles', 'accounts', 'indicators', 'field-review', 'network', 'narcotics', 'ballistics', 'modus', 'media', 'records'] },
@@ -128,9 +128,9 @@ export const SIU_NAV_CATEGORIES: NavCategory[] = [
 /** Labels that differ inside the SIU workspace. Anything absent falls back to
  *  the shared TAB_LABEL, so SIU only overrides what its vocabulary changes. */
 export const SIU_TAB_LABEL: Record<string, string> = {
-  siu: 'SIU Workspace',
+  siu: 'SIB Workspace',
   cases: 'Cases',
-  sops: 'SIU SOP',
+  sops: 'SIB SOP',
   legal: 'Legal Requests',
 }
 
@@ -140,7 +140,7 @@ export const TAB_LABEL: Record<string, string> = {
   persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', accounts: 'Accounts', indicators: 'Indicators', 'field-review': 'Intelligence',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
   media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide', devdocs: 'Developer Handbook',
-  inbox: 'My Desk', action: 'Action Center', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', owner: 'Owner Portal', profile: 'My Profile', 'command-center': 'Command Center', siu: 'Special Investigation Unit',
+  inbox: 'My Desk', action: 'Action Center', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', owner: 'Owner Portal', profile: 'My Profile', 'command-center': 'Command Center', siu: 'Special Investigations Bureau',
 }
 
 /** Presentational sub-grouping for crowded categories — a visual layer over

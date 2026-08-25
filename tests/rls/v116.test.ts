@@ -62,7 +62,7 @@ describe.skipIf(!enabled)('v1.16 — unified role/department assignment matrix (
     const pre = await applicant.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
     const reset = await director.rpc('rls_test_reset_member', {
-      p_target: ids.applicant, p_role: 'detective', p_division: 'LSB', p_active: false,
+      p_target: ids.applicant, p_role: 'detective', p_division: 'major_crimes', p_active: false,
     })
     if (reset.error) throw new Error(`rls_test_reset_member failed: ${reset.error.message}`)
   })
@@ -70,7 +70,7 @@ describe.skipIf(!enabled)('v1.16 — unified role/department assignment matrix (
   afterAll(async () => {
     if (director) {
       await director.rpc('rls_test_reset_member', {
-        p_target: ids.applicant, p_role: 'detective', p_division: 'LSB', p_active: false,
+        p_target: ids.applicant, p_role: 'detective', p_division: 'major_crimes', p_active: false,
       })
       await applicant.rpc('rls_test_cleanup')
     }
@@ -81,7 +81,7 @@ describe.skipIf(!enabled)('v1.16 — unified role/department assignment matrix (
     const ins = await applicant.from('membership_requests')
       .insert({
         applicant_id: ids.applicant, display_name: 'RLS Test Applicant (disposable)',
-        requested_bureau: 'LSB', requested_role: 'bureau_lead',
+        requested_bureau: 'major_crimes', requested_role: 'bureau_lead',
         reason: '[rls-test] v116 matrix fixture',
       })
       .select('id,status,requested_role')
@@ -116,7 +116,7 @@ describe.skipIf(!enabled)('v1.16 — unified role/department assignment matrix (
     expect(sub.error).toBeNull()
     const self = await applicant.rpc('review_membership_request', {
       p_request: requestId, p_decision: 'approve',
-      p_final_bureau: 'LSB', p_final_role: 'director',
+      p_final_bureau: 'major_crimes', p_final_role: 'director',
     })
     expect(self.error).not.toBeNull()
   })
@@ -124,13 +124,13 @@ describe.skipIf(!enabled)('v1.16 — unified role/department assignment matrix (
   it('a Bureau Lead cannot approve into another bureau or grant command roles', async () => {
     const other = await lead.rpc('review_membership_request', {
       p_request: requestId, p_decision: 'approve_with_changes',
-      p_final_bureau: 'BCB', p_final_role: 'detective',
+      p_final_bureau: 'street_crimes', p_final_role: 'detective',
       p_applicant_note: '[rls-test] must fail',
     })
     expect(other.error).not.toBeNull()
     const command = await lead.rpc('review_membership_request', {
       p_request: requestId, p_decision: 'approve_with_changes',
-      p_final_bureau: 'LSB', p_final_role: 'bureau_lead',
+      p_final_bureau: 'major_crimes', p_final_role: 'bureau_lead',
       p_applicant_note: '[rls-test] must fail',
     })
     expect(command.error).not.toBeNull()
@@ -139,7 +139,7 @@ describe.skipIf(!enabled)('v1.16 — unified role/department assignment matrix (
   it('a Director cannot approve a Director-final role (Owner only)', async () => {
     const rev = await director.rpc('review_membership_request', {
       p_request: requestId, p_decision: 'approve',
-      p_final_bureau: 'LSB', p_final_role: 'director',
+      p_final_bureau: 'major_crimes', p_final_role: 'director',
     })
     expect(rev.error).not.toBeNull()
   })
@@ -147,7 +147,7 @@ describe.skipIf(!enabled)('v1.16 — unified role/department assignment matrix (
   it('approving with changes requires a reason for the applicant', async () => {
     const rev = await owner.rpc('review_membership_request', {
       p_request: requestId, p_decision: 'approve_with_changes',
-      p_final_bureau: 'LSB', p_final_role: 'detective',
+      p_final_bureau: 'major_crimes', p_final_role: 'detective',
     })
     expect(rev.error).not.toBeNull()
   })
@@ -155,11 +155,11 @@ describe.skipIf(!enabled)('v1.16 — unified role/department assignment matrix (
   it('the Owner approves the Director-final request; the assignment is authoritative', async () => {
     const rev = await owner.rpc('review_membership_request', {
       p_request: requestId, p_decision: 'approve',
-      p_final_bureau: 'LSB', p_final_role: 'director',
+      p_final_bureau: 'major_crimes', p_final_role: 'director',
     })
     expect(rev.error).toBeNull()
     const prof = await applicant.from('profiles').select('role,division,active').eq('id', ids.applicant)
-    expect(prof.data![0]).toMatchObject({ role: 'director', division: 'LSB', active: true })
+    expect(prof.data![0]).toMatchObject({ role: 'director', division: 'major_crimes', active: true })
     // provenance: the approval recorded who/why/where it came from
     const ev = await director.from('role_events')
       .select('source,source_id,new_role').eq('target_id', ids.applicant)
@@ -170,13 +170,13 @@ describe.skipIf(!enabled)('v1.16 — unified role/department assignment matrix (
 
   it('the accepted assignment persists: self-edits are frozen, re-application is blocked', async () => {
     const upd = await applicant.from('profiles')
-      .update({ role: 'detective', division: 'BCB' }).eq('id', ids.applicant).select('role,division')
-    if (!upd.error) expect(upd.data![0]).toMatchObject({ role: 'director', division: 'LSB' }) // silently reverted
+      .update({ role: 'detective', division: 'street_crimes' }).eq('id', ids.applicant).select('role,division')
+    if (!upd.error) expect(upd.data![0]).toMatchObject({ role: 'director', division: 'major_crimes' }) // silently reverted
     // one request per account + active members can't re-apply (mr_ins RLS)
     const again = await applicant.from('membership_requests')
       .insert({
         applicant_id: ids.applicant, display_name: 'RLS Test Applicant (disposable)',
-        requested_bureau: 'BCB', requested_role: 'detective', reason: '[rls-test] must fail',
+        requested_bureau: 'street_crimes', requested_role: 'detective', reason: '[rls-test] must fail',
       })
       .select('id')
     expect(again.error).not.toBeNull()
@@ -185,7 +185,7 @@ describe.skipIf(!enabled)('v1.16 — unified role/department assignment matrix (
   it('a Judge gains no CID assignment authority', async () => {
     const cr = await judge.rpc('change_member_role', { p_target: ids.applicant, p_new_role: 'detective', p_reason: '[rls-test] must fail' })
     expect(cr.error).not.toBeNull()
-    const tr = await judge.rpc('request_transfer', { p_target: ids.applicant, p_to_bureau: 'BCB', p_reason: '[rls-test] must fail' })
+    const tr = await judge.rpc('request_transfer', { p_target: ids.applicant, p_to_bureau: 'street_crimes', p_reason: '[rls-test] must fail' })
     expect(tr.error).not.toBeNull()
     const rev = await judge.rpc('review_membership_request', { p_request: requestId, p_decision: 'reject' })
     expect(rev.error).not.toBeNull()
@@ -193,7 +193,7 @@ describe.skipIf(!enabled)('v1.16 — unified role/department assignment matrix (
 
   it('teardown: reset + cleanup leave no trace', async () => {
     const back = await director.rpc('rls_test_reset_member', {
-      p_target: ids.applicant, p_role: 'detective', p_division: 'LSB', p_active: false,
+      p_target: ids.applicant, p_role: 'detective', p_division: 'major_crimes', p_active: false,
     })
     expect(back.error).toBeNull()
     const clean = await applicant.rpc('rls_test_cleanup')

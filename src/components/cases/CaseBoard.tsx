@@ -1,6 +1,7 @@
 'use client'
 
 import { update } from '@/lib/db'
+import { bureauShort } from '@/lib/roles'
 import type { Tables } from '@/lib/database.types'
 import { useOperationsStore } from '@/lib/operations'
 import { isJtf } from '@/lib/opsJoint'
@@ -79,7 +80,7 @@ export function CaseBoard({ items, canEdit, onOpen, onMoved }: { items: CaseRow[
                       <p className="font-mono text-sm font-bold text-white">{c.case_number.replaceAll('-', ' - ')}</p>
                       <span className="flex flex-shrink-0 items-center gap-1">
                         {(c.is_joint_case || jtfOpIds.has(c.operation_id ?? '')) && <span className="rounded-full bg-violet-500/15 px-1.5 py-1 text-[10px] font-bold uppercase text-violet-300">JTF</span>}
-                        <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${caseStatusTint(c.status)}`}>{c.bureau}</span>
+                        <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${caseStatusTint(c.status)}`}>{bureauShort(c.bureau)}</span>
                       </span>
                     </div>
                     <p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-100">{c.title || 'Untitled case'}</p>

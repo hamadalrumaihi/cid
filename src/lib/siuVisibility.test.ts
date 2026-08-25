@@ -25,8 +25,8 @@ const row = (over: Partial<Parameters<typeof visibilityLabel>[0]> = {}) => ({
 })
 
 describe('describing a compartment', () => {
-  it('says SIU only when nothing has been released', () => {
-    expect(visibilityLabel(row())).toBe('SIU only')
+  it('says SIB only when nothing has been released', () => {
+    expect(visibilityLabel(row())).toBe('SIB only')
   })
 
   it('never calls a narrowed release a release to CID', () => {
@@ -127,10 +127,18 @@ describe('the reason', () => {
 
 describe('the review queue is ordered by how much thought it needs', () => {
   it('puts the genuinely ambiguous records first', () => {
-    const likelySiu = { review_note: 'SIU material references it and no CID material does.' }
+    const likelySiu = { review_note: 'SIB material references it and no CID material does.' }
     const unknowable = { review_note: 'with nothing attached on either side. Origin cannot be told' }
     const shared = { review_note: 'CID material already references it. It stays shared either way' }
     expect([shared, unknowable, likelySiu].map(reviewRank)).toEqual([2, 1, 0])
+  })
+
+  it('ranks stored legacy notes with the old SIU wording the same as new SIB ones', () => {
+    // The server now writes 'SIB material references it'; ledger rows written
+    // before the rename still say 'SIU material references it'. Both must sort
+    // to the ambiguous end — a rename must not reorder a review queue.
+    expect(reviewRank({ review_note: 'SIU material references it and no CID material does.' })).toBe(0)
+    expect(reviewRank({ review_note: 'SIB material references it and no CID material does.' })).toBe(0)
   })
 
   it('treats a record with no note as one CID already holds', () => {
@@ -153,9 +161,9 @@ describe('naming the registries', () => {
 })
 
 describe('the two restrictions are never described as the same thing', () => {
-  it('does not call a section restriction "SIU only"', () => {
+  it('does not call a section restriction "SIB only"', () => {
     // The whole point of the second mode is that CID KEEPS the profile.
-    // Labelling it "SIU only" would tell the person who applied it that they
+    // Labelling it "SIB only" would tell the person who applied it that they
     // hid a record they did not hide.
     expect(visibilityLabel({
       state: 'siu_only', scope: 'sections',
@@ -171,11 +179,11 @@ describe('the two restrictions are never described as the same thing', () => {
     })).toBe('1 section restricted')
   })
 
-  it('still says SIU only for a whole-record restriction', () => {
+  it('still says SIB only for a whole-record restriction', () => {
     expect(visibilityLabel({
       state: 'siu_only', scope: 'record', hidden_sections: [],
       revealed_to_case_id: null, revealed_to_user_id: null,
-    })).toBe('SIU only')
+    })).toBe('SIB only')
   })
 
   it('treats a row with no scope as a whole-record restriction', () => {
@@ -183,7 +191,7 @@ describe('the two restrictions are never described as the same thing', () => {
     // 'record', which is exactly how it already behaved.
     expect(visibilityLabel({
       state: 'siu_only', revealed_to_case_id: null, revealed_to_user_id: null,
-    })).toBe('SIU only')
+    })).toBe('SIB only')
   })
 })
 

@@ -9,7 +9,7 @@
  *  table rides `private.siu_case_access()` — the write wall — rather than the
  *  read superset, so oversight standing (the Director of CID, the Attorney
  *  General) reads the case file and none of this. Sources and legends are
- *  compartmented one step further, to the handler and SIU command, so an agent
+ *  compartmented one step further, to the handler and SIB command, so an agent
  *  with full access to an investigation still cannot read another agent's
  *  source. None of that is enforced here: these lists simply come back empty,
  *  because RLS already decided. */
@@ -66,7 +66,7 @@ const statusTint = (s: string) =>
   : 'bg-white/5 text-slate-300'
 
 /** A lane that came back empty is indistinguishable from a lane the viewer is
- *  not read into. That is the intended behavior everywhere in SIU, so the
+ *  not read into. That is the intended behavior everywhere in SIB, so the
  *  wording never speculates about which it is. */
 function Empty({ what }: { what: string }) {
   return <p className="mt-3 text-xs text-slate-400">No {what} to show.</p>
@@ -81,7 +81,7 @@ export function SiuTradecraftSection() {
         active={lane}
         onChange={setLane}
         idBase="siu-tradecraft"
-        ariaLabel="SIU tradecraft"
+        ariaLabel="SIB tradecraft"
         className="mb-4"
       />
       {lane === 'sources' && <SourcesLane />}
@@ -119,7 +119,7 @@ function SourcesLane() {
     <Card>
       <SectionHeader
         title="Confidential sources"
-        subtitle="Compartmented to the handler and SIU command — an agent working the same investigation does not see another agent's source. Identities never appear in an export."
+        subtitle="Compartmented to the handler and SIB command — an agent working the same investigation does not see another agent's source. Identities never appear in an export."
       />
       {!rows.length ? <Empty what="sources" /> : (
         <ul className="mt-3 space-y-2">
@@ -312,7 +312,7 @@ function ExportsLane() {
     <Card>
       <SectionHeader
         title="Export log"
-        subtitle="Every restricted export, with its reason. Source identities, undercover legends and intercept content are withheld from every export, for every caller — including SIU command."
+        subtitle="Every restricted export, with its reason. Source identities, undercover legends and intercept content are withheld from every export, for every caller — including SIB command."
       />
       {!rows.length ? <Empty what="exports" /> : (
         <ul className="mt-3 space-y-2">
@@ -382,7 +382,7 @@ export function SiuOversightSection() {
       </Card>
 
       <Card>
-        <SectionHeader title="Control of CID cases" subtitle="§14 — how often SIU has taken a case, and how often it gave one back." />
+        <SectionHeader title="Control of CID cases" subtitle="§14 — how often SIB has taken a case, and how often it gave one back." />
         <MetricStrip
           className="mt-3"
           metrics={[

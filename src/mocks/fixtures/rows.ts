@@ -11,7 +11,7 @@ export function caseRow(overrides: Partial<Tables<'cases'>> = {}): Tables<'cases
     area: 'Mirror Park',
     archived_at: null,
     archived_by: null,
-    bureau: 'LSB',
+    bureau: 'major_crimes',
     case_authority: 'cid',
     case_number: 'CID-26-0101',
     siu_assumed_at: null,
@@ -125,7 +125,7 @@ export function prosecutorCoverageRow(
   overrides: Partial<Tables<'prosecutor_coverage'>> & Pick<Tables<'prosecutor_coverage'>, 'prosecutor_id' | 'authorized_by'>,
 ): Tables<'prosecutor_coverage'> {
   return {
-    bureau: 'LSB',
+    bureau: 'major_crimes',
     created_at: mockTimestamp(),
     ended_at: null,
     ended_by: null,
@@ -264,7 +264,7 @@ export function legalRequestRow(
     request_number: 'LR-26-0001',
     request_type: 'warrant',
     response_deadline: null,
-    responsible_bureau: 'LSB',
+    responsible_bureau: 'major_crimes',
     return_filed_by: null,
     return_narrative: null,
     return_report_id: null,

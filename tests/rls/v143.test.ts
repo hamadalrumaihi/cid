@@ -16,7 +16,7 @@
  *  to the survivor instead of stranding them on the tombstone.
  *
  *  Fixtures: lsb (detective — creates the case, negative archiver), lead
- *  (LSB bureau_lead — archives/restores), director (negative for the
+ *  (MCB bureau_lead — archives/restores), director (negative for the
  *  owner-only surface; merges persons), owner (preview + delete). Cleanup
  *  sweeps fixture cases; the test persons and provisional narcotic are
  *  deleted in-test / afterAll. */
@@ -60,7 +60,7 @@ describe.skipIf(!enabled)('v1.43 — case archive + owner-only deletion + merge 
     }
     const pre = await director.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
-    const c = await lsb.from('cases').insert({ case_number: `V143-${tag}`, title: '[rls-test] v143 archive case', bureau: 'LSB' }).select('id')
+    const c = await lsb.from('cases').insert({ case_number: `V143-${tag}`, title: '[rls-test] v143 archive case', bureau: 'major_crimes' }).select('id')
     if (c.error) throw new Error(c.error.message)
     caseId = c.data![0].id
     const t = await lsb.from('case_tasks').insert({ case_id: caseId, title: '[rls-test] v143 task' }).select('id')

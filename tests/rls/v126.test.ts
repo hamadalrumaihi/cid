@@ -12,8 +12,8 @@
  *   - task_id is ON DELETE SET NULL: deleting the linked case_task leaves the
  *     blocker standing with task_id null (the blocker outlives its link).
  *
- *  Fixtures (tests/rls/README.md): lsb (LSB detective, case creator), bcb
- *  (BCB detective — bureau isolation), director (command teardown), owner
+ *  Fixtures (tests/rls/README.md): lsb (MCB detective, case creator), bcb
+ *  (SCB detective — bureau isolation), director (command teardown), owner
  *  (audit_log reader). Same conventions as the sibling suites;
  *  rls_test_cleanup at start + teardown (fixture blockers cascade with their
  *  fixture cases — the cleanup's plain `delete from cases` sweeps them).
@@ -57,7 +57,7 @@ describe.skipIf(!enabled)('v1.26 — case blockers + case priority (live)', () =
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
     const c = await lsb.from('cases')
-      .insert({ case_number: `V126-${tag}`, title: 'v1.26 blocker case', bureau: 'LSB', lead_detective_id: ids.lsb })
+      .insert({ case_number: `V126-${tag}`, title: 'v1.26 blocker case', bureau: 'major_crimes', lead_detective_id: ids.lsb })
       .select('id')
     if (c.error) throw new Error(c.error.message)
     caseId = c.data![0].id as string

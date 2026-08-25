@@ -1,16 +1,16 @@
 'use client'
 
-/** §15 — what SIU has told CID.
+/** §15 — what SIB has told CID.
  *
  *  A release carries a SNAPSHOT of one item, never a pointer into the
  *  investigation, so releasing something can never widen into access. This
- *  screen is the SIU side of that: what was released, to whom, whether it was
+ *  screen is the SIB side of that: what was released, to whom, whether it was
  *  acknowledged, and the ability to pull it back.
  *
  *  Everything rendered here is RLS-scoped to investigations the viewer can
  *  read, and every write goes through `siu_share` / `siu_revoke_disclosure`,
  *  which re-check field standing server-side. Oversight standing can read this
- *  list and gets no release controls — deciding what SIU tells CID is not an
+ *  list and gets no release controls — deciding what SIB tells CID is not an
  *  oversight power. */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -263,7 +263,7 @@ function ReleaseModal({ onClose, onDone }: { onClose: () => void; onDone: () => 
         </Field>
         <p className="text-[11px] text-slate-400">
           {siuAudienceLabel(audience)}. The investigation itself is never disclosed — CID sees the text
-          above and that SIU released it, with no case number, no link and no way to reach the file.
+          above and that SIB released it, with no case number, no link and no way to reach the file.
         </p>
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>

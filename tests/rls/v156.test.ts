@@ -18,9 +18,9 @@
  *     could not have reached 'confirmed' by any path;
  *   - anon is denied (read + RPC).
  *
- *  Fixtures (v154/v155 shape): lsb (active LSB detective — creates the case /
- *  extraction / facts, the non-command actor), bcb (active BCB detective — the
- *  no-case-access actor), lead (LSB bureau_lead = command — confirm probe),
+ *  Fixtures (v154/v155 shape): lsb (active MCB detective — creates the case /
+ *  extraction / facts, the non-command actor), bcb (active SCB detective — the
+ *  no-case-access actor), lead (MCB bureau_lead = command — confirm probe),
  *  owner (teardown), anon (denied). Accounts are NOT swept by rls_test_cleanup,
  *  so teardown owner-deletes the created account (cascading account_links) and
  *  the extraction (cascading its facts); persons are swept, and the fixture case
@@ -68,8 +68,8 @@ describe.skipIf(!enabled)('v1.56 — returned-record extraction (live)', () => {
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
 
-    // An LSB case (bcb, a BCB detective, cannot access it) + a person to own.
-    const c = await lsb.from('cases').insert({ case_number: `V156-${tag}`, title: `[rls-test] v156 extraction case ${tag}`, bureau: 'LSB' }).select('id')
+    // An MCB case (bcb, a SCB detective, cannot access it) + a person to own.
+    const c = await lsb.from('cases').insert({ case_number: `V156-${tag}`, title: `[rls-test] v156 extraction case ${tag}`, bureau: 'major_crimes' }).select('id')
     if (c.error) throw new Error(`case insert: ${c.error.message}`)
     caseId = c.data![0].id as string
     const pe = await lsb.from('persons').insert({ name: `[rls-test] v156 person ${tag}` }).select('id')
@@ -201,7 +201,7 @@ describe.skipIf(!enabled)('v1.56 — returned-record extraction (live)', () => {
   })
 
   it('a member with no case access cannot add facts to the extraction', async () => {
-    // bcb is a BCB detective; the extraction is on an LSB case it cannot access.
+    // bcb is a SCB detective; the extraction is on an MCB case it cannot access.
     const seen = await bcb.from('record_extractions').select('id').eq('id', extractionId)
     expect(seen.data ?? []).toHaveLength(0)
     const r = await bcb.rpc('extraction_add_fact', {

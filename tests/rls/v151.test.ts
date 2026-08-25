@@ -15,7 +15,7 @@
  *  A SECURITY DEFINER predicate private.has_media_break_glass(case,user) lets
  *  media_sel consult a live grant without exposing the grants table.
  *
- *  This suite proves, on an LSB case lsb owns carrying one RESTRICTED media row
+ *  This suite proves, on an MCB case lsb owns carrying one RESTRICTED media row
  *  (created by `lead`, who is command + intel-cleared so the insert's RETURNING
  *  is visible — a plain detective could insert restricted:true but never read it
  *  back, so the cleared fixture is the reliable way to mint the fixture row):
@@ -37,12 +37,12 @@
  *   - break-glass by a caller WITHOUT case access (bcb, other division) is
  *     rejected.
  *
- *  Fixtures: lsb (active LSB detective, NON-cleared, owns the case → the
- *  break-glass caller), lead (LSB bureau_lead = command + cleared — mints the
- *  restricted row, reads the audit trail), owner (SAB detective + is_owner =
+ *  Fixtures: lsb (active MCB detective, NON-cleared, owns the case → the
+ *  break-glass caller), lead (MCB bureau_lead = command + cleared — mints the
+ *  restricted row, reads the audit trail), owner (major_crimes detective + is_owner =
  *  cleared but NOT command — a positive cleared read, and proof ral_sel is
- *  command-not-owner), bcb (active BCB detective, NON-cleared, NO access to the
- *  LSB case — the per-user + no-case-access negatives), anon (denied).
+ *  command-not-owner), bcb (active SCB detective, NON-cleared, NO access to the
+ *  MCB case — the per-user + no-case-access negatives), anon (denied).
  *
  *  CLEANUP: rls_test_cleanup (definer, owner-privileged) deletes the case's
  *  media and the case; restricted_access_grants CASCADE off the case FK, and the
@@ -98,8 +98,8 @@ describe.skipIf(!enabled)('v1.51 — restricted-media audit + break-glass (live)
     // Best-effort pre-clean so a crashed prior run doesn't collide.
     try { await lsb.rpc('rls_test_cleanup') } catch { /* best effort */ }
 
-    // lsb owns an LSB case → lsb has can_access_case (break-glass caller).
-    const c = await lsb.from('cases').insert({ case_number: `V151-${tag}`, title: `[rls-test] v151 restricted-media case ${tag}`, bureau: 'LSB' }).select('id')
+    // lsb owns an MCB case → lsb has can_access_case (break-glass caller).
+    const c = await lsb.from('cases').insert({ case_number: `V151-${tag}`, title: `[rls-test] v151 restricted-media case ${tag}`, bureau: 'major_crimes' }).select('id')
     if (c.error) throw new Error(`case insert failed: ${c.error.message}`)
     caseId = c.data![0].id as string
 
@@ -211,7 +211,7 @@ describe.skipIf(!enabled)('v1.51 — restricted-media audit + break-glass (live)
   })
 
   it('break-glass by a caller WITHOUT case access is rejected', async () => {
-    // bcb is a BCB detective with no access to the LSB case.
+    // bcb is a SCB detective with no access to the MCB case.
     const r = await bcb.rpc('restricted_media_break_glass', { p_case: caseId, p_reason: 'no access but trying' })
     expect(r.error).not.toBeNull()
     expect(r.error!.message).toMatch(/case you have access to/i)

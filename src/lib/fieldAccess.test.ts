@@ -19,9 +19,7 @@ import {
 import type { FieldRosterRow } from './fieldAccess'
 import type { FieldAccessRequestRow } from './fieldAccess'
 import { countPending, pendingFirst } from '@/components/field/FieldAccessQueue'
-import {
-  JURISDICTIONS, jurisdictionLabel, jurisdictionRouting,
-} from './fieldSubmissions'
+import { JURISDICTIONS, jurisdictionLabel } from './fieldSubmissions'
 
 const req = (over: Partial<FieldAccessRequestRow> = {}): FieldAccessRequestRow => ({
   id: 'r1', user_id: 'u1', agency: 'SAHP', callsign: '924',
@@ -86,12 +84,14 @@ describe('the queue order', () => {
   })
 })
 
-describe('where a report happened, and where that sends it', () => {
-  it('names a bureau for every jurisdiction', () => {
-    // A detective seeing "Los Santos / City" alone cannot tell whether the
-    // report reached them because it is theirs.
+describe('where a report happened — a fact, not a routing key', () => {
+  it('labels every jurisdiction without naming a bureau', () => {
+    // The geographic city/blaine → bureau queue mapping died with the bureau
+    // restructure: every active CID member sees every field submission
+    // (server-enforced), so the label must not imply a routing destination.
     for (const j of JURISDICTIONS) {
-      expect(jurisdictionRouting(j), j).toMatch(/ · (LSB|BCB)$/)
+      expect(jurisdictionLabel(j), j).toBeTruthy()
+      expect(jurisdictionLabel(j), j).not.toMatch(/LSB|BCB|MCB|SCB|major_crimes|street_crimes/)
     }
   })
 
@@ -99,7 +99,6 @@ describe('where a report happened, and where that sends it', () => {
     // Only a draft can be in this state — a check constraint refuses a
     // submitted report without one.
     expect(jurisdictionLabel(null)).toBe('Not stated')
-    expect(jurisdictionRouting(null)).toBe('Not stated')
   })
 })
 

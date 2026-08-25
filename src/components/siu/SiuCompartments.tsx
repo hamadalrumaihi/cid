@@ -1,17 +1,17 @@
 'use client'
 
-/** Compartments — what SIU has taken out of CID's view, and what it has given
+/** Compartments — what SIB has taken out of CID's view, and what it has given
  *  back.
  *
  *  Two lists, deliberately separate. The REVIEW QUEUE is the honest residue of
- *  shipping compartmentation against live data: both active SIU members are
- *  also senior CID staff, so "created by an SIU member" says nothing about
- *  whether a record is SIU's. 95 registry records sit here awaiting a decision,
+ *  shipping compartmentation against live data: both active SIB members are
+ *  also senior CID staff, so "created by an SIB member" says nothing about
+ *  whether a record is SIB's. 95 registry records sit here awaiting a decision,
  *  and every one of them is still fully visible to CID while it waits. The
  *  COMPARTMENTS list is the records where somebody has actually decided.
  *
  *  Nothing on this screen is a permission. RLS hides a compartmented record
- *  from CID's selects, counts and updates, and each RPC re-checks SIU standing
+ *  from CID's selects, counts and updates, and each RPC re-checks SIB standing
  *  in its own body -- so a CID user who reached this component would see an
  *  empty ledger and get an exception from every button.
  *
@@ -49,8 +49,8 @@ type Act = 'reveal' | 'restrict' | 'mine' | 'theirs'
 
 const ACT_TITLE: Record<Act, string> = {
   reveal: 'Reveal to CID',
-  restrict: 'Pull back to SIU',
-  mine: 'Confirm this is SIU material',
+  restrict: 'Pull back to SIB',
+  mine: 'Confirm this is SIB material',
   theirs: 'Confirm this is an ordinary CID record',
 }
 
@@ -174,7 +174,7 @@ function Row({ row, onAct }: { row: VisibilityRow; onAct: (a: Act) => void }) {
           {flagged ? (
             <>
               <Button onClick={() => onAct('theirs')}>It is CID&apos;s</Button>
-              <Button variant="primary" onClick={() => onAct('mine')}>It is SIU&apos;s</Button>
+              <Button variant="primary" onClick={() => onAct('mine')}>It is SIB&apos;s</Button>
             </>
           ) : row.state === 'siu_only' ? (
             <Button variant="primary" onClick={() => onAct('reveal')}>Reveal to CID</Button>
@@ -260,7 +260,7 @@ export function SiuCompartmentsSection() {
     <div className="space-y-6">
       <SectionHeader
         title="Compartments"
-        subtitle="What SIU has taken out of CID's view, and what it has given back."
+        subtitle="What SIB has taken out of CID's view, and what it has given back."
         actions={
           <Button variant="primary" onClick={() => setTaking(true)}>
             Compartment a record
@@ -272,7 +272,7 @@ export function SiuCompartmentsSection() {
         <Card>
           <SectionHeader
             title="Origin not established"
-            subtitle="Records created by an SIU member who is also senior CID staff. Every one of these is still fully visible to CID and stays that way until somebody decides."
+            subtitle="Records created by an SIB member who is also senior CID staff. Every one of these is still fully visible to CID and stays that way until somebody decides."
             actions={<Badge tone="warn">{ranked.length}</Badge>}
           />
           <ul className="mt-3 space-y-2">

@@ -8,7 +8,7 @@ import { useSyncExternalStore } from 'react'
 import { useAuth } from '@/lib/auth'
 import { useSiu } from '@/lib/useSiu'
 import { NAV_CATEGORIES, SIU_NAV_CATEGORIES, SIU_TAB_LABEL, TAB_LABEL } from '@/lib/nav'
-import { deptLabel, roleLabel } from '@/lib/roles'
+import { bureauShort, roleLabel } from '@/lib/roles'
 import { DEPARTMENT_LABEL, siuCallsign, siuRoleLabel } from '@/lib/siu'
 import { safeUrl } from '@/lib/safeUrl'
 import { Store } from '@/lib/store'
@@ -23,8 +23,8 @@ function OfficerCard() {
   const { profile, session } = useAuth()
   const siu = useSiu()
   const { navigate } = useNav()
-  // Vanilla vocabulary (collab.js renderOfficerCard): 'Badge <n> · <dept
-  // abbreviation>' with amber On-LOA / emerald On-duty status dot. Clicking
+  // Vanilla vocabulary (collab.js renderOfficerCard): 'Badge <n> · <bureau
+  // short code>' with amber On-LOA / emerald On-duty status dot. Clicking
   // opens the My Profile editor (collab.js wires #officer-card the same way).
   const name = profile?.display_name || session?.user?.email || 'Not signed in'
   const initials =
@@ -35,8 +35,8 @@ function OfficerCard() {
   const sub = !profile
     ? '—'
     : siu.inSiu
-      ? `${siu.callsign ? `${siuCallsign(siu.callsign)} · ` : ''}Special Investigation Unit`
-      : `${profile.badge_number ? `Badge ${profile.badge_number} · ` : ''}${deptLabel(profile.division)}`
+      ? `${siu.callsign ? `${siuCallsign(siu.callsign)} · ` : ''}${DEPARTMENT_LABEL.siu}`
+      : `${profile.badge_number ? `Badge ${profile.badge_number} · ` : ''}${bureauShort(profile.division)}`
   const dot = !profile
     ? { cls: 'bg-slate-500', title: 'Offline' }
     : profile.loa
@@ -60,7 +60,7 @@ function OfficerCard() {
           }`}>
             {siu.inSiu
               ? (siu.standing === 'owner' ? 'Portal Owner'
-                 : siu.standing === 'oversight' ? 'SIU Oversight'
+                 : siu.standing === 'oversight' ? 'SIB Oversight'
                  : siuRoleLabel(siu.membership?.siu_role))
               : roleLabel(profile?.role)}
           </p>
@@ -123,12 +123,12 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
               one-h1-per-page. The department owns the wordmark: an SIU agent is
               not looking at "the CID Portal". */}
           <div className="text-base font-bold tracking-tight text-white">
-            {inSiu ? 'SIU Portal' : 'CID Portal'}
+            {inSiu ? 'SIB Portal' : 'CID Portal'}
           </div>
           <p className={`text-[11px] font-medium uppercase tracking-[0.18em] ${
             inSiu ? 'text-violet-300/70' : 'text-blue-300/70'
           }`}>
-            {inSiu ? 'Special Investigation Unit' : 'San Andreas'}
+            {inSiu ? DEPARTMENT_LABEL.siu : 'San Andreas'}
           </p>
         </div>
         <button
@@ -147,13 +147,13 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
           inSiu ? 'text-violet-300/90' : 'text-amber-400/90'
         }`}>
           <span className={`pulse-dot inline-block h-2 w-2 rounded-full ${inSiu ? 'bg-violet-400' : 'bg-amber-400'}`} />
-          {inSiu ? 'Restricted // SIU Eyes Only' : 'Restricted // CID Eyes Only'}
+          {inSiu ? 'Restricted // SIB Eyes Only' : 'Restricted // CID Eyes Only'}
         </p>
       </div>
 
       <nav className="mt-4 flex-1 space-y-1 overflow-y-auto px-3 pb-4" role="navigation">
         <p className="sidebar-hide px-3 pb-2 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-          {inSiu ? 'Unit' : 'Divisions'}
+          {inSiu ? 'Bureau' : 'Divisions'}
         </p>
         {/* SIU renders its OWN navigation — it is a separate department, not a
             leaf inside the CID sidebar. The shared registry routes are reused
@@ -255,7 +255,7 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
             every write still goes through an SIU RPC (§23). */}
         {siu.maySwitch && siu.canAccess && (
           <button
-            data-label={inSiu ? 'Criminal Investigation Division' : 'Special Investigation Unit'}
+            data-label={inSiu ? DEPARTMENT_LABEL.cid : DEPARTMENT_LABEL.siu}
             onClick={() => go(() => {
               const next = inSiu ? 'cid' : 'siu'
               siu.setViewing(next)
@@ -265,7 +265,7 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
             className="nav-link group mt-2 flex w-full items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"
           >
             <span className="nav-icon flex-shrink-0" aria-hidden>⇄</span>
-            <span className="nav-label">{inSiu ? 'Switch to CID' : 'Switch to SIU'}</span>
+            <span className="nav-label">{inSiu ? 'Switch to CID' : 'Switch to SIB'}</span>
           </button>
         )}
         {/* Owner Portal — standalone leaf, rendered ONLY for the project

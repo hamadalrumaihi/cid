@@ -6,10 +6,13 @@
 import { useEffect } from 'react'
 import { useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
-import { BUREAUS, roleLabel } from '@/lib/roles'
+import { BUREAUS, bureauShort, roleLabel } from '@/lib/roles'
 import { Card } from '@/components/ui/Card'
 
-const BUREAU_KEYS = ['LSB', 'BCB', 'SAB', 'JTF'] as const
+// SIB is deliberately absent: its roster is compartmented and never shown on
+// the general readiness board. JTF stays — members can hold the temporary
+// joint-case designation as their division.
+const BUREAU_KEYS = ['major_crimes', 'street_crimes', 'JTF'] as const
 
 export function DutyStatus() {
   const profiles = useProfilesStore((s) => s.profiles)
@@ -34,7 +37,7 @@ export function DutyStatus() {
           const inB = roster.filter((p) => p.division === b)
           return (
             <div key={b} className="rounded-lg border border-white/5 bg-ink-900/45 p-4">
-              <p className="mb-3 font-bold text-white">{b} <span className="text-xs font-normal text-slate-500">· {BUREAUS[b]} · {inB.length} active</span></p>
+              <p className="mb-3 font-bold text-white">{bureauShort(b)} <span className="text-xs font-normal text-slate-500">· {BUREAUS[b]} · {inB.length} active</span></p>
               <div className="space-y-1.5">
                 {inB.length ? inB.slice().sort((a, b2) => Number(a.loa) - Number(b2.loa)).map((p) => (
                   <div key={p.id} className="flex items-center justify-between gap-2 rounded-lg bg-ink-950/50 px-3 py-1.5 text-sm">

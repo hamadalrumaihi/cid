@@ -150,7 +150,7 @@ describe.skipIf(!enabled)('v1.30 — justice-request visibility & judiciary appr
   it('dual-active guard: an ACTIVE CID applicant cannot be approved into a justice role', async () => {
     // Flip the fixture CID-active (the john smith shape), then try the AG approval.
     const reset = await director.rpc('rls_test_reset_member', {
-      p_target: ids.justice, p_role: 'detective', p_division: 'LSB', p_active: true,
+      p_target: ids.justice, p_role: 'detective', p_division: 'major_crimes', p_active: true,
     })
     expect(reset.error).toBeNull()
     const rev = await ag.rpc('review_justice_membership_request', {

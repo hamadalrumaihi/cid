@@ -65,8 +65,8 @@ type C = SupabaseClient
 describe.skipIf(!enabled)('v1.36 — structured legal targets + change summaries (live)', () => {
   let anon: C, lsb: C, bcb: C, director: C
   const tag = Math.random().toString(36).slice(2, 8).toUpperCase()
-  let caseId = ''     // LSB fixture case (lsb-created)
-  let bcbCaseId = ''  // BCB fixture case (bcb-created) — outside lsb's audience
+  let caseId = ''     // MCB fixture case (lsb-created)
+  let bcbCaseId = ''  // SCB fixture case (bcb-created) — outside lsb's audience
   let vehicleId = ''  // registry fixture — director-deleted in teardown
   let placeId = ''    // registry fixture — director-deleted in teardown
   let mainId = ''     // lsb draft that collects the structured targets, then submits with a summary
@@ -105,12 +105,12 @@ describe.skipIf(!enabled)('v1.36 — structured legal targets + change summaries
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
 
     const c = await lsb.from('cases')
-      .insert({ case_number: `V136-${tag}`, title: '[rls-test] v136 structured targets', bureau: 'LSB' })
+      .insert({ case_number: `V136-${tag}`, title: '[rls-test] v136 structured targets', bureau: 'major_crimes' })
       .select('id')
     if (c.error) throw new Error(`fixture case: ${c.error.message}`)
     caseId = c.data![0].id
     const cb = await bcb.from('cases')
-      .insert({ case_number: `V136B-${tag}`, title: '[rls-test] v136 bcb isolation case', bureau: 'BCB' })
+      .insert({ case_number: `V136B-${tag}`, title: '[rls-test] v136 bcb isolation case', bureau: 'street_crimes' })
       .select('id')
     if (cb.error) throw new Error(`bcb fixture case: ${cb.error.message}`)
     bcbCaseId = cb.data![0].id

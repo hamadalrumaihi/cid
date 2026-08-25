@@ -159,7 +159,7 @@ export function FieldSubmitForm({ onDone, asInvestigator = false }: {
     const err = await submitDraft(id)
     setSending(false)
     if (err) { toast(err, 'danger'); return }
-    toast('Sent to CID/SIU. You can follow it under My Reports.', 'success')
+    toast('Sent to CID/SIB. You can follow it under My Reports.', 'success')
     onDone()
   }
 
@@ -307,7 +307,7 @@ export function FieldSubmitForm({ onDone, asInvestigator = false }: {
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Button variant="primary" onClick={() => void send()} disabled={sending || !id}>
-            {sending ? 'Sending…' : 'Send to CID / SIU'}
+            {sending ? 'Sending…' : 'Send to CID / SIB'}
           </Button>
           <Button variant="ghost" onClick={onDone} disabled={sending}>Finish later</Button>
           <Button variant="ghost" onClick={() => void discard()} disabled={sending}>Discard</Button>

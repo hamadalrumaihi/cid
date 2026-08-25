@@ -23,7 +23,7 @@ import { list, rpc } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
 import { useProfilesStore } from '@/lib/profiles'
-import { roleLabel } from '@/lib/roles'
+import { bureauLabel, bureauShort, roleLabel } from '@/lib/roles'
 import { fmtDateTime, timeAgo } from '@/lib/format'
 import { justiceRoleLabel, type LegalRequest } from '@/lib/justice'
 import { CID_ROUTING_BUREAUS, humanize, type RoutingBureau } from '@/lib/legalWorkflow'
@@ -105,7 +105,7 @@ function AppointModal({ busy, onSubmit, onClose }: {
                   {members.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.display_name || 'Member'} — {m.active
-                        ? `${roleLabel(m.role)}${m.division ? ` · ${m.division}` : ''}`
+                        ? `${roleLabel(m.role)}${m.division ? ` · ${bureauShort(m.division)}` : ''}`
                         : 'inactive'}
                     </option>
                   ))}
@@ -131,7 +131,7 @@ function AppointModal({ busy, onSubmit, onClose }: {
               {(id) => (
                 <Select id={id} value={bureau} onChange={(e) => setBureau(e.target.value as RoutingBureau | '')}>
                   <option value="">Select…</option>
-                  {CID_ROUTING_BUREAUS.map((b) => <option key={b} value={b}>{b}</option>)}
+                  {CID_ROUTING_BUREAUS.map((b) => <option key={b} value={b}>{bureauLabel(b)}</option>)}
                 </Select>
               )}
             </Field>
@@ -189,7 +189,7 @@ function CoverageModal({ prosecutors, busy, onSubmit, onClose }: {
             {(id) => (
               <Select id={id} value={bureau} onChange={(e) => setBureau(e.target.value as RoutingBureau | '')}>
                 <option value="">Select…</option>
-                {CID_ROUTING_BUREAUS.map((b) => <option key={b} value={b}>{b}</option>)}
+                {CID_ROUTING_BUREAUS.map((b) => <option key={b} value={b}>{bureauLabel(b)}</option>)}
               </Select>
             )}
           </Field>
@@ -515,7 +515,7 @@ export function DojAdmin({ requests, onOpen, reload, onConflict }: {
           </p>
           <p className="mt-0.5 text-xs text-amber-200/90">
             {noBureau.map((p) => p.name || `${p.user_id.slice(0, 8)}…`).join(' · ')} — until re-appointed with a
-            home bureau (LSB, BCB, or SAB), they cover no queue and cannot claim or be assigned requests.
+            home bureau (Major Crimes or Street Crimes), they cover no queue and cannot claim or be assigned requests.
           </p>
         </div>
       )}
@@ -537,7 +537,7 @@ export function DojAdmin({ requests, onOpen, reload, onConflict }: {
                   <span className="text-sm font-semibold text-white">{d.display_name || 'Member'}</span>
                   <span className="ml-2 text-xs text-slate-400">
                     {justiceRoleLabel(d.justice_role)}
-                    {m?.prosecutor_bureau ? ` · ${m.prosecutor_bureau}` : ''}
+                    {m?.prosecutor_bureau ? ` · ${bureauShort(m.prosecutor_bureau)}` : ''}
                   </span>
                   {effectiveJusticeRole(d.justice_role) === 'prosecutor' && m && !m.prosecutor_bureau && (
                     <Badge tone="warn" className="ml-2">No home bureau</Badge>
@@ -576,7 +576,7 @@ export function DojAdmin({ requests, onOpen, reload, onConflict }: {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-semibold text-white">{name(c.prosecutor_id)}</span>
-                  <Badge tone="warn">covers {c.bureau}</Badge>
+                  <Badge tone="warn">covers {bureauShort(c.bureau)}</Badge>
                   <span className="text-xs text-slate-400">
                     {c.expires_at ? `until ${fmtDateTime(c.expires_at)}` : 'no expiry'}
                     {' · '}granted by {name(c.authorized_by)} {timeAgo(c.starts_at)}
@@ -606,7 +606,7 @@ export function DojAdmin({ requests, onOpen, reload, onConflict }: {
                 <span className="text-sm font-semibold text-white">{name(t.user_id)}</span>
                 <span className="text-xs text-slate-400">
                   {humanize(t.direction)} · {justiceRoleLabel(t.requested_role)}
-                  {t.target_bureau ? ` · ${t.target_bureau}` : ''}
+                  {t.target_bureau ? ` · ${bureauShort(t.target_bureau)}` : ''}
                 </span>
                 <Badge tone={t.status === 'doj_accepted' ? 'good' : t.status === 'cid_approved' ? 'warn' : 'neutral'}>
                   {humanize(t.status)}

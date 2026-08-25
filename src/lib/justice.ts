@@ -142,11 +142,11 @@ export const REVIEW_STATUS_LABEL: Record<string, string> = {
   not_submitted: 'Draft — not submitted',
   cid_supervisor_review: 'CID supervisor review',
   returned_by_cid: 'Returned by CID',
-  // The SIU lane (20260903170000). Named for who actually decides: an SIU
+  // The SIB lane (20260903170000). Named for who actually decides: an SIB
   // warrant must never read "CID supervisor review", because the Director of
-  // CID holds no SIU authority and cannot act on it.
-  siu_command_review: 'SIU command review',
-  returned_by_siu_command: 'Returned by SIU command',
+  // CID holds no SIB authority and cannot act on it.
+  siu_command_review: 'SIB command review',
+  returned_by_siu_command: 'Returned by SIB command',
   submitted_to_doj: 'Submitted to DOJ — awaiting assignment',
   ada_review: 'ADA review',
   returned_by_ada: 'Returned by ADA',

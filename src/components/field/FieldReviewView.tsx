@@ -1,6 +1,6 @@
 'use client'
 
-/** Field Intelligence Review — the CID/SIU workspace for reports from patrol.
+/** Field Intelligence Review — the CID/SIB workspace for reports from patrol.
  *
  *  This is what replaced the Odyssey ticket queue. It is not the same thing
  *  renamed: a ticket was a request to open a case, and a field submission is
@@ -27,7 +27,7 @@ import { toast } from '@/lib/toast'
 import {
   RELIABILITIES, RELIABILITY_LABEL, RELIABILITY_MEANING, URGENCIES, URGENCY_LABEL,
   fieldStatusLabel, gradeSubmission, isExternalSource, jurisdictionLabel,
-  jurisdictionRouting, loadSubmissionParts, reliabilityLabel, sourceLabel,
+  loadSubmissionParts, reliabilityLabel, sourceLabel,
   submissionRef, urgencyLabel, urgencyTone,
   type FieldSubmissionRow, type Reliability, type SubmissionParts, type Urgency,
 } from '@/lib/fieldSubmissions'
@@ -192,7 +192,7 @@ export function FieldReviewView() {
               label: QUEUE_LABEL[f],
               count: countFor(f),
             })),
-            // Same table, same reports: SIU is a specialist detachment inside
+            // Same table, same reports: SIB is a specialist detachment inside
             // CID, so these are filters rather than a second application.
             ...(siu.isAgent ? SIU_FILTERS.map((f) => ({
               id: f as QueueFilter | SiuFilter | 'access' | 'legacy',
@@ -328,7 +328,7 @@ function ReportCard({ r, counts, me, isCommand, matched, onOpen, onChanged }: {
           <Badge tone={r.status === 'needs_info' ? 'warn' : 'accent'}>
             {fieldStatusLabel(r.status)}
           </Badge>
-          {/* A workflow indicator, never "confirmed SIU case" -- the wording
+          {/* A workflow indicator, never "confirmed SIB case" -- the wording
               comes from siuStateLabel so the two cannot drift apart. */}
           {r.siu_state && (
             <Badge tone={siuStateTone(r.siu_state)}>
@@ -570,7 +570,7 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
             <p className="text-xs text-slate-500">
               {submission.submitted_at && `Sent ${fmtDateTime(submission.submitted_at)}`}
               {submission.mdt_reference && ` · their report ${submission.mdt_reference}`}
-              {` · ${jurisdictionRouting(submission.jurisdiction)}`}
+              {` · ${jurisdictionLabel(submission.jurisdiction)}`}
               {` · ${sourceLabel(submission.source_type)}`}
             </p>
             {submission.archive_reason && (
@@ -646,7 +646,7 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
 
       {/* What acting on the record actually looks like: a case, a link to one
           somebody already opened, a surveillance entry, the source behind it.
-          Placed above the SIU panel because it is the CID path, and below the
+          Placed above the SIB panel because it is the CID path, and below the
           decision controls because the decision comes first. */}
       <IntelActions submission={submission}
         onChanged={() => { void load(); onChanged() }} />
@@ -799,7 +799,7 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
                 m.from_reviewer ? 'bg-white/5 text-slate-200' : 'bg-blue-500/10 text-blue-100'
               }`}>
                 <p className="text-[11px] uppercase tracking-wider text-slate-500">
-                  {m.from_reviewer ? 'CID/SIU' : 'Reporting officer'} · {fmtDateTime(m.created_at)}
+                  {m.from_reviewer ? 'CID/SIB' : 'Reporting officer'} · {fmtDateTime(m.created_at)}
                 </p>
                 <p className="mt-0.5 whitespace-pre-wrap">{m.body}</p>
               </li>

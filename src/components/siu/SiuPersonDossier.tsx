@@ -23,7 +23,7 @@
  *  and "medium confidence" into one word is a display convenience and must
  *  never be mistaken for the record.
  *
- *  ── An empty SIU section means something specific ─────────────────────────
+ *  ── An empty SIB section means something specific ─────────────────────────
  *  `siu_person_dossier()` is SECURITY INVOKER: an unauthorized caller gets no
  *  error, just empty arrays, because their policies returned nothing. So an
  *  absent watch means "none that you may see", never "none exists" — the same
@@ -155,10 +155,10 @@ export function SiuPersonDossierModal({ personId, onClose }: {
             </div>
           )}
 
-          {/* ── The SIU half ─────────────────────────────────────────── */}
+          {/* ── The SIB half ─────────────────────────────────────────── */}
           {siu.isAgent && (
             <Section
-              title="SIU"
+              title="SIB"
               hint="Held by the unit. An empty section here means nothing you are cleared to see — not that nothing exists."
             >
               <div className="space-y-2">

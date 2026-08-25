@@ -61,8 +61,10 @@ test.describe('DOJ legal review — functional E2E', () => {
       expect(cidRoles.join('|')).toContain('Detective')
       expect(cidRoles.join('|')).not.toContain('Attorney')
       const bureaus = await page.getByLabel(/Requested Department/).locator('option').allTextContents()
-      expect(bureaus.join('|')).toMatch(/LSB/)
+      expect(bureaus.join('|')).toMatch(/Major Crimes/)
+      expect(bureaus.join('|')).toMatch(/Street Crimes/)
       expect(bureaus.join('|')).not.toMatch(/JTF/)
+      expect(bureaus.join('|')).not.toMatch(/Special Investigations/)
     } finally {
       await live.ctx.dispose()
     }

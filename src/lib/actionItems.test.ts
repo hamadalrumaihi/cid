@@ -15,7 +15,7 @@ const NAMES: Record<string, string> = { 'off-2': 'Det. Ortiz', 'off-3': 'Det. Va
 
 function src(over: Partial<ActionSources> = {}): ActionSources {
   return {
-    me: ME, role: 'detective', division: 'LSB', isCommand: false,
+    me: ME, role: 'detective', division: 'major_crimes', isCommand: false,
     todayISO: TODAY, nowMs: NOW,
     profileName: (id) => (id && NAMES[id]) || '',
     cases: [], tasks: [], transfers: [], accessRequests: [],
@@ -27,7 +27,7 @@ function src(over: Partial<ActionSources> = {}): ActionSources {
 function mkCase(over: Partial<AcCase> = {}): AcCase {
   return {
     id: 'c-1', case_number: 'CID-26-001', title: 'Dockside', status: 'open',
-    bureau: 'LSB', lead_detective_id: ME, created_by: ME, follow_up_at: null,
+    bureau: 'major_crimes', lead_detective_id: ME, created_by: ME, follow_up_at: null,
     signoff_status: 'none', signoff_stage: null, signoff_assignee_id: null,
     signoff_submitted_by: null, signoff_submitted_at: null,
     created_at: NOW_ISO, updated_at: NOW_ISO, ...over,
@@ -44,7 +44,7 @@ function mkTask(over: Partial<AcTask> = {}): AcTask {
 function mkTransfer(over: Partial<AcTransfer> = {}): AcTransfer {
   return {
     id: 'tr-1', status: 'pending_source', target_id: 'off-2', requested_by: 'off-3',
-    from_bureau: 'LSB', to_bureau: 'BCB', reason: 'Coverage',
+    from_bureau: 'major_crimes', to_bureau: 'street_crimes', reason: 'Coverage',
     created_at: NOW_ISO, updated_at: NOW_ISO, ...over,
   }
 }
@@ -63,7 +63,7 @@ function mkLegal(over: Partial<AcLegal> = {}): AcLegal {
     review_status: 'submitted_to_doj', document_status: 'submitted',
     fulfilment_status: 'unissued', service_status: 'not_served',
     compliance_status: 'pending', approval_route: 'judge', classification: 'standard',
-    created_by: ME, responsible_bureau: 'LSB',
+    created_by: ME, responsible_bureau: 'major_crimes',
     assigned_ada_id: null, assigned_judge_id: null,
     response_deadline: null, expires_at: null, submitted_to_doj_at: NOW_ISO,
     created_at: NOW_ISO, updated_at: NOW_ISO, ...over,
@@ -141,7 +141,7 @@ describe('sign-off decide', () => {
 
   it('role authority (bureau lead of the case bureau) → command item with responsibleRole', () => {
     const c = mkCase({ signoff_status: 'awaiting_bureau_lead', signoff_assignee_id: 'off-2', lead_detective_id: 'off-3', created_by: 'off-3' })
-    const q = buildActionItems(src({ role: 'bureau_lead', division: 'LSB', isCommand: true, cases: [c] }))
+    const q = buildActionItems(src({ role: 'bureau_lead', division: 'major_crimes', isCommand: true, cases: [c] }))
     const item = byKey(q, 'case:c-1:signoff-decide')
     expect(item).toMatchObject({ isCommandItem: true, isPersonalItem: false, responsibleRole: 'bureau_lead' })
   })
@@ -175,7 +175,7 @@ describe('returned case', () => {
 
 describe('transfers', () => {
   it('source-side bureau lead decides pending_source → command needs_action item', () => {
-    const q = buildActionItems(src({ role: 'bureau_lead', division: 'LSB', isCommand: true, transfers: [mkTransfer()] }))
+    const q = buildActionItems(src({ role: 'bureau_lead', division: 'major_crimes', isCommand: true, transfers: [mkTransfer()] }))
     const item = byKey(q, 'transfer:tr-1')
     expect(item).toMatchObject({
       sourceType: 'transfer', status: 'needs_action', isCommandItem: true,
@@ -186,9 +186,9 @@ describe('transfers', () => {
 
   it('pending_target is decided by the DESTINATION bureau lead, not the source lead', () => {
     const t = mkTransfer({ status: 'pending_target' })
-    const sourceLead = buildActionItems(src({ role: 'bureau_lead', division: 'LSB', isCommand: true, transfers: [t] }))
+    const sourceLead = buildActionItems(src({ role: 'bureau_lead', division: 'major_crimes', isCommand: true, transfers: [t] }))
     expect(byKey(sourceLead, 'transfer:tr-1')).toBeUndefined() // not decider, not a party → excluded
-    const destLead = buildActionItems(src({ role: 'bureau_lead', division: 'BCB', isCommand: true, transfers: [t] }))
+    const destLead = buildActionItems(src({ role: 'bureau_lead', division: 'street_crimes', isCommand: true, transfers: [t] }))
     expect(byKey(destLead, 'transfer:tr-1')?.status).toBe('needs_action')
   })
 
@@ -200,7 +200,7 @@ describe('transfers', () => {
   })
 
   it('my own transfer is never a decide item — it waits, even for a decider role', () => {
-    const q = buildActionItems(src({ role: 'bureau_lead', division: 'LSB', isCommand: true, transfers: [mkTransfer({ target_id: ME })] }))
+    const q = buildActionItems(src({ role: 'bureau_lead', division: 'major_crimes', isCommand: true, transfers: [mkTransfer({ target_id: ME })] }))
     const item = byKey(q, 'transfer:tr-1')
     expect(item).toMatchObject({ status: 'waiting', isCommandItem: false, isPersonalItem: true, isWaitingOnCurrentUser: false })
   })
@@ -342,9 +342,9 @@ describe('legal requests (disposition-driven — lib/legalWorkflow)', () => {
       legalViewer: {
         myId: ME, cidActive: true, cidRole: 'detective',
         justiceRole: 'assistant_district_attorney', isOwner: false,
-        prosecutorBureaus: ['LSB'],
+        prosecutorBureaus: ['major_crimes'],
       },
-      legal: [mkLegal({ created_by: 'off-2' })], // submitted_to_doj, LSB, unassigned
+      legal: [mkLegal({ created_by: 'off-2' })], // submitted_to_doj, major_crimes, unassigned
     }))
     expect(q.items).toHaveLength(0)
   })
@@ -682,15 +682,15 @@ describe('surveillance (observations + targets)', () => {
   })
 
   it('pending approval → command decide item ONLY for the authorization mirror (bureau lead of the case bureau)', () => {
-    const cases = [mkCase({ bureau: 'LSB' })]
-    const lead = buildActionItems(src({ role: 'bureau_lead', division: 'LSB', isCommand: true, cases, survTargets: [mkTarget()] }))
+    const cases = [mkCase({ bureau: 'major_crimes' })]
+    const lead = buildActionItems(src({ role: 'bureau_lead', division: 'major_crimes', isCommand: true, cases, survTargets: [mkTarget()] }))
     expect(byKey(lead, 'surv_tgt:st-1')).toMatchObject({
       sourceType: 'surveillance_expiring', status: 'needs_action',
       isCommandItem: true, isWaitingOnCurrentUser: true,
       deepLink: '/cases?case=c-1&tab=surveillance',
     })
     // A bureau lead of ANOTHER bureau has no authority — and is not a party.
-    const otherLead = buildActionItems(src({ role: 'bureau_lead', division: 'BCB', isCommand: true, cases, survTargets: [mkTarget()] }))
+    const otherLead = buildActionItems(src({ role: 'bureau_lead', division: 'street_crimes', isCommand: true, cases, survTargets: [mkTarget()] }))
     expect(byKey(otherLead, 'surv_tgt:st-1')).toBeUndefined()
   })
 

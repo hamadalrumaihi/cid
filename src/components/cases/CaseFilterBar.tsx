@@ -5,8 +5,11 @@ import { activeCaseFilterCount, caseViews, EMPTY_FILTERS, setCaseViews, type Cas
 import { uiPrompt } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/Button'
 import { toast } from '@/lib/toast'
+import { PERMANENT_BUREAUS, bureauLabel } from '@/lib/roles'
 
-const BUREAUS = ['LSB', 'BCB', 'SAB', 'JTF']
+/** Filterable bureaus: the permanent bureaus, SIB (rows the viewer is cleared
+ *  for — RLS already scopes the list), and the temporary JTF designation. */
+const BUREAUS = [...PERMANENT_BUREAUS, 'special_investigations', 'JTF']
 const STATUSES = ['open', 'active', 'cold', 'closed']
 
 interface Props {
@@ -26,7 +29,7 @@ export function CaseFilterBar({ filters, scope, query, activeViewName, onFilters
   const patch = (p: Partial<CaseFilters>) => onFilters({ ...filters, ...p })
 
   const saveView = async () => {
-    const name = await uiPrompt('Name this case view.', { title: 'Save view', placeholder: 'Active BCB follow-ups', confirmText: 'Save' })
+    const name = await uiPrompt('Name this case view.', { title: 'Save view', placeholder: 'Active SCB follow-ups', confirmText: 'Save' })
     if (!name) return
     const next: SavedCaseView = { name, filters, scope, q: query }
     setCaseViews([...views.filter((v) => v.name !== name), next])
@@ -55,7 +58,7 @@ export function CaseFilterBar({ filters, scope, query, activeViewName, onFilters
       <div className="grid gap-2 md:grid-cols-5">
         <select aria-label="Filter by bureau" value={filters.bureau} onChange={(e) => patch({ bureau: e.target.value })} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
           <option value="">All bureaus</option>
-          {BUREAUS.map((b) => <option key={b} value={b}>{b}</option>)}
+          {BUREAUS.map((b) => <option key={b} value={b}>{bureauLabel(b)}</option>)}
         </select>
         <select aria-label="Filter by status" value={filters.status} onChange={(e) => patch({ status: e.target.value })} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
           <option value="">All statuses</option>

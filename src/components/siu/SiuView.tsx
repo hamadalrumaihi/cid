@@ -1,25 +1,25 @@
 'use client'
 
-/** Special Investigation Unit — the privileged investigative workspace.
+/** Special Investigations Bureau — the privileged investigative workspace.
  *
- *  SIU deliberately reuses the CID portal's mature systems: an SIU
+ *  SIB deliberately reuses the CID portal's mature systems: an SIB
  *  investigation IS a `cases` row (authority `siu`), so opening one lands in
  *  the ordinary case workspace with its reports, evidence, media, tasks,
  *  timeline, chat, graph and legal tabs already working. This screen is the
- *  privileged FILTER and the SIU-only administration around them — not a
+ *  privileged FILTER and the SIB-only administration around them — not a
  *  second case-management app.
  *
  *  Access: every gate here comes from `useSiu()` (the client mirror of
  *  `private.siu_standing()`). Rendering nothing is the correct behavior for an
  *  unauthorized account — the route resolves to the app's ordinary
- *  unknown-tab notice, never a "restricted" banner that would confirm SIU
- *  exists. RLS and the SIU RPCs are the real enforcement.
+ *  unknown-tab notice, never a "restricted" banner that would confirm SIB
+ *  exists. RLS and the SIB RPCs are the real enforcement.
  *
  *  Visual language: the portal's own dark investigative surfaces. Violet is
  *  reserved for identity and state markers — standing/classification/
  *  visibility chips — never washed over panels, borders or ordinary actions.
  *  No stamps, no glow, no hacker aesthetic — the difference between CID and
- *  SIU is authority and information access, not decoration. */
+ *  SIB is authority and information access, not decoration. */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -54,7 +54,7 @@ import {
 import { SiuPersonDossierModal } from './SiuPersonDossier'
 import { SiuCommandSection } from './SiuCommand'
 import { SiuOversightSection, SiuTradecraftSection } from './SiuTradecraft'
-import { roleLabel } from '@/lib/roles'
+import {roleLabel, bureauShort} from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -116,7 +116,7 @@ export function SiuView() {
   if (state !== 'in') return <Notice text="Sign in to continue." />
   if (siu.loading) return <CardGridSkeleton cols="" />
   // Unauthorized: the app's ordinary "nothing here" surface. No mention of
-  // SIU, no hint that a restricted area exists.
+  // SIB, no hint that a restricted area exists.
   if (!siu.canAccess) {
     return (
       <EmptyState
@@ -131,14 +131,14 @@ export function SiuView() {
     <div>
       <Card pad="lg" className="mb-5">
         <PageHeader
-          eyebrow="Special Investigation Unit"
-          title="SIU Workspace"
+          eyebrow="Special Investigations Bureau"
+          title="SIB Workspace"
           subtitle="Investigations, personnel and oversight of CID activity — separate authority, need-to-know by default."
           actions={
             <div className="flex items-center gap-2">
               <Badge tint="bg-violet-500/15 text-violet-300">
                 {siu.standing === 'owner' ? 'Portal Owner'
-                  : siu.standing === 'oversight' ? 'SIU Oversight'
+                  : siu.standing === 'oversight' ? 'SIB Oversight'
                   : siuRoleLabel(siu.standing)}
               </Badge>
               {siu.membership?.callsign && (
@@ -149,7 +149,7 @@ export function SiuView() {
         />
         {!siu.releaseOpen && (
           <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-300/90">
-            <strong className="font-semibold">Pre-release.</strong> SIU is gated to the Portal Owner
+            <strong className="font-semibold">Pre-release.</strong> SIB is gated to the Portal Owner
             until it is marked production-ready. Appointments, investigations and permissions all work
             exactly as they will after launch — no other account can see or reach any of it.
           </p>
@@ -161,7 +161,7 @@ export function SiuView() {
         active={section}
         onChange={setSection}
         idBase="siu"
-        ariaLabel="SIU sections"
+        ariaLabel="SIB sections"
         className="mb-4"
       />
 
@@ -247,11 +247,11 @@ function OverviewSection({ onGoto }: { onGoto: (s: Section) => void }) {
       <Card>
         <SectionHeader
           title="Active investigations"
-          subtitle="The most recently worked SIU cases you are cleared for."
+          subtitle="The most recently worked SIB cases you are cleared for."
           actions={<Button size="sm" onClick={() => onGoto('investigations')}>View all</Button>}
         />
         {!recent.length ? (
-          <p className="mt-3 text-xs text-slate-400">No SIU investigations yet.</p>
+          <p className="mt-3 text-xs text-slate-400">No SIB investigations yet.</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {recent.map((c) => <InvestigationRow key={c.id} row={c} />)}
@@ -260,12 +260,12 @@ function OverviewSection({ onGoto }: { onGoto: (s: Section) => void }) {
       </Card>
 
       {/* CID oversight signal — deliberately a filtered pointer into the CID
-          screens SIU already reads, not a second analytics dashboard. */}
+          screens SIB already reads, not a second analytics dashboard. */}
       {siu.canReadCid && (
         <Card>
           <SectionHeader
             title="CID activity"
-            subtitle="SIU holds broad read access across every bureau. Read-only: SIU never edits CID records."
+            subtitle="SIB holds broad read access across every bureau. Read-only: SIB never edits CID records."
           />
           <div className="mt-3">
             <MetricStrip
@@ -278,7 +278,7 @@ function OverviewSection({ onGoto }: { onGoto: (s: Section) => void }) {
           <p className="mt-3 text-[11px] text-slate-400">
             Work CID material in its own screens — Case Files, Persons, Gangs, the relationship
             graph and global search all already return every bureau&rsquo;s records for you.
-            Integrity concerns you record against a CID investigation stay on the SIU layer:
+            Integrity concerns you record against a CID investigation stay on the SIB layer:
             the case&rsquo;s own detectives and CID command never see that the note exists.
           </p>
         </Card>
@@ -335,7 +335,7 @@ function InvestigationsSection() {
 
   // The deferred call is the repo's standard effect→refresh hop (ShiftsView):
   // it keeps the first setState out of the synchronous effect body. `cases` is
-  // in the realtime publication and its per-subscriber RLS now runs the SIU
+  // in the realtime publication and its per-subscriber RLS now runs the SIB
   // wall, so this only ever wakes for rows this account may actually see.
   useEffect(() => {
     const t = window.setTimeout(() => { void refresh() }, 0)
@@ -353,8 +353,8 @@ function InvestigationsSection() {
     <div className="space-y-4">
       <Card>
         <SectionHeader
-          title="SIU investigations"
-          subtitle="Every SIU case you are cleared for. Opening one uses the full case workspace."
+          title="SIB investigations"
+          subtitle="Every SIB case you are cleared for. Opening one uses the full case workspace."
           actions={siu.isAgent ? (
             <Button variant="primary" onClick={() => setCreating(true)}>+ New investigation</Button>
           ) : undefined}
@@ -381,7 +381,7 @@ function InvestigationsSection() {
       ) : !shown.length ? (
         <EmptyState
           icon="🗂️"
-          title={rows.length ? 'No investigation matches that filter' : 'No SIU investigations yet'}
+          title={rows.length ? 'No investigation matches that filter' : 'No SIB investigations yet'}
           hint={rows.length
             ? 'Clear the filter to see everything you are cleared for.'
             : 'Open one to start building the record. Compartmented cases start with you as the only person on the allow-list.'}
@@ -429,7 +429,7 @@ function NewInvestigationModal({ onClose, onCreated }: { onClose: () => void; on
 
   return (
     <Modal open onClose={onClose} dirty={() => !!title || !!summary}>
-      <ModalHeader title="New SIU investigation" onClose={onClose} />
+      <ModalHeader title="New SIB investigation" onClose={onClose} />
       <div className="space-y-3">
         <Field label="Title" required>
           {(id) => <Input id={id} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Integrity review — Vespucci narcotics unit" />}
@@ -447,7 +447,7 @@ function NewInvestigationModal({ onClose, onCreated }: { onClose: () => void; on
           )}
         </Field>
         <p className="text-[11px] text-slate-400">
-          The case number is minted server-side in the SIU series. You are recorded as the lead agent;
+          The case number is minted server-side in the SIB series. You are recorded as the lead agent;
           a compartmented investigation starts with you as its only allow-listed member.
         </p>
         <div className="flex justify-end gap-2">
@@ -509,7 +509,7 @@ function TargetsSection() {
     <Card>
       <SectionHeader
         title="Targets"
-        subtitle="Investigative designations across SIU investigations you can access. A designation describes someone's standing in an investigation — it is not a finding or a conviction."
+        subtitle="Investigative designations across SIB investigations you can access. A designation describes someone's standing in an investigation — it is not a finding or a conviction."
         actions={
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={() => setShowCleared((v) => !v)}>
@@ -750,7 +750,7 @@ function OperationsSection() {
   }, [refresh])
 
   const create = async () => {
-    const name = await uiPrompt('Operation name', { title: 'New SIU operation' })
+    const name = await uiPrompt('Operation name', { title: 'New SIB operation' })
     if (!name?.trim()) return
     setBusy(true)
     const res = await rpc('siu_create_operation', { p_name: name.trim() })
@@ -766,7 +766,7 @@ function OperationsSection() {
     <Card>
       <SectionHeader
         title="Operations"
-        subtitle="Planned SIU actions — surveillance, undercover, warrants, apprehensions. Invisible to CID at every rank."
+        subtitle="Planned SIB actions — surveillance, undercover, warrants, apprehensions. Invisible to CID at every rank."
         actions={siu.isAgent ? (
           <Button size="sm" variant="primary" disabled={busy} onClick={() => void create()}>
             + New operation
@@ -774,7 +774,7 @@ function OperationsSection() {
         ) : undefined}
       />
       {!rows.length ? (
-        <p className="mt-3 text-xs text-slate-400">No SIU operations yet.</p>
+        <p className="mt-3 text-xs text-slate-400">No SIB operations yet.</p>
       ) : (
         <ul className="mt-3 space-y-2">
           {rows.map((o) => (
@@ -844,7 +844,7 @@ function IntelligenceSection() {
     <Card>
       <SectionHeader
         title="Intelligence"
-        subtitle="Restricted SIU intelligence, including concerns recorded against CID investigations. A CID case's own detectives and CID command never see that these notes exist."
+        subtitle="Restricted SIB intelligence, including concerns recorded against CID investigations. A CID case's own detectives and CID command never see that these notes exist."
         actions={
           <div className="flex items-center gap-2">
             {ungraded > 0 && <Badge tint="bg-white/5 text-slate-300">{ungraded} ungraded</Badge>}
@@ -860,10 +860,10 @@ function IntelligenceSection() {
       {!open.length ? (
         <div className="mt-3 rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
           <p className="text-sm font-semibold text-slate-200">
-            {rows.length ? 'No unresolved SIU intelligence.' : 'No intelligence recorded yet.'}
+            {rows.length ? 'No unresolved SIB intelligence.' : 'No intelligence recorded yet.'}
           </p>
           <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-slate-400">
-            A note can sit on an SIU investigation or on a CID case. Recorded against a CID case it
+            A note can sit on an SIB investigation or on a CID case. Recorded against a CID case it
             is invisible to that case&apos;s own detectives and to CID command — which is what makes
             investigating a compromised investigator possible without alerting them.
           </p>
@@ -1052,7 +1052,7 @@ function RecordIntelligenceModal({ onClose, onDone }: { onClose: () => void; onD
               <option value="">Choose a case…</option>
               {cases.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.case_authority === 'siu' ? '[SIU] ' : '[CID] '}{c.case_number} — {c.title}
+                  {c.case_authority === 'siu' ? '[SIB] ' : '[CID] '}{c.case_number} — {c.title}
                 </option>
               ))}
             </Select>
@@ -1063,14 +1063,14 @@ function RecordIntelligenceModal({ onClose, onDone }: { onClose: () => void; onD
           <p className="rounded-lg border border-violet-500/25 bg-violet-500/5 px-3 py-2 text-xs leading-relaxed text-violet-200/90">
             This note sits on a <strong className="font-semibold">CID investigation</strong>. Its own
             detectives and CID command will not see that it exists — that is what makes recording a
-            concern about an investigation possible without alerting the people running it. Every SIU
+            concern about an investigation possible without alerting the people running it. Every SIB
             field agent can read it.
           </p>
         )}
 
         {aboutCid && (
           <Field
-            label="Held by which SIU investigation"
+            label="Held by which SIB investigation"
             hint="Optional. Files the concern under one of your investigations so it is found again."
           >
             {(id) => (
@@ -1275,14 +1275,14 @@ function AgentsSection() {
 
   const remove = async (r: SiuRosterRow) => {
     if (!(await uiConfirm(
-      `Revoke ${r.display_name || 'this agent'}'s SIU access? Their reports, evidence, authorship and audit history are preserved — only live access ends.`,
-      { title: 'Remove from SIU', confirmText: 'Remove' },
+      `Revoke ${r.display_name || 'this agent'}'s SIB access? Their reports, evidence, authorship and audit history are preserved — only live access ends.`,
+      { title: 'Remove from SIB', confirmText: 'Remove' },
     ))) return
-    const reason = await uiPrompt('Reason for the removal (recorded in the SIU audit trail)', { title: 'Reason required' })
+    const reason = await uiPrompt('Reason for the removal (recorded in the SIB audit trail)', { title: 'Reason required' })
     if (!reason?.trim()) return
     const res = await rpc('siu_remove', { p_user: r.user_id, p_reason: reason.trim() })
     if (res.error) { toast(res.error.message, 'danger'); return }
-    toast('SIU access revoked.', 'success')
+    toast('SIB access revoked.', 'success')
     void refresh()
   }
 
@@ -1302,8 +1302,8 @@ function AgentsSection() {
     <div className="space-y-4">
       <Card>
         <SectionHeader
-          title="SIU personnel"
-          subtitle="Appointment only — there is no application, no request queue and no promotion path into SIU."
+          title="SIB personnel"
+          subtitle="Appointment only — there is no application, no request queue and no promotion path into SIB."
           actions={siu.canAppoint ? (
             <Button variant="primary" onClick={() => setInviting(true)}>+ Invite agent</Button>
           ) : undefined}
@@ -1315,14 +1315,14 @@ function AgentsSection() {
           <Card>
             <SectionHeader title={`Active (${active.length})`} />
             {!active.length ? (
-              <p className="mt-3 text-xs text-slate-400">No SIU agents appointed yet.</p>
+              <p className="mt-3 text-xs text-slate-400">No SIB agents appointed yet.</p>
             ) : (
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full min-w-[46rem] text-left text-xs">
                   <thead className="text-[10px] uppercase tracking-wider text-slate-400">
                     <tr>
                       <th className="px-2 py-1.5">Agent</th>
-                      <th className="px-2 py-1.5">SIU role</th>
+                      <th className="px-2 py-1.5">SIB role</th>
                       <th className="px-2 py-1.5">Callsign</th>
                       <th className="px-2 py-1.5">Appointed</th>
                       <th className="px-2 py-1.5">Former CID</th>
@@ -1342,7 +1342,7 @@ function AgentsSection() {
                         </td>
                         <td className="px-2 py-2">
                           <Badge tint="bg-violet-500/15 text-violet-300">
-                            {r.oversight_only ? 'SIU Oversight' : siuRoleLabel(r.siu_role)}
+                            {r.oversight_only ? 'SIB Oversight' : siuRoleLabel(r.siu_role)}
                           </Badge>
                         </td>
                         <td className="px-2 py-2 font-mono text-slate-200">{siuCallsign(r.callsign)}</td>
@@ -1350,9 +1350,9 @@ function AgentsSection() {
                           {fmtDate(r.appointed_at)}
                           {r.appointed_by_name && <span className="block text-[11px] text-slate-400">by {r.appointed_by_name}</span>}
                         </td>
-                        {/* History, never authority — no SIU rule reads it. */}
+                        {/* History, never authority — no SIB rule reads it. */}
                         <td className="px-2 py-2 text-slate-400">
-                          {roleLabel(r.former_cid_role)}{r.former_cid_bureau ? ` · ${r.former_cid_bureau}` : ''}
+                          {roleLabel(r.former_cid_role)}{r.former_cid_bureau ? ` · ${bureauShort(r.former_cid_bureau)}` : ''}
                         </td>
                         <td className="px-2 py-2 text-slate-400">{fmtWhen(r.last_activity)}</td>
                         <td className="px-2 py-2 text-right">
@@ -1439,15 +1439,15 @@ function InviteAgentModal({ onClose, onDone }: { onClose: () => void; onDone: ()
     })
     setBusy(false)
     if (res.error) { toast(res.error.message, 'danger'); return }
-    toast(`${picked.display_name || 'Member'} appointed to SIU.`, 'success')
+    toast(`${picked.display_name || 'Member'} appointed to SIB.`, 'success')
     onDone()
   }
 
   return (
     <Modal open onClose={onClose} dirty={() => !!picked}>
-      <ModalHeader title="Invite an agent into SIU" onClose={onClose} />
+      <ModalHeader title="Invite an agent into SIB" onClose={onClose} />
       <div className="space-y-3">
-        <Field label="Find an approved portal member" hint="Only active, approved accounts that are not already in SIU.">
+        <Field label="Find an approved portal member" hint="Only active, approved accounts that are not already in SIB.">
           {(id) => <Input id={id} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or badge number…" />}
         </Field>
         <div className="max-h-52 overflow-y-auto rounded-lg border border-white/10">
@@ -1463,13 +1463,13 @@ function InviteAgentModal({ onClose, onDone }: { onClose: () => void; onDone: ()
               }`}
             >
               <span className="flex-1 truncate text-white">{c.display_name || 'Member'}</span>
-              <span className="text-slate-400">{roleLabel(c.cid_role)}{c.cid_bureau ? ` · ${c.cid_bureau}` : ''}</span>
+              <span className="text-slate-400">{roleLabel(c.cid_role)}{c.cid_bureau ? ` · ${bureauShort(c.cid_bureau)}` : ''}</span>
             </button>
           ))}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="SIU role">
+          <Field label="SIB role">
             {(id) => (
               <Select id={id} value={role} onChange={(e) => setRole(e.target.value)}>
                 {roles.map((r) => <option key={r} value={r}>{siuRoleLabel(r)}</option>)}
@@ -1530,11 +1530,11 @@ function ActivitySection() {
   return (
     <Card>
       <SectionHeader
-        title="SIU activity"
+        title="SIB activity"
         subtitle="Appointments, classifications, assignments and compartment changes. Case-keyed entries appear only for investigations you are cleared for — the subject of an investigation never sees its trail."
       />
       {!rows.length ? (
-        <p className="mt-3 text-xs text-slate-400">No SIU activity recorded yet.</p>
+        <p className="mt-3 text-xs text-slate-400">No SIB activity recorded yet.</p>
       ) : (
         <ul className="mt-3 space-y-1.5">
           {rows.map((r) => (

@@ -87,57 +87,57 @@ describe('authority mirrors', () => {
   const lead = (division: string): OpViewer =>
     ({ userId: 'u2', active: true, role: 'bureau_lead', division, isCommand: true, isOwner: false })
   const director: OpViewer =
-    { userId: 'u3', active: true, role: 'director', division: 'SAB', isCommand: true, isOwner: false }
+    { userId: 'u3', active: true, role: 'director', division: 'street_crimes', isCommand: true, isOwner: false }
 
   const jtfOp = { op_type: 'jtf', status: 'active', bureau: null }
-  const parts = ['SAB', 'LSB']
+  const parts = ['major_crimes']
 
   it('canManageOperation: participating bureau_lead yes, foreign lead no, director always', () => {
-    expect(canManageOperation(lead('LSB'), jtfOp, parts)).toBe(true)
-    expect(canManageOperation(lead('BCB'), jtfOp, parts)).toBe(false)
+    expect(canManageOperation(lead('major_crimes'), jtfOp, parts)).toBe(true)
+    expect(canManageOperation(lead('street_crimes'), jtfOp, parts)).toBe(false)
     expect(canManageOperation(director, jtfOp, parts)).toBe(true)
-    expect(canManageOperation(det('LSB'), jtfOp, parts)).toBe(false)
+    expect(canManageOperation(det('major_crimes'), jtfOp, parts)).toBe(false)
   })
 
   it('canManageOperation: bureau-owned normal op is own-bureau or command; legacy is open', () => {
-    const owned = { op_type: 'normal', bureau: 'LSB' as const }
-    expect(canManageOperation(det('LSB'), owned, [])).toBe(true)
-    expect(canManageOperation(det('BCB'), owned, [])).toBe(false)
-    expect(canManageOperation(lead('BCB'), owned, [])).toBe(true)
-    expect(canManageOperation(det('BCB'), { op_type: 'normal', bureau: null }, [])).toBe(true)
+    const owned = { op_type: 'normal', bureau: 'major_crimes' as const }
+    expect(canManageOperation(det('major_crimes'), owned, [])).toBe(true)
+    expect(canManageOperation(det('street_crimes'), owned, [])).toBe(false)
+    expect(canManageOperation(lead('street_crimes'), owned, [])).toBe(true)
+    expect(canManageOperation(det('street_crimes'), { op_type: 'normal', bureau: null }, [])).toBe(true)
   })
 
   it('canLinkCaseToOp: participating bureau + case lead/creator/command only', () => {
-    const myCase = { bureau: 'LSB' as const, lead_detective_id: 'u1', created_by: 'u1', operation_id: null }
-    expect(canLinkCaseToOp(det('LSB'), myCase, jtfOp, parts)).toBe(true)
+    const myCase = { bureau: 'major_crimes' as const, lead_detective_id: 'u1', created_by: 'u1', operation_id: null }
+    expect(canLinkCaseToOp(det('major_crimes'), myCase, jtfOp, parts)).toBe(true)
     // Same bureau, but not the case lead/creator → no.
-    expect(canLinkCaseToOp(det('LSB', 'u9'), myCase, jtfOp, parts)).toBe(false)
+    expect(canLinkCaseToOp(det('major_crimes', 'u9'), myCase, jtfOp, parts)).toBe(false)
     // Non-participating bureau's case → no, even for its lead/creator.
-    const bcbCase = { ...myCase, bureau: 'BCB' as const }
-    expect(canLinkCaseToOp(det('BCB'), bcbCase, jtfOp, parts)).toBe(false)
+    const scbCase = { ...myCase, bureau: 'street_crimes' as const }
+    expect(canLinkCaseToOp(det('street_crimes'), scbCase, jtfOp, parts)).toBe(false)
     // Ended operation → no new links.
-    expect(canLinkCaseToOp(det('LSB'), myCase, { op_type: 'jtf', status: 'resolved' }, parts)).toBe(false)
+    expect(canLinkCaseToOp(det('major_crimes'), myCase, { op_type: 'jtf', status: 'resolved' }, parts)).toBe(false)
     // Already linked elsewhere → no.
-    expect(canLinkCaseToOp(det('LSB'), { ...myCase, operation_id: 'x' }, jtfOp, parts)).toBe(false)
+    expect(canLinkCaseToOp(det('major_crimes'), { ...myCase, operation_id: 'x' }, jtfOp, parts)).toBe(false)
     // Normal operation keeps today's behavior.
-    expect(canLinkCaseToOp(det('BCB', 'u9'), { ...bcbCase, lead_detective_id: 'z', created_by: 'z' }, { op_type: 'normal', status: 'active' }, [])).toBe(true)
+    expect(canLinkCaseToOp(det('street_crimes', 'u9'), { ...scbCase, lead_detective_id: 'z', created_by: 'z' }, { op_type: 'normal', status: 'active' }, [])).toBe(true)
   })
 
   it('canUnlinkCaseFromOp mirrors the jtf management rule', () => {
     const c = { lead_detective_id: 'u1', created_by: 'u5' }
-    expect(canUnlinkCaseFromOp(det('LSB'), c, { op_type: 'jtf' })).toBe(true)
-    expect(canUnlinkCaseFromOp(det('LSB', 'u9'), c, { op_type: 'jtf' })).toBe(false)
-    expect(canUnlinkCaseFromOp(det('LSB', 'u9'), c, { op_type: 'normal' })).toBe(true)
+    expect(canUnlinkCaseFromOp(det('major_crimes'), c, { op_type: 'jtf' })).toBe(true)
+    expect(canUnlinkCaseFromOp(det('major_crimes', 'u9'), c, { op_type: 'jtf' })).toBe(false)
+    expect(canUnlinkCaseFromOp(det('major_crimes', 'u9'), c, { op_type: 'normal' })).toBe(true)
   })
 })
 
 describe('helpers', () => {
   it('activeBureaus filters left rows and keeps join order', () => {
     expect(activeBureaus([
-      { bureau: 'LSB', left_at: null, joined_at: T1 },
-      { bureau: 'SAB', left_at: null, joined_at: T0 },
-      { bureau: 'BCB', left_at: T2, joined_at: T0 },
-    ])).toEqual(['SAB', 'LSB'])
+      { bureau: 'major_crimes', left_at: null, joined_at: T1 },
+      { bureau: 'street_crimes', left_at: null, joined_at: T0 },
+      { bureau: 'JTF', left_at: T2, joined_at: T0 },
+    ])).toEqual(['street_crimes', 'major_crimes'])
   })
 
   it('isOpEnded covers resolved and closed', () => {
@@ -148,14 +148,14 @@ describe('helpers', () => {
 
   it('operationTimeline assembles derived events newest-first', () => {
     const events = operationTimeline(
-      { created_at: T0, jtf_converted_at: T1, resolved_at: T2, status: 'resolved', op_type: 'jtf', lead_bureau: 'SAB' },
-      [{ bureau: 'SAB', joined_at: T1, left_at: null }],
+      { created_at: T0, jtf_converted_at: T1, resolved_at: T2, status: 'resolved', op_type: 'jtf', lead_bureau: 'major_crimes' },
+      [{ bureau: 'major_crimes', joined_at: T1, left_at: null }],
       [{ added_at: T1, removed_at: T2, removal_reason: 'unlinked', caseNumber: 'LSB-9000042' }],
     )
     expect(events[0].label).toMatch(/resolved|removed/i)
     expect(events.map((e) => e.label)).toEqual(expect.arrayContaining([
       'Operation created', 'Converted to Joint Task Force',
-      'Bureau joined — SAB', 'Case linked — LSB-9000042',
+      'Bureau joined — Major Crimes', 'Case linked — LSB-9000042',
       'Case removed — LSB-9000042', 'Operation resolved',
     ]))
     // Sorted newest first.

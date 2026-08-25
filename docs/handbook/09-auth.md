@@ -35,10 +35,15 @@
 `detective` → `senior_detective` → `bureau_lead` → `deputy_director` →
 `director`. **Command staff** = bureau_lead (within their bureau) +
 deputy_director + director (global). Plus a bureau:
-`LSB | BCB | SAB | JTF` — JTF is a **temporary joint-case designation**
-(and the pre-approval profile default), never a permanent home. One
-canonical definition: `src/lib/roles.ts` (the client mirror of the server
-matrix `private.can_assign_cid_role`).
+`major_crimes | street_crimes | special_investigations | JTF` (the
+2026-08-25 restructure renamed the enum values in place — LSB→`major_crimes`,
+BCB→`street_crimes`; ex-SAB rows were redistributed). `major_crimes` (Major
+Crimes Bureau, MCB) and `street_crimes` (Street Crimes Bureau, SCB) are the
+only permanent homes; `special_investigations` (SIB) is reserved for
+SIB-authority cases and is never a membership assignment; JTF is a
+**temporary joint-case designation** (and the pre-approval profile default),
+never a permanent home. One canonical definition: `src/lib/roles.ts` (the
+client mirror of the server matrix `private.can_assign_cid_role`).
 
 **Unified assignment matrix (v1.16)** — who may grant a role (signup
 approval, promotion/demotion, transfer role changes all use the same rule):
@@ -65,20 +70,22 @@ are a separate identity domain and grant no CID assignment authority. (Retired
 Lead+ (`private.is_command()`) — see [DOJ-INTEGRATION.md](../DOJ-INTEGRATION.md)
 Phase-1 banner.)
 
-### SIU — a second investigative authority
+### SIB — a second investigative authority
 
-The Special Investigation Unit is a **separate authority domain**, not another
+The Special Investigations Bureau (built as the Special Investigation Unit —
+the SIU→SIB rename changed terminology only, and every internal `siu_*`
+identifier below is unchanged) is a **separate authority domain**, not another
 rank: a member operates as CID (`profiles.role` + `profiles.division`) *or* as
-SIU (`siu_memberships.siu_role` — `special_agent` / `senior_special_agent` /
+SIB (`siu_memberships.siu_role` — `special_agent` / `senior_special_agent` /
 `special_agent_in_charge`, displayed as X-Ray 1). One resolver answers every
-SIU question:
+SIB question:
 `private.siu_standing()` server-side, mirrored by `siuStanding()` in
 `src/lib/siu.ts` and surfaced to components as `useSiu()` — never an inline
 `user.role === …` check.
 
-Visibility is deliberately **asymmetric**: SIU reads CID across every bureau
+Visibility is deliberately **asymmetric**: SIB reads CID across every bureau
 (read only — the superset `private.can_read_case` appears in SELECT policies
-and nowhere else), while CID gets **nothing** on an SIU case at any rank, in
+and nowhere else), while CID gets **nothing** on an SIB case at any rank, in
 any surface, with no placeholder to reveal that a record exists.
 `siu_compartmented` cases are allow-list only, with no exemption for X-1, the
 Attorney General or the owner flag. Membership is appointment-only
@@ -92,14 +99,14 @@ investigations, targets, intelligence and operations — via the read-only
 cannot open, assign, reclassify, author, designate, or delete anything.
 `siu_restricted` and above stay closed to them, which is what keeps an
 investigation *into* the Director, the AG or X-1 possible. On a CID case the
-SIU-only intelligence layer remains field-agent only, because the Director is a
+SIB-only intelligence layer remains field-agent only, because the Director is a
 plausible subject of an integrity flag.
 
-**Taking and releasing (§14/§15).** SIU command can **assume control** of a
+**Taking and releasing (§14/§15).** SIB command can **assume control** of a
 live CID case: one flip of `cases.case_authority` takes the case and every
 child row out of CID at every rank, with the case number, bureau, lead
 detective and all authorship untouched, and `siu_release_control()` gives it
-back. Going the other way, SIU releases a **single item** with `siu_share()` —
+back. Going the other way, SIB releases a **single item** with `siu_share()` —
 to the Division, to one case's members, or to one named officer. The release
 carries a snapshot of the text, never a pointer, so it can never widen into the
 investigation; CID reads it through `siu_released_intelligence()`, which
@@ -109,12 +116,12 @@ projects no origin at all.
 communications intelligence, and integrity reviews all ride the WRITE wall
 (`private.siu_case_access`), never the read superset — oversight reads the case
 file, not the tradecraft. Sources and legends narrow further to the handler and
-SIU command (`private.siu_handler_access`). Exports go through one logged RPC
+SIB command (`private.siu_handler_access`). Exports go through one logged RPC
 that always withholds source identities, legends and intercept content.
 
 **Build-phase gate:** while `siu_settings.enabled_for_non_owner` is false,
 `siu_standing()` resolves to `owner` for the Portal Owner and NULL for
-everybody else, so SIU does not exist for any other account. Full model:
+everybody else, so SIB does not exist for any other account. Full model:
 [AUTHORIZATION.md §4f](../AUTHORIZATION.md).
 
 ## Permissions (what may you do?) — three layers

@@ -13,7 +13,7 @@ import {
 
 describe('roleSession — GoTrue password-grant sessions per role', () => {
   it('mints a session whose user id matches the seeded profile', async () => {
-    const { profile, credentials } = roleSession('bureau_lead', { division: 'BCB' })
+    const { profile, credentials } = roleSession('bureau_lead', { division: 'street_crimes' })
     const { data, error } = await supabase().auth.signInWithPassword({
       email: credentials.email,
       password: credentials.password,
@@ -21,7 +21,7 @@ describe('roleSession — GoTrue password-grant sessions per role', () => {
     expect(error).toBeNull()
     expect(data.session?.user.id).toBe(profile.id)
     expect(profile.role).toBe('bureau_lead')
-    expect(profile.division).toBe('BCB')
+    expect(profile.division).toBe('street_crimes')
     expect(profile.active).toBe(true)
     await supabase().auth.signOut()
   })
@@ -101,10 +101,10 @@ describe('FiveManage uploads', () => {
 
 describe('rpcResult — pinning server-authoritative outcomes', () => {
   it('overrides an RPC without re-implementing server logic', async () => {
-    rpcResult('next_case_number', 'CID-26-9999')
-    const res = await rpc('next_case_number', { p_bureau: 'LSB' })
+    rpcResult('next_case_number', 'MCB-4009999')
+    const res = await rpc('next_case_number', { p_bureau: 'major_crimes' })
     expect(res.error).toBeNull()
-    expect(res.data).toBe('CID-26-9999')
+    expect(res.data).toBe('MCB-4009999')
   })
 })
 

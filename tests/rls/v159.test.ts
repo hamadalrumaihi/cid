@@ -29,8 +29,8 @@
  *     case members;
  *   - anon is denied throughout.
  *
- *  Fixtures (v158 shape): lsb (LSB detective — requester, NO narcotics
- *  clearance), bcb (BCB detective — cross-bureau probe), lead (bureau_lead =
+ *  Fixtures (v158 shape): lsb (MCB detective — requester, NO narcotics
+ *  clearance), bcb (SCB detective — cross-bureau probe), lead (bureau_lead =
  *  command + clearance, the decider), owner (kept for shape), anon.
  *  media.case_id is ON DELETE SET NULL, so teardown lead-deletes the media row
  *  explicitly; grants cascade with the case and log rows are purged by the
@@ -84,9 +84,9 @@ describe.skipIf(!enabled)('v1.59 — Lead-granted break-glass (live)', () => {
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
 
-    // An LSB case the BCB detective cannot access; lead attaches a RESTRICTED
+    // An MCB case the SCB detective cannot access; lead attaches a RESTRICTED
     // media row (media_ins has no restricted clause but lead has clearance).
-    const c = await lsb.from('cases').insert({ case_number: `V159-${tag}`, title: `[rls-test] v159 break-glass case ${tag}`, bureau: 'LSB' }).select('id')
+    const c = await lsb.from('cases').insert({ case_number: `V159-${tag}`, title: `[rls-test] v159 break-glass case ${tag}`, bureau: 'major_crimes' }).select('id')
     if (c.error) throw new Error(`case insert: ${c.error.message}`)
     caseId = c.data![0].id as string
     const m = await lead.from('media').insert({ title: `[rls-test] v159 restricted ${tag}`, type: 'image', case_id: caseId, restricted: true }).select('id')
@@ -124,7 +124,7 @@ describe.skipIf(!enabled)('v1.59 — Lead-granted break-glass (live)', () => {
     expect(r.error!.message).toMatch(/already have clearance/i)
   })
 
-  it('a non-member (cross-bureau) cannot request on the LSB case', async () => {
+  it('a non-member (cross-bureau) cannot request on the MCB case', async () => {
     const r = await bcb.rpc('restricted_media_request_access', { p_case: caseId, p_reason: 'v159 bcb probe' })
     expect(r.error).not.toBeNull()
     expect(r.error!.message).toMatch(/case you have access to/i)

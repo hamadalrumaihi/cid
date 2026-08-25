@@ -1,10 +1,10 @@
 'use client'
 
-/** Restrict a record to SIU — the action, wherever the record is.
+/** Restrict a record to SIB — the action, wherever the record is.
  *
- *  ── Why this is not only in the SIU workspace ─────────────────────────────
+ *  ── Why this is not only in the SIB workspace ─────────────────────────────
  *  It was, and that was wrong. To hide a person you had to leave their profile,
- *  find the SIU tab, open Compartments and search the registry for the record
+ *  find the SIB tab, open Compartments and search the registry for the record
  *  you were already looking at. Every one of those steps is a chance to pick
  *  the wrong person, and the consequence of picking the wrong person here is
  *  that CID silently loses access to somebody. Acting from the record makes the
@@ -12,10 +12,10 @@
  *
  *  ── Who sees it ───────────────────────────────────────────────────────────
  *  `siu.mayControlVisibility`, which is NOT `siu.isAgent` and NOT
- *  `siu.canAccess`. All three SIU ranks, the Director and the Owner may
- *  restrict and reveal; the Director has no SIU standing at all and must never
- *  be handed the SIU workspace. So the action is gated on the narrow capability
- *  and appears without opening any SIU screen.
+ *  `siu.canAccess`. All three SIB ranks, the Director and the Owner may
+ *  restrict and reveal; the Director has no SIB standing at all and must never
+ *  be handed the SIB workspace. So the action is gated on the narrow capability
+ *  and appears without opening any SIB screen.
  *
  *  Hiding it from everyone else is not the enforcement — every RPC re-checks
  *  server-side — but its PRESENCE on a shared CID registry page would tell any
@@ -139,7 +139,7 @@ export function RestrictDialog({ target, onClose, onDone }: {
 
   return (
     <Modal open onClose={onClose} wide dirty={() => reason.trim().length > 0 || !!choice.entityId}>
-      <ModalHeader title="Restrict to SIU" onClose={onClose} />
+      <ModalHeader title="Restrict to SIB" onClose={onClose} />
 
       {!target && (
         <SiuRegistryPicker
@@ -331,7 +331,7 @@ export function RestrictToSiuButton({ type, id, size }: {
   if (!siu.mayControlVisibility) return null
   return (
     <>
-      <Button size={size} onClick={() => setOpen(true)}>Restrict to SIU</Button>
+      <Button size={size} onClick={() => setOpen(true)}>Restrict to SIB</Button>
       {open && (
         <RestrictDialog
           key={n}

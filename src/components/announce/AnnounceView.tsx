@@ -169,7 +169,8 @@ export function AnnounceView() {
 }
 
 /** Who the post targets — '@everyone' gets the distinctive amber broadcast
- *  chip; every other audience renders its plain label (Command, LSPD, …). */
+ *  chip; every other audience renders its plain label (Command, Major Crimes
+ *  Bureau, …). */
 function AudienceChip({ audience }: { audience: string }) {
   if (audience === 'all') {
     return <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">@everyone</span>

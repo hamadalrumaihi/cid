@@ -25,6 +25,7 @@ import {
   REVIEW_STATUS_LABEL, SUBPOENA_FIELDS, WARRANT_FIELDS, reviewStatusLabel,
   type SubpoenaType, type WarrantType,
 } from './justice'
+import { PERMANENT_BUREAUS, bureauLabel, bureauShort } from './roles'
 
 /* ── Viewer context (authority mirror — server re-checks everything) ───────── */
 export interface LegalViewer {
@@ -42,7 +43,7 @@ export interface LegalViewer {
     | 'prosecutor' | 'attorney_general' | 'judge'
     | 'assistant_district_attorney' | 'district_attorney' | null
   isOwner: boolean
-  /** Bureaus this viewer is a live prosecutor for (SAB/LSB/BCB). */
+  /** Bureaus this viewer is a live prosecutor for (major_crimes/street_crimes). */
   prosecutorBureaus?: readonly string[]
   /** CID bureau (profiles.division). A Bureau Lead may only decide requests
    *  whose responsible bureau is their own -- can_approve_legal() enforces it,
@@ -194,15 +195,15 @@ export function stageLabel(r: LegalReqLike): string {
   return stageDisplayLabel(currentStage(r), r)
 }
 
-/** Stage label, SIU-aware: an SIU request sitting in (or returned from) SIU
+/** Stage label, SIB-aware: an SIB request sitting in (or returned from) SIB
  *  command review must never be captioned "CID Review" — the one wording the
- *  SIU lane migration forbids. The lane is inferred from the request's own
- *  status; for SIU requests in later stages the shared slot still reads
+ *  SIB lane migration forbids. The lane is inferred from the request's own
+ *  status; for SIB requests in later stages the shared slot still reads
  *  "CID Review" because the row alone cannot prove the lane there. */
 export function stageDisplayLabel(stage: StageId, r: LegalReqLike): string {
   if (stage === 'cid_review'
     && (r.review_status === 'siu_command_review' || r.review_status === 'returned_by_siu_command')) {
-    return 'SIU Command Review'
+    return 'SIB Command Review'
   }
   return STAGE_LABEL[stage]
 }
@@ -256,7 +257,7 @@ export function responsibleRole(r: LegalReqLike): ResponsibleRole {
 export const RESPONSIBLE_ROLE_LABEL: Record<ResponsibleRole, string> = {
   investigator: 'Requesting investigator',
   cid_supervisor: 'Bureau Lead',
-  siu_command: 'SIU command (X-1)',
+  siu_command: 'SIB command (X-1)',
   assigned_ada: 'Assigned ADA',
   bureau_prosecutor: 'Bureau prosecutor',
   district_attorney: 'District Attorney',
@@ -486,7 +487,7 @@ function nextActionLabel(
     if (s === 'not_submitted') return 'Finish draft'
     if (RETURNED.has(s)) return 'Revise and resubmit'
     if (s === 'cid_supervisor_review') return 'Review as Bureau Lead'
-    if (s === 'siu_command_review') return 'Review as SIU command'
+    if (s === 'siu_command_review') return 'Review as SIB command'
     if (s === 'ada_review') return 'Review as assigned ADA'
     if (s === 'da_review') return 'Review as DA'
     if (s === 'ag_review') return 'Review as AG'
@@ -507,7 +508,7 @@ function nextActionLabel(
   const role = responsibleRole(r)
   if (role === 'any_judge') return 'Available for judicial pickup'
   if (role === 'cid_supervisor') return 'Waiting on CID review'
-  if (role === 'siu_command') return 'Waiting on SIU command'
+  if (role === 'siu_command') return 'Waiting on SIB command'
   if (role === 'assigned_ada' || role === 'bureau_prosecutor') return 'Waiting on ADA'
   if (role === 'prosecutor') return s === 'prosecutor_queue' ? 'Waiting in the prosecutor queue' : 'Waiting on the prosecutor'
   if (role === 'district_attorney' || role === 'attorney_general') return 'Waiting on prosecution'
@@ -605,7 +606,7 @@ export function activeDeadline(r: LegalReqLike): { at: string; kind: 'expires' |
  *  and asserting "any Bureau Lead can act on this one" without knowing it is
  *  JTF would be a guess. Describing the rule is accurate; guessing is not. */
 function cidReviewExplanation(r: LegalReqLike, v?: LegalViewer): string {
-  const bureau = r.responsible_bureau ?? 'the responsible bureau'
+  const bureau = r.responsible_bureau ? bureauShort(r.responsible_bureau) : 'the responsible bureau'
   const base =
     `This request is awaiting command review before it can be approved and issued. `
     + `It can be decided by the ${bureau} Bureau Lead, or by any Deputy Director or `
@@ -634,10 +635,10 @@ export function routingExplanation(r: LegalReqLike, v?: LegalViewer): string {
   if (s === 'not_submitted') return 'This request is a draft and has not been submitted for review.'
   if (RETURNED.has(s)) return 'This request was returned for revision and is with the requesting investigator.'
   if (s === 'cid_supervisor_review') return cidReviewExplanation(r, v)
-  // §9 "why is this stuck", SIU lane. Says who is holding it AND where it goes
-  // next, because the SIU route is not the one most readers know: it skips the
+  // §9 "why is this stuck", SIB lane. Says who is holding it AND where it goes
+  // next, because the SIB route is not the one most readers know: it skips the
   // prosecutor queue entirely and goes X-1 → Attorney General → Judge.
-  if (s === 'siu_command_review') return 'This request is awaiting SIU command review. SIU legal requests do not go to a CID Bureau Lead or into a prosecutor queue — once SIU command approves, this goes to the Attorney General, and then to a Judge if it needs a warrant.'
+  if (s === 'siu_command_review') return 'This request is awaiting SIB command review. SIB legal requests do not go to a CID Bureau Lead or into a prosecutor queue — once SIB command approves, this goes to the Attorney General, and then to a Judge if it needs a warrant.'
   if (s === 'submitted_to_doj') {
     if (sealed) return 'This sealed request is not available for open judicial pickup. It requires explicit assignment under the sealed-request access rules.'
     if (judgeRouted) return 'This request passed CID review and is waiting at DOJ. The responsible bureau prosecutor can review it, while an eligible Judge may claim it directly because the request is Judge-routed and not sealed.'
@@ -645,7 +646,7 @@ export function routingExplanation(r: LegalReqLike, v?: LegalViewer): string {
   }
   if (s === 'prosecutor_queue') {
     if (sealed) return 'This sealed request is not claimable from the queue. It waits for formal prosecutor assignment by the Attorney General.'
-    return `Waiting in the ${r.responsible_bureau ?? 'responsible bureau'} prosecutor queue — prosecutors covering that bureau (home or temporary coverage) may claim it.`
+    return `Waiting in the ${r.responsible_bureau ? bureauLabel(r.responsible_bureau) : 'responsible bureau'} prosecutor queue — prosecutors covering that bureau (home or temporary coverage) may claim it.`
   }
   if (s === 'prosecutor_review') return 'This request is under prosecutorial review by the assigned prosecutor, who may approve it for judicial review, return it for corrections, or decline it.'
   if (s === 'ada_review') return 'This request is under review by the assigned bureau ADA.'
@@ -796,11 +797,20 @@ export function subtypeSupportsStructuredTargets(requestType: string, subtype: s
  * case-number prefix → lead detective's division → creator's division. The
  * server persists a successful derivation to cases.originating_bureau; this
  * mirror only explains and previews — RLS and definer RPCs stay the authority. */
-export const CID_ROUTING_BUREAUS = ['LSB', 'BCB', 'SAB'] as const
+export const CID_ROUTING_BUREAUS = PERMANENT_BUREAUS
 export type RoutingBureau = (typeof CID_ROUTING_BUREAUS)[number]
 
 export const isRoutingBureau = (b: string | null | undefined): b is RoutingBureau =>
   (CID_ROUTING_BUREAUS as readonly string[]).includes(b ?? '')
+
+/** Case-number prefix → routing bureau (mirror of private.legal_resolve_bureau).
+ *  Legacy prefixes minted before the restructure still derive (LSB→major_crimes,
+ *  BCB→street_crimes); SAB- is ambiguous — that bureau split — so it is absent
+ *  here and derivation falls through to the lead/creator divisions. */
+const ROUTING_PREFIX: Record<string, RoutingBureau> = {
+  MCB: 'major_crimes', LSB: 'major_crimes',
+  SCB: 'street_crimes', BCB: 'street_crimes',
+}
 
 export interface CaseRoutingLike {
   bureau: string
@@ -828,7 +838,8 @@ export function resolveResponsibleBureau(c: CaseRoutingLike): { bureau: RoutingB
   if (isRoutingBureau(c.bureau)) return { bureau: c.bureau, source: 'bureau' }
   if (isRoutingBureau(c.originating_bureau)) return { bureau: c.originating_bureau, source: 'originating' }
   const prefix = (c.case_number ?? '').split('-')[0]
-  if (isRoutingBureau(prefix)) return { bureau: prefix, source: 'case_number' }
+  const fromPrefix = ROUTING_PREFIX[prefix]
+  if (fromPrefix) return { bureau: fromPrefix, source: 'case_number' }
   if (isRoutingBureau(c.leadDivision)) return { bureau: c.leadDivision, source: 'lead_detective' }
   if (isRoutingBureau(c.creatorDivision)) return { bureau: c.creatorDivision, source: 'creator' }
   return { bureau: null, source: null }
@@ -896,7 +907,7 @@ export function legalWizardIssues(step: LegalWizardStepId, w: LegalWizardInput):
     // Mirror of private.legal_resolve_bureau's terminal error: a case with no
     // resolvable responsible bureau cannot create or submit legal requests.
     if (w.caseId && w.routingBureau === null) {
-      issues.push('This case needs a responsible bureau for legal routing — select LSB, BCB, or SAB.')
+      issues.push('This case needs a responsible bureau for legal routing — select Major Crimes or Street Crimes.')
     }
     if (subtypeRequiresPerson(w.requestType, w.subtype) && !w.personId) {
       issues.push('An arrest warrant requires a suspect from the Persons registry.')

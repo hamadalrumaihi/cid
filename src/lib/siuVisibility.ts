@@ -145,7 +145,7 @@ export function visibilityLabel(row: Pick<VisibilityRow,
         const n = row.hidden_sections?.length ?? 0
         return n === 1 ? '1 section restricted' : `${n} sections restricted`
       }
-      return 'SIU only'
+      return 'SIB only'
     case 'unclassified': return 'Origin not established'
     case 'partial':
     case 'revealed':
@@ -171,7 +171,7 @@ const ACTION_LABEL: Record<string, string> = {
   // officer to another. The server refuses to guess between wider and
   // narrower, and neither does this.
   redirected: 'Redirected',
-  restricted: 'Pulled back to SIU',
+  restricted: 'Pulled back to SIB',
   flagged: 'Flagged for review',
 }
 export const visibilityActionLabel = (a: string): string => ACTION_LABEL[a] ?? a
@@ -197,7 +197,7 @@ export function revealPreview(opts: {
 }
 
 export function restrictPreview(): string {
-  return 'After this, only SIU will be able to see this record. CID will not be '
+  return 'After this, only SIB will be able to see this record. CID will not be '
     + 'told it was withdrawn, and anyone who already read it will still remember it — '
     + 'restricting removes access, not knowledge.'
 }
@@ -234,7 +234,10 @@ export async function fetchReviewQueue(): Promise<VisibilityRow[]> {
  *  rather than a conclusion. */
 export function reviewRank(row: Pick<VisibilityRow, 'review_note'>): number {
   const n = row.review_note ?? ''
-  if (n.includes('SIU material references it')) return 0
+  // The server now writes 'SIB material references it'; stored legacy notes
+  // still say 'SIU material references it'. Rank both the same.
+  if (n.includes('SIB material references it')
+    || n.includes('SIU material references it')) return 0
   if (n.includes('nothing attached on either side')) return 1
   return 2
 }

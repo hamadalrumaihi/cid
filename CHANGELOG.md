@@ -8,6 +8,39 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Bureau restructure — Major Crimes / Street Crimes / SIB
+
+**Three bureaus replace the geographic model.** The database migration is live
+(`20260825120000_bureau_restructure.sql` +
+`20260825121000_bureau_restructure_finalize.sql`, applied in stages via MCP —
+see `supabase/MIGRATION-HISTORY.md`): the `bureau` enum values are renamed in
+place — LSB (Los Santos) → `major_crimes` (**Major Crimes Bureau**, MCB:
+serious, violent and complex investigations) and BCB (Blaine County) →
+`street_crimes` (**Street Crimes Bureau**, SCB: gang, narcotics and firearms
+work, surveillance, repeat offenders, proactive enforcement) — while ex-SAB
+(State) members and cases are redistributed by case signal (SAB does not map
+1:1). The SIU is renamed the **Special Investigations Bureau** (SIB) with its
+entire compartmentalization model intact: `case_authority='siu'` internals,
+the X-1 Special Agent in Charge command chain and the separate SIB→Attorney
+General legal path are unchanged, and every internal `siu_*` identifier keeps
+its name — only terminology changed. SIB-native cases now carry
+`bureau='special_investigations'` (CHECK-enforced to `case_authority='siu'`).
+
+**Case numbers are permanent.** New cases number `MCB-4######`,
+`SCB-5######`, `SIB-8######` (continuing the old SIU-8 series) and
+`JTF-3######`; existing `LSB-`/`BCB-`/`SAB-`/`SIU-` numbers are preserved
+verbatim, and `role_events` divisions are frozen as text so member history
+keeps its historical labels. Legal requests route to the Major Crimes /
+Street Crimes prosecutor queues via `responsible_bureau`; membership requests
+offer Major Crimes / Street Crimes only (SIB stays appointment-only, JTF a
+temporary joint-case designation). The field-intel geographic jurisdiction
+routing (city→LSB, blaine→BCB) is gone — every active CID member sees every
+field submission. LSPD/BCSO/SAHP remain as external field *agencies*, not CID
+bureaus. The live SOP document is renamed "Special Investigations Bureau SOP"
+with SIU→SIB terminology throughout (substance preserved), and the docs
+(`USER-GUIDE`, `AUTHORIZATION`, handbook, `supabase/README`) follow the new
+model.
+
 ### User Guide rewrite + CID/SIU visual redesign
 
 **The User Guide describes the portal that exists.** `docs/USER-GUIDE.md` is

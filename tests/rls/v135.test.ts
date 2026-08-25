@@ -25,8 +25,8 @@
  *   - sealed unchanged: a sealed judge-routed DOJ-submitted request is hidden
  *     from unassigned judges AND from the bureau prosecutor; DA oversight and
  *     the Owner still see it; a judge trying to CLAIM it is refused;
- *   - bureau prosecutor visibility: the LSB-assigned ADAs (primary AND
- *     supporting) see the parked LSB request; the BCB-assigned ADA does not;
+ *   - bureau prosecutor visibility: the MCB-assigned ADAs (primary AND
+ *     supporting) see the parked MCB request; the SCB-assigned ADA does not;
  *   - claim denials: CID detective (creator), CID supervisor, prosecutors,
  *     the DA, and anon are all rejected (the creator-judge guard is
  *     unreachable with these fixtures — the creator is always CID);
@@ -38,21 +38,21 @@
  *   - state guard: a routed request in 'ada_review' is not claimable;
  *   - claim also works from 'submitted_to_judge' (ADA handed off, no judge
  *     assigned yet) — judge2 takes that one;
- *   - bureau-prosecutor fan-out: on submit-to-DOJ the supporting LSB
+ *   - bureau-prosecutor fan-out: on submit-to-DOJ the supporting MCB
  *     prosecutor (distinct from the routed primary) receives the
  *     bureau-prosecutor notification.
  *
- *  Fixtures (tests/rls/README.md): lsb/bcb detectives, lead (LSB bureau_lead),
- *  owner, ADA LSB/BCB/SAB, DA, Judge, Judge 2. All requests are [rls-test] v135
- *  search warrants on a per-run LSB case (search_targets — no Persons row
- *  needed). LSB/BCB have NO live prosecutor coverage in prod (only the real
- *  SAB primary exists), so LSB submissions park at submitted_to_doj until this
- *  suite assigns its own test ADAs. The 7 REAL parked SAB warrants
+ *  Fixtures (tests/rls/README.md): lsb/bcb detectives, lead (MCB bureau_lead),
+ *  owner, the three bureau ADAs, DA, Judge, Judge 2. All requests are [rls-test] v135
+ *  search warrants on a per-run MCB case (search_targets — no Persons row
+ *  needed). The bureaus have NO live prosecutor coverage in the test project, so
+ *  submissions park at submitted_to_doj until this suite assigns its own test
+ *  ADAs. Any REAL parked warrants
  *  (LR-2026-01xx) are never claimed or mutated — every claim call targets a
  *  fixture id created here. rls_test_cleanup() runs at start AND teardown: it
  *  purges the fixture requests/case AND every prosecutor_bureau_assignment
  *  created by (or for) rls-test accounts, so re-runs start clean and the real
- *  SAB assignment (real prosecutor, real assigner) is untouched.
+ *  real assignment (real prosecutor, real assigner) is untouched.
  *  Requires migration 20260805010000. */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -86,10 +86,10 @@ describe.skipIf(!enabled)('v1.35 — parallel judiciary track (live)', () => {
   const ids: Record<string, string> = {}
   const tag = Math.random().toString(36).slice(2, 8).toUpperCase()
   let caseId = ''
-  let parkId = ''    // judge-routed warrant parked at submitted_to_doj (no LSB coverage)
+  let parkId = ''    // judge-routed warrant parked at submitted_to_doj (no MCB coverage)
   let bugId = ''     // dedicated parked request for the role-gate denial pin
   let sealedId = ''  // sealed judge-routed warrant, also parked
-  let routedId = ''  // warrant auto-routed to the test LSB primary (ada_review)
+  let routedId = ''  // warrant auto-routed to the test MCB primary (ada_review)
 
   /** Draft an [rls-test] v135 search warrant on the fixture case (no Persons
    *  row needed), attach one exhibit so CID review can approve, and submit it
@@ -132,13 +132,13 @@ describe.skipIf(!enabled)('v1.35 — parallel judiciary track (live)', () => {
       ids[key] = await signInWithRetry(client, email, pw!)
     }
     // Purge leftovers from any crashed prior run FIRST — a stale test ADA
-    // assignment on LSB would auto-route the "parked" fixtures and break the
+    // assignment on MCB would auto-route the "parked" fixtures and break the
     // claim-from-submitted_to_doj scenario.
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
 
     const c = await lsb.from('cases')
-      .insert({ case_number: `V135-${tag}`, title: '[rls-test] v135 parallel judiciary', bureau: 'LSB' })
+      .insert({ case_number: `V135-${tag}`, title: '[rls-test] v135 parallel judiciary', bureau: 'major_crimes' })
       .select('id')
     if (c.error) throw new Error(`fixture case: ${c.error.message}`)
     caseId = c.data![0].id
@@ -148,7 +148,7 @@ describe.skipIf(!enabled)('v1.35 — parallel judiciary track (live)', () => {
     if (!lsb) return
     // rls_test_cleanup removes the fixture requests (+versions/actions/
     // participants/signatures), the case, the test bureau assignments, and the
-    // test accounts' notifications — the real SAB assignment is untouched.
+    // test accounts' notifications — any real assignment is untouched.
     const { data, error } = await lsb.rpc('rls_test_cleanup')
     if (error) throw new Error(`rls_test_cleanup failed: ${error.message}`)
     console.info('[rls:v135] cleanup:', JSON.stringify(data))
@@ -175,12 +175,12 @@ describe.skipIf(!enabled)('v1.35 — parallel judiciary track (live)', () => {
       p_request: parkId, p_decision: 'approve', p_signature: 'RLS Lead v135',
     })
     expect(ap.error).toBeNull()
-    // LSB has no live routing prosecutor in prod — this is the production
-    // stall. If real LSB coverage ever appears this fails loudly (the fixture
+    // MCB has no live routing prosecutor in prod — this is the production
+    // stall. If real MCB coverage ever appears this fails loudly (the fixture
     // would auto-route) and the suite needs a re-think, not a silent pass.
     expect(ap.data).toMatchObject({
       review_status: 'submitted_to_doj', assigned_ada_id: null,
-      approval_route: 'judge', responsible_bureau: 'LSB',
+      approval_route: 'judge', responsible_bureau: 'major_crimes',
     })
 
     for (const c of [judge, judge2]) {
@@ -276,23 +276,23 @@ describe.skipIf(!enabled)('v1.35 — parallel judiciary track (live)', () => {
   /* ── 5. bureau prosecutor visibility ── */
 
   it('the bureau\'s live prosecutors (primary and supporting) see the parked request; a different bureau\'s ADA does not; sealed stays hidden', async () => {
-    // Per-run coverage: LSB primary + LSB supporting + BCB primary. These are
+    // Per-run coverage: MCB primary + MCB supporting + SCB primary. These are
     // created AFTER the fixtures parked, mirroring the prod fix (john smith
-    // re-assigned to SAB after the warrants stalled) — visibility is evaluated
+    // re-assigned elsewhere after the warrants stalled) — visibility is evaluated
     // at query time, so the assignment lights the parked request up.
-    for (const [pid, bureau] of [[ids.adaLsb, 'LSB'], [ids.adaBcb, 'BCB']] as const) {
+    for (const [pid, bureau] of [[ids.adaLsb, 'major_crimes'], [ids.adaBcb, 'street_crimes']] as const) {
       const r = await da.rpc('set_primary_ada', { p_prosecutor: pid, p_bureau: bureau })
       expect(r.error).toBeNull()
     }
-    const sup = await da.rpc('assign_ada_to_bureau', { p_prosecutor: ids.adaSab, p_bureau: 'LSB', p_type: 'supporting' })
+    const sup = await da.rpc('assign_ada_to_bureau', { p_prosecutor: ids.adaSab, p_bureau: 'major_crimes', p_type: 'supporting' })
     expect(sup.error).toBeNull()
 
-    // LSB prosecutors (not participants — pure policy branch) see the parked request
+    // MCB prosecutors (not participants — pure policy branch) see the parked request
     for (const c of [adaLsb, adaSab]) {
       const r = await c.from('legal_requests').select('id, responsible_bureau').eq('id', parkId)
       expect(r.error).toBeNull()
       expect(r.data).toHaveLength(1)
-      expect(r.data![0].responsible_bureau).toBe('LSB')
+      expect(r.data![0].responsible_bureau).toBe('major_crimes')
     }
     // the OTHER bureau's prosecutor sees nothing
     const other = await adaBcb.from('legal_requests').select('id').eq('id', parkId)
@@ -364,14 +364,14 @@ describe.skipIf(!enabled)('v1.35 — parallel judiciary track (live)', () => {
       p_request: routedId, p_decision: 'approve', p_signature: 'RLS Lead v135',
     })
     expect(ap.error).toBeNull()
-    // with the per-run LSB primary in place the request auto-routes
+    // with the per-run MCB primary in place the request auto-routes
     expect(ap.data).toMatchObject({ review_status: 'ada_review', assigned_ada_id: ids.adaLsb })
 
     const grab = await judge.rpc('claim_legal_request_as_judge', { p_request: routedId })
     expect(grab.error).not.toBeNull()
     expect(grab.error!.message).toMatch(/not awaiting judicial pickup/i)
 
-    // Fan-out: the supporting LSB prosecutor (distinct from the routed primary)
+    // Fan-out: the supporting MCB prosecutor (distinct from the routed primary)
     // was looped in on submit — notification only, no gating. Both actor (lead)
     // and target (adaSab) are rls-test accounts, so fan-out is not suppressed.
     const notif = await adaSab.from('notifications')
@@ -380,7 +380,7 @@ describe.skipIf(!enabled)('v1.35 — parallel judiciary track (live)', () => {
     expect(notif.error).toBeNull()
     const ping = (notif.data ?? []).find((n) =>
       (n.payload as { request_id?: string })?.request_id === routedId)
-    expect(ping, 'supporting LSB prosecutor must be notified on submit-to-DOJ').toBeTruthy()
+    expect(ping, 'supporting MCB prosecutor must be notified on submit-to-DOJ').toBeTruthy()
     expect(String((ping!.payload as { reason?: string }).reason)).toMatch(/bureau prosecutor/i)
   })
 

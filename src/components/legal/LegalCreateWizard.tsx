@@ -39,6 +39,7 @@ import {
   structuredTargetLine, subtypeRequiresPerson, subtypeSupportsStructuredTargets,
   type LegalWizardInput, type RoutingBureau, type RoutingSource, type StructuredTargetKind,
 } from '@/lib/legalWorkflow'
+import { bureauLabel, bureauShort } from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -336,7 +337,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
         id: c.id,
         number: c.case_number,
         label: `${c.case_number} — ${c.title ?? 'Untitled'}`,
-        sublabel: c.bureau === 'JTF' && c.originating_bureau ? `JTF · origin ${c.originating_bureau}` : c.bureau,
+        sublabel: c.bureau === 'JTF' && c.originating_bureau ? `JTF · origin ${bureauShort(c.originating_bureau)}` : bureauShort(c.bureau),
         routing: quick.bureau ? quick : null,
         routingCtx: { bureau: c.bureau, originating_bureau: c.originating_bureau, lead_detective_id: c.lead_detective_id, created_by: c.created_by },
       }
@@ -500,7 +501,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
   const [routingBusy, setRoutingBusy] = useState(false)
   const setResponsibleBureau = async () => {
     if (!caseSel || routingBusy) return
-    if (!isRoutingBureau(routingPick)) { toast('Choose LSB, BCB, or SAB.', 'warn'); return }
+    if (!isRoutingBureau(routingPick)) { toast('Choose Major Crimes or Street Crimes.', 'warn'); return }
     const bureau: RoutingBureau = routingPick
     setRoutingBusy(true)
     const res = await rpc('resolve_case_originating_bureau', { p_case: caseSel.id, p_bureau: bureau })
@@ -514,7 +515,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
         }
       : cur))
     setRoutingPick('')
-    toast(`Responsible bureau set to ${bureau} — legal requests on this case route there.`, 'success')
+    toast(`Responsible bureau set to ${bureauLabel(bureau)} — legal requests on this case route there.`, 'success')
   }
 
   /* ── Step navigation (focus moves to the step heading on change) ──────────── */
@@ -796,7 +797,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
             {!isEdit && caseSel?.routing?.bureau
               && (caseSel.routing.source === 'case_number' || caseSel.routing.source === 'lead_detective' || caseSel.routing.source === 'creator') && (
               <p className="text-xs text-slate-400">
-                Legal routing: <span className="font-semibold text-slate-200">{caseSel.routing.bureau}</span> — derived
+                Legal routing: <span className="font-semibold text-slate-200">{bureauShort(caseSel.routing.bureau)}</span> — derived
                 from {ROUTING_SOURCE_LABEL[caseSel.routing.source]}. It is recorded on the case when the request is created.
               </p>
             )}
@@ -813,7 +814,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
                         {(id) => (
                           <Select id={id} value={routingPick} onChange={(e) => setRoutingPick(e.target.value)}>
                             <option value="">Choose…</option>
-                            {CID_ROUTING_BUREAUS.map((b) => <option key={b} value={b}>{b}</option>)}
+                            {CID_ROUTING_BUREAUS.map((b) => <option key={b} value={b}>{bureauLabel(b)}</option>)}
                           </Select>
                         )}
                       </Field>
@@ -826,7 +827,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
               ) : (
                 <p className="rounded-lg border border-amber-500/25 bg-amber-500/5 p-2 text-xs text-amber-200">
                   This case needs a responsible bureau for legal routing. A CID supervisor (Senior Detective
-                  or above) must select LSB, BCB, or SAB before legal requests can proceed.
+                  or above) must select Major Crimes or Street Crimes before legal requests can proceed.
                 </p>
               )
             )}
@@ -972,7 +973,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
             <Card pad="sm" className="space-y-2">
               <Row label="Type">{humanize(requestType)} · {humanize(subtype)}</Row>
               <Row label="Case">{caseSel?.label ?? '—'}</Row>
-              {reviewRouting && <Row label="Legal routing">{reviewRouting} — Bureau Lead review</Row>}
+              {reviewRouting && <Row label="Legal routing">{bureauShort(reviewRouting)} — Bureau Lead review</Row>}
               <Row label={requestType === 'warrant' ? 'Subject' : 'Recipient'}>
                 {requestType === 'subpoena' && recipientType === 'entity'
                   ? (recipientName.trim() || '—')

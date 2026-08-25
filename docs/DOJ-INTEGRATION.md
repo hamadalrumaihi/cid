@@ -142,11 +142,12 @@ notifies the applicant — never touching the CID profile.
 
 ## Bureau-aligned ADA coverage
 
-Each permanent CID bureau (LSB / BCB / SAB) has designated ADA coverage. These
-are **assignments, not roles** — there is no `lsb_ada` role. An LSB ADA is an
-`assistant_district_attorney` with a `prosecutor_bureau_assignments` row for
-LSB. Assignment grants **routing responsibility only**: no CID case access, no
-`profiles.division` change, no JTF membership.
+Each permanent CID bureau (Major Crimes / Street Crimes) has designated ADA
+coverage. These are **assignments, not roles** — there is no per-bureau ADA
+role. A Major Crimes ADA is an `assistant_district_attorney` with a
+`prosecutor_bureau_assignments` row for `major_crimes`. Assignment grants
+**routing responsibility only**: no CID case access, no `profiles.division`
+change, no JTF membership.
 
 - Types: `primary`, `supporting`, `acting`. Partial unique indexes enforce at
   most one active `primary` and one active `acting` per bureau.

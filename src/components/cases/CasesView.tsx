@@ -23,6 +23,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { priorityTint } from '@/lib/tint'
 import { isRoutingBureau } from '@/lib/legalWorkflow'
+import { bureauShort } from '@/lib/roles'
 import { CaseBoard } from './CaseBoard'
 import { CaseDetail } from './CaseDetail'
 import { CaseFilterBar } from './CaseFilterBar'
@@ -144,9 +145,9 @@ function CasesViewInner() {
     <div className="space-y-4">
       <PageHeader
         title="Case Files"
-        eyebrow={siu.inSiu ? 'SIU + Division cases' : 'Live Cases'}
+        eyebrow={siu.inSiu ? 'SIB + Division cases' : 'Live Cases'}
         subtitle={siu.inSiu
-          ? 'Your unit\u2019s investigations and every Division case, in one list. Division cases are read-only under SIU authority.'
+          ? 'Your bureau\u2019s investigations and every Division case, in one list. Division cases are read-only under SIB authority.'
           : undefined}
         actions={
           <>
@@ -226,9 +227,9 @@ function CaseTable({ items, canDelete, showDept, selected, onSelect, onOpen }: {
     },
     ...(showDept ? [{
       key: 'dept', label: 'Authority',
-      value: (c: CaseRow) => caseDepartment(c) === 'siu' ? 'SIU' : 'CID',
+      value: (c: CaseRow) => caseDepartment(c) === 'siu' ? 'SIB' : 'CID',
       render: (c: CaseRow) => caseDepartment(c) === 'siu'
-        ? <span className="rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide bg-violet-500/15 text-violet-300">SIU</span>
+        ? <span className="rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide bg-violet-500/15 text-violet-300">SIB</span>
         : <span className="rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide bg-white/5 text-slate-400">CID</span>,
       className: 'px-3 py-1.5 whitespace-nowrap',
     } satisfies DataColumn<CaseRow>] : []),
@@ -236,15 +237,15 @@ function CaseTable({ items, canDelete, showDept, selected, onSelect, onOpen }: {
       key: 'title', label: 'Title', value: (c) => c.title || 'Untitled case',
       render: (c) => <span className="line-clamp-1 font-semibold text-white">{c.title || 'Untitled case'}</span>,
     },
-    { key: 'bureau', label: 'Unit', value: (c) => c.bureau },
+    { key: 'bureau', label: 'Unit', value: (c) => bureauShort(c.bureau) },
     {
       key: 'responsible', label: 'Responsible',
-      value: (c) => (isRoutingBureau(c.originating_bureau) ? c.originating_bureau
-        : isRoutingBureau(c.bureau) ? c.bureau : '—'),
+      value: (c) => (isRoutingBureau(c.originating_bureau) ? bureauShort(c.originating_bureau)
+        : isRoutingBureau(c.bureau) ? bureauShort(c.bureau) : '—'),
       render: (c) => {
         const b = isRoutingBureau(c.originating_bureau) ? c.originating_bureau
           : isRoutingBureau(c.bureau) ? c.bureau : null
-        return b ?? <span className="text-amber-300" title="No responsible bureau — legal routing is blocked">Needs routing</span>
+        return b ? bureauShort(b) : <span className="text-amber-300" title="No responsible bureau — legal routing is blocked">Needs routing</span>
       },
     },
     {
@@ -299,7 +300,7 @@ function CaseCard({ c, index, selected, canDelete, onSelect, onOpen }: { c: Case
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Badge tint={caseStatusTint(c.status)} className="uppercase">{c.status}</Badge>
         <Badge tint={signoffTint(c.signoff_status)}>{signoffLabel(c.signoff_status)}</Badge>
-        <Badge>{c.bureau}</Badge>
+        <Badge>{bureauShort(c.bureau)}</Badge>
         <StaleBadge c={c} />
       </div>
       <div className="mt-4 flex items-center justify-between gap-2 text-xs text-slate-500">

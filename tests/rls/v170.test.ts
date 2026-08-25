@@ -68,8 +68,8 @@ describe.skipIf(!enabled)('v1.70 — case-child delete requires case access (liv
     await signInWithRetry(lead, 'rls-test-lead@cidportal.test', PW.lead!)
 
     const c = await lsb.from('cases').insert({
-      case_number: `LSB-${Date.now().toString().slice(-6)}`,
-      title: tag('delete wall subject'), bureau: 'LSB',
+      case_number: `MCB-${Date.now().toString().slice(-6)}`,
+      title: tag('delete wall subject'), bureau: 'major_crimes',
     }).select('id').single()
     expect(c.error, c.error?.message).toBeNull()
     cidCase = c.data!.id as string

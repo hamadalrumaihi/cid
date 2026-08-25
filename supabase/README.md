@@ -18,7 +18,27 @@ Two axes enforced in the database via RLS, off the caller's `profiles` row:
 
 - **Role** (`profiles.role`, enum `app_role`) — `detective`, `senior_detective`,
   `bureau_lead`, `deputy_director`, `director`
-- **Bureau** (`profiles.division`, enum `bureau`) — `LSB`, `BCB`, `SAB`, `JTF`
+- **Bureau** (`profiles.division`, enum `bureau`) — `major_crimes`,
+  `street_crimes`, `special_investigations`, `JTF`. The 2026-08-25 bureau
+  restructure (`20260825120000_bureau_restructure.sql` +
+  `20260825121000_bureau_restructure_finalize.sql`) renamed the enum values in
+  place (LSB→`major_crimes`, BCB→`street_crimes`) and redistributed ex-SAB
+  rows. `major_crimes` (Major Crimes Bureau, MCB) and `street_crimes` (Street
+  Crimes Bureau, SCB) are the only permanent membership bureaus;
+  `special_investigations` (Special Investigations Bureau, SIB — the renamed
+  SIU; internal `siu_*` identifiers unchanged) is reserved for SIB-authority
+  cases (`case_authority='siu'`, CHECK-enforced) and is appointment-only;
+  `JTF` is a temporary joint-case designation.
+
+  Case numbering (existing numbers are preserved verbatim — legacy `LSB-` /
+  `BCB-` / `SAB-` / `SIU-` identifiers remain on old cases):
+
+  | Bureau | Prefix | Series |
+  |---|---|---|
+  | Major Crimes | `MCB-` | `MCB-4######` |
+  | Street Crimes | `SCB-` | `SCB-5######` |
+  | Special Investigations | `SIB-` | `SIB-8######` (continues the old `SIU-8` series) |
+  | Joint Task Force | `JTF-` | `JTF-3######` |
 
 Key rules:
 - **Deny-by-default:** new sign-ins land inactive (`active=false`) and see only

@@ -8,6 +8,7 @@
  *  (gang-roster / media case ids) distinctly labelled — never summed into an
  *  unlabelled count. */
 import { useEffect, useState } from 'react'
+import { bureauShort } from '@/lib/roles'
 import { useRouter } from 'next/navigation'
 import { insert, list, remove, rpc } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
@@ -327,7 +328,7 @@ export function CasesSection({ data, canEdit, onAttach, onRefresh }: {
                   <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
                     <Badge tone="accent" title="Durable case_intel_links row">Intel link</Badge>
                     {c?.status && <Badge tint={statusTint(c.status)}>{humanize(c.status)}</Badge>}
-                    {c?.bureau && <span>{c.bureau}</span>}
+                    {c?.bureau && <span>{bureauShort(c.bureau)}</span>}
                     {l.role && <span>· Role: {l.role}</span>}
                     {c?.lead_detective_id && officerName(c.lead_detective_id) && <span>· Lead {officerName(c.lead_detective_id)}</span>}
                     <span>· Linked {fmtDate(l.created_at)}{linkedBy ? ` by ${linkedBy}` : ''}</span>

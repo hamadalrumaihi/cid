@@ -10,7 +10,7 @@
  *   - security testing RPCs: security_test_report() (fixture-only writer)
  *     and owner_security_overview() (is_owner()-gated reader).
  *
- *  Fixtures reused (tests/rls/README.md): lsb/bcb detectives, lead (LSB
+ *  Fixtures reused (tests/rls/README.md): lsb/bcb detectives, lead (MCB
  *  bureau_lead), owner. Same conventions as rls.test.ts / legal.test.ts:
  *  sequential sign-ins with backoff, rls_test_cleanup() at suite start and
  *  teardown, and every created row authored by a test account so cleanup
@@ -70,7 +70,7 @@ describe.skipIf(!enabled)('v1.14 — report versions, legal search, security das
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
     const c = await lsb.from('cases')
-      .insert({ case_number: `V114-${tag}`, title: 'v1.14 RLS case (LSB)', bureau: 'LSB' })
+      .insert({ case_number: `V114-${tag}`, title: 'v1.14 RLS case (MCB)', bureau: 'major_crimes' })
       .select('id')
     if (c.error) throw new Error(c.error.message)
     caseId = c.data![0].id
@@ -131,7 +131,7 @@ describe.skipIf(!enabled)('v1.14 — report versions, legal search, security das
   })
 
   it('reopen → refinalize produces v2 with v1 still intact', async () => {
-    // report_reopen is bureau_lead+ (lead is LSB, same bureau as the case)
+    // report_reopen is bureau_lead+ (lead is MCB, same bureau as the case)
     const re = await lead.rpc('report_reopen', { p_report: reportId })
     expect(re.error).toBeNull()
     expect(re.data).toMatchObject({ finalized: false })

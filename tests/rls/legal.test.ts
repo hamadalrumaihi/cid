@@ -31,8 +31,8 @@
  *  covered by tests/rls/v163.test.ts once the DOJ fixture accounts
  *  (rls-test-prosecutor / -prosecutor2 / -judge / -ag) are provisioned.
  *
- *  Fixtures reused from the CID build: lsb (detective, LSB — the creator),
- *  bcb (detective, BCB — other-bureau), lead (bureau_lead, LSB — command,
+ *  Fixtures reused from the CID build: lsb (detective, MCB — the creator),
+ *  bcb (detective, SCB — other-bureau), lead (bureau_lead, MCB — command,
  *  the approver), owner (is_owner — oversight). Every artifact is removed by
  *  rls_test_cleanup in afterAll (+ a director-side person delete), so re-runs
  *  start clean and test actors never notify a real member (server-side
@@ -59,7 +59,7 @@ type C = SupabaseClient
 describe.skipIf(!enabled)('Legal requests — RLS/RPC security wall (minimal-DOJ model, live)', () => {
   let lsb: C, bcb: C, lead: C, owner: C
   const ids: Record<string, string> = {}
-  let caseId = ''       // LSB case owned by the lsb detective
+  let caseId = ''       // MCB case owned by the lsb detective
   let personId = ''
   let warrantId = ''    // the end-to-end warrant
   let subpoenaId = ''   // document_production subpoena (fulfilment chain)
@@ -82,7 +82,7 @@ describe.skipIf(!enabled)('Legal requests — RLS/RPC security wall (minimal-DOJ
     // would otherwise skew the read-visibility assertions.
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
-    const c1 = await lsb.from('cases').insert({ case_number: `LGL-${tag}-A`, title: 'Legal RLS case (LSB)', bureau: 'LSB' }).select('id')
+    const c1 = await lsb.from('cases').insert({ case_number: `LGL-${tag}-A`, title: 'Legal RLS case (MCB)', bureau: 'major_crimes' }).select('id')
     if (c1.error) throw new Error(c1.error.message)
     caseId = c1.data![0].id
     const p = await lsb.from('persons').insert({ name: `RLS Test Suspect ${tag}` }).select('id')
@@ -120,7 +120,7 @@ describe.skipIf(!enabled)('Legal requests — RLS/RPC security wall (minimal-DOJ
     })
     expect(ok.error).toBeNull()
     warrantId = ok.data!.id
-    expect(ok.data).toMatchObject({ responsible_bureau: 'LSB', classification: 'classified' })
+    expect(ok.data).toMatchObject({ responsible_bureau: 'major_crimes', classification: 'classified' })
 
     // another bureau cannot edit the draft, and no client role holds a direct write grant
     const edit = await bcb.rpc('update_legal_draft', { p_request: warrantId, p_title: 'hijack' })
@@ -336,7 +336,7 @@ describe.skipIf(!enabled)('Legal requests — RLS/RPC security wall (minimal-DOJ
     // owner oversight holds
     const own = await owner.from('legal_requests').select('id').eq('id', sealedId)
     expect(own.data).toHaveLength(1)
-    // sealed notifications carry no title/number (the LSB lead got the CID-review ping)
+    // sealed notifications carry no title/number (the MCB lead got the CID-review ping)
     const notif = await lead.from('notifications').select('payload')
       .eq('type', 'legal_request').order('created_at', { ascending: false }).limit(5)
     const sealedPings = (notif.data ?? []).filter((n) => (n.payload as { request_id?: string })?.request_id === sealedId)

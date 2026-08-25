@@ -211,9 +211,9 @@ export function SiuCommandSection() {
   )
 }
 
-/** §53. Safe for any SIU standing: every field is a count. Rendered both on
+/** §53. Safe for any SIB standing: every field is a count. Rendered both on
  *  the command dashboard and — the point of §53 — inside the Oversight section,
- *  which is the only SIU surface an oversight holder can reach. */
+ *  which is the only SIB surface an oversight holder can reach. */
 export function SiuOversightSupplementCard() {
   const [data, setData] = useState<SiuOversightSupplement | null>(null)
   const [loading, setLoading] = useState(true)

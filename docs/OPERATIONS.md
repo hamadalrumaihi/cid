@@ -110,10 +110,12 @@ pass; that is by design).
 **Restoration procedure** — restore the documented baseline:
 
 1. Compare each account's roster entry against the table in
-   `tests/rls/README.md` (e.g. `rls-test-lsb` = detective/LSB/active,
-   `rls-test-lead` = bureau_lead/LSB/active, `rls-test-inactive` stays
-   inactive, `rls-test-owner` = detective/SAB/active with `is_owner` only —
-   never a command role).
+   `tests/rls/README.md` (e.g. `rls-test-lsb` = detective/major_crimes/active,
+   `rls-test-lead` = bureau_lead/major_crimes/active, `rls-test-bcb` =
+   detective/street_crimes/active, `rls-test-inactive` stays inactive,
+   `rls-test-owner` = detective/major_crimes/active with `is_owner` only —
+   never a command role; the fixture account names keep their legacy
+   `lsb`/`bcb` suffixes from before the 2026-08-25 bureau restructure).
 2. Fix any drift through the Command Center's audited RPCs (activation,
    role, transfer) as a sufficiently-privileged account; `is_owner` is
    SQL-only.

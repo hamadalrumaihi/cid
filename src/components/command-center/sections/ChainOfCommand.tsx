@@ -7,10 +7,13 @@
 import { useEffect } from 'react'
 import { useProfilesStore, type RosterProfile } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
-import { BUREAUS, DEPT_OF_BUREAU, roleLabel } from '@/lib/roles'
+import { BUREAUS, bureauShort, roleLabel } from '@/lib/roles'
 import { initials } from '@/lib/format'
 
-const BUREAU_KEYS = ['LSB', 'BCB', 'SAB', 'JTF'] as const
+// SIB is deliberately absent: its roster is compartmented and never rendered
+// in the general org chart. JTF stays — members can carry the temporary
+// joint-case designation as their division.
+const BUREAU_KEYS = ['major_crimes', 'street_crimes', 'JTF'] as const
 
 function Person({ p }: { p: RosterProfile }) {
   return (
@@ -59,7 +62,7 @@ export function ChainOfCommand() {
             const dets = inB.filter((p) => p.role === 'detective')
             return (
               <div key={b} className="rounded-lg border border-white/5 bg-ink-900/45 p-4">
-                <p className="font-bold text-white">{b} <span className="text-xs font-normal text-slate-500">· {BUREAUS[b]} ({DEPT_OF_BUREAU[b]})</span></p>
+                <p className="font-bold text-white">{bureauShort(b)} <span className="text-xs font-normal text-slate-500">· {BUREAUS[b]}</span></p>
                 <div className="mt-3 space-y-3">
                   <Tier title="Bureau Lead" people={leads} tint="border-blue-500/25 bg-blue-500/5" />
                   <Tier title="Senior Detectives" people={seniors} tint="border-white/10 bg-white/5" />

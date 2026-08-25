@@ -3,7 +3,7 @@
 /** Responsible-bureau modal — the client face of `resolve_case_originating_bureau`
  *  (migration 20260815120000). `cases.bureau = 'JTF'` is an OPERATIONAL
  *  assignment; legal routing rides `cases.originating_bureau` (the responsible
- *  bureau — always LSB/BCB/SAB). Both columns are frozen against direct writes
+ *  bureau — always a permanent bureau, MCB/SCB). Both columns are frozen against direct writes
  *  by trg_block_direct_case_bureau, so this modal never patches the case; the
  *  RPC is the only path. Two modes, mirroring the server bar: SET a missing
  *  value (Senior Detective+), CHANGE an already-set one (Deputy Director+/
@@ -71,7 +71,7 @@ export function ResponsibleBureauModal({ open, c, onClose, onDone }: Responsible
         <label className="mt-4 block text-sm text-slate-300">Responsible bureau
           <select value={to} onChange={(e) => setTo(e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white">
             <option value="">Select a bureau…</option>
-            {options.map((b) => <option key={b} value={b}>{b} — {bureauLabel(b)}</option>)}
+            {options.map((b) => <option key={b} value={b}>{bureauLabel(b)}</option>)}
           </select>
         </label>
         {changing && (

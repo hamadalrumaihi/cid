@@ -16,27 +16,63 @@ export const ROLE_LABEL: Record<string, string> = {
   director: 'Director',
 }
 export const COMMAND_ROLES = ['bureau_lead', 'deputy_director', 'director'] as const
+
+// ---------------------------------------------------------------------------
+// The authoritative CID bureau model. Every screen, filter, dropdown, and
+// label derives from these maps — never hardcode bureau ids or names in a
+// component. The database mirror lives in private.bureau_label /
+// private.bureau_prefix / private.case_number_base
+// (20260825120000_bureau_restructure.sql); keep the two in lockstep.
+//
+//   Criminal Investigations Division
+//   ├── Major Crimes Bureau            (major_crimes,           MCB)
+//   ├── Street Crimes Bureau           (street_crimes,          SCB)
+//   └── Special Investigations Bureau  (special_investigations, SIB)
+//
+// JTF is not a bureau: it is the temporary joint-case designation (and the
+// pre-approval profile default). SIB is a real bureau but is never a normal
+// assignment target — its membership, cases, and legal path run through the
+// compartmented siu_* systems (internal plumbing identifiers keep the
+// historical `siu` spelling; every user-facing surface says SIB).
+// ---------------------------------------------------------------------------
+
 export const BUREAUS: Record<string, string> = {
-  LSB: 'Los Santos Bureau',
-  BCB: 'Blaine County Bureau',
-  SAB: 'State Bureau',
+  major_crimes: 'Major Crimes Bureau',
+  street_crimes: 'Street Crimes Bureau',
+  special_investigations: 'Special Investigations Bureau',
   JTF: 'Joint Task Force',
 }
 
-/** Department abbreviation per bureau — the officer-card vocabulary
- *  (vanilla DEPT_OF_BUREAU, collab.js:7). bureauLabel is the long form. */
-export const DEPT_OF_BUREAU: Record<string, string> = {
-  LSB: 'LSPD',
-  BCB: 'BCSO',
-  SAB: 'SAHP',
-  JTF: 'JTF (Joint)',
+/** Compact display name per bureau — chips, badges, table columns. The
+ *  normal bureaus read as words on every screen ("Major Crimes"); SIB and
+ *  JTF are established short names. Case-number PREFIXES (MCB-/SCB-) are
+ *  identifiers, not display — see CASE_PREFIX. */
+export const BUREAU_SHORT: Record<string, string> = {
+  major_crimes: 'Major Crimes',
+  street_crimes: 'Street Crimes',
+  special_investigations: 'SIB',
+  JTF: 'JTF',
+}
+
+/** Case-number prefix per bureau (mirror of private.bureau_prefix). Legacy
+ *  identifiers minted before the restructure (LSB-/BCB-/SAB-/SIU-) are
+ *  preserved data, never a live vocabulary. */
+export const CASE_PREFIX: Record<string, string> = {
+  major_crimes: 'MCB',
+  street_crimes: 'SCB',
+  special_investigations: 'SIB',
+  JTF: 'JTF',
 }
 
 export const roleLabel = (r?: string | null) => (r && ROLE_LABEL[r]) || r || '—'
 export const bureauLabel = (b?: string | null) => (b && BUREAUS[b]) || b || '—'
-export const deptLabel = (b?: string | null) => (b && DEPT_OF_BUREAU[b]) || b || '—'
+/** Short-code label (MCB/SCB/SIB/JTF); falls back to the raw value for
+ *  historical codes in frozen records. */
+export const bureauShort = (b?: string | null) => (b && BUREAU_SHORT[b]) || b || '—'
 export const isCommandRole = (r?: string | null) =>
   !!r && (COMMAND_ROLES as readonly string[]).includes(r)
+/** Is this the compartmented Special Investigations Bureau? */
+export const isSibBureau = (b?: string | null) => b === 'special_investigations'
 
 // ---------------------------------------------------------------------------
 // Unified role/department policy — the client mirror of the server matrix in
@@ -44,10 +80,12 @@ export const isCommandRole = (r?: string | null) =>
 // UX filtering only; RLS/RPCs remain the authority. Keep the two in lockstep.
 // ---------------------------------------------------------------------------
 
-/** Permanent CID departments. JTF is deliberately absent: it is a temporary
- *  joint-case designation (and the pre-approval profile default), never a
- *  permanent home — the server rejects it in every assignment path. */
-export const PERMANENT_BUREAUS = ['LSB', 'BCB', 'SAB'] as const
+/** Permanent CID departments — the normal assignment targets. JTF is
+ *  deliberately absent (temporary joint-case designation, pre-approval
+ *  default) and so is special_investigations: SIB membership is appointed
+ *  through the SIB workflow (siu_appoint), never a division dropdown — the
+ *  server rejects both in every assignment path. */
+export const PERMANENT_BUREAUS = ['major_crimes', 'street_crimes'] as const
 
 /** Minimal actor/target shape shared by profiles and roster rows. */
 export interface RoleParty {
@@ -129,8 +167,10 @@ export const canTransfer = (
 ): boolean => {
   if (!actor || !actor.active || actor.id === target.id) return false
   // Any department may be either side of a move, JTF included — the pair just
-  // has to be two real, different departments.
+  // has to be two real, different departments. SIB is never a transfer side:
+  // its membership moves only through the SIB appointment workflow.
   if (!(source in BUREAUS) || !(destination in BUREAUS) || source === destination) return false
+  if (isSibBureau(source) || isSibBureau(destination)) return false
   if (actor.is_owner || actor.role === 'deputy_director' || actor.role === 'director') return true
   if (actor.role !== 'bureau_lead') return false
   if (isCommandRole(target.role)) return false

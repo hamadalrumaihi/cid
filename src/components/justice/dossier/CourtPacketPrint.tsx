@@ -8,6 +8,7 @@
  *  Same mechanics as cases/tabs/WarrantPrint: a portal-mounted paper sheet,
  *  @media print swaps the app out, afterprint unmounts it. */
 import { useEffect, useRef } from 'react'
+import { bureauLabel } from '@/lib/roles'
 import { createPortal } from 'react-dom'
 import { fmtDateTime } from '@/lib/format'
 import { reviewStatusLabel, fulfilmentLabel, justiceRoleLabel, type LegalRequest, type LegalSignature, type LegalVersion } from '@/lib/justice'
@@ -67,7 +68,7 @@ function LegalPacketSheet({ r, version, signatures, versions, name, preparedAt }
         <tr><td>Title</td><td>{r.title || Empty}</td></tr>
         <tr><td>Case</td><td>{r.case_number_snapshot ?? '—'}{r.case_title_snapshot ? ` — ${r.case_title_snapshot}` : ''}</td></tr>
         <tr><td>{r.request_type === 'warrant' ? 'Suspect' : 'Recipient'}</td><td>{formatTarget(r)}</td></tr>
-        <tr><td>Responsible bureau</td><td>{r.responsible_bureau}</td></tr>
+        <tr><td>Responsible bureau</td><td>{bureauLabel(r.responsible_bureau)}</td></tr>
         <tr><td>Classification</td><td style={{ textTransform: 'uppercase' }}>{r.classification}</td></tr>
         <tr><td>Status</td><td>{reviewStatusLabel(r.review_status)} · {fulfilmentLabel(r.fulfilment_status)}</td></tr>
         {r.priority && <tr><td>Priority</td><td>{r.priority}</td></tr>}

@@ -81,12 +81,12 @@ update public.profiles p
 set role = s.role::app_role, division = s.division::bureau, is_owner = s.is_owner, active = true
 from (
   values
-    ('test-detective@cidportal.test', 'detective',        'LSB', false),
-    ('test-senior@cidportal.test',    'senior_detective', 'LSB', false),
-    ('test-lead@cidportal.test',      'bureau_lead',      'LSB', false),
-    ('test-deputy@cidportal.test',    'deputy_director',  'SAB', false),
-    ('test-director@cidportal.test',  'director',         'SAB', false),
-    ('test-owner@cidportal.test',     'director',         'SAB', true)
+    ('test-detective@cidportal.test', 'detective',        'major_crimes', false),
+    ('test-senior@cidportal.test',    'senior_detective', 'major_crimes', false),
+    ('test-lead@cidportal.test',      'bureau_lead',      'major_crimes', false),
+    ('test-deputy@cidportal.test',    'deputy_director',  'street_crimes', false),
+    ('test-director@cidportal.test',  'director',         'street_crimes', false),
+    ('test-owner@cidportal.test',     'director',         'street_crimes', true)
 ) as s(email, role, division, is_owner)
 where p.email = s.email;
 
@@ -102,7 +102,7 @@ select gen_random_uuid(), 'Test Syndicate', p.id
 from public.profiles p where p.email = 'test-detective@cidportal.test';
 
 insert into public.cases (id, case_number, title, summary, status, bureau, created_by, lead_detective_id)
-select gen_random_uuid(), 'TEST-0001', 'Fixture case', 'A synthetic case for tests.', 'open', 'LSB', p.id, p.id
+select gen_random_uuid(), 'TEST-0001', 'Fixture case', 'A synthetic case for tests.', 'open', 'major_crimes', p.id, p.id
 from public.profiles p where p.email = 'test-detective@cidportal.test';
 
 commit;

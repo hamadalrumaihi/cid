@@ -21,7 +21,7 @@
  *   - MERGED SEARCH: a merged person tombstone no longer surfaces in
  *     search_all / search_persons (matching the narcotics branch).
  *
- *  Fixtures: lsb (LSB detective — investigator + searcher), lead (LSB
+ *  Fixtures: lsb (MCB detective — investigator + searcher), lead (MCB
  *  bureau_lead — CID reviewer), director (merges, reviews membership),
  *  judge/judge2 (claim lane), applicant (disposable membership fixture,
  *  reset inactive before and after). rls_test_cleanup sweeps requests,
@@ -72,10 +72,10 @@ describe.skipIf(!enabled)('v1.42 — workflow dead ends unblocked (live)', () =>
     }
     const pre = await director.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
-    const park = await director.rpc('rls_test_reset_member', { p_target: ids.applicant, p_role: 'detective', p_division: 'LSB', p_active: false })
+    const park = await director.rpc('rls_test_reset_member', { p_target: ids.applicant, p_role: 'detective', p_division: 'major_crimes', p_active: false })
     if (park.error) throw new Error(`applicant reset failed: ${park.error.message}`)
 
-    const c = await lsb.from('cases').insert({ case_number: `V142-${tag}`, title: '[rls-test] v142 legal case', bureau: 'LSB' }).select('id')
+    const c = await lsb.from('cases').insert({ case_number: `V142-${tag}`, title: '[rls-test] v142 legal case', bureau: 'major_crimes' }).select('id')
     if (c.error) throw new Error(c.error.message)
     caseId = c.data![0].id
     const p = await lsb.from('persons').insert({ name: `RLS Test V142 Suspect ${tag}` }).select('id')
@@ -85,7 +85,7 @@ describe.skipIf(!enabled)('v1.42 — workflow dead ends unblocked (live)', () =>
 
   afterAll(async () => {
     if (!director) return
-    await director.rpc('rls_test_reset_member', { p_target: ids.applicant, p_role: 'detective', p_division: 'LSB', p_active: false })
+    await director.rpc('rls_test_reset_member', { p_target: ids.applicant, p_role: 'detective', p_division: 'major_crimes', p_active: false })
     const clean = await director.rpc('rls_test_cleanup')
     if (clean.error) throw new Error(`rls_test_cleanup failed: ${clean.error.message}`)
     // Persons are outside rls_test_cleanup's sweep — delete the two test
@@ -165,7 +165,7 @@ describe.skipIf(!enabled)('v1.42 — workflow dead ends unblocked (live)', () =>
     const ins = await applicant.from('membership_requests')
       .insert({
         applicant_id: ids.applicant, display_name: 'RLS Test Applicant',
-        requested_bureau: 'LSB', requested_role: 'detective', reason: '[rls-test] v142 join',
+        requested_bureau: 'major_crimes', requested_role: 'detective', reason: '[rls-test] v142 join',
       })
       .select('id')
     expect(ins.error).toBeNull()
@@ -179,15 +179,15 @@ describe.skipIf(!enabled)('v1.42 — workflow dead ends unblocked (live)', () =>
     // Old gate: 'request is not awaiting review'. New: the terminal row is
     // re-reviewable and the approval activates the applicant atomically.
     const re = await director.rpc('review_membership_request', {
-      p_request: requestId, p_decision: 'approve', p_final_bureau: 'LSB', p_final_role: 'detective',
+      p_request: requestId, p_decision: 'approve', p_final_bureau: 'major_crimes', p_final_role: 'detective',
       p_applicant_note: '[rls-test] v142 superseding decision',
     })
     expect(re.error).toBeNull()
     const prof = await director.from('profiles').select('active,role,division').eq('id', ids.applicant)
-    expect(prof.data![0]).toMatchObject({ active: true, role: 'detective', division: 'LSB' })
+    expect(prof.data![0]).toMatchObject({ active: true, role: 'detective', division: 'major_crimes' })
 
     // Park the disposable applicant back to its inactive baseline.
-    const park = await director.rpc('rls_test_reset_member', { p_target: ids.applicant, p_role: 'detective', p_division: 'LSB', p_active: false })
+    const park = await director.rpc('rls_test_reset_member', { p_target: ids.applicant, p_role: 'detective', p_division: 'major_crimes', p_active: false })
     expect(park.error).toBeNull()
   })
 

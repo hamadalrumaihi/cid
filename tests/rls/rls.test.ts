@@ -1,8 +1,8 @@
 /** RLS / RPC security-wall tests — run against the LIVE Supabase project as
  *  three dedicated accounts (see tests/rls/README.md):
  *
- *    rls-test-lsb@cidportal.test       detective, LSB, active
- *    rls-test-bcb@cidportal.test       detective, BCB, active
+ *    rls-test-lsb@cidportal.test       detective, MCB, active
+ *    rls-test-bcb@cidportal.test       detective, SCB, active
  *    rls-test-inactive@cidportal.test  inactive (deny-by-default)
  *
  *  Opt-in via `npm run test:rls` with the three RLS_TEST_PASSWORD_* env vars
@@ -69,12 +69,12 @@ describe.skipIf(!enabled)('RLS security wall (live project, test accounts)', () 
     const { data, error } = await lsb.from('profiles').select('id,role,division,active').eq('id', lsbId)
     expect(error).toBeNull()
     expect(data).toHaveLength(1)
-    expect(data![0]).toMatchObject({ role: 'detective', division: 'LSB', active: true })
+    expect(data![0]).toMatchObject({ role: 'detective', division: 'major_crimes', active: true })
   })
 
-  it('LSB detective can create a case in their own bureau', async () => {
+  it('MCB detective can create a case in their own bureau', async () => {
     const { data, error } = await lsb.from('cases')
-      .insert({ case_number: caseNumber, title: 'RLS wall test case', bureau: 'LSB' })
+      .insert({ case_number: caseNumber, title: 'RLS wall test case', bureau: 'major_crimes' })
       .select('id,bureau,status')
     expect(error).toBeNull()
     expect(data).toHaveLength(1)
@@ -83,26 +83,26 @@ describe.skipIf(!enabled)('RLS security wall (live project, test accounts)', () 
 
   /* ---- bureau isolation ---------------------------------------------- */
 
-  it('BCB detective cannot read an LSB case', async () => {
+  it('SCB detective cannot read an MCB case', async () => {
     const { data, error } = await bcb.from('cases').select('id').eq('id', caseId)
     expect(error).toBeNull()
     expect(data).toHaveLength(0) // RLS: invisible, not an error
   })
 
-  it('BCB detective cannot update an LSB case (zero rows affected)', async () => {
+  it('SCB detective cannot update an MCB case (zero rows affected)', async () => {
     const { data, error } = await bcb.from('cases').update({ title: 'hijacked' }).eq('id', caseId).select('id')
     expect(error).toBeNull()
     expect(data).toHaveLength(0)
   })
 
-  it('BCB detective cannot create a case in the LSB bureau', async () => {
+  it('SCB detective cannot create a case in the MCB bureau', async () => {
     const { error } = await bcb.from('cases')
-      .insert({ case_number: `${caseNumber}-X`, title: 'cross-bureau insert', bureau: 'LSB' })
+      .insert({ case_number: `${caseNumber}-X`, title: 'cross-bureau insert', bureau: 'major_crimes' })
       .select('id')
     expect(error).not.toBeNull()
   })
 
-  it('BCB detective cannot attach evidence to an LSB case', async () => {
+  it('SCB detective cannot attach evidence to an MCB case', async () => {
     const { error } = await bcb.from('evidence')
       .insert({ case_id: caseId, item_code: 'EV-RLS-X', description: 'cross-bureau evidence' })
       .select('id')
@@ -265,7 +265,7 @@ describe.skipIf(!enabled || !PW.owner)('Owner role (positive paths)', () => {
  *  or take a member from another bureau, that role changes are same-department
  *  only with a required reason, and that a Director keeps the broad power.
  *  Uses dedicated lead/director accounts (never mutated) and a throwaway
- *  `target` (detective/LSB) restored via rls_test_reset_member in afterAll.
+ *  `target` (detective/MCB) restored via rls_test_reset_member in afterAll.
  *  Skips unless all three passwords are set. */
 const ccEnabled = enabled && !!(PW.lead && PW.director && PW.target && PW.owner)
 describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority', () => {
@@ -292,14 +292,14 @@ describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority
     // (open transfers from an aborted previous run would violate the
     // one-open-transfer index).
     await director.rpc('rls_test_cleanup')
-    await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
+    await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'major_crimes', p_active: true })
   })
 
   afterAll(async () => {
     if (director) {
       // restore the throwaway target to its baseline, then purge the
       // role_events/transfers this block created
-      await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
+      await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'major_crimes', p_active: true })
       await director.rpc('rls_test_cleanup')
     }
     await Promise.all([lead, director, plainDet, owner, targetC].filter(Boolean).map((c) => c.auth.signOut()))
@@ -312,9 +312,9 @@ describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority
 
   it('direct role/division writes by command are frozen (privileged-column trigger)', async () => {
     const upd = await director.from('profiles')
-      .update({ role: 'director', division: 'BCB' }).eq('id', targetId).select('role,division')
+      .update({ role: 'director', division: 'street_crimes' }).eq('id', targetId).select('role,division')
     expect(upd.error).toBeNull() // policy allows the UPDATE…
-    expect(upd.data![0]).toMatchObject({ role: 'detective', division: 'LSB' }) // …but the trigger reverts it
+    expect(upd.data![0]).toMatchObject({ role: 'detective', division: 'major_crimes' }) // …but the trigger reverts it
   })
 
   it('Bureau Lead cannot promote above senior detective', async () => {
@@ -333,16 +333,16 @@ describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority
   })
 
   it('Bureau Lead CAN pull a rank-and-file member from another bureau in a single step (no source consent stage)', async () => {
-    // Stage the throwaway target in BCB, then have the LSB lead pull it in.
+    // Stage the throwaway target in SCB, then have the MCB lead pull it in.
     // Single-step (20260807040000): destination-side authority is enough —
     // the source bureau no longer has a veto, and the move applies at once.
-    const park = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'BCB', p_active: true })
+    const park = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'street_crimes', p_active: true })
     expect(park.error).toBeNull()
-    const tr = await lead.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'LSB', p_reason: '[rls-test] inbound pull' })
+    const tr = await lead.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'major_crimes', p_reason: '[rls-test] inbound pull' })
     expect(tr.error).toBeNull()
     expect((tr.data as { status: string }).status).toBe('completed')
     const prof = await director.from('profiles').select('division').eq('id', targetId)
-    expect(prof.data![0].division).toBe('LSB') // already back at the suite baseline (detective/LSB)
+    expect(prof.data![0].division).toBe('major_crimes') // already back at the suite baseline (detective/MCB)
   })
 
   it('Bureau Lead may promote to senior detective within their bureau (reason recorded)', async () => {
@@ -360,19 +360,19 @@ describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority
   it('Director can promote to command roles; transfers apply in a single step', async () => {
     const up = await director.rpc('change_member_role', { p_target: targetId, p_new_role: 'bureau_lead', p_reason: '[rls-test] promotion to command' })
     expect(up.error).toBeNull()
-    const tr = await director.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'BCB', p_reason: '[rls-test] higher-command move' })
+    const tr = await director.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'street_crimes', p_reason: '[rls-test] higher-command move' })
     expect(tr.error).toBeNull()
     // Single-step (20260807040000): the initiation applies the move at once.
     expect((tr.data as { status: string }).status).toBe('completed')
     const prof = await director.from('profiles').select('role,division').eq('id', targetId)
-    expect(prof.data![0]).toMatchObject({ role: 'bureau_lead', division: 'BCB' })
+    expect(prof.data![0]).toMatchObject({ role: 'bureau_lead', division: 'street_crimes' })
     // restore baseline for the rest of the suite
-    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
+    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'major_crimes', p_active: true })
     expect(reset.error).toBeNull()
   })
 
   it('users cannot transfer themselves and leads cannot decide their own transfer', async () => {
-    const self = await director.rpc('request_transfer', { p_target: (await director.auth.getUser()).data.user!.id, p_to_bureau: 'BCB', p_reason: '[rls-test] self' })
+    const self = await director.rpc('request_transfer', { p_target: (await director.auth.getUser()).data.user!.id, p_to_bureau: 'street_crimes', p_reason: '[rls-test] self' })
     expect(self.error).not.toBeNull()
   })
 
@@ -382,13 +382,13 @@ describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority
     expect((tr.data as { status: string }).status).toBe('completed')
     const prof = await director.from('profiles').select('division').eq('id', targetId)
     expect(prof.data![0].division).toBe('JTF')
-    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
+    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'major_crimes', p_active: true })
     expect(reset.error).toBeNull()
   })
 
   it('lead-initiated transfer applies in a single step (live role travels; audit trail written)', async () => {
-    // lead (LSB) initiates outbound — the initiation applies the move at once
-    const tr = await lead.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'BCB', p_reason: '[rls-test] single-step lead move' })
+    // lead (MCB) initiates outbound — the initiation applies the move at once
+    const tr = await lead.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'street_crimes', p_reason: '[rls-test] single-step lead move' })
     expect(tr.error).toBeNull()
     const row = tr.data as { id: string; status: string }
     expect(row.status).toBe('completed')
@@ -396,21 +396,21 @@ describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority
     const det = await plainDet.rpc('approve_transfer_target', { p_id: row.id })
     expect(det.error).not.toBeNull()
     const prof = await director.from('profiles').select('role,division').eq('id', targetId)
-    expect(prof.data![0]).toMatchObject({ role: 'detective', division: 'BCB' })
+    expect(prof.data![0]).toMatchObject({ role: 'detective', division: 'street_crimes' })
     const ev = await director.from('role_events')
       .select('source,old_division,new_division,old_role,new_role').eq('target_id', targetId)
       .order('created_at', { ascending: false }).limit(1)
     expect(ev.data![0]).toMatchObject({
-      source: 'transfer', old_division: 'LSB', new_division: 'BCB',
+      source: 'transfer', old_division: 'major_crimes', new_division: 'street_crimes',
       old_role: 'detective', new_role: 'detective',
     })
-    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
+    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'major_crimes', p_active: true })
     expect(reset.error).toBeNull()
   })
 
   it('transfer visibility: involved leads see everything, the officer sees their own, a plain detective sees nothing', async () => {
-    // lead (LSB) initiates LSB -> BCB for the target: lead is source AND requester
-    const tr = await lead.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'BCB', p_reason: '[rls-test] visibility probe' })
+    // lead (MCB) initiates MCB -> SCB for the target: lead is source AND requester
+    const tr = await lead.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'street_crimes', p_reason: '[rls-test] visibility probe' })
     expect(tr.error).toBeNull()
     const id = (tr.data as { id: string }).id
     // source Bureau Lead (also the requester) sees the row with the full reason
@@ -433,20 +433,21 @@ describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority
     const detCount = await plainDet.from('transfer_requests').select('id', { count: 'exact', head: true }).eq('id', id)
     expect(detCount.count ?? 0).toBe(0)
     // single step applied the move — restore the baseline
-    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
+    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'major_crimes', p_active: true })
     expect(reset.error).toBeNull()
   })
 
   it('an unrelated Bureau Lead cannot view or infer a transfer between two other bureaus', async () => {
-    // stage the throwaway target as a BCB detective and open a BCB -> SAB
-    // transfer (initiated by the Director, so the LSB lead is on NEITHER side
+    // stage the throwaway target as a street_crimes detective and open a
+    // street_crimes -> JTF transfer (initiated by the Director, so the
+    // major_crimes lead is on NEITHER side
     // and is not the requester)
-    const stage = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'BCB', p_active: true })
+    const stage = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'street_crimes', p_active: true })
     expect(stage.error).toBeNull()
-    const tr = await director.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'SAB', p_reason: '[rls-test] unrelated-bureau probe' })
+    const tr = await director.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'JTF', p_reason: '[rls-test] unrelated-bureau probe' })
     expect(tr.error).toBeNull()
     const id = (tr.data as { id: string }).id
-    // zero rows AND zero count for the unrelated LSB lead — existence is not inferable
+    // zero rows AND zero count for the unrelated MCB lead — existence is not inferable
     const rows = await lead.from('transfer_requests').select('id,reason').eq('id', id)
     expect(rows.data ?? []).toHaveLength(0)
     const count = await lead.from('transfer_requests').select('id', { count: 'exact', head: true }).eq('id', id)
@@ -457,24 +458,24 @@ describe.skipIf(!ccEnabled)('Command Center — role change & transfer authority
     // deciding is equally out of reach for the unrelated lead
     const decide = await lead.rpc('approve_transfer_source', { p_id: id })
     expect(decide.error).not.toBeNull()
-    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
+    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'major_crimes', p_active: true })
     expect(reset.error).toBeNull()
   })
 
   it('a destination Bureau Lead sees an inbound transfer with full decision information', async () => {
-    // stage the target in BCB and request BCB -> LSB (Director-initiated):
-    // the LSB lead is the DESTINATION side this time
-    const stage = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'BCB', p_active: true })
+    // stage the target in SCB and request SCB -> MCB (Director-initiated):
+    // the MCB lead is the DESTINATION side this time
+    const stage = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'street_crimes', p_active: true })
     expect(stage.error).toBeNull()
-    const tr = await director.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'LSB', p_reason: '[rls-test] inbound visibility' })
+    const tr = await director.rpc('request_transfer', { p_target: targetId, p_to_bureau: 'major_crimes', p_reason: '[rls-test] inbound visibility' })
     expect(tr.error).toBeNull()
     const id = (tr.data as { id: string }).id
     const asLead = await lead.from('transfer_requests')
       .select('id,reason,from_role,to_role,from_bureau,to_bureau,status,requested_by,decision_note').eq('id', id)
     expect(asLead.error).toBeNull()
     expect(asLead.data).toHaveLength(1)
-    expect(asLead.data![0]).toMatchObject({ reason: '[rls-test] inbound visibility', from_bureau: 'BCB', to_bureau: 'LSB' })
-    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'LSB', p_active: true })
+    expect(asLead.data![0]).toMatchObject({ reason: '[rls-test] inbound visibility', from_bureau: 'street_crimes', to_bureau: 'major_crimes' })
+    const reset = await director.rpc('rls_test_reset_member', { p_target: targetId, p_role: 'detective', p_division: 'major_crimes', p_active: true })
     expect(reset.error).toBeNull()
   })
 
@@ -570,20 +571,20 @@ describe.skipIf(!enabled)('Membership requests — applicant wall & review autho
       const ins = await applicant.from('membership_requests')
         .insert({
           applicant_id: applicantId, display_name: 'RLS Test Applicant',
-          requested_bureau: 'LSB', requested_role: 'detective',
+          requested_bureau: 'major_crimes', requested_role: 'detective',
           reason: '[rls-test] membership security-wall fixture',
         })
         .select(COLS)
       expect(ins.error).toBeNull()
       expect(ins.data).toHaveLength(1)
-      expect(ins.data![0]).toMatchObject({ status: 'draft', requested_bureau: 'LSB', requested_role: 'detective' })
+      expect(ins.data![0]).toMatchObject({ status: 'draft', requested_bureau: 'major_crimes', requested_role: 'detective' })
       requestId = ins.data![0].id
     } else {
       // Reuse path: reset the applicant-editable form fields. On a terminal
       // row the mr_upd policy matches zero rows (silently) — that is fine,
       // the status-dependent tests below detect it and skip.
       const upd = await applicant.from('membership_requests')
-        .update({ display_name: 'RLS Test Applicant', requested_bureau: 'LSB', requested_role: 'detective' })
+        .update({ display_name: 'RLS Test Applicant', requested_bureau: 'major_crimes', requested_role: 'detective' })
         .eq('id', requestId)
         .select('id')
       expect(upd.error).toBeNull()
@@ -598,7 +599,7 @@ describe.skipIf(!enabled)('Membership requests — applicant wall & review autho
     const { error } = await applicant.from('membership_requests')
       .insert({
         applicant_id: applicantId, display_name: 'RLS Test Applicant (dupe)',
-        requested_bureau: 'BCB', requested_role: 'detective', reason: '[rls-test] duplicate',
+        requested_bureau: 'street_crimes', requested_role: 'detective', reason: '[rls-test] duplicate',
       })
       .select('id')
     expect(error).not.toBeNull()
@@ -637,7 +638,7 @@ describe.skipIf(!enabled)('Membership requests — applicant wall & review autho
 
   it('applicant cannot review their own request via review_membership_request', async () => {
     const { error } = await applicant.rpc('review_membership_request', {
-      p_request: requestId, p_decision: 'approve', p_final_bureau: 'LSB', p_final_role: 'detective',
+      p_request: requestId, p_decision: 'approve', p_final_bureau: 'major_crimes', p_final_role: 'detective',
     })
     expect(error).not.toBeNull()
   })
@@ -652,15 +653,15 @@ describe.skipIf(!enabled)('Membership requests — applicant wall & review autho
 
   it.skipIf(!PW.lead)('bureau lead cannot approve outside their bureau or assign command roles', async (ctx) => {
     if (!(await ensurePending())) ctx.skip('fixture row is terminal from a previous run — no server reset path (see README)')
-    // rls-test-lead is bureau_lead of LSB (see README): BCB is the wrong bureau.
+    // rls-test-lead is bureau_lead of MCB (see README): SCB is the wrong bureau.
     const wrongBureau = await lead!.rpc('review_membership_request', {
-      p_request: requestId, p_decision: 'approve', p_final_bureau: 'BCB', p_final_role: 'detective',
+      p_request: requestId, p_decision: 'approve', p_final_bureau: 'street_crimes', p_final_role: 'detective',
     })
     expect(wrongBureau.error).not.toBeNull()
     // v1.16 unified matrix wording ("not authorized to assign <role> in <bureau>")
     expect(wrongBureau.error!.message).toMatch(/not authorized to assign|own bureau/i)
     const commandRole = await lead!.rpc('review_membership_request', {
-      p_request: requestId, p_decision: 'approve', p_final_bureau: 'LSB', p_final_role: 'director',
+      p_request: requestId, p_decision: 'approve', p_final_bureau: 'major_crimes', p_final_role: 'director',
     })
     expect(commandRole.error).not.toBeNull()
     expect(commandRole.error!.message).toMatch(/not authorized to assign|command roles/i)
@@ -722,7 +723,7 @@ describe.skipIf(!enabled)('Membership requests — applicant wall & review autho
  *  rls-test-applicant fixture (never the shared rls-test-inactive account).
  *  review_membership_request must be atomic: request status + decided_*
  *  columns + profile role/division/active + applicant notification + history
- *  land together. Teardown returns the fixture to inactive detective/LSB and
+ *  land together. Teardown returns the fixture to inactive detective/MCB and
  *  purges the request via rls_test_cleanup (which only checks that the CALLER
  *  is an rls-test auth account — active is not required, so the deactivated
  *  applicant can still purge). */
@@ -744,12 +745,12 @@ describe.skipIf(!approvalEnabled)('Membership approval — atomic activation (di
     applicantId = await signInAs(applicant, 'rls-test-applicant@cidportal.test', PW.applicant!)
     reviewerId = await signInAs(reviewer, reviewerCreds.email, reviewerCreds.pw)
     // Reset: purge any request a previous run left, then force the fixture
-    // back to inactive detective/LSB (a no-op that records a role_event on an
+    // back to inactive detective/MCB (a no-op that records a role_event on an
     // already-clean fixture — cleanup removes those too).
     const clean = await applicant.rpc('rls_test_cleanup')
     if (clean.error) throw new Error(`rls_test_cleanup failed: ${clean.error.message}`)
     const reset = await reviewer.rpc('rls_test_reset_member', {
-      p_target: applicantId, p_role: 'detective', p_division: 'LSB', p_active: false,
+      p_target: applicantId, p_role: 'detective', p_division: 'major_crimes', p_active: false,
     })
     if (reset.error) throw new Error(`rls_test_reset_member reset failed: ${reset.error.message}`)
   })
@@ -759,7 +760,7 @@ describe.skipIf(!approvalEnabled)('Membership approval — atomic activation (di
     // Safety net (idempotent with the final test): never leave the disposable
     // applicant active, and purge its request/notifications/role_events.
     const back = await reviewer.rpc('rls_test_reset_member', {
-      p_target: applicantId, p_role: 'detective', p_division: 'LSB', p_active: false,
+      p_target: applicantId, p_role: 'detective', p_division: 'major_crimes', p_active: false,
     })
     if (back.error) throw new Error(`rls_test_reset_member restore failed: ${back.error.message}`)
     const { error } = await applicant.rpc('rls_test_cleanup')
@@ -778,7 +779,7 @@ describe.skipIf(!approvalEnabled)('Membership approval — atomic activation (di
     const ins = await applicant.from('membership_requests')
       .insert({
         applicant_id: applicantId, display_name: 'RLS Test Applicant (disposable)',
-        requested_bureau: 'LSB', requested_role: 'detective',
+        requested_bureau: 'major_crimes', requested_role: 'detective',
         reason: '[rls-test] approval-path fixture',
       })
       .select('id,status')
@@ -792,7 +793,7 @@ describe.skipIf(!approvalEnabled)('Membership approval — atomic activation (di
   it('approve_with_changes activates the profile atomically', async () => {
     const rev = await reviewer.rpc('review_membership_request', {
       p_request: requestId, p_decision: 'approve_with_changes',
-      p_final_bureau: 'BCB', p_final_role: 'senior_detective',
+      p_final_bureau: 'street_crimes', p_final_role: 'senior_detective',
       p_applicant_note: '[rls-test] approved with changes',
       p_internal_note: '[rls-test] internal',
     })
@@ -804,8 +805,8 @@ describe.skipIf(!approvalEnabled)('Membership approval — atomic activation (di
     }
     expect(row).toMatchObject({
       status: 'approved_with_changes',
-      decided_bureau: 'BCB', decided_role: 'senior_detective',
-      requested_bureau: 'LSB', requested_role: 'detective', // originals preserved
+      decided_bureau: 'street_crimes', decided_role: 'senior_detective',
+      requested_bureau: 'major_crimes', requested_role: 'detective', // originals preserved
       decided_by: reviewerId,
     })
     expect(row.decided_at).not.toBeNull()
@@ -813,7 +814,7 @@ describe.skipIf(!approvalEnabled)('Membership approval — atomic activation (di
     // Profile flipped in the same transaction.
     const prof = await applicant.from('profiles').select('id,role,division,active').eq('id', applicantId)
     expect(prof.error).toBeNull()
-    expect(prof.data![0]).toMatchObject({ active: true, role: 'senior_detective', division: 'BCB' })
+    expect(prof.data![0]).toMatchObject({ active: true, role: 'senior_detective', division: 'street_crimes' })
 
     // The applicant was notified about their own approval.
     const note = await applicant.from('notifications')
@@ -843,7 +844,7 @@ describe.skipIf(!approvalEnabled)('Membership approval — atomic activation (di
 
   it('teardown: deactivation + cleanup leave no trace', async () => {
     const back = await reviewer.rpc('rls_test_reset_member', {
-      p_target: applicantId, p_role: 'detective', p_division: 'LSB', p_active: false,
+      p_target: applicantId, p_role: 'detective', p_division: 'major_crimes', p_active: false,
     })
     expect(back.error).toBeNull()
     const prof = await applicant.from('profiles').select('id,active').eq('id', applicantId)
@@ -860,8 +861,8 @@ describe.skipIf(!approvalEnabled)('Membership approval — atomic activation (di
 })
 
 /** Joint cases (migration 20260713040000) — temporary, case-scoped
- *  cross-bureau access via joint assignments. Uses the same LSB-owned-case /
- *  BCB-outsider pair as the bureau-isolation block; every case created here
+ *  cross-bureau access via joint assignments. Uses the same MCB-owned-case /
+ *  SCB-outsider pair as the bureau-isolation block; every case created here
  *  is removed by rls_test_cleanup in afterAll. */
 describe.skipIf(!enabled)('Joint cases — temporary case-scoped cross-bureau access', () => {
   let lsb: SupabaseClient
@@ -875,10 +876,10 @@ describe.skipIf(!enabled)('Joint cases — temporary case-scoped cross-bureau ac
     lsb = mk(); bcb = mk()
     await signInAs(lsb, 'rls-test-lsb@cidportal.test', PW.lsb!)
     bcbId = await signInAs(bcb, 'rls-test-bcb@cidportal.test', PW.bcb!)
-    const a = await lsb.from('cases').insert({ case_number: num, title: 'RLS joint-case test', bureau: 'LSB' }).select('id')
+    const a = await lsb.from('cases').insert({ case_number: num, title: 'RLS joint-case test', bureau: 'major_crimes' }).select('id')
     if (a.error) throw new Error(`case A insert failed: ${a.error.message}`)
     caseA = a.data![0].id
-    const b = await lsb.from('cases').insert({ case_number: `${num}-B`, title: 'RLS joint-case control', bureau: 'LSB' }).select('id')
+    const b = await lsb.from('cases').insert({ case_number: `${num}-B`, title: 'RLS joint-case control', bureau: 'major_crimes' }).select('id')
     if (b.error) throw new Error(`case B insert failed: ${b.error.message}`)
     caseB = b.data![0].id
     const rep = await lsb.from('reports')
@@ -895,7 +896,7 @@ describe.skipIf(!enabled)('Joint cases — temporary case-scoped cross-bureau ac
     await Promise.all([lsb, bcb].map((c) => c.auth.signOut()))
   })
 
-  it('BCB cannot read the LSB case before conversion (precondition)', async () => {
+  it('SCB cannot read the MCB case before conversion (precondition)', async () => {
     const { data, error } = await bcb.from('cases').select('id').in('id', [caseA, caseB])
     expect(error).toBeNull()
     expect(data).toHaveLength(0)
@@ -923,7 +924,7 @@ describe.skipIf(!enabled)('Joint cases — temporary case-scoped cross-bureau ac
     expect(error).not.toBeNull()
   })
 
-  it('case creator converts to joint; bureau stays LSB (never flips to JTF)', async () => {
+  it('case creator converts to joint; bureau stays MCB (never flips to JTF)', async () => {
     const { data, error } = await lsb.rpc('convert_case_to_joint', {
       p_case: caseA,
       p_members: [{ officer_id: bcbId, joint_role: 'Joint Investigator' }],
@@ -933,7 +934,7 @@ describe.skipIf(!enabled)('Joint cases — temporary case-scoped cross-bureau ac
     expect((data as { members_added: number }).members_added).toBe(1)
     const c = await lsb.from('cases').select('id,bureau,is_joint_case,originating_bureau').eq('id', caseA)
     expect(c.error).toBeNull()
-    expect(c.data![0]).toMatchObject({ is_joint_case: true, bureau: 'LSB', originating_bureau: 'LSB' })
+    expect(c.data![0]).toMatchObject({ is_joint_case: true, bureau: 'major_crimes', originating_bureau: 'major_crimes' })
   })
 
   it('the joint member can now read the case and its reports', async () => {
@@ -945,7 +946,7 @@ describe.skipIf(!enabled)('Joint cases — temporary case-scoped cross-bureau ac
     expect(r.data!.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('joint access is case-scoped: the second LSB case stays invisible', async () => {
+  it('joint access is case-scoped: the second MCB case stays invisible', async () => {
     const { data, error } = await bcb.from('cases').select('id').eq('id', caseB)
     expect(error).toBeNull()
     expect(data).toHaveLength(0)
@@ -987,7 +988,7 @@ describe.skipIf(!enabled)('Joint cases — temporary case-scoped cross-bureau ac
     expect(end.error).toBeNull()
     const c = await lsb.from('cases').select('id,is_joint_case,bureau,originating_bureau,joint_case_ended_at').eq('id', caseA)
     expect(c.error).toBeNull()
-    expect(c.data![0]).toMatchObject({ is_joint_case: false, bureau: 'LSB', originating_bureau: 'LSB' })
+    expect(c.data![0]).toMatchObject({ is_joint_case: false, bureau: 'major_crimes', originating_bureau: 'major_crimes' })
     expect(c.data![0].joint_case_ended_at).not.toBeNull()
     const a = await lsb.from('case_assignments')
       .select('id,assignment_source,removed_at')
@@ -1049,17 +1050,17 @@ describe.skipIf(!enabled)('Announcements — audience authority & scoped fan-out
 
   it('a detective can neither insert nor publish announcements', async () => {
     const ins = await lsb.from('announcements')
-      .insert({ title: '[rls-test] detective direct insert', body: 'should never exist', audience: 'LSB' })
+      .insert({ title: '[rls-test] detective direct insert', body: 'should never exist', audience: 'major_crimes' })
       .select('id')
     expect(ins.error).not.toBeNull()
     const pub = await lsb.rpc('publish_announcement', {
-      p_title: '[rls-test] detective publish', p_body: 'should never exist', p_audience: 'LSB',
+      p_title: '[rls-test] detective publish', p_body: 'should never exist', p_audience: 'major_crimes',
     })
     expect(pub.error).not.toBeNull()
   })
 
   it('announcement_recipient_count is rejected for a detective', async () => {
-    const { error } = await lsb.rpc('announcement_recipient_count', { p_audience: 'LSB' })
+    const { error } = await lsb.rpc('announcement_recipient_count', { p_audience: 'major_crimes' })
     expect(error).not.toBeNull()
   })
 
@@ -1069,15 +1070,15 @@ describe.skipIf(!enabled)('Announcements — audience authority & scoped fan-out
     })
     expect(everyone.error).not.toBeNull()
     expect(everyone.error!.message).toMatch(/audience/i)
-    // rls-test-lead is bureau_lead of LSB (see README). Authority proof
-    // WITHOUT notifying real LSB members: recipient_count is read-only…
-    const count = await lead!.rpc('announcement_recipient_count', { p_audience: 'LSB' })
+    // rls-test-lead is bureau_lead of MCB (see README). Authority proof
+    // WITHOUT notifying real MCB members: recipient_count is read-only…
+    const count = await lead!.rpc('announcement_recipient_count', { p_audience: 'major_crimes' })
     expect(count.error).toBeNull()
     expect(count.data as number).toBeGreaterThanOrEqual(0)
     // …and a direct INSERT creates no notifications (fan-out lives only in
     // publish_announcement).
     const ins = await lead!.from('announcements')
-      .insert({ title: '[rls-test] LSB division notice', body: 'RLS security-suite fixture — safe to ignore.', audience: 'LSB' })
+      .insert({ title: '[rls-test] MCB division notice', body: 'RLS security-suite fixture — safe to ignore.', audience: 'major_crimes' })
       .select('id')
     expect(ins.error).toBeNull()
     const annId = ins.data![0].id as string
@@ -1123,8 +1124,8 @@ describe.skipIf(!enabled)('Announcements — audience authority & scoped fan-out
       p_body: 'RLS security-suite fixture — safe to ignore.',
       p_audience: 'specific_members',
       p_mentions: [
-        { target: lsbId, label: 'RLS Test LSB' },
-        { target: bcbId, label: 'RLS Test BCB' },
+        { target: lsbId, label: 'RLS Test MCB' },
+        { target: bcbId, label: 'RLS Test SCB' },
       ],
     })
     expect(pub.error).toBeNull()
@@ -1195,7 +1196,7 @@ describe.skipIf(!denyEnabled)('Login denial — deny/restore access', () => {
     expect(prof.data!.login_denied_reason).toBe('[rls-test] denied')
     // A denied applicant cannot insert a membership request (mr_ins RLS).
     const ins = await applicant.from('membership_requests')
-      .insert({ applicant_id: applicantId, display_name: 'RLS Test Applicant', requested_bureau: 'LSB', requested_role: 'detective', reason: '[rls-test] blocked' })
+      .insert({ applicant_id: applicantId, display_name: 'RLS Test Applicant', requested_bureau: 'major_crimes', requested_role: 'detective', reason: '[rls-test] blocked' })
       .select('id')
     expect(ins.error).not.toBeNull()
   })
@@ -1218,7 +1219,7 @@ describe.skipIf(!denyEnabled)('Login denial — deny/restore access', () => {
     expect(prof.data!.active).toBe(false)
     // Now the applicant can file a request again.
     const ins = await applicant.from('membership_requests')
-      .insert({ applicant_id: applicantId, display_name: 'RLS Test Applicant', requested_bureau: 'LSB', requested_role: 'detective', reason: '[rls-test] restored' })
+      .insert({ applicant_id: applicantId, display_name: 'RLS Test Applicant', requested_bureau: 'major_crimes', requested_role: 'detective', reason: '[rls-test] restored' })
       .select('id')
     expect(ins.error).toBeNull()
   })

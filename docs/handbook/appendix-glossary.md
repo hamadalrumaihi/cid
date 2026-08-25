@@ -37,7 +37,7 @@ Plain-English definitions of every technical term the handbook uses.
 | **Sequence guard** | A counter/flag ensuring only the newest async request's result is applied. |
 | **CAS (compare-and-swap)** | An update that only applies if a column still has an expected value — prevents two tabs double-firing. |
 | **pg_trgm** | The Postgres extension powering typo-tolerant search. |
-| **Bureau** | A sub-division (`LSB`/`BCB`/`SAB`/`JTF`); most case access is scoped to it. |
+| **Bureau** | A sub-division (`major_crimes`/`street_crimes`/`special_investigations`/`JTF`); most case access is scoped to it. `major_crimes` and `street_crimes` are the permanent homes; `special_investigations` marks SIB-authority cases. |
 | **Sign-off chain** | The server-routed approval flow: bureau lead → deputy director → director. |
 | **Deconfliction** | Detecting the same identifier/person across separate cases. |
 | **BOLO** | "Be on the lookout" — flagged persons. |

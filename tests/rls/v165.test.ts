@@ -9,9 +9,9 @@
  *  provisioning contract):
  *
  *    RLS_TEST_PASSWORD_PROSECUTOR   rls-test-prosecutor@cidportal.test
- *                                   justice_memberships.prosecutor_bureau='LSB'
+ *                                   justice_memberships.prosecutor_bureau='major_crimes'
  *    RLS_TEST_PASSWORD_PROSECUTOR2  rls-test-prosecutor2@cidportal.test
- *                                   justice_memberships.prosecutor_bureau='BCB'
+ *                                   justice_memberships.prosecutor_bureau='street_crimes'
  *    RLS_TEST_PASSWORD_AG           rls-test-ag@cidportal.test (attorney_general)
  *
  *  DOJ-dependent tests it.skipIf cleanly while those passwords are unset (the
@@ -24,9 +24,9 @@
  *      Attorney General / Owner, and (with the AG fixture) the argument walls
  *      hold: blank reason, past expiry, non-prosecutor grantee — none of which
  *      ever writes a row.
- *   3. Bureau eligibility on claiming: a request approved into the BCB queue
- *      is invisible to the LSB-home prosecutor and their claim is refused
- *      "outside your bureau"; the BCB-home prosecutor sees it and claims it.
+ *   3. Bureau eligibility on claiming: a request approved into the SCB queue
+ *      is invisible to the MCB-home prosecutor and their claim is refused
+ *      "outside your bureau"; the SCB-home prosecutor sees it and claims it.
  *   4. justice_appoint is now 4-arg: a prosecutor appointment without p_bureau
  *      fails "home bureau", a non-prosecutor appointment with p_bureau fails
  *      "only prosecutors carry a home bureau", and the is_test fixture wall
@@ -83,7 +83,7 @@ describe.skipIf(!enabled)('v1.65 — bureau queues, stages, evidence designation
   let p1: C | null = null, p2: C | null = null, ag: C | null = null
   const ids: Record<string, string> = {}
   const tag = Math.random().toString(36).slice(2, 8).toUpperCase()
-  let caseId = ''            // LSB case created by the lsb detective (no lead set)
+  let caseId = ''            // MCB case created by the lsb detective (no lead set)
   let mediaByLeadId = ''     // uploaded by the bureau_lead — the non-uploader probe
   let mediaByLsbId = ''      // uploaded by the lsb detective — designate/clear cycle
 
@@ -113,7 +113,7 @@ describe.skipIf(!enabled)('v1.65 — bureau queues, stages, evidence designation
       // The bureau-queue lane's meaning depends on the HOME bureaus — verify
       // the updated v163 provisioning contract live before asserting anything.
       for (const [client, key, bureau] of [
-        [p1!, 'prosecutor', 'LSB'], [p2!, 'prosecutor2', 'BCB'],
+        [p1!, 'prosecutor', 'major_crimes'], [p2!, 'prosecutor2', 'street_crimes'],
       ] as const) {
         const m = await client.from('justice_memberships')
           .select('justice_role,active,prosecutor_bureau').eq('user_id', ids[key])
@@ -130,7 +130,7 @@ describe.skipIf(!enabled)('v1.65 — bureau queues, stages, evidence designation
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
 
     const c = await lsb.from('cases').insert({
-      case_number: `V165-${tag}`, title: `[rls-test] v165 stages/evidence case ${tag}`, bureau: 'LSB',
+      case_number: `V165-${tag}`, title: `[rls-test] v165 stages/evidence case ${tag}`, bureau: 'major_crimes',
     }).select('id')
     if (c.error) throw new Error(`case insert: ${c.error.message}`)
     caseId = c.data![0].id as string
@@ -168,7 +168,7 @@ describe.skipIf(!enabled)('v1.65 — bureau queues, stages, evidence designation
   it('no client role can INSERT/UPDATE prosecutor_coverage directly; a plain member reads only their own rows', async () => {
     for (const actor of [lsb, lead, owner]) {
       const ins = await actor.from('prosecutor_coverage').insert({
-        prosecutor_id: ids.lsb, bureau: 'LSB',
+        prosecutor_id: ids.lsb, bureau: 'major_crimes',
         reason: '[rls-test] v165 direct write probe', authorized_by: ids.owner,
       }).select('id')
       expect(ins.error).not.toBeNull()
@@ -188,7 +188,7 @@ describe.skipIf(!enabled)('v1.65 — bureau queues, stages, evidence designation
   it('justice_set_coverage and justice_end_coverage refuse everyone below the Attorney General / Owner', async () => {
     for (const [actor, name] of [[lsb, 'detective'], [lead, 'bureau_lead'], [director, 'director']] as const) {
       const grant = await actor.rpc('justice_set_coverage', {
-        p_user: randomUUID(), p_bureau: 'LSB', p_reason: '[rls-test] v165 refusal probe',
+        p_user: randomUUID(), p_bureau: 'major_crimes', p_reason: '[rls-test] v165 refusal probe',
       })
       expect(grant.error, `${name} grant`).not.toBeNull()
       expect(grant.error!.message).toMatch(/only the Attorney General or Owner/i)
@@ -200,13 +200,13 @@ describe.skipIf(!enabled)('v1.65 — bureau queues, stages, evidence designation
 
   it.skipIf(!doj)('AG argument walls: blank reason, past expiry, non-prosecutor grantee, unknown coverage — no row is ever written', async () => {
     const blank = await ag!.rpc('justice_set_coverage', {
-      p_user: ids.prosecutor, p_bureau: 'BCB', p_reason: '   ',
+      p_user: ids.prosecutor, p_bureau: 'street_crimes', p_reason: '   ',
     })
     expect(blank.error).not.toBeNull()
     expect(blank.error!.message).toMatch(/a reason is required/i)
 
     const past = await ag!.rpc('justice_set_coverage', {
-      p_user: ids.prosecutor, p_bureau: 'BCB', p_reason: '[rls-test] v165 expiry probe',
+      p_user: ids.prosecutor, p_bureau: 'street_crimes', p_reason: '[rls-test] v165 expiry probe',
       p_expires_at: new Date(Date.now() - 60_000).toISOString(),
     })
     expect(past.error).not.toBeNull()
@@ -214,7 +214,7 @@ describe.skipIf(!enabled)('v1.65 — bureau queues, stages, evidence designation
 
     // coverage is a prosecutor concept — a CID detective can never receive it
     const notPros = await ag!.rpc('justice_set_coverage', {
-      p_user: ids.lsb, p_bureau: 'BCB', p_reason: '[rls-test] v165 grantee probe',
+      p_user: ids.lsb, p_bureau: 'street_crimes', p_reason: '[rls-test] v165 grantee probe',
     })
     expect(notPros.error).not.toBeNull()
     expect(notPros.error!.message).toMatch(/active Prosecutor/i)
@@ -231,16 +231,16 @@ describe.skipIf(!enabled)('v1.65 — bureau queues, stages, evidence designation
 
   /* ============ 3. bureau eligibility on the queue ============ */
 
-  it.skipIf(!doj)('a BCB-queued request is invisible and unclaimable outside the home bureau; the home-bureau prosecutor claims it', async () => {
-    // The BCB detective drafts on their own case; the Director (cross-bureau
-    // fallback authority) approves it into the BCB prosecutor queue.
+  it.skipIf(!doj)('a SCB-queued request is invisible and unclaimable outside the home bureau; the home-bureau prosecutor claims it', async () => {
+    // The SCB detective drafts on their own case; the Director (cross-bureau
+    // fallback authority) approves it into the SCB prosecutor queue.
     const c = await bcb.from('cases').insert({
-      case_number: `V165B-${tag}`, title: `[rls-test] v165 BCB queue case ${tag}`, bureau: 'BCB',
+      case_number: `V165B-${tag}`, title: `[rls-test] v165 SCB queue case ${tag}`, bureau: 'street_crimes',
     }).select('id')
     expect(c.error).toBeNull()
     const r = await bcb.rpc('create_legal_request', {
       p_case: c.data![0].id, p_request_type: 'subpoena', p_subtype: 'document_production',
-      p_title: `[rls-test] V165 BCB Subpoena ${tag}`, p_recipient_type: 'entity', p_recipient_name: 'Fleeca Bank',
+      p_title: `[rls-test] V165 SCB Subpoena ${tag}`, p_recipient_type: 'entity', p_recipient_name: 'Fleeca Bank',
       p_narrative: 'Records needed for the v165 bureau-queue wall test.',
       p_form: { items_requested: 'Statements', date_range: '2026-01→2026-06' },
     })
@@ -252,9 +252,9 @@ describe.skipIf(!enabled)('v1.65 — bureau queues, stages, evidence designation
     expect(sub.error).toBeNull()
     const ap = await director.rpc('review_legal_request_as_cid', { p_request: reqId, p_decision: 'approve', p_signature: 'RLS Director' })
     expect(ap.error).toBeNull()
-    expect(ap.data).toMatchObject({ review_status: 'prosecutor_queue', responsible_bureau: 'BCB' })
+    expect(ap.data).toMatchObject({ review_status: 'prosecutor_queue', responsible_bureau: 'street_crimes' })
 
-    // The LSB-home prosecutor's lane view no longer includes the BCB queue…
+    // The MCB-home prosecutor's lane view no longer includes the SCB queue…
     const hidden = await p1!.from('legal_requests').select('id').eq('id', reqId)
     expect(hidden.error).toBeNull()
     expect(hidden.data ?? []).toHaveLength(0)
@@ -263,7 +263,7 @@ describe.skipIf(!enabled)('v1.65 — bureau queues, stages, evidence designation
     expect(deny.error).not.toBeNull()
     expect(deny.error!.message).toMatch(/outside your bureau/i)
 
-    // The BCB-home prosecutor sees the queue and the claim succeeds.
+    // The SCB-home prosecutor sees the queue and the claim succeeds.
     const seen = await p2!.from('legal_requests').select('id').eq('id', reqId)
     expect(seen.error).toBeNull()
     expect(seen.data).toHaveLength(1)
@@ -285,13 +285,13 @@ describe.skipIf(!enabled)('v1.65 — bureau queues, stages, evidence designation
       expect(noBureau.error!.message).toMatch(/home bureau/i)
     }
     const judgeWithBureau = await director.rpc('justice_appoint', {
-      p_user: randomUUID(), p_role: 'judge', p_reason: '[rls-test] v165 signature probe', p_bureau: 'LSB',
+      p_user: randomUUID(), p_role: 'judge', p_reason: '[rls-test] v165 signature probe', p_bureau: 'major_crimes',
     })
     expect(judgeWithBureau.error).not.toBeNull()
     expect(judgeWithBureau.error!.message).toMatch(/only prosecutors carry a home bureau/i)
     // Fully valid arguments still cannot touch a fixture account (v164 wall).
     const fixtureTarget = await director.rpc('justice_appoint', {
-      p_user: ids.bcb, p_role: 'prosecutor', p_reason: '[rls-test] v165 eligibility probe', p_bureau: 'BCB',
+      p_user: ids.bcb, p_role: 'prosecutor', p_reason: '[rls-test] v165 eligibility probe', p_bureau: 'street_crimes',
     })
     expect(fixtureTarget.error).not.toBeNull()
     expect(fixtureTarget.error!.message).toMatch(/not eligible for a DOJ appointment/i)
@@ -336,7 +336,7 @@ describe.skipIf(!enabled)('v1.65 — bureau queues, stages, evidence designation
     expect(det.error).not.toBeNull()
     expect(det.error!.message).toMatch(/only the case lead or a supervisor/i)
 
-    // a BCB detective cannot even learn the case exists
+    // a SCB detective cannot even learn the case exists
     const foreign = await bcb.rpc('case_set_stage', {
       p_case: caseId, p_stage: 'active_investigation', p_reason: '[rls-test] v165 cross-bureau probe',
     })

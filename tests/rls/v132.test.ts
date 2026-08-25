@@ -18,9 +18,9 @@
  *     comment is submitter-or-manager; duplicate never deletes; implementation
  *     link only flows from an accepted status; anon is denied the write RPCs.
  *
- *  Fixtures (tests/rls/README.md): lead (bureau_lead LSB), director (director
- *  SAB), owner (detective+is_owner SAB), lsb (detective LSB), bcb (detective
- *  BCB), target (detective LSB). All fixture docs/suggestions are removed in
+ *  Fixtures (tests/rls/README.md): lead (bureau_lead MCB), director (director
+ *  major_crimes), owner (detective+is_owner major_crimes), lsb (detective major_crimes), bcb (detective
+ *  SCB), target (detective MCB). All fixture docs/suggestions are removed in
  *  afterAll (suggestions/events/comments cascade from the parent document).
  *  Requires migration 20260802010000. */
 
@@ -78,18 +78,18 @@ describe.skipIf(!enabled)('v1.32 — bureau-scoped document edits + suggestions 
     // Fixture shelf — director creates & publishes the bureau-scoped SOPs
     // (division leadership may author every bureau incl. NULL). The command doc
     // exercises the org-wide security tier; the restricted doc the no-view path.
-    await mkDoc(director, 'lsbDoc', { status: 'draft', classification: 'internal', category: 'sops', document_type: 'sop', bureau: 'LSB' })
+    await mkDoc(director, 'lsbDoc', { status: 'draft', classification: 'internal', category: 'sops', document_type: 'sop', bureau: 'major_crimes' })
     await director.rpc('document_workflow', { p_document: docs.lsbDoc, p_action: 'publish' })
-    await mkDoc(director, 'bcbDoc', { status: 'draft', classification: 'internal', category: 'sops', document_type: 'sop', bureau: 'BCB' })
+    await mkDoc(director, 'bcbDoc', { status: 'draft', classification: 'internal', category: 'sops', document_type: 'sop', bureau: 'street_crimes' })
     await director.rpc('document_workflow', { p_document: docs.bcbDoc, p_action: 'publish' })
     await mkDoc(director, 'nullDoc', { status: 'draft', classification: 'internal', category: 'sops', document_type: 'sop' })
     await director.rpc('document_workflow', { p_document: docs.nullDoc, p_action: 'publish' })
-    await mkDoc(director, 'commandDoc', { status: 'draft', classification: 'command', category: 'command', bureau: 'LSB' })
+    await mkDoc(director, 'commandDoc', { status: 'draft', classification: 'command', category: 'command', bureau: 'major_crimes' })
     await director.rpc('document_workflow', { p_document: docs.commandDoc, p_action: 'publish' })
-    await mkDoc(director, 'restrictedDoc', { status: 'draft', classification: 'restricted', category: 'sops', bureau: 'LSB' })
+    await mkDoc(director, 'restrictedDoc', { status: 'draft', classification: 'restricted', category: 'sops', bureau: 'major_crimes' })
     await director.rpc('document_workflow', { p_document: docs.restrictedDoc, p_action: 'publish' })
-    // A draft SOP the LSB detective owns — proves the owner-while-active branch.
-    await mkDoc(lsb, 'ownDoc', { status: 'draft', classification: 'internal', category: 'sops', document_type: 'sop', bureau: 'LSB', owner_user_id: ids.lsb })
+    // A draft SOP the MCB detective owns — proves the owner-while-active branch.
+    await mkDoc(lsb, 'ownDoc', { status: 'draft', classification: 'internal', category: 'sops', document_type: 'sop', bureau: 'major_crimes', owner_user_id: ids.lsb })
   })
 
   afterAll(async () => {
@@ -103,7 +103,7 @@ describe.skipIf(!enabled)('v1.32 — bureau-scoped document edits + suggestions 
 
   /* ── bureau-scoped edit authority (via document_save, the real user path) ── */
 
-  it('LSB bureau lead CAN edit an LSB-bureau internal SOP', async () => {
+  it('MCB bureau lead CAN edit an MCB-bureau internal SOP', async () => {
     const before = await director.from('documents').select('current_version_number').eq('id', docs.lsbDoc).single()
     const save = await lead.rpc('document_save', {
       p_document: docs.lsbDoc, p_name: N('lsbDoc'),
@@ -114,7 +114,7 @@ describe.skipIf(!enabled)('v1.32 — bureau-scoped document edits + suggestions 
     expect(save.data!.current_version_number).toBe((before.data!.current_version_number as number) + 1)
   })
 
-  it('LSB bureau lead CANNOT edit a BCB-bureau SOP (cross-bureau denial)', async () => {
+  it('MCB bureau lead CANNOT edit a SCB-bureau SOP (cross-bureau denial)', async () => {
     const save = await lead.rpc('document_save', {
       p_document: docs.bcbDoc, p_name: N('bcbDoc'),
       p_body: '# bcbDoc\n\nUnauthorized cross-bureau edit.', p_change_type: 'procedural',
@@ -124,7 +124,7 @@ describe.skipIf(!enabled)('v1.32 — bureau-scoped document edits + suggestions 
     expect(save.error!.message).toMatch(/not authorized/i)
   })
 
-  it('LSB bureau lead CANNOT edit a NULL-bureau (division-wide) SOP', async () => {
+  it('MCB bureau lead CANNOT edit a NULL-bureau (division-wide) SOP', async () => {
     const save = await lead.rpc('document_save', {
       p_document: docs.nullDoc, p_name: N('nullDoc'),
       p_body: '# nullDoc\n\nUnauthorized division-wide edit.', p_change_type: 'procedural',
@@ -134,7 +134,7 @@ describe.skipIf(!enabled)('v1.32 — bureau-scoped document edits + suggestions 
     expect(save.error!.message).toMatch(/not authorized/i)
   })
 
-  it('director edits division-wide: a BCB-bureau doc AND a NULL-bureau doc', async () => {
+  it('director edits division-wide: a SCB-bureau doc AND a NULL-bureau doc', async () => {
     const bcbEdit = await director.rpc('document_save', {
       p_document: docs.bcbDoc, p_name: N('bcbDoc'),
       p_body: '# bcbDoc\n\nDirector revision.', p_change_type: 'procedural',
@@ -190,7 +190,7 @@ describe.skipIf(!enabled)('v1.32 — bureau-scoped document edits + suggestions 
     })
     expect(save.error).toBeNull()
     expect(save.data).toMatchObject({ id: docs.ownDoc })
-    // A different LSB detective who does not own it and is no manager is denied.
+    // A different MCB detective who does not own it and is no manager is denied.
     const deny = await target.rpc('document_save', {
       p_document: docs.ownDoc, p_name: N('ownDoc'),
       p_body: '# ownDoc\n\nUnauthorized.', p_change_type: 'editorial',
@@ -234,16 +234,16 @@ describe.skipIf(!enabled)('v1.32 — bureau-scoped document edits + suggestions 
     expect(theirs.data ?? []).toHaveLength(0)
   })
 
-  it('LSB lead manages an LSB suggestion (sees + decides); cannot decide a BCB suggestion', async () => {
-    // A suggestion on the BCB doc, submitted by the BCB detective.
+  it('MCB lead manages an MCB suggestion (sees + decides); cannot decide a SCB suggestion', async () => {
+    // A suggestion on the SCB doc, submitted by the SCB detective.
     const bcbSug = await bcb.rpc('submit_document_suggestion', {
       p_document: docs.bcbDoc, p_type: 'outdated',
-      p_title: N('sug-bcb'), p_explanation: 'BCB procedure changed.',
+      p_title: N('sug-bcb'), p_explanation: 'SCB procedure changed.',
     })
     expect(bcbSug.error).toBeNull()
     sug.bcb = bcbSug.data!.id as string
 
-    // The LSB lead sees & can decide the LSB suggestion...
+    // The MCB lead sees & can decide the MCB suggestion...
     const seen = await lead.from('document_suggestions').select('id').eq('id', sug.lsb)
     expect(seen.data).toHaveLength(1)
     const decide = await lead.rpc('decide_document_suggestion', {
@@ -252,7 +252,7 @@ describe.skipIf(!enabled)('v1.32 — bureau-scoped document edits + suggestions 
     expect(decide.error).toBeNull()
     expect(decide.data).toMatchObject({ status: 'under_review', decided_by: ids.lead })
 
-    // ...but neither sees nor may decide a suggestion on a BCB doc.
+    // ...but neither sees nor may decide a suggestion on a SCB doc.
     const notSeen = await lead.from('document_suggestions').select('id').eq('id', sug.bcb)
     expect(notSeen.data ?? []).toHaveLength(0)
     const denied = await lead.rpc('decide_document_suggestion', {

@@ -19,7 +19,7 @@
  *     row kept), leaves the survivor's name untouched, and writes a
  *     PERSON_MERGED audit row; an already-merged victim cannot be merged again.
  *
- *  Fixtures (tests/rls/README.md): lsb (LSB detective, creator), bcb (BCB
+ *  Fixtures (tests/rls/README.md): lsb (MCB detective, creator), bcb (SCB
  *  detective — non-creator/cross-bureau negative), lead (bureau_lead —
  *  command delete positive), director (merge authority), owner (audit_log
  *  reader — audit_sel is owner-only). rls_test_cleanup at start + teardown;
@@ -84,7 +84,7 @@ describe.skipIf(!enabled)('v1.28 — person intelligence + merge + search (live)
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
 
     const c = await lsb.from('cases')
-      .insert({ case_number: caseNumber, title: 'v1.28 person intel case', bureau: 'LSB', lead_detective_id: ids.lsb })
+      .insert({ case_number: caseNumber, title: 'v1.28 person intel case', bureau: 'major_crimes', lead_detective_id: ids.lsb })
       .select('id')
     if (c.error) throw new Error(c.error.message)
     caseId = c.data![0].id as string
@@ -305,11 +305,11 @@ describe.skipIf(!enabled)('v1.28 — person intelligence + merge + search (live)
       .insert({ case_id: caseId, kind: 'person', ref_id: contactId })
       .select('id')
     expect(link.error).toBeNull()
-    // The case creator hits the contact via the LSB case number...
+    // The case creator hits the contact via the MCB case number...
     const mine = await lsb.rpc('search_persons', { p_q: caseNumber })
     expect(mine.error).toBeNull()
     expect(hitIds(mine.data)).toContain(contactId)
-    // ...a BCB detective searching the same case number gets no such hit.
+    // ...a SCB detective searching the same case number gets no such hit.
     const theirs = await bcb.rpc('search_persons', { p_q: caseNumber })
     expect(theirs.error).toBeNull()
     expect(hitIds(theirs.data)).not.toContain(contactId)

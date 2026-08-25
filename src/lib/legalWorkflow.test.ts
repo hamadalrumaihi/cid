@@ -23,7 +23,7 @@ function req(over: Partial<LegalReqLike> = {}): LegalReqLike {
     created_by: 'inv-1', review_status: 'submitted_to_doj', document_status: 'finalized',
     fulfilment_status: 'unissued', service_status: 'not_served', compliance_status: 'pending',
     approval_route: 'judge', classification: 'classified', request_type: 'warrant',
-    subtype: 'search_warrant', responsible_bureau: 'SAB',
+    subtype: 'search_warrant', responsible_bureau: 'major_crimes',
     assigned_ada_id: null, assigned_judge_id: null,
     expires_at: null, response_deadline: null, submitted_to_doj_at: '2026-07-15T00:00:00Z',
     ...over,
@@ -111,8 +111,8 @@ describe('responsible role', () => {
 
 describe('action vs awareness distinction', () => {
   it('a bureau prosecutor sees a parked bureau request as awareness-only, not assigned', () => {
-    const prosecutor = viewer({ myId: 'p-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['SAB'] })
-    const r = req({ review_status: 'submitted_to_doj', responsible_bureau: 'SAB', assigned_ada_id: null })
+    const prosecutor = viewer({ myId: 'p-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['major_crimes'] })
+    const r = req({ review_status: 'submitted_to_doj', responsible_bureau: 'major_crimes', assigned_ada_id: null })
     expect(isBureauAwareness(r, prosecutor)).toBe(true)
     const d = dispositionFor(r, prosecutor, NOW)
     expect(d.awarenessOnly).toBe(true)
@@ -121,11 +121,11 @@ describe('action vs awareness distinction', () => {
     expect(d.nextAction).toBe('Awareness only')
   })
   it('a different bureau prosecutor gets no awareness flag', () => {
-    const bcb = viewer({ myId: 'p-2', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['BCB'] })
-    expect(isBureauAwareness(req({ responsible_bureau: 'SAB' }), bcb)).toBe(false)
+    const scb = viewer({ myId: 'p-2', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['street_crimes'] })
+    expect(isBureauAwareness(req({ responsible_bureau: 'major_crimes' }), scb)).toBe(false)
   })
   it('the assigned ADA is action, not awareness', () => {
-    const ada = viewer({ myId: 'a-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['SAB'] })
+    const ada = viewer({ myId: 'a-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['major_crimes'] })
     const d = dispositionFor(req({ review_status: 'ada_review', assigned_ada_id: 'a-1' }), ada, NOW)
     expect(d.viewerCanAct).toBe(true)
     expect(d.awarenessOnly).toBe(false)
@@ -143,7 +143,7 @@ describe('next-action derivation + grouping', () => {
     expect(ret.group).toBe('returned_to_you')
   })
   it('CID supervisor can act on cid_supervisor_review (not the creator)', () => {
-    const sup = viewer({ myId: 'sup-1', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'SAB' })
+    const sup = viewer({ myId: 'sup-1', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'major_crimes' })
     const d = dispositionFor(req({ review_status: 'cid_supervisor_review', created_by: 'inv-1' }), sup, NOW)
     expect(d.viewerCanAct).toBe(true)
     expect(d.nextAction).toBe('Review as Bureau Lead')
@@ -167,11 +167,11 @@ describe('next-action derivation + grouping', () => {
 describe('countViewerActionable (case Legal tab marker)', () => {
   it('counts only rows the viewer can act on — claimable and awareness excluded', () => {
     const rows = [
-      req({ review_status: 'ada_review', assigned_ada_id: 'a-1' }),          // actionable for the ADA
-      req({ review_status: 'submitted_to_doj', responsible_bureau: 'SAB' }), // awareness for a SAB prosecutor
-      req({ review_status: 'ada_review', assigned_ada_id: 'a-9' }),          // someone else's review
+      req({ review_status: 'ada_review', assigned_ada_id: 'a-1' }),                   // actionable for the ADA
+      req({ review_status: 'submitted_to_doj', responsible_bureau: 'major_crimes' }), // awareness for an MCB prosecutor
+      req({ review_status: 'ada_review', assigned_ada_id: 'a-9' }),                   // someone else's review
     ]
-    const ada = viewer({ myId: 'a-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['SAB'] })
+    const ada = viewer({ myId: 'a-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['major_crimes'] })
     expect(countViewerActionable(rows, ada, NOW)).toBe(1)
     // A judge could CLAIM the parked request, but claimable is not "needs your action".
     const judge = viewer({ myId: 'j-1', justiceRole: 'judge' })
@@ -239,16 +239,16 @@ describe('routing explanation', () => {
     expect(routingExplanation(req({ classification: 'sealed' }))).toContain('not available for open judicial pickup')
   })
   it('bureau awareness explanation', () => {
-    const prosecutor = viewer({ myId: 'p-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['SAB'] })
+    const prosecutor = viewer({ myId: 'p-1', justiceRole: 'assistant_district_attorney', prosecutorBureaus: ['major_crimes'] })
     expect(routingExplanation(req(), prosecutor)).toContain('bureau awareness')
   })
   it('queue explanation names the responsible bureau and the coverage path (bureau queues, 20260818120000)', () => {
-    const queued = routingExplanation(req({ review_status: 'prosecutor_queue', responsible_bureau: 'BCB' }))
-    expect(queued).toContain('BCB prosecutor queue')
+    const queued = routingExplanation(req({ review_status: 'prosecutor_queue', responsible_bureau: 'street_crimes' }))
+    expect(queued).toContain('Street Crimes Bureau prosecutor queue')
     expect(queued).toContain('coverage')
     expect(queued).not.toContain('any active prosecutor') // the shared-queue phrasing is gone
     // sealed rows never advertise the queue at all
-    const sealed = routingExplanation(req({ review_status: 'prosecutor_queue', responsible_bureau: 'BCB', classification: 'sealed' }))
+    const sealed = routingExplanation(req({ review_status: 'prosecutor_queue', responsible_bureau: 'street_crimes', classification: 'sealed' }))
     expect(sealed).toContain('formal prosecutor assignment by the Attorney General')
   })
 })
@@ -405,35 +405,61 @@ describe('responsible-bureau resolution (mirror of private.legal_resolve_bureau)
     return { bureau: 'JTF', originating_bureau: null, case_number: 'JTF-9000001', leadDivision: null, creatorDivision: null, ...over }
   }
 
+  it('pins the routing vocabulary to the permanent bureaus', () => {
+    expect(CID_ROUTING_BUREAUS).toEqual(['major_crimes', 'street_crimes'])
+  })
+
   it('a permanent bureau wins over everything', () => {
-    const c = kase({ bureau: 'LSB', originating_bureau: 'BCB', case_number: 'SAB-9000034', leadDivision: 'BCB', creatorDivision: 'SAB' })
-    expect(resolveResponsibleBureau(c)).toEqual({ bureau: 'LSB', source: 'bureau' })
+    const c = kase({ bureau: 'major_crimes', originating_bureau: 'street_crimes', case_number: 'SCB-5000034', leadDivision: 'street_crimes', creatorDivision: 'street_crimes' })
+    expect(resolveResponsibleBureau(c)).toEqual({ bureau: 'major_crimes', source: 'bureau' })
   })
 
   it('originating_bureau wins for JTF cases', () => {
-    const c = kase({ originating_bureau: 'BCB', case_number: 'SAB-9000034', leadDivision: 'SAB', creatorDivision: 'SAB' })
-    expect(resolveResponsibleBureau(c)).toEqual({ bureau: 'BCB', source: 'originating' })
+    const c = kase({ originating_bureau: 'street_crimes', case_number: 'MCB-4000034', leadDivision: 'major_crimes', creatorDivision: 'major_crimes' })
+    expect(resolveResponsibleBureau(c)).toEqual({ bureau: 'street_crimes', source: 'originating' })
   })
 
   it('falls back to the case-number prefix (numbers never change on reassignment)', () => {
+    expect(resolveResponsibleBureau(kase({ case_number: 'MCB-4000034' })))
+      .toEqual({ bureau: 'major_crimes', source: 'case_number' })
+    expect(resolveResponsibleBureau(kase({ case_number: 'SCB-5000034' })))
+      .toEqual({ bureau: 'street_crimes', source: 'case_number' })
+  })
+
+  it('derives legacy LSB-/BCB- prefixes; ambiguous SAB- falls through (that bureau split)', () => {
+    expect(resolveResponsibleBureau(kase({ case_number: 'LSB-9000034' })))
+      .toEqual({ bureau: 'major_crimes', source: 'case_number' })
+    expect(resolveResponsibleBureau(kase({ case_number: 'BCB-9000002' })))
+      .toEqual({ bureau: 'street_crimes', source: 'case_number' })
+    // SAB- cannot be derived from the number alone — mirror of
+    // private.legal_resolve_bureau, which falls through to the other signals.
+    expect(resolveResponsibleBureau(kase({ case_number: 'SAB-9000034', leadDivision: 'street_crimes' })))
+      .toEqual({ bureau: 'street_crimes', source: 'lead_detective' })
     expect(resolveResponsibleBureau(kase({ case_number: 'SAB-9000034' })))
-      .toEqual({ bureau: 'SAB', source: 'case_number' })
+      .toEqual({ bureau: null, source: null })
   })
 
   it('falls back to the lead detective’s division when the prefix is JTF-', () => {
-    expect(resolveResponsibleBureau(kase({ case_number: 'JTF-9000034', leadDivision: 'BCB', creatorDivision: 'SAB' })))
-      .toEqual({ bureau: 'BCB', source: 'lead_detective' })
+    expect(resolveResponsibleBureau(kase({ case_number: 'JTF-9000034', leadDivision: 'street_crimes', creatorDivision: 'major_crimes' })))
+      .toEqual({ bureau: 'street_crimes', source: 'lead_detective' })
   })
 
   it('falls back to the creator’s division when the lead is JTF', () => {
-    expect(resolveResponsibleBureau(kase({ case_number: 'JTF-9000034', leadDivision: 'JTF', creatorDivision: 'SAB' })))
-      .toEqual({ bureau: 'SAB', source: 'creator' })
+    expect(resolveResponsibleBureau(kase({ case_number: 'JTF-9000034', leadDivision: 'JTF', creatorDivision: 'major_crimes' })))
+      .toEqual({ bureau: 'major_crimes', source: 'creator' })
   })
 
   it('resolves null when nothing in the chain is a permanent bureau', () => {
     expect(resolveResponsibleBureau(kase({ case_number: 'JTF-9000034', leadDivision: 'JTF', creatorDivision: 'JTF' })))
       .toEqual({ bureau: null, source: null })
     expect(resolveResponsibleBureau(kase({ case_number: '' }))).toEqual({ bureau: null, source: null })
+  })
+
+  it('never resolves SIB — an SIB case does not enter the CID prosecutor lanes', () => {
+    expect(resolveResponsibleBureau(kase({ bureau: 'special_investigations', case_number: 'SIB-8000004', leadDivision: 'special_investigations', creatorDivision: 'special_investigations' })))
+      .toEqual({ bureau: null, source: null })
+    expect(resolveResponsibleBureau(kase({ case_number: 'SIU-8000001' })))
+      .toEqual({ bureau: null, source: null })
   })
 
   it('never returns JTF as a resolution, wherever it is planted', () => {
@@ -477,7 +503,7 @@ describe('responsible-bureau resolution (mirror of private.legal_resolve_bureau)
     expect(canChangeResponsibleBureau('detective')).toBe(false)
   })
 
-  it('wizard: routingBureau null blocks case_target and review; SAB or undefined add nothing', () => {
+  it('wizard: routingBureau null blocks case_target and review; resolved or undefined add nothing', () => {
     // Same valid search-warrant factory shape as the wizard suite above.
     function wiz(over: Partial<LegalWizardInput> = {}): LegalWizardInput {
       return {
@@ -488,14 +514,14 @@ describe('responsible-bureau resolution (mirror of private.legal_resolve_bureau)
         ...over,
       }
     }
-    const blocked = 'This case needs a responsible bureau for legal routing — select LSB, BCB, or SAB.'
+    const blocked = 'This case needs a responsible bureau for legal routing — select Major Crimes or Street Crimes.'
     expect(legalWizardIssues('case_target', wiz({ routingBureau: null }))).toEqual([blocked])
     expect(legalWizardIssues('review', wiz({ routingBureau: null }))).toContain(blocked)
     // no case selected yet → the missing-case issue, never the routing issue
     expect(legalWizardIssues('case_target', wiz({ caseId: '', routingBureau: null }))).toEqual(['Select a case.'])
     // resolved and legacy (unevaluated) callers are unaffected
-    expect(legalWizardIssues('case_target', wiz({ routingBureau: 'SAB' }))).toEqual([])
-    expect(legalWizardIssues('review', wiz({ routingBureau: 'SAB' }))).toEqual([])
+    expect(legalWizardIssues('case_target', wiz({ routingBureau: 'major_crimes' }))).toEqual([])
+    expect(legalWizardIssues('review', wiz({ routingBureau: 'major_crimes' }))).toEqual([])
     expect(legalWizardIssues('case_target', wiz())).toEqual([])
     expect(legalWizardIssues('review', wiz({ routingBureau: undefined }))).toEqual([])
     // drafts ride the same case_target mirror (create_legal_request also resolves)
@@ -572,7 +598,7 @@ describe('remediation pins — executed grouping, parked ownership, AG judge rev
   })
 })
 
-describe('the SIU legal lane — X-1, not a Bureau Lead', () => {
+describe('the SIB legal lane — X-1, not a Bureau Lead', () => {
   const siuReq = (over = {}) =>
     req({ review_status: 'siu_command_review', created_by: 'agent-1', ...over })
 
@@ -594,10 +620,10 @@ describe('the SIU legal lane — X-1, not a Bureau Lead', () => {
 
     const director = viewer({ myId: 'u-dir', cidActive: true, cidRole: 'director' })
     expect(dispositionFor(siuReq(), director, NOW).viewerCanAct,
-      'the Director of CID holds no SIU authority').toBe(false)
+      'the Director of CID holds no SIB authority').toBe(false)
   })
 
-  it('gives it to SIU command', () => {
+  it('gives it to SIB command', () => {
     const x1 = viewer({ myId: 'u-x1', cidActive: true, cidRole: 'bureau_lead', siuIsCommand: true })
     expect(dispositionFor(siuReq(), x1, NOW).viewerCanAct).toBe(true)
     // Never the author of the request, whatever their standing.
@@ -605,7 +631,7 @@ describe('the SIU legal lane — X-1, not a Bureau Lead', () => {
     expect(dispositionFor(siuReq(), selfX1, NOW).viewerCanAct).toBe(false)
   })
 
-  it('treats a request returned by SIU command as editable by its author', () => {
+  it('treats a request returned by SIB command as editable by its author', () => {
     // Without this the return path is a dead end: X-1 sends it back and the
     // agent cannot touch it. The server had the same omission.
     const author = viewer({ myId: 'agent-1', cidActive: true })
@@ -616,12 +642,12 @@ describe('the SIU legal lane — X-1, not a Bureau Lead', () => {
     expect(stageForReviewStatus('returned_by_siu_command')).toBe('draft')
   })
 
-  it('explains where the request goes next, since the SIU route is unfamiliar', () => {
+  it('explains where the request goes next, since the SIB route is unfamiliar', () => {
     // §9 "why is this stuck". A reader who knows the CID pipeline would
-    // reasonably expect a prosecutor queue next; the SIU lane skips it.
+    // reasonably expect a prosecutor queue next; the SIB lane skips it.
     const other = viewer({ myId: 'u-other', cidActive: true })
     const why = routingExplanation(siuReq(), other)
-    expect(why).toMatch(/SIU command/i)
+    expect(why).toMatch(/SIB command/i)
     expect(why).toMatch(/Attorney General/i)
     expect(why, 'it must say the prosecutor queue is NOT the next stop').toMatch(/prosecutor queue/i)
   })
@@ -630,13 +656,13 @@ describe('the SIU legal lane — X-1, not a Bureau Lead', () => {
 describe('§9 why is this stuck — the CID lane names who can act', () => {
   const pending = (over = {}) =>
     req({ review_status: 'cid_supervisor_review', created_by: 'inv-1',
-          responsible_bureau: 'LSB', ...over })
+          responsible_bureau: 'major_crimes', ...over })
 
   it('names the bureau and the fallback, not just "a Bureau Lead"', () => {
     // The old wording was true and useless: it never said who, so a stalled
     // request gave the reader nothing to act on.
     const why = routingExplanation(pending(), viewer({ myId: 'u-other' }))
-    expect(why).toMatch(/LSB Bureau Lead/)
+    expect(why).toMatch(/Major Crimes Bureau Lead/)
     expect(why).toMatch(/Deputy Director or\s+Director/)
   })
 
@@ -668,25 +694,25 @@ describe('§9 why is this stuck — the CID lane names who can act', () => {
 
 describe('who may decide a CID legal request', () => {
   const pending = (over = {}) =>
-    req({ review_status: 'cid_supervisor_review', created_by: 'inv-1', responsible_bureau: 'SAB', ...over })
+    req({ review_status: 'cid_supervisor_review', created_by: 'inv-1', responsible_bureau: 'major_crimes', ...over })
   const acts = (v: LegalViewer, r = pending()) => dispositionFor(r, v, NOW).viewerCanAct
 
   it('lets the responsible bureau lead decide their own bureau', () => {
-    expect(acts(viewer({ myId: 'u-lead', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'SAB' })))
+    expect(acts(viewer({ myId: 'u-lead', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'major_crimes' })))
       .toBe(true)
   })
 
   it('does not offer another bureau lead a button the database refuses', () => {
     // can_approve_legal() requires division = responsible_bureau. The client
-    // used to admit ANY bureau_lead, so a BCB lead saw an Approve control on an
-    // SAB request and got an exception on click.
-    expect(acts(viewer({ myId: 'u-lead', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'BCB' })))
+    // used to admit ANY bureau_lead, so an SCB lead saw an Approve control on an
+    // MCB request and got an exception on click.
+    expect(acts(viewer({ myId: 'u-lead', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'street_crimes' })))
       .toBe(false)
   })
 
   it('widens to any bureau lead on a joint case', () => {
     expect(acts(
-      viewer({ myId: 'u-lead', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'BCB' }),
+      viewer({ myId: 'u-lead', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'street_crimes' }),
       pending({ case_bureau: 'JTF' }),
     )).toBe(true)
   })
@@ -697,7 +723,7 @@ describe('who may decide a CID legal request', () => {
     // division test, and nothing requires the lead to be marked unavailable
     // first.
     for (const role of ['deputy_director', 'director']) {
-      expect(acts(viewer({ myId: 'u-cmd', cidActive: true, cidRole: role, cidDivision: 'BCB' })), role)
+      expect(acts(viewer({ myId: 'u-cmd', cidActive: true, cidRole: role, cidDivision: 'street_crimes' })), role)
         .toBe(true)
     }
     expect(acts(viewer({ myId: 'u-own', cidActive: true, cidRole: null, isOwner: true }))).toBe(true)
@@ -712,7 +738,7 @@ describe('who may decide a CID legal request', () => {
     // Separation of duties survives everything above. A Bureau Lead who raises
     // a request in their own bureau escalates; they do not self-approve.
     for (const role of ['bureau_lead', 'deputy_director', 'director']) {
-      expect(acts(viewer({ myId: 'inv-1', cidActive: true, cidRole: role, cidDivision: 'SAB' })), role)
+      expect(acts(viewer({ myId: 'inv-1', cidActive: true, cidRole: role, cidDivision: 'major_crimes' })), role)
         .toBe(false)
     }
   })

@@ -60,7 +60,7 @@ describe.skipIf(!enabled)('v1.17 — fixture hiding + organization correction (l
     await t.auth.signOut()
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
-    const reset = await director.rpc('rls_test_reset_member', { p_target: ids.target, p_role: 'detective', p_division: 'LSB', p_active: true })
+    const reset = await director.rpc('rls_test_reset_member', { p_target: ids.target, p_role: 'detective', p_division: 'major_crimes', p_active: true })
     if (reset.error) throw new Error(`reset failed: ${reset.error.message}`)
   })
 
@@ -68,7 +68,7 @@ describe.skipIf(!enabled)('v1.17 — fixture hiding + organization correction (l
     if (owner) {
       // never leave the lsb fixture un-flagged or the target off-baseline
       await owner.rpc('set_profile_test_flag', { p_target: ids.lsb, p_is_test: true })
-      await director.rpc('rls_test_reset_member', { p_target: ids.target, p_role: 'detective', p_division: 'LSB', p_active: true })
+      await director.rpc('rls_test_reset_member', { p_target: ids.target, p_role: 'detective', p_division: 'major_crimes', p_active: true })
       await lsb.rpc('rls_test_cleanup')
     }
     await Promise.all([lsb, bcb, director, owner, da].filter(Boolean).map((c) => c.auth.signOut()))
@@ -153,6 +153,6 @@ describe.skipIf(!enabled)('v1.17 — fixture hiding + organization correction (l
   it('teardown: baseline intact', async () => {
     const prof = await director.from('profiles').select('role,division,active').eq('id', ids.target)
     expect(prof.error).toBeNull()
-    expect(prof.data![0]).toMatchObject({ role: 'detective', division: 'LSB' })
+    expect(prof.data![0]).toMatchObject({ role: 'detective', division: 'major_crimes' })
   })
 })

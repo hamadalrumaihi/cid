@@ -12,6 +12,7 @@ import { fmtUSD } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
+import { bureauLabel, bureauShort } from '@/lib/roles'
 import { statusTint } from '@/lib/tint'
 import { ActivityFeed } from './ActivityFeed'
 import { Analytics } from './Analytics'
@@ -78,12 +79,13 @@ const Standby = () => (
 )
 const tVal = (v: number): React.ReactNode => (v === 0 ? <Standby /> : String(v))
 
-const BUREAU_KEYS = ['LSB', 'BCB', 'SAB', 'JTF'] as const
-const BUREAU_FULL_NAMES: Record<string, string> = {
-  LSB: 'Los Santos Bureau', BCB: 'Blaine County Bureau', SAB: 'State Bureau', JTF: 'Joint Task Force',
-}
+// SIB is deliberately absent from the command dashboard: SIB case rows are
+// already invisible to unauthorized viewers via RLS, so aggregating whatever
+// leaks through would render misleading (or leaky) counts. JTF stays for
+// joint cases. Names come from lib/roles (bureauShort/bureauLabel).
+const BUREAU_KEYS = ['major_crimes', 'street_crimes', 'JTF'] as const
 const BUREAU_BAR_COLORS: Record<string, string> = {
-  LSB: 'bg-blue-500', BCB: 'bg-emerald-500', SAB: 'bg-violet-500', JTF: 'bg-amber-500',
+  major_crimes: 'bg-blue-500', street_crimes: 'bg-emerald-500', JTF: 'bg-amber-500',
 }
 
 const drillStatusPill = (c: CaseRow) => {
@@ -172,7 +174,7 @@ export function CommandView() {
   )
 
   const bureauCounts = useMemo(() => {
-    const counts: Record<string, number> = { LSB: 0, BCB: 0, SAB: 0, JTF: 0 }
+    const counts: Record<string, number> = { major_crimes: 0, street_crimes: 0, JTF: 0 }
     filtered.forEach((c) => { if (counts[c.bureau] != null) counts[c.bureau]++ })
     return counts
   }, [filtered])
@@ -203,7 +205,7 @@ export function CommandView() {
             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Bureau</label>
             <select value={filters.bureau} onChange={(e) => setFilters((f) => ({ ...f, bureau: e.target.value }))} className="rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none focus:border-badge-500">
               <option value="">All bureaus</option>
-              {BUREAU_KEYS.map((k) => <option key={k} value={k}>{k}</option>)}
+              {BUREAU_KEYS.map((k) => <option key={k} value={k}>{bureauShort(k)}</option>)}
             </select>
           </div>
           <div>
@@ -284,7 +286,7 @@ export function CommandView() {
                     <span className="text-sm text-slate-200">{c.title || ''}</span>
                   </span>
                   <span className="flex flex-shrink-0 items-center gap-2">
-                    <span className="text-[11px] text-slate-500">{c.bureau}</span>
+                    <span className="text-[11px] text-slate-500">{bureauShort(c.bureau)}</span>
                     {drillStatusPill(c)}
                   </span>
                 </button>
@@ -302,14 +304,14 @@ export function CommandView() {
             <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Bureau scorecards</h3>
             <span className="text-[11px] text-slate-500">{profile?.role === 'bureau_lead' ? 'your bureau' : 'all bureaus'} · performance</span>
           </div>
-          <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2${scorecardKeys.length > 2 ? ' xl:grid-cols-4' : ''}`}>
+          <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2${scorecardKeys.length > 2 ? ' xl:grid-cols-3' : ''}`}>
             {scorecardKeys.map((k) => {
               const s = bureauScore(data.cases.filter((c) => c.bureau === k))
               const clr = s.clearance == null ? '—' : `${s.clearance}%`
               const clrTint = s.clearance == null ? 'text-slate-400' : s.clearance >= 60 ? 'text-emerald-300' : s.clearance >= 30 ? 'text-amber-300' : 'text-rose-300'
               return (
                 <Card key={k} pad="sm">
-                  <p className="text-sm font-bold text-white">{BUREAU_FULL_NAMES[k] || k}</p>
+                  <p className="text-sm font-bold text-white">{bureauLabel(k)}</p>
                   <p className="mt-0.5 text-[11px] text-slate-500">{s.total} case{s.total === 1 ? '' : 's'} on file</p>
                   <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                     <div><p className="text-2xl font-bold text-white">{s.open}</p><p className="text-[10px] uppercase tracking-wider text-slate-500">Active load</p></div>
@@ -354,12 +356,12 @@ export function CommandView() {
               <div
                 key={k}
                 onClick={isCommand ? () => setFilters((f) => ({ ...f, bureau: f.bureau === k ? '' : k })) : undefined}
-                title={isCommand ? `Filter to ${BUREAU_FULL_NAMES[k]}` : undefined}
+                title={isCommand ? `Filter to ${bureauLabel(k)}` : undefined}
                 className={isCommand ? 'cursor-pointer' : undefined}
               >
                 <div className="mb-1.5 flex justify-between text-xs">
                   <span className={`font-medium ${filters.bureau === k ? 'text-white' : 'text-slate-300'}`}>
-                    {BUREAU_FULL_NAMES[k]}{filters.bureau === k ? ' ✓' : ''}
+                    {bureauLabel(k)}{filters.bureau === k ? ' ✓' : ''}
                   </span>
                   <span className="font-mono text-slate-400">{bureauCounts[k]} case{bureauCounts[k] === 1 ? '' : 's'}</span>
                 </div>
