@@ -328,6 +328,15 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
     assigneeName: officerName(c.signoff_assignee_id),
   }) : null), [c, wf, mediaCount, profile?.id])
 
+  // Advisory health chips (lib/caseHealth) — computed from the SAME workflow
+  // snapshot, no extra fetches. Renders nothing when the case is healthy.
+  const health = useMemo(() => (c && wf ? caseHealth({
+    c,
+    tasks: wf.tasks, reports: wf.reports, legal: wf.legal,
+    blockers: wf.blockers, media: wf.media,
+    intelLinks: wf.intelLinks,
+  }) : []), [c, wf])
+
   // Legal-tab attention marker: how many of THIS viewer's case legal rows need
   // their own action (dispositionFor — awareness excluded). Same fetched rows
   // as the tab; sealed rows outside the viewer's RLS never reach this.
@@ -586,6 +595,8 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         onChanged={() => { onChanged(); void fetchCase() }}
         onGoTab={(t) => setTab(TABS.includes(t as TabId) ? (t as TabId) : 'overview')}
       />
+
+      <CaseHealthRow flags={health} onGoTab={(t) => setTab(TABS.includes(t as TabId) ? (t as TabId) : 'overview')} />
 
       <MetricStrip metrics={metrics} />
 

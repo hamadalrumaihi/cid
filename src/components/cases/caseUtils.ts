@@ -10,6 +10,7 @@
 import type { Tables } from '@/lib/database.types'
 import { countRows, list } from '@/lib/db'
 import { assessCase } from '@/lib/caseWorkflow'
+import { listCaseHealth } from '@/lib/caseHealth'
 import { todayISO } from '@/lib/format'
 import { Store } from '@/lib/store'
 import { uiConfirm } from '@/components/ui/dialog'
@@ -86,7 +87,10 @@ export interface CaseFilters {
   status: string
   /** '' anyone · 'me' · 'unassigned' · a profile id */
   assignee: string
-  /** '' any · 'stale' ≥14d · 'fresh' <14d */
+  /** '' any · 'stale' ≥14d · 'fresh' <14d · 'attention' any list-safe health
+   *  flag (lib/caseHealth listCaseHealth — no lead / no summary / stale /
+   *  follow-up due). The option is offered to command in the filter bar;
+   *  saved views carry it like any other filter value. */
   stale: string
 }
 
@@ -114,6 +118,7 @@ export function applyCaseFilters(items: CaseRow[], f: CaseFilters, meId: string 
     else if (f.assignee && c.lead_detective_id !== f.assignee) return false
     if (f.stale === 'stale') { if (c.status === 'closed' || c.status === 'cold' || caseStaleDays(c) < 14) return false }
     else if (f.stale === 'fresh') { if (caseStaleDays(c) >= 14) return false }
+    else if (f.stale === 'attention') { if (listCaseHealth(c).length === 0) return false }
     return true
   })
 }

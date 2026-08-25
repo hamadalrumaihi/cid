@@ -1,10 +1,12 @@
 'use client'
 
+import { useAuth } from '@/lib/auth'
 import { activeProfiles, officerName } from '@/lib/profiles'
 import { useSavedViews } from '@/lib/savedViews'
 import { activeCaseFilterCount, EMPTY_FILTERS, type CaseFilters, type SavedCaseViewConfig } from './caseUtils'
 import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Button } from '@/components/ui/Button'
+import { HelpTip } from '@/components/ui/HelpTip'
 import { toast } from '@/lib/toast'
 import { PERMANENT_BUREAUS, bureauLabel } from '@/lib/roles'
 
@@ -30,6 +32,7 @@ interface Props {
  *  cross-device via user_prefs); applying one only re-applies client filter
  *  state — RLS still decides what the filters can match. */
 export function CaseFilterBar({ filters, scope, query, activeViewName, onFilters, onScope, onQuery, onActiveViewName }: Props) {
+  const { isCommand } = useAuth()
   const sv = useSavedViews<SavedCaseViewConfig>('cases')
   const count = activeCaseFilterCount(filters)
   const patch = (p: Partial<CaseFilters>) => onFilters({ ...filters, ...p })
