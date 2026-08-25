@@ -72,7 +72,7 @@ the `service_role` key in the client.
 
 ## 5. RBAC model
 Two axes, both off the caller's `profiles` row: **role** (`profiles.role`) and
-**bureau** (`profiles.division` ∈ `LSB`/`BCB`/`SAB`/`JTF`). Command staff =
+**bureau** (`profiles.division` ∈ `major_crimes`/`street_crimes`/`special_investigations`/`JTF`). Command staff =
 `bureau_lead` + `deputy_director` + `director` (director is supreme).
 
 | Role | Read | Create/Edit (own bureau) | Sign-off authority | Delete |

@@ -114,14 +114,16 @@ Roles and bureaus have one canonical definition in `src/lib/roles.ts`.
 - **Roles** (`profiles.role`): `detective` → `senior_detective` →
   `bureau_lead` → `deputy_director` → `director`. **Command staff =
   bureau_lead, deputy_director, director** (director is supreme).
-- **Bureaus** (`profiles.division`): `LSB` (Los Santos), `BCB` (Blaine
-  County), `SAB` (State), `JTF` (Joint Task Force).
+- **Bureaus** (`profiles.division`): `major_crimes` (Major Crimes Bureau,
+  MCB), `street_crimes` (Street Crimes Bureau, SCB), `special_investigations`
+  (Special Investigations Bureau, SIB — appointment-only, compartmented),
+  `JTF` (Joint Task Force — a temporary joint-case designation).
 
 Access rules:
 
 - **Deny-by-default:** new sign-ins are inactive and see only the
   membership-request screen — they request **one** permanent department
-  (LSB/BCB/SAB) and a role, and Command approves/adjusts/rejects via a
+  (Major Crimes or Street Crimes) and a role, and Command approves/adjusts/rejects via a
   server-authoritative review RPC before the profile activates.
 - **Bureau isolation:** a member sees, edits, **and creates** cases only
   within their own bureau; JTF and command staff work across bureaus.
