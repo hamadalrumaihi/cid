@@ -5,7 +5,7 @@
  *  the nav (data-driven from NAV_CATEGORIES so it can't go stale), the REAL
  *  case tab rail (from caseTabs.ts — the old hard-coded mock advertised
  *  "Evidence" and "Files" tabs long after they were renamed), both legal
- *  lanes, SIU orientation, and the unified Intelligence intake. The full
+ *  lanes, SIB orientation, and the unified Intelligence intake. The full
  *  written manual (docs/USER-GUIDE.md) stays available in a collapsible at
  *  the end. Static content, no fetches. */
 import { NAV_CATEGORIES, TAB_LABEL } from '@/lib/nav'
@@ -160,7 +160,7 @@ function MiniPalette() {
         <span className="text-[10px] text-slate-500">new case…</span>
       </div>
       <div className="rounded-md bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-300">＋ New case</div>
-      <div className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] text-slate-300"><DocumentIcon size={10} /> SAB-9000041 — Vespucci ring</div>
+      <div className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] text-slate-300"><DocumentIcon size={10} /> SCB-5000041 — Vespucci ring</div>
       <div className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[10px] text-slate-300"><PersonIcon size={10} /> D. Moretti “Silver”</div>
     </div>
   )
@@ -171,7 +171,7 @@ function MiniAlert() {
     <div aria-hidden className="flex h-24 flex-col justify-center gap-1.5 px-2">
       <div className="rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-1.5">
         <p className="flex items-center gap-1 text-[10px] font-bold text-white"><AlertIcon size={11} className="text-amber-300" /> (555) 201-3344</p>
-        <p className="text-[10px] text-slate-400">in <span className="font-mono text-blue-300">SAB-9000041</span> · <span className="font-mono text-blue-300">SAB-9000038</span></p>
+        <p className="text-[10px] text-slate-400">in <span className="font-mono text-blue-300">SCB-5000041</span> · <span className="font-mono text-blue-300">SCB-5000038</span></p>
       </div>
       <div className="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1.5">
         <p className="flex items-center gap-1 text-[10px] font-bold text-slate-300"><IndicatorIcon size={11} /> SN-77812</p>
@@ -252,7 +252,7 @@ const FEATURES: { icon: React.ReactNode; title: string; where: React.ReactNode; 
 const FIXES: [React.ReactNode, string, string][] = [
   [<ClockIcon key="i" size={16} />, '“Signed in but not yet approved”', 'Normal for new accounts — ask Command to approve you, then reload.'],
   [<EyeIcon key="i" size={16} />, 'A colleague’s case is invisible to you', 'Other bureau. You only see cases you’re authorized for — ask the case lead.'],
-  [<LockIcon key="i" size={16} />, 'An SIU record shows “not found”', 'You are outside its classification or compartment. If your work needs it, ask SIU command through your chain.'],
+  [<LockIcon key="i" size={16} />, 'An SIB record shows “not found”', 'You are outside its classification or compartment. If your work needs it, ask SIB command through your chain.'],
   [<AlertIcon key="i" size={16} />, 'Save failed / Delete failed toast', 'The change wasn’t allowed (usually permissions). The toast says why.'],
   [<SearchIcon key="i" className="h-4 w-4" />, 'Search finds nothing', 'Fewer letters, or a plate / case-number fragment. It tolerates typos.'],
   [<UndoIcon key="i" size={16} />, 'Deleted something by accident', 'Click Undo in the toast within a few seconds. Gone? Ask Command.'],
@@ -302,7 +302,7 @@ export function GuideView() {
             </p>
           </div>
         </div>
-        <p className="mt-3 text-[11px] text-slate-500">SIU is never applied for here — the unit selects its members from inside the division.</p>
+        <p className="mt-3 text-[11px] text-slate-500">SIB is never applied for here — the unit selects its members from inside the division.</p>
         <p className="mt-4 mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">Then, in your first five minutes</p>
         <div className="flex flex-wrap items-center gap-y-2 text-xs">
           <span className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-200">1 · <b>My Profile</b> → name, badge, avatar, appearance</span>
@@ -332,13 +332,13 @@ export function GuideView() {
           ))}
         </div>
 
-        {/* SIU workspace note */}
+        {/* SIB workspace note */}
         <div className="mt-3 rounded-lg border border-violet-500/20 bg-violet-500/[0.04] p-3">
-          <p className="flex items-center gap-2 text-sm font-black text-violet-300"><LockIcon size={15} /> Special Investigation Unit</p>
+          <p className="flex items-center gap-2 text-sm font-black text-violet-300"><LockIcon size={15} /> Special Investigations Bureau</p>
           <p className="mt-1 text-xs leading-relaxed text-slate-400">
-            A <b className="text-slate-200">separate workspace and authority</b>, not a CID category. SIU members get a
+            A <b className="text-slate-200">separate workspace and authority</b>, not a CID category. SIB members get a
             <b className="text-slate-200"> Unit</b> section first, then CID&apos;s entire navigation tab for tab — the same screens over
-            one shared master dataset, scoped by what SIU standing may see. CID members see nothing of it.
+            one shared master dataset, scoped by what SIB standing may see. CID members see nothing of it.
           </p>
         </div>
 
@@ -427,7 +427,7 @@ export function GuideView() {
           immediately, from any bureau (on a JTF case, any Bureau Lead). The record names who reviewed and the rank they held at the time.
           A return reopens your draft; a non-material fix after a Judge/prosecutor return goes straight back to the prosecutor queue.
         </p>
-        <p className="mt-4 mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">SIU</p>
+        <p className="mt-4 mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">SIB</p>
         <div className="flex flex-wrap items-center gap-y-2 text-xs">
           <Step>Special Agent draft</Step>
           <Arrow />
@@ -440,7 +440,7 @@ export function GuideView() {
           <Step tone="good">Issue</Step>
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
-          SIU legal work never routes through CID command or the bureau prosecutor queue, and notifications stay inside the unit.
+          SIB legal work never routes through CID command or the bureau prosecutor queue, and notifications stay inside the unit.
           Nobody — X-1 included — reviews their own request.
         </p>
       </Section>
@@ -458,11 +458,11 @@ export function GuideView() {
         <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
           A submission is <b>information</b> — it never becomes a case, a registry record or a verified fact by itself. A reviewer verifies
           each claim, matches it to existing records, and decides: open a case, link a case, log an observation, register a source,
-          archive with a reason — or refer it to SIU. If a reviewer has a question, the report shows <b>“{fieldStatusLabel('needs_info')}”</b> and opens a thread with you.
+          archive with a reason — or refer it to SIB. If a reviewer has a question, the report shows <b>“{fieldStatusLabel('needs_info')}”</b> and opens a thread with you.
         </p>
       </Section>
 
-      {/* SIU visibility */}
+      {/* SIB visibility */}
       <Section id="siu" title="SIU visibility, in plain terms" blurb="Shared registries are one dataset — SIU can take a record out of CID's view, and give it back.">
         <div className="flex flex-wrap gap-1.5" aria-hidden>
           <span className={`rounded px-2 py-1 text-[11px] font-semibold ${visibilityTint('siu_only')}`}>SIU only</span>
@@ -471,10 +471,10 @@ export function GuideView() {
           <span className={`rounded px-2 py-1 text-[11px] font-semibold ${visibilityTint('unclassified')}`}>Origin not established</span>
         </div>
         <ul className="mt-3 space-y-1.5 text-xs leading-relaxed text-slate-400">
-          <li><b className="text-slate-200">Restrict to SIU</b> hides a whole record, or only its sensitive sections, from CID — with a written reason CID never sees.</li>
+          <li><b className="text-slate-200">Restrict to SIB</b> hides a whole record, or only its sensitive sections, from CID — with a written reason CID never sees.</li>
           <li><b className="text-slate-200">Reveal</b> lifts a restriction for everyone, one case, or one officer; released items carry a handling level.</li>
           <li>To a CID viewer a restricted record is an ordinary <b className="text-slate-200">not found</b> — nothing hints that anything was withheld.</li>
-          <li>Restricting and revealing belong to SIU agents, the Director and the owner. Compartmented investigations are allow-list only — rank exempts no one.</li>
+          <li>Restricting and revealing belong to SIB agents, the Director and the owner. Compartmented investigations are allow-list only — rank exempts no one.</li>
         </ul>
       </Section>
 
