@@ -3,8 +3,8 @@
 > Items intentionally **not** done yet, each with the trigger that should bring it
 > back. Most are gated on a **Supabase/Vercel Pro upgrade**, an **environment/network
 > change**, or **data scale** — not on effort. Revisit this list whenever you change
-> plans or the app grows. Keep in sync with the Owner Portal's improvement
-> roadmap (`src/components/owner/ownerData.ts`).
+> plans or the app grows. Keep in sync with the improvement roadmap in the
+> Developer Handbook ([Ch. 19](handbook/19-improvements.md)).
 
 ---
 
@@ -15,7 +15,7 @@
 - **How:** `curl` `xlsx-0.20.3/package/dist/xlsx.full.min.js` → `vendor/xlsx.full.min.js`; verify embedded version ≥ 0.20.2 + `node --check`; repoint the `<script>` in `index.html` to the local copy; commit. Removes the external runtime dependency entirely.
 
 ## 2. Server-side filtering + pagination (case list)
-- **Now:** the Cases list and Command dashboard filter the in-memory `casesCache` client-side (loads all cases the viewer can see, filters in JS).
+- **Now:** the Cases list and the Division Overview filter the in-memory `casesCache` client-side (loads all cases the viewer can see, filters in JS).
 - **Why deferred:** `casesCache` is **load-bearing** — Command KPIs, bureau load/scorecards, heatmap, Drive folders, every case dropdown, and id→case_number lookups all read it. Full pagination would be a high-risk refactor that fights that architecture, with little payoff at current data volume.
 - **Unblocks when:** case volume grows enough that the client-side filter feels slow, or Free-tier egress becomes a concern.
 - **How (sketch):** keep a **slim-projection** `casesCache` (id, case_number, title, bureau, status, area, lead_detective_id, created_at, updated_at, signoff_*) for the cross-cutting consumers; serve the **list view** from paginated server queries (`.eq`/`.ilike`/`.order`/`.range`, 50/page); add **lean indexes** (bureau, status, lead_detective_id, signoff_status, created_at, updated_at, signoff_submitted_at) verified against the actual queries. Supabase Pro helps here via more compute + **branching** to test the index migration safely.

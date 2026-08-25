@@ -59,7 +59,9 @@ SIB is **not** applied for here. SIB membership is appointed from inside the div
 
 ### Where the work is
 
-- **My Desk** (Command section — your landing page) gathers everything waiting on you: sign-offs, returned cases, due follow-ups, open tasks, mentions, followed records and draft reports. Start every session here.
+- **My Dashboard** (Command section — your landing page) is your work at a glance: a prioritized **Needs your attention** panel (the top of your Action Center queue), your cases, the **Jump back in** pins-and-recents strip, your open Investigative Tools tabs, unfinished **Drafts**, **Watched items** and your recent activity. Every count clicks through to the screen that owns it. Start every session here.
+- If your account holds more than one working world, a **dashboard switcher** chip row at the top of each dashboard hops between them — My Dashboard, Cases, Command Center, SIB, Legal Review, Owner Console — showing only the dashboards your access actually grants.
+- The **Division Overview** (Command section) is the shared division picture every member gets: case vitals (each tile opens the list behind the number), crime analytics, GPS trackers and raid compensation. Command queues, workload and approvals live in the **Command Center**.
 - The **Action Center** is one prioritized queue of everything awaiting a decision or action from you, in named lanes — Overdue, Returned to you, Needs your action, Command decisions, **Unassigned intel** (field intelligence no reviewer has claimed), **Expiring BOLOs** (windows closing within 7 days), Waiting on others, and **Drafts** (unfinished work you saved — resume or discard). Every item says why it's here and what to do next; filter the queue by type or bureau.
 - The **bell** is your notification feed. Notifications about the same case or request collapse into one group; the unread badge is exact. Click a row to mark it read and jump to its record, mark a whole group read, or **Mark all read** in one click. The bell's settings panel can **mute the optional streams** (announcements, tracker authorizations, document suggestions, stale-case reminders, sign-off heads-ups) — assignments, mentions, sign-off decisions, legal and security notices can never be muted. Duplicate notifications for the same event are suppressed automatically.
 
@@ -73,7 +75,7 @@ Five categories (a bottom bar on your phone). Click a category to jump to its fi
 
 | Category | Screens |
 |---|---|
-| **Command** | My Desk, Action Center, Dashboard, Analytics, Announcements, Heatmap, Roster & Commendations |
+| **Command** | My Dashboard, Action Center, Division Overview, Analytics, Announcements, Heatmap, Roster & Commendations |
 | **Cases** | Case Files, Operations, Legal Requests, Attachments, RICO |
 | **Investigative Tools** | One workspace holding all fourteen intelligence tools — see below |
 | **Reference** | Penal Code, SOPs & Library, User Guide |
@@ -107,7 +109,7 @@ SIB is a **separate workspace and authority**, not a CID category. An SIB accoun
 
 - **Pin** a case or record (the pin button on case headers and record profiles) to keep it one click away. Pins are saved to your account, so they **follow you across devices**. Pinning stores only the record's id — never its contents.
 - The portal also keeps a short **recently-opened** trail on each device.
-- Both appear in the **Jump back in** strip on the Command dashboard — pinned chips first, then recents, with a **Clear** for the history. A record you can no longer access simply doesn't appear; a pin comes back by itself if your access returns.
+- Both appear in the **Jump back in** strip on My Dashboard — pinned chips first, then recents, with a **Clear** for the history. A record you can no longer access simply doesn't appear; a pin comes back by itself if your access returns.
 
 ---
 
@@ -168,6 +170,8 @@ Closure runs through **Sign-off** (section I). Cases are never deleted from the 
 
 ### Manage the list — saved views and bulk actions
 
+- **Overview strip.** Case Files opens with a metric strip — My active, Unassigned, Awaiting review, Returned, Overdue tasks, No recent activity, plus per-bureau load for command — and clicking a tile applies the matching filter to the list below.
+- **Preset lenses.** Until you save your first view, one-click preset chips (My active, Unassigned, Awaiting my review, Returned, Overdue tasks, MCB cases, SCB cases) offer common starting filters; they disappear once you have views of your own.
 - **Saved views.** On Case Files (and the Persons, Legal Requests and BOLO lists), set up your filters, scope and search, then **Save** them as a named view. Views are saved to your account — they follow you across devices — and one view per list can be marked **default**, applying automatically when you open the list clean. Rename or delete views from the same menu. Case views you had saved on this device before are migrated to your account automatically the first time you open Case Files.
 - **Needs attention** (command). The case-age filter includes a **Needs attention** option for command: open cases carrying at least one health flag the list can see (no lead, no summary, quiet 14+ days, follow-up date passed). List rows carry a small attention count whose tooltip names the flags.
 - **Bulk actions.** Select several cases (checkboxes; shift-click for a range) and **set status** (open / active / cold), **assign a lead** (command only), or **archive / restore**. Every bulk action shows a preview confirm first, skips rows you can't edit (the result says how many), and reports progress as it works through the selection. Closing a case still runs through Sign-off, one case at a time — and there is **no bulk delete**, ever.
@@ -213,7 +217,7 @@ Wherever a record carries an access level — an SIB classification here, a lega
 - **Assign agents** to the investigation; compartmented work also needs the compartment grant.
 - **Supporting access** lets a named CID officer into one investigation's case file — never into SIB's sources, intelligence or operations — for up to 30 days.
 - **Conflicts and recusal:** a declared conflict removes that agent's access immediately, at any rank; only a *different* member of command can clear it.
-- **The Director's window:** the Director of CID can request access to a specific investigation by case number from My Desk. X-1 decides; approval opens that one case file for a fixed period.
+- **The Director's window:** the Director of CID can request access to a specific investigation by case number from My Dashboard. X-1 decides; approval opens that one case file for a fixed period.
 
 ### Targets, intelligence and the watchlist
 
@@ -338,7 +342,7 @@ The registries are relationship-first — a record's value is who and what it's 
 - **Duplicate warnings.** Creating a person, gang or vehicle shows an inline warning when a similar record already exists — with peek buttons to check — but never blocks you; you decide.
 - **Pin** buttons on person, vehicle, gang, account and narcotics records add them to your Jump-back strip (section C).
 
-Link intel to a case from the case's **Intel & Notes** tab so everything cross-references. **Follow** any case, person or vehicle (the ☆ button) and My Desk flags it whenever it changes — follow is "tell me about changes", pin is "keep it one click away". Archiving hides a record from working views without destroying it; **permanent deletion is the portal owner's alone**.
+Link intel to a case from the case's **Intel & Notes** tab so everything cross-references. **Follow** any case, person or vehicle (the ☆ button) and My Dashboard flags it in **Watched items** whenever it changes — follow is "tell me about changes", pin is "keep it one click away". Archiving hides a record from working views without destroying it; **permanent deletion is the portal owner's alone**.
 
 ---
 
@@ -358,7 +362,7 @@ An authorized investigator adds a charge from the frozen penal-code snapshot; it
 
 ### Sign-off
 
-When the investigation is done, open **Sign-off** and submit. Routing is automatic — bureau lead → deputy director → director — and **LOA-aware**: an approver on leave is skipped, and the record shows who actually signed. You are notified at every step; returned cases land in **My Desk → Returned or in-flight sign-off** with the reviewer's note. Nobody approves their own submission.
+When the investigation is done, open **Sign-off** and submit. Routing is automatic — bureau lead → deputy director → director — and **LOA-aware**: an approver on leave is skipped, and the record shows who actually signed. You are notified at every step; returned cases land on **My Dashboard** — and in the Action Center's **Returned to you** lane — with the reviewer's note. Nobody approves their own submission.
 
 ### The case packet
 
@@ -381,7 +385,7 @@ When the investigation is done, open **Sign-off** and submit. Routing is automat
 | A legal request has vanished from your queue | It moved to the next stage, was claimed by someone else, or is sealed. Check its Review History from the request itself. |
 | Your legal request came back | Read the return note on the request, fix the draft, and resubmit. Only declare **material change** if the substance changed — that rewinds it to full command review. |
 | Search finds nothing | Fewer letters (it tolerates typos), or a plate / case-number fragment. **Ctrl-K / ⌘K** opens the full palette. |
-| Changes elsewhere aren't showing | A connection banner appears when you're offline; reload or click Refresh on My Desk. |
+| Changes elsewhere aren't showing | A connection banner appears when you're offline; reload or click Refresh on My Dashboard. |
 | Archived or deleted something by accident | Most deletions show an **Undo** toast for a few seconds. Archived records are restorable. Cases are archived, not deleted — only the portal owner deletes permanently. Ask Command; everything is audit-logged. |
 | You can't approve your own work | By design, everywhere: sign-off, legal review, membership approvals. A second person must act. |
 

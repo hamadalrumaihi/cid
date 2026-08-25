@@ -101,9 +101,17 @@ palette is a full-screen sheet.
 
 ## 4.5 Command tools
 
-Dashboard (KPIs + 8 widgets incl. the ticket wizard that *creates cases*
-and the dual-co-sign GPS trackers — self-co-sign blocked in UI *and* by
-trigger), division analytics (SVG charts, Monday-week buckets),
+Division Overview (`/command` — the member-facing division picture: a
+case-vitals KPI strip whose tiles navigate to the owning list, crime
+analytics, the dual-co-sign GPS trackers — self-co-sign blocked in UI
+*and* by trigger — and the raid-compensation calculator; the
+needs-attention widget, command filter bar/drill, bureau scorecards and
+caseload bars moved to the Command Center, with a pointer banner for
+command staff — which also carries the Cases & Assignments and
+Intelligence Oversight queues, the permissions matrix from
+`src/lib/permissionsMatrix.ts`, and a bureau-vs-division scope badge
+from `useCapabilities()`), division analytics (SVG charts, Monday-week
+buckets),
 announcements (audience-targeted: everyone/`@everyone` for deputy+ only,
 command, own/specific department, or just the mentioned members — the
 `publish_announcement()` RPC resolves recipients server-side with one
@@ -129,12 +137,17 @@ in Ch. 8.
 
 ## 4.6 Personal tools
 
-My Desk (ten derived panels over eight live tables), the Action Center
+My Dashboard (`/inbox`, the default landing — a prioritized
+needs-attention panel over the Action Center's top items, plus my-cases,
+"Jump back in", open Investigative Tools tabs, drafts, watched items and
+bounded recent activity; every self-fetch a slim limited projection,
+with a capability-gated dashboard switcher chip row from
+`useCapabilities()`), the Action Center
 (`useActionItems` slim fetches → the pure `buildActionItems` model;
 wave-3 lanes add Unassigned intel, Expiring BOLOs and Drafts — the drafts
 lane describes `user_drafts` KEYS, never payloads), watchlist (follow +
-"updated" chips via localStorage seen-stamps), pins & recents (the Command
-dashboard "Jump back in" strip — DB pins + device recents, both ids-only,
+"updated" chips via localStorage seen-stamps), pins & recents (the My
+Dashboard "Jump back in" strip — DB pins + device recents, both ids-only,
 titles RLS-resolved at render), saved views on the Cases/Persons/Legal/
 BOLO lists (`lib/savedViews` over `user_prefs`; re-applying a view only
 re-applies client filter state — RLS still decides what it matches),

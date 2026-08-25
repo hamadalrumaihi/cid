@@ -12,27 +12,28 @@ Companion to [DEPLOYMENT.md](DEPLOYMENT.md) (shipping changes); the July
 
 | Signal | Where | What it means |
 | --- | --- | --- |
-| **Client errors** | Owner Portal → Health → *Client errors* + a bell ping (throttled 1 / 15 min) | An uncaught exception in a member's browser. [`src/lib/errorReport.ts`](../src/lib/errorReport.ts) reports them to `client_errors`; owners are notified via a DB trigger. |
-| **Feedback inbox** | Owner Portal → Feedback | Members reporting problems in their words — the de-facto second alert channel. |
-| **DB health** | Owner Portal → Health | Round-trip time, live row counts, realtime activity. |
-| **Security-test history** | Owner Portal → Security Testing | `security_test_runs` via the `owner_security_overview()` RPC: per-suite pass/fail/skip for recent RLS runs, live fixture health, leftover test-data counts. A run that stops reporting, or fixture health going red, is a signal in itself. |
+| **Client errors** | Owner Console → Security & Audit → *Client errors* + a bell ping (throttled 1 / 15 min) | An uncaught exception in a member's browser. [`src/lib/errorReport.ts`](../src/lib/errorReport.ts) reports them to `client_errors`; owners are notified via a DB trigger. |
+| **Feedback inbox** | Owner Console → Feedback & Bugs | Members reporting problems in their words — the de-facto second alert channel. |
+| **DB health** | Owner Console → System Health | Round-trip time, live row counts, realtime activity. |
+| **Security-test history** | Owner Console → Security & Audit | `security_test_runs` via the `owner_security_overview()` RPC: per-suite pass/fail/skip for recent RLS runs, live fixture health, leftover test-data counts. A run that stops reporting, or fixture health going red, is a signal in itself. |
 | **CI** | GitHub Actions | `verify` (4 gates + drift/schema checks) on every PR; `security-suites` when secrets are set. |
 | **Vercel** | Vercel dashboard | Build status, runtime logs, deployment history. |
 | **Supabase logs** | Supabase dashboard → Logs | API / Postgres / Auth logs, with configurable alert emails. |
 | **Supabase advisors** | Supabase dashboard → Advisors | Security + performance lints; check after any migration. |
 
-**First thing to check when "something's broken":** Owner Portal → Health,
-then the client-errors panel, then Vercel runtime logs.
+**First thing to check when "something's broken":** Owner Console →
+System Health, then the client-errors panel (Security & Audit), then
+Vercel runtime logs.
 
 ## 2. Routine tasks
 
-- **Client-error triage** — skim Owner Portal → Health → Client errors after
+- **Client-error triage** — skim Owner Console → Security & Audit → Client errors after
   the bell pings. The reporter is deduplicated and capped per session, and
   it already filters non-actionable noise (connectivity, stale-chunk
   reloads), so rows that appear are usually real code bugs.
 - **Security-test dashboard reads** — after each CI `security-suites` run
-  (or a local `npm run test:rls`), confirm the run appears in Owner Portal →
-  Security Testing with zero failures. Failure summaries are sanitized
+  (or a local `npm run test:rls`), confirm the run appears in Owner Console →
+  Security & Audit with zero failures. Failure summaries are sanitized
   server-side; retention keeps the newest 50 runs per suite.
 - **RLS fixture baseline maintenance** — the `rls-test-*` roster entries are
   intentional. Their required roles, bureaus, and active flags are the
@@ -49,10 +50,10 @@ then the client-errors panel, then Vercel runtime logs.
 
 ## 3. Incident response — general procedure
 
-1. **Confirm scope** — one user or everyone? Owner Portal → Health shows
+1. **Confirm scope** — one user or everyone? Owner Console → System Health shows
    whether the DB round-trip and realtime are up.
 2. **Recent change?** — check the last merge (`main`) and the last migration
-   (`supabase_migrations.schema_migrations`, or Owner Portal → Health). Most
+   (`supabase_migrations.schema_migrations`, or Owner Console → System Health). Most
    incidents follow a deploy or a migration.
 3. **Front-end regression** → **roll back in Vercel** (Deployments →
    previous → *Promote*). Deployments are immutable, so this is instant and
@@ -90,7 +91,7 @@ then the client-errors panel, then Vercel runtime logs.
    project.
 2. If it fails: the last migration is the prime suspect. Fix **forward**
    with a corrective migration (never a destructive revert), then re-run the
-   suite and check Owner Portal → Security Testing records the green run.
+   suite and check Owner Console → Security & Audit records the green run.
 3. Check Supabase advisors for policy lints the migration introduced.
 4. Precedent: the suite's first run caught `private.is_owner()` missing its
    EXECUTE grant, which broke every `is_owner`-based policy for all users —
@@ -122,8 +123,8 @@ pass; that is by design).
 3. Leftover test *data* (a crashed run's rows) is cleared by
    `rls_test_cleanup()` — callable only by the `rls-test-*` accounts and
    only for rows they authored; a clean re-run does this automatically.
-4. Re-run `npm run test:rls` and confirm a green row in Owner Portal →
-   Security Testing.
+4. Re-run `npm run test:rls` and confirm a green row in Owner Console →
+   Security & Audit.
 
 If the drift was manual and unexplained, treat it as a security event and
 check the audit log for who changed the fixture (§6).

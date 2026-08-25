@@ -141,7 +141,7 @@ feature/* ──► Pull Request preview (Preview env scope — never production
   placeholder values — previews render the config gate instead of touching
   production data. (A dedicated staging database/site was evaluated and
   deliberately not adopted; if that changes, point the Preview scope at it.)
-- Verify what's deployed: the Owner Portal Health section shows
+- Verify what's deployed: the Owner Console's System Health section shows
   `NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA` / branch / environment — compare
   against `git log`.
 - Previews on the Hobby plan are publicly reachable by URL (Deployment
@@ -211,9 +211,10 @@ function secret (§1).
    npm run test:e2e
    ```
 
-4. **Owner Portal → Health** — DB round-trip, realtime activity, client
-   errors; **Owner Portal → Security Testing** shows the reported result of
-   the RLS run (the suite posts its outcome via `security_test_report()`).
+4. **Owner Console → System Health** — DB round-trip, realtime activity;
+   **Owner Console → Security & Audit** shows client errors and the reported
+   result of the RLS run (the suite posts its outcome via
+   `security_test_report()`).
 5. **Supabase advisors** after any migration.
 
 Ongoing monitoring and incident response live in

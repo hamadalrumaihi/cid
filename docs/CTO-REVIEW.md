@@ -102,7 +102,7 @@ Ranked by fit with what the division actually does in-game:
 
 1. **Warrant lifecycle v2** — statuses, expiry, judge sign-off link to the packet export (High impact, M).
 2. **Confidential-informant module** — a registry with *stricter-than-bureau* RLS (handler + command only); the platform's isolation machinery already supports it (High, M–L).
-3. **Court/session calendar integration** — subpoenas and hearing dates feeding My Desk (Med, M).
+3. **Court/session calendar integration** — subpoenas and hearing dates feeding My Dashboard (Med, M).
 4. **Shift handover notes** — structured "pass-down" between shift reports (Med, S–M).
 5. **Case merge/split** — real investigations converge; today that's manual re-linking (Med, M).
 6. **Evidence QR/blockchain-style custody hash** — RP flavor + tamper story for court scenes (Med, M).

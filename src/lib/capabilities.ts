@@ -136,8 +136,12 @@ export function useCapabilities(): Caps {
   const siu = useSiu()
   const key = auth.justiceRole ? auth.profile?.id ?? null : null
   const v = useTableVersion('justice_memberships')
+  // Seed from the session cache ONLY — auth.justiceRole lacks `expires_at`,
+  // so seeding from it would advertise the DOJ dashboard for an expired
+  // temporary membership until the read settles (security review W2).
+  // Unknown = no DOJ until the expiry-aware read below confirms it.
   const [dojRole, setDojRole] = useState<DojRole>(
-    () => (key && dojRoleCache?.key === key ? dojRoleCache.value : effectiveDojRole(auth.justiceRole)),
+    () => (key && dojRoleCache?.key === key ? dojRoleCache.value : null),
   )
   useEffect(() => {
     if (!key) return
@@ -152,7 +156,7 @@ export function useCapabilities(): Caps {
         const value = live ? effectiveDojRole(m.justice_role) : null
         dojRoleCache = { key, value }
         if (!cancelled) setDojRole(value)
-      } catch { /* transient — keep the auth-derived value; the server re-checks */ }
+      } catch { /* transient — keep the cache-seeded value (or none); the server re-checks */ }
     })()
     return () => { cancelled = true }
   }, [key, v])

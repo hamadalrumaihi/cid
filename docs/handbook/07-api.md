@@ -120,7 +120,7 @@ browser never runs privileged tests and never sees fixture credentials.
 | RPC | Purpose |
 |---|---|
 | `security_test_report(p_suite, p_passed, p_failed, p_skipped, p_failures, p_commit, p_branch, p_release, p_source, p_duration_ms)` | writer, callable **only by `rls-test-%@cidportal.test` accounts** — the live RLS suites report their own sanitized results (a vitest reporter posts after every `npm run test:rls`). Failures are re-sanitized server-side (short name/expected/actual strings only); newest 50 runs kept per suite; audit-logged |
-| `owner_security_overview()` | reader, `private.is_owner()`-gated + audited — recent runs, live fixture-roster health checks, and leftover test-data counts for the Owner Portal's Security Testing section |
+| `owner_security_overview()` | reader, `private.is_owner()`-gated + audited — recent runs, live fixture-roster health checks, and leftover test-data counts for the Owner Console's Security & Audit section |
 
 ### Legal import RPCs (v1.15.0)
 

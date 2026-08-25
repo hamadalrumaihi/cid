@@ -38,7 +38,7 @@ import { useTableVersion } from '@/lib/realtime'
 import { ROLE_LABEL, bureauShort } from '@/lib/roles'
 import { signoffLabel } from '@/lib/signoff'
 import { Store } from '@/lib/store'
-import { toast } from '@/lib/toast'
+import { humanizeError, toast } from '@/lib/toast'
 import { isToolTab, type ToolId } from '@/lib/toolsModel'
 import { markWatchSeen, type WatchType } from '@/lib/watchlist'
 import { listCaseHealth } from '@/lib/caseHealth'
@@ -198,7 +198,9 @@ export function InboxView() {
       // profiles.id IS the auth uid — the same key ToolsView persists under.
       setOpenTabs(readToolTabs(profile.id))
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
+      // humanizeError: raw PostgREST/RLS text (table/policy names) must never
+      // render on a member-facing surface (security review W1).
+      setErr(humanizeError(e))
     } finally {
       setLoading(false)
     }

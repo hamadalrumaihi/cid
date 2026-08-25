@@ -219,7 +219,7 @@ More depth: [Handbook Ch. 9](handbook/09-auth.md).
 - **State lives in small zustand stores co-located with their domain** —
   realtime version counters (`lib/realtime.ts`), toasts (`lib/toast.ts`),
   the roster cache (`lib/profiles.ts`), watchlist, operations, the dialog
-  host, and the Owner Portal vitals. There is no global app store.
+  host, and the Owner Console vitals. There is no global app store.
 - **Device preferences** (accent, density, list view modes, the ids-only
   recents trail) persist in one localStorage blob (`cid-portal-v3`,
   [`src/lib/store.ts`](../src/lib/store.ts)).
@@ -280,12 +280,17 @@ publishable key is never involved in service-role writes.
 
 Gated by `profiles.is_owner` in the UI and `private.is_owner()` in RLS:
 
-- **Owner Portal** (`/owner`, [`src/components/owner/`](../src/components/owner)) —
-  Health (DB round-trip, live row counts, realtime activity, client errors),
-  **Security Testing** (reads `security_test_runs` via the
-  `owner_security_overview()` RPC: recent RLS-suite runs, live fixture
-  health, leftover test-data counts), env/routes/architecture reference,
-  suggestions, and feedback triage.
+- **Owner Console** (`/owner`, [`src/components/owner/`](../src/components/owner)) —
+  `?s=` sections grouped Overview / Operations / Safety / Reference: the
+  owner dashboard (warnings, pending queue, recent administrative changes),
+  Portal Management (SIB release gate, runbook), Roles & Access (justice
+  grants, test-fixture flagging), Feedback & Bugs triage, Permanent
+  Deletion + the deletion ledger, **Security & Audit** (client errors, and
+  `security_test_runs` via the `owner_security_overview()` RPC: recent
+  RLS-suite runs, live fixture health, leftover test-data counts), System
+  Health (DB round-trip, env, realtime, live row counts) and Handbook &
+  Reference (deep links into the Developer Handbook; the former static
+  documentation walls live there now). Legacy `?s=` values redirect.
 - **Developer Handbook in-app** (`/devdocs`,
   [`src/components/devdocs/`](../src/components/devdocs)) — generated from
   `docs/handbook/` by `npm run gen:handbook`; CI fails if the generated copy

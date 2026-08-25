@@ -9,8 +9,8 @@ user-facing routes:
 
 | URL | File | Renders |
 |---|---|---|
-| `/` | `app/page.tsx` | Redirect shim: legacy `#deep-links`, else last-visited tab, else `/command`. Also the OAuth landing spot — it **waits** for the auth event before redirecting. |
-| `/<tab>` | `app/(app)/[tab]/page.tsx` | One of the screens in `PAGE_META`. Invalid slugs → `/command`; legacy `reports` → `/cases`; the 14 intelligence tool slugs render `ToolTabRedirect`, which forwards into `/tools` (below). |
+| `/` | `app/page.tsx` | Redirect shim: legacy `#deep-links`, else `/inbox` (My Dashboard — the default landing). Also the OAuth landing spot — it **waits** for the auth event before redirecting. |
+| `/<tab>` | `app/(app)/[tab]/page.tsx` | One of the screens in `PAGE_META`. Invalid slugs → `/inbox`; legacy `reports` → `/cases`; the 14 intelligence tool slugs render `ToolTabRedirect`, which forwards into `/tools` (below). |
 | anything else | `app/not-found.tsx` | Styled 404. |
 
 `(app)/layout.tsx` wraps every tab in `AuthProvider` → `Gate` (sign-in
@@ -33,7 +33,7 @@ One row per leaf tab in `PAGE_META` (`src/lib/nav.ts` — the routing truth).
 
 | Slug | Screen (component) | Data highlights | Extra permissions |
 |---|---|---|---|
-| `command` | Dashboard (`CommandView` + 8 widgets, incl. the "Jump back in" pins/recents strip — `command/JumpBack.tsx`) | cases, evidence, tickets, trackers, raid comp, user_pins | filter bar/scorecards command-only |
+| `command` | Division Overview (`CommandView` — lean member-facing division picture: navigating case-vitals tiles, analytics, activity feed, trackers, raid comp; the needs-attention widget, filter bar/drill, scorecards and caseload bars moved to the Command Center, pointer banner for command staff) | cases, evidence, persons, gangs, trackers | — |
 | `analytics` | Division Analytics | cases, evidence, persons (charts) | — |
 | `announce` | Announcements | announcements | posting = command |
 | `heatmap` | Crime Heatmap | cases, turf, places, raids | — |
@@ -63,15 +63,15 @@ One row per leaf tab in `PAGE_META` (`src/lib/nav.ts` — the routing truth).
 | `sops` | SOPs & Library | documents + versions | writes = command |
 | `guide` | User Guide | static visual guide (generated from docs/USER-GUIDE.md) | — |
 | `devdocs` | Developer Handbook (`DevDocsView`) | generated handbook content | **owner-only** |
-| `action` | Action Center (`ActionCenterView`) | prioritized pending decisions across cases, command, personnel + Unassigned intel / Expiring BOLOs / Drafts lanes (`lib/actionItems`), type + bureau filters | self-scoped |
-| `inbox` | My Desk (`InboxView`) | self-scoped rollup panels (sign-offs, returned cases, follow-ups, tasks, mentions, following, drafts…) | self-scoped |
+| `action` | Action Center (`ActionCenterView`) | prioritized pending decisions across cases, command, personnel + Unassigned intel / Expiring BOLOs / Drafts lanes and an SIB items branch (`lib/actionItems`), type + bureau filters | self-scoped |
+| `inbox` | My Dashboard (`InboxView`) — the **default landing**: needs-attention (Action Center top slice), my cases, "Jump back in" (`command/JumpBack.tsx`), open tool tabs, drafts, watched items, bounded recent activity; capability-gated `DashSwitcher` chip row | slim limited projections over cases/reports/messages/legal/drafts + user_pins/watchlist | self-scoped |
 | `calendar` | Calendar | cases, tasks, shift weeks | — |
 | `shifts` | Shift Reports | shift_reports | edit own |
 | `audit` | Audit Log | audit_log (DataTable + CSV) | **owner-only** |
 | `feedback` | Feedback (sidebar leaf) | feedback | triage = owner flag (`profiles.is_owner`) |
 | `profile` | My Profile (`ProfileView`) | own profile, appearance, notification settings | self |
-| `command-center` | Command Center (`CommandCenterView`) | personnel admin, approvals, promotions, transfers | command + Owner |
-| `owner` | Owner Portal (`OwnerView`) | project health, feedback triage, security testing | **owner-only** |
+| `command-center` | Command Center (`CommandCenterView`, `?s=` sections) | command dashboard overview, Cases & Assignments and Intelligence Oversight queues, personnel admin, approvals, promotions, transfers, duty status, permissions matrix (`src/lib/permissionsMatrix.ts`), bureau-vs-division scope badge | command + Owner |
+| `owner` | Owner Console (`OwnerView`, `?s=` sections grouped Overview / Operations / Safety / Reference; legacy `?s=` values redirect) | owner dashboard (warnings, pending queue, recent admin changes), portal management (SIB release gate, runbook), roles & access (justice grants, test-fixture flag), feedback triage, permanent deletion + ledger, security & audit, system health, handbook reference | **owner-only** |
 
 ¹ **Investigative Tools slugs.** These 14 routes stay registered (deep-link
 contracts) but no longer render their view directly: the `[tab]` page returns
