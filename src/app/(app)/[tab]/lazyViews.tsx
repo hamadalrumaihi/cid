@@ -19,11 +19,12 @@ export const SiuView = lazy('siu', () => import('@/components/siu/SiuView').then
 export const AuditView = lazy('audit', () => import('@/components/audit/AuditView').then((m) => m.AuditView))
 export const FeedbackView = lazy('feedback', () => import('@/components/feedback/FeedbackView').then((m) => m.FeedbackView))
 export const ConcernView = lazy('concern', () => import('@/components/concern/ConcernView').then((m) => m.ConcernView))
-export const NarcoticsView = lazy('narcotics', () => import('@/components/narcotics/NarcoticsView').then((m) => m.NarcoticsView))
-export const BallisticsView = lazy('ballistics', () => import('@/components/ballistics/BallisticsView').then((m) => m.BallisticsView))
 export const RicoView = lazy('rico', () => import('@/components/rico/RicoView').then((m) => m.RicoView))
 export const HeatmapView = lazy('heatmap', () => import('@/components/heatmap/HeatmapView').then((m) => m.HeatmapView))
-export const NetworkView = lazy('network', () => import('@/components/network/NetworkView').then((m) => m.NetworkView))
-export const ModusView = lazy('modus', () => import('@/components/modus/ModusView').then((m) => m.ModusView))
 export const DevDocsView = lazy('devdocs', () => import('@/components/devdocs/DevDocsView').then((m) => m.DevDocsView))
 export const OwnerView = lazy('owner', () => import('@/components/owner/OwnerView').then((m) => m.OwnerView))
+// The Investigative Tools workspace. The 14 tool views themselves are NOT
+// imported here anymore — they live in the workspace's own lazy registry
+// (components/tools/toolRegistry) so they aren't double-shipped; their old
+// routes render ToolTabRedirect instead.
+export const ToolsView = lazy('tools', () => import('@/components/tools/ToolsView').then((m) => m.ToolsView))

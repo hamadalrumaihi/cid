@@ -18,6 +18,9 @@ export function Subtabs() {
   if (!def) return null // standalone leaves (feedback) hide the strip
 
   const tabs = def.tabs.filter((t) => (t !== 'audit' && t !== 'devdocs') || isOwner)
+  // A one-tab category (Investigative Tools) needs no strip — the single leaf
+  // IS the category, so a one-button tablist would be noise.
+  if (tabs.length <= 1) return null
   const groups = SUBTAB_GROUPS[def.id]
     ?.map((g) => ({ ...g, tabs: g.tabs.filter((t) => tabs.includes(t)) }))
     .filter((g) => g.tabs.length)

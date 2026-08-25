@@ -240,6 +240,15 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
   }
 }
 
+/* Investigative Tools tab strip — horizontal scroll with a hidden scrollbar
+   and soft fade edges so overflow reads as "more tabs", not a cut-off. */
+.tools-tabstrip {
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+}
+.tools-tabstrip::-webkit-scrollbar { display: none; }
+
 /* Commander Heatmap tiles — ported from the vanilla hand-written layer. */
 .hm-tile{border:1px solid rgba(255,255,255,.06);border-radius:1rem;padding:1.25rem;background:linear-gradient(135deg,rgba(100,116,139,.12),rgba(30,41,59,.04))}
 .hm-tile.lvl1{background:linear-gradient(135deg,rgba(59,130,246,.18),rgba(29,78,216,.04));border-color:rgba(59,130,246,.28)}
