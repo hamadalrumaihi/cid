@@ -30,12 +30,14 @@ import {
   ITEM_CATEGORY_LABEL, LOCATION_KINDS, LOCATION_KIND_LABEL, ORG_ROLES,
   ORG_ROLE_LABEL, ORG_TYPES, ORG_TYPE_LABEL, TIME_PRECISION, TIME_PRECISION_LABEL,
   WEIGHT_UNITS, addPart, createDraft, discardDraft, loadSubmissionParts,
+  fieldStatusMeaning,
   normalizedGrams, removePart, saveDraft, submitDraft, submitProblem, weightProblem,
   type SubmissionParts,
 } from '@/lib/fieldSubmissions'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { HelpTip } from '@/components/ui/HelpTip'
 import { EvidencePanel } from './EvidencePanel'
 
 interface Draft {
@@ -192,8 +194,16 @@ export function FieldSubmitForm({ onDone, asInvestigator = false }: {
       <Card>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-base font-semibold text-white">Submit field intelligence</h2>
-          <span className="text-xs text-slate-500">
+          <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
             {saving === 'saving' ? 'Saving…' : saving === 'saved' ? 'Draft saved' : 'Draft'}
+            {/* Draft vs submitted, in the registry's own words (lib/
+                fieldSubmissions STATUS_MEANING) — same prose as the chips. */}
+            {/* No guide link here: the User Guide lives in the CID portal,
+                which a patrol author may not be able to open. */}
+            <HelpTip label="What draft means" align="right">
+              <p><span className="font-semibold text-white">Draft:</span> {fieldStatusMeaning('draft')}</p>
+              <p className="mt-1.5"><span className="font-semibold text-white">Sent:</span> {fieldStatusMeaning('new')} Once sent, it cannot be edited — it is the record of what you reported.</p>
+            </HelpTip>
           </span>
         </div>
 
