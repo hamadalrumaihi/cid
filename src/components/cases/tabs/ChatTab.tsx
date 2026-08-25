@@ -4,12 +4,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { insert, list, deleteWithUndo } from '@/lib/db'
 import { Button } from '@/components/ui/Button'
 import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
+import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
+import { searchMemberHits } from '@/lib/entitySearch'
 import { timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { clearDraft, loadDraft, saveDraft, useDraftState } from '@/lib/userDrafts'
 import { SaveState } from '@/components/ui/SaveState'
 import { notify } from '@/lib/notify'
-import { officerName, activeProfiles } from '@/lib/profiles'
+import { officerName, activeProfiles, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { parseStringArray } from '@/lib/jsonShapes'
 import { toast } from '@/lib/toast'
@@ -53,6 +55,9 @@ export function ChatTab({ c }: { c: CaseRow }) {
     return () => { live = false }
   }, [c.id])
   const [sending, setSending] = useState(false)
+  // The mention picker filters the shared roster cache — warm it once.
+  const rosterLoaded = useProfilesStore((s) => s.loaded)
+  useEffect(() => { if (!rosterLoaded) void useProfilesStore.getState().fetch() }, [rosterLoaded])
   const addMention = (val: string) => {
     if (!val) return
     const p = activeProfiles().find((x) => x.id === val)
@@ -110,11 +115,20 @@ export function ChatTab({ c }: { c: CaseRow }) {
           </button>
         )}
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <select value="" onChange={(e) => addMention(e.target.value)} aria-label="Mention an officer" className="rounded-lg border border-white/10 bg-ink-900 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-badge-500">
-          <option value="">＠ Mention…</option>
-          {activeProfiles().map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}
-        </select>
+      <div className="flex items-end justify-between gap-2">
+        {/* Compact roster picker (searchMemberHits, min 1 char) — picking an
+            officer appends @Name and queues their id, exactly as the old
+            select did. Value stays null so mentions can chain. */}
+        <div className="w-full max-w-xs">
+          <RecordSearchPicker
+            label="＠ Mention"
+            placeholder="Officer name…"
+            value={null}
+            onChange={(v) => { if (v) addMention(v.id) }}
+            search={async (q) => searchMemberHits(q)}
+            minChars={1}
+          />
+        </div>
         <Button variant="primary" onClick={() => void send()} disabled={sending}>Send</Button>
       </div>
     </div>

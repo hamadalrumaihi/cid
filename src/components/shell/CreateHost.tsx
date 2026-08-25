@@ -5,8 +5,9 @@
  *  reuses the EXACT modals the registry views export (CaseModal, PersonModal,
  *  VehicleModal, …) — same fields, same validation, same RLS-scoped writes —
  *  lazy-loaded so none of those view chunks ride in the shell bundle. Option
- *  lists (gangs/persons/cases/narcotics) load on first need through the
- *  viewer's RLS and are cached for the session. Pages keep their own
+ *  lists (gangs/cases/narcotics) load on first need through the viewer's RLS
+ *  and are cached for the session; person/gang pickers inside the modals run
+ *  the bounded entity-search registry instead of preloads. Pages keep their own
  *  specialized New buttons; this is an additional door, not a replacement. */
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
@@ -65,7 +66,6 @@ type GangRow = Tables<'gangs'>
 type NarcoticRow = Tables<'narcotics'>
 
 interface Options {
-  personsLite?: Lite[]
   gangsLite?: Lite[]
   gangsFull?: GangRow[]
   casesLite?: CaseLite[]
@@ -75,10 +75,10 @@ interface Options {
 const NEEDS: Record<CreateKind, (keyof Options)[]> = {
   case: [],
   person: ['gangsLite'],
-  vehicle: ['personsLite', 'gangsLite'],
+  vehicle: [],
   gang: [],
   place: ['gangsFull', 'casesLite', 'narcotics'],
-  account: ['personsLite'],
+  account: [],
   indicator: ['casesLite'],
   operation: [],
   siu: [],
@@ -86,7 +86,6 @@ const NEEDS: Record<CreateKind, (keyof Options)[]> = {
 
 async function loadOption(key: keyof Options): Promise<Options[keyof Options]> {
   switch (key) {
-    case 'personsLite': return (await list('persons', { select: 'id,name', order: 'name' })) as unknown as Lite[]
     case 'gangsLite': return (await list('gangs', { select: 'id,name', order: 'name' })) as unknown as Lite[]
     case 'gangsFull': return await list('gangs', { order: 'name' })
     case 'casesLite': {
@@ -167,8 +166,8 @@ export function CreateHost({ children }: { children: React.ReactNode }) {
           onSaved={createdCb ? close : () => openNewest('persons')}
         />
       )}
-      {kind === 'vehicle' && ready && (
-        <VehicleModal record={null} persons={options.personsLite!} gangs={options.gangsLite!} onClose={close} onSaved={() => openNewest('vehicles')} />
+      {kind === 'vehicle' && (
+        <VehicleModal record={null} onClose={close} onSaved={() => openNewest('vehicles')} />
       )}
       {kind === 'gang' && (
         <GangModal record={null} onClose={close} onSaved={() => openNewest('gangs')} />
@@ -185,8 +184,8 @@ export function CreateHost({ children }: { children: React.ReactNode }) {
           onSaved={close}
         />
       )}
-      {kind === 'account' && ready && (
-        <AccountModal persons={options.personsLite!} onClose={close} onSaved={close} />
+      {kind === 'account' && (
+        <AccountModal onClose={close} onSaved={close} />
       )}
       {kind === 'indicator' && ready && (
         <IndicatorModal record={null} cases={options.casesLite!} onClose={close} onSaved={close} />

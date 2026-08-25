@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import type { Tables } from '@/lib/database.types'
 import { insert, list, rpc } from '@/lib/db'
+import { searchEntities, searchPersonHits, searchPlaceHits, searchVehicleHits, type EntityHit } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
 import { caseLink } from '@/lib/caseLinks'
 import { fmtDateTime } from '@/lib/format'
@@ -32,6 +33,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
+import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import { type CaseRow } from './shared'
 
 type TargetRow = Tables<'surveillance_targets'>
@@ -49,9 +51,6 @@ interface DeconflictRow {
   other_case_count: number
   visible_case_ids: string[]
 }
-
-/** Bounded picker option (persons/vehicles/places, RLS-scoped, capped). */
-interface PickOption { id: string; label: string }
 
 const SECTION_TITLE = 'text-xs font-bold uppercase tracking-[0.14em] text-slate-400'
 const humanize = (s: string | null | undefined): string =>
@@ -89,26 +88,6 @@ export function SurveillanceTab({ c }: { c: CaseRow }) {
   const [err, setErr] = useState<unknown>(null)
   const [requestOpen, setRequestOpen] = useState(false)
   const [eventOpen, setEventOpen] = useState(false)
-
-  // Registry pickers for the observation/event forms — bounded, fail-open.
-  const [persons, setPersons] = useState<PickOption[]>([])
-  const [vehicles, setVehicles] = useState<PickOption[]>([])
-  const [places, setPlaces] = useState<PickOption[]>([])
-  useEffect(() => {
-    if (!canEdit) return
-    const t = window.setTimeout(() => {
-      void list('persons', { select: 'id,name', order: 'name', limit: 200 })
-        .then((r) => setPersons((r as unknown as { id: string; name: string }[]).map((p) => ({ id: p.id, label: p.name }))))
-        .catch(() => {})
-      void list('vehicles', { select: 'id,plate,model', order: 'plate', limit: 200 })
-        .then((r) => setVehicles((r as unknown as { id: string; plate: string; model: string | null }[]).map((v) => ({ id: v.id, label: `${v.plate}${v.model ? ` · ${v.model}` : ''}` }))))
-        .catch(() => {})
-      void list('places', { select: 'id,name', order: 'name', limit: 200 })
-        .then((r) => setPlaces((r as unknown as { id: string; name: string }[]).map((p) => ({ id: p.id, label: p.name }))))
-        .catch(() => {})
-    }, 0)
-    return () => window.clearTimeout(t)
-  }, [canEdit])
 
   const vT = useTableVersion('surveillance_targets')
   const vO = useTableVersion('surveillance_observations')
@@ -202,18 +181,17 @@ export function SurveillanceTab({ c }: { c: CaseRow }) {
       <ObservationsSection
         c={c} observations={observations} entitiesByObs={entitiesByObs} targets={targets}
         canEdit={canEdit} nameOf={nameOf}
-        persons={persons} vehicles={vehicles} places={places}
         onChanged={refresh}
       />
       <EventsSection
         events={events} participantsByEvent={participantsByEvent} canEdit={canEdit}
-        nameOf={nameOf} persons={persons} vehicles={vehicles} places={places}
+        nameOf={nameOf}
         onCreate={() => setEventOpen(true)} onChanged={refresh}
       />
       <PatternsPanel patterns={patterns} nameOf={nameOf} />
       <DeconflictionPanel rows={deconflict} nameOf={nameOf} />
       {requestOpen && <RequestModal caseId={c.id} onClose={() => setRequestOpen(false)} onSaved={() => { setRequestOpen(false); void refresh() }} />}
-      {eventOpen && <EventModal caseId={c.id} places={places} onClose={() => setEventOpen(false)} onSaved={() => { setEventOpen(false); void refresh() }} />}
+      {eventOpen && <EventModal caseId={c.id} onClose={() => setEventOpen(false)} onSaved={() => { setEventOpen(false); void refresh() }} />}
     </div>
   )
 }
@@ -467,16 +445,13 @@ function TargetHistory({ targetId }: { targetId: string }) {
 
 /* ── Observations ─────────────────────────────────────────────────────────── */
 
-function ObservationsSection({ c, observations, entitiesByObs, targets, canEdit, nameOf, persons, vehicles, places, onChanged }: {
+function ObservationsSection({ c, observations, entitiesByObs, targets, canEdit, nameOf, onChanged }: {
   c: CaseRow
   observations: ObservationRow[]
   entitiesByObs: ReadonlyMap<string, ObsEntityRow[]>
   targets: TargetRow[]
   canEdit: boolean
   nameOf: (id: string | null | undefined) => string
-  persons: PickOption[]
-  vehicles: PickOption[]
-  places: PickOption[]
   onChanged: () => void
 }) {
   const [verFilter, setVerFilter] = useState('')
@@ -504,7 +479,7 @@ function ObservationsSection({ c, observations, entitiesByObs, targets, canEdit,
       </div>
       {formOpen && canEdit && (
         <LogObservationForm
-          caseId={c.id} targets={targets} persons={persons} vehicles={vehicles} places={places}
+          caseId={c.id} targets={targets}
           onSaved={() => { setFormOpen(false); onChanged() }}
         />
       )}
@@ -520,19 +495,17 @@ function ObservationsSection({ c, observations, entitiesByObs, targets, canEdit,
   )
 }
 
-function LogObservationForm({ caseId, targets, persons, vehicles, places, onSaved }: {
+function LogObservationForm({ caseId, targets, onSaved }: {
   caseId: string
   targets: TargetRow[]
-  persons: PickOption[]
-  vehicles: PickOption[]
-  places: PickOption[]
   onSaved: () => void
 }) {
   const [observedAt, setObservedAt] = useState(nowLocal)
   const [activity, setActivity] = useState('')
-  const [personId, setPersonId] = useState('')
-  const [vehicleId, setVehicleId] = useState('')
-  const [placeId, setPlaceId] = useState('')
+  // Bounded entity-search pickers (lib/entitySearch) — no registry preloads.
+  const [person, setPerson] = useState<EntityHit | null>(null)
+  const [vehicle, setVehicle] = useState<EntityHit | null>(null)
+  const [place, setPlace] = useState<EntityHit | null>(null)
   const [plate, setPlate] = useState('')
   const [locationText, setLocationText] = useState('')
   const [targetId, setTargetId] = useState('')
@@ -551,9 +524,9 @@ function LogObservationForm({ caseId, targets, persons, vehicles, places, onSave
       observed_at: at,
       source_type: 'detective_manual',
       activity: activity.trim(),
-      person_id: personId || null,
-      vehicle_id: vehicleId || null,
-      place_id: placeId || null,
+      person_id: person?.id ?? null,
+      vehicle_id: vehicle?.id ?? null,
+      place_id: place?.id ?? null,
       plate_snapshot: plate.trim() || null,
       location_text: locationText.trim() || null,
       confidence,
@@ -591,30 +564,31 @@ function LogObservationForm({ caseId, targets, persons, vehicles, places, onSave
         {(id) => <Textarea id={id} rows={2} value={activity} onChange={(e) => setActivity(e.target.value)} placeholder="What was seen, plainly and factually" />}
       </Field>
       <div className="grid gap-3 md:grid-cols-3">
-        <Field label="Person (optional)">
-          {(id) => (
-            <Select id={id} value={personId} onChange={(e) => setPersonId(e.target.value)}>
-              <option value="">— none —</option>
-              {persons.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-            </Select>
-          )}
-        </Field>
-        <Field label="Vehicle (optional)">
-          {(id) => (
-            <Select id={id} value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
-              <option value="">— none —</option>
-              {vehicles.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
-            </Select>
-          )}
-        </Field>
-        <Field label="Place (optional)">
-          {(id) => (
-            <Select id={id} value={placeId} onChange={(e) => setPlaceId(e.target.value)}>
-              <option value="">— none —</option>
-              {places.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-            </Select>
-          )}
-        </Field>
+        <RecordSearchPicker<EntityHit>
+          label="Person (optional)"
+          value={person}
+          onChange={setPerson}
+          search={searchPersonHits}
+          placeholder="Search name, alias, phone…"
+          getThumb={(h) => h.thumbUrl}
+          peekType="person"
+        />
+        <RecordSearchPicker<EntityHit>
+          label="Vehicle (optional)"
+          value={vehicle}
+          onChange={setVehicle}
+          search={searchVehicleHits}
+          placeholder="Search plate, model…"
+          peekType="vehicle"
+        />
+        <RecordSearchPicker<EntityHit>
+          label="Place (optional)"
+          value={place}
+          onChange={setPlace}
+          search={searchPlaceHits}
+          placeholder="Search place name, area…"
+          peekType="place"
+        />
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="Plate snapshot (optional)" hint="As read at the scene — kept even if no registry vehicle matches.">
@@ -755,14 +729,11 @@ function ObservationRowCard({ o, entities, canEdit, nameOf, onChanged }: {
 
 /* ── Association events ───────────────────────────────────────────────────── */
 
-function EventsSection({ events, participantsByEvent, canEdit, nameOf, persons, vehicles, places, onCreate, onChanged }: {
+function EventsSection({ events, participantsByEvent, canEdit, nameOf, onCreate, onChanged }: {
   events: EventRow[]
   participantsByEvent: ReadonlyMap<string, ParticipantRow[]>
   canEdit: boolean
   nameOf: (id: string | null | undefined) => string
-  persons: PickOption[]
-  vehicles: PickOption[]
-  places: PickOption[]
   onCreate: () => void
   onChanged: () => void
 }) {
@@ -777,7 +748,7 @@ function EventsSection({ events, participantsByEvent, canEdit, nameOf, persons, 
       ) : events.map((e) => (
         <EventRowCard
           key={e.id} e={e} participants={participantsByEvent.get(e.id) ?? []}
-          canEdit={canEdit} nameOf={nameOf} persons={persons} vehicles={vehicles} places={places}
+          canEdit={canEdit} nameOf={nameOf}
           onChanged={onChanged}
         />
       ))}
@@ -785,20 +756,18 @@ function EventsSection({ events, participantsByEvent, canEdit, nameOf, persons, 
   )
 }
 
-function EventRowCard({ e, participants, canEdit, nameOf, persons, vehicles, places, onChanged }: {
+function EventRowCard({ e, participants, canEdit, nameOf, onChanged }: {
   e: EventRow
   participants: ParticipantRow[]
   canEdit: boolean
   nameOf: (id: string | null | undefined) => string
-  persons: PickOption[]
-  vehicles: PickOption[]
-  places: PickOption[]
   onChanged: () => void
 }) {
   const [addOpen, setAddOpen] = useState(false)
-  const [kind, setKind] = useState('person')
-  const [refId, setRefId] = useState('')
-  const options = kind === 'person' ? persons : kind === 'vehicle' ? vehicles : kind === 'place' ? places : []
+  const [kind, setKind] = useState<'person' | 'vehicle' | 'place'>('person')
+  const [ref, setRef] = useState<EntityHit | null>(null)
+  // Bounded per-kind arm of the shared entity-search registry.
+  const search = useCallback((q: string) => searchEntities(kind, q), [kind])
 
   const review = async (decision: 'verify' | 'reject') => {
     let notes: string | undefined
@@ -815,13 +784,13 @@ function EventRowCard({ e, participants, canEdit, nameOf, persons, vehicles, pla
   }
 
   const addParticipant = async () => {
-    if (!refId) return
-    const res = await insert('surveillance_event_participants', { event_id: e.id, kind, ref_id: refId })
+    if (!ref) return
+    const res = await insert('surveillance_event_participants', { event_id: e.id, kind, ref_id: ref.id })
     if (res.error) {
       toast(res.error.code === '23505' ? 'Already a participant.' : res.error.message, res.error.code === '23505' ? 'warn' : 'danger')
       return
     }
-    setRefId('')
+    setRef(null)
     onChanged()
   }
 
@@ -867,25 +836,31 @@ function EventRowCard({ e, participants, canEdit, nameOf, persons, vehicles, pla
         )}
       </div>
       {addOpen && canEdit && (
-        <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-white/5 pt-2">
-          <Field label="Kind" className="w-32">
-            {(id) => (
-              <Select id={id} value={kind} onChange={(ev) => { setKind(ev.target.value); setRefId('') }}>
-                <option value="person">Person</option>
-                <option value="vehicle">Vehicle</option>
-                <option value="place">Place</option>
-              </Select>
-            )}
-          </Field>
-          <Field label="Record" className="min-w-48 flex-1">
-            {(id) => (
-              <Select id={id} value={refId} onChange={(ev) => setRefId(ev.target.value)}>
-                <option value="">Select…</option>
-                {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-              </Select>
-            )}
-          </Field>
-          <Button size="sm" onAction={addParticipant} disabled={!refId}>Add</Button>
+        <div className="mt-2 space-y-2 border-t border-white/5 pt-2">
+          <div className="grid gap-2 sm:grid-cols-[8rem_minmax(0,1fr)]">
+            <Field label="Kind">
+              {(id) => (
+                <Select id={id} value={kind} onChange={(ev) => { setKind(ev.target.value as 'person' | 'vehicle' | 'place'); setRef(null) }}>
+                  <option value="person">Person</option>
+                  <option value="vehicle">Vehicle</option>
+                  <option value="place">Place</option>
+                </Select>
+              )}
+            </Field>
+            <RecordSearchPicker<EntityHit>
+              // Remount per kind: a kind switch must not reuse the previous
+              // kind's rows or typed query.
+              key={kind}
+              label="Record"
+              value={ref}
+              onChange={setRef}
+              search={search}
+              placeholder={`Search ${kind}s…`}
+              peekType={kind}
+              {...(kind === 'person' ? { getThumb: (h: EntityHit) => h.thumbUrl } : {})}
+            />
+          </div>
+          <Button size="sm" onAction={addParticipant} disabled={!ref}>Add participant</Button>
         </div>
       )}
     </div>
@@ -1138,15 +1113,14 @@ function RequestModal({ caseId, onClose, onSaved }: { caseId: string; onClose: (
 
 /* ── Record association event modal ───────────────────────────────────────── */
 
-function EventModal({ caseId, places, onClose, onSaved }: {
+function EventModal({ caseId, onClose, onSaved }: {
   caseId: string
-  places: PickOption[]
   onClose: () => void
   onSaved: () => void
 }) {
   const [eventType, setEventType] = useState('meeting')
   const [occurredAt, setOccurredAt] = useState(nowLocal)
-  const [placeId, setPlaceId] = useState('')
+  const [place, setPlace] = useState<EntityHit | null>(null)
   const [locationText, setLocationText] = useState('')
   const [summary, setSummary] = useState('')
   const [busy, setBusy] = useState(false)
@@ -1160,7 +1134,7 @@ function EventModal({ caseId, places, onClose, onSaved }: {
       case_id: caseId,
       event_type: eventType,
       occurred_at: at,
-      place_id: placeId || null,
+      place_id: place?.id ?? null,
       location_text: locationText.trim() || null,
       summary: summary.trim(),
     })
@@ -1190,14 +1164,14 @@ function EventModal({ caseId, places, onClose, onSaved }: {
             </Field>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Place (optional)">
-              {(id) => (
-                <Select id={id} value={placeId} onChange={(e) => setPlaceId(e.target.value)}>
-                  <option value="">— none —</option>
-                  {places.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                </Select>
-              )}
-            </Field>
+            <RecordSearchPicker<EntityHit>
+              label="Place (optional)"
+              value={place}
+              onChange={setPlace}
+              search={searchPlaceHits}
+              placeholder="Search place name, area…"
+              peekType="place"
+            />
             <Field label="Location text (optional)">
               {(id) => <Input id={id} value={locationText} onChange={(e) => setLocationText(e.target.value)} />}
             </Field>

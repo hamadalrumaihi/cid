@@ -17,6 +17,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { uiConfirm } from '@/components/ui/dialog'
 import { deleteWithUndo, list, insert, rpc, update } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
+import { searchCaseHits } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
 import { OPS_CASE_COLS, OP_SEG_COLOR, OP_STATUSES, opStatusTint, type OpsCaseRow, useOperationsStore } from '@/lib/operations'
 import {
@@ -28,6 +29,7 @@ import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
+import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
 
 type OperationRow = Tables<'operations'>
 
@@ -142,23 +144,34 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
   onEdit: () => void
 }) {
   const router = useRouter()
-  const [pick, setPick] = useState('')
+  const [pick, setPick] = useState<PickedRecord | null>(null)
   const [convertOpen, setConvertOpen] = useState(false)
   const [addBureau, setAddBureau] = useState('')
   const parts = activeBureaus(bureaus)
   const jtf = isJtf(op)
   const manages = canManageOperation(viewer, op, parts)
 
-  // Which cases may THIS viewer contribute? (Server re-validates in the sync
-  // trigger — this only filters the picker so unauthorized options never show.)
-  const linkable = allCases.filter((c) =>
-    canLinkCaseToOp(viewer, c, op, parts))
+  // Which cases may THIS viewer contribute? Bounded two-step (the person-RPC
+  // idiom): searchCaseHits finds candidates, then ONE in:{id} hydration of the
+  // authority columns so canLinkCaseToOp can filter — unauthorized or
+  // already-linked cases never show. (Server re-validates in the sync
+  // trigger; this only trims the picker.) Read via the picker's search ref,
+  // so the inline closure always sees current viewer/op/parts.
+  const searchLinkable = async (q: string): Promise<PickedRecord[]> => {
+    const hits = await searchCaseHits(q, { limit: 20 })
+    if (!hits.length) return []
+    const rows = await list('cases', { select: OPS_CASE_COLS, in: { id: hits.map((h) => h.id) } })
+      .then((r) => r as unknown as OpsCaseRow[])
+      .catch(() => [] as OpsCaseRow[])
+    const ok = new Set(rows.filter((c) => canLinkCaseToOp(viewer, c, op, parts)).map((c) => c.id))
+    return hits.filter((h) => ok.has(h.id))
+  }
 
   const linkCase = async () => {
     if (!pick) return
-    const res = await update('cases', pick, { operation_id: op.id })
+    const res = await update('cases', pick.id, { operation_id: op.id })
     if (res.error) toast(res.error.message, 'danger')
-    else { setPick(''); toast(jtf ? 'Case linked — joint within this operation.' : 'Case linked.', 'success'); onChanged() }
+    else { setPick(null); toast(jtf ? 'Case linked — joint within this operation.' : 'Case linked.', 'success'); onChanged() }
   }
   const unlink = async (c: OpsCaseRow) => {
     if (jtf && !(await uiConfirm(
@@ -311,13 +324,18 @@ function OperationDetail({ op, viewer, bureaus, links, cases, allCases, canDelet
       {/* ── Cases ────────────────────────────────────────────────────────── */}
       <section className="rounded-lg border border-white/5 bg-ink-900/60 p-5">
         <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">Cases</h2>
-        {linkable.length > 0 && !isOpEnded(op.status) && (
-          <div className="mb-3 flex gap-2 rounded-lg bg-ink-900/50 p-3">
-            <select value={pick} onChange={(e) => setPick(e.target.value)} className={`${CONTROL} min-w-0 flex-1`} aria-label="Link a case">
-              <option value="">{jtf ? 'Add one of your cases to this JTF…' : 'Link a case…'}</option>
-              {linkable.map((c) => <option key={c.id} value={c.id}>{c.case_number} - {c.title}{jtf ? ` (${bureauShort(c.bureau)})` : ''}</option>)}
-            </select>
-            <Button variant="primary" onClick={() => void linkCase()}>{jtf ? 'Add Case' : 'Link'}</Button>
+        {viewer.active && !isOpEnded(op.status) && (
+          <div className="mb-3 flex flex-col gap-2 rounded-lg bg-ink-900/50 p-3 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1">
+              <RecordSearchPicker
+                label={jtf ? 'Add one of your cases to this JTF' : 'Link a case'}
+                placeholder="Search case number or title…"
+                value={pick}
+                onChange={setPick}
+                search={searchLinkable}
+              />
+            </div>
+            <Button variant="primary" onClick={() => void linkCase()} disabled={!pick}>{jtf ? 'Add Case' : 'Link'}</Button>
           </div>
         )}
         <div className="space-y-2">

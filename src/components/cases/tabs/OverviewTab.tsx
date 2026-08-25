@@ -5,9 +5,11 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
-import { Field, Input, Textarea } from '@/components/ui/Field'
+import { Field, Textarea } from '@/components/ui/Field'
+import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import { insert, list, deleteWithUndo, rpc } from '@/lib/db'
 import { caseLink } from '@/lib/caseLinks'
+import { searchMemberHits, type EntityHit } from '@/lib/entitySearch'
 import { fmtDate } from '@/lib/format'
 import { CaseProvenance } from '../CaseProvenance'
 import { useAuth } from '@/lib/auth'
@@ -173,35 +175,31 @@ export function OverviewTab({ c, canEdit, canDelete, wf, assessment, onWorkflowC
 }
 
 /* ── Add support officer ────────────────────────────────────────────────────
- * Roster-search picker (the JointCaseModal idiom, compact): type to filter the
- * active roster, click an officer to assign them with role 'support'. Officers
- * with an ACTIVE assignment are excluded; a unique-violation from a stale list
- * surfaces as a friendly "already on this case" instead of the raw constraint. */
+ * Shared roster picker (RecordSearchPicker + searchMemberHits): type to filter
+ * the active roster, pick an officer to assign them with role 'support'.
+ * Officers with an ACTIVE assignment stay visible but badged "Already on this
+ * case" and unselectable (getDisabled), as do inactive/LOA flags; a
+ * unique-violation from a stale list still surfaces as a friendly "already on
+ * this case" instead of the raw constraint. */
 function AddSupportModal({ caseId, assignments, onClose, onAdded }: {
   caseId: string
   assignments: AssignmentRow[]
   onClose: () => void
   onAdded: () => void
 }) {
-  const profiles = useProfilesStore((s) => s.profiles)
   const rosterLoaded = useProfilesStore((s) => s.loaded)
   const fetchProfiles = useProfilesStore((s) => s.fetch)
-  const [query, setQuery] = useState('')
   useEffect(() => { if (!rosterLoaded) void fetchProfiles() }, [rosterLoaded, fetchProfiles])
 
   const assignedIds = useMemo(
     () => new Set(assignments.filter(isActiveAssignment).map((a) => a.officer_id)),
     [assignments],
   )
-  const options = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return profiles
-      .filter((p) => p.active && !p.is_system && !assignedIds.has(p.id))
-      .filter((p) => !q
-        || (p.display_name ?? '').toLowerCase().includes(q)
-        || (p.badge_number ?? '').toLowerCase().includes(q))
-      .sort((a, b) => (a.display_name || '').localeCompare(b.display_name || ''))
-  }, [profiles, assignedIds, query])
+  const rowDisabled = (h: EntityHit): string | null =>
+    assignedIds.has(h.id) ? 'Already on this case'
+      : h.meta?.active === 'false' ? 'Inactive'
+        : h.meta?.loa === 'true' ? 'On LOA'
+          : null
 
   const add = useAction(async (officerId: string) => {
     const res = await insert('case_assignments', { case_id: caseId, officer_id: officerId, role: 'support' })
@@ -218,41 +216,18 @@ function AddSupportModal({ caseId, assignments, onClose, onAdded }: {
     <Modal open onClose={onClose}>
       <div className="p-5">
         <ModalHeader title="Add support officer" onClose={onClose} />
-        <Field label="Search officers" hint="Click an officer to assign them to this case as support.">
-          {(id) => (
-            <Input
-              id={id}
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Name or badge number…"
-              autoComplete="off"
-            />
-          )}
-        </Field>
-        <ul aria-label="Active officers" className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-white/10 bg-ink-950/70">
-          {options.map((p) => (
-            <li key={p.id}>
-              <button
-                onClick={() => void add.run(p.id)}
-                disabled={add.busy}
-                className="flex min-h-[44px] w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-white">{p.display_name || 'Officer'}</span>
-                  <span className="block truncate text-xs text-slate-400">
-                    {[p.badge_number ? `Badge ${p.badge_number}` : null, bureauLabel(p.division), roleLabel(p.role)].filter(Boolean).join(' · ')}
-                  </span>
-                </span>
-              </button>
-            </li>
-          ))}
-          {!options.length && (
-            <li className="px-3 py-3 text-sm text-slate-400">
-              {rosterLoaded ? 'No eligible officers match.' : 'Loading roster…'}
-            </li>
-          )}
-        </ul>
+        <RecordSearchPicker<EntityHit>
+          label="Search officers"
+          hint="Pick an officer to assign them to this case as support."
+          placeholder="Name or badge number…"
+          value={null}
+          onChange={(v) => { if (v) void add.run(v.id) }}
+          search={async (q) => searchMemberHits(q)}
+          getThumb={(h) => h.thumbUrl}
+          getDisabled={rowDisabled}
+          disabled={add.busy}
+          emptyState={rosterLoaded ? undefined : 'Loading roster…'}
+        />
       </div>
     </Modal>
   )

@@ -20,7 +20,7 @@
  *  makes that requirement loud, and the fact list always shows it. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { insert, list, ilikeAny, remove, rpc } from '@/lib/db'
+import { insert, list, remove, rpc } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { officerName } from '@/lib/profiles'
@@ -34,7 +34,9 @@ import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { ListSkeleton } from '@/components/ui/Skeleton'
-import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
+import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
+import { searchPersonHits, type EntityHit } from '@/lib/entitySearch'
+import { ACCOUNT_PLATFORMS } from '@/components/accounts/AccountsView'
 import { type CaseRow, type ExtractionRow, type ExtractionFactRow } from './shared'
 
 // record_extractions.source_kind CHECK vocabulary (nullable — unspecified is
@@ -353,32 +355,35 @@ function FactRow({ f }: { f: ExtractionFactRow }) {
 /* ── Add-fact form — the ONLY write path into record_extraction_facts (the
  *  extraction_add_fact RPC). Client-validates value + source_location non-blank
  *  and (for ownership) platform + owner; the server re-validates all of it. ─── */
+// Sentinel for the platform select's free-text escape hatch. Not a platform
+// name — never sent to the RPC.
+const OTHER_PLATFORM = '__other__'
+
 function AddFactForm({ extractionId, onAdded }: { extractionId: string; onAdded: () => void }) {
   const [factType, setFactType] = useState('phone')
   const [value, setValue] = useState('')
   const [sourceLocation, setSourceLocation] = useState('')
   const [platform, setPlatform] = useState('')
-  const [owner, setOwner] = useState<PickedRecord | null>(null)
+  const [platformOther, setPlatformOther] = useState('')
+  const [owner, setOwner] = useState<EntityHit | null>(null)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
 
   const showAccountFields = needsAccountFields(factType)
   const isOwnership = factType === 'ownership'
 
-  // Person owner search — RLS-scoped, bounded (ilikeAny + limit 20), same idiom
-  // as the Intel tab's person picker.
-  const searchPersons = useCallback(async (q: string): Promise<PickedRecord[]> => {
-    const or = ilikeAny(['name', 'alias'], q)
-    const r = (await list('persons', { select: 'id,name,alias', order: 'name', limit: 20, ...(or ? { or } : {}) })) as unknown as { id: string; name: string; alias: string | null }[]
-    return r.map((p) => ({ id: p.id, label: p.name || 'Person', ...(p.alias ? { sublabel: `“${p.alias}”` } : {}) }))
-  }, [])
+  // The platform feeds extraction_add_fact's find-or-create, so a free-typed
+  // variant ('birdy', 'Birdy ') would mint a duplicate account. The select
+  // normalizes the common case to the canonical vocabulary; “Other…” keeps
+  // genuinely new platforms possible without blocking them.
+  const platformValue = platform === OTHER_PLATFORM ? platformOther.trim() : platform.trim()
 
   const valid =
     value.trim() !== '' &&
     sourceLocation.trim() !== '' &&
-    (!isOwnership || (platform.trim() !== '' && !!owner))
+    (!isOwnership || (platformValue !== '' && !!owner))
 
-  const reset = () => { setValue(''); setSourceLocation(''); setPlatform(''); setOwner(null); setNote('') }
+  const reset = () => { setValue(''); setSourceLocation(''); setPlatform(''); setPlatformOther(''); setOwner(null); setNote('') }
 
   const add = async () => {
     if (!valid || busy) return
@@ -390,7 +395,7 @@ function AddFactForm({ extractionId, onAdded }: { extractionId: string; onAdded:
       p_fact_type: factType,
       p_value: value.trim(),
       p_source_location: sourceLocation.trim(),
-      ...(showAccountFields && platform.trim() ? { p_platform: platform.trim() } : {}),
+      ...(showAccountFields && platformValue ? { p_platform: platformValue } : {}),
       ...(showAccountFields && owner ? { p_owner_person: owner.id } : {}),
       ...(note.trim() ? { p_note: note.trim() } : {}),
     })
@@ -431,16 +436,34 @@ function AddFactForm({ extractionId, onAdded }: { extractionId: string; onAdded:
               required={isOwnership}
               hint={isOwnership ? 'Required for ownership.' : 'Used to find or create the account.'}
             >
-              {(id) => <Input id={id} value={platform} onChange={(e) => setPlatform(e.target.value)} placeholder="e.g. Birdy, InstaPic" />}
+              {(id) => (
+                <div className="space-y-2">
+                  <Select id={id} value={platform} onChange={(e) => { setPlatform(e.target.value); setPlatformOther('') }}>
+                    <option value="">Choose platform…</option>
+                    {ACCOUNT_PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
+                    <option value={OTHER_PLATFORM}>Other…</option>
+                  </Select>
+                  {platform === OTHER_PLATFORM && (
+                    <Input
+                      value={platformOther}
+                      onChange={(e) => setPlatformOther(e.target.value)}
+                      placeholder="New platform name"
+                      aria-label="Other platform name"
+                    />
+                  )}
+                </div>
+              )}
             </Field>
-            <RecordSearchPicker
+            <RecordSearchPicker<EntityHit>
               label="Owner (person)"
               required={isOwnership}
               hint={isOwnership ? 'Required for ownership.' : 'Optional — asserts who operates the account.'}
               value={owner}
               onChange={setOwner}
-              search={searchPersons}
+              search={searchPersonHits}
               placeholder="Search persons…"
+              getThumb={(h) => h.thumbUrl}
+              peekType="person"
             />
           </div>
           {isOwnership && (

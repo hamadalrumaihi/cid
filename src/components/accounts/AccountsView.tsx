@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Tables } from '@/lib/database.types'
 import { countRows, ilikeAny, insert, list, remove, rpc, update } from '@/lib/db'
+import { searchPersonHits, type EntityHit } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { officerName } from '@/lib/profiles'
@@ -38,7 +39,6 @@ import { useToolNav } from '@/components/tools/useToolNav'
 type Account = Tables<'accounts'>
 type AccountHandle = Tables<'account_handles'>
 type AccountLink = Tables<'account_links'>
-type PersonLite = { id: string; name: string }
 
 export const ACCOUNT_PLATFORMS = ['Birdy', 'InstaPic'] as const
 const CONFIDENCE = ['suspected', 'probable', 'confirmed'] as const
@@ -109,7 +109,6 @@ async function resolveSubjectNames(links: AccountLink[]): Promise<Record<string,
 export function AccountsView() {
   const { state, canEdit, isCommand } = useAuth()
   const [accounts, setAccounts] = useState<Account[]>([])
-  const [persons, setPersons] = useState<PersonLite[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -124,13 +123,9 @@ export function AccountsView() {
     if (state !== 'in') return
     setLoading(true); setErr(null)
     try {
-      const [a, p] = await Promise.all([
-        list('accounts', { order: 'updated_at', ascending: false }),
-        list('persons', { select: 'id,name', order: 'name' }).then((r) => r as unknown as PersonLite[]).catch(() => [] as PersonLite[]),
-      ])
+      const a = await list('accounts', { order: 'updated_at', ascending: false })
       // Merged tombstones drop out of the registry (mirrors persons/narcotics).
       setAccounts((a as Account[]).filter((x) => x.lifecycle !== 'merged'))
-      setPersons(p)
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     finally { setLoading(false) }
   }, [state])
@@ -189,8 +184,8 @@ export function AccountsView() {
         </div>
       )}
 
-      {creating && <AccountModal persons={persons} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); void refresh() }} />}
-      {editing && <AccountModal account={editing} persons={persons} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void refresh() }} />}
+      {creating && <AccountModal onClose={() => setCreating(false)} onSaved={() => { setCreating(false); void refresh() }} />}
+      {editing && <AccountModal account={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void refresh() }} />}
       {mergeFor && <AccountMergeModal survivor={mergeFor} pool={accounts} isCommand={isCommand} onClose={() => setMergeFor(null)} onMerged={() => { setMergeFor(null); void refresh() }} />}
     </section>
   )
@@ -408,7 +403,7 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
   )
 }
 
-export function AccountModal({ account, persons, onClose, onSaved }: { account?: Account; persons: PersonLite[]; onClose: () => void; onSaved: () => void }) {
+export function AccountModal({ account, onClose, onSaved }: { account?: Account; onClose: () => void; onSaved: () => void }) {
   const editing = !!account
   const [platform, setPlatform] = useState<string>(account?.platform ?? ACCOUNT_PLATFORMS[0])
   const [handle, setHandle] = useState(account?.handle ?? '')
@@ -422,7 +417,7 @@ export function AccountModal({ account, persons, onClose, onSaved }: { account?:
   const [operatorUnknown, setOperatorUnknown] = useState(account?.operator_unknown ?? false)
   const [isImpersonation, setIsImpersonation] = useState(account?.is_impersonation ?? false)
   const [isCompromised, setIsCompromised] = useState(account?.is_compromised ?? false)
-  const [ownerPerson, setOwnerPerson] = useState('')
+  const [ownerPerson, setOwnerPerson] = useState<EntityHit | null>(null)
   const [busy, setBusy] = useState(false)
   // external_id is frozen once set (DB trigger) — only editable while still null.
   const idLocked = !!account?.external_id
@@ -459,7 +454,7 @@ export function AccountModal({ account, persons, onClose, onSaved }: { account?:
     const res = await insert('accounts', { ...fields, external_id: externalId.trim() || null })
     if (res.error || !res.data?.[0]) { setBusy(false); toast(res.error?.message ?? 'Save failed.', 'danger'); return }
     if (ownerPerson) {
-      await insert('account_links', { account_id: res.data[0].id, subject_kind: 'person', subject_id: ownerPerson, person_id: ownerPerson, ownership_confidence: 'suspected', source: 'manual' })
+      await insert('account_links', { account_id: res.data[0].id, subject_kind: 'person', subject_id: ownerPerson.id, person_id: ownerPerson.id, ownership_confidence: 'suspected', source: 'manual' })
     }
     setBusy(false)
     toast('Account created.', 'success')
@@ -512,14 +507,18 @@ export function AccountModal({ account, persons, onClose, onSaved }: { account?:
             {(id) => <Textarea id={id} rows={2} value={summary} onChange={(e) => setSummary(e.target.value)} />}
           </Field>
           {!editing && (
-            <Field label="Suspected owner" className="sm:col-span-2">
-              {(id) => (
-                <Select id={id} value={ownerPerson} onChange={(e) => setOwnerPerson(e.target.value)}>
-                  <option value="">— optional —</option>
-                  {persons.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </Select>
-              )}
-            </Field>
+            <div className="sm:col-span-2">
+              <RecordSearchPicker<EntityHit>
+                label="Suspected owner"
+                hint="Optional — links to the new account as suspected ownership."
+                value={ownerPerson}
+                onChange={setOwnerPerson}
+                search={searchPersonHits}
+                placeholder="Search name, alias, phone…"
+                getThumb={(h) => h.thumbUrl}
+                peekType="person"
+              />
+            </div>
           )}
           <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2">
             <label className="flex items-center gap-2 text-sm text-slate-300">

@@ -88,6 +88,10 @@ interface CaseRoutingCtx {
   lead_detective_id: string | null
   created_by: string | null
 }
+/** PickedRecord plus the optional mugshot for the picker's thumb rows. It is
+ *  never stashed (asPick strips it) — a restored pick just falls back to the
+ *  initials thumb. */
+type ThumbPick = PickedRecord & { thumbUrl?: string | null }
 interface CasePick extends PickedRecord {
   number: string
   /** null = not evaluated (edit mode, legacy stash, or the division lookup is
@@ -96,6 +100,12 @@ interface CasePick extends PickedRecord {
   routingCtx?: CaseRoutingCtx
 }
 interface TargetDraft { kind: StructuredTargetKind; sourceId: string; label: string; rationale: string }
+/** Quick-preview (peek) type per structured-target kind. prior_legal_request
+ *  has no preview type — those rows render plain, on purpose (a sealed prior
+ *  is labelled by number alone and a peek would have nothing safe to add). */
+const TARGET_PEEK: Partial<Record<StructuredTargetKind, 'person' | 'vehicle' | 'place'>> = {
+  person_record: 'person', vehicle: 'vehicle', place: 'place',
+}
 type FieldSpec = { key: string; label: string; req?: boolean; kind?: 'textarea' | 'datetime' }
 
 /** Never-lose-work stash for the CREATE flow (same key family as the old
@@ -217,7 +227,7 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
   const [requestType, setRequestType] = useState<'warrant' | 'subpoena' | null>(null)
   const [subtype, setSubtype] = useState<string | null>(null)
   const [caseSel, setCaseSel] = useState<CasePick | null>(null)
-  const [personSel, setPersonSel] = useState<PickedRecord | null>(null)
+  const [personSel, setPersonSel] = useState<ThumbPick | null>(null)
   const [recipientType, setRecipientType] = useState<'player' | 'entity'>('player')
   const [recipientName, setRecipientName] = useState('')
   const [title, setTitle] = useState('')
@@ -376,19 +386,19 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
     })()
     return () => { cancelled = true }
   }, [isEdit, caseSel])
-  const searchPersons = useCallback(async (q: string): Promise<PickedRecord[]> => {
+  const searchPersons = useCallback(async (q: string): Promise<ThumbPick[]> => {
     const or = ilikeAny(['name', 'alias'], q)
     const rows = (await list('persons', {
-      select: 'id,name,alias', order: 'name', limit: 20, ...(or ? { or } : {}),
-    })) as unknown as Pick<Tables<'persons'>, 'id' | 'name' | 'alias'>[]
-    return rows.map((p) => ({ id: p.id, label: p.name, ...(p.alias ? { sublabel: `“${p.alias}”` } : {}) }))
+      select: 'id,name,alias,mugshot_url', order: 'name', limit: 20, ...(or ? { or } : {}),
+    })) as unknown as Pick<Tables<'persons'>, 'id' | 'name' | 'alias' | 'mugshot_url'>[]
+    return rows.map((p) => ({ id: p.id, label: p.name, ...(p.alias ? { sublabel: `“${p.alias}”` } : {}), thumbUrl: p.mugshot_url }))
   }, [])
 
   /* ── Structured search-warrant targets ────────────────────────────────────── */
   const [tKind, setTKind] = useState<StructuredTargetKind>('person_record')
-  const [tSel, setTSel] = useState<PickedRecord | null>(null)
+  const [tSel, setTSel] = useState<ThumbPick | null>(null)
   const [tRationale, setTRationale] = useState('')
-  const targetSearch = useCallback(async (q: string): Promise<PickedRecord[]> => {
+  const targetSearch = useCallback(async (q: string): Promise<ThumbPick[]> => {
     if (tKind === 'person_record') return searchPersons(q)
     if (tKind === 'vehicle') {
       const or = ilikeAny(['plate', 'model'], q)
@@ -848,6 +858,8 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
                   : 'Recipient (player)'}
                 required={requiresPerson || (requestType === 'subpoena' && recipientType === 'player')}
                 value={personSel} onChange={setPersonSel} search={searchPersons}
+                getThumb={(p) => p.thumbUrl}
+                peekType="person"
                 placeholder="Search by name or alias…"
                 hint={isEdit && row?.person_id
                   ? 'The linked person can be replaced, not removed, while revising.'
@@ -917,9 +929,15 @@ export function LegalCreateWizard({ entry, onCancel, onDone }: {
                       </Select>
                     )}
                   </Field>
-                  <RecordSearchPicker
+                  <RecordSearchPicker<ThumbPick>
+                    // Remount per kind (the Intel-tab idiom): a kind switch
+                    // must not keep the previous kind's rows under the new
+                    // kind's peek type or reuse its typed query.
+                    key={tKind}
                     label="Record" value={tSel} onChange={setTSel} search={targetSearch}
                     placeholder={`Search ${STRUCTURED_TARGET_KIND_LABEL[tKind].toLowerCase()}s…`}
+                    {...(TARGET_PEEK[tKind] ? { peekType: TARGET_PEEK[tKind] } : {})}
+                    {...(tKind === 'person_record' ? { getThumb: (h: ThumbPick) => h.thumbUrl } : {})}
                   />
                 </div>
                 <Field label="Rationale — why this target belongs on the warrant">

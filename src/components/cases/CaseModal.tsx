@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import { insert, list, rpc, update, deleteWithUndo } from '@/lib/db'
 import type { Tables } from '@/lib/database.types'
+import { searchMemberHits, searchOperationHits, type EntityHit } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
-import { useOperationsStore } from '@/lib/operations'
-import { activeProfiles, officerName } from '@/lib/profiles'
+import { useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
 import { CASE_STATUSES } from '@/lib/signoff'
 import { toast } from '@/lib/toast'
@@ -36,8 +37,6 @@ interface Props {
 
 export function CaseModal({ open, record, onClose, onSaved }: Props) {
   const { profile, isCommand } = useAuth()
-  const operations = useOperationsStore((s) => s.operations)
-  const fetchOps = useOperationsStore((s) => s.fetch)
   const templatesVersion = useTableVersion('case_templates')
   const [templates, setTemplates] = useState<CaseTemplateRow[]>([])
   const [managerOpen, setManagerOpen] = useState(false)
@@ -67,7 +66,42 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
       setTemplates((await list('case_templates', { order: 'sort_order' })).filter((t) => t.active !== false))
     } catch { setTemplates([]) }
   }
-  useEffect(() => { if (open) queueMicrotask(() => { setForm(initial); setChecklist([]); setFollowupDays(null); void fetchOps(); void fetchTemplates() }) }, [open, initial, fetchOps, templatesVersion])
+  useEffect(() => { if (open) queueMicrotask(() => { setForm(initial); setChecklist([]); setFollowupDays(null); void fetchTemplates() }) }, [open, initial, templatesVersion])
+
+  // ── Bounded picker plumbing ───────────────────────────────────────────────
+  // Lead labels come from the shared roster cache (warm it once); the current
+  // operation's name resolves via ONE in:{id} lookup instead of the old
+  // whole-shelf preload. FK guard: a slow/failed lookup keeps the id under a
+  // placeholder label — saving never nulls an assignment the editor didn't
+  // touch.
+  const rosterProfiles = useProfilesStore((s) => s.profiles)
+  const rosterLoaded = useProfilesStore((s) => s.loaded)
+  useEffect(() => { if (open && !rosterLoaded) void useProfilesStore.getState().fetch() }, [open, rosterLoaded])
+  const leadValue = useMemo<EntityHit | null>(() => {
+    if (!form.lead_detective_id) return null
+    const p = rosterProfiles.find((x) => x.id === form.lead_detective_id)
+    return { id: form.lead_detective_id, label: p?.display_name || '(assigned officer)', thumbUrl: p?.avatar_url ?? null }
+  }, [form.lead_detective_id, rosterProfiles])
+  // Operation names seen so far (the record's own + any picked in-session).
+  const [opNames, setOpNames] = useState<Record<string, string>>({})
+  useEffect(() => {
+    const oid = record?.operation_id
+    if (!open || !oid) return
+    let live = true
+    void list('operations', { select: 'id,name', in: { id: [oid] } })
+      .then((r) => {
+        const row = (r as unknown as { id: string; name: string }[])[0]
+        if (live && row) setOpNames((m) => ({ ...m, [row.id]: row.name }))
+      })
+      .catch(() => { /* keep the id under its placeholder */ })
+    return () => { live = false }
+  }, [open, record])
+  const opValue = useMemo<EntityHit | null>(
+    () => form.operation_id
+      ? { id: form.operation_id, label: opNames[form.operation_id] ?? '(current operation)' }
+      : null,
+    [form.operation_id, opNames],
+  )
   // Auto-continue the bureau's established case-number series (e.g. MCB-4000034)
   // instead of leaving the field blank. New cases only; server-side generator so
   // it always reflects live data. We fill only when the field is empty or still
@@ -197,18 +231,29 @@ export function CaseModal({ open, record, onClose, onSaved }: Props) {
           <label className="text-sm text-slate-300">Area
             <input value={form.area} onChange={(e) => set('area', e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white" />
           </label>
-          <label className="text-sm text-slate-300">Lead detective
-            <select value={form.lead_detective_id} disabled={!isCommand} onChange={(e) => set('lead_detective_id', e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white disabled:opacity-70">
-              <option value="">Unassigned</option>
-              {activeProfiles().map((p) => <option key={p.id} value={p.id}>{officerName(p.id) || p.display_name}</option>)}
-            </select>
-          </label>
-          <label className="text-sm text-slate-300">Operation
-            <select value={form.operation_id} onChange={(e) => set('operation_id', e.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white">
-              <option value="">None</option>
-              {operations.map((op) => <option key={op.id} value={op.id}>{op.name}</option>)}
-            </select>
-          </label>
+          {/* Assignment authority unchanged: only command may change the lead
+              (RLS re-decides server-side) — the picker renders disabled with
+              the current assignee shown. */}
+          <RecordSearchPicker<EntityHit>
+            label="Lead detective"
+            placeholder={isCommand ? 'Search name, badge or bureau…' : 'Unassigned'}
+            disabled={!isCommand}
+            value={leadValue}
+            onChange={(v) => set('lead_detective_id', v?.id ?? '')}
+            search={async (q) => searchMemberHits(q)}
+            getThumb={(h) => h.thumbUrl}
+          />
+          <RecordSearchPicker<EntityHit>
+            label="Operation"
+            placeholder="Search operations…"
+            value={opValue}
+            onChange={(v) => {
+              if (v) setOpNames((m) => ({ ...m, [v.id]: v.label }))
+              set('operation_id', v?.id ?? '')
+            }}
+            search={async (q) => searchOperationHits(q)}
+            peekType="operation"
+          />
           <label className="md:col-span-2 text-sm text-slate-300">Summary
             <textarea value={form.summary} onChange={(e) => set('summary', e.target.value)} rows={5} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-white" />
           </label>

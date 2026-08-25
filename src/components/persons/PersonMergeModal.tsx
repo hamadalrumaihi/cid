@@ -1,19 +1,23 @@
 'use client'
 
-/** Review duplicates + merge (command-only execution). Duplicate clusters are
- *  surfaced by the pure `findDuplicatePersons` detector with the exact signals
- *  that flagged them; merging goes through the server-authoritative
- *  `person_merge` RPC (command-gated, tombstones the victims — nothing is ever
- *  deleted). Non-command members can review clusters but see no merge
- *  controls. */
-import { useEffect, useMemo, useState } from 'react'
+/** Review duplicates + merge (command-only execution). Candidate duplicates
+ *  are picked from the registry through the bounded RecordSearchPicker
+ *  (searchPersonHits — indexed, RLS-scoped, merged tombstones filtered); the
+ *  pure `findDuplicatePersons` detector then reports exactly which signals the
+ *  picked records share with this profile. Merging goes through the
+ *  server-authoritative `person_merge` RPC (command-gated, tombstones the
+ *  victims — nothing is ever deleted). Non-command members can compare records
+ *  but see no merge controls. */
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { countRows, list, rpc } from '@/lib/db'
+import { searchPersonHits, type EntityHit } from '@/lib/entitySearch'
 import { fmtDate } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Field, Textarea } from '@/components/ui/Field'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
+import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import { humanize } from '@/components/gangs/gangIntel'
 import {
   MERGE_REPOINT_TABLES, findDuplicatePersons, planPersonMerge, type DuplicateCluster,
@@ -71,13 +75,17 @@ export function PersonDuplicatesModal({ person, isCommand, onClose, onMerged }: 
   onClose: () => void
   onMerged: (survivorId: string) => void
 }) {
-  const [pool, setPool] = useState<PersonRow[] | null>(null)
-  const [linkRows, setLinkRows] = useState<{
-    vehicles: Array<{ person_id: string; vehicle_id: string }>
-    places: Array<{ person_id: string; place_id: string }>
-  }>({ vehicles: [], places: [] })
+  const [picked, setPicked] = useState<EntityHit[]>([])
+  const [hydrated, setHydrated] = useState<{
+    key: string
+    rows: PersonRow[]
+    links: {
+      vehicles: Array<{ person_id: string; vehicle_id: string }>
+      places: Array<{ person_id: string; place_id: string }>
+    }
+  } | null>(null)
   const [survivorId, setSurvivorId] = useState(person.id)
-  /** null = "default selection" (everyone in the cluster except the survivor);
+  /** null = "default selection" (everyone picked except the survivor);
    *  a Set once the reviewer has touched the checkboxes. */
   const [victimSel, setVictimSel] = useState<ReadonlySet<string> | null>(null)
   const [countsState, setCountsState] = useState<{ key: string; data: Record<string, Record<string, number>> } | null>(null)
@@ -85,40 +93,51 @@ export function PersonDuplicatesModal({ person, isCommand, onClose, onMerged }: 
   const [step, setStep] = useState<'review' | 'confirm'>('review')
   const [busy, setBusy] = useState(false)
 
-  // The registry pool + shared-link rows are fetched on open only (never as
-  // part of the profile load) — duplicate detection needs the full pool.
+  // Bounded, RLS-scoped registry search — the source person stays out of the
+  // results; merged tombstones are already filtered by searchPersonHits.
+  const exclude = useMemo(() => new Set([person.id]), [person.id])
+  const search = useCallback((q: string) => searchPersonHits(q, { exclude }), [exclude])
+
+  // Hydrate the picked candidates + their shared-link rows for the signal
+  // detector — bounded in:{id} lookups on just the compared records, keyed by
+  // the picked-id set so a stale response never renders.
+  const pickedKey = picked.map((p) => p.id).join(',')
   useEffect(() => {
+    if (!pickedKey) return
     let live = true
+    const ids = pickedKey.split(',')
+    const compared = [person.id, ...ids]
     void Promise.all([
-      list('persons', { order: 'name' }).catch(() => [] as PersonRow[]),
-      list('person_vehicles', { select: 'person_id,vehicle_id' })
+      list('persons', { in: { id: ids } }).catch(() => [] as PersonRow[]),
+      list('person_vehicles', { select: 'person_id,vehicle_id', in: { person_id: compared } })
         .then((r) => r as unknown as Array<{ person_id: string; vehicle_id: string }>).catch(() => []),
-      list('person_places', { select: 'person_id,place_id' })
+      list('person_places', { select: 'person_id,place_id', in: { person_id: compared } })
         .then((r) => r as unknown as Array<{ person_id: string; place_id: string }>).catch(() => []),
     ]).then(([rows, vehicles, places]) => {
       if (!live) return
-      setPool(rows.filter((r) => r.lifecycle !== 'merged'))
-      setLinkRows({ vehicles, places })
+      setHydrated({ key: pickedKey, rows: rows.filter((r) => r.lifecycle !== 'merged'), links: { vehicles, places } })
     })
     return () => { live = false }
-  }, [])
-
-  // Only clusters containing THIS person are relevant here.
-  const cluster: DuplicateCluster | null = useMemo(() => {
-    if (!pool) return null
-    return findDuplicatePersons(pool, linkRows).find((c) => c.ids.includes(person.id)) ?? null
-  }, [pool, linkRows, person.id])
+  }, [pickedKey, person.id])
+  const hyd = hydrated && hydrated.key === pickedKey ? hydrated : null
 
   const members: PersonRow[] = useMemo(() => {
-    if (!pool || !cluster) return []
-    const byId = new Map(pool.map((p) => [p.id, p]))
-    return cluster.ids.map((cid) => byId.get(cid)).filter((x): x is PersonRow => !!x)
-  }, [pool, cluster])
+    if (!hyd) return [person]
+    const byId = new Map(hyd.rows.map((p) => [p.id, p]))
+    return [person, ...pickedKey.split(',').map((pid) => byId.get(pid)).filter((x): x is PersonRow => !!x)]
+  }, [hyd, pickedKey, person])
 
-  // Default: current person survives, every other cluster member is a victim.
+  // Advisory only — which signals (if any) flag the compared records as
+  // likely duplicates. Absence of a cluster never blocks a deliberate merge.
+  const cluster: DuplicateCluster | null = useMemo(() => {
+    if (!hyd || members.length < 2) return null
+    return findDuplicatePersons(members, hyd.links).find((c) => c.ids.includes(person.id)) ?? null
+  }, [hyd, members, person.id])
+
+  // Default: current person survives, every other picked record is a victim.
   const victimIds: ReadonlySet<string> = useMemo(
-    () => victimSel ?? new Set((cluster?.ids ?? []).filter((cid) => cid !== survivorId)),
-    [victimSel, cluster, survivorId],
+    () => victimSel ?? new Set(members.map((m) => m.id).filter((mid) => mid !== survivorId)),
+    [victimSel, members, survivorId],
   )
 
   const survivor = members.find((m) => m.id === survivorId) ?? person
@@ -167,31 +186,56 @@ export function PersonDuplicatesModal({ person, isCommand, onClose, onMerged }: 
   }
 
   return (
-    <Modal open wide onClose={onClose} dirty={() => !!reason.trim()}>
+    <Modal open wide onClose={onClose} dirty={() => !!reason.trim() || picked.length > 0}>
       <div className="max-h-[85vh] overflow-y-auto p-6">
         <ModalHeader title="Review duplicates" onClose={onClose} />
 
-        {pool === null ? (
-          <p className="text-sm text-slate-400">Scanning the registry for likely duplicates…</p>
-        ) : !cluster ? (
-          <p className="text-sm text-slate-400">
-            No likely duplicates found for <span className="text-white">{person.name}</span>. Detection compares normalized names, DOBs, phones, mugshots, aliases and shared vehicle/place links — it never merges anything by itself.
-          </p>
-        ) : (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
-              <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-amber-300/80">
-                Why these records were flagged
-                <Badge tint={cluster.confidence === 'strong' ? 'bg-rose-500/15 text-rose-300' : 'bg-amber-500/15 text-amber-300'} className="uppercase">
-                  {cluster.confidence}
-                </Badge>
+        <div className="space-y-4">
+          <RecordSearchPicker<EntityHit>
+            multiple
+            label={`Suspected duplicates of ${person.name}`}
+            hint="Bounded registry search — merged records never appear. Detection compares normalized names, DOBs, phones, mugshots, aliases and shared vehicle/place links; it never merges anything by itself."
+            values={picked}
+            onChangeMany={(v) => {
+              setPicked(v)
+              setVictimSel(null)
+              setStep('review')
+              // A removed pick can orphan a chosen survivor — fall back home.
+              if (survivorId !== person.id && !v.some((x) => x.id === survivorId)) setSurvivorId(person.id)
+            }}
+            search={search}
+            placeholder="Search name, alias, phone…"
+            getThumb={(h) => h.thumbUrl}
+            peekType="person"
+          />
+
+          {picked.length === 0 ? (
+            <p className="text-sm text-slate-400">
+              Search the registry for the record(s) you believe duplicate <span className="text-white">{person.name}</span>, then compare them side by side before merging.
+            </p>
+          ) : hyd === null ? (
+            <p className="text-sm text-slate-400">Loading the picked records for comparison…</p>
+          ) : (
+            <>
+            {cluster ? (
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-amber-300/80">
+                  Why these records look like duplicates
+                  <Badge tint={cluster.confidence === 'strong' ? 'bg-rose-500/15 text-rose-300' : 'bg-amber-500/15 text-amber-300'} className="uppercase">
+                    {cluster.confidence}
+                  </Badge>
+                </p>
+                <ul className="mt-1 space-y-0.5">
+                  {cluster.signals.map((s, i) => (
+                    <li key={i} className="text-xs text-slate-300">• {s.detail}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-xs text-slate-400">
+                No automatic duplicate signals between these records — verify they are the same person before merging.
               </p>
-              <ul className="mt-1 space-y-0.5">
-                {cluster.signals.map((s, i) => (
-                  <li key={i} className="text-xs text-slate-300">• {s.detail}</li>
-                ))}
-              </ul>
-            </div>
+            )}
 
             <div className="space-y-1.5">
               {members.map((m) => {
@@ -230,7 +274,7 @@ export function PersonDuplicatesModal({ person, isCommand, onClose, onMerged }: 
 
             {!isCommand ? (
               <p className="rounded-lg border border-white/5 bg-ink-900 px-3 py-2 text-xs text-slate-400">
-                Merging is restricted to command (Bureau Lead or higher). Flag this cluster to your lead if these are the same person.
+                Merging is restricted to command (Bureau Lead or higher). Flag these records to your lead if they are the same person.
               </p>
             ) : !victims.length ? (
               <p className="text-xs text-slate-400">Tick at least one record to merge into the survivor.</p>
@@ -294,8 +338,9 @@ export function PersonDuplicatesModal({ person, isCommand, onClose, onMerged }: 
                 )}
               </>
             )}
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
     </Modal>
   )

@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
 import { deleteWithUndo, ilikeAny, insert, list, update, withRetry } from '@/lib/db'
+import { searchGangHits, searchPersonHits, type EntityHit } from '@/lib/entitySearch'
 import { useAuth } from '@/lib/auth'
 import { useTableVersion } from '@/lib/realtime'
 import { toast } from '@/lib/toast'
@@ -23,12 +24,13 @@ import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { inputCls, labelCls } from '@/components/ui/Field'
 import { WatchButton } from '@/components/cases/WatchButton'
 import { DuplicateMatchNotice, type DuplicateMatch } from '@/components/shared/DuplicateMatches'
+import { RecordSearchPicker } from '@/components/shared/RecordSearchPicker'
 import { useToolNav } from '@/components/tools/useToolNav'
 import { VehicleProfile } from './VehicleProfile'
 
 type VehicleRow = Tables<'vehicles'>
-export interface PersonOption { id: string; name: string }
-export interface GangOption { id: string; name: string }
+interface PersonOption { id: string; name: string }
+interface GangOption { id: string; name: string }
 interface CaseOption { id: string; case_number: string }
 
 export function VehiclesView() {
@@ -54,12 +56,17 @@ export function VehiclesView() {
     setLoading(true)
     setErr(null)
     try {
-      const [v, p, g] = await Promise.all([
-        withRetry(() => list('vehicles', { order: 'updated_at', ascending: false })),
-        list('persons', { select: 'id,name', order: 'name' }).catch(() => [] as Tables<'persons'>[]),
-        list('gangs', { select: 'id,name', order: 'name' }).catch(() => [] as Tables<'gangs'>[]),
-      ])
+      const v = await withRetry(() => list('vehicles', { order: 'updated_at', ascending: false }))
       setVehicles(v)
+      // Owner/gang names for the cards — bounded in:{id} lookups on just the
+      // referenced ids (never a whole-registry load), degrading to id-less
+      // chips on failure exactly like the old best-effort option fetches.
+      const ownerIds = [...new Set(v.map((x) => x.owner_id).filter((x): x is string => !!x))]
+      const gangIds = [...new Set(v.map((x) => x.gang_id).filter((x): x is string => !!x))]
+      const [p, g] = await Promise.all([
+        ownerIds.length ? list('persons', { select: 'id,name', in: { id: ownerIds } }).catch(() => []) : Promise.resolve([]),
+        gangIds.length ? list('gangs', { select: 'id,name', in: { id: gangIds } }).catch(() => []) : Promise.resolve([]),
+      ])
       setPersons(p as unknown as PersonOption[])
       setGangs(g as unknown as GangOption[])
     } catch (e) {
@@ -124,7 +131,7 @@ export function VehiclesView() {
         />
       </Card>
 
-      <CrossrefPanel vehicles={vehicles} persons={persons} ownerName={ownerName} />
+      <CrossrefPanel vehicles={vehicles} ownerName={ownerName} />
 
       {loading ? (
         <CardGridSkeleton cols="sm:grid-cols-2 xl:grid-cols-3" />
@@ -173,8 +180,6 @@ export function VehiclesView() {
       {editor && (
         <VehicleModal
           record={editor.record}
-          persons={persons}
-          gangs={gangs}
           onClose={() => setEditor(null)}
           onSaved={() => { setEditor(null); void refresh() }}
         />
@@ -186,20 +191,45 @@ export function VehiclesView() {
 /* ---- Create / edit modal ------------------------------------------------
    Exported so VehicleProfile's Edit action reuses this exact definition. */
 
-export function VehicleModal({ record, persons, gangs, onClose, onSaved }: {
+export function VehicleModal({ record, onClose, onSaved }: {
   record: VehicleRow | null
-  persons: PersonOption[]
-  gangs: GangOption[]
   onClose: () => void
   onSaved: () => void
 }) {
   const [plate, setPlate] = useState(record?.plate ?? '')
   const [model, setModel] = useState(record?.model ?? '')
   const [color, setColor] = useState(record?.color ?? '')
-  const [ownerId, setOwnerId] = useState(record?.owner_id ?? '')
-  const [gangId, setGangId] = useState(record?.gang_id ?? '')
+  // FK-preservation guard (vanilla vehicles.js, picker edition): while editing,
+  // the current owner/gang ids are seeded as placeholder selections
+  // IMMEDIATELY — the bounded lookup below only upgrades their labels. A
+  // failed or slow lookup keeps the id in place, so an unrelated save can
+  // never silently null an existing link.
+  const [owner, setOwner] = useState<EntityHit | null>(
+    record?.owner_id ? { id: record.owner_id, label: 'Current owner' } : null)
+  const [gang, setGang] = useState<EntityHit | null>(
+    record?.gang_id ? { id: record.gang_id, label: 'Current gang' } : null)
   const [notes, setNotes] = useState(record?.notes ?? '')
   const [busy, setBusy] = useState(false)
+
+  // Resolve the current owner/gang labels — one bounded in:{id} lookup per
+  // table, best-effort; only touches a selection still pointing at that id.
+  useEffect(() => {
+    const pid = record?.owner_id
+    const gid = record?.gang_id
+    if (!pid && !gid) return
+    let live = true
+    void Promise.all([
+      pid ? list('persons', { select: 'id,name', in: { id: [pid] } }).catch(() => []) : Promise.resolve([]),
+      gid ? list('gangs', { select: 'id,name', in: { id: [gid] } }).catch(() => []) : Promise.resolve([]),
+    ]).then(([p, g]) => {
+      if (!live) return
+      const pr = (p as unknown as PersonOption[])[0]
+      const gr = (g as unknown as GangOption[])[0]
+      if (pr) setOwner((cur) => (cur && cur.id === pr.id ? { ...cur, label: pr.name || 'Person' } : cur))
+      if (gr) setGang((cur) => (cur && cur.id === gr.id ? { ...cur, label: gr.name } : cur))
+    })
+    return () => { live = false }
+  }, [record])
 
   // Duplicate hint at create time — an exact normalized-plate match against a
   // bounded ilike lookup. Advisory only (the UNIQUE plate key still guards).
@@ -222,21 +252,15 @@ export function VehicleModal({ record, persons, gangs, onClose, onSaved }: {
     return () => { live = false; window.clearTimeout(t) }
   }, [plate, record])
 
-  // FK-preservation guard (vanilla vehicles.js): if the linked owner/gang
-  // isn't in the loaded options (fetch failed / stale), keep a synthetic
-  // option so an unrelated save can't silently null the link.
-  const ownerKnown = !record?.owner_id || persons.some((p) => p.id === record.owner_id)
-  const gangKnown = !record?.gang_id || gangs.some((g) => g.id === record.gang_id)
-
   const dirty = () =>
     plate !== (record?.plate ?? '') || model !== (record?.model ?? '') || color !== (record?.color ?? '') ||
-    ownerId !== (record?.owner_id ?? '') || gangId !== (record?.gang_id ?? '') || notes !== (record?.notes ?? '')
+    (owner?.id ?? '') !== (record?.owner_id ?? '') || (gang?.id ?? '') !== (record?.gang_id ?? '') || notes !== (record?.notes ?? '')
 
   const save = async () => {
     const p = plate.trim().toUpperCase()
     if (!p) { toast('Plate is required.', 'warn'); return }
     setBusy(true)
-    const payload = { plate: p, model: model.trim() || null, color: color.trim() || null, owner_id: ownerId || null, gang_id: gangId || null, notes: notes.trim() || null }
+    const payload = { plate: p, model: model.trim() || null, color: color.trim() || null, owner_id: owner?.id ?? null, gang_id: gang?.id ?? null, notes: notes.trim() || null }
     const res = record ? await update('vehicles', record.id, payload) : await insert('vehicles', payload)
     setBusy(false)
     if (res.error) {
@@ -251,39 +275,38 @@ export function VehicleModal({ record, persons, gangs, onClose, onSaved }: {
     <Modal open onClose={onClose} dirty={dirty}>
       <ModalHeader title={record ? 'Edit Vehicle' : 'New Vehicle'} onClose={onClose} />
       <div className="space-y-3">
+        <div>
+          <label htmlFor="vehicle-plate" className={labelCls}>Plate *</label>
+          <input id="vehicle-plate" value={plate} onChange={(e) => setPlate(e.target.value)} className={`${inputCls} font-mono uppercase tracking-widest`} />
+          {!record && <DuplicateMatchNotice matches={dupes} />}
+        </div>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="vehicle-plate" className={labelCls}>Plate *</label>
-            <input id="vehicle-plate" value={plate} onChange={(e) => setPlate(e.target.value)} className={`${inputCls} font-mono uppercase tracking-widest`} />
-            {!record && <DuplicateMatchNotice matches={dupes} />}
-          </div>
           <div>
             <label htmlFor="vehicle-model" className={labelCls}>Model</label>
             <input id="vehicle-model" value={model} onChange={(e) => setModel(e.target.value)} className={inputCls} />
           </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="vehicle-color" className={labelCls}>Color</label>
             <input id="vehicle-color" value={color} onChange={(e) => setColor(e.target.value)} className={inputCls} />
           </div>
-          <div>
-            <label htmlFor="vehicle-owner" className={labelCls}>Registered Owner</label>
-            <select id="vehicle-owner" value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={inputCls}>
-              <option value="">— unknown —</option>
-              {!ownerKnown && record?.owner_id && <option value={record.owner_id}>(current owner — loading…)</option>}
-              {persons.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
         </div>
-        <div>
-          <label htmlFor="vehicle-gang" className={labelCls}>Gang Association</label>
-          <select id="vehicle-gang" value={gangId} onChange={(e) => setGangId(e.target.value)} className={inputCls}>
-            <option value="">— none —</option>
-            {!gangKnown && record?.gang_id && <option value={record.gang_id}>(current gang — loading…)</option>}
-            {gangs.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-          </select>
-        </div>
+        <RecordSearchPicker<EntityHit>
+          label="Registered Owner"
+          value={owner}
+          onChange={setOwner}
+          search={searchPersonHits}
+          placeholder="Search name, alias, phone… (blank = unknown)"
+          getThumb={(h) => h.thumbUrl}
+          peekType="person"
+        />
+        <RecordSearchPicker<EntityHit>
+          label="Gang Association"
+          value={gang}
+          onChange={setGang}
+          search={searchGangHits}
+          placeholder="Search gang name or alias… (blank = none)"
+          peekType="gang"
+        />
         <div>
           <label htmlFor="vehicle-notes" className={labelCls}>Notes</label>
           <textarea id="vehicle-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className={inputCls} />
@@ -306,9 +329,8 @@ export function VehicleModal({ record, persons, gangs, onClose, onSaved }: {
 
 interface CrossrefAlert { icon: React.ReactNode; label: string; kind: string; cases: string[] }
 
-function CrossrefPanel({ vehicles, persons, ownerName }: {
+function CrossrefPanel({ vehicles, ownerName }: {
   vehicles: VehicleRow[]
-  persons: PersonOption[]
   ownerName: (id: string | null) => string | null
 }) {
   const { state } = useAuth()
@@ -370,14 +392,23 @@ function CrossrefPanel({ vehicles, persons, ownerName }: {
         }
       }
 
-      // Persons linked (Intel tab) to 2+ cases.
+      // Persons linked (Intel tab) to 2+ cases. Names resolve via one bounded
+      // in:{id} lookup on just the flagged ids — best-effort, never the
+      // whole registry.
       const personCases: Record<string, Set<string>> = {}
       for (const l of links) {
         if (l.kind === 'person') (personCases[l.ref_id] = personCases[l.ref_id] ?? new Set()).add(l.case_id)
       }
-      for (const [pid, s] of Object.entries(personCases)) {
-        if (s.size < 2) continue
-        found.push({ icon: <PersonIcon size={13} className="inline align-[-2px]" />, label: persons.find((p) => p.id === pid)?.name ?? 'Linked person', kind: 'Person in multiple cases', cases: [...s] })
+      const flagged = Object.entries(personCases).filter(([, s]) => s.size >= 2)
+      const personNames = new Map<string, string>()
+      if (flagged.length) {
+        const rows = (await list('persons', { select: 'id,name', in: { id: flagged.map(([pid]) => pid) } })
+          .catch(() => [])) as unknown as PersonOption[]
+        for (const r of rows) personNames.set(r.id, r.name)
+      }
+      if (cancelled) return
+      for (const [pid, s] of flagged) {
+        found.push({ icon: <PersonIcon size={13} className="inline align-[-2px]" />, label: personNames.get(pid) ?? 'Linked person', kind: 'Person in multiple cases', cases: [...s] })
       }
 
       setAlerts(found)
@@ -385,7 +416,7 @@ function CrossrefPanel({ vehicles, persons, ownerName }: {
     }, 0)
     return () => { cancelled = true; window.clearTimeout(t) }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- rescan when data or retry changes
-  }, [state, vehicles, persons, retry])
+  }, [state, vehicles, retry])
 
   if (state !== 'in') return null
   if (scan === 'loading') return <p className="mb-6 text-sm text-slate-400">Scanning for cross-case matches…</p>
