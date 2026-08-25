@@ -10,10 +10,20 @@ widest:
 | Component state (`useState`) | Screen-local rows, filters, modal state, form fields (modals mount fresh per open) | every view |
 | Derived state (`useMemo`) | Filtering, grouping, chart buckets, graph building | big views |
 | React Context | Two: `AuthProvider` (session/profile/capabilities) and `ToolsWorkspaceContext` (the Investigative Tools workspace — open tabs, active key, open/close/dirty ops; `useToolsWorkspace()` returns null outside `/tools` so hosted views no-op) | `lib/auth.tsx`, `components/tools/ToolsWorkspaceContext.tsx` |
-| zustand stores | Toasts, dialogs, realtime versions, profiles cache, operations cache, watchlist — singletons that non-React code must reach | `lib/*`, `ui/dialog` |
-| localStorage (`Store`) | Device preferences + legacy-app continuity, ONE JSON blob (`cid-portal-v3`) | `lib/store.ts` |
+| zustand stores | Toasts, dialogs, realtime versions, profiles cache, operations cache, watchlist, pins, draft save-state — singletons that non-React code must reach | `lib/*`, `ui/dialog` |
+| localStorage (`Store`) | Device preferences + legacy-app continuity, ONE JSON blob (`cid-portal-v3`); includes the ids-only recents trail (`lib/recents.ts`) | `lib/store.ts` |
+| localStorage (`Drafts`) | Draft mirror keys (`cid-draft:…`) — `lib/userDrafts` mirrors per-user (`u:<uid>:<key>`) before every server save; legacy shared keys survive for the legal stash | `lib/drafts.ts` |
 | sessionStorage | Investigative Tools open tabs, per signed-in user, **ids only** (`cid-tools-workspace:<uid>`) — titles are re-fetched RLS-scoped on restore, invisible rows close silently | `components/tools/ToolsView.tsx` |
+| **Per-user DB state** | Cross-device personal state, owner-only RLS, never shared data: `user_pins` (pinned records, ids only — `lib/pins.ts`), `user_drafts` (autosaved drafts, 64 KiB cap — `lib/userDrafts.ts`), `user_prefs` (small keyed jsonb: saved views `views:<section>` — `lib/savedViews.ts`; notification mutes `notif_muted` — `lib/notifications.ts`) | Supabase |
 | The database | ALL shared data — every screen refetches on mount and on realtime bumps | Supabase |
+
+**Personalization rule**: anything per-user that should follow the member
+across devices goes in one of the three `user_*` tables above (owner-only
+RLS, no audit triggers, no realtime, size-capped jsonb); anything genuinely
+device-local goes in the `Store` blob. Ids only for anything referencing
+records — consumers re-resolve titles through the viewer's RLS at render, so
+lost access hides entries instead of leaking stale labels. Don't invent a
+fourth mechanism.
 
 ## The refresh idiom (memorize — it's in ~30 files)
 

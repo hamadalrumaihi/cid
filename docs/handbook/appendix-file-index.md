@@ -30,13 +30,16 @@ One line per important file. Risk tags: ⚠ = understand before editing.
 | `db.ts` | ⚠ THE data layer: list/insert/update/remove/rpc/deleteWithUndo/withRetry |
 | `docx.ts` | Dependency-free OOXML writer (byte-fragile ZIP) |
 | `deadlines.ts` | Shared deadline engine (v1.14) — feeds `ui/DeadlineChip`; `justice.ts` delegates to it |
-| `drafts.ts` | Never-lose-work localStorage stash — reports, chat, and (v1.14) the legal create/edit forms |
+| `drafts.ts` | localStorage draft primitive (`cid-draft:` keys) — now mostly `userDrafts`' local mirror; the legal wizard's stash keeps the legacy shared keys |
+| `userDrafts.ts` | DB-backed never-lose-work drafts (`user_drafts`, owner-only RLS, cross-device): debounced upsert, per-user local mirror, 60KB guard, offline degradation; feeds `ui/SaveState` |
+| `entityPreview.ts` | Lite RLS-scoped record projections + linked-record counts for `ui/RecordPeek` |
 | `fivemanage.ts` | Media upload (multipart → hosted URL) |
 | `format.ts` | timeAgo/todayISO/fmtUSD/slug/downloadBlob/copyText |
 | `forms.ts` | 8 report schemas + warrant helpers + finalize-gap check |
 | `markdown.tsx` | Safe mini-Markdown → React (no innerHTML, ever) |
 | `nav.ts` | ⚠ PAGE_META / categories / labels — the nav contract |
 | `notify.ts` / `notifText.ts` | Notification write (RPC, unforgeable) / render vocabulary |
+| `notifications.ts` | Shared notification actions — mark-read, mark-all (one conditional update), accurate unread count, mute prefs (`user_prefs` key `notif_muted`; only `OPTIONAL_NOTIF_CATEGORIES` are mutable) |
 | `operations.ts` | Operations zustand cache + status colors |
 | `packet.ts` / `pdf.tsx` | Case-packet gathering / court-styled PDF renderer (dynamic import) |
 | `penal.ts` | Static penal code (162 charges) + calculators |

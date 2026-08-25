@@ -68,9 +68,15 @@ learn steps 1–6 of the [Learning Path](20-learning-path.md) first. Safe
 starter areas: `PenalView`, `GuideView`, any registry view.
 
 **Where do I put temporary/draft user input?**
-Modals guard dirty state automatically. For persistence there's
-`lib/drafts.ts` — currently unwired (zero importers) — or the `Store`
-blob for preferences. Don't invent a third mechanism.
+Modals guard dirty state automatically. For persistence use
+`lib/userDrafts.ts` — DB-backed (`user_drafts`, owner-only RLS,
+cross-device) with a per-user localStorage mirror and the `ui/SaveState`
+chip; `lib/drafts.ts` remains only as its local-mirror primitive (and the
+legal wizard's deliberate device-local stash). Per-user *preferences* go in
+`user_prefs` (`lib/savedViews.ts` shows the pattern) when they should follow
+the member across devices, or the `Store` blob when they're genuinely
+device-local. Per-user record bookmarks are `user_pins` (`lib/pins.ts`).
+Don't invent another mechanism.
 
 **How do I test realtime behavior?**
 Two browsers (or one normal + one incognito) signed in as different

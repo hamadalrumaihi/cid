@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/Badge'
 import { useOperationsStore } from '@/lib/operations'
 import { caseJointInfo, type OpCaseLinkRow } from '@/lib/opsJoint'
 import { assessCase, ricoTabVisible } from '@/lib/caseWorkflow'
+import { caseHealth } from '@/lib/caseHealth'
 import { normalizeCaseTab } from '@/lib/caseLinks'
 import type { Tables } from '@/lib/database.types'
 import type { LegalRequest } from '@/lib/justice'
@@ -40,6 +41,7 @@ import { useNarrow } from '@/lib/useNarrow'
 import { confirmCaseClose, enableRicoSession, ricoSessionEnabled } from './caseUtils'
 import { CaseModal } from './CaseModal'
 import { CaseCommandHeader } from './CaseCommandHeader'
+import { CaseHealthRow } from './CaseHealthRow'
 import { ReassignBureauModal } from './ReassignBureauModal'
 import { ResponsibleBureauModal } from './ResponsibleBureauModal'
 import { CaseSectionSwitcher } from './CaseSectionSwitcher'
@@ -75,8 +77,9 @@ type TabId = CaseTabId
 const TAB_LABELS = CASE_TAB_LABELS
 const TAB_GROUPS = CASE_TAB_GROUPS
 
-/** Slim media projection — enough for the metric count + Overview recap. */
-type WfMediaRow = Pick<Tables<'media'>, 'id' | 'created_at' | 'archived_at'>
+/** Slim media projection — the metric count + Overview recap, plus the
+ *  title/category the health advisory reads (undescribed-media flag). */
+type WfMediaRow = Pick<Tables<'media'>, 'id' | 'created_at' | 'archived_at' | 'title' | 'category'>
 
 /** The case-scoped workflow snapshot — fetched ONCE here and shared with the
  *  command header, metric strip AND OverviewTab (which used to run the same
@@ -264,7 +267,7 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
         // Legal is read-scoped by RLS; a failure must not sink the header.
         // Narrow projection — the Legal tab + cards read the same columns.
         list('legal_requests', { select: LEGAL_LIST_COLS, eq: { case_id: id }, order: 'created_at', ascending: false }).catch(() => [] as LegalRequest[]),
-        list('media', { select: 'id,created_at,archived_at', eq: { case_id: id } })
+        list('media', { select: 'id,created_at,archived_at,title,category', eq: { case_id: id } })
           .then((r) => r as unknown as WfMediaRow[]),
         list('case_blockers', { eq: { case_id: id }, order: 'created_at', ascending: false }).catch(() => [] as BlockerRow[]),
         // Cheap HEAD count — has this case ever grown a RICO tracker?
