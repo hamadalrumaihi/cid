@@ -172,7 +172,7 @@ export function SignoffTab({ c }: { c: CaseRow }) {
         <div className="mt-4 flex flex-wrap gap-2">
           {owner && <button onClick={() => void callRpc('submit')} disabled={busy} className="rounded-lg bg-badge-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-60">Submit / Resubmit</button>}
           {owner && c.signoff_status === 'approved_deputy' && <><Button variant="success" disabled={busy} onClick={() => void callRpc('complete')}>Complete at Deputy</Button><Button variant="warn" disabled={busy} onClick={() => void callRpc('escalate')}>Escalate</Button></>}
-          {reviewer && <><Button variant="success" disabled={busy} onClick={() => void callRpc('approve')}>Approve</Button><button onClick={() => void callRpc('changes')} disabled={busy} className="rounded-lg bg-orange-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-60">Changes</button><button onClick={() => void callRpc('deny')} disabled={busy} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-60">Deny</button></>}
+          {reviewer && <><Button variant="success" disabled={busy} onClick={() => void callRpc('approve')}>Approve</Button><Button variant="warn" disabled={busy} onClick={() => void callRpc('changes')}>Changes</Button><Button variant="danger" disabled={busy} onClick={() => void callRpc('deny')}>Deny</Button></>}
         </div>
         {(reviewer || owner) && <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Decision note" className="mt-3 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white" />}
         {canOverride && (
