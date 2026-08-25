@@ -81,9 +81,9 @@ export function PersonnelView() {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">Active Roster</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {state !== 'in' ? (
-            <p className="text-sm text-slate-500 sm:col-span-2 xl:col-span-3">Sign in to view the roster.</p>
+            <p className="text-sm text-slate-400 sm:col-span-2 xl:col-span-3">Sign in to view the roster.</p>
           ) : !roster.length ? (
-            <p className="text-sm text-slate-500 sm:col-span-2 xl:col-span-3">No officers on the roster yet.</p>
+            <p className="text-sm text-slate-400 sm:col-span-2 xl:col-span-3">No officers on the roster yet.</p>
           ) : (
             <>
               {visible.map((p) => (

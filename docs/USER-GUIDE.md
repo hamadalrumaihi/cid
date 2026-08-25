@@ -132,11 +132,13 @@ A case carries four separate dials — don't conflate them:
 - **Investigative stage** — a deliberate progress marker moved with a reason: Intake → Active Investigation → Legal Process → Enforcement Ready → Pending Closure → Closed.
 - **Workflow** — where the case sits in sign-off (investigation, awaiting sign-off, returned, closed).
 
-The case header shows all of them, plus blockers, overdue items and **one recommended next action**. Rarely-used and administrative actions live in the header's **Actions** menu.
+**Hover any status chip, anywhere in the portal** — the tooltip says what that status means and, where a workflow is waiting, who acts next. The same vocabulary is used everywhere, so "Returned for changes" on a case always means the same thing it does on a legal request.
+
+The case header is two compact lines — identity, state and **one recommended next action** on the first; stage, unit, lead, last update, sign-off and overdue markers on the second. Blockers show in the metric strip below, legal-hold and archived states as banners. Rarely-used and administrative actions live in the header's **Actions** menu.
 
 ### Work the tabs
 
-The case detail groups its tabs into three areas:
+The case detail groups its tabs into three areas. Each section pill carries a **live count** of what's inside (reports, media, tasks, charges, legal, intel…) and an amber **attention dot** when something in it needs someone — a report awaiting sign-off, an actionable legal request, an overdue task, a draft report. **Switching sections never loses your place**: every section you've visited keeps its filters, drafts, scroll position and half-finished forms until you leave the case, and the Brief's "since your last visit" recap is only reset when you actually leave the case — not by hopping between tabs. On a phone, a compact section switcher replaces the tab strip.
 
 **Investigation**
 - **Brief** — the case at a glance: assignments, stats, recap, blockers.
@@ -161,6 +163,11 @@ The case detail groups its tabs into three areas:
 ### Close it — and reopen it
 
 Closure runs through **Sign-off** (section I). Cases are never deleted from the working view: Command **archives** (archived cases can be restored), and only the portal owner can permanently delete. A closed case can be reopened by changing its status if your rank allows; sealed reports inside it stay sealed.
+
+### Manage the list — saved views and bulk actions
+
+- **Saved views.** On Case Files (and the Persons, Legal Requests and BOLO lists), set up your filters, scope and search, then **Save** them as a named view. Views are saved to your account — they follow you across devices — and one view per list can be marked **default**, applying automatically when you open the list clean. Rename or delete views from the same menu. Case views you had saved on this device before are migrated to your account automatically the first time you open Case Files.
+- **Bulk actions.** Select several cases (checkboxes; shift-click for a range) and **set status** (open / active / cold), **assign a lead** (command only), or **archive / restore**. Every bulk action shows a preview confirm first, skips rows you can't edit (the result says how many), and reports progress as it works through the selection. Closing a case still runs through Sign-off, one case at a time — and there is **no bulk delete**, ever.
 
 ---
 
@@ -315,7 +322,18 @@ The registries — every tool in the **Investigative Tools** workspace (section 
 - **Narcotics** — drug processing and market analytics. **Ballistics** — weapon benches and component tracing. **M.O. Detector** — tactical profiling and cross-reference.
 - **Media Vault** — universal media-to-case intake. **Records** — live shared division records.
 
-Link intel to a case from the case's **Intel & Notes** tab so everything cross-references. **Follow** any case, person or vehicle (the ☆ button) and My Desk flags it whenever it changes. Archiving hides a record from working views without destroying it; **permanent deletion is the portal owner's alone**.
+### Working with linked records
+
+The registries are relationship-first — a record's value is who and what it's connected to:
+
+- **Edit a link, don't recreate it.** Every relationship (person↔person, person↔vehicle, person↔place, gang turf and properties, gang↔account, gang↔narcotic, case intel links, account ownership) has an **Edit** control: change its confidence, its role or note, or mark it **Current / Historical / Disputed** as the picture develops. An association that ended is marked Historical — not deleted — so the record keeps its history and its audit trail.
+- **Search pickers.** Linking a record opens a search picker over the registry — type a few letters and pick — instead of scrolling an unbounded list.
+- **Peek before you open.** Linked records carry a **peek** button: a small preview card with the record's identity, status chips and linked-record counts, so you can confirm "is this the right one?" without leaving your screen. One click opens the full record.
+- **New link panels**: a vehicle's profile lists its **linked people**, a gang dossier its **accounts** and **narcotics** ties, and an account its **surveillance history** — connections that existed in the data but had no screen before.
+- **Duplicate warnings.** Creating a person, gang or vehicle shows an inline warning when a similar record already exists — with peek buttons to check — but never blocks you; you decide.
+- **Pin** buttons on person, vehicle, gang, account and narcotics records add them to your Jump-back strip (section C).
+
+Link intel to a case from the case's **Intel & Notes** tab so everything cross-references. **Follow** any case, person or vehicle (the ☆ button) and My Desk flags it whenever it changes — follow is "tell me about changes", pin is "keep it one click away". Archiving hides a record from working views without destroying it; **permanent deletion is the portal owner's alone**.
 
 ---
 

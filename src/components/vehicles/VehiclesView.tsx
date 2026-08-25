@@ -154,9 +154,9 @@ export function VehiclesView() {
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-2">
                     <WatchButton type="vehicle" id={v.id} label={v.plate} compact />
-                    <button onClick={() => { if (nav.inWorkspace) nav.openRecord('vehicles', v.id, v.plate); else router.push(`/vehicles?vehicle=${v.id}`) }} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Profile</button>
-                    {canEdit && <button onClick={() => setEditor({ record: v })} className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10">Edit</button>}
-                    {canDelete && <button onClick={() => void onDelete(v)} aria-label="Delete vehicle" className="-my-1 rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10"><XMarkIcon size={14} /></button>}
+                    <button onClick={() => { if (nav.inWorkspace) nav.openRecord('vehicles', v.id, v.plate); else router.push(`/vehicles?vehicle=${v.id}`) }} className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10 sm:min-h-0">Profile</button>
+                    {canEdit && <button onClick={() => setEditor({ record: v })} className="-my-1 min-h-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-slate-200 transition hover:bg-white/10 sm:min-h-0">Edit</button>}
+                    {canDelete && <button onClick={() => void onDelete(v)} aria-label={`Delete vehicle ${v.plate}`} className="-my-1 min-h-[44px] min-w-[44px] rounded-md border border-white/10 bg-white/5 px-2.5 py-2 text-xs text-rose-300 transition hover:bg-rose-500/10 sm:min-h-0 sm:min-w-0"><XMarkIcon size={14} className="mx-auto" /></button>}
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
