@@ -12,9 +12,10 @@ export function useNav() {
   const pathname = usePathname()
   const router = useRouter()
 
-  // First path segment is the tab id ('/cases/…' → 'cases'); default 'command'.
-  const seg = pathname.split('/')[1] || 'command'
-  const activeTab = isValidTab(seg) ? seg : 'command'
+  // First path segment is the tab id ('/cases/…' → 'cases'); default 'inbox'
+  // (My Dashboard — the personal home and default landing, src/app/page.tsx).
+  const seg = pathname.split('/')[1] || 'inbox'
+  const activeTab = isValidTab(seg) ? seg : 'inbox'
   // TAB_CATEGORY now covers every PAGE_META tab; null means "belongs to no
   // category" (profile/owner/command-center/concern/siu/feedback) — no strip
   // highlight, Subtabs suppressed. The 'command' fallback only guards a tab
@@ -25,7 +26,7 @@ export function useNav() {
 
   const navigate = useCallback(
     (tab: string) => {
-      const target = isValidTab(tab) ? tab : 'command'
+      const target = isValidTab(tab) ? tab : 'inbox'
       // Store('tab') persistence happens in AppShell's route-change effect so
       // direct loads and back/forward persist too — not just clicks.
       router.push(`/${target}`)
@@ -35,7 +36,7 @@ export function useNav() {
   )
 
   const navigateCategory = useCallback(
-    (cat: string) => navigate(CAT_DEFAULT[cat] ?? 'command'),
+    (cat: string) => navigate(CAT_DEFAULT[cat] ?? 'inbox'),
     [navigate],
   )
 

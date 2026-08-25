@@ -1,90 +1,88 @@
 'use client'
 
-import Link from 'next/link'
+/** My Dashboard (/inbox) — the personal landing surface (Phase-2A rebuild of
+ *  the old "My Desk"). One prioritized "Needs your attention" panel (the TOP
+ *  slice of the Action Center's useActionItems queue) replaces the former
+ *  dead metric strip and the duplicated sign-off / returned / follow-up /
+ *  task / mention panels — and their big unprojected table loads went with
+ *  them. Everything this view fetches itself is a slim projection with a
+ *  limit, RLS-scoped as ever. Empty panels render nothing (DashPanel
+ *  `empty`); every count is clickable through to its owning surface. */
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Json, Tables } from '@/lib/database.types'
-import { list } from '@/lib/db'
-import { markAllRead, markRead } from '@/lib/notifications'
-import { caseLink } from '@/lib/caseLinks'
-import { todayISO, timeAgo } from '@/lib/format'
+import { useActionItems } from '@/components/actioncenter/useActionItems'
+import { isFieldOnlyAccount } from '@/components/command-center/lib/membershipPending'
+import { DashPanel } from '@/components/dash/DashPanel'
+import { DashRow } from '@/components/dash/DashRow'
+import { DashSwitcher } from '@/components/dash/DashSwitcher'
+import { JumpBack } from '@/components/command/JumpBack'
+import { SiuAccessRequestCard } from '@/components/siu/SiuAccessRequest'
+import { useCreate } from '@/components/shell/CreateHost'
+import { useToolNav } from '@/components/tools/useToolNav'
+import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { uiConfirm } from '@/components/ui/dialog'
+import { describeDraftKey } from '@/lib/actionItems'
 import { useAuth } from '@/lib/auth'
-import {ROLE_LABEL, bureauShort} from '@/lib/roles'
-import { notifDetail, notifSub, notifTitle } from '@/lib/notifText'
+import { caseLink } from '@/lib/caseLinks'
+import type { Json, Tables } from '@/lib/database.types'
+import { list, removeWhere } from '@/lib/db'
+import { useFieldStanding } from '@/lib/fieldStanding'
+import { timeAgo } from '@/lib/format'
+import { useJusticeRoster } from '@/lib/justiceRoster'
+import { humanize } from '@/lib/legalWorkflow'
+import { TAB_LABEL } from '@/lib/nav'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
-import { caseStaleDays, isStaleCase } from '@/components/cases/caseUtils'
-import { StaleBadge } from '@/components/cases/StaleBadge'
-import { caseStatusTint, signoffLabel, signoffTint } from '@/lib/signoff'
+import { ROLE_LABEL, bureauShort } from '@/lib/roles'
+import { signoffLabel } from '@/lib/signoff'
 import { Store } from '@/lib/store'
-import { toast } from '@/lib/toast'
+import { humanizeError, toast } from '@/lib/toast'
+import { isToolTab, type ToolId } from '@/lib/toolsModel'
 import { markWatchSeen, type WatchType } from '@/lib/watchlist'
-import { useJusticeRoster } from '@/lib/justiceRoster'
-import { useFieldStanding } from '@/lib/fieldStanding'
-import { isFieldOnlyAccount } from '@/components/command-center/lib/membershipPending'
-import { canReviewCase } from '@/components/command-center/lib/approvals'
-import { SiuAccessRequestCard } from '@/components/siu/SiuAccessRequest'
-import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
-import { PageHeader } from '@/components/ui/PageHeader'
+import { listCaseHealth } from '@/lib/caseHealth'
+import { fetchWatchTargets, type WatchTarget } from './watchItems'
 
-type CaseRow = Tables<'cases'>
-type TaskRow = Tables<'case_tasks'>
-type MessageRow = Tables<'case_messages'>
-type NotificationRow = Tables<'notifications'>
-type ReportRow = Tables<'reports'>
-type WatchRow = Tables<'watchlist'>
-type PersonRow = Tables<'persons'>
-type VehicleRow = Tables<'vehicles'>
+/* ── slim projections — every self-fetch is select+limit bounded ─────────── */
 
-interface InboxData {
-  cases: CaseRow[]
-  tasks: TaskRow[]
-  messages: MessageRow[]
-  notifications: NotificationRow[]
-  reports: ReportRow[]
-  watchlist: WatchRow[]
-  persons: PersonRow[]
-  vehicles: VehicleRow[]
+type MyCaseRow = Pick<Tables<'cases'>,
+  'id' | 'case_number' | 'title' | 'status' | 'bureau' | 'lead_detective_id'
+  | 'created_by' | 'summary' | 'follow_up_at' | 'signoff_status'
+  | 'signoff_submitted_by' | 'updated_at'>
+type ReportLite = Pick<Tables<'reports'>, 'id' | 'case_id' | 'template' | 'finalized' | 'updated_at'>
+type MessageLite = Pick<Tables<'case_messages'>,
+  'id' | 'case_id' | 'author_id' | 'author_name' | 'body' | 'mentions' | 'created_at'>
+type LegalLite = Pick<Tables<'legal_requests'>,
+  'id' | 'request_number' | 'request_type' | 'review_status' | 'updated_at'>
+type DraftLite = Pick<Tables<'user_drafts'>, 'key' | 'updated_at'>
+
+const MY_CASE_COLS =
+  'id,case_number,title,status,bureau,lead_detective_id,created_by,summary,'
+  + 'follow_up_at,signoff_status,signoff_submitted_by,updated_at'
+const REPORT_COLS = 'id,case_id,template,finalized,updated_at'
+const MESSAGE_COLS = 'id,case_id,author_id,author_name,body,mentions,created_at'
+const LEGAL_COLS = 'id,request_number,request_type,review_status,updated_at'
+const DRAFT_COLS = 'key,updated_at'
+
+interface DeskData {
+  myCases: MyCaseRow[]
+  /** Cases I submitted for sign-off (any state) — feeds the returned badge
+   *  and the recent-decisions slice of the activity panel. */
+  submissions: MyCaseRow[]
+  watched: WatchTarget[]
+  drafts: DraftLite[]
+  reports: ReportLite[]
+  messages: MessageLite[]
+  legal: LegalLite[]
 }
 
-const EMPTY: InboxData = { cases: [], tasks: [], messages: [], notifications: [], reports: [], watchlist: [], persons: [], vehicles: [] }
+const EMPTY: DeskData = { myCases: [], submissions: [], watched: [], drafts: [], reports: [], messages: [], legal: [] }
 
-/** Followed target resolved against the desk caches — port of vanilla
- *  watchlist.js resolveWatchTarget/isWatchNew. Targets hidden by RLS (or
- *  deleted) resolve to nothing and are skipped, exactly like vanilla. */
-interface WatchItem {
-  w: WatchRow
-  icon: string
-  title: string
-  sub: string
-  ts: string | null
-  href: string
-  fresh: boolean
-}
-
-function resolveWatchItems(data: InboxData, seen: Record<string, string>): WatchItem[] {
-  const items: WatchItem[] = []
-  for (const w of data.watchlist) {
-    let it: Omit<WatchItem, 'fresh' | 'w'> | null = null
-    if (w.target_type === 'case') {
-      const c = data.cases.find((x) => x.id === w.target_id)
-      if (c) it = { icon: '🗂️', title: `${c.case_number} · ${c.title || 'Untitled'}`, sub: `${bureauShort(c.bureau)} · ${c.status}`, ts: c.updated_at, href: caseHref(c.id) }
-    } else if (w.target_type === 'person') {
-      const p = data.persons.find((x) => x.id === w.target_id)
-      if (p) it = { icon: '👤', title: p.name || 'Person', sub: [p.alias ? `“${p.alias}”` : '', p.status || ''].filter(Boolean).join(' · ') || 'Person of interest', ts: p.updated_at, href: `/persons?q=${encodeURIComponent(p.name ?? '')}` }
-    } else if (w.target_type === 'vehicle') {
-      const v = data.vehicles.find((x) => x.id === w.target_id)
-      if (v) it = { icon: '🚗', title: v.plate, sub: [v.model, v.color].filter(Boolean).join(' · ') || 'Registered plate', ts: v.updated_at, href: `/vehicles?q=${encodeURIComponent(v.plate)}` }
-    }
-    if (!it) continue
-    const stamp = seen[`${w.target_type}:${w.target_id}`]
-    // No activity ts → nothing new; followed before the marker existed → new-ish.
-    const fresh = !!it.ts && (!stamp || it.ts > stamp)
-    items.push({ ...it, w, fresh })
-  }
-  items.sort((a, b) => Number(b.fresh) - Number(a.fresh) || String(b.ts ?? '').localeCompare(String(a.ts ?? '')))
-  return items
-}
-const CLOSED_SIGNOFF = new Set(['none', 'ready_doj', 'approved_complete'])
+const RETURNED_SIGNOFF = new Set(['changes_requested', 'denied'])
+/** Sign-off states that represent a DECISION on a submission (for the
+ *  activity feed) — everything except open/awaiting. */
+const DECIDED_SIGNOFF = new Set(['changes_requested', 'denied', 'approved_deputy', 'approved_complete', 'ready_doj'])
 
 const isJsonArray = (v: Json): v is Json[] => Array.isArray(v)
 
@@ -96,84 +94,62 @@ function jsonHasId(v: Json, id: string): boolean {
   return false
 }
 
-function isDue(date?: string | null): boolean {
-  return !!date && date <= todayISO()
+/* ── open Investigative Tools tabs (sessionStorage, ids only) ─────────────
+ * Same key/shape ToolsView persists ({tabs:[{toolId,recordId?}],activeKey}).
+ * Read directly — tools/ readStored is module-private and this must not
+ * import from tools/ views. IDS ONLY: list tabs label via TAB_LABEL; record
+ * tabs render as "<tool label> record" WITHOUT fetching titles (no reads,
+ * nothing leaked — the workspace re-verifies titles through RLS on open). */
+
+interface OpenToolTab { toolId: ToolId; recordId?: string }
+
+function readToolTabs(uid: string | null): OpenToolTab[] {
+  if (!uid || typeof window === 'undefined') return []
+  try {
+    const raw = window.sessionStorage.getItem(`cid-tools-workspace:${uid}`)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as { tabs?: Array<{ toolId?: unknown; recordId?: unknown }> }
+    if (!Array.isArray(parsed?.tabs)) return []
+    const out: OpenToolTab[] = []
+    for (const t of parsed.tabs) {
+      if (typeof t?.toolId === 'string' && isToolTab(t.toolId)) {
+        out.push(typeof t.recordId === 'string' && t.recordId
+          ? { toolId: t.toolId, recordId: t.recordId }
+          : { toolId: t.toolId })
+      }
+    }
+    return out
+  } catch { return [] }
 }
 
-function daysUntil(date?: string | null): number | null {
-  if (!date) return null
-  const start = new Date(todayISO() + 'T00:00:00').getTime()
-  const end = new Date(date + 'T00:00:00').getTime()
-  return Math.round((end - start) / 86400000)
-}
-
-function caseHref(id: string): string {
-  return caseLink(id)
-}
-
-function EmptyLine({ text }: { text: string }) {
-  return <p className="px-3 py-2.5 text-sm text-slate-400">{text}</p>
-}
-
-/** One dense list row inside a Panel — no nested card chrome; the panel's
- *  divide-y draws the separators. */
-const ROW = 'block px-3 py-2 transition hover:bg-white/5'
-
-function CaseLine({ c, meta }: { c: CaseRow; meta?: React.ReactNode }) {
-  return (
-    <Link href={caseHref(c.id)} className={`group ${ROW}`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-sm font-black tabular-nums text-slate-100">{c.case_number}</span>
-        <span className={`rounded px-1.5 py-0.5 text-[10px] font-black uppercase ${caseStatusTint(c.status)}`}>{c.status}</span>
-        <span className="rounded border border-white/10 px-1.5 py-0.5 text-[10px] font-black text-slate-300">{c.bureau}</span>
-        <StaleBadge c={c} />
-        <span className="min-w-0 truncate text-sm font-bold text-white group-hover:text-amber-100">{c.title || 'Untitled case'}</span>
-      </div>
-      <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-slate-400">
-        <span>Lead: {officerName(c.lead_detective_id) || 'Unassigned'}</span>
-        <span>Updated {timeAgo(c.updated_at)}</span>
-        {meta}
-      </div>
-    </Link>
-  )
-}
-
-function Panel({ title, count, action, children }: { title: string; count: number; action?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="overflow-hidden rounded-lg border border-white/10 bg-ink-900/40">
-      <div className="flex items-center justify-between gap-3 border-b border-white/5 px-3 py-2">
-        <h2 className="text-xs font-black uppercase tracking-wide text-slate-200">{title}</h2>
-        <span className="flex items-center gap-2">
-          {action}
-          <span className="rounded border border-white/10 px-1.5 py-0.5 text-xs font-black tabular-nums text-slate-300">{count}</span>
-        </span>
-      </div>
-      <div className="divide-y divide-white/5">{children}</div>
-    </section>
-  )
-}
+interface ActivityRow { key: string; ts: string; title: string; why: string; href: string }
 
 export function InboxView() {
-  const { profile, state, isCommand } = useAuth()
+  const { profile, state, isCommand, canEdit } = useAuth()
+  const create = useCreate()
+  const { openHref } = useToolNav()
+  const ac = useActionItems()
   const fetchProfiles = useProfilesStore((s) => s.fetch)
   const rosterProfiles = useProfilesStore((s) => s.profiles)
   const justiceByUser = useJusticeRoster((s) => s.byUser)
+  const fetchJustice = useJusticeRoster((s) => s.fetch)
   const fieldIds = useFieldStanding((s) => s.ids)
   const fieldLoaded = useFieldStanding((s) => s.loaded)
   const fetchFieldStanding = useFieldStanding((s) => s.fetch)
-  const fetchJustice = useJusticeRoster((s) => s.fetch)
-  const [data, setData] = useState<InboxData>(EMPTY)
+
+  const [data, setData] = useState<DeskData>(EMPTY)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   // Bumped whenever a watchSeen stamp is written so `fresh` chips recompute.
   const [seenVer, setSeenVer] = useState(0)
+  const [openTabs, setOpenTabs] = useState<OpenToolTab[]>([])
 
   const vCases = useTableVersion('cases')
-  const vTasks = useTableVersion('case_tasks')
   const vMessages = useTableVersion('case_messages')
-  const vNotifications = useTableVersion('notifications')
   const vReports = useTableVersion('reports')
   const vWatch = useTableVersion('watchlist')
+  const vDrafts = useTableVersion('user_drafts')
+  const vLegal = useTableVersion('legal_requests')
   const vPersons = useTableVersion('persons')
   const vVehicles = useTableVersion('vehicles')
   const vJustice = useTableVersion('justice_memberships')
@@ -184,38 +160,61 @@ export function InboxView() {
     setLoading(true)
     setErr(null)
     try {
-      await fetchProfiles()
-      void fetchJustice()
-      void fetchFieldStanding()
-      const [cases, tasks, messages, notifications, reports, watchlist, persons, vehicles] = await Promise.all([
-        list('cases', { order: 'updated_at', ascending: false, is: { archived_at: null } }),
-        list('case_tasks', { order: 'due', nullsFirst: false }),
-        list('case_messages', { order: 'created_at', ascending: false, limit: 120 }),
-        list('notifications', { eq: { user_id: profile.id }, order: 'created_at', ascending: false, limit: 40 }),
-        list('reports', { order: 'updated_at', ascending: false, limit: 120 }),
-        list('watchlist', { eq: { user_id: profile.id }, order: 'created_at', ascending: false }),
-        // Only needed to resolve followed targets — a failure shouldn't sink the desk.
-        list('persons', {}).catch(() => [] as PersonRow[]),
-        list('vehicles', {}).catch(() => [] as VehicleRow[]),
+      await fetchProfiles() // officerName for mention authors / case leads
+      if (isCommand) { void fetchJustice(); void fetchFieldStanding() }
+      const me = profile.id
+      const [myCases, submissions, watched, drafts, reports, messages, legal] = await Promise.all([
+        // My cases: lead OR creator = me, live rows, newest movement first.
+        list('cases', {
+          select: MY_CASE_COLS, or: `lead_detective_id.eq.${me},created_by.eq.${me}`,
+          is: { archived_at: null }, order: 'updated_at', ascending: false, limit: 40,
+        }).then((r) => r as unknown as MyCaseRow[]),
+        // My sign-off submissions — recent decisions + the returned badge.
+        list('cases', {
+          select: MY_CASE_COLS, eq: { signoff_submitted_by: me },
+          order: 'updated_at', ascending: false, limit: 10,
+        }).then((r) => r as unknown as MyCaseRow[]).catch(() => [] as MyCaseRow[]),
+        fetchWatchTargets(me).catch(() => [] as WatchTarget[]),
+        // user_drafts is RLS owner-only; the eq is belt-and-braces. Keys only.
+        list('user_drafts', {
+          select: DRAFT_COLS, eq: { user_id: me }, order: 'updated_at', ascending: false, limit: 8,
+        }).then((r) => r as unknown as DraftLite[]).catch(() => [] as DraftLite[]),
+        // Unfinalized reports authored by me (finalized filtered client-side —
+        // the column is nullable).
+        list('reports', {
+          select: REPORT_COLS, eq: { author_id: me }, order: 'updated_at', ascending: false, limit: 20,
+        }).then((r) => r as unknown as ReportLite[]).catch(() => [] as ReportLite[]),
+        // Recent case chat — mention matching happens client-side over one
+        // bounded page (RLS scopes it to cases I can read).
+        list('case_messages', {
+          select: MESSAGE_COLS, order: 'created_at', ascending: false, limit: 40,
+        }).then((r) => r as unknown as MessageLite[]).catch(() => [] as MessageLite[]),
+        // My legal requests, newest movement first — activity feed only.
+        list('legal_requests', {
+          select: LEGAL_COLS, eq: { created_by: me }, order: 'updated_at', ascending: false, limit: 5,
+        }).then((r) => r as unknown as LegalLite[]).catch(() => [] as LegalLite[]),
       ])
-      setData({ cases, tasks, messages, notifications, reports, watchlist, persons, vehicles })
+      setData({ myCases, submissions, watched, drafts, reports, messages, legal })
+      // profiles.id IS the auth uid — the same key ToolsView persists under.
+      setOpenTabs(readToolTabs(profile.id))
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
+      // humanizeError: raw PostgREST/RLS text (table/policy names) must never
+      // render on a member-facing surface (security review W1).
+      setErr(humanizeError(e))
     } finally {
       setLoading(false)
     }
-  }, [fetchProfiles, fetchJustice, fetchFieldStanding, profile, state])
+  }, [fetchProfiles, fetchJustice, fetchFieldStanding, isCommand, profile, state])
 
   useEffect(() => {
     const id = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(id)
-  }, [refresh, vCases, vTasks, vMessages, vNotifications, vReports, vWatch, vPersons, vVehicles, vJustice])
+  }, [refresh, vCases, vMessages, vReports, vWatch, vDrafts, vLegal, vPersons, vVehicles, vJustice])
 
-  // Command-only: pending CID sign-ins awaiting a decision. Mirrors the roster
-  // rule — a deactivated member who now holds an active justice identity was
-  // moved out by an organization correction and is NOT a pending sign-in.
-  // ...and a Field Intelligence submitter is inactive by design, having
-  // applied for nothing at all.
+  // Command-only banner count: pending CID sign-ins awaiting a decision.
+  // Mirrors the roster rule — an inactive member holding an active justice
+  // identity was moved out by an organization correction, and a Field
+  // Intelligence submitter is inactive by design (applied for nothing).
   const pendingApprovals = isCommand
     ? rosterProfiles.filter((p) => !p.active && !p.removed_at && !justiceByUser[p.id]
         && !isFieldOnlyAccount(p.id, fieldLoaded ? fieldIds : null)).length
@@ -223,76 +222,116 @@ export function InboxView() {
 
   const model = useMemo(() => {
     const myId = profile?.id ?? ''
-    const review = data.cases.filter((c) => canReviewCase(c, profile))
-    const bounced = data.cases.filter((c) => c.signoff_submitted_by === myId && (c.signoff_status === 'changes_requested' || c.signoff_status === 'denied'))
-    const mineInFlight = data.cases.filter((c) => c.signoff_submitted_by === myId && !CLOSED_SIGNOFF.has(c.signoff_status) && !bounced.some((b) => b.id === c.id))
-    const followUps = data.cases.filter((c) => c.status !== 'closed' && isDue(c.follow_up_at)).sort((a, b) => String(a.follow_up_at).localeCompare(String(b.follow_up_at)))
-    const stale = data.cases.filter(isStaleCase).sort((a, b) => caseStaleDays(b) - caseStaleDays(a))
-    const tasks = data.tasks.filter((t) => !t.done && (t.assignee === myId || t.created_by === myId)).sort((a, b) => String(a.due || '9999').localeCompare(String(b.due || '9999')))
-    const overdueTasks = tasks.filter((t) => isDue(t.due))
-    const mentions = data.messages.filter((m) => m.author_id !== myId && (jsonHasId(m.mentions, myId) || (profile?.display_name && m.body.toLowerCase().includes(`@${profile.display_name.toLowerCase()}`)))).slice(0, 12)
-    const watched = resolveWatchItems(data, Store.get<Record<string, string>>('watchSeen', {}))
-    const draftReports = data.reports.filter((r) => r.author_id === myId && !r.finalized).slice(0, 12)
-    const unread = data.notifications.filter((n) => !n.read)
-    return { review, bounced, mineInFlight, followUps, stale, tasks, overdueTasks, mentions, watched, draftReports, unread }
+    const returnedIds = new Set(
+      data.submissions
+        .filter((c) => c.signoff_submitted_by === myId && RETURNED_SIGNOFF.has(c.signoff_status))
+        .map((c) => c.id),
+    )
+    const myCases = data.myCases.filter((c) => c.status !== 'closed').slice(0, 8)
+    const seen = Store.get<Record<string, string>>('watchSeen', {})
+    const watched = data.watched
+      .map((it) => {
+        const stamp = seen[`${it.w.target_type}:${it.w.target_id}`]
+        // No activity ts → nothing new; followed before the marker → new-ish.
+        return { ...it, fresh: !!it.ts && (!stamp || it.ts > stamp) }
+      })
+      .sort((a, b) => Number(b.fresh) - Number(a.fresh) || String(b.ts ?? '').localeCompare(String(a.ts ?? '')))
+    const draftReports = data.reports.filter((r) => !r.finalized).slice(0, 5)
+    const mentions = data.messages.filter((m) => m.author_id !== myId
+      && (jsonHasId(m.mentions, myId)
+        || (!!profile?.display_name && m.body.toLowerCase().includes(`@${profile.display_name.toLowerCase()}`))))
+
+    // Recent activity: three bounded self-scoped sources, merged newest-first.
+    const activity: ActivityRow[] = [
+      ...mentions.slice(0, 6).map((m) => ({
+        key: `msg:${m.id}`, ts: m.created_at,
+        title: `${m.author_name || officerName(m.author_id) || 'Officer'} mentioned you`,
+        why: m.body, href: caseLink(m.case_id, 'chat'),
+      })),
+      ...data.legal.map((l) => ({
+        key: `legal:${l.id}`, ts: l.updated_at,
+        title: `${l.request_number} — ${humanize(l.request_type || 'request')}`,
+        why: `Your legal request · ${humanize(l.review_status || 'submitted')}`,
+        href: `/legal?request=${encodeURIComponent(l.id)}`,
+      })),
+      ...data.submissions.filter((c) => DECIDED_SIGNOFF.has(c.signoff_status)).slice(0, 5).map((c) => ({
+        key: `signoff:${c.id}`, ts: c.updated_at,
+        title: `${c.case_number} · ${c.title || 'Untitled case'}`,
+        why: `Sign-off decision on your submission — ${signoffLabel(c.signoff_status)}`,
+        href: caseLink(c.id, 'signoff'),
+      })),
+    ].sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 8)
+
+    return { myId, myCases, returnedIds, watched, draftReports, activity }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seenVer invalidates the Store-read watchSeen map
   }, [data, profile, seenVer])
 
-  // Shared helpers (lib/notifications) — the same writes the bell panel and
-  // the Action Center absorb make, so read-state stays consistent everywhere.
-  async function markNotificationRead(n: NotificationRow) {
-    const err = await markRead([n.id])
-    if (err) {
-      toast(`Could not mark notification read: ${err.message}`, 'danger')
-      return
-    }
-    setData((prev) => ({ ...prev, notifications: prev.notifications.map((x) => (x.id === n.id ? { ...x, read: true } : x)) }))
+  const attention = ac.items.slice(0, 8)
+  const freshWatched = model.watched.filter((it) => it.fresh)
+
+  const markAllSeen = () => {
+    for (const it of model.watched) markWatchSeen(it.w.target_type as WatchType, it.w.target_id, it.ts ?? undefined)
+    setSeenVer((v) => v + 1)
   }
 
-  async function markAllNotificationsRead() {
-    const err = await markAllRead() // ONE conditional update, RLS-scoped to my rows
-    if (err) {
-      toast(`Could not mark notifications read: ${err.message}`, 'danger')
-      return
-    }
-    setData((prev) => ({ ...prev, notifications: prev.notifications.map((x) => ({ ...x, read: true })) }))
+  const discardDraft = async (key: string) => {
+    const ok = await uiConfirm(
+      'Discard this draft? The saved work-in-progress is deleted; anything already saved to the record itself is untouched.',
+      { title: 'Discard draft', confirmText: 'Discard draft' },
+    )
+    if (!ok) return
+    // The viewer's own user_drafts row (RLS owner-only) — same write path the
+    // Action Center's discard uses.
+    const res = await removeWhere('user_drafts', { eq: { key } })
+    if (res.error) { toast(`Could not discard the draft: ${res.error.message}`, 'danger'); return }
+    setData((d) => ({ ...d, drafts: d.drafts.filter((x) => x.key !== key) }))
+    toast('Draft discarded.', 'success')
   }
 
-  if (state !== 'in') return <EmptyLine text="Sign in to view My Desk." />
+  if (state !== 'in') return <p className="px-3 py-2.5 text-sm text-slate-400">Sign in to view your dashboard.</p>
+
+  const draftsCount = data.drafts.length + model.draftReports.length
+  const allQuiet = !loading && !ac.loading && ac.items.length === 0 && model.myCases.length === 0
+    && openTabs.length === 0 && draftsCount === 0 && model.watched.length === 0 && model.activity.length === 0
 
   return (
-    <section className="view-in space-y-5">
-      <div>
-        <p className="t-readout inline-flex items-center gap-2 rounded border border-emerald-400/20 bg-emerald-500/10 px-2 py-1 text-[10px] uppercase tracking-widest text-emerald-200">
-          <span className="t-dot t-dot-emerald" /> Live desk
-        </p>
-        <PageHeader
-          className="mt-2"
-          title="My Desk"
-          subtitle={`${profile?.display_name || 'Officer'} - ${ROLE_LABEL[profile?.role ?? ''] || profile?.role || 'Member'}`}
-          actions={
-            <span className="flex items-center gap-2">
-              <Link href="/action" className="rounded border border-white/10 px-3 py-2 text-sm font-bold text-slate-200 hover:border-amber-300/30 hover:text-amber-100">Action Center ↗</Link>
-              <button onClick={() => { void refresh() }} className="rounded border border-white/10 px-3 py-2 text-sm font-bold text-slate-200 hover:border-amber-300/30 hover:text-amber-100">
-                Refresh
-              </button>
-            </span>
-          }
-        />
+    <section className="view-in space-y-4">
+      {/* The visible page title lives in the shell Header (PAGE_META.inbox);
+          this keeps the one-h1-per-view contract without duplicating it. */}
+      <h1 className="sr-only">My Dashboard</h1>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <DashSwitcher />
+        <div className="flex flex-wrap items-center gap-2">
+          {canEdit && (
+            <>
+              <Button onClick={() => create.open('case')}>New case</Button>
+              <Button onClick={() => create.open('person')}>New person</Button>
+              <Button onClick={() => create.open('vehicle')}>New vehicle</Button>
+            </>
+          )}
+          <Button onClick={() => { void refresh(); void ac.refresh() }}>Refresh</Button>
+        </div>
       </div>
 
-      {err && <p className="rounded border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">Desk refresh failed: {err}</p>}
+      <p className="text-sm text-slate-400">
+        <span className="font-semibold text-slate-200">{profile?.display_name || 'Officer'}</span>
+        {' — '}
+        {ROLE_LABEL[profile?.role ?? ''] || profile?.role || 'Member'}
+        {profile?.division ? <> · {bureauShort(profile.division)}</> : null}
+      </p>
+
+      {err && <p className="rounded-lg border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">Dashboard refresh failed: {err}</p>}
 
       {/* Renders for the Director of CID alone. They hold no SIU standing and
           cannot reach the SIU workspace at all, so the request surface has to
-          live on their own desk. */}
+          live on their own dashboard. */}
       <SiuAccessRequestCard />
-      {loading && <p className="rounded border border-white/10 bg-white/[0.03] p-3 text-sm text-slate-400">Loading desk...</p>}
 
       {isCommand && (
-        <Link
-          href="/command-center"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-400/25 bg-amber-500/10 px-4 py-3 transition hover:border-amber-300/40 hover:bg-amber-500/15"
+        <button
+          onClick={() => openHref('/command-center')}
+          className="flex w-full flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-left transition hover:border-amber-300/40 hover:bg-amber-500/15"
         >
           <span className="text-sm font-bold text-amber-100">
             Command administration
@@ -304,134 +343,159 @@ export function InboxView() {
           </span>
           <span className="flex items-center gap-2">
             {pendingApprovals > 0 && <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-xs font-black text-amber-100">{pendingApprovals}</span>}
-            <span className="text-xs font-semibold text-amber-200">Open Command Center ↗</span>
+            <span className="text-xs font-semibold text-amber-200">Open Command Center →</span>
           </span>
-        </Link>
+        </button>
       )}
 
-      <MetricStrip
-        metrics={([
-          { label: 'Review', value: model.review.length, tint: model.review.length ? 'bg-amber-500/15 text-amber-300' : undefined },
-          { label: 'Bounced', value: model.bounced.length, tint: model.bounced.length ? 'bg-rose-500/15 text-rose-300' : undefined },
-          { label: 'Follow-ups', value: model.followUps.length, tint: model.followUps.length ? 'bg-amber-500/15 text-amber-300' : undefined },
-          { label: 'Stale', value: model.stale.length, tint: model.stale.length ? 'bg-rose-500/15 text-rose-300' : undefined },
-          {
-            label: 'Tasks', value: model.tasks.length,
-            hint: model.overdueTasks.length ? `${model.overdueTasks.length} overdue` : undefined,
-            tint: model.overdueTasks.length ? 'bg-rose-500/15 text-rose-300' : undefined,
-          },
-          { label: 'Mentions', value: model.mentions.length },
-          { label: 'Unread', value: model.unread.length, tint: model.unread.length ? 'bg-emerald-500/15 text-emerald-300' : undefined },
-          { label: 'Drafts', value: model.draftReports.length, tint: model.draftReports.length ? 'bg-amber-500/15 text-amber-300' : undefined },
-        ] satisfies Metric[])}
-      />
+      {loading && <p className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm text-slate-400">Loading your dashboard…</p>}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <Panel title="Sign-off waiting on me" count={model.review.length}>
-          {model.review.length ? model.review.map((c) => (
-            <CaseLine key={c.id} c={c} meta={<span className={`rounded px-1.5 py-0.5 font-bold ${signoffTint(c.signoff_status)}`}>{signoffLabel(c.signoff_status)}</span>} />
-          )) : <EmptyLine text="No sign-off reviews are waiting on you." />}
-        </Panel>
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+        <DashPanel
+          title="Needs your attention"
+          count={ac.items.length}
+          action={{ label: `Open Action Center (${ac.items.length}) →`, href: '/action' }}
+          empty={ac.items.length === 0}
+        >
+          {attention.map((it) => (
+            <DashRow
+              key={it.id}
+              title={it.title}
+              why={it.reason || it.summary}
+              meta={it.caseNumber ?? timeAgo(it.updatedAt)}
+              overdue={it.status === 'overdue'}
+              badge={it.priority === 'critical'
+                ? <Badge tone="danger">critical</Badge>
+                : it.priority === 'high' ? <Badge tone="warn">high</Badge> : undefined}
+              onClick={() => openHref(it.deepLink)}
+            />
+          ))}
+        </DashPanel>
 
-        <Panel title="Returned or in-flight sign-off" count={model.bounced.length + model.mineInFlight.length}>
-          {[...model.bounced, ...model.mineInFlight].length ? [...model.bounced, ...model.mineInFlight].map((c) => (
-            <CaseLine key={c.id} c={c} meta={<span className={`rounded px-1.5 py-0.5 font-bold ${signoffTint(c.signoff_status)}`}>{signoffLabel(c.signoff_status)}</span>} />
-          )) : <EmptyLine text="No submitted cases need your attention." />}
-        </Panel>
+        <DashPanel
+          title="My cases"
+          count={model.myCases.length}
+          action={{ label: 'All my cases →', onClick: () => { Store.set('casesScope', 'mine'); openHref('/cases') } }}
+          empty={model.myCases.length === 0}
+        >
+          {model.myCases.map((c) => {
+            const flags = listCaseHealth(c)
+            const returned = model.returnedIds.has(c.id)
+              || (c.signoff_submitted_by === model.myId && RETURNED_SIGNOFF.has(c.signoff_status))
+            return (
+              <DashRow
+                key={c.id}
+                title={`${c.case_number} · ${c.title || 'Untitled case'}`}
+                badge={
+                  <>
+                    <StatusBadge domain="case" value={c.status} className="uppercase" />
+                    {returned && <Badge tone="danger" title={signoffLabel(c.signoff_status)}>Returned to you</Badge>}
+                    {flags.length > 0 && (
+                      <Badge tone="warn" title={`Needs attention:\n${flags.map((f) => `• ${f.label}`).join('\n')}`}>
+                        {flags.length}
+                      </Badge>
+                    )}
+                  </>
+                }
+                why={`${c.lead_detective_id === model.myId ? 'You lead this case' : 'You opened this case'} · ${bureauShort(c.bureau)}${flags.length ? ` · ${flags.length} attention flag${flags.length === 1 ? '' : 's'}` : ''}`}
+                meta={timeAgo(c.updated_at)}
+                onClick={() => openHref(caseLink(c.id))}
+              />
+            )
+          })}
+        </DashPanel>
 
-        <Panel title="Due follow-ups" count={model.followUps.length}>
-          {model.followUps.length ? model.followUps.map((c) => (
-            <CaseLine key={c.id} c={c} meta={<span>Follow-up {c.follow_up_at}</span>} />
-          )) : <EmptyLine text="No follow-ups are due today." />}
-        </Panel>
+        {/* Pins + recents — ids-only stores, titles re-resolved through RLS. */}
+        <JumpBack />
 
-        <Panel title="Stale active cases" count={model.stale.length}>
-          {model.stale.length ? model.stale.slice(0, 12).map((c) => (
-            <CaseLine key={c.id} c={c} meta={<span>{caseStaleDays(c)} days quiet</span>} />
-          )) : <EmptyLine text="No stale active cases visible to you." />}
-        </Panel>
+        <DashPanel
+          title="Open investigative tabs"
+          count={openTabs.length}
+          hint="Tabs still open in your Investigative Tools workspace this session."
+          empty={openTabs.length === 0}
+        >
+          {openTabs.map((t, i) => (
+            <DashRow
+              key={`${t.toolId}:${t.recordId ?? i}`}
+              title={t.recordId ? `${TAB_LABEL[t.toolId] ?? t.toolId} record` : TAB_LABEL[t.toolId] ?? t.toolId}
+              why={t.recordId
+                ? 'An open record tab — its title reloads when you return'
+                : 'An open tool tab in your workspace'}
+              onClick={() => openHref(t.recordId
+                ? `/tools?tool=${t.toolId}&record=${encodeURIComponent(t.recordId)}`
+                : `/tools?tool=${t.toolId}`)}
+            />
+          ))}
+        </DashPanel>
 
-        <Panel title="My open tasks" count={model.tasks.length}>
-          {model.tasks.length ? model.tasks.slice(0, 12).map((t) => (
-            <Link key={t.id} href={caseHref(t.case_id)} className={ROW}>
-              <p className="text-sm font-bold text-white">{t.title}</p>
-              <p className={`mt-0.5 text-xs ${isDue(t.due) ? 'text-rose-300' : 'text-slate-400'}`}>
-                {t.due ? `${isDue(t.due) ? 'Due' : 'Due in ' + daysUntil(t.due)} ${t.due}` : 'No due date'} - {t.assignee ? `Assigned to ${officerName(t.assignee) || 'officer'}` : 'Unassigned'}
-              </p>
-            </Link>
-          )) : <EmptyLine text="No open tasks are assigned to or created by you." />}
-        </Panel>
+        <DashPanel title="Drafts" count={draftsCount} empty={draftsCount === 0}>
+          {data.drafts.map((d) => {
+            const desc = describeDraftKey(d.key)
+            return (
+              <div key={d.key} className="flex items-center gap-1">
+                <div className="min-w-0 flex-1">
+                  <DashRow
+                    title={desc.title}
+                    why={desc.summary}
+                    meta={timeAgo(d.updated_at)}
+                    onClick={() => openHref(desc.deepLink)}
+                  />
+                </div>
+                <button
+                  onClick={() => { void discardDraft(d.key) }}
+                  aria-label={`Discard draft: ${desc.title}`}
+                  className="min-h-10 flex-shrink-0 rounded-lg px-2.5 text-[11px] font-semibold text-slate-400 transition hover:bg-rose-500/10 hover:text-rose-300"
+                >
+                  Discard
+                </button>
+              </div>
+            )
+          })}
+          {model.draftReports.map((r) => (
+            <DashRow
+              key={r.id}
+              title={`Report draft — ${humanize(r.template || 'report')}`}
+              why="Unfinalized case report — finish and finalize it"
+              meta={timeAgo(r.updated_at)}
+              onClick={() => openHref(caseLink(r.case_id, 'reports'))}
+            />
+          ))}
+        </DashPanel>
 
-        <Panel title="Mentions" count={model.mentions.length}>
-          {model.mentions.length ? model.mentions.map((m) => (
-            <Link key={m.id} href={caseHref(m.case_id)} className={ROW}>
-              <p className="text-xs font-bold text-slate-400">{m.author_name || officerName(m.author_id) || 'Officer'} - {timeAgo(m.created_at)}</p>
-              <p className="mt-0.5 line-clamp-2 text-sm text-slate-100">{m.body}</p>
-            </Link>
-          )) : <EmptyLine text="No recent case-chat mentions." />}
-        </Panel>
-
-        <Panel
-          title="Following"
+        <DashPanel
+          title="Watched items"
           count={model.watched.length}
-          action={model.watched.some((it) => it.fresh) ? (
-            <span className="flex items-center gap-2">
-              <span className="text-[11px] font-semibold text-amber-300">{model.watched.filter((it) => it.fresh).length} updated</span>
-              <button
-                onClick={() => { for (const it of model.watched) markWatchSeen(it.w.target_type as WatchType, it.w.target_id, it.ts ?? undefined); setSeenVer((v) => v + 1) }}
-                className="-my-1.5 rounded border border-white/10 bg-white/5 px-2 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10"
-              >
-                Mark all seen
-              </button>
-            </span>
-          ) : undefined}
+          action={freshWatched.length > 0 ? { label: `Mark all seen (${freshWatched.length})`, onClick: markAllSeen } : undefined}
+          empty={model.watched.length === 0}
         >
-          {model.watched.length ? model.watched.map((it) => (
-            <Link
+          {model.watched.map((it) => (
+            <DashRow
               key={it.w.id}
-              href={it.href}
-              onClick={() => { markWatchSeen(it.w.target_type as WatchType, it.w.target_id, it.ts ?? undefined); setSeenVer((v) => v + 1) }}
-              className={`${ROW} ${it.fresh ? 'bg-amber-500/[0.04]' : ''}`}
-            >
-              <p className="truncate text-sm font-bold text-white">
-                <span aria-hidden>{it.icon}</span> {it.title}
-                {it.fresh && <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-black uppercase text-amber-300">updated</span>}
-              </p>
-              <p className="mt-0.5 text-xs text-slate-400">{it.sub}{it.ts ? ` · ${timeAgo(it.ts)}` : ''}</p>
-            </Link>
-          )) : <EmptyLine text="Follow cases, persons or vehicles (the ☆ Follow button) to pin their changes here." />}
-        </Panel>
+              title={`${it.icon} ${it.title}`}
+              badge={it.fresh ? <Badge tone="warn">updated</Badge> : undefined}
+              why={it.sub}
+              meta={it.ts ? timeAgo(it.ts) : undefined}
+              onClick={() => {
+                markWatchSeen(it.w.target_type as WatchType, it.w.target_id, it.ts ?? undefined)
+                setSeenVer((v) => v + 1)
+                openHref(it.href)
+              }}
+            />
+          ))}
+        </DashPanel>
 
-        <Panel
-          title="Notifications"
-          count={model.unread.length}
-          action={model.unread.length > 0 ? (
-            <button
-              onClick={() => { void markAllNotificationsRead() }}
-              className="-my-1.5 rounded border border-white/10 bg-white/5 px-2 py-2 text-[11px] font-semibold text-slate-300 transition hover:bg-white/10"
-            >
-              Mark all read
-            </button>
-          ) : undefined}
-        >
-          {data.notifications.length ? data.notifications.slice(0, 12).map((n) => (
-            <button key={n.id} onClick={() => { if (!n.read) void markNotificationRead(n) }} className={`w-full text-left ${ROW} ${n.read ? 'text-slate-500' : 'bg-emerald-500/[0.06] text-emerald-100'}`}>
-              <p className="text-xs font-black uppercase tracking-wide">{notifTitle(n)}</p>
-              <p className="mt-0.5 line-clamp-2 text-sm">{[notifDetail(n), notifSub(n)].filter(Boolean).join(' — ') || 'Notification'}</p>
-              <p className="mt-0.5 text-xs opacity-70">{timeAgo(n.created_at)}{n.read ? '' : ' - click to mark read'}</p>
-            </button>
-          )) : <EmptyLine text="No notifications yet." />}
-        </Panel>
-
-        <Panel title="Draft reports" count={model.draftReports.length}>
-          {model.draftReports.length ? model.draftReports.map((r) => (
-            <Link key={r.id} href={`${caseHref(r.case_id)}&tab=reports`} className={ROW}>
-              <p className="text-sm font-bold text-white">{r.template}</p>
-              <p className="mt-0.5 text-xs text-slate-400">Updated {timeAgo(r.updated_at)} - case report draft</p>
-            </Link>
-          )) : <EmptyLine text="No unfinalized report rows authored by you." />}
-        </Panel>
+        <DashPanel title="Recent activity" count={model.activity.length} empty={model.activity.length === 0}>
+          {model.activity.map((r) => (
+            <DashRow key={r.key} title={r.title} why={r.why} meta={timeAgo(r.ts)} onClick={() => openHref(r.href)} />
+          ))}
+        </DashPanel>
       </div>
+
+      {allQuiet && (
+        <p className="rounded-lg border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-400">
+          All clear — nothing is waiting on you right now.
+        </p>
+      )}
     </section>
   )
 }

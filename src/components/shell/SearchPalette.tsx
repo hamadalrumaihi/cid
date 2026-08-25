@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuth } from '@/lib/auth'
+import { useCapabilities } from '@/lib/capabilities'
 import { caseLink } from '@/lib/caseLinks'
 import { PAGE_META, TAB_LABEL } from '@/lib/nav'
 import { useProfilesStore } from '@/lib/profiles'
@@ -27,6 +28,7 @@ import { recentSearches, rememberSearch, runSearch, SEARCH_KINDS, SEARCH_SECTION
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { useSiu } from '@/lib/useSiu'
+import { DASH_LABEL, DASH_TAB } from '@/components/dash/DashSwitcherView'
 import { useCreate, type CreateKind } from '@/components/shell/CreateHost'
 import { CalendarIcon, CaseIcon, ChevronIcon, ClockIcon, KindIcon, PlusIcon, RadioIcon, ScaleIcon, XMarkIcon } from '@/components/shell/icons'
 import { useToolNav } from '@/components/tools/useToolNav'
@@ -70,6 +72,7 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
   // vehicle/gang/narcotic hits on their record tabs (and records the recent).
   const { openHref, openRecord } = useToolNav()
   const { profile, canEdit, isCommand, isOwner, signOut, setMyLoa } = useAuth()
+  const caps = useCapabilities()
   const siu = useSiu()
   const create = useCreate()
   const [query, setQuery] = useState(initialQuery)
@@ -138,6 +141,8 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
   const onLoa = !!profile?.loa
   const siuCanAccess = siu.canAccess
   const siuIsAgent = siu.isAgent
+  const capsReady = caps.ready
+  const dashboards = caps.dashboards
   const actions = useMemo<Action[]>(() => {
     const go = (path: string) => { onClose(); openHref(path) }
     const out: Action[] = []
@@ -171,6 +176,21 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
       },
     })
     out.push({ id: 'signout', icon: <XMarkIcon size={15} />, label: 'Sign out', keywords: 'sign out log out exit quit', run: async () => { onClose(); await signOut() } })
+    // "Open <dashboard>" — EXACTLY the dashboards this account's capability
+    // set exposes (useCapabilities is the one gate model; same UX-only caveat
+    // as the gates below). Nothing until caps settle, so gated commands never
+    // flash during boot; 'submitter' never reaches this shell (separate app).
+    if (capsReady) {
+      for (const d of dashboards) {
+        if (d === 'submitter') continue
+        out.push({
+          id: `dash:${d}`, icon: <ChevronIcon dir="right" />,
+          label: `Open ${DASH_LABEL[d]}`,
+          keywords: `open dashboard ${d} ${DASH_TAB[d]} ${DASH_LABEL[d]}`.toLowerCase(),
+          run: () => go(`/${DASH_TAB[d]}`),
+        })
+      }
+    }
     // "Go to …" — gated to what this viewer may actually open. A UX gate only
     // (the routes self-gate and RLS decides data), but an ungated command list
     // would advertise owner/command/SIB surfaces to everyone.
@@ -191,7 +211,7 @@ export function SearchPalette({ open, initialQuery, onClose }: { open: boolean; 
       })
     }
     return out
-  }, [canEdit, isCommand, isOwner, siuCanAccess, siuIsAgent, onLoa, onClose, openHref, create, setMyLoa, signOut])
+  }, [canEdit, isCommand, isOwner, siuCanAccess, siuIsAgent, capsReady, dashboards, onLoa, onClose, openHref, create, setMyLoa, signOut])
 
   const matchedActions = useMemo(() => {
     const q = query.trim().toLowerCase()

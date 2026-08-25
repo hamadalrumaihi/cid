@@ -85,15 +85,15 @@ defaults for the live project.
 ## What's inside
 
 Workspaces organized into five sidebar sections — Command, Cases,
-Intelligence, Reference, and Oversight — plus the standalone Command
-Center, Owner Portal, Feedback, and Profile screens (the routing truth
-is `NAV_CATEGORIES` in `src/lib/nav.ts`):
+Investigative Tools, Reference, and Oversight — plus the standalone
+Command Center, Owner Console, Feedback, and Profile screens (the
+routing truth is `NAV_CATEGORIES` in `src/lib/nav.ts`):
 
 | Area | Purpose |
 | --- | --- |
-| **Command** | My Desk (everything waiting on you — the landing page), Action Center (prioritized queue of pending decisions), dashboard (KPIs, tickets, activity feed, bureau load, GPS trackers, raid-compensation calculator), division analytics charts, announcements, crime heatmap, roster & commendations |
+| **Command** | My Dashboard (your work at a glance — the landing page: needs-attention, my cases, jump-back, open tool tabs, drafts, watched items, recent activity), Action Center (prioritized queue of pending decisions), Division Overview (case vitals, crime analytics, activity feed, GPS trackers, raid-compensation calculator), division analytics charts, announcements, crime heatmap, roster & commendations |
 | **Cases** | Case board + full case detail (photos & case media, template-driven reports with finalize/e-sign, tasks, penal-code charges, case chat with @mentions, investigation graph, zoomable timeline, RICO tracking, sign-off workflow, court-packet export to PDF/DOCX/Markdown), operations/task forces, **legal requests** (warrant/subpoena drafting, packets, Bureau Lead+ review & fulfilment), file attachments |
-| **Intelligence** | Persons (with dossier export), BOLO board, gangs (ranks/members/turf), places, vehicle registry with cross-case matching, account registry (handles, links & confidence), indicators registry with automatic deconfliction, network graph, narcotics, ballistics, M.O. detector, media vault, records |
+| **Investigative Tools** | One multi-tab workspace holding Persons (with dossier export), BOLO board, gangs (ranks/members/turf), places, vehicle registry with cross-case matching, account registry (handles, links & confidence), indicators registry with automatic deconfliction, network graph, narcotics, ballistics, M.O. detector, media vault, records |
 | **Reference** | S.A. Penal Code, SOPs & document library (with version history), in-app user guide, developer handbook (owner-only) |
 | **Oversight** | Division calendar, weekly shift reports, audit log |
 

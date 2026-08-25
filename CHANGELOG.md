@@ -8,6 +8,79 @@ the merged PRs that compose it.
 
 ## [Unreleased] — Records & Requests domain + 10-phase roadmap
 
+### Master dashboard pass — 2026-08-25
+
+One coordinated dashboard restructure across every workspace. No RLS or
+workflow semantics changed — each dashboard renders what the viewer's own
+policies already allow, and hiding an entry remains cosmetic.
+
+**Capability model & dash primitives**
+- `src/lib/capabilities.ts` — `useCapabilities()` answers "which dashboards
+  does this account get, and with what scope?" in one place: a pure
+  `capsFrom` derivation (full test matrix) over the auth gate, SIB standing
+  and the expiry-aware DOJ role. Dashboard visibility now comes from actual
+  capabilities, never role strings. UX gating only — RLS stays the wall.
+- Shared primitives in `src/components/dash/`: `DashPanel` (counted,
+  empty-collapsing panel), `DashRow` (why-it's-here row) and `DashSwitcher`
+  (capability-gated chip row / narrow select hopping between My Dashboard,
+  Cases, Command Center, SIB, Legal Review and the Owner Console).
+
+**My Dashboard is the home**
+- The default landing is `/inbox`, retitled **My Dashboard** (it was the
+  Action Center; before that, "My Desk"). `InboxView` rebuilt: one
+  prioritized "Needs your attention" panel (the top slice of the Action
+  Center's `useActionItems` queue) replaces the dead metric strip and the
+  duplicated sign-off/returned/follow-up/task/mention panels — plus my
+  cases (health flags + returned badges), the relocated "Jump back in"
+  pins/recents strip, open Investigative Tools tabs, drafts (`user_drafts`
+  keys + unfinalized reports, discardable), watched items and bounded
+  recent activity. Every self-fetch is a slim limited projection. `/` and
+  invalid slugs now fall back to `/inbox`.
+
+**Division Overview & Command Center**
+- `/command` retitled **Division Overview** and slimmed to the shared
+  member picture: navigating case-vitals tiles (five dead KPI tiles
+  removed), crime analytics, activity feed, GPS trackers, raid comp. The
+  needs-attention widget (`AttentionWidget` deleted), command filter bar +
+  drill, bureau scorecards and caseload bars moved to the Command Center;
+  a banner points command staff across.
+- Command Center: Overview is now a command dashboard; new **Cases &
+  Assignments** (unassigned / awaiting review / returned / stale / overdue
+  queues) and **Intelligence Oversight** sections; the permissions matrix
+  moved to `src/lib/permissionsMatrix.ts`; a header badge states command
+  reach (own bureau vs division-wide) from `useCapabilities()`.
+
+**Cases dashboard**
+- Case Files opens with an overview metric strip (My active / Unassigned /
+  Awaiting review / Returned / Overdue tasks / No recent activity, plus
+  per-bureau load for command reach) whose tiles apply the matching lens;
+  first-run preset chips until the user saves a view; new attention-lens
+  values `awaiting` / `returned` / `overdue_tasks`.
+
+**Owner Console**
+- `/owner` retitled **Owner Console** and restructured into Overview /
+  Operations / Safety / Reference rails (legacy `?s=` values redirect): a
+  new owner dashboard (warnings, pending queue, recent administrative
+  changes) plus the first UI for the SIB release gate, test-fixture
+  flagging, justice grants and the deletion ledger. The static
+  documentation walls (suggestions / impact / architecture / routes /
+  workflow / learning) were pruned in favor of the Developer Handbook; one
+  Handbook & Reference section deep-links it.
+
+**SIB, DOJ & submitter**
+- SIB workspace: per-standing dashboard landing (Overview) + `?s=` deep
+  links; the Action Center gained an SIB items branch.
+- DOJ workspace: per-role overview landing (`doj/DojOverview.tsx`),
+  composed from the same RLS-scoped request set the tabs already load —
+  no new queries or predicates.
+- Field Intelligence portal: a Home dashboard in `FieldShell` (status
+  buckets over the officer's own reports) and My Reports filters.
+
+**Shell & responsive foundations**
+- Capability-gated Open-dashboard palette commands; NotificationsBell copy
+  fixes; responsive foundations — header/bottom-nav tokens, sticky action
+  bars, scroll strips, 44 px touch targets, DataTable narrow fallback.
+
 ### Portal-wide UX pass — 2026-08-25
 
 One coordinated usability pass across the whole portal. No permissions or

@@ -472,7 +472,7 @@ export function PersonProfile({ id, onBack }: { id: string; onBack: () => void }
           </Card>
 
           {/* Sticky section nav */}
-          <div className="sticky top-0 z-20 -mx-1 bg-ink-950/80 px-1 py-1 backdrop-blur">
+          <div className="sticky-below-header z-20 -mx-1 bg-ink-950/80 px-1 py-1 backdrop-blur">
             <SectionTabs<SectionId> tabs={tabs} active={section} onChange={setSection} idBase="person" ariaLabel="Person sections" />
           </div>
 

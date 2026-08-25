@@ -59,7 +59,7 @@ export const DEP_NODES: DepNode[] = [
   { id: 'tbl/profiles', kind: 'table', label: 'profiles', about: 'One row per member: role, bureau, active, LOA. Guard trigger blocks self-promotion; email column is command-granted.', dependsOn: [], ifChanged: 'Every RLS helper reads it; the PROFILE_COLS/email constraint must hold.', risk: 'high' },
   { id: 'tbl/case-satellites', kind: 'table', label: 'case satellites (evidence, reports, tasks, messages, intel links…)', about: '17 case-scoped tables, all gated by can_access_case.', dependsOn: ['tbl/cases'], ifChanged: 'deleteWithUndo cascade configs in CaseDetail/GangsView/PlacesView must match the FKs.', risk: 'high' },
   { id: 'tbl/intel', kind: 'table', label: 'shared intel (persons, gangs, vehicles, places, indicators, …)', about: '21 registries: active-member read/write, command delete.', dependsOn: [], ifChanged: 'Registry views + pickers + graph + packets read them.', risk: 'medium' },
-  { id: 'tbl/own-row', kind: 'table', label: 'own-row (notifications, watchlist, shift_reports, feedback)', about: 'Keyed to auth.uid().', dependsOn: ['tbl/profiles'], ifChanged: 'Bell/My Desk/shifts flows.', risk: 'medium' },
+  { id: 'tbl/own-row', kind: 'table', label: 'own-row (notifications, watchlist, shift_reports, feedback)', about: 'Keyed to auth.uid().', dependsOn: ['tbl/profiles'], ifChanged: 'Bell/My Dashboard/shifts flows.', risk: 'medium' },
   { id: 'tbl/audit_log', kind: 'table', label: 'audit_log', about: 'Trigger-written mutation log; owner-only read.', dependsOn: [], ifChanged: 'AuditView + the activity feed read it; never add a client write path.', risk: 'medium' },
 
   // ---- rpcs -----------------------------------------------------------

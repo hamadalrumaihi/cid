@@ -28,10 +28,12 @@ SIB-authority cases).
    → submit for sign-off → export the court packet ([Ch. 4.1](04-features.md)).
 2. **Build intelligence**: registries for persons, gangs, vehicles, places,
    indicators — cross-referenced automatically (deconfliction alerts).
-3. **Command oversight**: dashboard KPIs, analytics, heatmap, roster
-   approval, announcements, GPS-tracker co-signing.
-4. **Personal desk**: My Desk (everything waiting on *you*), watchlist,
-   calendar, weekly shift reports, notifications.
+3. **Command oversight**: the Command Center (approvals, promotions,
+   case & intelligence oversight queues), Division Overview vitals,
+   analytics, heatmap, announcements, GPS-tracker co-signing.
+4. **Personal dashboard**: My Dashboard (the default landing —
+   everything waiting on *you* at a glance), watchlist, calendar,
+   weekly shift reports, notifications.
 
 ## The 30-second architecture
 

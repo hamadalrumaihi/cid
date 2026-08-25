@@ -52,6 +52,21 @@ const TABS: Array<{ id: Screen; label: string }> = [
   { id: 'drafts', label: 'Drafts' },
 ]
 
+/** The sent-report statuses, folded into the four buckets an author actually
+ *  tracks. Labels reuse the registry's own words (lib/fieldSubmissions
+ *  STATUS_LABEL) so the tiles, the filter chips and the badges never disagree.
+ *  'draft' is deliberately absent — drafts have their own screen and row. */
+type BucketId = 'sent' | 'reviewing' | 'needs_info' | 'done'
+
+const BUCKETS: Array<{ id: BucketId; label: string; statuses: readonly string[] }> = [
+  { id: 'sent', label: 'Sent', statuses: ['new'] },
+  { id: 'reviewing', label: 'Being reviewed', statuses: ['reviewing'] },
+  { id: 'needs_info', label: 'Question for you', statuses: ['needs_info'] },
+  // Three terminal states, one bucket: reviewed, acted on, or filed — each
+  // means "nothing more is needed from you".
+  { id: 'done', label: 'Reviewed', statuses: ['reviewed', 'actionable', 'archived'] },
+]
+
 /** Name, callsign, rank and agency, as one line. The callsign and rank come
  *  from the APPOINTMENT (command-set) rather than from profiles.badge_number,
  *  which the account holder can edit — attribution should not be self-declared. */
@@ -66,6 +81,11 @@ export function FieldShell() {
   const { profile, field, signOut } = useAuth()
   const [screen, setScreen] = useState<Screen>('home')
   const [rows, setRows] = useState<FieldSubmissionRow[] | null>(null)
+  // My Reports can arrive pre-filtered from a dashboard tile; picking the tab
+  // directly always shows everything.
+  const [reportFilter, setReportFilter] = useState<BucketId | null>(null)
+  // A draft picked to resume. Cleared whenever navigation starts fresh.
+  const [resumeDraft, setResumeDraft] = useState<FieldSubmissionRow | null>(null)
 
   const agency = field?.agency ?? ''
   const agencyName = AGENCY_NAME[agency] ?? agency
@@ -79,6 +99,18 @@ export function FieldShell() {
   const drafts = (rows ?? []).filter((r) => isEditableByOfficer(r.status))
   const sent = (rows ?? []).filter((r) => !isEditableByOfficer(r.status))
   const needsAnswer = sent.filter((r) => r.status === 'needs_info')
+
+  const bucketCount = (b: (typeof BUCKETS)[number]) =>
+    sent.filter((r) => b.statuses.includes(r.status)).length
+  const activeBucket = BUCKETS.find((b) => b.id === reportFilter) ?? null
+  const reportRows = activeBucket
+    ? sent.filter((r) => activeBucket.statuses.includes(r.status))
+    : sent
+
+  const goTo = (s: Screen) => { setReportFilter(null); setResumeDraft(null); setScreen(s) }
+  const openReports = (f: BucketId | null) => { setResumeDraft(null); setReportFilter(f); setScreen('reports') }
+  const startNew = () => { setResumeDraft(null); setScreen('submit') }
+  const resume = (r: FieldSubmissionRow) => { setResumeDraft(r); setScreen('submit') }
 
   return (
     <main className="min-h-screen bg-ink-950 text-white">
@@ -94,9 +126,9 @@ export function FieldShell() {
         </div>
         <nav className="mx-auto flex max-w-3xl gap-1 overflow-x-auto px-4 pb-2 sm:px-6" aria-label="Field Intelligence">
           {TABS.map((t) => (
-            <button key={t.id} onClick={() => setScreen(t.id)}
+            <button key={t.id} onClick={() => goTo(t.id)}
               aria-current={screen === t.id ? 'page' : undefined}
-              className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+              className={`inline-flex min-h-11 flex-shrink-0 items-center rounded-lg px-3 py-1.5 text-sm font-semibold transition lg:min-h-9 ${
                 screen === t.id ? 'bg-badge-500/15 text-white' : 'text-slate-400 hover:bg-white/5'
               }`}>
               {t.label}
@@ -111,6 +143,105 @@ export function FieldShell() {
       <div className="mx-auto max-w-3xl space-y-4 px-4 py-6 sm:px-6">
         {screen === 'home' && (
           <>
+            {needsAnswer.length > 0 && (
+              <section aria-label="Needs your information"
+                className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-4 sm:p-5">
+                <h2 className="text-sm font-semibold text-amber-200">
+                  {needsAnswer.length === 1
+                    ? 'An investigator needs your information'
+                    : `${needsAnswer.length} reports need your information`}
+                </h2>
+                <p className="mt-1 text-sm text-slate-300">
+                  A report cannot move on until you answer.
+                </p>
+                <div className="mt-3">
+                  <Button variant="warn" onClick={() => openReports('needs_info')}>
+                    {needsAnswer.length === 1
+                      ? `Answer now · ${submissionRef(needsAnswer[0])}`
+                      : 'Answer now'}
+                  </Button>
+                </div>
+              </section>
+            )}
+
+            <Card>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                  My reports
+                </h2>
+                <span className="text-xs text-slate-400">Tap a count to see those reports</span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {BUCKETS.map((b) => {
+                  const n = bucketCount(b)
+                  const hot = b.id === 'needs_info' && n > 0
+                  return (
+                    <button key={b.id} type="button" onClick={() => openReports(b.id)}
+                      className={`min-h-11 rounded-lg border p-3 text-left transition hover:bg-white/5 ${
+                        hot ? 'border-amber-500/25 bg-amber-500/5' : 'border-white/10 bg-ink-950/40'
+                      }`}>
+                      <span className={`block text-2xl font-bold tabular-nums ${
+                        hot ? 'text-amber-300' : 'text-white'
+                      }`}>{rows ? n : '—'}</span>
+                      <span className="mt-0.5 block text-xs font-semibold text-slate-400">{b.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </Card>
+
+            <Card>
+              <h2 className="text-base font-semibold text-white">
+                Send information to CID&nbsp;/&nbsp;SIB
+              </h2>
+              <p className="mt-2 text-sm text-slate-300">
+                Report what you have seen on patrol — people, vehicles, gangs and
+                motorcycle clubs, criminal locations and seizures. Investigators review it
+                and decide what it means; you do not need to know which unit or case it
+                belongs to.
+              </p>
+              <div className="mt-4">
+                <Button variant="primary" onClick={startNew}>
+                  Submit new report
+                </Button>
+              </div>
+            </Card>
+
+            {drafts.length > 0 && (
+              <SubmissionList
+                rows={drafts.slice(0, 3)} title="Unfinished drafts" onResume={resume}
+                empty="No unfinished reports."
+                footer={drafts.length > 3 ? (
+                  <Button variant="ghost" onClick={() => goTo('drafts')}>
+                    All {drafts.length} drafts
+                  </Button>
+                ) : null}
+              />
+            )}
+
+            <Card>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                How this works
+              </h2>
+              <ul className="mt-2 space-y-2 text-sm text-slate-300">
+                <li>
+                  <span className="font-semibold text-white">After you send a report</span>,
+                  an investigator reads it. You will see its status change here — and if it
+                  was useful, it may show as being acted on or kept on file.
+                </li>
+                <li>
+                  <span className="font-semibold text-white">“Question for you”</span> means
+                  an investigator needs something only you can answer before going further.
+                  Open the report and reply — that is all.
+                </li>
+                <li>
+                  <span className="font-semibold text-white">Drafts</span> save themselves
+                  as you type, so nothing is lost if you close the tab. A draft is yours
+                  alone until you send it; once sent, it cannot be edited.
+                </li>
+              </ul>
+            </Card>
+
             <Card>
               <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
                 Reporting officer
@@ -125,61 +256,59 @@ export function FieldShell() {
                 back to the officer who actually made it.
               </p>
             </Card>
-
-            <Card>
-              <h2 className="text-base font-semibold text-white">
-                Send information to CID&nbsp;/&nbsp;SIB
-              </h2>
-              <p className="mt-2 text-sm text-slate-300">
-                Report what you have seen on patrol — people, vehicles, gangs and
-                motorcycle clubs, criminal locations and seizures. Investigators review it
-                and decide what it means; you do not need to know which unit or case it
-                belongs to.
-              </p>
-              <div className="mt-4">
-                <Button variant="primary" onClick={() => setScreen('submit')}>
-                  Submit Intelligence
-                </Button>
-              </div>
-            </Card>
-
-            {needsAnswer.length > 0 && (
-              <Card>
-                <h2 className="text-sm font-semibold text-amber-200">
-                  {needsAnswer.length === 1 ? 'An investigator has a question' : `${needsAnswer.length} questions for you`}
-                </h2>
-                <p className="mt-1 text-sm text-slate-300">
-                  Open {needsAnswer.length === 1 ? 'it' : 'them'} under My Reports.
-                </p>
-              </Card>
-            )}
-
-            <SubmissionList
-              rows={sent.slice(0, 5)} title="Recent reports"
-              empty="Nothing sent yet. Anything useful you have seen is worth reporting."
-            />
           </>
         )}
 
         {screen === 'submit' && (
-          <FieldSubmitForm onDone={() => { setScreen('reports') }} />
+          <FieldSubmitForm key={resumeDraft?.id ?? 'new'} resume={resumeDraft ?? undefined}
+            onDone={() => { setResumeDraft(null); setScreen('reports') }} />
         )}
 
         {screen === 'reports' && (
-          <SubmissionList
-            rows={sent} title="My reports"
-            empty="Nothing sent yet."
-          />
+          <>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filter my reports">
+              <FilterChip active={!activeBucket} onClick={() => setReportFilter(null)}>
+                All · {sent.length}
+              </FilterChip>
+              {BUCKETS.map((b) => (
+                <FilterChip key={b.id} active={reportFilter === b.id}
+                  onClick={() => setReportFilter(b.id)}>
+                  {b.label} · {bucketCount(b)}
+                </FilterChip>
+              ))}
+            </div>
+            <SubmissionList
+              rows={reportRows} title={activeBucket ? `My reports — ${activeBucket.label}` : 'My reports'}
+              empty={activeBucket ? 'No reports here right now.' : 'Nothing sent yet.'}
+            />
+          </>
         )}
 
         {screen === 'drafts' && (
           <SubmissionList
-            rows={drafts} title="Drafts"
+            rows={drafts} title="Drafts" onResume={resume}
             empty="No unfinished reports. Drafts save themselves as you type, so nothing is lost if you close the tab."
           />
         )}
       </div>
     </main>
+  )
+}
+
+/** A report-list filter pill. Local to this shell on purpose — the CID portal
+ *  filters with DataTable; this portal keeps its own small idiom. */
+function FilterChip({ active, onClick, children }: {
+  active: boolean; onClick: () => void; children: React.ReactNode
+}) {
+  return (
+    <button type="button" onClick={onClick} aria-pressed={active}
+      className={`inline-flex min-h-11 flex-shrink-0 items-center rounded-full border px-3 py-1.5 text-sm font-semibold transition lg:min-h-9 ${
+        active
+          ? 'border-badge-500/40 bg-badge-500/15 text-white'
+          : 'border-white/10 text-slate-400 hover:bg-white/5 hover:text-white'
+      }`}>
+      {children}
+    </button>
   )
 }
 
@@ -227,15 +356,18 @@ function OfficerThread({ submissionId }: { submissionId: string }) {
       <div className="mt-2 flex gap-2">
         <Input value={body} onChange={(e) => setBody(e.target.value)}
           placeholder="Your answer…" disabled={busy} />
-        <Button size="sm" variant="primary" disabled={busy || !body.trim()}
+        <Button variant="primary" disabled={busy || !body.trim()}
           onClick={() => void send()}>Send</Button>
       </div>
     </div>
   )
 }
 
-function SubmissionList({ rows, title, empty }: {
+function SubmissionList({ rows, title, empty, onResume, footer }: {
   rows: FieldSubmissionRow[]; title: string; empty: string
+  /** When given, drafts get a Resume button that reopens them in the form. */
+  onResume?: (r: FieldSubmissionRow) => void
+  footer?: React.ReactNode
 }) {
   return (
     <Card pad="none" className="overflow-hidden">
@@ -250,7 +382,7 @@ function SubmissionList({ rows, title, empty }: {
             <li key={r.id} className="px-5 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-mono text-sm text-slate-300">{submissionRef(r)}</span>
-                <Badge tone={r.status === 'needs_info' ? 'warn' : r.status === 'rejected' ? 'neutral' : 'accent'}>
+                <Badge tone={r.status === 'needs_info' ? 'warn' : 'accent'}>
                   {fieldStatusLabel(r.status)}
                 </Badge>
               </div>
@@ -261,11 +393,17 @@ function SubmissionList({ rows, title, empty }: {
               <p className="mt-1 text-[11px] text-slate-600">
                 {r.submitted_at ? `Sent ${fmtDateTime(r.submitted_at)}` : `Started ${fmtDateTime(r.created_at)}`}
               </p>
+              {onResume && isEditableByOfficer(r.status) && (
+                <div className="mt-2">
+                  <Button onClick={() => onResume(r)}>Resume draft</Button>
+                </div>
+              )}
               {r.status === 'needs_info' && <OfficerThread submissionId={r.id} />}
             </li>
           ))}
         </ul>
       )}
+      {footer && <div className="border-t border-white/5 px-5 py-2">{footer}</div>}
     </Card>
   )
 }

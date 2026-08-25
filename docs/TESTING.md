@@ -57,7 +57,7 @@ Non-negotiable conventions (every file in the suite):
 - **`rls_test_cleanup()` at start and teardown** — the definer RPC (callable only by `rls-test-*` accounts, deleting only rows they authored) purges cases/reports/evidence/legal/membership/transfer fixtures so re-runs are deterministic even after a crashed run.
 - **`rls_test_reset_member()` for fixture baselining** — restores an rls-test profile's role/division/active after promotion/transfer tests (callable only by, and only against, rls-test accounts; migration `20260718020000`).
 - **Self-skip without fixture passwords** — no `RLS_TEST_PASSWORD_*` in the environment means every test skips, so plain `npm test` and secretless forks stay offline and green.
-- A vitest reporter (`tests/rls/securityReporter.ts`) posts sanitized per-file results to the Owner Portal's Security Testing dashboard via `security_test_report()` — best-effort, never affects the run.
+- A vitest reporter (`tests/rls/securityReporter.ts`) posts sanitized per-file results to the Owner Console's Security & Audit section via `security_test_report()` — best-effort, never affects the run.
 
 Run the live RLS suite **after every change that touches RLS policies, definer RPCs, or grants** — it has caught real production bugs before release (the `private.is_owner()` EXECUTE grant; the justice NULL-guard gap that became migration `20260714070000`).
 

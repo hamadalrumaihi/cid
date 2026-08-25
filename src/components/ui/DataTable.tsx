@@ -16,6 +16,8 @@
  *   - `mobileCard` — below `sm` the current page renders as a card list
  *     (filter/sort/pagination still apply) instead of a table that would
  *     only x-scroll. Uses lib/useNarrow (matchMedia, not CSS hiding).
+ *     Without a mobileCard a generic label/value card is derived from the
+ *     first few columns, so no table ever x-scrolls on a phone.
  *   - rows with `onRowClick` are keyboard-activatable (tabIndex 0 +
  *     Enter/Space); the global [tabindex]:focus-visible ring applies. */
 import { useMemo, useRef, useState, type ReactNode } from 'react'
@@ -148,7 +150,56 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = 50, pageSizeOpt
   }
 
   const cellPad = dense ? 'py-1.5' : 'py-2'
-  const asCards = narrow && !!mobileCard
+  // Below `sm` every table renders as cards: the caller's mobileCard when
+  // provided, else a generic label/value card built from the first columns —
+  // never a table that only x-scrolls on a phone.
+  const asCards = narrow
+
+  /** Generic narrow card — first column as the title (its render() kept),
+   *  the next up-to-3 columns as label: value pairs. Selection and row
+   *  activation carry over so the phone view loses no behavior. */
+  const genericCard = (r: T, idx: number) => {
+    const [head, ...rest] = columns
+    const meta = rest.slice(0, 3)
+    const clickable = !!onRowClick
+    return (
+      <div
+        onClick={clickable ? () => onRowClick!(r) : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        role={clickable ? 'button' : undefined}
+        onKeyDown={clickable ? (e) => {
+          if (e.target !== e.currentTarget) return
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick!(r) }
+        } : undefined}
+        className={`flex items-start gap-3 rounded-lg border border-white/5 bg-ink-900/60 p-3 ${clickable ? 'cursor-pointer transition hover:border-white/10' : ''}`}
+      >
+        {selection && (
+          <input
+            type="checkbox"
+            aria-label={`Select row ${head ? head.value(r) : selection.idOf(r)}`}
+            checked={selection.selected.has(selection.idOf(r))}
+            disabled={selection.disabled?.(r) ?? false}
+            onClick={(e) => { e.stopPropagation(); pickRow(r, idx, e.shiftKey) }}
+            onChange={() => { /* handled in onClick for shift-range support */ }}
+            className="mt-1"
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          {head && <div className="text-sm font-semibold text-white">{head.render ? head.render(r) : head.value(r)}</div>}
+          {meta.length > 0 && (
+            <dl className="mt-1.5 space-y-1">
+              {meta.map((c) => (
+                <div key={c.key} className="flex items-baseline gap-2 text-xs">
+                  <dt className="flex-shrink-0 font-semibold uppercase tracking-wider text-slate-400">{c.label}</dt>
+                  <dd className="min-w-0 text-slate-200">{c.render ? c.render(r) : c.value(r)}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -191,7 +242,7 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = 50, pageSizeOpt
         /* Narrow fallback: the SAME page slice as cards — an honest stack
          * instead of a table that only x-scrolls (see lib/useNarrow). */
         <ul className="space-y-2">
-          {slice.map((r) => <li key={rowKey(r)}>{mobileCard!(r)}</li>)}
+          {slice.map((r, idx) => <li key={rowKey(r)}>{mobileCard ? mobileCard(r) : genericCard(r, idx)}</li>)}
         </ul>
       ) : (
         <div className="overflow-x-auto">

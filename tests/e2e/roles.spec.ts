@@ -2,7 +2,7 @@
  *  the six seeded roles it signs in and asserts the RLS-visible navigation
  *  contract — the UI gates must match what the database allows:
  *   - Command Center leaf: Bureau Lead / Deputy / Director / Owner only.
- *   - Owner Portal leaf: Owner only.
+ *   - Owner Console leaf: Owner only.
  *  Plus a signed-out check that the gate is shown. Self-skips without the test
  *  project credentials, so CI and forks stay green.
  *
@@ -31,7 +31,7 @@ test.describe('role-gated navigation', () => {
         await expect(page.getByRole('heading', { name: /CID Portal/i })).toBeVisible({ timeout: 20_000 })
 
         const commandLeaf = page.getByRole('button', { name: /Command Center/i })
-        const ownerLeaf = page.getByRole('button', { name: /Owner Portal/i })
+        const ownerLeaf = page.getByRole('button', { name: /Owner Console/i })
 
         if (canCommand(account)) await expect(commandLeaf).toBeVisible()
         else await expect(commandLeaf).toHaveCount(0)

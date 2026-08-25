@@ -249,7 +249,7 @@ export function GangsView() {
       </div>
 
       {selected.size > 0 && (
-        <div className="sticky top-2 z-10 flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 backdrop-blur">
+        <div className="sticky-below-header-2 z-10 flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 backdrop-blur">
           <span className="text-sm font-semibold text-rose-200">{selected.size} selected</span>
           <span className="flex gap-2">
             <button onClick={() => void deleteRows(gangs.filter((g) => selected.has(g.id)))} className="rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500">Delete selected</button>

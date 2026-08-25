@@ -180,7 +180,7 @@ export function SalesObservationForm({
         <Field label="Total units" required>{(id) => (
           <Input id={id} inputMode="numeric" value={units} onChange={(e) => setUnits(e.target.value)} placeholder="0" />
         )}</Field>
-        <div className="grid grid-cols-[1fr,auto] gap-2">
+        <div className="grid grid-cols-[1fr_auto] gap-2">
           <Field label="Recorded weight">{(id) => (
             <Input id={id} inputMode="decimal" value={weightValue} onChange={(e) => setWeightValue(e.target.value)} placeholder="0" />
           )}</Field>
@@ -203,7 +203,7 @@ export function SalesObservationForm({
         ) : (
           <div className="space-y-2">
             {stacks.map((s, i) => (
-              <div key={i} className="grid grid-cols-[auto,1fr,1fr,auto,auto] items-end gap-2">
+              <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-[auto_1fr_1fr_auto_auto] sm:items-end">
                 <span className="pb-2 text-[11px] font-semibold text-slate-500">#{i + 1}</span>
                 <Field label="Units">{(id) => (
                   <Input id={id} inputMode="numeric" value={s.units}

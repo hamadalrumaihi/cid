@@ -40,9 +40,9 @@ export function generateStaticParams() {
 export default async function TabPage({ params }: { params: Promise<{ tab: string }> }) {
   const { tab } = await params
   // Vanilla navigate() fallbacks: the legacy reports leaf folded into cases;
-  // anything unknown falls back to command.
+  // anything unknown falls back to My Dashboard (the default landing).
   if (tab === 'reports') redirect('/cases')
-  if (!(tab in PAGE_META)) redirect('/command')
+  if (!(tab in PAGE_META)) redirect('/inbox')
   // Legacy Intelligence tool routes → the Investigative Tools workspace. The
   // routes stay prerendered and valid (deep links, bookmarks, notifications,
   // case cross-links); a tiny client shim maps their query params onto

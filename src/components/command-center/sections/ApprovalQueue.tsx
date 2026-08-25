@@ -473,7 +473,7 @@ export function ApprovalQueue() {
           </div>
         ) : <p className="text-sm text-emerald-300">✓ No sign-offs waiting on you.</p>}
       </section>
-      <p className="text-[11px] text-slate-500">The same reviews appear on your <b>My Desk</b> tab; this is the command-wide aggregate. Only authorized reviewers can decide each stage.</p>
+      <p className="text-[11px] text-slate-500">The same reviews appear on your <b>My Dashboard</b> tab; this is the command-wide aggregate. Only authorized reviewers can decide each stage.</p>
 
       {decision && (
         <DecisionModal

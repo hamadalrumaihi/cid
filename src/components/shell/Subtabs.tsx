@@ -49,7 +49,7 @@ export function Subtabs() {
 
   return (
     <nav
-      className="z-10 flex items-center gap-1 overflow-x-auto border-b border-white/5 bg-ink-950/60 px-4 py-2 sm:px-8"
+      className="scroll-strip z-10 flex items-center gap-1 overflow-x-auto border-b border-white/5 bg-ink-950/60 px-4 py-2 sm:px-8"
       role="tablist"
       aria-label="Section tools"
     >

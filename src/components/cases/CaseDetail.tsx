@@ -600,10 +600,10 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
 
       <MetricStrip metrics={metrics} />
 
-      {/* Sticky tab strip — tucks directly under the shell header (sticky
-          top-0). Header ≈ 4.5rem mobile / 4.75rem sm+; z-10 stays below the
-          header's z-20 so the header owns the seam (no gap, no overlap). */}
-      <div className="sticky top-[4.5rem] z-10 -mx-4 border-b border-white/10 bg-ink-950/90 px-4 backdrop-blur sm:top-[4.75rem] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      {/* Sticky tab strip — tucks directly under the shell header via the
+          shared --app-header-h token; z-10 stays below the header's z-30 so
+          the header owns the seam (no gap, no overlap). */}
+      <div className="sticky top-[var(--app-header-h)] z-10 -mx-4 border-b border-white/10 bg-ink-950/90 px-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         {narrow ? (
           /* Phones: the 14-tab strip was 4-5 screen widths of horizontal
              scrolling — a select-style switcher (current section + count,

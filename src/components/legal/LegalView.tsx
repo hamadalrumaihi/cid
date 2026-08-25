@@ -10,10 +10,10 @@
  *   - Requests — the canonical card registry (one group per request via
  *     dispositionFor) with simple filters: text search, type/subtype, and
  *     status group.
- *   - DOJ tabs (justice members only — DojWorkspace): the shared prosecutor
- *     queue, the judicial queue, held work, returns, the decided archive, and
- *     AG administration. CID-only members see exactly the two CID views;
- *     dual members get both sets.
+ *   - DOJ tabs (justice members only — DojWorkspace): the per-role review
+ *     Overview landing, the shared prosecutor queue, the judicial queue, held
+ *     work, returns, the decided archive, and AG administration. CID-only
+ *     members see exactly the two CID views; dual members get both sets.
  *  Creation and revision run through the guided LegalCreateWizard; every
  *  write stays on the existing definer RPCs. Deep link: /legal?request=<id>. */
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
@@ -250,6 +250,7 @@ function LegalViewInner() {
   ]
 
   const dojCounts: Record<DojViewId, number | undefined> = {
+    doj_overview: undefined,
     queue: dojLists.queue.length,
     judicial: dojLists.judicial.length,
     mine: dojLists.mine.length,
@@ -262,7 +263,13 @@ function LegalViewInner() {
       { id: 'overview' as const, label: 'Overview' },
       { id: 'requests' as const, label: 'Requests', count: requests.length },
     ] : []),
-    ...dojViews.map((v) => ({ id: v.id, label: v.label, count: dojCounts[v.id] })),
+    // Dual members already have a CID "Overview" tab — the DOJ landing gets a
+    // disambiguated label for them; pure DOJ members see plain "Overview".
+    ...dojViews.map((v) => ({
+      id: v.id,
+      label: cidMode && v.id === 'doj_overview' ? 'DOJ overview' : v.label,
+      count: dojCounts[v.id],
+    })),
   ]
   const isDojView = dojViews.some((v) => v.id === view)
 
@@ -316,6 +323,7 @@ function LegalViewInner() {
             lists={dojLists}
             requests={requests}
             onOpen={open}
+            onNavigate={setView}
             reload={reload}
           />
         )}

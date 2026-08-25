@@ -59,13 +59,13 @@ export function PortalAssistant() {
         onClick={() => setOpen((v) => !v)}
         title="Portal Assistant (owner pilot)"
         aria-label="Open Portal Assistant"
-        className="fixed bottom-24 right-4 z-40 grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-badge-500 text-white transition hover:brightness-110 lg:bottom-6"
+        className="fixed bottom-[calc(var(--bottom-nav-h,0rem)+1.5rem+env(safe-area-inset-bottom,0px))] right-4 z-40 grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-badge-500 text-white transition hover:brightness-110 lg:bottom-6"
       >
         <span aria-hidden className="text-lg">✦</span>
       </button>
 
       {open && (
-        <div className="fixed bottom-40 right-4 z-40 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-white/10 bg-ink-900 p-3 shadow-2xl lg:bottom-20">
+        <div className="fixed bottom-[calc(var(--bottom-nav-h,0rem)+5rem+env(safe-area-inset-bottom,0px))] right-4 z-40 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-white/10 bg-ink-900 p-3 shadow-2xl lg:bottom-20">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-sm font-bold text-white">Portal Assistant <span className="rounded bg-white/10 px-1.5 text-[10px] font-semibold text-slate-300">owner pilot</span></p>
             <button onClick={() => setOpen(false)} aria-label="Close" className="rounded p-1 text-slate-400 hover:text-white">✕</button>

@@ -1,19 +1,24 @@
 'use client'
 
-/** Owner Portal — the project owner's control center: project intelligence,
- *  feedback triage, change planning and engineering workflow in one
- *  owner-only place. Documentation lives in the Developer Handbook
- *  (Reference → Developer Handbook); this portal is for browsing,
- *  management, diagnostics and action planning.
+/** Owner Console — the project owner's control center, consolidated
+ *  (Phase 2C) into five areas: the Owner Dashboard (warnings, queues, recent
+ *  administrative changes), Portal Management (global controls + runbook),
+ *  Roles & Access (oversight + the owner-only grant RPCs), the Safety
+ *  surfaces (Permanent Deletion, Security & Audit, System Health) and one
+ *  Handbook & Reference section. The static documentation walls that used to
+ *  live here moved to the Developer Handbook (/devdocs) — this console is for
+ *  deciding and doing.
  *
  *  Access: useAuth().isOwner (profiles.is_owner) gates the UI; RLS
- *  (private.is_owner()) is the real wall on feedback/feedback_meta/audit.
- *  NOT a CID operational screen — division data appears only as high-level
- *  counts and health signals. */
+ *  (private.is_owner()) is the real wall on feedback/feedback_meta/audit/
+ *  deleted_member_ledger, and every dangerous action here is an owner-only,
+ *  self-auditing SECURITY DEFINER RPC — the console never writes its own
+ *  audit rows. NOT a CID operational screen — division data appears only as
+ *  high-level counts and health signals. */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
-import { countRows, insert, list, remove, update, updateWhere, withRetry } from '@/lib/db'
+import { countRows, insert, list, remove, rpc, update, updateWhere, withRetry } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { isConfigured } from '@/lib/supabase'
 import { fmConfigured } from '@/lib/fivemanage'
@@ -21,6 +26,11 @@ import { useRealtimeStore, useTableVersion } from '@/lib/realtime'
 import { officerName, useProfilesStore } from '@/lib/profiles'
 import { timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
+import { parseSecurityOverview, type SecurityOverview } from '@/lib/schemas'
+import { parseStringArray } from '@/lib/jsonShapes'
+import { AGENCY_LABEL, justiceRoleLabel, type JusticeAgency } from '@/lib/justice'
+import { PERMANENT_BUREAUS, bureauLabel, roleLabel } from '@/lib/roles'
+import { uiConfirm } from '@/components/ui/dialog'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -29,53 +39,55 @@ import { Notice, EmptyState, ErrorNotice } from '@/components/ui/Notice'
 import { Badge } from '@/components/ui/Badge'
 import { inputCls, labelCls } from '@/components/ui/Field'
 import { ArchiveIcon, SearchIcon } from '@/components/shell/icons'
+import { DashPanel } from '@/components/dash/DashPanel'
+import { DashRow } from '@/components/dash/DashRow'
 import { DepExplorer } from '@/components/devdocs/DevDocsView'
 import {
   ENV_VARS, FB_PRIORITIES, FB_PRIORITY_TINT, FB_STATUSES, FB_STATUS_TINT, FB_TYPES,
-  LEARNING, MANUAL_ACTIONS, MATRIX_NOTE, PERMISSIONS_MATRIX, REALTIME_DOC, RECOVERY_NOTES,
-  ROUTES, SUGGESTIONS, WORKFLOW, fbLabel,
+  MANUAL_ACTIONS, RECOVERY_NOTES, fbLabel,
 } from './ownerData'
-import { PERMANENT_BUREAUS, bureauLabel } from '@/lib/roles'
-import { useOwnerVitals } from './ownerVitals'
+import { ADMIN_AUDIT_ACTIONS, adminActionLabel, ledgerReferenceCount, ownerQueue } from './ownerQueue'
 import { SecurityTestingSection } from './SecurityTestingSection'
 import { PermanentDeletionSection } from './PermanentDeletionSection'
-import { parseStringArray } from '@/lib/jsonShapes'
 
 type FeedbackRow = Tables<'feedback'>
 type MetaRow = Tables<'feedback_meta'>
 interface FbItem { fb: FeedbackRow; meta: MetaRow | null }
 
 const SECTIONS: { id: string; label: string; sub: string }[] = [
-  { id: 'home', label: 'Overview', sub: 'What this portal is and where everything lives' },
-  { id: 'health', label: 'Health & statistics', sub: 'Service checks, safety warnings & live counts' },
-  { id: 'security', label: 'Security Testing', sub: 'Live RLS suite results, fixture health & the access matrix' },
-  { id: 'ops', label: 'Production status', sub: 'Workflow health, Justice coverage, manual actions & recovery' },
+  { id: 'home', label: 'Owner Dashboard', sub: 'Warnings, the pending queue & recent administrative changes' },
+  { id: 'manage', label: 'Portal Management', sub: 'SIB release gate, reference data, feature status & the runbook' },
+  { id: 'access', label: 'Roles & Access', sub: 'Membership oversight, justice grants & test-fixture flagging' },
   { id: 'feedback', label: 'Feedback & Bugs', sub: 'The owner inbox — triage, catalog, resolve' },
-  { id: 'suggestions', label: 'Suggestions', sub: 'The improvement roadmap from the repo analysis' },
-  { id: 'impact', label: 'Change Impact', sub: '"If I change this, what else must I check?"' },
-  { id: 'architecture', label: 'Architecture', sub: 'The system at a glance + deep links' },
-  { id: 'routes', label: 'Routes', sub: 'Every screen, its access rule and risk' },
-  { id: 'env', label: 'Environment', sub: 'Variables — configured or not, never values' },
-  { id: 'realtime', label: 'Realtime', sub: 'Channels, session activity & failure points' },
-  { id: 'workflow', label: 'Workflow', sub: 'Safe development, deploys, rollback & permissions' },
-  { id: 'learning', label: 'Learning Center', sub: 'Paths, common mistakes, what to avoid early' },
-  { id: 'deletion', label: 'Permanent deletion', sub: 'Irreversible member erasure — arm, confirm, execute' },
+  { id: 'deletion', label: 'Permanent Deletion', sub: 'Irreversible member erasure + the deletion ledger' },
+  { id: 'security', label: 'Security & Audit', sub: 'Live RLS suite results, client errors & the audit log' },
+  { id: 'system', label: 'System Health', sub: 'DB round-trip, environment, realtime & live table counts' },
+  { id: 'reference', label: 'Handbook & Reference', sub: 'Deep links into the Developer Handbook + the dependency explorer' },
 ]
 
 /** Desktop rail grouping — same section ids + deep-links, grouped by purpose. */
 const NAV_GROUPS: { label: string; ids: string[] }[] = [
   { label: 'Overview', ids: ['home'] },
-  { label: 'Monitor', ids: ['health', 'security', 'ops', 'realtime'] },
-  { label: 'Improve', ids: ['feedback', 'suggestions', 'impact'] },
-  { label: 'Understand', ids: ['architecture', 'routes', 'env'] },
-  { label: 'Operate', ids: ['workflow', 'learning', 'deletion'] },
+  { label: 'Operations', ids: ['manage', 'access', 'feedback'] },
+  { label: 'Safety', ids: ['deletion', 'security', 'system'] },
+  { label: 'Reference', ids: ['reference'] },
 ]
+
+/** ?s= compatibility — every retired section id maps to its successor, so old
+ *  deep links keep resolving. Unknown values fall through to home. The ids
+ *  'feedback', 'security' and 'deletion' survived the reorganization. */
+const LEGACY_SECTION: Record<string, string> = {
+  health: 'system', ops: 'manage', realtime: 'system', env: 'system',
+  suggestions: 'reference', impact: 'reference', architecture: 'reference',
+  routes: 'reference', workflow: 'reference', learning: 'reference',
+}
 
 export function OwnerView() {
   const { state, isOwner } = useAuth()
   const router = useRouter()
   const sp = useSearchParams()
-  const section = sp.get('s') ?? 'home'
+  const rawSection = sp.get('s') ?? 'home'
+  const section = SECTIONS.some((s) => s.id === rawSection) ? rawSection : LEGACY_SECTION[rawSection] ?? 'home'
   const [query, setQuery] = useState('')
   const [handbookTitles, setHandbookTitles] = useState<{ slug: string; title: string }[]>([])
 
@@ -100,18 +112,16 @@ export function OwnerView() {
     if (q.length < 2) return []
     const out: { type: string; label: string; sub: string; go: () => void }[] = []
     for (const s of SECTIONS) if (`${s.label} ${s.sub}`.toLowerCase().includes(q)) out.push({ type: 'Section', label: s.label, sub: s.sub, go: () => go(s.id) })
-    for (const r of ROUTES) if (`${r.path} ${r.component}`.toLowerCase().includes(q)) out.push({ type: 'Route', label: r.path, sub: r.component, go: () => go('routes') })
-    for (const sug of SUGGESTIONS) if (sug.title.toLowerCase().includes(q)) out.push({ type: 'Suggestion', label: sug.title, sub: sug.group, go: () => go('suggestions') })
-    for (const e of ENV_VARS) if (e.name.toLowerCase().includes(q)) out.push({ type: 'Env', label: e.name, sub: e.purpose, go: () => go('env') })
+    for (const e of ENV_VARS) if (e.name.toLowerCase().includes(q)) out.push({ type: 'Env', label: e.name, sub: e.purpose, go: () => go('system') })
     for (const h of handbookTitles) if (h.title.toLowerCase().includes(q)) out.push({ type: 'Handbook', label: h.title, sub: 'Developer Handbook', go: () => router.push(`/devdocs?page=${h.slug}`) })
     return out.slice(0, 12)
   }, [query, handbookTitles, go, router])
 
-  if (state !== 'in') return <Notice text="Sign in to view the Owner Portal." />
+  if (state !== 'in') return <Notice text="Sign in to view the Owner Console." />
   if (!isOwner) {
     return (
       <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-amber-200">
-        Restricted — the Owner Portal is owner-only. If you believe you should have access,
+        Restricted — the Owner Console is owner-only. If you believe you should have access,
         ownership is granted on the database profile, not in the app.
       </div>
     )
@@ -121,10 +131,14 @@ export function OwnerView() {
 
   return (
     <div className="mx-auto max-w-7xl">
-      {/* breadcrumbs + global portal search */}
+      {/* One real h1 per view: home renders its hero heading; every other
+          section carries a visually-hidden one so the outline stays honest. */}
+      {active.id !== 'home' && <h1 className="sr-only">Owner Console — {active.label}</h1>}
+
+      {/* breadcrumbs + global console search */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-slate-400">
-          <button onClick={() => go('home')} className="font-bold text-slate-300 hover:text-white">Owner Portal</button>
+          <button onClick={() => go('home')} className="font-bold text-slate-300 hover:text-white">Owner Console</button>
           {active.id !== 'home' && <><span aria-hidden className="text-slate-600">/</span><span className="font-semibold text-white">{active.label}</span></>}
         </nav>
         <div className="relative w-full sm:w-80">
@@ -132,8 +146,8 @@ export function OwnerView() {
             <SearchIcon className="h-3.5 w-3.5 flex-shrink-0 text-slate-500" />
             <input
               type="search" value={query} onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search sections, routes, env, suggestions, docs…"
-              aria-label="Search the Owner Portal"
+              placeholder="Search sections, env, handbook…"
+              aria-label="Search the Owner Console"
               className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-500"
             />
           </div>
@@ -154,7 +168,7 @@ export function OwnerView() {
       </div>
 
       <div className="flex gap-6">
-        <aside className="sticky top-4 hidden w-52 flex-shrink-0 self-start lg:block" aria-label="Owner Portal navigation">
+        <aside className="sticky-below-header hidden w-52 flex-shrink-0 self-start lg:block" aria-label="Owner Console navigation">
           <nav className="space-y-4">
             {NAV_GROUPS.map((g) => (
               <div key={g.label} className="space-y-0.5">
@@ -182,27 +196,21 @@ export function OwnerView() {
           {/* mobile section picker */}
           <div className="mb-4 lg:hidden">
             <select
-              value={active.id} onChange={(e) => go(e.target.value)} aria-label="Owner Portal section"
+              value={active.id} onChange={(e) => go(e.target.value)} aria-label="Owner Console section"
               className="w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2.5 text-sm font-bold text-white outline-none"
             >
               {SECTIONS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </div>
 
-          {active.id === 'home' && <HomeSection onGo={go} />}
-          {active.id === 'health' && <HealthSection />}
-          {active.id === 'security' && <SecurityTestingSection />}
-          {active.id === 'ops' && <OpsSection />}
+          {active.id === 'home' && <DashboardSection onGo={go} />}
+          {active.id === 'manage' && <ManageSection onGo={go} />}
+          {active.id === 'access' && <AccessSection />}
           {active.id === 'feedback' && <FeedbackInbox />}
-          {active.id === 'suggestions' && <SuggestionsSection />}
-          {active.id === 'impact' && <ImpactSection />}
-          {active.id === 'architecture' && <ArchitectureSection />}
-          {active.id === 'routes' && <RoutesSection />}
-          {active.id === 'env' && <EnvSection />}
-          {active.id === 'realtime' && <RealtimeSection />}
-          {active.id === 'workflow' && <WorkflowSection />}
-          {active.id === 'learning' && <LearningSection />}
-          {active.id === 'deletion' && <PermanentDeletionSection />}
+          {active.id === 'deletion' && <DeletionSection />}
+          {active.id === 'security' && <SecurityAuditSection />}
+          {active.id === 'system' && <SystemSection />}
+          {active.id === 'reference' && <ReferenceSection />}
         </div>
       </div>
     </div>
@@ -218,20 +226,68 @@ function Panel({ title, sub, children }: { title: string; sub?: string; children
   )
 }
 
-/* ---- home ---------------------------------------------------------------- */
+/* ---- owner dashboard ------------------------------------------------------ */
 
-function HomeSection({ onGo }: { onGo: (s: string) => void }) {
+interface DashState {
+  /** null on any field = that fetch failed / not authorized — shown honestly. */
+  errCount: number | null
+  errRows: Tables<'client_errors'>[]
+  sec: SecurityOverview | null
+  openFeedback: number | null
+  admin: Tables<'audit_log'>[] | null
+  at: number
+}
+
+function DashboardSection({ onGo }: { onGo: (s: string) => void }) {
   const router = useRouter()
-  // KPI values are READ ONLY — no fetch here. Health + open feedback come from
-  // the shared vitals store (written by their own sections after their existing
-  // loads); realtime + deploy come straight from the global store / env.
-  const versions = useRealtimeStore((s) => s.versions)
-  const health = useOwnerVitals((s) => s.health)
-  const openFeedback = useOwnerVitals((s) => s.openFeedback)
-  const liveTables = Object.keys(versions).length
-  const branch = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF ?? null
-  const vercelEnv = process.env.NEXT_PUBLIC_VERCEL_ENV ?? null
-  const commit = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ?? null
+  const [d, setD] = useState<DashState | null>(null)
+  const [loading, setLoading] = useState(true)
+  const errV = useTableVersion('client_errors')
+
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    // Each signal fails independently to null — an unreadable signal renders
+    // as unknown, never as a false all-clear. All reads are bounded.
+    const [errCount, errRows, secRaw, fbs, metas, admin] = await Promise.all([
+      countRows('client_errors').catch(() => null),
+      list('client_errors', { order: 'created_at', ascending: false, limit: 5 }).catch(() => []),
+      rpc('owner_security_overview', {} as never).then((r) => (r.error ? null : r.data)).catch(() => null),
+      list('feedback', { select: 'id' }).catch(() => null),
+      list('feedback_meta', { select: 'feedback_id,status' }).catch(() => null),
+      list('audit_log', {
+        in: { action: [...ADMIN_AUDIT_ACTIONS] }, order: 'created_at', ascending: false, limit: 10,
+      }).catch(() => null),
+    ])
+    let openFeedback: number | null = null
+    if (fbs !== null && metas !== null) {
+      const closed = new Set(['resolved', 'archived', 'rejected', 'duplicate'])
+      const statusById = new Map(metas.map((m) => [m.feedback_id, m.status]))
+      openFeedback = fbs.filter((f) => !closed.has(statusById.get(f.id) ?? 'new')).length
+    }
+    setD({
+      errCount, errRows,
+      sec: secRaw === null ? null : parseSecurityOverview(secRaw),
+      openFeedback, admin, at: Date.now(),
+    })
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    const t = window.setTimeout(() => { void refresh() }, 0)
+    return () => window.clearTimeout(t)
+  }, [refresh, errV])
+
+  // Latest run per suite → failing assertions right now; fixture drift count.
+  const latestBySuite = new Map<string, SecurityOverview['runs'][number]>()
+  for (const r of d?.sec?.runs ?? []) if (!latestBySuite.has(r.suite)) latestBySuite.set(r.suite, r)
+  const securityFailures = d?.sec ? [...latestBySuite.values()].reduce((n, r) => n + r.failed, 0) : null
+  const fixtureIssues = d?.sec ? d.sec.fixtures.filter((f) => !f.present || f.issues.length > 0).length : null
+  const queue = ownerQueue({
+    clientErrors: d?.errCount ?? null,
+    securityFailures,
+    fixtureIssues,
+    openFeedback: d?.openFeedback ?? null,
+  })
 
   return (
     <div className="space-y-4">
@@ -239,108 +295,311 @@ function HomeSection({ onGo }: { onGo: (s: string) => void }) {
         <p className="t-readout mb-3 inline-flex items-center gap-2 rounded border border-blue-400/20 bg-blue-500/10 px-2 py-1 text-[10px] uppercase tracking-widest text-blue-200">
           <span className="t-dot t-dot-cyan" /> Owner &amp; developer operations
         </p>
-        <h1 className="text-xl font-black text-white">The project&rsquo;s control center</h1>
+        <h1 className="text-xl font-black text-white">Owner Console</h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-400">
-          One owner-only place to understand, monitor, maintain and safely evolve the portal:
-          health and statistics, the feedback inbox, the improvement roadmap, change-impact
-          planning, and the engineering workflow. Learning and reference live in the{' '}
+          The owner-only control center: what needs you now, the portal&rsquo;s global controls,
+          role &amp; access oversight, and the safety surfaces. Learning and reference live in the{' '}
           <button onClick={() => router.push('/devdocs')} className="text-blue-300 underline decoration-blue-300/40 hover:text-blue-200">Developer Handbook</button> —
-          this portal is for deciding and doing.
+          this console is for deciding and doing.
         </p>
+        <div className="mt-3 flex items-center gap-3">
+          <p className="text-xs text-slate-400">
+            {d ? <>Signals checked {timeAgo(new Date(d.at).toISOString())}.</> : 'Checking signals…'}
+          </p>
+          <Button size="sm" disabled={loading} onClick={() => void refresh()}>{loading ? 'Checking…' : '↻ Re-check'}</Button>
+        </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard
-          label="Database" onClick={() => onGo('health')}
-          value={health ? (health.ok ? 'OK' : 'Down') : '—'}
-          tone={health ? (health.ok ? 'good' : 'bad') : 'muted'}
-          detail={health ? `${health.ms} ms round-trip` : 'Not checked yet — open Health'}
-        />
-        <KpiCard
-          label="Open feedback" onClick={() => onGo('feedback')}
-          value={openFeedback === null ? '—' : String(openFeedback)}
-          tone={openFeedback === null ? 'muted' : 'accent'}
-          detail={openFeedback === null ? 'Not checked yet — open Feedback' : 'open / unresolved items'}
-        />
-        <KpiCard
-          label="Realtime" onClick={() => onGo('realtime')}
-          value={String(liveTables)} tone={liveTables > 0 ? 'good' : 'muted'}
-          detail={liveTables > 0 ? 'live tables this session' : 'no events yet this session'}
-        />
-        <KpiCard
-          label="Last deploy" onClick={() => onGo('workflow')}
-          value={vercelEnv ?? (process.env.NODE_ENV === 'production' ? 'production' : 'local')}
-          tone="accent"
-          detail={branch ? `${branch}${commit ? ` · ${commit.slice(0, 7)}` : ''}` : 'branch unavailable'}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {SECTIONS.filter((s) => s.id !== 'home').map((s) => (
-          <button key={s.id} onClick={() => onGo(s.id)} className="rounded-lg border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
-            <p className="text-sm font-black text-white">{s.label}</p>
-            <p className="mt-1 text-sm text-slate-400">{s.sub}</p>
-          </button>
+      <DashPanel
+        title="Pending owner actions"
+        count={queue.length}
+        hint="Derived from the real signals only: client errors, RLS-suite failures, fixture drift and open feedback."
+      >
+        {queue.length === 0 ? (
+          <p className="px-2.5 py-2 text-sm text-emerald-300">✓ Nothing pending — every checked signal is clear.</p>
+        ) : queue.map((i) => (
+          <DashRow
+            key={i.id} title={i.label} why={i.why} onClick={() => onGo(i.section)}
+            badge={<Badge tone={i.id === 'open_feedback' ? 'accent' : 'danger'}>{i.count}</Badge>}
+          />
         ))}
-        <button onClick={() => router.push('/devdocs')} className="rounded-lg border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
-          <p className="text-sm font-black text-white">Developer Handbook</p>
-          <p className="mt-1 text-sm text-slate-400">The reference library — 24 chapters, searchable, generated from the repo docs.</p>
-        </button>
-        <button onClick={() => router.push('/audit')} className="rounded-lg border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
-          <p className="text-sm font-black text-white">Audit Log</p>
-          <p className="mt-1 text-sm text-slate-400">Every mutation, trigger-written, exportable to CSV (owner-only screen).</p>
-        </button>
+      </DashPanel>
+
+      <DashPanel
+        title="Critical warnings"
+        count={d?.errCount ?? undefined}
+        hint="Uncaught client exceptions (latest 5) — the full panel with stacks lives in Security & Audit."
+        action={{ label: 'All →', onClick: () => onGo('security') }}
+        empty={!loading && (d?.errCount ?? 0) === 0}
+      >
+        {d?.errRows.map((r) => (
+          <DashRow
+            key={r.id}
+            title={r.message.slice(0, 100)}
+            why={`${r.route || 'unknown route'} · ${officerName(r.reporter_id) || 'unknown reporter'}`}
+            meta={timeAgo(r.created_at)}
+            overdue
+            onClick={() => onGo('security')}
+          />
+        ))}
+      </DashPanel>
+
+      <DashPanel
+        title="Security suite"
+        hint="Latest reported run per suite + fixture health. Full results, failures and the access matrix live in Security & Audit."
+        action={{ label: 'Detail →', onClick: () => onGo('security') }}
+      >
+        {d?.sec === null && !loading && (
+          <p className="px-2.5 py-2 text-sm text-slate-400">The security overview could not be read — open Security &amp; Audit to retry.</p>
+        )}
+        {latestBySuite.size === 0 && d?.sec && (
+          <p className="px-2.5 py-2 text-sm text-slate-400">No reported runs yet — run <code className="text-blue-300">npm run test:rls</code> or let CI report.</p>
+        )}
+        {[...latestBySuite.values()].map((r) => (
+          <DashRow
+            key={r.id}
+            title={r.suite}
+            why={`${r.passed} passed · ${r.failed} failed · ${r.skipped} skipped (${r.source === 'ci' ? 'CI' : 'local'})`}
+            meta={timeAgo(r.created_at)}
+            badge={<Badge tone={r.failed > 0 ? 'danger' : 'good'}>{r.failed > 0 ? `${r.failed} failed` : 'passing'}</Badge>}
+            overdue={r.failed > 0}
+            onClick={() => onGo('security')}
+          />
+        ))}
+        {d?.sec && (
+          <DashRow
+            title="Fixture health"
+            why={fixtureIssues ? 'rls-test fixtures missing or drifted — detail in Security & Audit' : 'all rls-test fixtures match their expected identity'}
+            badge={<Badge tone={fixtureIssues ? 'warn' : 'good'}>{fixtureIssues ? `${fixtureIssues} issue${fixtureIssues === 1 ? '' : 's'}` : 'healthy'}</Badge>}
+            onClick={() => onGo('security')}
+          />
+        )}
+      </DashPanel>
+
+      <DashPanel
+        title="Recent administrative changes"
+        count={d?.admin?.length ?? undefined}
+        hint="Latest curated admin actions from the audit log (role, membership, justice, deletion & owner controls)."
+        action={{ label: 'Audit log →', onClick: () => router.push('/audit') }}
+      >
+        {d?.admin === null && !loading && (
+          <p className="px-2.5 py-2 text-sm text-slate-400">The audit log could not be read — retry, or open it directly.</p>
+        )}
+        {d?.admin?.length === 0 && (
+          <p className="px-2.5 py-2 text-sm text-slate-400">No recent administrative changes.</p>
+        )}
+        {d?.admin?.map((r) => (
+          <DashRow
+            key={r.id}
+            title={adminActionLabel(r.action)}
+            why={`${r.entity}${r.actor_id ? ` · by ${officerName(r.actor_id) || 'unknown'}` : ''}`}
+            meta={timeAgo(r.created_at)}
+            onClick={() => router.push('/audit')}
+          />
+        ))}
+      </DashPanel>
+
+      {/* Ordinary bureau workload stays in the Command Center — one link row,
+          not KPI cards, per the consolidation spec. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-white/5 bg-ink-900/40 px-3 py-1.5 text-xs">
+        <span className="font-bold uppercase tracking-wider text-slate-400">Command queues</span>
+        <button onClick={() => router.push('/command-center?s=approvals')} className="rounded px-1.5 py-2 font-semibold text-blue-300 transition hover:text-white">Approvals →</button>
+        <button onClick={() => router.push('/command-center?s=promotions')} className="rounded px-1.5 py-2 font-semibold text-blue-300 transition hover:text-white">Promotions &amp; transfers →</button>
+        <button onClick={() => router.push('/cases?archived=1')} className="rounded px-1.5 py-2 font-semibold text-blue-300 transition hover:text-white">Archived cases →</button>
       </div>
     </div>
   )
 }
 
-function KpiCard({ label, value, detail, tone, onClick }: {
-  label: string
-  value: string
-  detail: string
-  tone: 'good' | 'bad' | 'accent' | 'muted'
-  onClick: () => void
-}) {
-  const valueColor = tone === 'good' ? 'text-emerald-300' : tone === 'bad' ? 'text-rose-300' : tone === 'accent' ? 'text-white' : 'text-slate-400'
+/* ---- portal management ---------------------------------------------------- */
+
+function ManageSection({ onGo }: { onGo: (s: string) => void }) {
+  const router = useRouter()
+  const versions = useRealtimeStore((s) => s.versions)
+  const liveTables = Object.keys(versions).length
+  const branch = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF ?? null
+  const vercelEnv = process.env.NEXT_PUBLIC_VERCEL_ENV ?? null
+  const openActions = MANUAL_ACTIONS.filter((a) => !a.done)
+
   return (
-    <button onClick={onClick} className="rounded-lg border border-white/5 bg-ink-900/60 p-4 text-left transition hover:border-white/10 hover:bg-white/[0.03]">
-      <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
-      <p className={`mt-1 font-mono text-2xl font-black ${valueColor}`}>{value}</p>
-      <p className="mt-0.5 text-xs text-slate-400">{detail}</p>
+    <div className="space-y-4">
+      <SibReleasePanel />
+
+      <Panel title="Reference data & communications" sub="The owner-relevant global surfaces — content lives on its own screen; this is the door.">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <LinkCard title="Announcements" sub="Division-wide notices — posting is a command power your account holds." onClick={() => router.push('/announce')} />
+          <LinkCard title="Penal Code" sub="Statutes, sentences & fines — the administration tools live on the screen itself." onClick={() => router.push('/penal')} />
+          <LinkCard title="SOP Library" sub="Policy & reference documents, including the owner-classified SOPs." onClick={() => router.push('/sops')} />
+        </div>
+      </Panel>
+
+      <Panel title="Feature & environment status" sub="Condensed readouts — the full environment table and live counts are in System Health.">
+        <ul className="space-y-1.5 text-sm">
+          <SafetyLine ok={isConfigured} text="Supabase configured" bad="Missing NEXT_PUBLIC_SUPABASE_* — the app cannot function" />
+          <SafetyLine ok={fmConfigured()} text="FiveManage configured (optional)" bad="Uploads disabled — Attachments/Media fall back to paste-a-URL" warnOnly />
+          <li className={liveTables > 0 ? 'text-emerald-300' : 'text-slate-400'}>
+            {liveTables > 0 ? `✓ Realtime live — events from ${liveTables} tables this session` : '— No realtime events yet this session (signal, not a failure)'}
+          </li>
+          <li className="text-slate-300">
+            Deploy: <b className="text-white">{vercelEnv ?? (process.env.NODE_ENV === 'production' ? 'production build' : 'development')}</b>
+            {branch && <span className="text-slate-400"> · {branch}</span>}
+          </li>
+        </ul>
+        <button onClick={() => onGo('system')} className="mt-3 rounded px-1.5 py-2 text-xs font-semibold text-blue-300 transition hover:text-white">Full detail → System Health</button>
+      </Panel>
+
+      <Panel title="Runbook — manual actions" sub="Work only a person with dashboard access can do — the app cannot verify these, so this checklist is maintained by hand (update ownerData.ts when an item is completed).">
+        {openActions.length === 0 && <p className="text-sm text-emerald-300">✓ Nothing outstanding.</p>}
+        <div className="space-y-2">
+          {MANUAL_ACTIONS.map((a) => (
+            <div key={a.title} className={`rounded-lg p-3 ${a.done ? 'bg-ink-950/40' : 'bg-amber-500/5'}`}>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="min-w-0 flex-1 text-sm font-bold text-white">{a.title}</p>
+                {a.done
+                  ? <Badge tone="good">Done {a.done}</Badge>
+                  : <Badge tone={a.status === 'not_configured' ? 'neutral' : a.status === 'recurring' ? 'warn' : 'danger'}>
+                      {a.status === 'not_configured' ? 'Not configured' : a.status === 'recurring' ? 'Recurring' : 'Action required'}
+                    </Badge>}
+              </div>
+              <p className="mt-1 text-sm text-slate-400">{a.detail}</p>
+              <p className="mt-1 text-xs text-slate-400">Where: {a.where}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 space-y-1.5 border-t border-white/5 pt-3 text-sm text-slate-300">
+          <p><Badge tone="neutral">Unknown</Badge> <span className="ml-1">{RECOVERY_NOTES.backups}</span></p>
+          <p><Badge tone="danger">Action</Badge> <span className="ml-1">{RECOVERY_NOTES.restore}</span></p>
+        </div>
+      </Panel>
+    </div>
+  )
+}
+
+/** The SIB release gate — first UI for public.siu_set_release(). While the
+ *  gate is CLOSED, siu_settings.enabled_for_non_owner is false and SIU
+ *  resolves to the owner alone; flipping it turns on the production
+ *  permission model that is already written (lib/siu.ts). Owner-only,
+ *  reason-required, audited server-side as SIU_RELEASE_SET — no client audit
+ *  writes here. */
+function SibReleasePanel() {
+  // undefined = loading; null = the bounded read failed (state unknown).
+  const [row, setRow] = useState<Tables<'siu_settings'> | null | undefined>(undefined)
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const refresh = useCallback(async () => {
+    try { setRow((await list('siu_settings', { limit: 1 }))[0] ?? null) }
+    catch { setRow(null) }
+  }, [])
+  useEffect(() => {
+    const t = window.setTimeout(() => { void refresh() }, 0)
+    return () => window.clearTimeout(t)
+  }, [refresh])
+
+  const enabled = row?.enabled_for_non_owner ?? null
+  const flip = async () => {
+    const r = reason.trim()
+    if (!r) { toast('A reason is required — the RPC refuses without one.', 'warn'); return }
+    const next = !(enabled ?? false)
+    const ok = await uiConfirm(
+      next
+        ? 'siu_settings.enabled_for_non_owner flips to TRUE.\n\nAppointed SIB members (and the Attorney General’s ex-officio oversight) go LIVE for non-owner accounts — the production permission model that is already written turns on. Nothing is rebuilt and nothing else changes.\n\nThe flip is audited server-side (SIU_RELEASE_SET) with your reason. Other signed-in sessions pick it up on their next context load.'
+        : 'siu_settings.enabled_for_non_owner flips to FALSE.\n\nSIB returns to the owner-only build phase: every non-owner account loses SIB standing and SIB tables return zero rows to them. Appointments are kept, just dormant.\n\nThe flip is audited server-side (SIU_RELEASE_SET) with your reason. Other signed-in sessions pick it up on their next context load.',
+      { title: next ? 'Open the SIB release gate?' : 'Close the SIB release gate?', confirmText: next ? 'Open the gate' : 'Close the gate' },
+    )
+    if (!ok) return
+    setBusy(true)
+    const res = await rpc('siu_set_release', { p_enabled: next, p_reason: r })
+    setBusy(false)
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast(next ? 'SIB release gate opened' : 'SIB release gate closed', 'success')
+    setReason('')
+    void refresh()
+  }
+
+  return (
+    <Panel title="SIB release gate" sub="One flag controls whether the Special Investigations Bureau exists for anyone but you. Owner-only, reason-required, audited (SIU_RELEASE_SET).">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-slate-300">Current state:</span>
+        {row === undefined
+          ? <Badge tone="neutral">checking…</Badge>
+          : enabled === null
+            ? <Badge tone="warn">unknown — siu_settings unreadable</Badge>
+            : enabled
+              ? <Badge tone="good">OPEN — released to appointed members</Badge>
+              : <Badge tone="neutral">CLOSED — owner-only build phase</Badge>}
+        {row?.updated_at && <span className="text-xs text-slate-400">last changed {timeAgo(row.updated_at)}</span>}
+      </div>
+      <div className="mt-3 max-w-xl">
+        <label htmlFor="sib-release-reason" className={labelCls}>Reason (required — recorded in the audit log)</label>
+        <input
+          id="sib-release-reason" value={reason} onChange={(e) => setReason(e.target.value)}
+          placeholder={enabled ? 'Why the gate is closing…' : 'Why SIB is being released…'}
+          className={inputCls}
+        />
+      </div>
+      <Button
+        variant="danger" className="mt-3" disabled={busy || row === undefined || enabled === null}
+        onClick={() => void flip()}
+      >
+        {busy ? 'Applying…' : enabled ? 'Close the release gate' : 'Open the release gate'}
+      </Button>
+      <p className="mt-2 text-xs text-slate-400">
+        Exactly what flips: <code className="text-blue-300">siu_settings.enabled_for_non_owner</code>.
+        The rules themselves (lib/siu.ts + private.siu_standing()) are already in place on both sides of the gate.
+      </p>
+    </Panel>
+  )
+}
+
+function LinkCard({ title, sub, onClick }: { title: string; sub: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="rounded-lg border border-white/10 bg-ink-950/50 p-4 text-left transition hover:border-blue-400/30 hover:bg-white/[0.03]">
+      <p className="text-sm font-black text-white">{title}</p>
+      <p className="mt-1 text-sm text-slate-400">{sub}</p>
     </button>
   )
 }
 
-/* ---- health & statistics --------------------------------------------------- */
+/* ---- roles & access ------------------------------------------------------- */
 
-interface HealthState {
-  db: { ok: boolean; ms: number } | null
-  counts: Record<string, number | null>
+interface AccessState {
+  activeMembers: number | null
+  pendingCid: number | null
+  legacyTransfers: number | null
+  /** Active prosecutor assignment per bureau (null = the fetch failed). */
+  coverage: { bureau: string; primaryId: string | null; actingId: string | null }[] | null
   at: number
 }
 
-const STAT_TABLES = ['profiles', 'cases', 'evidence', 'reports', 'persons', 'gangs', 'vehicles', 'indicators', 'media', 'feedback', 'notifications', 'audit_log'] as const
-
-function HealthSection() {
-  const { session } = useAuth()
-  const versions = useRealtimeStore((s) => s.versions)
-  const [h, setH] = useState<HealthState | null>(null)
+function AccessSection() {
+  const router = useRouter()
+  const [a, setA] = useState<AccessState | null>(null)
   const [loading, setLoading] = useState(true)
+  // Subscribe to the roster so prosecutor names resolve as soon as it loads —
+  // and so an UNRESOLVABLE assignee (test fixtures are hidden from profile
+  // reads by RLS) can be surfaced as a warning instead of a blank.
+  const roster = useProfilesStore((s) => s.profiles)
 
   const refresh = useCallback(async () => {
     setLoading(true)
-    const t0 = performance.now()
-    let db: HealthState['db'] = null
-    try { await countRows('profiles'); db = { ok: true, ms: Math.round(performance.now() - t0) } }
-    catch { db = { ok: false, ms: Math.round(performance.now() - t0) } }
-    // Share the DB round-trip with the Overview KPI strip — no extra fetch.
-    useOwnerVitals.getState().setHealth(db)
-    const counts: Record<string, number | null> = {}
-    await Promise.all(STAT_TABLES.map(async (t) => {
-      try { counts[t] = await countRows(t) } catch { counts[t] = null }
+    void useProfilesStore.getState().fetch()
+    const [activeMembers, pendingCid, legacy, pba] = await Promise.all([
+      countRows('profiles', { eq: { active: true } }).catch(() => null),
+      countRows('membership_requests', { eq: { status: 'pending' } }).catch(() => null),
+      list('transfer_requests', { in: { status: ['pending_source', 'pending_target', 'approved'] }, select: 'id' }).catch(() => null),
+      list('prosecutor_bureau_assignments', { is: { ends_at: null } }).catch(() => null),
+    ])
+    const coverage = pba === null ? null : PERMANENT_BUREAUS.map((b) => ({
+      bureau: b,
+      primaryId: pba.find((r) => r.bureau === b && r.assignment_type === 'primary')?.prosecutor_id ?? null,
+      actingId: pba.find((r) => r.bureau === b && r.assignment_type === 'acting')?.prosecutor_id ?? null,
     }))
-    setH({ db, counts, at: Date.now() })
+    setA({
+      activeMembers, pendingCid,
+      legacyTransfers: legacy === null ? null : legacy.length,
+      coverage, at: Date.now(),
+    })
     setLoading(false)
   }, [])
 
@@ -349,55 +608,319 @@ function HealthSection() {
     return () => window.clearTimeout(t)
   }, [refresh])
 
-  const commit = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ?? null
-  const branch = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF ?? null
-  const vercelEnv = process.env.NEXT_PUBLIC_VERCEL_ENV ?? null
-  const liveTables = Object.keys(versions).length
-
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <HealthCard label="Database" ok={h?.db?.ok ?? null} detail={h?.db ? `${h.db.ms} ms round-trip` : 'checking…'} />
-        <HealthCard label="Authentication" ok={!!session} detail={session ? 'session active, auto-refreshing' : 'no session'} />
-        <HealthCard label="Realtime" ok={liveTables > 0 ? true : null} detail={liveTables > 0 ? `events from ${liveTables} tables this session` : 'no events yet this session (signal, not a failure)'} />
-        <HealthCard label="Media host" ok={fmConfigured()} detail={fmConfigured() ? 'FiveManage configured (not pinged — pinging would upload)' : 'not configured — uploads disabled'} />
-      </div>
-
-      <Panel title="Application" sub="Build metadata comes from Vercel system env vars — 'Unavailable' means the project doesn't expose them, not an error.">
-        <div className="grid grid-cols-1 gap-2 text-sm text-slate-300 sm:grid-cols-2">
-          <p>Environment: <b className="text-white">{vercelEnv ?? (process.env.NODE_ENV === 'production' ? 'production build' : 'development')}</b></p>
-          <p>Deployed branch: <b className="text-white">{branch ?? 'Unavailable'}</b></p>
-          <p>Commit: <b className="font-mono text-white">{commit ? commit.slice(0, 10) : 'Unavailable'}</b></p>
-          <p>Supabase client: <b className="text-white">{isConfigured ? 'configured' : 'NOT CONFIGURED'}</b></p>
+      <Panel title="Membership oversight" sub="High-level counts only — day-to-day personnel administration lives in the Command Center, and that stays true for the owner.">
+        <div className="flex justify-end">
+          <Button size="sm" disabled={loading} onClick={() => void refresh()}>{loading ? 'Checking…' : '↻ Re-check'}</Button>
+        </div>
+        <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <LinkCard
+            title={`${a?.activeMembers ?? '—'} active members`}
+            sub="The roster — approve, manage, promote, transfer, remove (Command Center → Personnel)."
+            onClick={() => router.push('/command-center?s=personnel')}
+          />
+          <LinkCard
+            title={`${a?.pendingCid ?? '—'} pending applications`}
+            sub="Membership requests awaiting review (Command Center → Approvals)."
+            onClick={() => router.push('/command-center?s=approvals')}
+          />
+          <LinkCard
+            title={`${a?.legacyTransfers ?? '—'} legacy open transfers`}
+            sub="Transfers now apply instantly — old two-sided rows need approving or cancelling (→ Promotions)."
+            onClick={() => router.push('/command-center?s=promotions')}
+          />
+          <LinkCard
+            title="Field officer roster"
+            sub="SAHP / BCSO / LSPD Field Intelligence accounts — portal access only, never CID."
+            onClick={() => router.push('/command-center?s=field')}
+          />
         </div>
       </Panel>
 
-      <Panel title="Safety" sub="Checks that should always be green.">
-        <ul className="space-y-1.5 text-sm">
-          <SafetyLine ok={isConfigured} text="Supabase env vars present" bad="Missing NEXT_PUBLIC_SUPABASE_* — the app cannot function" />
-          <SafetyLine ok={fmConfigured()} text="FiveManage configured (optional)" bad="Uploads disabled — Attachments/Media fall back to paste-a-URL" warnOnly />
-          <SafetyLine ok={h?.db?.ok ?? true} text="Database reachable" bad="Profile count query failed — check Supabase status/logs" />
-          <li className="text-slate-400">Owner-dashboard items that live OUTSIDE this repo: Supabase OTP expiry + leaked-password protection + backups (see docs/HARDENING.md), GitHub branch protection (see Workflow).</li>
-        </ul>
-      </Panel>
-
-      <Panel title="Statistics" sub="Live row counts (RLS-scoped — these are the rows YOUR account can see, which for the owner+command account is everything). 'Unavailable' = the count query failed.">
-        {loading && !h ? <p className="text-sm text-slate-400">Counting…</p> : (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
-            {STAT_TABLES.map((t) => (
-              <div key={t} className="rounded-lg bg-ink-950/50 p-3">
-                <p className="font-mono text-lg font-black text-white">{h?.counts[t] ?? '—'}</p>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t.replace(/_/g, ' ')}</p>
-              </div>
-            ))}
+      <Panel title="Justice coverage" sub="Each bureau needs an active prosecutor (primary or acting) or its classified legal requests go unseen at the DOJ — exactly the failure repaired in July 2026.">
+        {a?.coverage === null && <p className="text-sm text-slate-400"><Badge tone="neutral">Unknown</Badge> <span className="ml-1">The assignment table could not be read — retry, and check Supabase if it persists.</span></p>}
+        {a?.coverage && (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {a.coverage.map((c) => {
+              const covererId = c.primaryId ?? c.actingId
+              // A held slot whose holder is invisible on the roster is a real
+              // signal: test fixtures and removed accounts are hidden from
+              // profile reads, so "held by someone you can't see" warrants a
+              // look — never a green light. (Direct roster lookup, NOT
+              // officerName(): that helper returns an 'Officer' placeholder
+              // for unknown ids, which would mask exactly this case.)
+              const holder = covererId ? roster.find((p) => p.id === covererId) : undefined
+              const name = holder?.display_name ?? null
+              const unresolvable = !!covererId && roster.length > 0 && !holder
+              const tone = !covererId ? 'danger' : unresolvable ? 'warn' : name ? 'good' : 'neutral'
+              const label = !covererId ? 'Uncovered' : unresolvable ? 'Verify' : name ? 'Covered' : 'Unknown'
+              return (
+                <div key={c.bureau} className="rounded-lg bg-ink-950/50 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-bold text-white">{bureauLabel(c.bureau)}</p>
+                    <Badge tone={tone as 'danger' | 'warn' | 'good' | 'neutral'}>{label}</Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">
+                    {covererId
+                      ? <>{c.primaryId ? 'Primary' : 'Acting'}: {name || 'not on the visible roster — likely a test fixture or removed account; verify in Justice Portal → Coverage'}</>
+                      : 'No active prosecutor — classified requests from this bureau are invisible at the DOJ until one is assigned (Justice Portal → Coverage).'}
+                  </p>
+                </div>
+              )
+            })}
           </div>
         )}
-        <Button size="sm" className="mt-3" disabled={loading} onClick={() => void refresh()}>
-          {loading ? 'Refreshing…' : '↻ Refresh'}
-        </Button>
       </Panel>
 
+      <JusticeGrantPanel roster={roster} />
+      <TestFlagPanel roster={roster} />
+    </div>
+  )
+}
+
+/** Mirrors owner_grant_justice_membership()'s server validation exactly:
+ *  DOJ takes the three prosecutorial titles, the Judiciary takes judge. */
+const GRANTABLE_JUSTICE: { role: string; agency: JusticeAgency }[] = [
+  { role: 'assistant_district_attorney', agency: 'doj' },
+  { role: 'district_attorney', agency: 'doj' },
+  { role: 'attorney_general', agency: 'doj' },
+  { role: 'judge', agency: 'judiciary' },
+]
+
+/** First UI for public.owner_grant_justice_membership() — the dual-identity
+ *  grant. The RPC is owner-only, reason-required and self-auditing
+ *  (JUSTICE_GRANTED); it refuses test fixtures and removed/login-denied
+ *  accounts server-side. */
+function JusticeGrantPanel({ roster }: { roster: ReturnType<typeof useProfilesStore.getState>['profiles'] }) {
+  const { profile } = useAuth()
+  const [targetId, setTargetId] = useState('')
+  const [role, setRole] = useState(GRANTABLE_JUSTICE[0].role)
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const candidates = useMemo(() =>
+    roster
+      .filter((p) => p.active && !p.is_system && !p.removed_at)
+      .slice()
+      .sort((x, y) => (x.display_name || '').localeCompare(y.display_name || '')),
+  [roster])
+  const target = candidates.find((p) => p.id === targetId) ?? null
+  const agency = GRANTABLE_JUSTICE.find((g) => g.role === role)?.agency ?? 'doj'
+
+  const grant = async () => {
+    const r = reason.trim()
+    if (!target) { toast('Pick a member first.', 'warn'); return }
+    if (!r) { toast('A reason is required — the RPC refuses without one.', 'warn'); return }
+    const ok = await uiConfirm(
+      `Grant ${justiceRoleLabel(role)} (${AGENCY_LABEL[agency]}) to ${target.display_name}?\n\nThis inserts or REPLACES their justice membership immediately — a dual identity alongside their CID role (${roleLabel(target.role)}, ${bureauLabel(target.division)}). They are notified, and the grant is audited server-side (JUSTICE_GRANTED) with your reason.\n\nLegacy ADA/DA titles act with the effective role ‘prosecutor’; the AG additionally holds ex-officio SIB oversight once the release gate is open.`,
+      { title: 'Grant a justice membership?', confirmText: 'Grant' },
+    )
+    if (!ok) return
+    setBusy(true)
+    const res = await rpc('owner_grant_justice_membership', {
+      p_target: target.id, p_agency: agency, p_justice_role: role, p_reason: r,
+    })
+    setBusy(false)
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast(`${justiceRoleLabel(role)} granted to ${target.display_name}`, 'success')
+    setTargetId(''); setReason('')
+  }
+
+  return (
+    <Panel title="Justice grant (dual identity)" sub="Direct owner appointment into the DOJ/Judiciary — the ordinary signup path deliberately blocks active CID members from applying; dual identity is an owner decision.">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div>
+          <label htmlFor="jg-target" className={labelCls}>Member (active CID)</label>
+          <select id="jg-target" value={targetId} onChange={(e) => setTargetId(e.target.value)} className={inputCls}>
+            <option value="">— select a member —</option>
+            {candidates.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.display_name} · {roleLabel(p.role)}/{bureauLabel(p.division)}{p.id === profile?.id ? ' (you)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="jg-role" className={labelCls}>Role (agency follows)</label>
+          <select id="jg-role" value={role} onChange={(e) => setRole(e.target.value)} className={inputCls}>
+            {GRANTABLE_JUSTICE.map((g) => (
+              <option key={g.role} value={g.role}>{justiceRoleLabel(g.role)} — {AGENCY_LABEL[g.agency]}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="jg-reason" className={labelCls}>Reason (required, audited)</label>
+          <input id="jg-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why this appointment…" className={inputCls} />
+        </div>
+      </div>
+      <Button variant="primary" className="mt-3" disabled={busy || !targetId} onClick={() => void grant()}>
+        {busy ? 'Granting…' : 'Grant justice membership'}
+      </Button>
+    </Panel>
+  )
+}
+
+/** First UI for public.set_profile_test_flag(). Flagging hides the profile
+ *  from EVERY real member's profile reads — this owner account included — so
+ *  clearing a flag takes the exact user id rather than a picker. Owner-only,
+ *  audited server-side (TEST_FLAG_SET). */
+function TestFlagPanel({ roster }: { roster: ReturnType<typeof useProfilesStore.getState>['profiles'] }) {
+  const { profile } = useAuth()
+  const [targetId, setTargetId] = useState('')
+  const [clearId, setClearId] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const candidates = useMemo(() =>
+    roster
+      .filter((p) => p.id !== profile?.id && !p.is_system)
+      .slice()
+      .sort((x, y) => (x.display_name || '').localeCompare(y.display_name || '')),
+  [roster, profile?.id])
+  const target = candidates.find((p) => p.id === targetId) ?? null
+
+  const setFlag = async (id: string, isTest: boolean, name: string | null) => {
+    const ok = await uiConfirm(
+      isTest
+        ? `Flag ${name ?? id} as a TEST FIXTURE?\n\nEffect: the profile disappears from every real member's profile reads (roster, pickers, analytics, search) — including this owner account. It is excluded from ex-officio SIB standings and treated as a fixture by the security suites. The account itself keeps working.\n\nAudited server-side (TEST_FLAG_SET). To undo, you will need the exact user id: ${id}`
+        : `Clear the test-fixture flag on ${id}?\n\nEffect: the profile becomes visible on the roster and in every profile read again, and stops being treated as a fixture.\n\nAudited server-side (TEST_FLAG_SET).`,
+      { title: isTest ? 'Flag as test fixture?' : 'Clear test-fixture flag?', confirmText: isTest ? 'Flag as fixture' : 'Clear flag' },
+    )
+    if (!ok) return
+    setBusy(true)
+    const res = await rpc('set_profile_test_flag', { p_target: id, p_is_test: isTest })
+    setBusy(false)
+    if (res.error) { toast(res.error.message, 'danger'); return }
+    toast(isTest ? 'Profile flagged as a test fixture' : 'Test-fixture flag cleared', 'success')
+    setTargetId(''); setClearId('')
+    void useProfilesStore.getState().fetch()
+  }
+
+  return (
+    <Panel title="Test-fixture flagging" sub="profiles.is_test hides an account from every real member's reads — how the rls-test fixtures stay off the roster. Flagged profiles vanish from this picker too, so clearing takes the exact user id.">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div>
+          <label htmlFor="tf-target" className={labelCls}>Flag a visible member as a fixture</label>
+          <select id="tf-target" value={targetId} onChange={(e) => setTargetId(e.target.value)} className={inputCls}>
+            <option value="">— select a member —</option>
+            {candidates.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.display_name} · {roleLabel(p.role)}/{bureauLabel(p.division)}{p.active ? '' : ' · inactive'}
+              </option>
+            ))}
+          </select>
+          <Button variant="danger" size="sm" className="mt-2" disabled={busy || !target}
+            onClick={() => { if (target) void setFlag(target.id, true, target.display_name) }}>
+            Flag as test fixture
+          </Button>
+        </div>
+        <div>
+          <label htmlFor="tf-clear" className={labelCls}>Clear a flag by user id</label>
+          <input id="tf-clear" value={clearId} onChange={(e) => setClearId(e.target.value)}
+            placeholder="profile UUID of the hidden fixture" className={inputCls} />
+          <Button size="sm" className="mt-2" disabled={busy || !clearId.trim()}
+            onClick={() => void setFlag(clearId.trim(), false, null)}>
+            Clear flag
+          </Button>
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+/* ---- permanent deletion --------------------------------------------------- */
+
+function DeletionSection() {
+  const router = useRouter()
+  return (
+    <div className="space-y-4">
+      <PermanentDeletionSection />
+      <DeletionLedgerPanel />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <LinkCard
+          title="Case permanent deletion"
+          sub="Performed from the case header — owner only, archived cases only, reason + preview required (Cases → Archived)."
+          onClick={() => router.push('/cases')}
+        />
+        <LinkCard
+          title="Field-record undelete"
+          sub="Deleted field submissions are recoverable — Intelligence → the Deleted filter (owner)."
+          onClick={() => router.push('/field-review')}
+        />
+      </div>
+    </div>
+  )
+}
+
+/** Read-only window onto deleted_member_ledger — the owner-only table that
+ *  preserves the identity snapshot, reason and reference counts of every
+ *  permanent deletion. First UI ever for it; bounded to the latest 20. */
+function DeletionLedgerPanel() {
+  // undefined = loading; null = the read failed.
+  const [rows, setRows] = useState<Tables<'deleted_member_ledger'>[] | null | undefined>(undefined)
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      void list('deleted_member_ledger', { order: 'executed_at', ascending: false, limit: 20 })
+        .then(setRows)
+        .catch(() => setRows(null))
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [])
+
+  return (
+    <Panel title="Deletion ledger" sub="Owner-only record of every executed permanent deletion — identity snapshot, reason and how many references each account held. Read-only; latest 20.">
+      {rows === undefined && <p className="text-sm text-slate-400">Loading the ledger…</p>}
+      {rows === null && <p className="text-sm text-slate-400">The ledger could not be read — it is owner-only by RLS; retry from a signed-in owner session.</p>}
+      {rows?.length === 0 && <p className="text-sm text-emerald-300">✓ No permanent deletions have ever been executed.</p>}
+      {!!rows?.length && (
+        <div className="space-y-2">
+          {rows.map((r) => {
+            const refs = ledgerReferenceCount(r.references)
+            return (
+              <div key={r.id} className="rounded-lg bg-ink-950/50 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="min-w-0 flex-1 text-sm font-bold text-white">
+                    {r.display_name}
+                    <span className="ml-2 font-normal text-slate-400">
+                      {roleLabel(r.role)}{r.division ? ` / ${bureauLabel(r.division)}` : ''}{r.badge_number ? ` · #${r.badge_number}` : ''}
+                    </span>
+                  </p>
+                  <Badge tone="neutral">{refs === null ? 'refs unknown' : `${refs} reference${refs === 1 ? '' : 's'}`}</Badge>
+                  <span className="text-xs text-slate-400">executed {timeAgo(r.executed_at)}</span>
+                </div>
+                <p className="mt-1 text-sm text-slate-300">Reason: {r.reason}</p>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  by {officerName(r.deleted_by) || 'unknown'}{r.armed_at ? ` · armed ${timeAgo(r.armed_at)}` : ''}
+                </p>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+/* ---- security & audit ----------------------------------------------------- */
+
+function SecurityAuditSection() {
+  const router = useRouter()
+  return (
+    <div className="space-y-4">
+      <SecurityTestingSection />
       <ClientErrorsPanel />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <LinkCard
+          title="Audit Log"
+          sub="Every mutation, trigger-written, exportable to CSV — owner-only screen."
+          onClick={() => router.push('/audit')}
+        />
+        <LinkCard
+          title="Documentation governance"
+          sub="Doc-governance warnings (stale required reading, unacknowledged campaigns) render on the Audit Log screen."
+          onClick={() => router.push('/audit')}
+        />
+      </div>
     </div>
   )
 }
@@ -451,6 +974,131 @@ function ClientErrorsPanel() {
   )
 }
 
+/* ---- system health -------------------------------------------------------- */
+
+interface HealthState {
+  db: { ok: boolean; ms: number } | null
+  counts: Record<string, number | null>
+  at: number
+}
+
+const STAT_TABLES = ['profiles', 'cases', 'evidence', 'reports', 'persons', 'gangs', 'vehicles', 'indicators', 'media', 'feedback', 'notifications', 'audit_log'] as const
+
+function SystemSection() {
+  const { session } = useAuth()
+  const versions = useRealtimeStore((s) => s.versions)
+  const [h, setH] = useState<HealthState | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    const t0 = performance.now()
+    let db: HealthState['db'] = null
+    try { await countRows('profiles'); db = { ok: true, ms: Math.round(performance.now() - t0) } }
+    catch { db = { ok: false, ms: Math.round(performance.now() - t0) } }
+    const counts: Record<string, number | null> = {}
+    await Promise.all(STAT_TABLES.map(async (t) => {
+      try { counts[t] = await countRows(t) } catch { counts[t] = null }
+    }))
+    setH({ db, counts, at: Date.now() })
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    const t = window.setTimeout(() => { void refresh() }, 0)
+    return () => window.clearTimeout(t)
+  }, [refresh])
+
+  const commit = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ?? null
+  const branch = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF ?? null
+  const vercelEnv = process.env.NEXT_PUBLIC_VERCEL_ENV ?? null
+  const rtEntries = Object.entries(versions).sort((x, y) => y[1] - x[1])
+  const liveTables = rtEntries.length
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <HealthCard label="Database" ok={h?.db?.ok ?? null} detail={h?.db ? `${h.db.ms} ms round-trip` : 'checking…'} />
+        <HealthCard label="Authentication" ok={!!session} detail={session ? 'session active, auto-refreshing' : 'no session'} />
+        <HealthCard label="Realtime" ok={liveTables > 0 ? true : null} detail={liveTables > 0 ? `events from ${liveTables} tables this session` : 'no events yet this session (signal, not a failure)'} />
+        <HealthCard label="Media host" ok={fmConfigured()} detail={fmConfigured() ? 'FiveManage configured (not pinged — pinging would upload)' : 'not configured — uploads disabled'} />
+      </div>
+
+      <Panel title="Application" sub="Build metadata comes from Vercel system env vars — 'Unavailable' means the project doesn't expose them, not an error.">
+        <div className="grid grid-cols-1 gap-2 text-sm text-slate-300 sm:grid-cols-2">
+          <p>Environment: <b className="text-white">{vercelEnv ?? (process.env.NODE_ENV === 'production' ? 'production build' : 'development')}</b></p>
+          <p>Deployed branch: <b className="text-white">{branch ?? 'Unavailable'}</b></p>
+          <p>Commit: <b className="font-mono text-white">{commit ? commit.slice(0, 10) : 'Unavailable'}</b></p>
+          <p>Supabase client: <b className="text-white">{isConfigured ? 'configured' : 'NOT CONFIGURED'}</b></p>
+        </div>
+      </Panel>
+
+      <Panel title="Safety" sub="Checks that should always be green.">
+        <ul className="space-y-1.5 text-sm">
+          <SafetyLine ok={isConfigured} text="Supabase env vars present" bad="Missing NEXT_PUBLIC_SUPABASE_* — the app cannot function" />
+          <SafetyLine ok={fmConfigured()} text="FiveManage configured (optional)" bad="Uploads disabled — Attachments/Media fall back to paste-a-URL" warnOnly />
+          <SafetyLine ok={h?.db?.ok ?? true} text="Database reachable" bad="Profile count query failed — check Supabase status/logs" />
+          <li className="text-slate-400">Owner-dashboard items that live OUTSIDE this repo: Supabase OTP expiry + leaked-password protection + backups (see docs/HARDENING.md), GitHub branch protection (see the handbook&rsquo;s workflow chapter).</li>
+        </ul>
+      </Panel>
+
+      <Panel title="Environment overview" sub="Names and purpose only — values are never displayed (they are public client keys, but the habit matters). Changing any of these requires a REBUILD, and vercel.json + ci.yml carry duplicate copies that must agree.">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-white/10 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <th className="px-2 py-2">Variable</th><th className="px-2 py-2">Purpose</th><th className="px-2 py-2">Required</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">If missing</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {ENV_VARS.map((e) => {
+                const ok = e.name.startsWith('NEXT_PUBLIC_SUPABASE') ? isConfigured : fmConfigured()
+                return (
+                  <tr key={e.name}>
+                    <td className="px-2 py-2 font-mono text-blue-300">{e.name}</td>
+                    <td className="px-2 py-2 text-slate-300">{e.purpose}</td>
+                    <td className="px-2 py-2 text-slate-400">{e.required ? 'required' : 'optional'}</td>
+                    <td className="px-2 py-2">{ok ? <span className="text-emerald-300">✓ configured</span> : <span className={e.required ? 'text-rose-300' : 'text-amber-300'}>✗ missing</span>}</td>
+                    <td className="px-2 py-2 text-slate-400">{e.ifMissing}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      <Panel title="This session's realtime activity" sub="Version counters = events received since you signed in. A quiet table is not a failure — it just hasn't changed. Full realtime documentation lives in the handbook (State & Realtime).">
+        {rtEntries.length ? (
+          <div className="flex flex-wrap gap-1.5">
+            {rtEntries.map(([t, ver]) => (
+              <span key={t} className="rounded-lg border border-white/10 bg-ink-950/50 px-2 py-1 font-mono text-[11px] text-slate-300">
+                {t} <b className="text-emerald-300">{ver}</b>
+              </span>
+            ))}
+          </div>
+        ) : <p className="text-sm text-slate-400">No events yet this session.</p>}
+      </Panel>
+
+      <Panel title="Statistics" sub="Live row counts (RLS-scoped — these are the rows YOUR account can see, which for the owner+command account is everything). 'Unavailable' = the count query failed.">
+        {loading && !h ? <p className="text-sm text-slate-400">Counting…</p> : (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+            {STAT_TABLES.map((t) => (
+              <div key={t} className="rounded-lg bg-ink-950/50 p-3">
+                <p className="font-mono text-lg font-black text-white">{h?.counts[t] ?? '—'}</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{t.replace(/_/g, ' ')}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        <Button size="sm" className="mt-3" disabled={loading} onClick={() => void refresh()}>
+          {loading ? 'Refreshing…' : '↻ Refresh'}
+        </Button>
+      </Panel>
+    </div>
+  )
+}
+
 function HealthCard({ label, ok, detail }: { label: string; ok: boolean | null; detail: string }) {
   return (
     <div className="rounded-lg border border-white/10 bg-ink-950/50 p-4">
@@ -467,202 +1115,6 @@ function SafetyLine({ ok, text, bad, warnOnly }: { ok: boolean; text: string; ba
     <li className={ok ? 'text-emerald-300' : warnOnly ? 'text-amber-300' : 'text-rose-300'}>
       {ok ? '✓' : warnOnly ? '⚠' : '✗'} {ok ? text : bad}
     </li>
-  )
-}
-
-/* ---- production status -------------------------------------------------------- */
-
-/** Live checks read ordinary RLS-scoped tables the owner can already see —
- *  no privileged fetch, no server data invented here. The manual-actions
- *  checklist is static configuration (ownerData.ts) and is labeled as such:
- *  the app cannot verify dashboard-side work, so it never claims to. */
-
-type OpsStatus = 'healthy' | 'warning' | 'action' | 'unknown' | 'not_configured'
-
-const OPS_CHIP: Record<OpsStatus, { label: string; cls: string }> = {
-  healthy: { label: 'Healthy', cls: 'bg-emerald-500/15 text-emerald-300' },
-  warning: { label: 'Warning', cls: 'bg-amber-500/15 text-amber-300' },
-  action: { label: 'Action required', cls: 'bg-rose-500/15 text-rose-300' },
-  unknown: { label: 'Unknown', cls: 'bg-slate-500/20 text-slate-300' },
-  not_configured: { label: 'Not configured', cls: 'bg-slate-500/20 text-slate-400' },
-}
-
-function OpsChip({ status }: { status: OpsStatus }) {
-  const c = OPS_CHIP[status]
-  return <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${c.cls}`}>{c.label}</span>
-}
-
-interface OpsState {
-  /** Active prosecutor assignment per bureau (null = the fetch failed). */
-  coverage: { bureau: string; primaryId: string | null; actingId: string | null }[] | null
-  pendingCid: number | null
-  pendingJustice: number | null
-  legacyTransfers: number | null
-  archivedCases: number | null
-  at: number
-}
-
-function OpsSection() {
-  const [ops, setOps] = useState<OpsState | null>(null)
-  const [loading, setLoading] = useState(true)
-  // Subscribe to the roster so prosecutor names resolve as soon as it loads —
-  // and so an UNRESOLVABLE assignee (test fixtures are hidden from profile
-  // reads by RLS) can be surfaced as a warning instead of a blank.
-  const roster = useProfilesStore((s) => s.profiles)
-
-  const refresh = useCallback(async () => {
-    setLoading(true)
-    useProfilesStore.getState().fetch()
-    // Each check fails independently to null → its card shows Unknown, never
-    // a false green.
-    const [pba, pendingCid, pendingJustice, legacy, totalCases, liveCases] = await Promise.all([
-      list('prosecutor_bureau_assignments', { is: { ends_at: null } }).catch(() => null),
-      countRows('membership_requests', { eq: { status: 'pending' } }).catch(() => null),
-      countRows('justice_membership_requests', { eq: { status: 'pending' } }).catch(() => null),
-      list('transfer_requests', { in: { status: ['pending_source', 'pending_target', 'approved'] }, select: 'id' }).catch(() => null),
-      countRows('cases').catch(() => null),
-      countRows('cases', { is: { archived_at: null } }).catch(() => null),
-    ])
-    const coverage = pba === null ? null : PERMANENT_BUREAUS.map((b) => ({
-      bureau: b,
-      primaryId: pba.find((r) => r.bureau === b && r.assignment_type === 'primary')?.prosecutor_id ?? null,
-      actingId: pba.find((r) => r.bureau === b && r.assignment_type === 'acting')?.prosecutor_id ?? null,
-    }))
-    setOps({
-      coverage,
-      pendingCid,
-      pendingJustice,
-      legacyTransfers: legacy === null ? null : legacy.length,
-      archivedCases: totalCases === null || liveCases === null ? null : totalCases - liveCases,
-      at: Date.now(),
-    })
-    setLoading(false)
-  }, [])
-
-  useEffect(() => {
-    const t = window.setTimeout(() => { void refresh() }, 0)
-    return () => window.clearTimeout(t)
-  }, [refresh])
-
-  const router = useRouter()
-  const openActions = MANUAL_ACTIONS.filter((a) => !a.done)
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-400">
-          {ops ? <>Live checks ran {timeAgo(new Date(ops.at).toISOString())} — RLS-scoped reads, nothing privileged.</> : 'Running checks…'}
-        </p>
-        <Button size="sm" disabled={loading} onClick={() => void refresh()}>{loading ? 'Checking…' : '↻ Re-check'}</Button>
-      </div>
-
-      <Panel title="Justice coverage" sub="Each bureau needs an active prosecutor (primary or acting) or its classified legal requests go unseen at the DOJ — exactly the failure repaired in July 2026.">
-        {ops?.coverage === null && <p className="text-sm text-slate-400"><OpsChip status="unknown" /> The assignment table could not be read — retry, and check Supabase if it persists.</p>}
-        {ops?.coverage && (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {ops.coverage.map((c) => {
-              const covererId = c.primaryId ?? c.actingId
-              // A held slot whose holder is invisible on the roster is a real
-              // signal: test fixtures and removed accounts are hidden from
-              // profile reads, so "held by someone you can't see" warrants a
-              // look — never a green light. (Direct roster lookup, NOT
-              // officerName(): that helper returns an 'Officer' placeholder
-              // for unknown ids, which would mask exactly this case.)
-              const holder = covererId ? roster.find((p) => p.id === covererId) : undefined
-              const name = holder?.display_name ?? null
-              const unresolvable = !!covererId && roster.length > 0 && !holder
-              const status: OpsStatus = !covererId ? 'action' : unresolvable ? 'warning' : name ? 'healthy' : 'unknown'
-              return (
-                <div key={c.bureau} className="rounded-lg bg-ink-950/50 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-bold text-white">{bureauLabel(c.bureau)}</p>
-                    <OpsChip status={status} />
-                  </div>
-                  <p className="mt-1 text-xs text-slate-400">
-                    {covererId
-                      ? <>{c.primaryId ? 'Primary' : 'Acting'}: {name || 'not on the visible roster — likely a test fixture or removed account; verify in Justice Portal → Coverage'}</>
-                      : 'No active prosecutor — classified requests from this bureau are invisible at the DOJ until one is assigned (Justice Portal → Coverage).'}
-                  </p>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </Panel>
-
-      <Panel title="Workflow health" sub="Queues that should trend to zero. Counts are live and RLS-scoped.">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          <OpsCountCard
-            label="CID applications" value={ops?.pendingCid ?? null}
-            status={ops?.pendingCid === null || !ops ? 'unknown' : ops.pendingCid > 0 ? 'warning' : 'healthy'}
-            detail={ops?.pendingCid ? 'awaiting review — Command Center → Approvals' : 'no pending membership requests'}
-            onClick={() => router.push('/command-center?s=approvals')}
-          />
-          <OpsCountCard
-            label="Justice applications (legacy)" value={ops?.pendingJustice ?? null}
-            status={ops?.pendingJustice === null || !ops ? 'unknown' : ops.pendingJustice > 0 ? 'warning' : 'healthy'}
-            detail={ops?.pendingJustice ? 'legacy requests — justice memberships retired, no longer actionable' : 'no pending justice requests'}
-            onClick={() => router.push('/command-center?s=approvals')}
-          />
-          <OpsCountCard
-            label="Legacy open transfers" value={ops?.legacyTransfers ?? null}
-            status={ops?.legacyTransfers === null || !ops ? 'unknown' : ops.legacyTransfers > 0 ? 'action' : 'healthy'}
-            detail={ops?.legacyTransfers ? 'transfers now apply instantly — these old two-sided rows need approving or cancelling' : 'none expected — transfers apply instantly'}
-            onClick={() => router.push('/command-center?s=promotions')}
-          />
-          <OpsCountCard
-            label="Archived cases" value={ops?.archivedCases ?? null}
-            status={ops?.archivedCases === null || !ops ? 'unknown' : 'healthy'}
-            detail="hidden from boards, restorable by command; only you can permanently delete one (Cases → Archived)"
-            onClick={() => router.push('/cases')}
-          />
-        </div>
-      </Panel>
-
-      <Panel title="Manual actions" sub="Work only a person with dashboard access can do — the app cannot verify these, so this checklist is maintained by hand (recorded 2026-07-18; update ownerData.ts when an item is completed).">
-        {openActions.length === 0 && <p className="text-sm text-emerald-300">✓ Nothing outstanding.</p>}
-        <div className="space-y-2">
-          {MANUAL_ACTIONS.map((a) => (
-            <div key={a.title} className={`rounded-lg p-3 ${a.done ? 'bg-ink-950/40' : 'bg-amber-500/5'}`}>
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="min-w-0 flex-1 text-sm font-bold text-white">{a.title}</p>
-                {a.done
-                  ? <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-300">Done {a.done}</span>
-                  : <OpsChip status={a.status === 'not_configured' ? 'not_configured' : a.status === 'recurring' ? 'warning' : 'action'} />}
-              </div>
-              <p className="mt-1 text-sm text-slate-400">{a.detail}</p>
-              <p className="mt-1 text-xs text-slate-500">Where: {a.where}</p>
-            </div>
-          ))}
-        </div>
-      </Panel>
-
-      <Panel title="Backups & recovery" sub="Honest status: this app cannot see Supabase backups, so it will never show them green.">
-        <ul className="space-y-2 text-sm text-slate-300">
-          <li><OpsChip status="unknown" /> <span className="ml-1">{RECOVERY_NOTES.backups}</span></li>
-          <li><OpsChip status="action" /> <span className="ml-1">{RECOVERY_NOTES.restore}</span></li>
-        </ul>
-      </Panel>
-    </div>
-  )
-}
-
-function OpsCountCard({ label, value, status, detail, onClick }: {
-  label: string
-  value: number | null
-  status: OpsStatus
-  detail: string
-  onClick: () => void
-}) {
-  return (
-    <button onClick={onClick} className="rounded-lg border border-white/10 bg-ink-950/50 p-3 text-left transition hover:border-blue-400/30">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
-        <OpsChip status={status} />
-      </div>
-      <p className="mt-1 font-mono text-2xl font-black text-white">{value === null ? '—' : value}</p>
-      <p className="mt-0.5 text-xs text-slate-400">{detail}</p>
-    </button>
   )
 }
 
@@ -711,18 +1163,13 @@ function FeedbackInbox() {
         list('feedback_meta', {}),
       ])
       const byId = new Map(metas.map((m) => [m.feedback_id, m]))
-      const built = fbs.map((fb) => ({ fb, meta: byId.get(fb.id) ?? null }))
-      setItems(built)
-      // Share the open/unresolved count with the Overview KPI strip — no extra
-      // fetch. "Open" = not resolved/archived/rejected/duplicate.
-      const closed = new Set(['resolved', 'archived', 'rejected', 'duplicate'])
-      useOwnerVitals.getState().setOpenFeedback(built.filter((i) => !closed.has(i.meta?.status ?? 'new')).length)
+      setItems(fbs.map((fb) => ({ fb, meta: byId.get(fb.id) ?? null })))
     } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     finally { setLoading(false) }
   }, [])
 
   useEffect(() => {
-    useProfilesStore.getState().fetch()
+    void useProfilesStore.getState().fetch()
     const t = window.setTimeout(() => { void refresh() }, 0)
     return () => window.clearTimeout(t)
   }, [refresh])
@@ -925,269 +1372,36 @@ function FeedbackDetailModal({ item, onClose, onSaved }: { item: FbItem; onClose
   )
 }
 
-/* ---- suggestions ------------------------------------------------------------- */
+/* ---- handbook & reference ------------------------------------------------- */
 
-function SuggestionsSection() {
-  const [group, setGroup] = useState('')
-  const groups = [...new Set(SUGGESTIONS.map((s) => s.group))]
-  const shown = group ? SUGGESTIONS.filter((s) => s.group === group) : SUGGESTIONS
-  return (
-    <Panel title="Improvement roadmap" sub="From the July 2026 repository analysis (handbook Ch. 19). Recommendations only — nothing here changes code. 'Wait' = do after a prerequisite or at larger scale.">
-      <div className="mb-3 flex flex-wrap gap-1.5">
-        <button onClick={() => setGroup('')} className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${!group ? 'border-badge-500/50 bg-badge-500/15 text-white' : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'}`}>All ({SUGGESTIONS.length})</button>
-        {groups.map((g) => (
-          <button key={g} onClick={() => setGroup(group === g ? '' : g)} className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${group === g ? 'border-badge-500/50 bg-badge-500/15 text-white' : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'}`}>{g}</button>
-        ))}
-      </div>
-      <div className="space-y-2">
-        {shown.map((s) => (
-          <div key={s.title} className="rounded-lg bg-ink-950/50 p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="min-w-0 flex-1 text-sm font-bold text-white">{s.title}</p>
-              <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] uppercase text-slate-400">{s.group}</span>
-              <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${s.difficulty === 'S' ? 'bg-emerald-500/15 text-emerald-300' : s.difficulty === 'M' ? 'bg-amber-500/15 text-amber-300' : 'bg-rose-500/15 text-rose-300'}`}>{s.difficulty === 'S' ? 'small' : s.difficulty === 'M' ? 'medium' : 'large'}</span>
-              {s.done
-                ? <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-300">done {s.done}</span>
-                : <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${s.safeNow ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-500/20 text-slate-400'}`}>{s.safeNow ? 'safe now' : 'wait'}</span>}
-            </div>
-            <p className="mt-1 text-sm text-slate-400">{s.why}</p>
-            <p className="mt-1 text-xs text-slate-400">
-              Files: <span className="font-mono">{s.files}</span> · risk {s.risk} · benefit {s.benefit} · verify: {s.verify}
-            </p>
-          </div>
-        ))}
-      </div>
-    </Panel>
-  )
-}
+const HANDBOOK_LINKS: { page: string; label: string; sub: string }[] = [
+  { page: 'architecture', label: 'Architecture Blocks', sub: 'The nine blocks, risk levels & common mistakes' },
+  { page: 'database', label: 'Database Guide', sub: 'Tables, RLS policies & triggers — where every rule lives' },
+  { page: 'auth', label: 'Auth Flow', sub: 'Gate states, capability booleans & the owner flag' },
+  { page: 'api', label: 'API Flow', sub: 'How a read/write travels db.ts → PostgREST → RLS' },
+  { page: 'state', label: 'State & Realtime', sub: 'Stores, version counters & the refetch pattern' },
+  { page: 'dependency-map', label: 'Dependency Map', sub: 'What imports what, across the repo' },
+  { page: 'change-impact', label: 'Change Impact Tables', sub: '"If I change this, what else must I check?"' },
+  { page: 'learning-path', label: 'Learning Path', sub: 'Beginner → advanced milestones, and what to avoid early' },
+  { page: 'glossary', label: 'Glossary', sub: 'The project vocabulary, defined' },
+  { page: 'faq', label: 'FAQ', sub: 'Common questions, answered from the repo' },
+]
 
-/* ---- change impact / architecture / routes / env / realtime ------------------- */
-
-function ImpactSection() {
+function ReferenceSection() {
   const router = useRouter()
   return (
     <div className="space-y-4">
-      <Panel title="Change Impact Center" sub="Pick anything below — libraries, components, hooks, tables, RPCs, services, config — to see what it depends on, what depends on it, and what to check if you change it. Impact lists are curated from the repository analysis; treat them as informed inference, not proof.">
+      <Panel title="Developer Handbook" sub="The reference library — searchable, generated from the repo docs. The suggestions roadmap, route registry, workflow guide and learning paths that used to be duplicated here live in these chapters.">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <LinkCard title="Open the Handbook" sub="All chapters, with full-text search." onClick={() => router.push('/devdocs')} />
+          {HANDBOOK_LINKS.map((h) => (
+            <LinkCard key={h.page} title={h.label} sub={h.sub} onClick={() => router.push(`/devdocs?page=${h.page}`)} />
+          ))}
+        </div>
+      </Panel>
+      <Panel title="Change Impact — dependency explorer" sub="Pick anything — libraries, components, hooks, tables, RPCs, services, config — to see what it depends on, what depends on it, and what to check if you change it. Impact lists are curated from the repository analysis; treat them as informed inference, not proof.">
         <DepExplorer />
       </Panel>
-      <Panel title="Before any change — the universal checklist">
-        <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-300">
-          <li>Branch off main; never experiment on production.</li>
-          <li>Check the item above + the handbook&rsquo;s <button onClick={() => router.push('/devdocs?page=change-impact')} className="text-blue-300 underline decoration-blue-300/40">Change Impact tables</button>.</li>
-          <li>Schema changes: additive migration + database.types.ts in the same PR.</li>
-          <li>Run the four gates; test the changed flow on the PR preview (two browsers for realtime).</li>
-          <li>High-risk items (CSP, auth, sign-off, delete cascades) get a line-by-line self-review.</li>
-        </ol>
-      </Panel>
-    </div>
-  )
-}
-
-function ArchitectureSection() {
-  const router = useRouter()
-  const link = (page: string, label: string) => (
-    <button onClick={() => router.push(`/devdocs?page=${page}`)} className="text-blue-300 underline decoration-blue-300/40 hover:text-blue-200">{label}</button>
-  )
-  return (
-    <div className="space-y-4">
-      <Panel title="The system at a glance">
-        <pre className="overflow-x-auto rounded-lg border border-white/10 bg-ink-950 p-4 font-mono text-[11px] leading-relaxed text-slate-300">{`Browser (Next.js SPA, static)          Supabase (the backend)
-  36 screens ── shell ── ui             Auth ─ profiles trigger
-       │                                PostgREST ─ RLS ─ 91 tables
-   lib/auth ─ lib/nav ─ lib/toast       114 RPCs ─ private.* helpers
-       │                                Realtime publication
-   lib/db ◄── domain libs               audit/touch/guard triggers
-       │            │
-   lib/supabase ─ lib/realtime (wss)    FiveManage (media URLs only)
-                                        Discord (OAuth + DM edge fn)
-   Vercel (hosting/previews/rollback) · GitHub Actions (gates + drift checks)`}</pre>
-        <p className="mt-2 text-sm text-slate-400">
-          Flows in depth: {link('architecture', 'Architecture Blocks')} (nine blocks, risk levels, common mistakes) ·{' '}
-          {link('auth', 'Auth flow')} · {link('api', 'API flow')} · {link('database', 'Database')} ·{' '}
-          {link('state', 'State & realtime flow')} · {link('dependency-map', 'Dependency Map')}.
-        </p>
-      </Panel>
-      <Panel title="The nine blocks, one line each" sub="Full detail with common mistakes lives in the handbook chapter.">
-        <ul className="space-y-1 text-sm text-slate-300">
-          <li><b className="text-white">Config & build</b> — CSP + deploy machinery (HIGH risk: exact allow-lists).</li>
-          <li><b className="text-white">Routing & shell</b> — one [tab] route + chrome (nav three-way contract).</li>
-          <li><b className="text-white">Auth & identity</b> — state machine + capability booleans (~40 consumers).</li>
-          <li><b className="text-white">Data access</b> — db.ts, the only path to Postgres (throw-vs-return contract).</li>
-          <li><b className="text-white">Realtime</b> — one channel per table → version counters.</li>
-          <li><b className="text-white">Feature views</b> — 36 screens, one uniform skeleton.</li>
-          <li><b className="text-white">Domain libs</b> — sign-off vocabulary, forms, penal, exports, search, notify.</li>
-          <li><b className="text-white">UI primitives</b> — Modal/dialog/DataTable/editor + safeUrl/markdown (XSS surfaces).</li>
-          <li><b className="text-white">The database</b> — where every rule that matters lives (HIGHEST risk).</li>
-        </ul>
-      </Panel>
-    </div>
-  )
-}
-
-function RoutesSection() {
-  return (
-    <Panel title="Route explorer" sub="Every screen, its component, access rule and edit risk. Access is enforced by RLS + view gates, not by the router — all routes serve the same static shell.">
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-white/10 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              <th className="px-2 py-2">Path</th><th className="px-2 py-2">Component</th><th className="px-2 py-2">Access</th><th className="px-2 py-2">Data</th><th className="px-2 py-2">Risk</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {ROUTES.map((r) => (
-              <tr key={r.path}>
-                <td className="px-2 py-2 font-mono text-blue-300">{r.path}</td>
-                <td className="px-2 py-2 text-slate-300">{r.component}</td>
-                <td className="px-2 py-2 text-slate-400">{r.access}</td>
-                <td className="px-2 py-2 text-slate-400">{r.data}</td>
-                <td className="px-2 py-2"><span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${r.risk === 'high' ? 'bg-rose-500/15 text-rose-300' : r.risk === 'medium' ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300'}`}>{r.risk}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Panel>
-  )
-}
-
-function EnvSection() {
-  const configured: Record<string, boolean> = {
-    NEXT_PUBLIC_SUPABASE_URL: isConfigured,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: isConfigured,
-    NEXT_PUBLIC_FIVEMANAGE_API_KEY: fmConfigured(),
-    NEXT_PUBLIC_FIVEMANAGE_BASE_URL: fmConfigured(),
-  }
-  return (
-    <Panel title="Environment overview" sub="Names and purpose only — values are never displayed (they are public client keys, but the habit matters). Changing any of these requires a REBUILD, and vercel.json + ci.yml carry duplicate copies that must agree.">
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-white/10 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              <th className="px-2 py-2">Variable</th><th className="px-2 py-2">Purpose</th><th className="px-2 py-2">Required</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Used in</th><th className="px-2 py-2">If missing</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {ENV_VARS.map((e) => (
-              <tr key={e.name}>
-                <td className="px-2 py-2 font-mono text-blue-300">{e.name}</td>
-                <td className="px-2 py-2 text-slate-300">{e.purpose}</td>
-                <td className="px-2 py-2 text-slate-400">{e.required ? 'required' : 'optional'}</td>
-                <td className="px-2 py-2">{configured[e.name] ? <span className="text-emerald-300">✓ configured</span> : <span className={e.required ? 'text-rose-300' : 'text-amber-300'}>✗ missing</span>}</td>
-                <td className="px-2 py-2 font-mono text-slate-400">{e.usedIn}</td>
-                <td className="px-2 py-2 text-slate-400">{e.ifMissing}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Panel>
-  )
-}
-
-function RealtimeSection() {
-  const versions = useRealtimeStore((s) => s.versions)
-  const entries = Object.entries(versions).sort((a, b) => b[1] - a[1])
-  return (
-    <div className="space-y-4">
-      <Panel title="How realtime works here">
-        <p className="text-sm text-slate-300">{REALTIME_DOC.how}</p>
-        <p className="mt-2 text-sm text-slate-400"><b className="text-slate-300">Not published</b> (refresh on remount only, by design): {REALTIME_DOC.notPublished.join(' · ')}</p>
-        <p className="mt-2 text-sm text-slate-400"><b className="text-slate-300">Security:</b> {REALTIME_DOC.security}</p>
-      </Panel>
-      <Panel title="This session's channel activity" sub="Version counters = events received since you signed in. A quiet table is not a failure — it just hasn't changed.">
-        {entries.length ? (
-          <div className="flex flex-wrap gap-1.5">
-            {entries.map(([t, v]) => (
-              <span key={t} className="rounded-lg border border-white/10 bg-ink-950/50 px-2 py-1 font-mono text-[11px] text-slate-300">
-                {t} <b className="text-emerald-300">{v}</b>
-              </span>
-            ))}
-          </div>
-        ) : <p className="text-sm text-slate-400">No events yet this session.</p>}
-      </Panel>
-      <Panel title="Common failure points">
-        <ul className="list-disc space-y-1 pl-5 text-sm text-slate-300">
-          {REALTIME_DOC.failures.map((f) => <li key={f}>{f}</li>)}
-        </ul>
-      </Panel>
-    </div>
-  )
-}
-
-function WorkflowSection() {
-  return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
-        <p className="text-sm font-bold text-amber-200">⚠ All code changes go through a branch + PR preview first.</p>
-        <p className="mt-1 text-sm text-amber-200/80">Production tracks main. A broken merge deploys immediately — the preview deployment IS the safe development version. {WORKFLOW.notVerified}</p>
-      </div>
-      <Panel title="Branching & gates"><p className="text-sm text-slate-300">{WORKFLOW.branch}</p><p className="mt-2 font-mono text-xs text-slate-400">{WORKFLOW.gates}</p></Panel>
-      <Panel title="Database changes"><p className="text-sm text-slate-300">{WORKFLOW.db}</p></Panel>
-      <Panel title="Deploy & verify"><p className="text-sm text-slate-300">{WORKFLOW.deploy}</p></Panel>
-      <Panel title="Releases & the merge checklist"><p className="text-sm text-slate-300">{WORKFLOW.versioning}</p></Panel>
-      <Panel title="Rollback & emergencies"><p className="text-sm text-slate-300">{WORKFLOW.rollback}</p><p className="mt-2 text-sm text-slate-300">{WORKFLOW.emergency}</p></Panel>
-      <Panel title="Permissions matrix" sub={MATRIX_NOTE}>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-white/10 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                <th className="px-2 py-2">Area</th><th className="px-2 py-2">Owner</th><th className="px-2 py-2">Command</th><th className="px-2 py-2">Member</th><th className="px-2 py-2">Inactive/Guest</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {PERMISSIONS_MATRIX.map((r) => (
-                <tr key={r.area}>
-                  <td className="px-2 py-2 text-slate-300">{r.area}</td>
-                  <td className="px-2 py-2 text-slate-400">{r.owner}</td>
-                  <td className="px-2 py-2 text-slate-400">{r.command}</td>
-                  <td className="px-2 py-2 text-slate-400">{r.member}</td>
-                  <td className="px-2 py-2 text-slate-400">{r.inactive}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
-    </div>
-  )
-}
-
-function LearnPath({ title, items }: { title: string; items: { step: string; where: string; why: string }[] }) {
-  return (
-    <Panel title={title}>
-      <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-300">
-        {items.map((i) => (
-          <li key={i.step}><b className="text-white">{i.step}</b> — <span className="font-mono text-blue-300">{i.where}</span><br /><span className="text-slate-400">{i.why}</span></li>
-        ))}
-      </ol>
-    </Panel>
-  )
-}
-
-function LearningSection() {
-  const router = useRouter()
-  return (
-    <div className="space-y-4">
-      <LearnPath title="Beginner path" items={LEARNING.beginner} />
-      <LearnPath title="Intermediate path" items={LEARNING.intermediate} />
-      <LearnPath title="Advanced path" items={LEARNING.advanced} />
-      <Panel title="Avoid changing early">
-        <div className="flex flex-wrap gap-1.5">
-          {LEARNING.avoidEarly.map((f) => <span key={f} className="rounded-lg border border-rose-500/25 bg-rose-500/10 px-2 py-1 font-mono text-[11px] text-rose-300">{f}</span>)}
-        </div>
-      </Panel>
-      <Panel title="Common mistakes (all real)">
-        <ul className="list-disc space-y-1 pl-5 text-sm text-slate-300">
-          {LEARNING.mistakes.map((mk) => <li key={mk}>{mk}</li>)}
-        </ul>
-      </Panel>
-      <p className="text-sm text-slate-400">
-        The full checklist with milestones lives in the handbook&rsquo;s{' '}
-        <button onClick={() => router.push('/devdocs?page=learning-path')} className="text-blue-300 underline decoration-blue-300/40">Learning Path</button>,
-        with the <button onClick={() => router.push('/devdocs?page=glossary')} className="text-blue-300 underline decoration-blue-300/40">Glossary</button> and{' '}
-        <button onClick={() => router.push('/devdocs?page=faq')} className="text-blue-300 underline decoration-blue-300/40">FAQ</button> beside it.
-      </p>
     </div>
   )
 }

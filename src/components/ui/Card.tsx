@@ -8,11 +8,13 @@
 
 type Pad = 'none' | 'sm' | 'md' | 'lg'
 
+// Slightly tighter below sm — phone columns are ~20rem wide, so a p-6 surface
+// spent a third of the row on padding. Desktop values are unchanged.
 const PAD: Record<Pad, string> = {
   none: '',
-  sm: 'p-4',
-  md: 'p-5',
-  lg: 'p-6',
+  sm: 'p-3 sm:p-4',
+  md: 'p-4 sm:p-5',
+  lg: 'p-4 sm:p-6',
 }
 
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {

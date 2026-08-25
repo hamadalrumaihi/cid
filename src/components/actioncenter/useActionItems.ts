@@ -7,7 +7,7 @@
  *  flight, so the queue never flashes empty. */
 import { useCallback, useEffect, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { buildActionItems, type AcBoloPerson, type AcDoc, type AcDraft, type AcFieldSubmission, type AcGrant, type AcHold, type AcMemberTransfer, type AcObservation, type AcSuggestion, type AcSurvTarget, type ActionItem, type ActionSources } from '@/lib/actionItems'
+import { buildActionItems, type AcBoloPerson, type AcDoc, type AcDraft, type AcFieldSubmission, type AcGrant, type AcHold, type AcMemberTransfer, type AcObservation, type AcSiuAccessRequest, type AcSiuDisclosure, type AcSiuReferral, type AcSuggestion, type AcSurvTarget, type ActionItem, type ActionSources } from '@/lib/actionItems'
 import {
   ackState, canApproveDoc, docTitle, reviewState,
   type MyAckVersions, type ShelfDoc,
@@ -64,6 +64,15 @@ const FIELD_COLS = 'id,submission_no,summary,status,assigned_to,jurisdiction,sub
 const FIELD_OPEN = ['new', 'reviewing', 'needs_info']
 /** BOLO-expiry projection — mirrors AcBoloPerson exactly. */
 const BOLO_COLS = 'id,name,bolo,bolo_expires_at,bolo_risk,updated_at'
+/** SIB projections — mirror the AcSiu* Picks exactly. These queries are
+ *  issued ONLY for the SIB standing that can act on them (see the gates in
+ *  refresh); a non-SIB viewer never queries an siu_* table from here. RLS is
+ *  the real wall either way, and the model re-gates on sibStanding. */
+const SIB_ACCESS_COLS = 'id,case_number_requested,reason,status,requested_at,updated_at'
+const SIB_REFERRAL_COLS = 'id,category,summary,status,submitted_at,updated_at'
+const SIB_DISCLOSURE_COLS = 'id,title,audience,released_at,acknowledged_at,revoked_at'
+/** SiuIntake's OPEN_STATUSES — referrals still needing an intake decision. */
+const SIB_REFERRAL_OPEN = ['submitted', 'under_review', 'info_requested']
 
 const TRANSFER_PENDING = ['pending_source', 'pending_target']
 
@@ -180,9 +189,15 @@ export function useActionItems(): ActionItemsResult {
       if (!useJusticeRoster.getState().loaded) await useJusticeRoster.getState().fetch()
       else void useJusticeRoster.getState().fetch()
     }
+    // SIB gates — the same capability signals the SIB workspace itself reads
+    // (useSiu). While the SIU context is still resolving these are false, so
+    // a non-SIB (or not-yet-known) viewer issues NO siu_* query at all; the
+    // context settling re-creates this callback and the effect catches up.
+    const sibAgent = siu.canAccess && siu.isAgent
+    const sibCommand = siu.canAccess && siu.isCommand
     try {
       const me = profile.id
-      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks, suggestionRows, holds, restrictedGrants, survObservations, survTargetRows, justiceMembershipRows, memberTransfers, myDrafts, fieldSubmissions, boloPersons] =
+      const [cases, tasks, transfers, accessRequests, legal, blockers, notifications, membershipRequests, justiceRequests, docRows, docAcks, suggestionRows, holds, restrictedGrants, survObservations, survTargetRows, justiceMembershipRows, memberTransfers, myDrafts, fieldSubmissions, boloPersons, sibAccessRequests, sibReferrals, sibDisclosures] =
         await Promise.all([
           // Bounded: newest-first so the AWAITING/returned/follow-up branches
           // and the caseById context map keep the live working set — an
@@ -277,6 +292,24 @@ export function useActionItems(): ActionItemsResult {
             ? list('persons', { select: BOLO_COLS, eq: { bolo: true }, limit: 200 })
                 .then((r) => r as unknown as AcBoloPerson[]).catch(() => [] as AcBoloPerson[])
             : Promise.resolve([] as AcBoloPerson[]),
+          // SIB sources — bounded, RLS-scoped (siu_case_access), and fetched
+          // ONLY for the standing that can act. All fail-open to empty: an
+          // RLS miss and "no SIB work" must be indistinguishable. NOTE: the
+          // siu_* tables are not in the realtime publication, so no version
+          // counter exists for them — the rows still refresh on every other
+          // trigger (visibility catch-up, manual Refresh, sibling bumps).
+          sibCommand
+            ? list('siu_access_requests', { select: SIB_ACCESS_COLS, eq: { status: 'pending' }, order: 'requested_at', ascending: false, limit: 50 })
+                .then((r) => r as unknown as AcSiuAccessRequest[]).catch(() => [] as AcSiuAccessRequest[])
+            : Promise.resolve([] as AcSiuAccessRequest[]),
+          sibAgent
+            ? list('siu_referrals', { select: SIB_REFERRAL_COLS, in: { status: SIB_REFERRAL_OPEN }, order: 'submitted_at', ascending: false, limit: 50 })
+                .then((r) => r as unknown as AcSiuReferral[]).catch(() => [] as AcSiuReferral[])
+            : Promise.resolve([] as AcSiuReferral[]),
+          sibAgent
+            ? list('siu_disclosures', { select: SIB_DISCLOSURE_COLS, is: { acknowledged_at: null, revoked_at: null }, order: 'released_at', ascending: false, limit: 50 })
+                .then((r) => r as unknown as AcSiuDisclosure[]).catch(() => [] as AcSiuDisclosure[])
+            : Promise.resolve([] as AcSiuDisclosure[]),
         ])
       const nowMs = Date.now()
       // Command/owner: the shared awaitingCount (submitted + actionable
@@ -356,6 +389,10 @@ export function useActionItems(): ActionItemsResult {
         fieldSubmissions,
         boloPersons,
         canManageBolos: canEdit,
+        sibStanding: sibAgent || sibCommand ? { isAgent: sibAgent, isCommand: sibCommand } : null,
+        sibAccessRequests,
+        sibReferrals,
+        sibDisclosures,
         notifications,
         documents,
         suggestions,
@@ -368,7 +405,7 @@ export function useActionItems(): ActionItemsResult {
     } finally {
       setRefreshing(false)
     }
-  }, [state, profile, isCommand, isOwner, justiceRole, canEdit, fetchProfiles, auth, prosecutorBureaus, siu.isCommand])
+  }, [state, profile, isCommand, isOwner, justiceRole, canEdit, fetchProfiles, auth, prosecutorBureaus, siu.canAccess, siu.isAgent, siu.isCommand])
 
   useEffect(() => {
     // A version-driven refetch fans out ~21 queries — pointless while the tab

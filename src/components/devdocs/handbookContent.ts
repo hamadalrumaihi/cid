@@ -42,10 +42,12 @@ SIB-authority cases).
    → submit for sign-off → export the court packet ([Ch. 4.1](04-features.md)).
 2. **Build intelligence**: registries for persons, gangs, vehicles, places,
    indicators — cross-referenced automatically (deconfliction alerts).
-3. **Command oversight**: dashboard KPIs, analytics, heatmap, roster
-   approval, announcements, GPS-tracker co-signing.
-4. **Personal desk**: My Desk (everything waiting on *you*), watchlist,
-   calendar, weekly shift reports, notifications.
+3. **Command oversight**: the Command Center (approvals, promotions,
+   case & intelligence oversight queues), Division Overview vitals,
+   analytics, heatmap, announcements, GPS-tracker co-signing.
+4. **Personal dashboard**: My Dashboard (the default landing —
+   everything waiting on *you* at a glance), watchlist, calendar,
+   weekly shift reports, notifications.
 
 ## The 30-second architecture
 
@@ -728,9 +730,17 @@ palette is a full-screen sheet.
 
 ## 4.5 Command tools
 
-Dashboard (KPIs + 8 widgets incl. the ticket wizard that *creates cases*
-and the dual-co-sign GPS trackers — self-co-sign blocked in UI *and* by
-trigger), division analytics (SVG charts, Monday-week buckets),
+Division Overview (\`/command\` — the member-facing division picture: a
+case-vitals KPI strip whose tiles navigate to the owning list, crime
+analytics, the dual-co-sign GPS trackers — self-co-sign blocked in UI
+*and* by trigger — and the raid-compensation calculator; the
+needs-attention widget, command filter bar/drill, bureau scorecards and
+caseload bars moved to the Command Center, with a pointer banner for
+command staff — which also carries the Cases & Assignments and
+Intelligence Oversight queues, the permissions matrix from
+\`src/lib/permissionsMatrix.ts\`, and a bureau-vs-division scope badge
+from \`useCapabilities()\`), division analytics (SVG charts, Monday-week
+buckets),
 announcements (audience-targeted: everyone/\`@everyone\` for deputy+ only,
 command, own/specific department, or just the mentioned members — the
 \`publish_announcement()\` RPC resolves recipients server-side with one
@@ -756,12 +766,17 @@ in Ch. 8.
 
 ## 4.6 Personal tools
 
-My Desk (ten derived panels over eight live tables), the Action Center
+My Dashboard (\`/inbox\`, the default landing — a prioritized
+needs-attention panel over the Action Center's top items, plus my-cases,
+"Jump back in", open Investigative Tools tabs, drafts, watched items and
+bounded recent activity; every self-fetch a slim limited projection,
+with a capability-gated dashboard switcher chip row from
+\`useCapabilities()\`), the Action Center
 (\`useActionItems\` slim fetches → the pure \`buildActionItems\` model;
 wave-3 lanes add Unassigned intel, Expiring BOLOs and Drafts — the drafts
 lane describes \`user_drafts\` KEYS, never payloads), watchlist (follow +
-"updated" chips via localStorage seen-stamps), pins & recents (the Command
-dashboard "Jump back in" strip — DB pins + device recents, both ids-only,
+"updated" chips via localStorage seen-stamps), pins & recents (the My
+Dashboard "Jump back in" strip — DB pins + device recents, both ids-only,
 titles RLS-resolved at render), saved views on the Cases/Persons/Legal/
 BOLO lists (\`lib/savedViews\` over \`user_prefs\`; re-applying a view only
 re-applies client filter state — RLS still decides what it matches),
@@ -790,8 +805,8 @@ user-facing routes:
 
 | URL | File | Renders |
 |---|---|---|
-| \`/\` | \`app/page.tsx\` | Redirect shim: legacy \`#deep-links\`, else last-visited tab, else \`/command\`. Also the OAuth landing spot — it **waits** for the auth event before redirecting. |
-| \`/<tab>\` | \`app/(app)/[tab]/page.tsx\` | One of the screens in \`PAGE_META\`. Invalid slugs → \`/command\`; legacy \`reports\` → \`/cases\`; the 14 intelligence tool slugs render \`ToolTabRedirect\`, which forwards into \`/tools\` (below). |
+| \`/\` | \`app/page.tsx\` | Redirect shim: legacy \`#deep-links\`, else \`/inbox\` (My Dashboard — the default landing). Also the OAuth landing spot — it **waits** for the auth event before redirecting. |
+| \`/<tab>\` | \`app/(app)/[tab]/page.tsx\` | One of the screens in \`PAGE_META\`. Invalid slugs → \`/inbox\`; legacy \`reports\` → \`/cases\`; the 14 intelligence tool slugs render \`ToolTabRedirect\`, which forwards into \`/tools\` (below). |
 | anything else | \`app/not-found.tsx\` | Styled 404. |
 
 \`(app)/layout.tsx\` wraps every tab in \`AuthProvider\` → \`Gate\` (sign-in
@@ -814,7 +829,7 @@ One row per leaf tab in \`PAGE_META\` (\`src/lib/nav.ts\` — the routing truth)
 
 | Slug | Screen (component) | Data highlights | Extra permissions |
 |---|---|---|---|
-| \`command\` | Dashboard (\`CommandView\` + 8 widgets, incl. the "Jump back in" pins/recents strip — \`command/JumpBack.tsx\`) | cases, evidence, tickets, trackers, raid comp, user_pins | filter bar/scorecards command-only |
+| \`command\` | Division Overview (\`CommandView\` — lean member-facing division picture: navigating case-vitals tiles, analytics, activity feed, trackers, raid comp; the needs-attention widget, filter bar/drill, scorecards and caseload bars moved to the Command Center, pointer banner for command staff) | cases, evidence, persons, gangs, trackers | — |
 | \`analytics\` | Division Analytics | cases, evidence, persons (charts) | — |
 | \`announce\` | Announcements | announcements | posting = command |
 | \`heatmap\` | Crime Heatmap | cases, turf, places, raids | — |
@@ -844,15 +859,15 @@ One row per leaf tab in \`PAGE_META\` (\`src/lib/nav.ts\` — the routing truth)
 | \`sops\` | SOPs & Library | documents + versions | writes = command |
 | \`guide\` | User Guide | static visual guide (generated from docs/USER-GUIDE.md) | — |
 | \`devdocs\` | Developer Handbook (\`DevDocsView\`) | generated handbook content | **owner-only** |
-| \`action\` | Action Center (\`ActionCenterView\`) | prioritized pending decisions across cases, command, personnel + Unassigned intel / Expiring BOLOs / Drafts lanes (\`lib/actionItems\`), type + bureau filters | self-scoped |
-| \`inbox\` | My Desk (\`InboxView\`) | self-scoped rollup panels (sign-offs, returned cases, follow-ups, tasks, mentions, following, drafts…) | self-scoped |
+| \`action\` | Action Center (\`ActionCenterView\`) | prioritized pending decisions across cases, command, personnel + Unassigned intel / Expiring BOLOs / Drafts lanes and an SIB items branch (\`lib/actionItems\`), type + bureau filters | self-scoped |
+| \`inbox\` | My Dashboard (\`InboxView\`) — the **default landing**: needs-attention (Action Center top slice), my cases, "Jump back in" (\`command/JumpBack.tsx\`), open tool tabs, drafts, watched items, bounded recent activity; capability-gated \`DashSwitcher\` chip row | slim limited projections over cases/reports/messages/legal/drafts + user_pins/watchlist | self-scoped |
 | \`calendar\` | Calendar | cases, tasks, shift weeks | — |
 | \`shifts\` | Shift Reports | shift_reports | edit own |
 | \`audit\` | Audit Log | audit_log (DataTable + CSV) | **owner-only** |
 | \`feedback\` | Feedback (sidebar leaf) | feedback | triage = owner flag (\`profiles.is_owner\`) |
 | \`profile\` | My Profile (\`ProfileView\`) | own profile, appearance, notification settings | self |
-| \`command-center\` | Command Center (\`CommandCenterView\`) | personnel admin, approvals, promotions, transfers | command + Owner |
-| \`owner\` | Owner Portal (\`OwnerView\`) | project health, feedback triage, security testing | **owner-only** |
+| \`command-center\` | Command Center (\`CommandCenterView\`, \`?s=\` sections) | command dashboard overview, Cases & Assignments and Intelligence Oversight queues, personnel admin, approvals, promotions, transfers, duty status, permissions matrix (\`src/lib/permissionsMatrix.ts\`), bureau-vs-division scope badge | command + Owner |
+| \`owner\` | Owner Console (\`OwnerView\`, \`?s=\` sections grouped Overview / Operations / Safety / Reference; legacy \`?s=\` values redirect) | owner dashboard (warnings, pending queue, recent admin changes), portal management (SIB release gate, runbook), roles & access (justice grants, test-fixture flag), feedback triage, permanent deletion + ledger, security & audit, system health, handbook reference | **owner-only** |
 
 ¹ **Investigative Tools slugs.** These 14 routes stay registered (deep-link
 contracts) but no longer render their view directly: the \`[tab]\` page returns
@@ -987,7 +1002,7 @@ browser never runs privileged tests and never sees fixture credentials.
 | RPC | Purpose |
 |---|---|
 | \`security_test_report(p_suite, p_passed, p_failed, p_skipped, p_failures, p_commit, p_branch, p_release, p_source, p_duration_ms)\` | writer, callable **only by \`rls-test-%@cidportal.test\` accounts** — the live RLS suites report their own sanitized results (a vitest reporter posts after every \`npm run test:rls\`). Failures are re-sanitized server-side (short name/expected/actual strings only); newest 50 runs kept per suite; audit-logged |
-| \`owner_security_overview()\` | reader, \`private.is_owner()\`-gated + audited — recent runs, live fixture-roster health checks, and leftover test-data counts for the Owner Portal's Security Testing section |
+| \`owner_security_overview()\` | reader, \`private.is_owner()\`-gated + audited — recent runs, live fixture-roster health checks, and leftover test-data counts for the Owner Console's Security & Audit section |
 
 ### Legal import RPCs (v1.15.0)
 
@@ -1593,7 +1608,7 @@ Dependabot opens weekly dependency PRs gated by the same.
 
 The opt-in live security suite (\`npm run test:rls\`, see
 \`tests/rls/README.md\`) additionally posts each run's **sanitized** results
-to the Owner Portal's Security Testing dashboard via a vitest reporter
+to the Owner Console's Security & Audit section via a vitest reporter
 (\`tests/rls/securityReporter.ts\`, v1.14) — fixture-authenticated,
 best-effort, and self-skipping when credentials are absent.
 

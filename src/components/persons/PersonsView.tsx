@@ -522,7 +522,7 @@ export function PersonsView() {
       />
 
       {selected.size > 0 && (
-        <div className="sticky top-2 z-10 flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 backdrop-blur">
+        <div className="sticky-below-header-2 z-10 flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 backdrop-blur">
           <span className="text-sm font-semibold text-rose-200">{selected.size} selected</span>
           <span className="flex gap-2">
             <Button size="sm" variant="danger" onClick={() => void deleteSelected()}>Delete selected</Button>

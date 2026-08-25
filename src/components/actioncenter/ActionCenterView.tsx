@@ -7,7 +7,7 @@
  *  limited to the canonical writes the owning pages already make (task
  *  complete, blocker resolve, access decision, mark-read) — everything
  *  server-authoritative (sign-off, transfers, membership, legal) deep-links
- *  to its owning surface. My Desk stays the broad personal overview. */
+ *  to its owning surface. My Dashboard stays the broad personal overview. */
 import Link from 'next/link'
 import { useCallback, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -118,7 +118,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
   )
 }
 
-function QueueSection({ id, title, subtitle, emptyText, showWhenEmpty, items, muted, now, onOpen, onAction }: {
+function QueueSection({ id, title, subtitle, emptyText, showWhenEmpty, items, muted, now, onOpen, onAction, className }: {
   id: SectionKey
   title: string
   subtitle: string
@@ -131,10 +131,12 @@ function QueueSection({ id, title, subtitle, emptyText, showWhenEmpty, items, mu
   now: number
   onOpen: (item: ActionItem) => void
   onAction: (item: ActionItem, kind: InlineActionKind) => Promise<unknown> | void
+  /** Grid placement only (e.g. the full-width Overdue lane). */
+  className?: string
 }) {
   if (!items.length && !showWhenEmpty) return null
   return (
-    <section aria-labelledby={`ac-sec-${id}`}>
+    <section aria-labelledby={`ac-sec-${id}`} className={className}>
       <h2 id={`ac-sec-${id}`} className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">
         {title} <span className="font-semibold">({items.length})</span>
       </h2>
@@ -399,26 +401,32 @@ export function ActionCenterView() {
             <EmptyState
               icon="✓"
               title="You're all caught up."
-              hint="Nothing needs your action right now. My Desk keeps the broader overview of your cases, drafts and mentions."
-              action={{ label: 'Open My Desk', onClick: () => router.push('/inbox') }}
+              hint="Nothing needs your action right now. My Dashboard keeps the broader overview of your cases, drafts and mentions."
+              action={{ label: 'Open My Dashboard', onClick: () => router.push('/inbox') }}
             />
           ))}
 
-          {SECTION_ORDER.map(({ key, title, subtitle, empty, gate }) => (
-            <QueueSection
-              key={key}
-              id={key}
-              title={title}
-              subtitle={subtitle}
-              emptyText={empty}
-              showWhenEmpty={explainEmpties && (!gate || gates[gate])}
-              items={sections[key]}
-              muted={key === 'waiting' || key === 'drafts'}
-              now={now}
-              onOpen={absorb}
-              onAction={runInline}
-            />
-          ))}
+          {/* Wide screens: the Overdue lane stays full-width on top, the rest
+              flow into two columns (InboxView's grid idiom). Source order and
+              section semantics are untouched — layout only. */}
+          <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
+            {SECTION_ORDER.map(({ key, title, subtitle, empty, gate }) => (
+              <QueueSection
+                key={key}
+                id={key}
+                title={title}
+                subtitle={subtitle}
+                emptyText={empty}
+                showWhenEmpty={explainEmpties && (!gate || gates[gate])}
+                items={sections[key]}
+                muted={key === 'waiting' || key === 'drafts'}
+                now={now}
+                onOpen={absorb}
+                onAction={runInline}
+                className={key === 'overdue' ? 'xl:col-span-2' : undefined}
+              />
+            ))}
+          </div>
 
           {sections.activity.length > 0 && (
             <details>
@@ -436,8 +444,8 @@ export function ActionCenterView() {
       )}
 
       <p className="text-xs text-slate-400">
-        This is the actionable slice of your{' '}
-        <Link href="/inbox" className="rounded font-semibold text-badge-200 transition hover:text-white">My Desk</Link>
+        This is the actionable slice of{' '}
+        <Link href="/inbox" className="rounded font-semibold text-badge-200 transition hover:text-white">My Dashboard</Link>
         {' '}— the same reviews and tasks appear there in context.
         {suppressedCount > 0 && <> {suppressedCount} low-signal notification{suppressedCount === 1 ? ' was' : 's were'} folded into the items above.</>}
       </p>

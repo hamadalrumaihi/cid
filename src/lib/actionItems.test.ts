@@ -3,7 +3,8 @@ import {
   buildActionItems, describeDraftKey, priorityFromScore, NUDGE, STATUS_BASE,
   type AcAccess, type AcBlocker, type AcBoloPerson, type AcCase, type AcDoc, type AcDraft,
   type AcFieldSubmission, type AcLegal, type AcNotif,
-  type AcObservation, type AcSuggestion, type AcSurvTarget, type AcTask, type AcTransfer,
+  type AcObservation, type AcSiuAccessRequest, type AcSiuDisclosure, type AcSiuReferral,
+  type AcSuggestion, type AcSurvTarget, type AcTask, type AcTransfer,
   type ActionSources,
 } from './actionItems'
 
@@ -838,5 +839,78 @@ describe('expiring BOLOs (persons.bolo)', () => {
     expect(byKey(off, 'bolo:p-1')).toBeUndefined()
     const viewer = buildActionItems(src({ boloPersons: [mkBolo()] }))
     expect(byKey(viewer, 'bolo:p-1')).toBeUndefined()
+  })
+})
+
+/* ---- SIB branch (sibStanding-gated) ---------------------------------------- */
+
+describe('SIB work (sibStanding-gated)', () => {
+  const mkSibAccess = (over: Partial<AcSiuAccessRequest> = {}): AcSiuAccessRequest => ({
+    id: 'sar-1', case_number_requested: 'SIB-8000012', reason: 'Cross-bureau overlap',
+    status: 'pending', requested_at: NOW_ISO, updated_at: NOW_ISO, ...over,
+  })
+  const mkSibReferral = (over: Partial<AcSiuReferral> = {}): AcSiuReferral => ({
+    id: 'ref-1', category: 'corruption', summary: 'Evidence log discrepancies',
+    status: 'submitted', submitted_at: NOW_ISO, updated_at: NOW_ISO, ...over,
+  })
+  const mkSibDisclosure = (over: Partial<AcSiuDisclosure> = {}): AcSiuDisclosure => ({
+    id: 'dis-1', title: 'Sanitized surveillance summary', audience: 'cid',
+    released_at: NOW_ISO, acknowledged_at: null, revoked_at: null, ...over,
+  })
+  const AGENT = { isAgent: true, isCommand: false }
+  const COMMAND = { isAgent: true, isCommand: true }
+
+  it('null sibStanding emits NOTHING even when SIB rows are present (non-disclosure)', () => {
+    const q = buildActionItems(src({
+      sibAccessRequests: [mkSibAccess()],
+      sibReferrals: [mkSibReferral()],
+      sibDisclosures: [mkSibDisclosure()],
+    }))
+    expect(q.items).toEqual([])
+  })
+
+  it('pending Director access request → command needs_action item on /siu?s=intake (X-1 only)', () => {
+    const q = buildActionItems(src({ sibStanding: COMMAND, sibAccessRequests: [mkSibAccess()] }))
+    expect(byKey(q, 'sib_access:sar-1')).toMatchObject({
+      sourceType: 'sib_access_request', status: 'needs_action',
+      title: 'SIB access request — SIB-8000012', summary: 'Cross-bureau overlap',
+      deepLink: '/siu?s=intake', isCommandItem: true, isWaitingOnCurrentUser: true,
+      canAct: false, actionLabel: null,
+    })
+    // A field agent without command standing never sees the decision queue.
+    const agent = buildActionItems(src({ sibStanding: AGENT, sibAccessRequests: [mkSibAccess()] }))
+    expect(byKey(agent, 'sib_access:sar-1')).toBeUndefined()
+    // Decided rows emit nothing.
+    const decided = buildActionItems(src({ sibStanding: COMMAND, sibAccessRequests: [mkSibAccess({ status: 'approved' })] }))
+    expect(byKey(decided, 'sib_access:sar-1')).toBeUndefined()
+  })
+
+  it('open intake referral → shared-queue needs_action item for field agents', () => {
+    const q = buildActionItems(src({ sibStanding: AGENT, sibReferrals: [mkSibReferral()] }))
+    expect(byKey(q, 'sib_referral:ref-1')).toMatchObject({
+      sourceType: 'sib_referral', status: 'needs_action',
+      title: 'Intake referral — Corruption', summary: 'Evidence log discrepancies',
+      reason: 'Awaiting an SIB intake decision',
+      deepLink: '/siu?s=intake', isWaitingOnCurrentUser: true,
+    })
+    const info = buildActionItems(src({ sibStanding: AGENT, sibReferrals: [mkSibReferral({ status: 'info_requested' })] }))
+    expect(byKey(info, 'sib_referral:ref-1')?.reason).toContain('More information was requested')
+    for (const status of ['accepted', 'declined']) {
+      const closed = buildActionItems(src({ sibStanding: AGENT, sibReferrals: [mkSibReferral({ status })] }))
+      expect(byKey(closed, 'sib_referral:ref-1'), status).toBeUndefined()
+    }
+  })
+
+  it('un-acknowledged release to CID → waiting item; acknowledged/revoked emit nothing', () => {
+    const q = buildActionItems(src({ sibStanding: AGENT, sibDisclosures: [mkSibDisclosure()] }))
+    expect(byKey(q, 'sib_disclosure:dis-1')).toMatchObject({
+      sourceType: 'sib_disclosure', status: 'waiting',
+      title: 'Release to CID — Sanitized surveillance summary',
+      deepLink: '/siu?s=disclosure', isPersonalItem: true,
+    })
+    const acked = buildActionItems(src({ sibStanding: AGENT, sibDisclosures: [mkSibDisclosure({ acknowledged_at: NOW_ISO })] }))
+    expect(byKey(acked, 'sib_disclosure:dis-1')).toBeUndefined()
+    const revoked = buildActionItems(src({ sibStanding: AGENT, sibDisclosures: [mkSibDisclosure({ revoked_at: NOW_ISO })] }))
+    expect(byKey(revoked, 'sib_disclosure:dis-1')).toBeUndefined()
   })
 })

@@ -22,10 +22,13 @@ import { SectionHeader } from '@/components/ui/PageHeader'
 import { useMyBureauScope } from '@/components/justice/legalShared'
 import { DojQueueList } from './DojQueueList'
 import { DojAdmin } from './DojAdmin'
+import { DojOverview } from './DojOverview'
 import { JusticePickerModal } from './JusticePickerModal'
 import { RecusalBanner, isRecusalError } from './RecusalBanner'
 
-export type DojViewId = 'queue' | 'judicial' | 'mine' | 'returned' | 'decided' | 'admin'
+/** 'doj_overview' (not 'overview') — LegalView's dual-identity tab union
+ *  already uses 'overview' for the CID landing; the ids must never collide. */
+export type DojViewId = 'doj_overview' | 'queue' | 'judicial' | 'mine' | 'returned' | 'decided' | 'admin'
 export type DojRole = 'prosecutor' | 'attorney_general' | 'judge'
 
 const TERMINAL = ['approved', 'denied', 'withdrawn', 'declined', 'cancelled', 'superseded']
@@ -64,9 +67,9 @@ export function deriveDojLists(requests: LegalRequest[], myId: string | null): D
 }
 
 /** Which DOJ tabs each role gets (judges skip the prosecutor queue; only the
- *  AG gets Administration). */
+ *  AG gets Administration). Every role lands on the Overview first. */
 export function dojViewsForRole(role: DojRole): { id: DojViewId; label: string }[] {
-  const views: { id: DojViewId; label: string }[] = []
+  const views: { id: DojViewId; label: string }[] = [{ id: 'doj_overview', label: 'Overview' }]
   if (role !== 'judge') views.push({ id: 'queue', label: 'Queue' })
   views.push({ id: 'judicial', label: 'Judicial queue' })
   if (role !== 'attorney_general') views.push({ id: 'mine', label: 'My requests' })
@@ -75,7 +78,7 @@ export function dojViewsForRole(role: DojRole): { id: DojViewId; label: string }
   return views
 }
 
-export function DojWorkspace({ view, role, myId, lists, requests, onOpen, reload }: {
+export function DojWorkspace({ view, role, myId, lists, requests, onOpen, onNavigate, reload }: {
   view: DojViewId
   role: DojRole
   myId: string | null
@@ -83,6 +86,8 @@ export function DojWorkspace({ view, role, myId, lists, requests, onOpen, reload
   /** The full RLS-scoped set (the Administration panel reads held work from it). */
   requests: LegalRequest[]
   onOpen: (id: string) => void
+  /** Switch the workspace's own view state (the Overview panels land here). */
+  onNavigate: (view: DojViewId) => void
   reload: () => void
 }) {
   const [conflict, setConflict] = useState<string | null>(null)
@@ -136,6 +141,17 @@ export function DojWorkspace({ view, role, myId, lists, requests, onOpen, reload
   return (
     <div className="space-y-4">
       {conflict && <RecusalBanner message={conflict} onDismiss={() => setConflict(null)} />}
+
+      {view === 'doj_overview' && (
+        <DojOverview
+          role={role}
+          myId={myId}
+          lists={lists}
+          requests={requests}
+          onOpen={onOpen}
+          onNavigate={onNavigate}
+        />
+      )}
 
       {view === 'queue' && (() => {
         const queueAction = (r: LegalRequest) => {

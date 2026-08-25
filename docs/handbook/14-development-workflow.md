@@ -31,7 +31,7 @@ Dependabot opens weekly dependency PRs gated by the same.
 
 The opt-in live security suite (`npm run test:rls`, see
 `tests/rls/README.md`) additionally posts each run's **sanitized** results
-to the Owner Portal's Security Testing dashboard via a vitest reporter
+to the Owner Console's Security & Audit section via a vitest reporter
 (`tests/rls/securityReporter.ts`, v1.14) — fixture-authenticated,
 best-effort, and self-skipping when credentials are absent.
 
