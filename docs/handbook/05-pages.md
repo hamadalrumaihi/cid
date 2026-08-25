@@ -38,7 +38,7 @@ One row per leaf tab in `PAGE_META` (`src/lib/nav.ts` — the routing truth).
 | `announce` | Announcements | announcements | posting = command |
 | `heatmap` | Crime Heatmap | cases, turf, places, raids | — |
 | `personnel` | Roster & Commendations | profiles (+ admin RPCs), commendations | admin panel = command |
-| `cases` | Case board + detail | the whole case constellation | bureau-scoped |
+| `cases` | Case board + detail (keep-alive case sections; saved views via `lib/savedViews`; DataTable row-selection bulk status/lead/archive — chunked, preview-confirmed, no bulk delete) | the whole case constellation | bureau-scoped; bulk lead assign command-only |
 | `operations` | Task Forces | operations, cases | — |
 | `case-files` | Attachments | case_files + FiveManage | delete = command |
 | `rico` | RICO tracker | rico_cases, predicate_acts | — |
