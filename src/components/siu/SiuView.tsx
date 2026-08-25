@@ -22,9 +22,10 @@
  *  SIB is authority and information access, not decoration. */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import type { Tables } from '@/lib/database.types'
 import { useAuth } from '@/lib/auth'
+import { caseLink } from '@/lib/caseLinks'
 import { list, rpc, withRetry } from '@/lib/db'
 import { useSiu } from '@/lib/useSiu'
 import { useTableVersion } from '@/lib/realtime'
@@ -43,6 +44,11 @@ import {
   SIU_CREDIBILITY, SIU_RELIABILITY, SIU_SOURCE_TYPES,
   siuCredibilityLabel, siuCredibilityTint,
   siuReliabilityLabel, siuReviewOutcomeLabel, siuSourceTypeLabel,
+  fetchSiuAccessRequests, fetchSiuCommandDashboard, fetchSiuDisclosures,
+  fetchSiuIntelQuality, fetchSiuReferrals, siuAudienceLabel,
+  siuReferralCategoryLabel,
+  type SiuAccessRequest, type SiuCommandDashboard, type SiuDisclosure,
+  type SiuIntelQuality, type SiuReferral,
 } from '@/lib/siu'
 import { SiuCompartmentsSection } from './SiuCompartments'
 import { SiuDisclosuresSection } from './SiuDisclosures'
@@ -54,6 +60,9 @@ import {
 import { SiuPersonDossierModal } from './SiuPersonDossier'
 import { SiuCommandSection } from './SiuCommand'
 import { SiuOversightSection, SiuTradecraftSection } from './SiuTradecraft'
+import { DashPanel } from '@/components/dash/DashPanel'
+import { DashRow } from '@/components/dash/DashRow'
+import { DashSwitcher } from '@/components/dash/DashSwitcher'
 import {roleLabel, bureauShort} from '@/lib/roles'
 import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/Badge'
@@ -111,7 +120,16 @@ const fmtWhen = (v?: string | null) =>
 export function SiuView() {
   const { state } = useAuth()
   const siu = useSiu()
+  const sp = useSearchParams()
   const [section, setSection] = useState<Section>('overview')
+
+  // ?s= deep-links land on their section (the CommandCenterView precedent) —
+  // the Action Center's SIB items point here. In-view tab clicks keep the
+  // existing local state; an invalid or absent param changes nothing.
+  useEffect(() => {
+    const s = sp.get('s')
+    if (s && SECTIONS.some((t) => t.id === s)) setSection(s as Section)
+  }, [sp])
 
   if (state !== 'in') return <Notice text="Sign in to continue." />
   if (siu.loading) return <CardGridSkeleton cols="" />
@@ -129,6 +147,11 @@ export function SiuView() {
 
   return (
     <div>
+      {/* Same chip row as My Dashboard — a multi-role account hops between
+          its dashboards from the SIB landing without touching the sidebar. */}
+      <div className="mb-4">
+        <DashSwitcher />
+      </div>
       <Card pad="lg" className="mb-5">
         <PageHeader
           eyebrow="Special Investigations Bureau"
