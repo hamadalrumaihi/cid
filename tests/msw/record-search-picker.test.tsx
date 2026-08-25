@@ -53,7 +53,9 @@ describe('RecordSearchPicker through MSW', () => {
       expect(text).toContain('Paleto Score')
       expect(text).toContain('2 matches') // aria-live result count
 
-      const option = [...view.container.querySelectorAll('button')]
+      // Combobox rows are role="option" (aria-activedescendant pattern —
+      // focus stays in the input, options are not tab stops).
+      const option = [...view.container.querySelectorAll('[role="option"]')]
         .find((b) => b.textContent?.includes('Vespucci Fencing Ring'))
       expect(option).toBeDefined()
       await view.fire(option!, new MouseEvent('click', { bubbles: true }))

@@ -18,6 +18,7 @@ import { StatusBadge } from './StatusBadge'
 
 const TYPE_LABEL: Record<PreviewType, string> = {
   person: 'Person', vehicle: 'Vehicle', gang: 'Gang', place: 'Place', account: 'Account', narcotic: 'Narcotic',
+  case: 'Case', operation: 'Operation', member: 'Member',
 }
 
 export function RecordPeek({ type, id, onClose }: { type: PreviewType; id: string; onClose: () => void }) {
