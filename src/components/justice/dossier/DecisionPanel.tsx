@@ -24,6 +24,7 @@ import { Card } from '@/components/ui/Card'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Field, Input, Textarea } from '@/components/ui/Field'
 import { uiPrompt } from '@/components/ui/dialog'
+import { StickyActionBar } from '@/components/shared/StickyActionBar'
 import { JusticePickerModal } from '@/components/doj/JusticePickerModal'
 import { RecusalBanner, isRecusalError } from '@/components/doj/RecusalBanner'
 
@@ -675,7 +676,9 @@ export function DecisionPanel({
   const hasActions = editable || canCidReview || canSiuCommandReview || anyFulfilment || anyDoj
 
   return (
-    <div className="sticky bottom-0 z-20 pb-[env(safe-area-inset-bottom)] sm:static sm:pb-0">
+    // Phones: pinned above the BottomNav via the shared StickyActionBar
+    // geometry (safe-area handled there); static in the sm+ column layout.
+    <StickyActionBar className="sm:static">
       <section aria-label="Your available actions">
         <Card pad="sm" className="space-y-3 backdrop-blur">
           <div>
@@ -880,6 +883,6 @@ export function DecisionPanel({
           onClose={() => setAssignSeat(null)}
         />
       )}
-    </div>
+    </StickyActionBar>
   )
 }

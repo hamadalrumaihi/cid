@@ -493,7 +493,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
       <MetricStrip metrics={metrics} />
 
       {/* ── Deep-linkable sections ─────────────────────────────────────────── */}
-      <div className="sticky top-0 z-20 -mx-1 bg-ink-950/80 px-1 py-1 backdrop-blur">
+      <div className="sticky-below-header z-20 -mx-1 bg-ink-950/80 px-1 py-1 backdrop-blur">
         <SectionTabs<DossierSectionId> tabs={tabs} active={section} onChange={setSection} idBase="legal" ariaLabel="Legal request sections" />
       </div>
 

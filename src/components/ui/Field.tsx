@@ -11,8 +11,11 @@
  *  accept a given id, so behaviour is unchanged. */
 import { useId } from 'react'
 
+// min-h-11 floors every control at 44px (touch target); text-base below sm
+// keeps iOS from auto-zooming <16px inputs (incl. all date inputs), while
+// desktop keeps the denser text-sm.
 export const inputCls =
-  'w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-sm text-white outline-none transition focus:border-badge-500'
+  'min-h-11 w-full rounded-lg border border-white/10 bg-ink-900 px-3 py-2 text-base text-white outline-none transition focus:border-badge-500 sm:text-sm'
 export const labelCls = 'mb-1 block text-xs font-semibold text-slate-400'
 
 /** Rose border for a control whose Field carries an error. */

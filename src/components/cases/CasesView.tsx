@@ -28,6 +28,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { isRoutingBureau } from '@/lib/legalWorkflow'
 import { bureauShort } from '@/lib/roles'
+import { StickyActionBar } from '@/components/shared/StickyActionBar'
 import { CaseBoard } from './CaseBoard'
 import { CaseDetail } from './CaseDetail'
 import { CaseFilterBar } from './CaseFilterBar'
@@ -311,7 +312,7 @@ function CasesViewInner() {
         : <CaseTable items={filtered} canSelect={canSelect} showDept={siu.inSiu} selected={selected} onSelect={(id, on) => setSelected((s) => on ? [...s, id] : s.filter((x) => x !== id))} onOpen={openCase} />}
       {!loading && !filtered.length && view !== 'table' && <Notice text="No cases match this view." />}
 
-      {selected.length > 0 && <div className="sticky bottom-4 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-ink-850 p-3">
+      {selected.length > 0 && <StickyActionBar className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-ink-850 p-3">
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-sm font-bold text-white" aria-live="polite">
             {bulk ? `${bulk.label} ${bulk.done} of ${bulk.total}…` : `${selected.length} selected`}
@@ -343,7 +344,7 @@ function CasesViewInner() {
           {isCommand && !showArchived && <Button onClick={() => setAssignOpen(true)} disabled={busy}>Assign lead…</Button>}
           {canDelete && <Button variant="danger" onClick={() => void archiveSelected()} disabled={busy}>{showArchived ? 'Restore selected' : 'Archive selected'}</Button>}
         </div>
-      </div>}
+      </StickyActionBar>}
 
       <AssignLeadModal open={assignOpen} count={selectedRows.length} onClose={() => setAssignOpen(false)} onAssign={(id) => void bulkAssignLead(id)} />
       <CaseModal open={modalOpen} record={editRecord} onClose={() => setModalOpen(false)} onSaved={(id) => { setModalOpen(false); void fetchCases(); if (id) openCase(id) }} />
@@ -452,6 +453,29 @@ function CaseTable({ items, canSelect, showDept, selected, onSelect, onOpen }: {
         },
       } : undefined}
       onRowClick={(c) => onOpen(c.id)}
+      mobileCard={(c) => (
+        <div className="flex items-start gap-3 rounded-lg border border-white/5 bg-ink-900/60 p-3">
+          {canSelect && (
+            <input
+              type="checkbox"
+              aria-label={`Select case ${c.case_number}`}
+              checked={selectedSet.has(c.id)}
+              onChange={(e) => onSelect(c.id, e.target.checked)}
+              className="mt-1"
+            />
+          )}
+          <button onClick={() => onOpen(c.id)} className="min-w-0 flex-1 rounded text-left">
+            <p className="font-mono text-xs font-bold tabular-nums text-badge-200">{c.case_number}</p>
+            <p className="mt-0.5 line-clamp-2 text-sm font-semibold text-white">{c.title || 'Untitled case'}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
+              <StatusBadge domain="case" value={c.status} className="uppercase" />
+              <span>{officerName(c.lead_detective_id) || 'Unassigned'}</span>
+              <span aria-hidden>·</span>
+              <span title={c.updated_at}>{timeAgo(c.updated_at)}</span>
+            </div>
+          </button>
+        </div>
+      )}
       initialSort={{ key: 'updated', dir: 'desc' }}
       csvName="cases"
       countLabel="cases"

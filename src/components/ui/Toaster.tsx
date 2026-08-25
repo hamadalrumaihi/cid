@@ -23,7 +23,9 @@ export function Toaster() {
   return (
     // z-60: above the modal backdrop (z-50), below confirm dialogs (z-70) —
     // vanilla got this ordering from #toast-root sitting after #modal-root.
-    <div className="fixed bottom-20 right-4 z-[60] flex flex-col gap-3 sm:bottom-6 sm:right-6" aria-live="polite">
+    // Bottom offset clears the mobile BottomNav (+ home indicator) via the
+    // shared --bottom-nav-h token; lg (not sm) is where the nav disappears.
+    <div className="fixed bottom-[calc(var(--bottom-nav-h,0rem)+1rem+env(safe-area-inset-bottom,0px))] right-4 z-[60] flex flex-col gap-3 sm:right-6 lg:bottom-6" aria-live="polite">
       {toasts.map((t) => {
         const Icon = t.onUndo ? UndoIcon : ICONS[t.type]
         return (

@@ -126,7 +126,7 @@ function DialogCard({ dialog, finish }: { dialog: PendingDialog; finish: (v: boo
     >
       <div
         ref={cardRef}
-        className="w-full max-w-[26rem] rounded-2xl border border-white/10 bg-ink-850 p-6 shadow-2xl shadow-black/50"
+        className="max-h-[85dvh] w-full max-w-[26rem] overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-ink-850 p-6 shadow-2xl shadow-black/50"
         role="dialog"
         aria-modal="true"
         aria-labelledby={dialog.title ? 'cid-dialog-title' : undefined}

@@ -63,7 +63,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Content column is capped: on very wide monitors (2560px+) panels
             stop stretching edge to edge. Galleries, graphs and boards still
             get the full 1600px; text-heavy views add their own tighter cap. */}
-        <div className="mx-auto w-full max-w-[100rem] p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8">{children}</div>
+        <div className="mx-auto w-full max-w-[100rem] p-4 pb-[calc(var(--bottom-nav-h,0rem)+1.5rem)] sm:p-6 sm:pb-[calc(var(--bottom-nav-h,0rem)+1.5rem)] lg:p-8 lg:pb-8">{children}</div>
       </main>
       <BottomNav />
       <ConnBanner />

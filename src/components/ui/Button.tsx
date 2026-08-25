@@ -30,9 +30,11 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 const BASE =
   'inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition disabled:cursor-not-allowed disabled:opacity-60'
 
+// Touch floor below lg (md ≥44px, sm ≥36px); desktop keeps its density via
+// the lg: resets, so the visual rhythm on wide screens is unchanged.
 const SIZES: Record<Size, string> = {
-  sm: 'px-3 py-1.5 text-xs',
-  md: 'px-4 py-2 text-sm',
+  sm: 'min-h-9 px-3 py-1.5 text-xs lg:min-h-0',
+  md: 'min-h-11 px-4 py-2 text-sm lg:min-h-9',
 }
 
 const VARIANTS: Record<Variant, string> = {

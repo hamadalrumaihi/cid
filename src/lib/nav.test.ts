@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DASH_LABEL, DASH_TAB } from '@/components/dash/DashSwitcherView'
 import {
   CAT_DEFAULT, NAV_CATEGORIES, PAGE_META, SIU_NAV_CATEGORIES, SIU_TAB_LABEL,
   SUBTAB_GROUPS, TAB_CATEGORY, TAB_LABEL, isValidTab,
@@ -51,6 +52,52 @@ describe('nav — Investigative Tools consolidation', () => {
 
   it("legacy Intelligence tabs map to 'intel' (their routes redirect into /tools)", () => {
     for (const t of TOOL_TABS) expect(TAB_CATEGORY[t], `TAB_CATEGORY['${t}']`).toBe('intel')
+  })
+})
+
+/** Phase-1A dashboard architecture: My Dashboard (inbox) is the personal home
+ *  and default landing; Central Command became the shared Division Overview;
+ *  the Owner Portal is the Owner Console. Route ids are unchanged — only
+ *  titles/labels and the landing default moved. */
+describe('nav — dashboard architecture retitles & landing', () => {
+  it("inbox is 'My Dashboard' and leads the Command category (the landing default)", () => {
+    expect(PAGE_META.inbox.title).toBe('My Dashboard')
+    expect(PAGE_META.inbox.sub).toBe('Your work at a glance')
+    expect(TAB_LABEL.inbox).toBe('My Dashboard')
+    expect(CAT_DEFAULT.command).toBe('inbox')
+  })
+
+  it("command is the shared 'Division Overview' (route id unchanged)", () => {
+    expect(PAGE_META.command.title).toBe('Division Overview')
+    expect(TAB_LABEL.command).toBe('Division Overview')
+    expect(isValidTab('command')).toBe(true)
+  })
+
+  it("owner is the 'Owner Console' (route id unchanged)", () => {
+    expect(PAGE_META.owner.title).toBe('Owner Console')
+    expect(TAB_LABEL.owner).toBe('Owner Console')
+  })
+
+  it('the Command category tab order is pinned, inbox first', () => {
+    const command = NAV_CATEGORIES.find((c) => c.id === 'command')
+    expect(command!.tabs).toEqual(['inbox', 'action', 'command', 'analytics', 'announce', 'heatmap', 'personnel'])
+  })
+
+  it('command-center stays a standalone (per-user-gated) leaf, not a category tab', () => {
+    expect(TAB_CATEGORY['command-center']).toBeNull()
+    expect(isValidTab('command-center')).toBe(true)
+  })
+
+  it('every dashboard-switcher entry routes to a registered tab, spec label set pinned', () => {
+    for (const t of Object.values(DASH_TAB)) expect(isValidTab(t), `DASH_TAB → '${t}'`).toBe(true)
+    expect(DASH_LABEL).toEqual({
+      my: 'My Dashboard',
+      cases: 'Cases',
+      command: 'Command Center',
+      sib: 'SIB',
+      doj: 'Legal Review',
+      owner: 'Owner Console',
+    })
   })
 })
 

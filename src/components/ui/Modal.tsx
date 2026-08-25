@@ -112,6 +112,27 @@ export function Modal({ open, onClose, children, wide, slide, dismissible = true
     }
   }, [open])
 
+  // Soft-keyboard fit: dvh tracks browser chrome but NOT the keyboard, so on
+  // phones an open keyboard can hide the bottom of a 90dvh card. Cap the card
+  // to the visualViewport height while it is shrunk; clear the inline style
+  // when the keyboard closes so the classes above take back over.
+  useEffect(() => {
+    if (!open) return
+    const vv = window.visualViewport
+    const card = cardRef.current
+    if (!vv || !card) return
+    const apply = () => {
+      const shrunk = vv.height < window.innerHeight - 1
+      card.style.maxHeight = shrunk ? `${Math.max(240, Math.round(vv.height) - 16)}px` : ''
+    }
+    apply()
+    vv.addEventListener('resize', apply)
+    return () => {
+      vv.removeEventListener('resize', apply)
+      card.style.maxHeight = ''
+    }
+  }, [open])
+
   if (!open || typeof document === 'undefined') return null
 
   return createPortal(
@@ -129,7 +150,7 @@ export function Modal({ open, onClose, children, wide, slide, dismissible = true
         className={
           slide
             ? 'modal-card relative ml-auto flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-white/10 bg-ink-850 shadow-2xl shadow-black/50'
-            : `modal-card relative w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-ink-850 shadow-2xl shadow-black/50`
+            : `modal-card relative w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} max-h-[90dvh] overflow-y-auto rounded-2xl border border-white/10 bg-ink-850 shadow-2xl shadow-black/50`
         }
       >
         <ModalGuardContext.Provider value={guard}>{children}</ModalGuardContext.Provider>

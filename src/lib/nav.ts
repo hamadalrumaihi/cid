@@ -11,7 +11,9 @@ export interface PageMeta {
 }
 
 export const PAGE_META: Record<string, PageMeta> = {
-  command:    { title: 'Central Command', sub: 'Case assignment & operational hub' },
+  // Division Overview — the SHARED analytics/trackers dashboard (formerly
+  // "Central Command"); the personal home is My Dashboard (inbox) below.
+  command:    { title: 'Division Overview', sub: 'Case assignment & operational hub' },
   analytics:  { title: 'Division Analytics', sub: 'Caseload, clearance & activity trends' },
   cases:      { title: 'Case Files', sub: 'Live case records, photos & reports' },
   legal:      { title: 'Legal Requests', sub: 'Warrants & subpoenas — drafting, command review & fulfilment' },
@@ -33,12 +35,12 @@ export const PAGE_META: Record<string, PageMeta> = {
   announce:   { title: 'Announcements', sub: 'Division-wide notices from command staff' },
   'case-files': { title: 'Case Files — Attachments', sub: 'Files uploaded and linked per case' },
   heatmap:    { title: 'Commander Heatmap', sub: 'Gang turf, places, raids & case concentration by area' },
-  inbox:      { title: 'My Desk', sub: 'Everything waiting on you — sign-off, overdue cases, mentions & draft reports' },
+  inbox:      { title: 'My Dashboard', sub: 'Your work at a glance' },
   action:     { title: 'Action Center', sub: 'Prioritized work requiring your attention across cases, command, and personnel' },
   shifts:     { title: 'Weekly Shift Reports', sub: 'Detective activity rolled up to bureau leadership' },
   audit:      { title: 'Audit Log', sub: 'Division-wide action history (owner-only)' },
   feedback:   { title: 'Feedback', sub: 'Suggest a feature or report a bug' },
-  owner:      { title: 'Owner Portal', sub: 'Project intelligence, feedback triage & engineering operations (owner-only)' },
+  owner:      { title: 'Owner Console', sub: 'Project intelligence, feedback triage & engineering operations (owner-only)' },
   profile:    { title: 'My Profile', sub: 'Your account, appearance and notification settings' },
   'command-center': { title: 'Command Center', sub: 'Command administration — personnel, approvals, promotions & chain of command' },
   vehicles:   { title: 'Vehicle Registry', sub: 'Plates, owners & cross-case matches' },
@@ -81,9 +83,9 @@ export interface NavCategory {
 }
 
 export const NAV_CATEGORIES: NavCategory[] = [
-  // My Desk (inbox) leads the Command group — it is the personal home and the
-  // app's default landing (src/app/page.tsx), so the Command category opens
-  // there. Central Command (the shared dashboard) follows it.
+  // My Dashboard (inbox) leads the Command group — it is the personal home and
+  // the app's default landing (src/app/page.tsx), so the Command category
+  // opens there. Division Overview (the shared dashboard) follows it.
   { id: 'command',   label: 'Command',      tabs: ['inbox', 'action', 'command', 'analytics', 'announce', 'heatmap', 'personnel'] },
   { id: 'cases',     label: 'Cases',        tabs: ['cases', 'operations', 'legal', 'case-files', 'rico'] },
   // The 14 intelligence tabs now live INSIDE the Investigative Tools
@@ -144,13 +146,13 @@ export const SIU_TAB_LABEL: Record<string, string> = {
 }
 
 export const TAB_LABEL: Record<string, string> = {
-  command: 'Dashboard', analytics: 'Analytics', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
+  command: 'Division Overview', analytics: 'Analytics', announce: 'Announcements', heatmap: 'Heatmap', personnel: 'Roster & Commendations',
   cases: 'Case Files', operations: 'Operations', legal: 'Legal Requests', 'case-files': 'Attachments', rico: 'RICO',
   persons: 'Persons', bolo: 'BOLO Board', gangs: 'Gangs', places: 'Places', vehicles: 'Vehicles', accounts: 'Accounts', indicators: 'Indicators', 'field-review': 'Intelligence',
   network: 'Network', narcotics: 'Narcotics', ballistics: 'Ballistics', modus: 'M.O. Detector',
   media: 'Media Vault', records: 'Records', penal: 'Penal Code', sops: 'SOPs & Library', guide: 'User Guide', devdocs: 'Developer Handbook',
   tools: 'Investigative Tools',
-  inbox: 'My Desk', action: 'Action Center', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', owner: 'Owner Portal', profile: 'My Profile', 'command-center': 'Command Center', siu: 'Special Investigations Bureau',
+  inbox: 'My Dashboard', action: 'Action Center', calendar: 'Calendar', shifts: 'Shift Reports', audit: 'Audit Log', owner: 'Owner Console', profile: 'My Profile', 'command-center': 'Command Center', siu: 'Special Investigations Bureau',
 }
 
 /** Presentational sub-grouping for crowded categories — a visual layer over

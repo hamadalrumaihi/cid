@@ -1,11 +1,14 @@
 'use client'
 
 /** Sidebar — port of the vanilla #sidebar (index.html:65-132): brand head,
- *  restricted banner, 5 category buttons + standalone Feedback leaf,
- *  appearance/collapse controls, officer card. Collapse uses the same
+ *  restricted banner, capability-gated Dashboards leaves (useCapabilities),
+ *  5 category buttons + standalone Feedback/Concern leaves, appearance/
+ *  collapse controls, officer card. Collapse uses the same
  *  body.nav-collapsed class contract as the legacy styles.css. */
 import { useSyncExternalStore } from 'react'
+import { DASH_LABEL, DASH_TAB, type SwitchableId } from '@/components/dash/DashSwitcherView'
 import { useAuth } from '@/lib/auth'
+import { useCapabilities } from '@/lib/capabilities'
 import { useSiu } from '@/lib/useSiu'
 import { NAV_CATEGORIES, SIU_NAV_CATEGORIES, SIU_TAB_LABEL, TAB_LABEL } from '@/lib/nav'
 import { bureauShort, roleLabel } from '@/lib/roles'
@@ -86,8 +89,18 @@ const subscribeCollapse = (cb: () => void) => {
 }
 const readCollapsed = () => document.body.classList.contains('nav-collapsed')
 
+/** The capability-gated dashboard leaves (the old standalone Command Center +
+ *  Owner leaves, absorbed and extended). Order matches the capability model's
+ *  display order; entries render only when useCapabilities grants them. */
+const DASH_LEAVES: { id: SwitchableId; icon: string; title: string }[] = [
+  { id: 'command', icon: '🛡️', title: 'Command Center — personnel, approvals, promotions & chain of command' },
+  { id: 'sib', icon: '🛰️', title: 'Special Investigations Bureau workspace' },
+  { id: 'doj', icon: '⚖️', title: 'Legal Review — warrants & subpoenas awaiting DOJ review' },
+  { id: 'owner', icon: '🛠️', title: 'Owner Console — project intelligence & engineering operations' },
+]
+
 export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; onCloseDrawer: () => void }) {
-  const { isCommand, isOwner } = useAuth()
+  const caps = useCapabilities()
   const siu = useSiu()
   const inSiu = siu.inSiu
   const { activeCategory, activeTab, navigate, navigateCategory } = useNav()
@@ -152,6 +165,35 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
       </div>
 
       <nav className="mt-4 flex-1 space-y-1 overflow-y-auto px-3 pb-4" role="navigation">
+        {/* Dashboards — capability-gated leaf links (useCapabilities), one per
+            dashboard the account holds beyond the shared category nav. This
+            absorbs the former standalone Command Center + Owner leaves and
+            adds SIB / Legal Review for the accounts that hold them. Hiding is
+            cosmetic; each view self-gates and RLS is the real rule. Gated on
+            caps.ready so nothing flashes in and out during boot. */}
+        {!inSiu && caps.ready && caps.dashboards.some((d) => DASH_LEAVES.some((l) => l.id === d)) && (
+          <div className="pb-1">
+            <p className="sidebar-hide px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Dashboards
+            </p>
+            {DASH_LEAVES.filter((l) => caps.dashboards.includes(l.id)).map((l) => (
+              <button
+                key={l.id}
+                data-label={DASH_LABEL[l.id]}
+                onClick={() => go(() => navigate(DASH_TAB[l.id]))}
+                title={l.title}
+                className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
+                  activeTab === DASH_TAB[l.id]
+                    ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-badge-500'
+                    : 'text-slate-300'
+                }`}
+              >
+                <span className="nav-icon flex-shrink-0" aria-hidden>{l.icon}</span>
+                <span className="nav-label">{DASH_LABEL[l.id]}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <p className="sidebar-hide px-3 pb-2 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
           {inSiu ? 'Bureau' : 'Divisions'}
         </p>
@@ -233,21 +275,8 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
           <span className="nav-icon flex-shrink-0"><CategoryIcon cat="concern" /></span>
           <span className="nav-label">Report a Concern</span>
         </button>}
-        {/* Command Center — standalone leaf for command staff + owner.
-            Hiding is cosmetic; the view gate + RLS/RPCs are the real rule. */}
-        {!inSiu && (isCommand || isOwner) && (
-          <button
-            data-label="Command Center"
-            onClick={() => go(() => navigate('command-center'))}
-            title="Command Center — personnel, approvals, promotions & chain of command"
-            className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
-              activeTab === 'command-center' ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-badge-500' : 'text-slate-300'
-            }`}
-          >
-            <span className="nav-icon flex-shrink-0" aria-hidden>🛡️</span>
-            <span className="nav-label">Command Center</span>
-          </button>
-        )}
+        {/* Command Center / SIB / Legal Review / Owner Console leaves moved
+            into the capability-gated Dashboards block above. */}
         {/* Deliberate department switch — rendered ONLY for accounts that
             legitimately hold BOTH contexts (Portal Owner, Attorney General
             oversight). A normal CID member is never offered this, and the
@@ -266,22 +295,6 @@ export function Sidebar({ drawerOpen, onCloseDrawer }: { drawerOpen: boolean; on
           >
             <span className="nav-icon flex-shrink-0" aria-hidden>⇄</span>
             <span className="nav-label">{inSiu ? 'Switch to CID' : 'Switch to SIB'}</span>
-          </button>
-        )}
-        {/* Owner Portal — standalone leaf, rendered ONLY for the project
-            owner (profiles.is_owner). Hiding is cosmetic; OwnerView and RLS
-            (private.is_owner()) enforce the real rule. */}
-        {!inSiu && isOwner && (
-          <button
-            data-label="Owner"
-            onClick={() => go(() => navigate('owner'))}
-            title="Owner Portal — project intelligence & engineering operations"
-            className={`nav-link group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition hover:bg-white/5 hover:text-white ${
-              activeTab === 'owner' ? 'relative bg-white/10 text-white before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-badge-500' : 'text-slate-300'
-            }`}
-          >
-            <span className="nav-icon flex-shrink-0" aria-hidden>🛠️</span>
-            <span className="nav-label">Owner</span>
           </button>
         )}
       </nav>

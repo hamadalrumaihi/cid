@@ -111,7 +111,7 @@ export function ToolTabBar({ tabs, activeKey, onActivate, onClose, onCloseOthers
   const menuTab = menu ? tabs.find((t) => t.key === menu.key) : null
 
   return (
-    <div className="sticky top-[4.5rem] z-10 -mx-4 mb-4 border-b border-white/10 bg-ink-950/90 px-4 backdrop-blur sm:top-[4.75rem] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+    <div className="sticky top-[var(--app-header-h)] z-10 -mx-4 mb-4 border-b border-white/10 bg-ink-950/90 px-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
       <div className="flex items-center gap-1 py-1.5">
         {/* Directory home chip — first, fixed; returns without closing tabs. */}
         <button
@@ -134,7 +134,7 @@ export function ToolTabBar({ tabs, activeKey, onActivate, onClose, onCloseOthers
           role="tablist"
           aria-label="Open tools"
           onKeyDown={onStripKeyDown}
-          className="tools-tabstrip hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto sm:flex"
+          className="scroll-strip hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto sm:flex"
         >
           {tabs.map(tabChip)}
         </div>

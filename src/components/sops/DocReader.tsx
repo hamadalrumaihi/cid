@@ -30,6 +30,7 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { EmptyState, ErrorNotice, Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { DetailSkeleton } from '@/components/ui/Skeleton'
+import { StickyActionBar } from '@/components/shared/StickyActionBar'
 import {
   CATEGORY_LABEL, STATUS_LABEL, STATUS_TONE, TYPE_LABEL,
   ackState, canApproveDoc, canEditDoc, docCategory, docTitle,
@@ -491,14 +492,16 @@ export function DocReader(props: {
         </div>
       </div>
 
-      {/* Mobile: acknowledgement stays one thumb away while reading. */}
+      {/* Mobile: acknowledgement stays one thumb away while reading — sticky
+          above the BottomNav (StickyActionBar owns the offset + safe area)
+          instead of a fixed sheet that used to cover the nav itself. */}
       {ackPending && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-ink-950/95 p-3 backdrop-blur lg:hidden">
+        <StickyActionBar className="mt-4 rounded-2xl border border-white/10 bg-ink-950/95 p-3 backdrop-blur lg:hidden">
           {deadline && <p className="mb-1.5 text-center text-xs text-amber-300">Due {fmtDate(deadline)}</p>}
           <Button variant="primary" className="min-h-[48px] w-full" onAction={acknowledge}>
             Acknowledge reading — v{doc.current_version_number}
           </Button>
-        </div>
+        </StickyActionBar>
       )}
 
       {/* Mobile TOC drawer (ui/Modal — focus-trapped). */}

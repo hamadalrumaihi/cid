@@ -10,7 +10,9 @@
  *     EntityLink is the only ui/ primitive that touches the router, and the
  *     stub routes push/replace into the Actions panel.
  *
- *  Scope is deliberately src/components/ui/ only — domain components need
+ *  Scope is deliberately the provider-free primitive layers — src/components/
+ *  ui/ plus the dash/ dashboard primitives (their wired variants stay out;
+ *  DashSwitcherView is the storyable core) — domain components need
  *  AuthContext (module-private by design) and live data; see docs/STORYBOOK.md.
  */
 import { fileURLToPath } from 'node:url'
@@ -21,7 +23,10 @@ import tailwindcss from '@tailwindcss/vite'
 const here = (rel: string) => fileURLToPath(new URL(rel, import.meta.url))
 
 const config: StorybookConfig = {
-  stories: ['../src/components/ui/**/*.stories.@(ts|tsx)'],
+  stories: [
+    '../src/components/ui/**/*.stories.@(ts|tsx)',
+    '../src/components/dash/**/*.stories.@(ts|tsx)',
+  ],
   addons: [
     // Advisory only — parameters.a11y.test is 'todo' in preview.tsx, so
     // violations annotate the panel without failing anything.

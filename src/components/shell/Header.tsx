@@ -113,7 +113,10 @@ export function Header({ onOpenDrawer }: { onOpenDrawer: () => void }) {
   }, [])
 
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b sm:gap-3 border-white/5 bg-ink-950/70 px-3 py-3.5 backdrop-blur-xl sm:px-8 sm:py-4">
+    // z-30: above in-page sticky bars (z-10/z-20), tied with BottomNav (never
+    // overlaps it), below the sidebar (z-40) and modals (z-50+). Height is
+    // published as --app-header-h in globals.css — keep them in step.
+    <header className="sticky top-0 z-30 flex items-center justify-between gap-2 border-b sm:gap-3 border-white/5 bg-ink-950/70 px-3 py-3.5 backdrop-blur-xl sm:px-8 sm:py-4">
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <button
           onClick={onOpenDrawer}

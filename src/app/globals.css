@@ -104,8 +104,12 @@ body .from-blue-500\/20 {
 body .to-blue-700 { --tw-gradient-to: rgb(var(--acc-700)) var(--tw-gradient-to-position); }
 body .to-blue-700\/5 { --tw-gradient-to: rgb(var(--acc-700) / .05) var(--tw-gradient-to-position); }
 
-/* Density — same html[data-density] contract as the legacy app. */
-html[data-density="compact"] { font-size: 14px; }
+/* Density — same html[data-density] contract as the legacy app. Desktop only:
+   at 14px root a 2.75rem control is 38.5px, breaking the ≥44px touch floor,
+   so phones/tablets always keep the 16px base. */
+@media (min-width: 1024px) {
+  html[data-density="compact"] { font-size: 14px; }
+}
 
 /* Flat bordered surface — the dense "case jacket" panel (Card variant="flat"
    as a plain class for non-component markup). Keep in step with ui/Card. */
@@ -212,6 +216,34 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
   padding-right: max(0px, env(safe-area-inset-right));
 }
 
+/* ── Shared layout tokens — shell chrome geometry, published once ──────────
+   --app-header-h: the sticky Header's height (px-3 py-3.5 + h-11 controls =
+   4.5rem; sm py-4 → 4.75rem). --bottom-nav-h: BottomNav's height EXCLUDING
+   its own safe-bottom padding (py-2.5 + icon + label ≈ 3.5rem); it renders
+   below lg only, so the token is 0 at lg+ — anything offset by it collapses
+   to its desktop position automatically. */
+:root { --app-header-h: 4.5rem; --bottom-nav-h: 0rem; }
+@media (min-width: 640px) { :root { --app-header-h: 4.75rem; } }
+@media (max-width: 1023.98px) { :root { --bottom-nav-h: 3.5rem; } }
+
+@layer components {
+  /* Sticky-top helpers. Default offset is the app header; a wrapper that adds
+     its own sticky chrome (e.g. .tools-pane below) republishes --sticky-top
+     and every descendant toolbar clears it with no per-view math. The -2
+     variant keeps the old `top-2` breathing room for floating bars. */
+  .sticky-below-header { position: sticky; top: var(--sticky-top, var(--app-header-h)); }
+  .sticky-below-header-2 { position: sticky; top: calc(var(--sticky-top, var(--app-header-h)) + 0.5rem); }
+
+  /* Bottom action bars (shared/StickyActionBar.tsx): sticky above the mobile
+     BottomNav + home indicator, plain 1rem inset on desktop. z-40 sits above
+     BottomNav (z-30) and below Modal (z-50). */
+  .sticky-action-bar {
+    position: sticky;
+    bottom: calc(var(--bottom-nav-h, 0rem) + 1rem + env(safe-area-inset-bottom, 0px));
+    z-index: 40;
+  }
+}
+
 /* Collapsed sidebar (desktop): icon rail + hover flyout labels. */
 @media (min-width: 1024px) {
   .nav-collapsed #sidebar { width: 4.75rem; }
@@ -243,27 +275,22 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
   }
 }
 
-/* Investigative Tools tab strip — horizontal scroll with a hidden scrollbar
-   and soft fade edges so overflow reads as "more tabs", not a cut-off. */
-.tools-tabstrip {
+/* Horizontal scroll strip — hidden scrollbar with soft fade edges so overflow
+   reads as "more items", not a cut-off. Used by the tools tab strip and the
+   mobile BottomNav row (generalized from the old .tools-tabstrip). */
+.scroll-strip {
   scrollbar-width: none;
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
   mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
 }
-.tools-tabstrip::-webkit-scrollbar { display: none; }
+.scroll-strip::-webkit-scrollbar { display: none; }
 
-/* Inside a workspace tool pane, the views' own sticky toolbars (`top-0`
-   section navs, `top-2` bulk-select bars) must clear the sticky tab strip:
-   header (4.5rem, sm 4.75rem — ToolTabBar's own offsets) + strip height
-   (py-1.5 + h-10 + 1px border). `:not(.fixed *)` leaves sticky headers inside
-   fixed overlays (modals, slide-overs) untouched. Standalone routes have no
-   .tools-pane wrapper, so nothing changes there. */
-.tools-pane { --tools-tabbar-h: 3.3125rem; }
-.tools-pane .sticky.top-0:not(.fixed *) { top: calc(4.5rem + var(--tools-tabbar-h)); }
-.tools-pane .sticky.top-2:not(.fixed *) { top: calc(4.5rem + var(--tools-tabbar-h) + 0.5rem); }
-@media (min-width: 640px) {
-  .tools-pane .sticky.top-0:not(.fixed *) { top: calc(4.75rem + var(--tools-tabbar-h)); }
-  .tools-pane .sticky.top-2:not(.fixed *) { top: calc(4.75rem + var(--tools-tabbar-h) + 0.5rem); }
+/* Inside a workspace tool pane the views' sticky toolbars must also clear the
+   sticky tab strip (py-1.5 + h-10 + 1px border): republishing --sticky-top
+   makes .sticky-below-header(-2) descendants offset by header + strip. */
+.tools-pane {
+  --tools-tabbar-h: 3.3125rem;
+  --sticky-top: calc(var(--app-header-h) + var(--tools-tabbar-h));
 }
 
 /* Commander Heatmap tiles — flattened to the house surface (Card idiom:
