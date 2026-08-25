@@ -7,7 +7,7 @@
  *  case_intel_links as the primary list and show indirect associations
  *  (gang-roster / media case ids) distinctly labelled — never summed into an
  *  unlabelled count. */
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 import { bureauShort } from '@/lib/roles'
 import { useRouter } from 'next/navigation'
 import { ilikeAny, insert, list, remove, rpc } from '@/lib/db'
@@ -31,7 +31,7 @@ import { RecordPeekButton } from '@/components/shared/RecordPeekButton'
 import { RecordSearchPicker, type PickedRecord } from '@/components/shared/RecordSearchPicker'
 import { useToolNav } from '@/components/tools/useToolNav'
 import { PROVENANCE_KINDS, humanize } from '@/components/gangs/gangIntel'
-import { CONFIDENCE_LEVELS, LINK_STATUSES, RELATIONSHIP_TYPES, linkStatusLabel, relationshipLabel } from './personIntel'
+import { CONFIDENCE_LEVELS, LINK_STATUSES, RELATIONSHIP_TYPES, relationshipLabel } from './personIntel'
 import type { GangRow, PersonRow } from './PersonModal'
 import {
   PERSON_LITE_COLS,
@@ -53,6 +53,7 @@ export function RelationshipsSection({ personId, gang, data, canEdit, onLink, on
   const [conf, setConf] = useState('any')
   const [prov, setProv] = useState('any')
   const [status, setStatus] = useState('any')
+  const [editLink, setEditLink] = useState<RelationshipRow | null>(null)
 
   const rows = data.rows.filter((r) =>
     (type === 'any' || r.relationship === type)
@@ -104,17 +105,19 @@ export function RelationshipsSection({ personId, gang, data, canEdit, onLink, on
             const otherId = r.person_a === personId ? r.person_b : r.person_a
             const other: PersonLite | undefined = data.people.get(otherId)
             const linkedBy = officerName(r.created_by)
+            const mayManage = isCommand || (!!r.created_by && r.created_by === profile?.id)
             return (
               <Card key={r.id} pad="sm" className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <EntityLink kind="person" id={otherId} label={other?.name ?? 'Person'} />
+                    <RecordPeekButton type="person" id={otherId} label={other?.name ?? 'Person'} />
                     <Badge tone="accent">{relationshipLabel(r.relationship)}</Badge>
-                    <Badge tint={r.rel_status === 'current' ? 'bg-emerald-500/15 text-emerald-300' : r.rel_status === 'disputed' ? 'bg-rose-500/15 text-rose-300' : 'bg-white/5 text-slate-400'}>
-                      {linkStatusLabel(r.rel_status)}
-                    </Badge>
-                    <ConfidenceBadge confidence={r.confidence} />
-                    <ProvenanceBadge provenance={r.provenance} />
+                    <LinkStatusBadge status={r.rel_status} />
+                    {/* Confidence via the central registry — null renders as an
+                        explicit "Unverified", never a blank. */}
+                    <StatusBadge domain="confidence" value={r.confidence ?? 'unverified'} />
+                    {r.provenance && <StatusBadge domain="provenance" value={r.provenance} />}
                   </div>
                   <p className="mt-1 text-[11px] text-slate-400">
                     {other?.alias ? `“${other.alias}” · ` : ''}
@@ -126,7 +129,10 @@ export function RelationshipsSection({ personId, gang, data, canEdit, onLink, on
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-2">
                   <button onClick={() => nav.openHref(`/network?focus=p:${encodeURIComponent(otherId)}`)} className="text-[11px] font-semibold text-blue-300 hover:text-blue-200" title="Open in the relationship network">Graph</button>
-                  {(isCommand || (r.created_by && r.created_by === profile?.id)) && (
+                  {canEdit && mayManage && (
+                    <button onClick={() => setEditLink(r)} className="text-[11px] font-semibold text-blue-300 hover:text-blue-200" title="Edit confidence, status, or note">Edit</button>
+                  )}
+                  {mayManage && (
                     <button onClick={() => void unlink(r)} className="text-[11px] text-rose-300 hover:text-rose-200">Unlink</button>
                   )}
                 </div>
@@ -157,6 +163,25 @@ export function RelationshipsSection({ personId, gang, data, canEdit, onLink, on
             ))}
           </div>
         </div>
+      )}
+
+      {editLink && (
+        <LinkEditPopover
+          title="Edit relationship link"
+          table="person_relationships"
+          id={editLink.id}
+          role={editLink.relationship}
+          roleColumn="relationship"
+          roleOptions={RELATIONSHIP_TYPES}
+          roleLabel={relationshipLabel}
+          roleRequired
+          status={editLink.rel_status}
+          statusColumn="rel_status"
+          confidence={editLink.confidence}
+          note={editLink.note}
+          onClose={() => setEditLink(null)}
+          onSaved={() => { setEditLink(null); onRefresh() }}
+        />
       )}
     </div>
   )
@@ -296,6 +321,7 @@ export function CasesSection({ data, canEdit, onAttach, onRefresh }: {
   onRefresh: () => void
 }) {
   const router = useRouter()
+  const [editLink, setEditLink] = useState<IntelLinkRow | null>(null)
 
   const unlink = async (l: IntelLinkRow) => {
     if (!(await uiConfirm('Remove this durable case link?', { confirmText: 'Unlink' }))) return
@@ -340,11 +366,27 @@ export function CasesSection({ data, canEdit, onAttach, onRefresh }: {
                   </p>
                   {l.note && <p className="mt-0.5 text-xs text-slate-400">{l.note}</p>}
                 </div>
-                {canEdit && <button onClick={() => void unlink(l)} className="flex-shrink-0 text-[11px] text-rose-300 hover:text-rose-200">Unlink</button>}
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  {canEdit && (
+                    <button onClick={() => setEditLink(l)} className="text-[11px] font-semibold text-blue-300 hover:text-blue-200" title="Edit the link's role or note">Edit</button>
+                  )}
+                  {canEdit && <button onClick={() => void unlink(l)} className="text-[11px] text-rose-300 hover:text-rose-200">Unlink</button>}
+                </div>
               </Card>
             )
           })}
         </div>
+      )}
+      {editLink && (
+        <LinkEditPopover
+          title="Edit case link"
+          table="case_intel_links"
+          id={editLink.id}
+          role={editLink.role}
+          note={editLink.note}
+          onClose={() => setEditLink(null)}
+          onSaved={() => { setEditLink(null); onRefresh() }}
+        />
       )}
       {data.indirect.length > 0 && (
         <div>
@@ -371,67 +413,57 @@ export function CasesSection({ data, canEdit, onAttach, onRefresh }: {
 
 interface CaseOption { id: string; case_number: string; title: string | null }
 
+/** Bounded, RLS-scoped case search for the attach modals (ilikeAny + limit 20
+ *  — the IntelTab LinkForm pattern; '' returns the most recently updated). */
+export async function searchCaseOptions(q: string): Promise<PickedRecord[]> {
+  const or = ilikeAny(['case_number', 'title'], q)
+  const rows = await list('cases', { select: 'id,case_number,title', order: 'updated_at', ascending: false, limit: 20, ...(or ? { or } : {}) })
+    .then((r) => r as unknown as CaseOption[]).catch(() => [] as CaseOption[])
+  return rows.map((c) => ({ id: c.id, label: c.case_number, ...(c.title ? { sublabel: c.title } : {}) }))
+}
+
 /** Durable attach-to-case — mirrors AttachGangModal but for kind='person'.
- *  Fetches its own slim case options on open (no full-table load upstream). */
+ *  The case picker is a bounded server-backed search (never a whole-table
+ *  load); the unique (case_id, kind, ref_id) key backs the duplicate check. */
 export function AttachPersonModal({ person, onClose, onSaved }: { person: PersonRow; onClose: () => void; onSaved: () => void }) {
-  const [cases, setCases] = useState<CaseOption[] | null>(null)
-  const [caseId, setCaseId] = useState('')
+  const [picked, setPicked] = useState<PickedRecord | null>(null)
   const [role, setRole] = useState('Subject')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
 
-  // Load options once per open (mounted fresh per open, like PersonModal).
-  useEffect(() => {
-    let live = true
-    void list('cases', { select: 'id,case_number,title', order: 'updated_at', ascending: false })
-      .then((r) => {
-        if (!live) return
-        const rows = (r as unknown as CaseOption[]).slice().sort((a, b) => (a.case_number || '').localeCompare(b.case_number || ''))
-        setCases(rows)
-        setCaseId((cur) => cur || rows[0]?.id || '')
-      })
-      .catch(() => { if (live) setCases([]) })
-    return () => { live = false }
-  }, [])
-
   const go = async () => {
-    if (!caseId) return
+    if (!picked) return
     setBusy(true)
-    const existing = await list('case_intel_links', { eq: { case_id: caseId, kind: 'person', ref_id: person.id } }).catch(() => [])
-    if (existing.length) { toast('This person is already linked to that case.', 'warn'); setBusy(false); return }
-    const res = await insert('case_intel_links', { case_id: caseId, kind: 'person', ref_id: person.id, role: role.trim() || null, note: note.trim() || null })
+    const res = await insert('case_intel_links', { case_id: picked.id, kind: 'person', ref_id: person.id, role: role.trim() || null, note: note.trim() || null })
     setBusy(false)
-    if (res.error) { toast(`Attach failed: ${res.error.message}`, 'danger'); return }
-    const num = cases?.find((c) => c.id === caseId)?.case_number || 'case'
-    toast(`${person.name || 'Person'} linked to ${num}`, 'success')
+    if (res.error) {
+      toast(res.error.code === '23505' ? 'This person is already linked to that case.' : `Attach failed: ${res.error.message}`, 'danger')
+      return
+    }
+    toast(`${person.name || 'Person'} linked to ${picked.label}`, 'success')
     onSaved()
   }
 
   return (
-    <Modal open onClose={onClose}>
+    <Modal open onClose={onClose} dirty={() => !!picked || !!note.trim()}>
       <div className="p-6">
         <ModalHeader title="Attach to case" onClose={onClose} />
         <p className="mb-3 text-sm text-slate-400">
           Creates a durable intel link (shows in the case&rsquo;s Intel &amp; Graph tabs) for <span className="text-white">{person.name}</span>.
         </p>
-        {cases === null ? (
-          <p className="text-sm text-slate-400">Loading cases…</p>
-        ) : cases.length ? (
-          <div className="space-y-3">
-            <Field label="Case">
-              {(id) => (
-                <Select id={id} value={caseId} onChange={(e) => setCaseId(e.target.value)}>
-                  {cases.map((c) => <option key={c.id} value={c.id}>{c.case_number} · {c.title || ''}</option>)}
-                </Select>
-              )}
-            </Field>
-            <Field label="Role in the case">{(id) => <Input id={id} value={role} onChange={(e) => setRole(e.target.value)} placeholder="Subject, suspect, witness…" />}</Field>
-            <Field label="Note (optional)">{(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} />}</Field>
-            <Button variant="primary" className="w-full" loading={busy} onClick={() => void go()}>Create case link</Button>
-          </div>
-        ) : (
-          <p className="text-sm text-slate-400">No cases available to attach to.</p>
-        )}
+        <div className="space-y-3">
+          <RecordSearchPicker
+            label="Case"
+            required
+            placeholder="Search case number or title…"
+            value={picked}
+            onChange={setPicked}
+            search={searchCaseOptions}
+          />
+          <Field label="Role in the case">{(id) => <Input id={id} value={role} onChange={(e) => setRole(e.target.value)} placeholder="Subject, suspect, witness…" />}</Field>
+          <Field label="Note (optional)">{(id) => <Input id={id} value={note} onChange={(e) => setNote(e.target.value)} />}</Field>
+          <Button variant="primary" className="w-full" loading={busy} disabled={!picked} onClick={() => void go()}>Create case link</Button>
+        </div>
       </div>
     </Modal>
   )

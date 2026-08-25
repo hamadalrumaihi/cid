@@ -202,12 +202,15 @@ export function CaseDetail({ id, onBack, onChanged }: { id: string; onBack: () =
   const [visitedForId, setVisitedForId] = useState(id)
   if (visitedForId !== id) {
     // Render-phase adjustment (same idiom as adoptedKey): a new case drops the
-    // previous case's panes and scroll memory.
+    // previous case's panes; its scroll memory clears in the effect below.
     setVisitedForId(id)
     setVisited(new Set([urlTab]))
-    tabScroll.current.clear()
   }
   if (!visited.has(tab)) setVisited(new Set(visited).add(tab))
+
+  // Scroll memory belongs to ONE case — drop it when the id changes (before
+  // the restore effect below reads it; layout effects run in declared order).
+  useLayoutEffect(() => { tabScroll.current.clear() }, [id])
 
   const setTab = (next: TabId) => {
     tabScroll.current.set(tab, window.scrollY)
