@@ -189,7 +189,7 @@ function TypeCard({ label, desc, selected, onSelect }: {
       type="button"
       aria-pressed={selected}
       onClick={onSelect}
-      className={`min-h-[64px] rounded-2xl border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-500 ${
+      className={`min-h-[64px] rounded-lg border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-badge-500 ${
         selected ? 'border-badge-500/60 bg-badge-500/10' : 'border-white/5 bg-ink-900/60 hover:border-white/15'
       }`}
     >

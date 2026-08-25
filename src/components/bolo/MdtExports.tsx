@@ -148,7 +148,7 @@ export function MdtExportsPanel({ persons, canPropose, isCommand }: { persons: P
   if (rows !== null && active.length === 0 && !canPropose) return null
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-ink-900/60 p-5">
+    <div className="rounded-lg border border-white/10 bg-ink-900/60 p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-slate-300">Patrol MDT exports</h2>
         <span className="text-[11px] text-slate-500">BOLOs &amp; caution flags pushed to the in-city MDT — never case details.</span>

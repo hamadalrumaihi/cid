@@ -103,7 +103,11 @@ function LinkedCasesPanel({ plate, ownerId }: { plate: string; ownerId: string |
         // Fail-closed: no per-query .catch(() => []) here — a degraded leg
         // would masquerade as an authoritative "no linked cases".
         const [reports, links] = await Promise.all([
-          list('reports', {}),
+          // Bounded scan: the plate match only needs case_id + fields, and the
+          // reports table grows without bound — read the newest 500 rows
+          // instead of every column of every report the viewer can see.
+          list('reports', { select: 'case_id,fields', order: 'created_at', ascending: false, limit: 500 })
+            .then((r) => r as unknown as Pick<Tables<'reports'>, 'case_id' | 'fields'>[]),
           ownerId
             ? list('case_intel_links', { select: 'case_id', eq: { kind: 'person', ref_id: ownerId } })
                 .then((r) => r as unknown as { case_id: string }[])

@@ -91,8 +91,10 @@ export function AdminPanel({ profiles, emails, justiceByUser = {}, requests = nu
     <Card pad="lg">
       <h4 className="mb-1 text-sm font-semibold uppercase tracking-wider text-amber-300/80">⚙️ Member Administration (Director / Command)</h4>
       <p className="mb-4 text-xs text-slate-400">Approve and assign officers. New sign-ins are inactive until activated.</p>
+      {/* Phones scroll the table inside this wrapper (min-width holds the
+          5-column layout) instead of stretching the whole page. */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
+        <table className="w-full min-w-[38rem] text-left text-sm">
           <thead>
             <tr className="text-[11px] uppercase tracking-wider text-slate-400">
               <th className="px-3 py-2">Officer</th><th className="px-3 py-2">Role</th><th className="px-3 py-2">Bureau</th><th className="px-3 py-2">Active</th><th className="px-3 py-2" />

@@ -1,9 +1,9 @@
 'use client'
 
-/** Medals & support commendations — vanilla personnel.js:51-96. Tinted
- *  gradient cards; any active member can award/edit, command can delete
- *  (with undo). Recipient is free text with the roster cache as fallback
- *  name resolution. */
+/** Medals & support commendations — vanilla personnel.js:51-96. Flat tinted
+ *  cards (Card idiom: rounded-lg, quiet wash); any active member can
+ *  award/edit, command can delete (with undo). Recipient is free text with
+ *  the roster cache as fallback name resolution. */
 import { useState } from 'react'
 import type { Tables } from '@/lib/database.types'
 import { deleteWithUndo, insert, update } from '@/lib/db'
@@ -16,10 +16,10 @@ import { Modal, ModalHeader } from '@/components/ui/Modal'
 export type CommendationRow = Tables<'commendations'>
 
 const COMM_TINTS: Record<string, string> = {
-  amber: 'from-amber-500/20 to-amber-700/5 border-amber-500/20',
-  blue: 'from-blue-500/20 to-blue-700/5 border-blue-500/20',
-  violet: 'from-violet-500/20 to-violet-700/5 border-violet-500/20',
-  emerald: 'from-emerald-500/20 to-emerald-700/5 border-emerald-500/20',
+  amber: 'border-amber-500/20 bg-amber-500/5',
+  blue: 'border-blue-500/20 bg-blue-500/5',
+  violet: 'border-violet-500/20 bg-violet-500/5',
+  emerald: 'border-emerald-500/20 bg-emerald-500/5',
 }
 const TINT_KEYS = ['amber', 'blue', 'violet', 'emerald']
 
@@ -40,20 +40,28 @@ export function Commendations({ rows, onChanged }: { rows: CommendationRow[]; on
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {state !== 'in' ? (
-          <p className="text-sm text-slate-500 sm:col-span-2 lg:col-span-3">Sign in to view commendations.</p>
+          <p className="text-sm text-slate-400 sm:col-span-2 lg:col-span-3">Sign in to view commendations.</p>
         ) : !rows.length ? (
-          <p className="text-sm text-slate-500 sm:col-span-2 lg:col-span-3">No commendations.{canEdit ? ' Use "+ Award Commendation".' : ''}</p>
+          <p className="text-sm text-slate-400 sm:col-span-2 lg:col-span-3">No commendations.{canEdit ? ' Use "+ Award Commendation".' : ''}</p>
         ) : rows.map((c) => (
-          <div key={c.id} className={`relative rounded-2xl border bg-gradient-to-br ${COMM_TINTS[c.tint || 'amber'] || COMM_TINTS.amber} p-5`}>
-            <div className="flex items-start gap-3">
-              <span className="text-3xl" aria-hidden="true">{c.icon || '🎖️'}</span>
+          <div key={c.id} className={`relative rounded-lg border ${COMM_TINTS[c.tint || 'amber'] || COMM_TINTS.amber} p-4`}>
+            <div className="flex items-start gap-2.5">
+              <span className="text-lg leading-6" aria-hidden="true">{c.icon || '🎖️'}</span>
               <div className="min-w-0 flex-1">
-                <p className="font-semibold text-white">{c.title}</p>
+                <p className="text-sm font-semibold text-white">{c.title}</p>
                 <p className="text-xs text-slate-300">{c.recipient_name || officerName(c.recipient_id) || '—'}</p>
               </div>
-              {canEdit && <button onClick={() => setEditing(c)} className="-m-2 p-2 text-[11px] text-slate-400 hover:text-white">edit</button>}
+              {canEdit && (
+                <button
+                  onClick={() => setEditing(c)}
+                  aria-label={`Edit commendation "${c.title}"`}
+                  className="-my-2 -mr-2 grid min-h-[40px] min-w-[40px] place-items-center rounded-lg text-[11px] text-slate-400 hover:text-white"
+                >
+                  edit
+                </button>
+              )}
             </div>
-            <p className="mt-3 text-xs text-slate-300">{c.note || ''}</p>
+            {c.note && <p className="mt-2 text-xs text-slate-300">{c.note}</p>}
           </div>
         ))}
       </div>

@@ -266,12 +266,18 @@ textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
   .tools-pane .sticky.top-2:not(.fixed *) { top: calc(4.75rem + var(--tools-tabbar-h) + 0.5rem); }
 }
 
-/* Commander Heatmap tiles — ported from the vanilla hand-written layer. */
-.hm-tile{border:1px solid rgba(255,255,255,.06);border-radius:1rem;padding:1.25rem;background:linear-gradient(135deg,rgba(100,116,139,.12),rgba(30,41,59,.04))}
-.hm-tile.lvl1{background:linear-gradient(135deg,rgba(59,130,246,.18),rgba(29,78,216,.04));border-color:rgba(59,130,246,.28)}
-.hm-tile.lvl2{background:linear-gradient(135deg,rgba(245,158,11,.20),rgba(146,64,14,.05));border-color:rgba(245,158,11,.30)}
-.hm-tile.lvl3{background:linear-gradient(135deg,rgba(244,63,94,.22),rgba(136,19,55,.06));border-color:rgba(244,63,94,.42)}
-.hm-bar{height:100%;background:linear-gradient(90deg,#3b82f6,#f59e0b,#f43f5e)}
+/* Commander Heatmap tiles — flattened to the house surface (Card idiom:
+   rounded-lg, ink fill). The heat SEMANTICS stay: intensity level tints the
+   border + a faint flat wash, and .hm-bar takes the matching flat heat color
+   (blue <50, amber 50–74, rose ≥75 — the same scale as the map dots/legend)
+   instead of the old 3-stop glow gradient. */
+.hm-tile{border:1px solid rgba(255,255,255,.05);border-radius:.5rem;padding:1rem;background:rgb(11 18 32/.6)}
+.hm-tile.lvl1{background:rgba(59,130,246,.08);border-color:rgba(59,130,246,.28)}
+.hm-tile.lvl2{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.30)}
+.hm-tile.lvl3{background:rgba(244,63,94,.09);border-color:rgba(244,63,94,.42)}
+.hm-bar{height:100%;background:#3b82f6}
+.hm-tile.lvl2 .hm-bar{background:#f59e0b}
+.hm-tile.lvl3 .hm-bar{background:#f43f5e}
 
 /* Tiptap rich editor content (RichEditor.tsx) — markdown-equivalent styling */
 .rich-editor-content p { margin: 0.35rem 0; line-height: 1.55; }

@@ -60,8 +60,8 @@ SIB is **not** applied for here. SIB membership is appointed from inside the div
 ### Where the work is
 
 - **My Desk** (Command section — your landing page) gathers everything waiting on you: sign-offs, returned cases, due follow-ups, open tasks, mentions, followed records and draft reports. Start every session here.
-- The **Action Center** ranks work needing your attention across cases, command and personnel.
-- The **bell** is your notification feed — mentions, sign-off events, decisions. Click one to jump to its record.
+- The **Action Center** is one prioritized queue of everything awaiting a decision or action from you, in named lanes — Overdue, Returned to you, Needs your action, Command decisions, **Unassigned intel** (field intelligence no reviewer has claimed), **Expiring BOLOs** (windows closing within 7 days), Waiting on others, and **Drafts** (unfinished work you saved — resume or discard). Every item says why it's here and what to do next; filter the queue by type or bureau.
+- The **bell** is your notification feed. Notifications about the same case or request collapse into one group; the unread badge is exact. Click a row to mark it read and jump to its record, mark a whole group read, or **Mark all read** in one click. The bell's settings panel can **mute the optional streams** (announcements, tracker authorizations, document suggestions, stale-case reminders, sign-off heads-ups) — assignments, mentions, sign-off decisions, legal and security notices can never be muted. Duplicate notifications for the same event are suppressed automatically.
 
 ---
 
@@ -99,8 +99,15 @@ SIB is a **separate workspace and authority**, not a CID category. An SIB accoun
 
 ### The header, everywhere
 
-- **Search everything…** — press **/** to focus, or **Ctrl-K / ⌘K** for the palette. It finds cases, people, plates, places, penal codes and legal requests, and runs commands ("new case", "loa", "go to heatmap").
-- **Bell** — notifications. **Access chip** — hover to see what your role allows. **Set LOA / Clear LOA**. **Sign out**.
+- **Search everything…** — press **/** to focus, or **Ctrl-K / ⌘K** for the palette. One search reaches everything your access can see: cases, reports, case tasks, evidence, operations, legal requests, persons, **BOLOs**, gangs, places, vehicles, accounts, narcotics, ballistics, documents, penal charges, **intelligence submissions** and **division members**. Results come grouped by kind, each row tagged with what it is (typo-tolerant — a few letters or a plate fragment is enough). Opening a person, vehicle, gang or narcotics hit lands it as its own record tab in the Investigative Tools workspace; a task hit deep-links straight to its case's Tasks tab. The palette also runs commands: **Go to** any screen *your role can actually open* (Owner, Command and SIB surfaces are simply not listed otherwise), a permission-gated **New record** set, My active cases, Set/Clear LOA and Sign out. On a phone the palette opens full-screen.
+- **+ Create** — one button for every record type you're allowed to create: case, person, vehicle, gang, place, account, indicator, operation and (for SIB agents) SIB investigation. It opens the exact same forms the individual screens use, from anywhere — a bottom sheet on your phone. Types your role can't create aren't shown.
+- **Bell** — notifications (see section B). **Access chip** — hover to see what your role allows. **Set LOA / Clear LOA**. **Sign out**.
+
+### Pins and recents — "Jump back in"
+
+- **Pin** a case or record (the pin button on case headers and record profiles) to keep it one click away. Pins are saved to your account, so they **follow you across devices**. Pinning stores only the record's id — never its contents.
+- The portal also keeps a short **recently-opened** trail on each device.
+- Both appear in the **Jump back in** strip on the Command dashboard — pinned chips first, then recents, with a **Clear** for the history. A record you can no longer access simply doesn't appear; a pin comes back by itself if your access returns.
 
 ---
 

@@ -11,7 +11,7 @@ import type { Tables } from '@/lib/database.types'
 import { list } from '@/lib/db'
 import { useAuth } from '@/lib/auth'
 import { officerName } from '@/lib/profiles'
-import { copyText, fmtDateTime } from '@/lib/format'
+import { copyText, fmtDateTime, timeAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -86,7 +86,7 @@ export function AuditView() {
   ], [named])
 
   if (state !== 'in') return <Notice text="Sign in to view the audit log." />
-  if (!isOwner) return <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-amber-200">Restricted — the audit log is owner-only.</div>
+  if (!isOwner) return <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-6 text-sm text-amber-200">Restricted — the audit log is owner-only.</div>
 
   return (
     <div className="space-y-5">
@@ -108,6 +108,23 @@ export function AuditView() {
             csvName="audit-log"
             countLabel="entries"
             emptyText="No audit entries yet."
+            mobileCard={(r) => (
+              // Narrow screens: compact actor · action · entity · age card
+              // (same filtered/sorted page slice — see DataTable mobileCard).
+              <div className="rounded-lg border border-white/5 bg-ink-900 px-3 py-2.5">
+                <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+                  <span className="font-semibold text-white">{named(r.actor_id)}</span>
+                  <span className="rounded bg-white/5 px-1.5 py-0.5 text-xs text-slate-200">{r.action}</span>
+                </p>
+                <p className="mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                  <span className="truncate font-mono">
+                    {r.entity}
+                    {r.entity_id ? ` · ${r.entity_id.slice(0, 8)}` : ''}
+                  </span>
+                  <span className="flex-shrink-0" title={fmtDateTime(r.created_at)}>{timeAgo(r.created_at)}</span>
+                </p>
+              </div>
+            )}
           />
           {/* A full window means older entries probably exist below the cut. */}
           {rows.length >= limit && (

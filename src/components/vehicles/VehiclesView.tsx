@@ -323,14 +323,17 @@ function CrossrefPanel({ vehicles, persons, ownerName }: {
     let cancelled = false
     const t = window.setTimeout(async () => {
       setScan('loading')
-      let reports: Tables<'reports'>[] = []
-      let links: Tables<'case_intel_links'>[] = []
+      // Deconfliction must see EVERY (RLS-visible) row or it under-reports —
+      // so no limit here; the selects are narrowed to just the columns the
+      // scan reads, which is the whole payload win on the big tables.
+      let reports: Pick<Tables<'reports'>, 'case_id' | 'fields'>[] = []
+      let links: Pick<Tables<'case_intel_links'>, 'kind' | 'ref_id' | 'case_id'>[] = []
       let cases: CaseOption[] = []
       let failed = false
       try {
         ;[reports, links, cases] = await Promise.all([
-          list('reports', {}),
-          list('case_intel_links', {}),
+          list('reports', { select: 'case_id,fields' }) as unknown as Promise<Pick<Tables<'reports'>, 'case_id' | 'fields'>[]>,
+          list('case_intel_links', { select: 'kind,ref_id,case_id' }) as unknown as Promise<Pick<Tables<'case_intel_links'>, 'kind' | 'ref_id' | 'case_id'>[]>,
           list('cases', { select: 'id,case_number' }) as unknown as Promise<CaseOption[]>,
         ])
       } catch { failed = true }
@@ -388,7 +391,7 @@ function CrossrefPanel({ vehicles, persons, ownerName }: {
   if (scan === 'loading') return <p className="mb-6 text-sm text-slate-400">Scanning for cross-case matches…</p>
   if (scan === 'failed') {
     return (
-      <div className="mb-6 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5 text-sm text-amber-200">
+      <div className="mb-6 rounded-lg border border-amber-500/20 bg-amber-500/5 p-5 text-sm text-amber-200">
         ⚠ Could not scan for cross-case matches (connection issue).{' '}
         <button onClick={() => setRetry((n) => n + 1)} className="underline">Retry</button>
       </div>

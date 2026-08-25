@@ -144,7 +144,7 @@ export function AccountsView() {
 
   return (
     <section className="view-in space-y-4">
-      <div className="rounded-2xl border border-white/10 bg-ink-900/60 p-6">
+      <div className="rounded-lg border border-white/10 bg-ink-900/60 p-6">
         <PageHeader
           title="Account Registry"
           subtitle="Social-media & online accounts, handle history and polymorphic ownership."
@@ -289,7 +289,7 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
   ]
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-ink-900/50 p-4">
+    <div className="rounded-lg border border-white/10 bg-ink-900/50 p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">

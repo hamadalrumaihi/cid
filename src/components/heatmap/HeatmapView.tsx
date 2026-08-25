@@ -184,7 +184,7 @@ export function HeatmapView() {
 
   return (
     <div>
-      <div className="mb-4 rounded-2xl border border-white/5 bg-ink-900/60 p-5">
+      <div className="mb-4 rounded-lg border border-white/5 bg-ink-900/60 p-5">
         <div className="flex flex-wrap items-center gap-2">
           {LAYER_META.map((L) => (
             <button
@@ -294,7 +294,7 @@ function FocusBanner({ gang, areaCount, activeCount, showAll, onToggle, onClear 
 }) {
   const quiet = areaCount - activeCount
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-2.5">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-2.5">
       <p className="text-sm font-semibold text-amber-200">
         {gang ? (
           <>
@@ -359,7 +359,7 @@ function AreaDetail({ area, data, win, loadedAt, onClose }: {
   const gangName = (id: string | null) => (id && data.gangs.find((g) => g.id === id)?.name) || 'Unknown gang'
 
   return (
-    <div className="mb-6 rounded-2xl border border-blue-500/20 bg-ink-900/70 p-5">
+    <div className="mb-6 rounded-lg border border-blue-500/20 bg-ink-900/70 p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="text-base font-bold text-white"><span aria-hidden className="mr-1 inline-block align-[-2px] text-slate-400"><PlaceIcon size={15} /></span>{area} <span className="ml-1 text-xs font-medium text-slate-400">{WINDOWS[win].label}</span></h3>
         <button onClick={onClose} aria-label="Close area details" className="-my-1 rounded-md border border-white/10 bg-white/5 p-2 text-xs font-semibold text-slate-300 hover:bg-white/10">✕ Close</button>
@@ -411,7 +411,7 @@ function DetailBlock({ title, children }: { title: React.ReactNode; children: Re
     <div>
       <h4 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-400">{title}</h4>
       <div className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
-        {children.length ? children : <p className="text-sm text-slate-600">None in this window.</p>}
+        {children.length ? children : <p className="text-sm text-slate-400">None in this window.</p>}
       </div>
     </div>
   )
@@ -491,7 +491,7 @@ function HeatSvg({ rows, max, layers, onPick, focus }: { rows: AreaRow[]; max: n
   const btn = 'grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-ink-900/90 text-sm font-black text-slate-200 hover:bg-white/10'
 
   return (
-    <div className="relative mb-6 overflow-hidden rounded-2xl border border-white/5 bg-ink-950/60">
+    <div className="relative mb-6 overflow-hidden rounded-lg border border-white/5 bg-ink-950/60">
       <svg
         ref={svgRef}
         viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}

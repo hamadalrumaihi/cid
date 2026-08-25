@@ -123,7 +123,7 @@ export function BoloView() {
 
   return (
     <section className="view-in space-y-4">
-      <div className="rounded-2xl border border-rose-500/20 bg-ink-900/60 p-6">
+      <div className="rounded-lg border border-rose-500/20 bg-ink-900/60 p-6">
         <PageHeader
           title="BOLO Board"
           subtitle="At-large subjects flagged be-on-the-lookout, with risk, instructions and live warrant status."
@@ -275,7 +275,7 @@ function BoloCard({ person, gang, legal, today, now, canEdit, onProfile, onEdit,
   const issuedBy = officerName(person.bolo_issued_by)
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-rose-500/20 bg-ink-900/60">
+    <div className="overflow-hidden rounded-lg border border-rose-500/20 bg-ink-900/60">
       <div className="flex items-center justify-between gap-2 bg-rose-500/10 px-4 py-2">
         <span className="text-[11px] font-bold uppercase tracking-widest text-rose-300">Be on the lookout</span>
         <span className="flex items-center gap-1.5">
