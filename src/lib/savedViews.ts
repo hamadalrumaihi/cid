@@ -129,48 +129,53 @@ export function legacyCaseViewsToSaved(raw: unknown): SavedView[] {
 /* ---- Store (fetch / cache / optimistic writes) --------------------------- */
 
 interface SectionState { views: SavedView[]; loaded: boolean }
-interface SavedViewsState {
-  sections: Record<string, SectionState>
-  inflight: Record<string, boolean>
-}
+interface SavedViewsState { sections: Record<string, SectionState> }
 
-const useSavedViewsStore = create<SavedViewsState>(() => ({ sections: {}, inflight: {} }))
+const useSavedViewsStore = create<SavedViewsState>(() => ({ sections: {} }))
 
 const setSection = (section: string, views: SavedView[]) =>
   useSavedViewsStore.setState((s) => ({ sections: { ...s.sections, [section]: { views, loaded: true } } }))
 
+// Concurrent loads share ONE promise so a mutation issued before the first
+// fetch resolves awaits the real server list (never clobbers it with []).
+const inflight = new Map<string, Promise<SavedView[]>>()
+
 /** Fetch a section's views (cached — refetches only on a fresh session).
  *  Offline / signed out degrades to the local fallback, never throws. */
-export async function loadViews(section: string): Promise<SavedView[]> {
+export function loadViews(section: string): Promise<SavedView[]> {
   const st = useSavedViewsStore.getState()
-  if (st.sections[section]?.loaded) return st.sections[section].views
-  if (st.inflight[section]) return st.sections[section]?.views ?? []
-  useSavedViewsStore.setState((s) => ({ inflight: { ...s.inflight, [section]: true } }))
-  try {
-    const rows = await list('user_prefs', { eq: { key: viewsPrefKey(section) } })
-    let views = rows.length ? parseViewsValue(rows[0].value) : []
-    if (!rows.length && section === 'cases') {
-      // Migrate-on-first-load: no server row yet, but the legacy local blob
-      // may hold views from the vanilla site — lift them up once. The local
-      // copy is intentionally NOT cleared (offline/legacy fallback).
-      const legacy = legacyCaseViewsToSaved(Store.get<unknown>('caseViews', null))
-      if (legacy.length) {
-        views = legacy
-        void upsert('user_prefs', { key: viewsPrefKey(section), value: serializeViews(views) }, 'user_id,key')
+  if (st.sections[section]?.loaded) return Promise.resolve(st.sections[section].views)
+  const pending = inflight.get(section)
+  if (pending) return pending
+  const p = (async () => {
+    try {
+      const rows = await list('user_prefs', { eq: { key: viewsPrefKey(section) } })
+      let views = rows.length ? parseViewsValue(rows[0].value) : []
+      if (!rows.length && section === 'cases') {
+        // Migrate-on-first-load: no server row yet, but the legacy local blob
+        // may hold views from the vanilla site — lift them up once. The local
+        // copy is intentionally NOT cleared (offline/legacy fallback).
+        const legacy = legacyCaseViewsToSaved(Store.get<unknown>('caseViews', null))
+        if (legacy.length) {
+          views = legacy
+          void upsert('user_prefs', { key: viewsPrefKey(section), value: serializeViews(views) }, 'user_id,key')
+        }
       }
+      setSection(section, views)
+      return views
+    } catch {
+      // No session / network blip: cases falls back to the legacy local views.
+      const fallback = section === 'cases'
+        ? legacyCaseViewsToSaved(Store.get<unknown>('caseViews', null))
+        : []
+      setSection(section, fallback)
+      return fallback
+    } finally {
+      inflight.delete(section)
     }
-    setSection(section, views)
-    return views
-  } catch {
-    // No session / network blip: cases falls back to the legacy local views.
-    const fallback = section === 'cases'
-      ? legacyCaseViewsToSaved(Store.get<unknown>('caseViews', null))
-      : []
-    setSection(section, fallback)
-    return fallback
-  } finally {
-    useSavedViewsStore.setState((s) => ({ inflight: { ...s.inflight, [section]: false } }))
-  }
+  })()
+  inflight.set(section, p)
+  return p
 }
 
 /** Optimistic write-through: apply locally, upsert, revert + toast on error. */
@@ -197,27 +202,26 @@ async function persistViews(section: string, next: SavedView[]): Promise<boolean
 export async function saveView(section: string, name: string, config: unknown): Promise<boolean> {
   const clean = name.trim().slice(0, MAX_VIEW_NAME_LEN)
   if (!clean) return false
-  await loadViews(section)
-  const views = useSavedViewsStore.getState().sections[section]?.views ?? []
+  const views = await loadViews(section)
   return persistViews(section, upsertViewIn(views, clean, config))
 }
 
 export async function renameView(section: string, from: string, to: string): Promise<boolean> {
   const clean = to.trim().slice(0, MAX_VIEW_NAME_LEN)
   if (!clean || clean === from) return false
-  const views = useSavedViewsStore.getState().sections[section]?.views ?? []
+  const views = await loadViews(section)
   return persistViews(section, renameViewIn(views, from, clean))
 }
 
 export async function deleteView(section: string, name: string): Promise<boolean> {
-  const views = useSavedViewsStore.getState().sections[section]?.views ?? []
+  const views = await loadViews(section)
   return persistViews(section, removeViewIn(views, name))
 }
 
 /** Mark `name` as the section default (applied on first visit when no other
  *  filters are active) — or clear the default with null. One default max. */
 export async function setDefaultView(section: string, name: string | null): Promise<boolean> {
-  const views = useSavedViewsStore.getState().sections[section]?.views ?? []
+  const views = await loadViews(section)
   return persistViews(section, withDefault(views, name))
 }
 

@@ -316,7 +316,7 @@ function CasesViewInner() {
             {bulk ? `${bulk.label} ${bulk.done} of ${bulk.total}…` : `${selected.length} selected`}
           </p>
           {!busy && selected.length < filtered.length && (
-            <button onClick={selectAllMatching} className="rounded text-sm font-semibold text-badge-200 hover:text-white">
+            <button onClick={selectAllMatching} className="min-h-[40px] rounded text-sm font-semibold text-badge-200 hover:text-white">
               Select all matching filter ({Math.min(filtered.length, SELECT_ALL_CAP)}{filtered.length > SELECT_ALL_CAP ? ` of ${filtered.length}` : ''})
             </button>
           )}
