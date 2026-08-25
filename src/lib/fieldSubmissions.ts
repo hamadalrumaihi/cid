@@ -89,35 +89,25 @@ export function isEditableByOfficer(s: string): boolean {
 
 /** Where it happened. This replaced a CID/SIU/Unsure picker, which asked the
  *  submitter the wrong question entirely: a patrol officer cannot know whether
- *  an observation belongs to a bureau or to the Special Investigation Unit, and
- *  asking produced a guess or "unsure". Where they were standing, they know.
+ *  an observation belongs to a bureau or to the Special Investigations Bureau,
+ *  and asking produced a guess or "unsure". Where they were standing, they
+ *  know.
  *
  *  It is deliberately NOT inferred from the reporting agency. SAHP is
- *  statewide — a trooper works both, and assuming "SAHP means state" would file
- *  half their reports in the wrong queue. */
+ *  statewide — a trooper works both.
+ *
+ *  Jurisdiction is a FACT about the observation, not a routing key: the old
+ *  geographic city/blaine → bureau queue mapping died with the bureau
+ *  restructure — every active CID member sees every field submission
+ *  (server-enforced). */
 export const JURISDICTIONS = ['city', 'blaine'] as const
 export type Jurisdiction = (typeof JURISDICTIONS)[number]
 export const JURISDICTION_LABEL: Record<Jurisdiction, string> = {
   city: 'Los Santos / City',
   blaine: 'Blaine County',
 }
-/** Which bureau's queue a jurisdiction feeds, for showing an investigator why
- *  a report reached them. Statewide bureaus (SAB, JTF) and SIU see both. */
-export const JURISDICTION_BUREAU: Record<Jurisdiction, string> = {
-  city: 'LSB', blaine: 'BCB',
-}
 export function jurisdictionLabel(j: string | null): string {
   return JURISDICTION_LABEL[j as Jurisdiction] ?? 'Not stated'
-}
-
-/** The jurisdiction as a reviewer needs to read it: where it happened AND whose
- *  queue that puts it in. Without the bureau, an LSB detective seeing only
- *  "Los Santos / City" cannot tell whether the report reached them because it
- *  is theirs or because everybody sees everything -- and the answer decides
- *  whether they are the one who has to act on it. */
-export function jurisdictionRouting(j: string | null): string {
-  const b = JURISDICTION_BUREAU[j as Jurisdiction]
-  return b ? `${jurisdictionLabel(j)} · ${b}` : jurisdictionLabel(j)
 }
 
 // ---------------------------------------------------------------------------
@@ -320,8 +310,8 @@ export function weightProblem(value: number | null, unit: string | null): string
 export function submitProblem(s: Pick<FieldSubmissionRow,
   'summary' | 'observed_precision' | 'observed_at' | 'observed_to' | 'jurisdiction'>): string | null {
   if (!s.summary?.trim()) return 'Say what happened before sending — even one line.'
-  // Required by a check constraint too. It decides which detectives see the
-  // report, so a missing one means nobody does.
+  // Required by a check constraint too — where it happened is a fact every
+  // reviewer needs, even though it no longer routes the report anywhere.
   if (!s.jurisdiction) return 'Choose where this happened — Los Santos or Blaine County.'
   if (s.observed_precision === 'range') {
     if (!s.observed_at || !s.observed_to) return 'A time range needs both a start and an end.'

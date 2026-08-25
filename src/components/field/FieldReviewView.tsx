@@ -27,7 +27,7 @@ import { toast } from '@/lib/toast'
 import {
   RELIABILITIES, RELIABILITY_LABEL, RELIABILITY_MEANING, URGENCIES, URGENCY_LABEL,
   fieldStatusLabel, gradeSubmission, isExternalSource, jurisdictionLabel,
-  jurisdictionRouting, loadSubmissionParts, reliabilityLabel, sourceLabel,
+  loadSubmissionParts, reliabilityLabel, sourceLabel,
   submissionRef, urgencyLabel, urgencyTone,
   type FieldSubmissionRow, type Reliability, type SubmissionParts, type Urgency,
 } from '@/lib/fieldSubmissions'
@@ -570,7 +570,7 @@ function SubmissionDetail({ submission, onBack, onChanged }: {
             <p className="text-xs text-slate-500">
               {submission.submitted_at && `Sent ${fmtDateTime(submission.submitted_at)}`}
               {submission.mdt_reference && ` · their report ${submission.mdt_reference}`}
-              {` · ${jurisdictionRouting(submission.jurisdiction)}`}
+              {` · ${jurisdictionLabel(submission.jurisdiction)}`}
               {` · ${sourceLabel(submission.source_type)}`}
             </p>
             {submission.archive_reason && (

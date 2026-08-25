@@ -162,9 +162,11 @@ access change (PR #204) shipped alongside Phase 5.
 
 ## Post‑roadmap work (not part of Phases 0–10)
 
-- **Special Investigation Unit (SIU)** — a second investigative department alongside CID, with its
-  own authority model, classifications, compartments, chain of command and tradecraft. Built after
-  this roadmap closed and **not** covered by any phase above.
+- **Special Investigations Bureau (SIB)** — built as the Special Investigation Unit (SIU) and
+  renamed by the 2026‑08‑25 bureau restructure (internal `siu_*` identifiers unchanged) — a second
+  investigative department alongside CID, with its own authority model, classifications,
+  compartments, chain of command and tradecraft. Built after this roadmap closed and **not**
+  covered by any phase above.
   | | PR |
   |---|---|
   | Phase 1 — authority model, classifications, compartments, build‑phase gate | #235 |
@@ -175,7 +177,7 @@ access change (PR #204) shipped alongside Phase 5.
   | Test isolation policy + RLS safety review | #240 |
   | `rls_test_cleanup()` namespace wall (F1–F5) | #241 |
 
-  Authority model: [`AUTHORIZATION.md` §4f](AUTHORIZATION.md). SIU remains behind an owner‑only
+  Authority model: [`AUTHORIZATION.md` §4f](AUTHORIZATION.md). SIB remains behind an owner‑only
   build gate (`siu_settings.enabled_for_non_owner`) until `siu_set_release(true, …)` is called.
 
 ## Notes on process

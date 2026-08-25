@@ -620,10 +620,10 @@ describe('the SIB legal lane — X-1, not a Bureau Lead', () => {
 
     const director = viewer({ myId: 'u-dir', cidActive: true, cidRole: 'director' })
     expect(dispositionFor(siuReq(), director, NOW).viewerCanAct,
-      'the Director of CID holds no SIU authority').toBe(false)
+      'the Director of CID holds no SIB authority').toBe(false)
   })
 
-  it('gives it to SIU command', () => {
+  it('gives it to SIB command', () => {
     const x1 = viewer({ myId: 'u-x1', cidActive: true, cidRole: 'bureau_lead', siuIsCommand: true })
     expect(dispositionFor(siuReq(), x1, NOW).viewerCanAct).toBe(true)
     // Never the author of the request, whatever their standing.
@@ -631,7 +631,7 @@ describe('the SIB legal lane — X-1, not a Bureau Lead', () => {
     expect(dispositionFor(siuReq(), selfX1, NOW).viewerCanAct).toBe(false)
   })
 
-  it('treats a request returned by SIU command as editable by its author', () => {
+  it('treats a request returned by SIB command as editable by its author', () => {
     // Without this the return path is a dead end: X-1 sends it back and the
     // agent cannot touch it. The server had the same omission.
     const author = viewer({ myId: 'agent-1', cidActive: true })
@@ -642,12 +642,12 @@ describe('the SIB legal lane — X-1, not a Bureau Lead', () => {
     expect(stageForReviewStatus('returned_by_siu_command')).toBe('draft')
   })
 
-  it('explains where the request goes next, since the SIU route is unfamiliar', () => {
+  it('explains where the request goes next, since the SIB route is unfamiliar', () => {
     // §9 "why is this stuck". A reader who knows the CID pipeline would
-    // reasonably expect a prosecutor queue next; the SIU lane skips it.
+    // reasonably expect a prosecutor queue next; the SIB lane skips it.
     const other = viewer({ myId: 'u-other', cidActive: true })
     const why = routingExplanation(siuReq(), other)
-    expect(why).toMatch(/SIU command/i)
+    expect(why).toMatch(/SIB command/i)
     expect(why).toMatch(/Attorney General/i)
     expect(why, 'it must say the prosecutor queue is NOT the next stop').toMatch(/prosecutor queue/i)
   })
@@ -656,13 +656,13 @@ describe('the SIB legal lane — X-1, not a Bureau Lead', () => {
 describe('§9 why is this stuck — the CID lane names who can act', () => {
   const pending = (over = {}) =>
     req({ review_status: 'cid_supervisor_review', created_by: 'inv-1',
-          responsible_bureau: 'LSB', ...over })
+          responsible_bureau: 'major_crimes', ...over })
 
   it('names the bureau and the fallback, not just "a Bureau Lead"', () => {
     // The old wording was true and useless: it never said who, so a stalled
     // request gave the reader nothing to act on.
     const why = routingExplanation(pending(), viewer({ myId: 'u-other' }))
-    expect(why).toMatch(/LSB Bureau Lead/)
+    expect(why).toMatch(/MCB Bureau Lead/)
     expect(why).toMatch(/Deputy Director or\s+Director/)
   })
 
@@ -694,25 +694,25 @@ describe('§9 why is this stuck — the CID lane names who can act', () => {
 
 describe('who may decide a CID legal request', () => {
   const pending = (over = {}) =>
-    req({ review_status: 'cid_supervisor_review', created_by: 'inv-1', responsible_bureau: 'SAB', ...over })
+    req({ review_status: 'cid_supervisor_review', created_by: 'inv-1', responsible_bureau: 'major_crimes', ...over })
   const acts = (v: LegalViewer, r = pending()) => dispositionFor(r, v, NOW).viewerCanAct
 
   it('lets the responsible bureau lead decide their own bureau', () => {
-    expect(acts(viewer({ myId: 'u-lead', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'SAB' })))
+    expect(acts(viewer({ myId: 'u-lead', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'major_crimes' })))
       .toBe(true)
   })
 
   it('does not offer another bureau lead a button the database refuses', () => {
     // can_approve_legal() requires division = responsible_bureau. The client
-    // used to admit ANY bureau_lead, so a BCB lead saw an Approve control on an
-    // SAB request and got an exception on click.
-    expect(acts(viewer({ myId: 'u-lead', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'BCB' })))
+    // used to admit ANY bureau_lead, so an SCB lead saw an Approve control on an
+    // MCB request and got an exception on click.
+    expect(acts(viewer({ myId: 'u-lead', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'street_crimes' })))
       .toBe(false)
   })
 
   it('widens to any bureau lead on a joint case', () => {
     expect(acts(
-      viewer({ myId: 'u-lead', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'BCB' }),
+      viewer({ myId: 'u-lead', cidActive: true, cidRole: 'bureau_lead', cidDivision: 'street_crimes' }),
       pending({ case_bureau: 'JTF' }),
     )).toBe(true)
   })
@@ -723,7 +723,7 @@ describe('who may decide a CID legal request', () => {
     // division test, and nothing requires the lead to be marked unavailable
     // first.
     for (const role of ['deputy_director', 'director']) {
-      expect(acts(viewer({ myId: 'u-cmd', cidActive: true, cidRole: role, cidDivision: 'BCB' })), role)
+      expect(acts(viewer({ myId: 'u-cmd', cidActive: true, cidRole: role, cidDivision: 'street_crimes' })), role)
         .toBe(true)
     }
     expect(acts(viewer({ myId: 'u-own', cidActive: true, cidRole: null, isOwner: true }))).toBe(true)
@@ -738,7 +738,7 @@ describe('who may decide a CID legal request', () => {
     // Separation of duties survives everything above. A Bureau Lead who raises
     // a request in their own bureau escalates; they do not self-approve.
     for (const role of ['bureau_lead', 'deputy_director', 'director']) {
-      expect(acts(viewer({ myId: 'inv-1', cidActive: true, cidRole: role, cidDivision: 'SAB' })), role)
+      expect(acts(viewer({ myId: 'inv-1', cidActive: true, cidRole: role, cidDivision: 'major_crimes' })), role)
         .toBe(false)
     }
   })

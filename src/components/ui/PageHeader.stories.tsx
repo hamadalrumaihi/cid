@@ -27,7 +27,7 @@ export const WithSubtitle: Story = {
 
 export const WithEyebrowAndActions: Story = {
   args: {
-    eyebrow: 'Los Santos Bureau',
+    eyebrow: 'Major Crimes Bureau',
     title: 'Vespucci Fencing Ring',
     subtitle: 'CID-26-0140 · Lead: Det. Lena Ortiz',
     actions: (
@@ -42,7 +42,7 @@ export const WithEyebrowAndActions: Story = {
 
 export const LongTitleWrap: Story = {
   args: {
-    eyebrow: 'Blaine County Bureau',
+    eyebrow: 'Street Crimes Bureau',
     title:
       'Joint Operation — Interbureau Narcotics Distribution Network, Sandy Shores Corridor',
     subtitle: 'Wraps without pushing the actions off-screen.',

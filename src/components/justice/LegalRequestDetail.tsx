@@ -30,6 +30,7 @@ import {
   type SubpoenaType, type WarrantType,
 } from '@/lib/justice'
 import { dispositionFor, formatTarget, humanize, routingExplanation } from '@/lib/legalWorkflow'
+import { bureauShort } from '@/lib/roles'
 import { parsePacketManifest } from '@/lib/schemas'
 import { toast } from '@/lib/toast'
 import { useNow } from '@/lib/useNow'
@@ -471,7 +472,7 @@ function LegalRequestDossier({ requestId, onBack }: { requestId: string; onBack:
           </div>
           <div>
             <dt className="text-xs font-semibold text-slate-400">Responsible bureau</dt>
-            <dd className="text-sm text-slate-200">{r.responsible_bureau ?? '—'}</dd>
+            <dd className="text-sm text-slate-200">{r.responsible_bureau ? bureauShort(r.responsible_bureau) : '—'}</dd>
           </div>
         </dl>
         {!disposition.viewerCanAct && disposition.whyNoAction && (

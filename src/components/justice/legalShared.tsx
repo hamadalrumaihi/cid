@@ -172,7 +172,7 @@ export function useMyProsecutorBureaus(): readonly string[] {
  *  their own justice_memberships row plus LIVE temporary coverage grants from
  *  prosecutor_coverage (self-select is always allowed on both). Presentation
  *  only — the server enforces bureau eligibility on every claim/assign; this
- *  just labels the queue ("Home: LSB", "Coverage: BCB until …"). Non-
+ *  just labels the queue ("Home: MCB", "Coverage: SCB until …"). Non-
  *  prosecutors skip the reads entirely. */
 export interface BureauScope {
   /** justice_memberships.prosecutor_bureau, or null (legacy row — surfaced to

@@ -12,6 +12,7 @@ import {
   fulfilmentEvents, humanize, laneThatAdvanced, routingExplanation,
   type FulfilmentEvent, type LegalDisposition, type LegalViewer,
 } from '@/lib/legalWorkflow'
+import { bureauShort } from '@/lib/roles'
 import { Card } from '@/components/ui/Card'
 import { EntityLink } from '@/components/ui/EntityLink'
 import { WorkflowTimeline, type TimelineEntry } from '@/components/ui/WorkflowTimeline'
@@ -40,7 +41,7 @@ export function SummarySection({ r, name, viewer, disposition, caseLinkable }: {
             <>{r.case_number_snapshot ?? '—'}{r.case_title_snapshot ? ` — ${r.case_title_snapshot}` : ''}</>
           )}
         </Row>
-        <Row label="Responsible bureau">{r.responsible_bureau}</Row>
+        <Row label="Responsible bureau">{r.responsible_bureau ? bureauShort(r.responsible_bureau) : '—'}</Row>
         {/* A JTF case number marks an OPERATIONAL assignment, not a routing
             lane — make explicit that the bureau above is what routes review. */}
         {(r.case_number_snapshot ?? '').startsWith('JTF-') && (

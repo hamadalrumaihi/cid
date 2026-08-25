@@ -467,9 +467,9 @@ export function DecisionPanel({
   exhibits: LegalExhibit[]
   editable: boolean
   canCidReview: boolean
-  /** The SIU lane's first approval. Same RPC as the CID one — the server
+  /** The SIB lane's first approval. Same RPC as the CID one — the server
    *  branches on the case's authority — but a different person and different
-   *  wording, because "As Bureau Lead" on an SIU warrant names somebody with
+   *  wording, because "As Bureau Lead" on an SIB warrant names somebody with
    *  no authority over it. */
   canSiuCommandReview: boolean
   cidActive: boolean
@@ -710,7 +710,7 @@ export function DecisionPanel({
             </Block>
           )}
           {canSiuCommandReview && (
-            <Block title="As SIU command">
+            <Block title="As SIB command">
               <Button variant="primary" disabled={busy} onClick={() => void cidDecide('approve')}>Approve</Button>
               <Button disabled={busy} onClick={() => void cidDecide('deny')}>Deny</Button>
               <Button disabled={busy} onClick={() => void cidDecide('return')}>Return for revision</Button>
