@@ -36,8 +36,6 @@ export const COMMAND_ROLES = ['bureau_lead', 'deputy_director', 'director'] as c
 // historical `siu` spelling; every user-facing surface says SIB).
 // ---------------------------------------------------------------------------
 
-export type BureauId = 'major_crimes' | 'street_crimes' | 'special_investigations' | 'JTF'
-
 export const BUREAUS: Record<string, string> = {
   major_crimes: 'Major Crimes Bureau',
   street_crimes: 'Street Crimes Bureau',
