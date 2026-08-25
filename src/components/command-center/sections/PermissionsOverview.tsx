@@ -1,9 +1,9 @@
 'use client'
 
 /** Command Center → Permissions. A read-only view of the access matrix so
- *  command staff can see who can do what without needing owner access. Reuses
- *  the single matrix defined in the Owner Portal data module. */
-import { PERMISSIONS_MATRIX, MATRIX_NOTE } from '@/components/owner/ownerData'
+ *  command staff can see who can do what without needing owner access. Reads
+ *  the shared matrix data lib — no Owner Portal coupling. */
+import { PERMISSIONS_MATRIX, MATRIX_NOTE } from '@/lib/permissionsMatrix'
 
 export function PermissionsOverview() {
   return (

@@ -13,10 +13,15 @@
 import { useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
+import { useCapabilities } from '@/lib/capabilities'
+import { bureauLabel } from '@/lib/roles'
+import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import { Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CommandCenterOverview } from './sections/Overview'
+import { CasesAssignments } from './sections/CasesAssignments'
+import { IntelOversight } from './sections/IntelOversight'
 import { ChainOfCommand } from './sections/ChainOfCommand'
 import { PersonnelAdmin } from './sections/PersonnelAdmin'
 import { ApprovalQueue } from './sections/ApprovalQueue'
@@ -27,7 +32,9 @@ import { CommandComms } from './sections/CommandComms'
 import { FieldOfficers } from './sections/FieldOfficers'
 
 export const CC_SECTIONS = [
-  { id: 'overview', label: 'Overview', sub: 'Command KPIs and what needs a decision' },
+  { id: 'overview', label: 'Overview', sub: 'Decision queues, bureau workload and what awaits you' },
+  { id: 'cases', label: 'Cases & Assignments', sub: 'Unassigned, awaiting review, returned, stale and overdue queues' },
+  { id: 'intel', label: 'Intelligence Oversight', sub: 'Field intel queues, MDT export approvals and registry hygiene' },
   { id: 'chain', label: 'Chain of Command', sub: 'Roles, bureaus and the sign-off chain' },
   { id: 'personnel', label: 'Personnel & Admin', sub: 'Approve, manage, promote, transfer, remove' },
   { id: 'approvals', label: 'Approval Queue', sub: 'Pending member approvals + sign-offs awaiting you' },
@@ -41,6 +48,7 @@ type SectionId = (typeof CC_SECTIONS)[number]['id']
 
 export function CommandCenterView() {
   const { state, isCommand, isOwner } = useAuth()
+  const { commandScope } = useCapabilities()
   const sp = useSearchParams()
   const router = useRouter()
   const raw = sp.get('s') as SectionId | null
@@ -74,6 +82,15 @@ export function CommandCenterView() {
         <PageHeader
           title="Command Center"
           subtitle={`The single home for command administration — ${active.sub.toLowerCase()}.`}
+          actions={
+            // Command reach, on every section: a Bureau Lead acts within their
+            // bureau; DD/Director (and the Owner) see the whole division.
+            <Badge tone={commandScope?.level === 'bureau' ? 'accent' : 'neutral'}>
+              {commandScope?.level === 'bureau'
+                ? `Your bureau: ${bureauLabel(commandScope.bureau)}`
+                : 'Scope: Division-wide'}
+            </Badge>
+          }
         />
       </Card>
 
@@ -95,6 +112,8 @@ export function CommandCenterView() {
 
         <section className="min-w-0">
           {section === 'overview' && <CommandCenterOverview onGo={(id) => go(id as SectionId)} />}
+          {section === 'cases' && <CasesAssignments />}
+          {section === 'intel' && <IntelOversight onGo={(id) => go(id as SectionId)} />}
           {section === 'chain' && <ChainOfCommand />}
           {section === 'personnel' && <PersonnelAdmin />}
           {section === 'approvals' && <ApprovalQueue />}

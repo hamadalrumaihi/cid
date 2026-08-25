@@ -7,38 +7,14 @@ import type { Tables } from '@/lib/database.types'
 export type CaseRow = Tables<'cases'>
 export type TrackerRow = Tables<'trackers'>
 
-/* ---- Command filters (#17) — command staff scope the dashboard ------------ */
-export interface CmdFilters {
-  bureau: string
-  detective: string
-  /** '' · open/active/cold/closed · 'awaiting' · 'ready_doj' · 'open_active' (KPI drill) */
-  status: string
-  from: string
-  to: string
-}
-export const EMPTY_CMD_FILTERS: CmdFilters = { bureau: '', detective: '', status: '', from: '', to: '' }
-
-export const cmdFilterActive = (f: CmdFilters): boolean =>
-  !!(f.bureau || f.detective || f.status || f.from || f.to)
-
-/** Case-vs-filter predicate (command.js:15-26). 'open_active' is the drill
- *  target for the "Open Cases" KPI card, which counts open+active together. */
-export function cmdMatch(c: CaseRow, f: CmdFilters): boolean {
-  if (f.bureau && c.bureau !== f.bureau) return false
-  if (f.detective && c.lead_detective_id !== f.detective) return false
-  if (f.status === 'awaiting') { if (!/^awaiting_/.test(c.signoff_status || '')) return false }
-  else if (f.status === 'ready_doj') { if (!(c.signoff_status === 'ready_doj' || c.signoff_status === 'approved_complete')) return false }
-  else if (f.status === 'open_active') { if (!(c.status === 'open' || c.status === 'active')) return false }
-  else if (f.status && c.status !== f.status) return false
-  if (f.from && new Date(c.created_at) < new Date(f.from)) return false
-  if (f.to && new Date(c.created_at) > new Date(f.to + 'T23:59:59')) return false
-  return true
-}
+/* ---- Command filters: RETIRED ---------------------------------------------
+ * CmdFilters / cmdMatch / cmdFilterActive (+ the reEvWeapon/reEvNarc evidence
+ * classifiers behind the seizure KPIs) drove the in-page filter-bar/drill on
+ * the old command dashboard. Phase-2B moved command scoping to the Command
+ * Center (?s=overview / ?s=cases queues, bureau-scoped via commandScope), and
+ * the Division Overview tiles now navigate instead of drilling in place. */
 
 /* ---- KPI derivations ------------------------------------------------------ */
-export const reEvWeapon = /gun|weapon|firearm|pistol|rifle|shotgun|ammo|ammunition|magazine/i
-export const reEvNarc = /narc|drug|cocaine|coke|meth|heroin|cannabis|weed|marijuana|fentanyl|opi|pill/i
-
 export function avgResolutionDays(cases: CaseRow[]): number | null {
   const closed = cases.filter((c) => c.closed_at && c.created_at)
   if (!closed.length) return null

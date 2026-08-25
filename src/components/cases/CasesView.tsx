@@ -3,8 +3,9 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { listCaseHealth } from '@/lib/caseHealth'
+import { useCapabilities } from '@/lib/capabilities'
 import { list, rpc, update, updateWhere, withRetry } from '@/lib/db'
-import { timeAgo } from '@/lib/format'
+import { timeAgo, todayISO } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
 import { useSiu } from '@/lib/useSiu'
 import { caseDepartment } from '@/lib/siu'
@@ -22,12 +23,13 @@ import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { Field, Select } from '@/components/ui/Field'
+import { MetricStrip, type Metric } from '@/components/ui/MetricStrip'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
 import { isRoutingBureau } from '@/lib/legalWorkflow'
-import { bureauShort } from '@/lib/roles'
+import { PERMANENT_BUREAUS, bureauShort } from '@/lib/roles'
 import { StickyActionBar } from '@/components/shared/StickyActionBar'
 import { CaseBoard } from './CaseBoard'
 import { CaseDetail } from './CaseDetail'
@@ -38,6 +40,22 @@ import { StaleBadge } from './StaleBadge'
 import { WatchButton } from './WatchButton'
 
 let staleEscalationStarted = false
+
+/* ── Saved-view presets (Phase-2A) — offered ONLY while the user has no saved
+ * views of their own: chips that apply a filter combo, never auto-saved. They
+ * re-apply CLIENT filter state over rows RLS already returned — presets can
+ * never bypass authorization or widen access. ── */
+const VIEW_PRESETS: { name: string; config: SavedCaseViewConfig }[] = [
+  { name: 'My active', config: { filters: {}, scope: 'mine' } },
+  { name: 'Unassigned', config: { filters: { assignee: 'unassigned' }, scope: 'all' } },
+  { name: 'Awaiting my review', config: { filters: { stale: 'awaiting' }, scope: 'all' } },
+  { name: 'Returned', config: { filters: { stale: 'returned' }, scope: 'mine' } },
+  { name: 'Overdue tasks', config: { filters: { stale: 'overdue_tasks' }, scope: 'all' } },
+  { name: 'MCB cases', config: { filters: { bureau: 'major_crimes' }, scope: 'all' } },
+  { name: 'SCB cases', config: { filters: { bureau: 'street_crimes' }, scope: 'all' } },
+]
+
+const RETURNED_SIGNOFF = new Set(['changes_requested', 'denied'])
 
 export function CasesView() {
   // useSearchParams (deep links: ?case= / ?tab=) needs a client-side Suspense
@@ -110,7 +128,27 @@ function CasesViewInner() {
   }, [sp, canEdit, router])
   const casesV = useTableVersion('cases')
   const templatesV = useTableVersion('case_templates')
+  const tasksV = useTableVersion('case_tasks')
   const caseId = sp.get('case')
+  const caps = useCapabilities()
+
+  // ONE bounded projection over open tasks → the set of case ids with an
+  // overdue open task. Feeds the overview strip and the 'overdue_tasks' lens
+  // (CaseFilterCtx). Advisory — a failed read leaves the lens fail-open.
+  const [overdueTaskCaseIds, setOverdueTaskCaseIds] = useState<ReadonlySet<string>>(() => new Set<string>())
+  useEffect(() => {
+    queueMicrotask(() => {
+      void (async () => {
+        try {
+          const rows = (await list('case_tasks', {
+            select: 'case_id,due,done', eq: { done: false }, order: 'due', nullsFirst: false, limit: 500,
+          })) as unknown as { case_id: string; due: string | null }[]
+          const today = todayISO()
+          setOverdueTaskCaseIds(new Set(rows.filter((t) => !!t.due && t.due <= today).map((t) => t.case_id)))
+        } catch { /* advisory metric only — the table stays fully usable */ }
+      })()
+    })
+  }, [tasksV])
   const fetchProfiles = useProfilesStore((s) => s.fetch)
   const fetchOps = useOperationsStore((s) => s.fetch)
 
@@ -167,11 +205,82 @@ function CasesViewInner() {
   const filtered = useMemo(() => {
     let rows = cases.filter((c) => showArchived ? !!c.archived_at : !c.archived_at)
     if (scope === 'mine' && profile?.id) rows = rows.filter((c) => c.lead_detective_id === profile.id || c.created_by === profile.id)
-    rows = applyCaseFilters(rows, filters, profile?.id ?? null)
+    rows = applyCaseFilters(rows, filters, profile?.id ?? null, { overdueTaskCaseIds })
     const q = query.trim().toLowerCase()
     if (q) rows = rows.filter((c) => JSON.stringify(c).toLowerCase().includes(q))
     return rows
-  }, [cases, scope, filters, profile, query, showArchived])
+  }, [cases, scope, filters, profile, query, showArchived, overdueTaskCaseIds])
+
+  /* ── Overview strip — triage counts over the ALREADY-fetched list (live
+   * rows only) + the one tasks projection. Every count clicks through to the
+   * existing filter/scope state that shows those rows — nothing here invents
+   * new query paths, and RLS already scoped everything counted. ── */
+  const overview = useMemo(() => {
+    const me = profile?.id ?? null
+    const live = cases.filter((c) => !c.archived_at)
+    const open = live.filter((c) => c.status !== 'closed')
+    const applyLens = (patch: Partial<CaseFilters>, nextScope: string) => {
+      setShowArchived(false)
+      setScope(nextScope)
+      setFilters({ ...EMPTY_FILTERS, ...patch })
+      setQuery('')
+      setActiveViewName('')
+    }
+    const metrics: Metric[] = [
+      {
+        label: 'My active',
+        value: open.filter((c) => me && (c.lead_detective_id === me || c.created_by === me)).length,
+        hint: 'Lead or creator: you',
+        onClick: () => applyLens({}, 'mine'),
+      },
+      {
+        label: 'Unassigned',
+        value: open.filter((c) => !c.lead_detective_id).length,
+        hint: 'No lead detective',
+        onClick: () => applyLens({ assignee: 'unassigned' }, 'all'),
+      },
+      {
+        label: 'Awaiting review',
+        value: live.filter((c) => (c.signoff_status ?? '').startsWith('awaiting_')).length,
+        hint: 'Sign-off in flight',
+        onClick: () => applyLens({ stale: 'awaiting' }, 'all'),
+      },
+      {
+        label: 'Returned',
+        value: live.filter((c) => RETURNED_SIGNOFF.has(c.signoff_status ?? '')).length,
+        hint: 'Changes requested / denied',
+        onClick: () => applyLens({ stale: 'returned' }, 'all'),
+      },
+      {
+        label: 'Overdue tasks',
+        value: live.filter((c) => overdueTaskCaseIds.has(c.id)).length,
+        hint: 'Cases with overdue open tasks',
+        onClick: () => applyLens({ stale: 'overdue_tasks' }, 'all'),
+      },
+      {
+        label: 'No recent activity',
+        value: live.filter(isStaleCase).length,
+        hint: 'Quiet 14 days or more',
+        onClick: () => applyLens({ stale: 'stale' }, 'all'),
+      },
+    ]
+    // Command reach only: per-bureau active load (a Bureau Lead sees their
+    // own bureau; DD/Director the division) — clicks the bureau filter.
+    if (caps.commandScope !== null) {
+      const bureaus = caps.commandScope.level === 'bureau'
+        ? PERMANENT_BUREAUS.filter((b) => b === caps.commandScope?.bureau)
+        : [...PERMANENT_BUREAUS]
+      for (const b of bureaus) {
+        metrics.push({
+          label: `${bureauShort(b)} active`,
+          value: open.filter((c) => c.bureau === b).length,
+          hint: 'Bureau live caseload',
+          onClick: () => applyLens({ bureau: b }, 'all'),
+        })
+      }
+    }
+    return metrics
+  }, [cases, profile, overdueTaskCaseIds, caps.commandScope, setActiveViewName])
 
   // Keep ?view= on the detail round-trip so the saved-view name (and the bar
   // it drives) is still active when the user comes back to the list.
@@ -304,7 +413,30 @@ function CasesViewInner() {
         }
       />
 
+      {/* Triage overview — counts over the fetched list; every tile applies
+          the existing filter/scope state that shows those rows. */}
+      {!loading && !showArchived && <MetricStrip metrics={overview} />}
+
       <CaseFilterBar filters={filters} scope={scope} query={query} activeViewName={activeViewName} onFilters={setFilters} onScope={setScope} onQuery={setQuery} onActiveViewName={setActiveViewName} />
+
+      {/* First-run helper: preset lenses until the user saves a view of their
+          own. Clicking applies filter state only (nothing is auto-saved) —
+          client filters over RLS-scoped rows, never an authorization change. */}
+      {savedViews.loaded && savedViews.views.length === 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Try a view:</span>
+          {VIEW_PRESETS.map((p) => (
+            <button
+              key={p.name}
+              type="button"
+              onClick={() => applyViewConfig('', p.config)}
+              className="min-h-[36px] rounded-full border border-white/10 bg-ink-900 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-badge-400/40 hover:text-white"
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {loading ? <CardGridSkeleton />
         : view === 'board' ? <CaseBoard items={filtered} canEdit={canEdit} onOpen={openCase} onMoved={fetchCases} />

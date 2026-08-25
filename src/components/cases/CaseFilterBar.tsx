@@ -105,6 +105,11 @@ export function CaseFilterBar({ filters, scope, query, activeViewName, onFilters
                 when a saved view / persisted filter already carries it, so the
                 select never shows a blank for an active value. */}
             {(isCommand || filters.stale === 'attention') && <option value="attention">Needs attention</option>}
+            {/* Sign-off / task lenses (Phase-2A overview strip + presets) —
+                client filters over RLS-visible rows, like every other value. */}
+            <option value="awaiting">Awaiting sign-off</option>
+            <option value="returned">Returned (sign-off)</option>
+            <option value="overdue_tasks">Overdue tasks</option>
           </select>
           {isCommand && (
             <HelpTip label="What counts as needs attention" align="right" className="shrink-0">

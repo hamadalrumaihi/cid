@@ -90,8 +90,25 @@ export interface CaseFilters {
   /** '' any · 'stale' ≥14d · 'fresh' <14d · 'attention' any list-safe health
    *  flag (lib/caseHealth listCaseHealth — no lead / no summary / stale /
    *  follow-up due). The option is offered to command in the filter bar;
-   *  saved views carry it like any other filter value. */
+   *  saved views carry it like any other filter value.
+   *
+   *  Phase-2A additions to the same attention-lens select (still one value,
+   *  same persistence, same saved-view carriage — no new filter mechanics):
+   *  'awaiting' sign-off in an awaiting_* state · 'returned' sign-off
+   *  changes_requested/denied · 'overdue_tasks' the case id appears in the
+   *  overdue-open-task set the view computed (CaseFilterCtx below). All of
+   *  these are CLIENT lenses over rows RLS already returned — they never
+   *  widen access. */
   stale: string
+}
+
+/** View-computed context for filters that need more than the cases row —
+ *  today only the overdue-task case-id set (one bounded case_tasks
+ *  projection in CasesView). When absent (e.g. a saved view applied before
+ *  the projection resolves), the 'overdue_tasks' lens fails OPEN — it shows
+ *  all rows rather than pretending an empty overdue set is knowledge. */
+export interface CaseFilterCtx {
+  overdueTaskCaseIds?: ReadonlySet<string>
 }
 
 export const EMPTY_FILTERS: CaseFilters = { bureau: '', status: '', assignee: '', stale: '' }
@@ -109,7 +126,11 @@ export const persistCaseFilters = (f: CaseFilters): void => Store.set('caseFilte
 export const activeCaseFilterCount = (f: CaseFilters): number =>
   (['bureau', 'status', 'assignee', 'stale'] as const).filter((k) => f[k]).length
 
-export function applyCaseFilters(items: CaseRow[], f: CaseFilters, meId: string | null): CaseRow[] {
+/** Sign-off states the 'returned' lens matches — same values as the sign-off
+ *  workflow's returned set (lib/signoff vocabulary). */
+const RETURNED_SIGNOFF = new Set(['changes_requested', 'denied'])
+
+export function applyCaseFilters(items: CaseRow[], f: CaseFilters, meId: string | null, ctx?: CaseFilterCtx): CaseRow[] {
   return items.filter((c) => {
     if (f.bureau && c.bureau !== f.bureau) return false
     if (f.status && c.status !== f.status) return false
@@ -119,6 +140,12 @@ export function applyCaseFilters(items: CaseRow[], f: CaseFilters, meId: string 
     if (f.stale === 'stale') { if (c.status === 'closed' || c.status === 'cold' || caseStaleDays(c) < 14) return false }
     else if (f.stale === 'fresh') { if (caseStaleDays(c) >= 14) return false }
     else if (f.stale === 'attention') { if (listCaseHealth(c).length === 0) return false }
+    else if (f.stale === 'awaiting') { if (!(c.signoff_status ?? '').startsWith('awaiting_')) return false }
+    else if (f.stale === 'returned') { if (!RETURNED_SIGNOFF.has(c.signoff_status ?? '')) return false }
+    else if (f.stale === 'overdue_tasks') {
+      // Fail-open without ctx (see CaseFilterCtx) — never fake an empty set.
+      if (ctx?.overdueTaskCaseIds && !ctx.overdueTaskCaseIds.has(c.id)) return false
+    }
     return true
   })
 }
