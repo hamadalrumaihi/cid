@@ -310,6 +310,7 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
           )}
         </div>
         <div className="flex flex-shrink-0 items-center gap-1.5">
+          {expanded && <PinButton type="account" id={a.id} label={`@${a.handle}`} size="sm" />}
           {canEdit && <Button size="sm" className="min-h-[44px] sm:min-h-0" aria-label={`Edit @${a.handle}`} onClick={onEdit}>Edit</Button>}
           {isCommand && <Button size="sm" className="min-h-[44px] sm:min-h-0" aria-label={`Merge @${a.handle}`} onClick={onMerge}>Merge</Button>}
           <Button size="sm" className="min-h-[44px] sm:min-h-0" aria-label={`${expanded ? 'Hide' : 'Show'} details for @${a.handle}`} aria-expanded={expanded} onClick={onToggle}>{expanded ? 'Hide' : 'Details'}</Button>
@@ -393,6 +394,13 @@ function AccountCard({ account: a, canEdit, isCommand, expanded, onToggle, onEdi
                 </div>
               </div>
             )}
+          </div>
+
+          <div>
+            <h4 className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Surveillance history</h4>
+            {/* Verified-observation history via the polymorphic entity links
+                (kind='account') — RLS-trimmed like every other registry. */}
+            <ObservationHistory kind="account" refId={a.id} />
           </div>
         </div>
       )}
