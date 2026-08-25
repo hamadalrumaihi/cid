@@ -203,6 +203,8 @@ Every investigation carries a **classification** — who inside SIB may reach it
 
 A **preliminary inquiry** stays invisible to oversight at every classification until it becomes a **full investigation**. Categories (corruption, integrity, organized crime, narcotics…) are subject matter, orthogonal to classification.
 
+Wherever a record carries an access level — an SIB classification here, a legal classification on a request, a classification on an SOP document — it renders as the same style of **access badge**; hover it to see who can reach the record.
+
 ### Staff and share it
 
 - **Assign agents** to the investigation; compartmented work also needs the compartment grant.
@@ -343,7 +345,9 @@ Link intel to a case from the case's **Intel & Notes** tab so everything cross-r
 
 Write investigative reports on the case's **Reports** tab, from the division's templates. The **Evidence / Property** section has **Add from case evidence** and **Add from case attachments** pickers — they list only what is already logged on this case, and entries appear as removable chips. Open a saved report in place: referenced evidence expands, attachments open, matching names jump to profiles.
 
-**Finalize** seals the report — contents lock, and your signature (name, badge, time) is recorded. Bureau Leads and above can **Reopen** a sealed report; nothing sealed is ever lost — Signatures shows every seal including superseded ones, and **Versions** lists each sealed version exactly as signed. Warrant reports carry a status ladder (draft → signed → executed → returned) that feeds the BOLO board and person profiles.
+**Your draft saves itself.** While you type, a small chip shows **Saving… / Saved** — the draft is stored to your account, so you can start a report at one desk and finish it at another. If you're offline (or the draft grows very large) the chip says so and the draft is kept on the device until it can sync. Reopening the editor shows a **Restore draft** banner — restore it or **Discard** it deliberately; saved drafts also appear in the Action Center's **Drafts** lane. The same autosave runs on case notes, the case chat composer, person and gang creation, and intelligence summaries.
+
+**Finalize** seals the report — contents lock, and your signature (name, badge, time) is recorded. Bureau Leads and above can **Reopen** a sealed report; nothing sealed is ever lost — Signatures shows every seal including superseded ones, and **Versions** lists each sealed version exactly as signed. Warrant reports carry a status ladder (draft → signed → executed → **Return filed**) that feeds the BOLO board and person profiles. "Return filed" means the warrant's return went to the court — the warrant is complete. It is deliberately *not* called "Returned", which in legal review means **Returned for revision** (sent back to you for changes).
 
 ### Charges
 
