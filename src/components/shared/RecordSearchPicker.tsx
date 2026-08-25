@@ -20,7 +20,7 @@ export interface PickedRecord {
 }
 
 export function RecordSearchPicker<T extends PickedRecord>({
-  label, required, hint, placeholder, value, onChange, search, disabled, emptyState,
+  label, required, hint, placeholder, value, onChange, search, disabled, emptyState, initialQuery,
 }: {
   label: string
   required?: boolean
@@ -34,8 +34,11 @@ export function RecordSearchPicker<T extends PickedRecord>({
   /** Custom node shown when a non-empty query returns no matches (e.g. a
    *  "create the record first" call to action). Falls back to a plain hint. */
   emptyState?: React.ReactNode
+  /** Seed the search box (e.g. a legacy address being migrated). Applied on
+   *  mount only — typing still owns the field afterwards. */
+  initialQuery?: string
 }) {
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(initialQuery ?? '')
   const [results, setResults] = useState<T[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)

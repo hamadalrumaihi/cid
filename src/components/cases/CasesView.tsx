@@ -11,17 +11,17 @@ import { useOperationsStore } from '@/lib/operations'
 import { notify } from '@/lib/notify'
 import { activeProfiles, officerName, useProfilesStore } from '@/lib/profiles'
 import { useTableVersion } from '@/lib/realtime'
-import { caseStatusTint, signoffLabel, signoffTint } from '@/lib/signoff'
+import { signoffLabel } from '@/lib/signoff'
 import { Store } from '@/lib/store'
 import { toast } from '@/lib/toast'
 import { uiConfirm } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { Notice } from '@/components/ui/Notice'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { CardGridSkeleton } from '@/components/ui/Skeleton'
-import { priorityTint } from '@/lib/tint'
 import { isRoutingBureau } from '@/lib/legalWorkflow'
 import { bureauShort } from '@/lib/roles'
 import { CaseBoard } from './CaseBoard'
@@ -240,12 +240,12 @@ function CaseTable({ items, canDelete, showDept, selected, onSelect, onOpen }: {
     },
     {
       key: 'status', label: 'Status', value: (c) => c.status,
-      render: (c) => <Badge tint={caseStatusTint(c.status)} className="uppercase">{c.status}</Badge>,
+      render: (c) => <StatusBadge domain="case" value={c.status} className="uppercase" />,
     },
     {
       key: 'priority', label: 'Priority', value: (c) => c.priority ?? '',
       render: (c) => c.priority
-        ? <Badge tint={priorityTint(c.priority)} className="uppercase">{c.priority}</Badge>
+        ? <StatusBadge domain="priority" value={c.priority} className="uppercase" />
         : <span className="text-slate-400">—</span>,
     },
     { key: 'lead', label: 'Lead', value: (c) => officerName(c.lead_detective_id) || 'Unassigned' },
@@ -297,8 +297,8 @@ function CaseCard({ c, index, selected, canDelete, onSelect, onOpen }: { c: Case
       </div>
       <p className="mt-3 line-clamp-3 min-h-[3.75rem] text-sm text-slate-400">{c.summary || 'No summary recorded.'}</p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Badge tint={caseStatusTint(c.status)} className="uppercase">{c.status}</Badge>
-        <Badge tint={signoffTint(c.signoff_status)}>{signoffLabel(c.signoff_status)}</Badge>
+        <StatusBadge domain="case" value={c.status} className="uppercase" />
+        <StatusBadge domain="signoff" value={c.signoff_status} />
         <Badge>{bureauShort(c.bureau)}</Badge>
         <StaleBadge c={c} />
       </div>

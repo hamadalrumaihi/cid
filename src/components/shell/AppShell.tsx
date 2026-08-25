@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { Store } from '@/lib/store'
 import { BottomNav } from './BottomNav'
 import { ConnBanner } from './ConnBanner'
+import { CreateHost } from './CreateHost'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 import { Subtabs } from './Subtabs'
@@ -44,6 +45,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [drawerOpen])
 
   return (
+    // CreateHost wraps the whole shell so the Header's + Create button and the
+    // command palette share one useCreate() context (and one modal mount).
+    <CreateHost>
     <div className="flex min-h-screen">
       {drawerOpen && (
         <div
@@ -65,5 +69,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <ConnBanner />
       <PortalAssistant />
     </div>
+    </CreateHost>
   )
 }
