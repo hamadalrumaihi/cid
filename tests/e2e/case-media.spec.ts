@@ -133,7 +133,7 @@ test.describe('case workspace — Photos & Media / Intel & Notes / Graph / RICO 
 
     const mkCase = (num: string, title: string) =>
       insertRow<{ id: string; case_number: string }>(lsb, 'cases', {
-        case_number: num, title: `[rls-test] ${tag} ${title}`, bureau: 'LSB',
+        case_number: num, title: `[rls-test] ${tag} ${title}`, bureau: 'major_crimes',
       })
     const caseARow = await mkCase(`MEDA-${tag}`, 'case media workspace')
     const caseBRow = await mkCase(`MEDB-${tag}`, 'fresh case (close + rico link)')

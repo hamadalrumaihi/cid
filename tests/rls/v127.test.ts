@@ -12,8 +12,8 @@
  *   - deny path: a denied request grants nothing — the requester still cannot
  *     select the case.
  *
- *  Fixtures (tests/rls/README.md): lsb (LSB detective, case creator + lead),
- *  bcb (BCB detective — the cross-bureau requester), lead (LSB bureau_lead —
+ *  Fixtures (tests/rls/README.md): lsb (MCB detective, case creator + lead),
+ *  bcb (SCB detective — the cross-bureau requester), lead (MCB bureau_lead —
  *  the decider), director (command teardown). Same conventions as the sibling
  *  suites; rls_test_cleanup at start + teardown (requests/grants cascade with
  *  the fixture cases; fixture notifications are swept by user_id).
@@ -41,8 +41,8 @@ describe.skipIf(!enabled)('v1.27 — access request decisions + decision notific
   let lsb: C, bcb: C, lead: C, director: C
   const ids: Record<string, string> = {}
   const tag = Math.random().toString(36).slice(2, 8).toUpperCase()
-  let caseId = ''      // approve-path case (LSB, led by lsb)
-  let caseId2 = ''     // deny-path case (LSB, led by lsb)
+  let caseId = ''      // approve-path case (MCB, led by lsb)
+  let caseId2 = ''     // deny-path case (MCB, led by lsb)
   let requestId = ''   // bcb's request on caseId
   let requestId2 = ''  // bcb's request on caseId2
 
@@ -58,15 +58,15 @@ describe.skipIf(!enabled)('v1.27 — access request decisions + decision notific
     }
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
-    // Two LSB cases led by the LSB detective: one for the approve path, one
+    // Two MCB cases led by the MCB detective: one for the approve path, one
     // for the deny path (a grant on the first must not bleed into the second).
     const c1 = await lsb.from('cases')
-      .insert({ case_number: `V127A-${tag}`, title: 'v1.27 access approve case', bureau: 'LSB', lead_detective_id: ids.lsb })
+      .insert({ case_number: `V127A-${tag}`, title: 'v1.27 access approve case', bureau: 'major_crimes', lead_detective_id: ids.lsb })
       .select('id')
     if (c1.error) throw new Error(c1.error.message)
     caseId = c1.data![0].id as string
     const c2 = await lsb.from('cases')
-      .insert({ case_number: `V127D-${tag}`, title: 'v1.27 access deny case', bureau: 'LSB', lead_detective_id: ids.lsb })
+      .insert({ case_number: `V127D-${tag}`, title: 'v1.27 access deny case', bureau: 'major_crimes', lead_detective_id: ids.lsb })
       .select('id')
     if (c2.error) throw new Error(c2.error.message)
     caseId2 = c2.data![0].id as string

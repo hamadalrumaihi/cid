@@ -30,7 +30,7 @@
  *  rls-test-applicant — drafts/submits/withdraws requests; reset via
  *  rls_test_reset_member and purged via rls_test_cleanup between scenarios,
  *  the v116 convention). Teardown restores the applicant to
- *  detective/LSB/inactive and purges its request, so re-runs start clean.
+ *  detective/MCB/inactive and purges its request, so re-runs start clean.
  *  Requires migration 20260730010000. */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -59,11 +59,11 @@ describe.skipIf(!enabled)('v1.29 — approval-queue reconciliation + is_system g
   const ids: Record<string, string> = {}
   let approvedDecidedAt = ''
 
-  /** Baseline the disposable applicant (inactive detective/LSB) and purge any
+  /** Baseline the disposable applicant (inactive detective/MCB) and purge any
    *  membership_requests row so the next scenario starts from a clean slate. */
   const resetApplicant = async (active = false) => {
     const reset = await director.rpc('rls_test_reset_member', {
-      p_target: ids.applicant, p_role: 'detective', p_division: 'LSB', p_active: active,
+      p_target: ids.applicant, p_role: 'detective', p_division: 'major_crimes', p_active: active,
     })
     if (reset.error) throw new Error(`rls_test_reset_member failed: ${reset.error.message}`)
     const clean = await applicant.rpc('rls_test_cleanup')
@@ -75,7 +75,7 @@ describe.skipIf(!enabled)('v1.29 — approval-queue reconciliation + is_system g
     const ins = await applicant.from('membership_requests')
       .insert({
         applicant_id: ids.applicant, display_name: 'RLS Test Applicant (disposable)',
-        requested_bureau: 'LSB', requested_role: 'detective',
+        requested_bureau: 'major_crimes', requested_role: 'detective',
         reason: '[rls-test] v129 reconciliation fixture',
       })
       .select('id')
@@ -100,7 +100,7 @@ describe.skipIf(!enabled)('v1.29 — approval-queue reconciliation + is_system g
   })
 
   afterAll(async () => {
-    // Restore the pre-suite state: applicant inactive detective/LSB, no request.
+    // Restore the pre-suite state: applicant inactive detective/MCB, no request.
     if (director && applicant) await resetApplicant()
     await Promise.all([lsb, director, owner, applicant].filter(Boolean).map((c) => c.auth.signOut()))
   })
@@ -118,14 +118,14 @@ describe.skipIf(!enabled)('v1.29 — approval-queue reconciliation + is_system g
     const act = await director.rpc('assign_member', { target: ids.applicant, set_active: true })
     expect(act.error).toBeNull()
     const prof = await director.from('profiles').select('active, role, division').eq('id', ids.applicant)
-    expect(prof.data![0]).toMatchObject({ active: true, role: 'detective', division: 'LSB' })
+    expect(prof.data![0]).toMatchObject({ active: true, role: 'detective', division: 'major_crimes' })
     const req = await director.from('membership_requests')
       .select('status, decided_by, decided_at, decided_role, decided_bureau')
       .eq('id', requestId)
     expect(req.error).toBeNull()
     expect(req.data![0]).toMatchObject({
       status: 'approved', decided_by: ids.director,
-      decided_role: 'detective', decided_bureau: 'LSB',
+      decided_role: 'detective', decided_bureau: 'major_crimes',
     })
     expect(req.data![0].decided_at).not.toBeNull()
   })
@@ -171,7 +171,7 @@ describe.skipIf(!enabled)('v1.29 — approval-queue reconciliation + is_system g
     // profile active the way the queue never could (test helper) and prove the
     // guard skips members who are not transitioning inactive→active.
     const on = await director.rpc('rls_test_reset_member', {
-      p_target: ids.applicant, p_role: 'detective', p_division: 'LSB', p_active: true,
+      p_target: ids.applicant, p_role: 'detective', p_division: 'major_crimes', p_active: true,
     })
     expect(on.error).toBeNull()
     const noop = await director.rpc('assign_member', { target: ids.applicant, set_active: true })
@@ -190,12 +190,12 @@ describe.skipIf(!enabled)('v1.29 — approval-queue reconciliation + is_system g
     // Fabricate the audited live-incident state: pending request + active
     // profile (pre-migration assign_member left exactly this behind).
     const ghost = await director.rpc('rls_test_reset_member', {
-      p_target: ids.applicant, p_role: 'detective', p_division: 'LSB', p_active: true,
+      p_target: ids.applicant, p_role: 'detective', p_division: 'major_crimes', p_active: true,
     })
     expect(ghost.error).toBeNull()
     const rev = await director.rpc('review_membership_request', {
       p_request: requestId, p_decision: 'approve',
-      p_final_bureau: 'LSB', p_final_role: 'detective',
+      p_final_bureau: 'major_crimes', p_final_role: 'detective',
     })
     expect(rev.error).toBeNull()
     const req = await director.from('membership_requests')
@@ -203,7 +203,7 @@ describe.skipIf(!enabled)('v1.29 — approval-queue reconciliation + is_system g
     expect(req.data![0]).toMatchObject({ status: 'approved', decided_by: ids.director })
     approvedDecidedAt = req.data![0].decided_at as string
     const prof = await director.from('profiles').select('active, role, division').eq('id', ids.applicant)
-    expect(prof.data![0]).toMatchObject({ active: true, role: 'detective', division: 'LSB' })
+    expect(prof.data![0]).toMatchObject({ active: true, role: 'detective', division: 'major_crimes' })
   })
 
   it('a decided (approved) request neither blocks nor is rewritten by a reactivation', async () => {
@@ -234,6 +234,6 @@ describe.skipIf(!enabled)('v1.29 — approval-queue reconciliation + is_system g
     const left = await director.from('membership_requests').select('id').eq('applicant_id', ids.applicant)
     expect(left.data ?? []).toHaveLength(0)
     const prof = await director.from('profiles').select('active, role, division').eq('id', ids.applicant)
-    expect(prof.data![0]).toMatchObject({ active: false, role: 'detective', division: 'LSB' })
+    expect(prof.data![0]).toMatchObject({ active: false, role: 'detective', division: 'major_crimes' })
   })
 })

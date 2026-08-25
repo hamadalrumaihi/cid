@@ -30,8 +30,8 @@
  *   - search_narcotics: RLS-scoped, merged tombstones excluded, anon has no
  *     EXECUTE; anon reads zero narcotics rows and cannot submit suggestions.
  *
- *  Fixtures (tests/rls/README.md): lead (bureau_lead LSB), director (director
- *  SAB), owner (detective+is_owner SAB), lsb (LSB detective), bcb (BCB
+ *  Fixtures (tests/rls/README.md): lead (bureau_lead MCB), director (director
+ *  major_crimes), owner (detective+is_owner major_crimes), lsb (MCB detective), bcb (SCB
  *  detective). All fixture narcotics/places carry the `[rls-test] v133` +
  *  STAMP marker and are purged at start AND teardown by the owner/director
  *  fixtures (children cascade from narcotics). narcotic_suggestions has NO

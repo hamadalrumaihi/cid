@@ -10,9 +10,9 @@
  *    - the retired ADA/DA/AG lane RPCs stay EXECUTE-revoked; the revived judge
  *      decision RPC refuses non-judicial states/actors inside the RPC.
  *
- *  Fixtures reused from the CID build: lsb (detective, LSB, the creator),
- *  lead (bureau_lead, LSB — command), bcb (detective, BCB — non-command),
- *  director (SAB director — command). All artifacts are removed by
+ *  Fixtures reused from the CID build: lsb (detective, MCB, the creator),
+ *  lead (bureau_lead, MCB — command), bcb (detective, SCB — non-command),
+ *  director (major_crimes director — command). All artifacts are removed by
  *  rls_test_cleanup in afterAll so re-runs start clean. */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -40,7 +40,7 @@ describe.skipIf(!enabled)('v152 — Bureau Lead+ legal approval (live)', () => {
   let personId = ''
   const tag = Math.random().toString(36).slice(2, 8).toUpperCase()
 
-  // Draft an LSB arrest warrant as the lsb detective, attach one exhibit, and
+  // Draft an MCB arrest warrant as the lsb detective, attach one exhibit, and
   // submit it to CID — leaving it in `cid_supervisor_review` (a frozen v1) ready
   // for a command decision. Returns the request id.
   const mkSubmitted = async (title: string) => {
@@ -71,7 +71,7 @@ describe.skipIf(!enabled)('v152 — Bureau Lead+ legal approval (live)', () => {
     }
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
-    const c1 = await lsb.from('cases').insert({ case_number: `V152-${tag}`, title: 'v152 lead-approval case (LSB)', bureau: 'LSB' }).select('id')
+    const c1 = await lsb.from('cases').insert({ case_number: `V152-${tag}`, title: 'v152 lead-approval case (MCB)', bureau: 'major_crimes' }).select('id')
     if (c1.error) throw new Error(c1.error.message)
     caseId = c1.data![0].id
     const p = await lsb.from('persons').insert({ name: `V152 Suspect ${tag}` }).select('id')

@@ -26,8 +26,8 @@
  *     baseline (remove -> restore -> rls_test_reset_member);
  *   - anon cannot execute admin_remove_member.
  *
- *  Fixtures: lsb (detective), lead (LSB bureau_lead), director, owner,
- *  bcb (BCB detective), target (throwaway detective/LSB — removed and fully
+ *  Fixtures: lsb (detective), lead (MCB bureau_lead), director, owner,
+ *  bcb (SCB detective), target (throwaway detective/MCB — removed and fully
  *  restored in-test). rls_test_cleanup runs at start and teardown. */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -69,13 +69,13 @@ describe.skipIf(!enabled)('v1.41 — sign-off authority + removal matrix (live)'
     }
     const pre = await director.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
-    const base = await director.rpc('rls_test_reset_member', { p_target: ids.target, p_role: 'detective', p_division: 'LSB', p_active: true })
+    const base = await director.rpc('rls_test_reset_member', { p_target: ids.target, p_role: 'detective', p_division: 'major_crimes', p_active: true })
     if (base.error) throw new Error(`target baseline failed: ${base.error.message}`)
   })
 
   afterAll(async () => {
     if (!director) return
-    await director.rpc('rls_test_reset_member', { p_target: ids.target, p_role: 'detective', p_division: 'LSB', p_active: true })
+    await director.rpc('rls_test_reset_member', { p_target: ids.target, p_role: 'detective', p_division: 'major_crimes', p_active: true })
     const { error } = await director.rpc('rls_test_cleanup')
     if (error) throw new Error(`rls_test_cleanup failed: ${error.message}`)
     await Promise.all([lsb, lead, director, owner, bcb, target].filter(Boolean).map((c) => c.auth.signOut()))
@@ -83,7 +83,7 @@ describe.skipIf(!enabled)('v1.41 — sign-off authority + removal matrix (live)'
 
   const newCase = async (client: C, suffix: string) => {
     const r = await client.from('cases')
-      .insert({ case_number: `V141-${tag}-${suffix}`, title: `[rls-test] v141 ${suffix}`, bureau: 'LSB' })
+      .insert({ case_number: `V141-${tag}-${suffix}`, title: `[rls-test] v141 ${suffix}`, bureau: 'major_crimes' })
       .select('id')
     if (r.error) throw new Error(r.error.message)
     return r.data![0].id as string
@@ -185,13 +185,13 @@ describe.skipIf(!enabled)('v1.41 — sign-off authority + removal matrix (live)'
     // Removal nulls profiles.email; rls_test_reset_member (20260807090000)
     // re-syncs it from auth.users so the durable target leaves this suite
     // exactly as it entered (leave-no-trace).
-    const reset = await director.rpc('rls_test_reset_member', { p_target: ids.target, p_role: 'detective', p_division: 'LSB', p_active: true })
+    const reset = await director.rpc('rls_test_reset_member', { p_target: ids.target, p_role: 'detective', p_division: 'major_crimes', p_active: true })
     expect(reset.error).toBeNull()
     // profiles.email is not client-selectable (column grants), so the email
     // re-sync is proven indirectly: rls_test_set_signoff's fixture check
     // reads profiles.email, and later suites would fail if it stayed null.
     const back = await director.from('profiles').select('role,division,active,removed_at').eq('id', ids.target)
-    expect(back.data![0]).toMatchObject({ role: 'detective', division: 'LSB', active: true, removed_at: null })
+    expect(back.data![0]).toMatchObject({ role: 'detective', division: 'major_crimes', active: true, removed_at: null })
   })
 
   it('anon cannot execute admin_remove_member', async () => {

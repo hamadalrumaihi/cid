@@ -34,8 +34,8 @@
  *     'Ditch Witch' may surface the PUBLIC cannabis substance, but there is no
  *     sale branch in search — the three sale tables still return ZERO for lsb.
  *
- *  Fixtures (tests/rls/README.md): lead (bureau_lead LSB), director (director
- *  SAB), owner (detective+is_owner SAB), lsb (LSB detective), bcb (BCB
+ *  Fixtures (tests/rls/README.md): lead (bureau_lead MCB), director (director
+ *  major_crimes), owner (detective+is_owner major_crimes), lsb (MCB detective), bcb (SCB
  *  detective). Read assertions hit the LIVE prod seed (series
  *  6132197e-…, narcotic 951825a7-… cannabis, observations 9b344092-… /
  *  c17b7abd-…). All write tests build their own [rls-test] v134 fixture series

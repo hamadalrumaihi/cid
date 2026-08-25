@@ -164,7 +164,7 @@ export async function buildLegalFixtures(): Promise<LegalFixtures> {
 
     // Registry fixtures (director-deleted in teardown — cleanup never sweeps them).
     const caseRow = await insertRow<{ id: string; case_number: string }>(lsb, 'cases', {
-      case_number: `LGL-${tag}`, title: `[rls-test] ${tag} legal workflow E2E case`, bureau: 'LSB',
+      case_number: `LGL-${tag}`, title: `[rls-test] ${tag} legal workflow E2E case`, bureau: 'major_crimes',
     })
     const person = await insertRow<{ id: string; name: string }>(lsb, 'persons', {
       name: `RLS Test Suspect ${tag}`,

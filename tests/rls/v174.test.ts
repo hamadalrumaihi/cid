@@ -39,8 +39,8 @@
  *    * A judge-set penalty is never totalled as zero.
  *
  *  ── Fixture / env contract ─────────────────────────────────────────────────
- *  `rls-test-lsb` is an ordinary LSB detective and owns the case. `rls-test-lead`
- *  is an LSB Bureau Lead — the CID approver. `rls-test-prosecutor` files;
+ *  `rls-test-lsb` is an ordinary MCB detective and owns the case. `rls-test-lead`
+ *  is an MCB Bureau Lead — the CID approver. `rls-test-prosecutor` files;
  *  `rls-test-judge` disposes. The detective doubles as the no-justice-role
  *  caller that the NULL hole let through.
  *
@@ -106,8 +106,8 @@ describe.skipIf(!enabled)('v1.74 — charge records, snapshots and the status la
     ricoConspiracy = await idOf(lsb, legacyVersion, '(10)01')
 
     const c = await lsb.from('cases').insert({
-      case_number: `LSB-${Date.now().toString().slice(-6)}`,
-      title: `[rls-test] charge records ${RUN}`, bureau: 'LSB',
+      case_number: `MCB-${Date.now().toString().slice(-6)}`,
+      title: `[rls-test] charge records ${RUN}`, bureau: 'major_crimes',
     }).select('id').single()
     expect(c.error, c.error?.message).toBeNull()
     caseId = c.data!.id as string

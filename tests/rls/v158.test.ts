@@ -5,8 +5,8 @@
  *  media policies were portal-wide (is_active only). The migration adds one
  *  conjunct — (case_id is null OR can_access_case(case_id)) — to
  *  media_sel / media_ins / media_upd. This suite proves, live:
- *   - CASE-ATTACHED media is invisible across the bureau wall (a BCB detective
- *     sees 0 rows of an LSB case's media) while the owning bureau and command
+ *   - CASE-ATTACHED media is invisible across the bureau wall (a SCB detective
+ *     sees 0 rows of an MCB case's media) while the owning bureau and command
  *     both see it;
  *   - UNATTACHED media (case_id null — the general vault / gang packages)
  *     stays visible to every active member, unchanged;
@@ -18,7 +18,7 @@
  *     break-glass grant (D6 preserved);
  *   - anon reads nothing.
  *
- *  Fixtures (v156 shape): lsb (LSB detective — owning bureau), bcb (BCB
+ *  Fixtures (v156 shape): lsb (MCB detective — owning bureau), bcb (SCB
  *  detective — the cross-bureau probe), lead (bureau_lead = command,
  *  cross-bureau + deleter), owner (unused for writes; kept for shape), anon.
  *  media.case_id is ON DELETE SET NULL, so case deletion ORPHANS media into the
@@ -65,8 +65,8 @@ describe.skipIf(!enabled)('v1.58 — media follows case access (live)', () => {
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
 
-    // An LSB case the BCB detective cannot access.
-    const c = await lsb.from('cases').insert({ case_number: `V158-${tag}`, title: `[rls-test] v158 media-scope case ${tag}`, bureau: 'LSB' }).select('id')
+    // An MCB case the SCB detective cannot access.
+    const c = await lsb.from('cases').insert({ case_number: `V158-${tag}`, title: `[rls-test] v158 media-scope case ${tag}`, bureau: 'major_crimes' }).select('id')
     if (c.error) throw new Error(`case insert: ${c.error.message}`)
     caseId = c.data![0].id as string
   })

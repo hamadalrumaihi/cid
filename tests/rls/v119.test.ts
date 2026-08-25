@@ -16,9 +16,9 @@
  *     Director / Owner (never a bureau_lead, never rank-and-file), requires a
  *     reason, and is audited as source='command_override'.
  *
- *  Fixtures (tests/rls/README.md): lsb (LSB detective — case owner), bcb (BCB
- *  detective — non-owner), lead (LSB bureau_lead — the routed reviewer), director
- *  (SAB command), owner (is_owner). Same conventions as v114–v118: sequential
+ *  Fixtures (tests/rls/README.md): lsb (MCB detective — case owner), bcb (SCB
+ *  detective — non-owner), lead (MCB bureau_lead — the routed reviewer), director
+ *  (major_crimes command), owner (is_owner). Same conventions as v114–v118: sequential
  *  sign-in with backoff, rls_test_cleanup() at start and teardown, every row
  *  authored by a fixture so cleanup catches it. Self-skips without fixture
  *  passwords. Requires migrations 20260721040000 + 20260721040001. */
@@ -54,11 +54,11 @@ describe.skipIf(!enabled)('v1.19 — sign-off integrity: concurrency, provenance
   const ids: Record<string, string> = {}
   const tag = Math.random().toString(36).slice(2, 8).toUpperCase()
 
-  // Create an LSB case owned by the lsb detective; returns its id.
+  // Create an MCB case owned by the lsb detective; returns its id.
   let n = 0
   const newCase = async (): Promise<string> => {
     const r = await lsb.from('cases')
-      .insert({ case_number: `V119-${tag}-${++n}`, title: 'v1.19 sign-off integrity case (LSB)', bureau: 'LSB' })
+      .insert({ case_number: `V119-${tag}-${++n}`, title: 'v1.19 sign-off integrity case (MCB)', bureau: 'major_crimes' })
       .select('id')
     if (r.error) throw new Error(`case create failed: ${r.error.message}`)
     return r.data![0].id as string

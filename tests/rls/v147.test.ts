@@ -17,7 +17,7 @@
  *   - a command lift releases it; the preview flips to deletable:true;
  *   - the owner can then permanently delete (which also tears the case down).
  *
- *  Fixtures: lead (LSB bureau_lead = command — places/lifts), lsb (plain
+ *  Fixtures: lead (MCB bureau_lead = command — places/lifts), lsb (plain
  *  active detective, NON-command — denied), owner (is_owner — preview/delete),
  *  anon (denied read). legal_holds cascades on case delete, but teardown
  *  lifts any residual hold and owner-deletes the case explicitly rather than
@@ -60,7 +60,7 @@ describe.skipIf(!enabled)('v1.47 — legal hold (live)', () => {
     try { await lead.rpc('rls_test_cleanup') } catch { /* best effort */ }
 
     // A bare case with NO legal requests — the hold is the only purge blocker.
-    const c = await lead.from('cases').insert({ case_number: `V147-${tag}`, title: `[rls-test] v147 legal-hold case ${tag}`, bureau: 'LSB' }).select('id')
+    const c = await lead.from('cases').insert({ case_number: `V147-${tag}`, title: `[rls-test] v147 legal-hold case ${tag}`, bureau: 'major_crimes' }).select('id')
     if (c.error) throw new Error(c.error.message)
     caseId = c.data![0].id as string
   })

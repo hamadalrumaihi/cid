@@ -12,8 +12,8 @@
  *     audit row, freezes an immutable version, is idempotent on import_key,
  *     and is reversible via import_rollback_by_key() — both owner-only.
  *
- *  Fixtures reused (tests/rls/README.md): lsb/bcb detectives, lead (LSB
- *  bureau_lead), director (SAB command), ada (LSB primary ADA), da, ag,
+ *  Fixtures reused (tests/rls/README.md): lsb/bcb detectives, lead (MCB
+ *  bureau_lead), director (major_crimes command), ada (MCB primary ADA), da, ag,
  *  judge, owner. Same conventions as legal.test.ts / v114.test.ts:
  *  sequential sign-ins with backoff (GoTrue rate-limits parallel grants),
  *  rls_test_cleanup() at suite start and teardown, every created row authored
@@ -56,8 +56,8 @@ describe.skipIf(!enabled)('v1.15 — search_warrant subtype + owner warrant impo
   let lsb: C, bcb: C, lead: C, director: C, owner: C, ada: C, da: C, ag: C, judge: C
   const ids: Record<string, string> = {}
   const tag = Math.random().toString(36).slice(2, 8).toUpperCase()
-  let caseId = ''        // LSB case owned by the lsb detective
-  let importCaseId = ''  // separate LSB case for the imports
+  let caseId = ''        // MCB case owned by the lsb detective
+  let importCaseId = ''  // separate MCB case for the imports
   let personId = ''
   let lifecycleId = ''   // the end-to-end search warrant
 
@@ -92,17 +92,17 @@ describe.skipIf(!enabled)('v1.15 — search_warrant subtype + owner warrant impo
     // Roll back any imports orphaned by a crashed prior run (owner-only).
     for (const k of allKeys) await owner.rpc('import_rollback_by_key', { p_import_key: k })
 
-    const c1 = await lsb.from('cases').insert({ case_number: `V115-${tag}-A`, title: 'v1.15 RLS case (LSB)', bureau: 'LSB' }).select('id')
+    const c1 = await lsb.from('cases').insert({ case_number: `V115-${tag}-A`, title: 'v1.15 RLS case (MCB)', bureau: 'major_crimes' }).select('id')
     if (c1.error) throw new Error(c1.error.message)
     caseId = c1.data![0].id
-    const c2 = await lsb.from('cases').insert({ case_number: `V115-${tag}-IMP`, title: 'v1.15 RLS import case (LSB)', bureau: 'LSB' }).select('id')
+    const c2 = await lsb.from('cases').insert({ case_number: `V115-${tag}-IMP`, title: 'v1.15 RLS import case (MCB)', bureau: 'major_crimes' }).select('id')
     if (c2.error) throw new Error(c2.error.message)
     importCaseId = c2.data![0].id
     const p = await lsb.from('persons').insert({ name: `RLS V115 Subject ${tag}` }).select('id')
     if (p.error) throw new Error(p.error.message)
     personId = p.data![0].id
-    // Cover LSB with a primary ADA so CID approval auto-routes to `ada`.
-    const cov = await da.rpc('set_primary_ada', { p_prosecutor: ids.ada, p_bureau: 'LSB' })
+    // Cover MCB with a primary ADA so CID approval auto-routes to `ada`.
+    const cov = await da.rpc('set_primary_ada', { p_prosecutor: ids.ada, p_bureau: 'major_crimes' })
     if (cov.error) throw new Error(`ADA coverage setup failed: ${cov.error.message}`)
   })
 
@@ -136,7 +136,7 @@ describe.skipIf(!enabled)('v1.15 — search_warrant subtype + owner warrant impo
     })
     expect(ok.error).toBeNull()
     expect(ok.data).toMatchObject({
-      subtype: 'search_warrant', responsible_bureau: 'LSB',
+      subtype: 'search_warrant', responsible_bureau: 'major_crimes',
       approval_route: 'judge', classification: 'classified',
     })
   })
@@ -186,7 +186,7 @@ describe.skipIf(!enabled)('v1.15 — search_warrant subtype + owner warrant impo
     expect(sub.error).toBeNull()
     expect(sub.data).toMatchObject({ review_status: 'cid_supervisor_review' })
 
-    // CID supervisor approval routes to the LSB primary ADA.
+    // CID supervisor approval routes to the MCB primary ADA.
     const cid = await lead.rpc('review_legal_request_as_cid', { p_request: lifecycleId, p_decision: 'approve', p_signature: 'RLS Lead' })
     expect(cid.error).toBeNull()
     expect(cid.data).toMatchObject({ review_status: 'ada_review', assigned_ada_id: ids.ada })

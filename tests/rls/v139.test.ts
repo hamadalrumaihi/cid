@@ -18,7 +18,7 @@
  *   - director authorizes with an expiry → authorized; the target history is
  *     visible to case members; the requester activates → active;
  *   - the other-bureau detective (bcb) sees NO targets/observations for the
- *     LSB case (case wall);
+ *     MCB case (case wall);
  *   - OBSERVATION GUARD: a direct insert claiming source_type 'alpr' +
  *     verification_status 'verified' is stamped detective_manual/unverified;
  *   - RESTRICTED WALL: a restricted observation is invisible to a same-bureau
@@ -36,10 +36,10 @@
  *     surveillance_deconflict returns the cross-case row for the case member
  *     and ZERO rows for the no-access viewer (gated on can_access_case).
  *
- *  Fixtures (tests/rls/README.md): lsb (LSB detective, case creator), bcb
- *  (BCB detective — the other-bureau viewer), lead (LSB bureau_lead — the
- *  self-approval pin), director (SAB director — command authorizer), target
- *  (throwaway, reset to detective/LSB — the same-bureau case-access member).
+ *  Fixtures (tests/rls/README.md): lsb (MCB detective, case creator), bcb
+ *  (SCB detective — the other-bureau viewer), lead (MCB bureau_lead — the
+ *  self-approval pin), director (major_crimes director — command authorizer), target
+ *  (throwaway, reset to detective/MCB — the same-bureau case-access member).
  *  rls_test_cleanup() runs at start AND teardown; the 20260812120000 re-emit
  *  sweeps surveillance rows + rls-test% bridge events (cases cascade
  *  their surveillance children). The fixture person is deleted best-effort by
@@ -68,8 +68,8 @@ describe.skipIf(!enabled)('v1.39 — surveillance & intelligence domain (live)',
   let lsb: C, bcb: C, lead: C, director: C, target: C
   let targetId = ''
   const tag = Math.random().toString(36).slice(2, 8).toUpperCase()
-  let caseId = ''         // LSB case (creator: lsb) — the surveillance case
-  let caseBId = ''        // second LSB case (creator: lsb) — deconfliction sibling
+  let caseId = ''         // MCB case (creator: lsb) — the surveillance case
+  let caseBId = ''        // second MCB case (creator: lsb) — deconfliction sibling
   let personId = ''       // shared subject for the pattern/deconfliction pins
   let leadReqId = ''      // lead's request — the self-approval + lifecycle pin
   let obsId = ''          // manual observation (guard + review/promote pins)
@@ -94,17 +94,17 @@ describe.skipIf(!enabled)('v1.39 — surveillance & intelligence domain (live)',
     }
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
-    const base = await resetTarget('detective', 'LSB')
+    const base = await resetTarget('detective', 'major_crimes')
     if (base.error) throw new Error(`target baseline failed: ${base.error.message}`)
 
-    // Fixture cases: both LSB, creator lsb. bcb has no path to either.
+    // Fixture cases: both MCB, creator lsb. bcb has no path to either.
     const a = await lsb.from('cases')
-      .insert({ case_number: `V139A-${tag}`, title: '[rls-test] v139 surveillance case', bureau: 'LSB' })
+      .insert({ case_number: `V139A-${tag}`, title: '[rls-test] v139 surveillance case', bureau: 'major_crimes' })
       .select('id')
     if (a.error) throw new Error(`case A: ${a.error.message}`)
     caseId = a.data![0].id
     const b = await lsb.from('cases')
-      .insert({ case_number: `V139B-${tag}`, title: '[rls-test] v139 deconfliction sibling', bureau: 'LSB' })
+      .insert({ case_number: `V139B-${tag}`, title: '[rls-test] v139 deconfliction sibling', bureau: 'major_crimes' })
       .select('id')
     if (b.error) throw new Error(`case B: ${b.error.message}`)
     caseBId = b.data![0].id
@@ -118,7 +118,7 @@ describe.skipIf(!enabled)('v1.39 — surveillance & intelligence domain (live)',
 
   afterAll(async () => {
     if (!lsb) return
-    if (director && targetId) await resetTarget('detective', 'LSB')
+    if (director && targetId) await resetTarget('detective', 'major_crimes')
     // Persons are not swept by rls_test_cleanup — command delete, best effort
     // (observations reference person_id with ON DELETE SET NULL).
     if (director && personId) {
@@ -203,7 +203,7 @@ describe.skipIf(!enabled)('v1.39 — surveillance & intelligence domain (live)',
 
   /* ── 5. the case wall ──────────────────────────────────────────────────── */
 
-  it('the other-bureau detective sees NO surveillance rows for the LSB case', async () => {
+  it('the other-bureau detective sees NO surveillance rows for the MCB case', async () => {
     const t = await bcb.from('surveillance_targets').select('id').eq('case_id', caseId)
     expect(t.error).toBeNull()
     expect(t.data ?? []).toHaveLength(0)
@@ -240,7 +240,7 @@ describe.skipIf(!enabled)('v1.39 — surveillance & intelligence domain (live)',
     expect(ins.data![0].restricted).toBe(true)
     restrictedObsId = ins.data![0].id
 
-    // target is an LSB detective with case access — but neither creator,
+    // target is an MCB detective with case access — but neither creator,
     // reviewer, command, nor owner: the restricted clause filters the row.
     const hidden = await target.from('surveillance_observations').select('id').eq('id', restrictedObsId)
     expect(hidden.error).toBeNull()

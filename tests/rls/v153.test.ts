@@ -15,7 +15,7 @@
  *     held link → the trigger aborts the whole RPC);
  *   - after a command LIFTS the hold, case_archive succeeds.
  *
- *  Fixtures (v147 hold-suite shape): lead (LSB bureau_lead = command — places/
+ *  Fixtures (v147 hold-suite shape): lead (MCB bureau_lead = command — places/
  *  lifts the hold, owns the fixture rows), lsb (plain active detective), owner
  *  (is_owner — teardown purge), anon (unused write path here, kept for shape).
  *  Self-cleaning: teardown lifts any residual hold, deletes the linked person,
@@ -69,7 +69,7 @@ describe.skipIf(!enabled)('v1.53 — legal hold preservation lock (live)', () =>
     try { await lead.rpc('rls_test_cleanup') } catch { /* best effort */ }
 
     // A bare case carrying NO legal requests — the hold is the only blocker.
-    const c = await lead.from('cases').insert({ case_number: `V153-${tag}`, title: `[rls-test] v153 preservation case ${tag}`, bureau: 'LSB' }).select('id')
+    const c = await lead.from('cases').insert({ case_number: `V153-${tag}`, title: `[rls-test] v153 preservation case ${tag}`, bureau: 'major_crimes' }).select('id')
     if (c.error) throw new Error(`case insert: ${c.error.message}`)
     caseId = c.data![0].id as string
 

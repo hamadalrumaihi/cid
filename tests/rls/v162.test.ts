@@ -3,7 +3,7 @@
  *
  *  `cases.bureau = 'JTF'` is an OPERATIONAL assignment, not a prosecutorial
  *  lane — legal work on a JTF case routes through its RESPONSIBLE bureau
- *  (cases.originating_bureau, always LSB/BCB/SAB or null). This suite asserts
+ *  (cases.originating_bureau, always major_crimes/street_crimes or null). This suite asserts
  *  the live wall around that model:
  *   - a JTF case is BORN with a responsible bureau (the creation trigger
  *     defaults it from the creator's division), so create_legal_request and
@@ -14,19 +14,19 @@
  *     case refuses the RPC outright;
  *   - approval on a JTF-ASSIGNED case accepts ANY eligible Bureau Lead
  *     (migration 20260818120000 — audited jtf_any_lead): after a change to
- *     SAB (and a resubmit that re-stamps the request), the LSB Bureau Lead
- *     can still act on the SAB-routed request, and the Director's DD+
+ *     street_crimes (and a resubmit that re-stamps the request), the MCB Bureau
+ *     Lead can still act on the SCB-routed request, and the Director's DD+
  *     cross-bureau fallback decides as before. (The responsible-bureau
  *     NARROWING for ordinary — non-JTF — cases survives unchanged: §6 pins
  *     the own-bureau lead path, and bureau-scoped prosecutor queues are
  *     pinned by v165.);
  *   - the freeze trigger still blocks direct originating_bureau writes;
- *   - regression: a permanent-bureau LSB case stamps LSB and its own Lead
+ *   - regression: a permanent-bureau MCB case stamps MCB and its own Lead
  *     approves unchanged, and another bureau still cannot draft on it.
  *
- *  Fixtures reused from the CID build: lsb (detective, LSB — the creator),
- *  bcb (detective, BCB — other-bureau), lead (bureau_lead, LSB), director
- *  (director, SAB — the DD+ change/approve authority), owner (is_owner —
+ *  Fixtures reused from the CID build: lsb (detective, MCB — the creator),
+ *  bcb (detective, SCB — other-bureau), lead (bureau_lead, MCB), director
+ *  (director, major_crimes — the DD+ change/approve authority), owner (is_owner —
  *  the no-reason negative). Every artifact carries the [rls-test]/run-tag
  *  marker and is removed by rls_test_cleanup in afterAll (it sweeps
  *  fixture-created cases and their legal requests), so re-runs start clean. */
@@ -55,9 +55,9 @@ describe.skipIf(!enabled)('v1.62 — JTF legal routing: responsible-bureau wall 
   const ids: Record<string, string> = {}
   const tag = Math.random().toString(36).slice(2, 8).toUpperCase()
   let jtfCaseId = ''   // JTF-assigned case created by the lsb detective
-  let lsbCaseId = ''   // permanent-bureau LSB regression case
+  let lsbCaseId = ''   // permanent-bureau MCB regression case
   let jtfRequestId = ''  // the routed subpoena on the JTF case
-  let lsbRequestId = ''  // the regression subpoena on the LSB case
+  let lsbRequestId = ''  // the regression subpoena on the MCB case
 
   beforeAll(async () => {
     lsb = mk(); bcb = mk(); lead = mk(); director = mk(); owner = mk()
@@ -82,7 +82,7 @@ describe.skipIf(!enabled)('v1.62 — JTF legal routing: responsible-bureau wall 
     const c1 = await lsb.from('cases').insert({ case_number: `V162-${tag}-JTF`, title: '[rls-test] v162 JTF routing case', bureau: 'JTF' }).select('id')
     if (c1.error) throw new Error(c1.error.message)
     jtfCaseId = c1.data![0].id
-    const c2 = await lsb.from('cases').insert({ case_number: `V162-${tag}-LSB`, title: '[rls-test] v162 permanent-bureau case', bureau: 'LSB' }).select('id')
+    const c2 = await lsb.from('cases').insert({ case_number: `V162-${tag}-MCB`, title: '[rls-test] v162 permanent-bureau case', bureau: 'major_crimes' }).select('id')
     if (c2.error) throw new Error(c2.error.message)
     lsbCaseId = c2.data![0].id
   })
@@ -101,12 +101,12 @@ describe.skipIf(!enabled)('v1.62 — JTF legal routing: responsible-bureau wall 
   /* ============ 1. birth default + legal create/submit ride it ============ */
 
   it('a JTF case is born with the creator’s bureau as responsible; legal create + submit stamp it', async () => {
-    // the BEFORE INSERT trigger defaulted originating_bureau from the creator (LSB detective)
+    // the BEFORE INSERT trigger defaulted originating_bureau from the creator (MCB detective)
     const row = await lsb.from('cases').select('bureau,originating_bureau').eq('id', jtfCaseId).single()
     expect(row.error).toBeNull()
-    expect(row.data).toMatchObject({ bureau: 'JTF', originating_bureau: 'LSB' })
+    expect(row.data).toMatchObject({ bureau: 'JTF', originating_bureau: 'major_crimes' })
 
-    // drafting no longer fails at creation — the request is routed to LSB
+    // drafting no longer fails at creation — the request is routed to MCB
     const r = await lsb.rpc('create_legal_request', {
       p_case: jtfCaseId, p_request_type: 'subpoena', p_subtype: 'document_production',
       p_title: `[rls-test] V162 JTF Subpoena ${tag}`, p_recipient_type: 'entity', p_recipient_name: 'Maze Bank',
@@ -115,45 +115,45 @@ describe.skipIf(!enabled)('v1.62 — JTF legal routing: responsible-bureau wall 
     })
     expect(r.error).toBeNull()
     jtfRequestId = r.data!.id
-    expect(r.data).toMatchObject({ responsible_bureau: 'LSB' })
+    expect(r.data).toMatchObject({ responsible_bureau: 'major_crimes' })
 
     const sub = await lsb.rpc('submit_legal_request_to_cid', { p_request: jtfRequestId })
     expect(sub.error).toBeNull()
-    expect(sub.data).toMatchObject({ review_status: 'cid_supervisor_review', responsible_bureau: 'LSB' })
+    expect(sub.data).toMatchObject({ review_status: 'cid_supervisor_review', responsible_bureau: 'major_crimes' })
   })
 
   /* ============ 2. set vs change bars on resolve_case_originating_bureau ============ */
 
   it('setting is supervisor-gated; changing a set value is DD+/Owner with a required reason', async () => {
     // a plain detective is not a CID supervisor — even on their own case
-    const det = await lsb.rpc('resolve_case_originating_bureau', { p_case: jtfCaseId, p_bureau: 'SAB' })
+    const det = await lsb.rpc('resolve_case_originating_bureau', { p_case: jtfCaseId, p_bureau: 'street_crimes' })
     expect(det.error).not.toBeNull()
     expect(det.error!.message).toMatch(/only a CID supervisor/i)
 
-    // a Bureau Lead may SET a missing value but not CHANGE the already-set LSB
-    const chg = await lead.rpc('resolve_case_originating_bureau', { p_case: jtfCaseId, p_bureau: 'SAB' })
+    // a Bureau Lead may SET a missing value but not CHANGE the already-set MCB
+    const chg = await lead.rpc('resolve_case_originating_bureau', { p_case: jtfCaseId, p_bureau: 'street_crimes' })
     expect(chg.error).not.toBeNull()
     expect(chg.error!.message).toMatch(/only a Deputy Director/i)
 
     // even the Owner cannot change it silently — the reason is mandatory
-    const noReason = await owner.rpc('resolve_case_originating_bureau', { p_case: jtfCaseId, p_bureau: 'SAB' })
+    const noReason = await owner.rpc('resolve_case_originating_bureau', { p_case: jtfCaseId, p_bureau: 'street_crimes' })
     expect(noReason.error).not.toBeNull()
     expect(noReason.error!.message).toMatch(/reason is required/i)
 
     // a Director with a reason performs the org correction
     const ok = await director.rpc('resolve_case_originating_bureau', {
-      p_case: jtfCaseId, p_bureau: 'SAB', p_reason: '[rls-test] v162 routing correction',
+      p_case: jtfCaseId, p_bureau: 'street_crimes', p_reason: '[rls-test] v162 routing correction',
     })
     expect(ok.error).toBeNull()
-    expect(ok.data).toMatchObject({ id: jtfCaseId, bureau: 'JTF', originating_bureau: 'SAB' })
+    expect(ok.data).toMatchObject({ id: jtfCaseId, bureau: 'JTF', originating_bureau: 'street_crimes' })
     const after = await lsb.from('cases').select('originating_bureau').eq('id', jtfCaseId).single()
-    expect(after.data).toMatchObject({ originating_bureau: 'SAB' })
+    expect(after.data).toMatchObject({ originating_bureau: 'street_crimes' })
   })
 
   /* ============ 3. approval routes through the responsible bureau ============ */
 
-  it('after the change to SAB, a resubmit re-stamps the request; ANY Bureau Lead may act (JTF) and a Director still decides', async () => {
-    // While the request is still stamped LSB the LSB Lead may act — return it
+  it('after the change to street_crimes, a resubmit re-stamps the request; ANY Bureau Lead may act (JTF) and a Director still decides', async () => {
+    // While the request is still stamped MCB the MCB Lead may act — return it
     // (a real supervisor move) so the resubmit below re-resolves the bureau.
     const ret = await lead.rpc('review_legal_request_as_cid', {
       p_request: jtfRequestId, p_decision: 'return', p_note: '[rls-test] v162 re-route after bureau correction',
@@ -164,11 +164,11 @@ describe.skipIf(!enabled)('v1.62 — JTF legal routing: responsible-bureau wall 
     // resubmission rides legal_resolve_bureau again → responsible_bureau follows the case
     const resub = await lsb.rpc('submit_legal_request_to_cid', { p_request: jtfRequestId })
     expect(resub.error).toBeNull()
-    expect(resub.data).toMatchObject({ review_status: 'cid_supervisor_review', responsible_bureau: 'SAB' })
+    expect(resub.data).toMatchObject({ review_status: 'cid_supervisor_review', responsible_bureau: 'street_crimes' })
 
     // Bureau queues + stages (20260818120000): the case is JTF-ASSIGNED, so
-    // ANY eligible Bureau Lead may decide — the LSB Lead acts on the
-    // SAB-routed request (audited jtf_any_lead=true). A return with a note is
+    // ANY eligible Bureau Lead may decide — the MCB Lead acts on the
+    // SCB-routed request (audited jtf_any_lead=true). A return with a note is
     // the least-destructive proof of that authority.
     const anyLead = await lead.rpc('review_legal_request_as_cid', {
       p_request: jtfRequestId, p_decision: 'return', p_note: '[rls-test] v162 JTF any-lead authority check',
@@ -180,7 +180,7 @@ describe.skipIf(!enabled)('v1.62 — JTF legal routing: responsible-bureau wall 
     // — that is reserved for judge/prosecutor returns, see 20260818120000 §4)
     const resub2 = await lsb.rpc('submit_legal_request_to_cid', { p_request: jtfRequestId })
     expect(resub2.error).toBeNull()
-    expect(resub2.data).toMatchObject({ review_status: 'cid_supervisor_review', responsible_bureau: 'SAB' })
+    expect(resub2.data).toMatchObject({ review_status: 'cid_supervisor_review', responsible_bureau: 'street_crimes' })
 
     // Deputy Director / Director keep the audited cross-bureau fallback — approval still works
     const ok = await director.rpc('review_legal_request_as_cid', {
@@ -190,18 +190,18 @@ describe.skipIf(!enabled)('v1.62 — JTF legal routing: responsible-bureau wall 
     // minimal-DOJ revival (20260816120000): approve queues rather than decides.
     expect(ok.data).toMatchObject({
       review_status: 'prosecutor_queue', decision: null,
-      cid_reviewed_by: ids.director, responsible_bureau: 'SAB',
+      cid_reviewed_by: ids.director, responsible_bureau: 'street_crimes',
     })
   })
 
   /* ============ 4. the freeze trigger still owns the column ============ */
 
   it('direct client writes of originating_bureau stay frozen (RPC-only)', async () => {
-    const direct = await lsb.from('cases').update({ originating_bureau: 'BCB' }).eq('id', jtfCaseId).select('id')
+    const direct = await lsb.from('cases').update({ originating_bureau: 'major_crimes' }).eq('id', jtfCaseId).select('id')
     expect(direct.error).not.toBeNull()
     expect(direct.error!.message).toMatch(/case bureau can only be changed via/i)
     const still = await lsb.from('cases').select('originating_bureau').eq('id', jtfCaseId).single()
-    expect(still.data).toMatchObject({ originating_bureau: 'SAB' })
+    expect(still.data).toMatchObject({ originating_bureau: 'street_crimes' })
   })
 
   /* ============ 5. JTF unstorable + permanent-bureau refusal ============ */
@@ -211,11 +211,11 @@ describe.skipIf(!enabled)('v1.62 — JTF legal routing: responsible-bureau wall 
       p_case: jtfCaseId, p_bureau: 'JTF', p_reason: '[rls-test] v162 invalid target',
     })
     expect(jtf.error).not.toBeNull()
-    expect(jtf.error!.message).toMatch(/must be LSB, BCB, or SAB/i)
+    expect(jtf.error!.message).toMatch(/must be Major Crimes or Street Crimes/i)
 
-    // an LSB case's responsible bureau IS its bureau — case_reassign_bureau is the move path
+    // an MCB case's responsible bureau IS its bureau — case_reassign_bureau is the move path
     const perm = await director.rpc('resolve_case_originating_bureau', {
-      p_case: lsbCaseId, p_bureau: 'BCB', p_reason: '[rls-test] v162 wrong path',
+      p_case: lsbCaseId, p_bureau: 'street_crimes', p_reason: '[rls-test] v162 wrong path',
     })
     expect(perm.error).not.toBeNull()
     expect(perm.error!.message).toMatch(/its own bureau/i)
@@ -223,22 +223,22 @@ describe.skipIf(!enabled)('v1.62 — JTF legal routing: responsible-bureau wall 
 
   /* ============ 6. permanent-bureau regression ============ */
 
-  it('regression: a permanent LSB case still stamps LSB and its own Lead approves unchanged', async () => {
+  it('regression: a permanent MCB case still stamps MCB and its own Lead approves unchanged', async () => {
     const r = await lsb.rpc('create_legal_request', {
       p_case: lsbCaseId, p_request_type: 'subpoena', p_subtype: 'document_production',
-      p_title: `[rls-test] V162 LSB Subpoena ${tag}`, p_recipient_type: 'entity', p_recipient_name: 'Fleeca Bank',
+      p_title: `[rls-test] V162 MCB Subpoena ${tag}`, p_recipient_type: 'entity', p_recipient_name: 'Fleeca Bank',
       p_narrative: 'Regression check — permanent-bureau routing is untouched by v1.62.',
       p_form: { items_requested: 'Account statements', date_range: '2026-02→2026-07' },
     })
     expect(r.error).toBeNull()
     lsbRequestId = r.data!.id
-    expect(r.data).toMatchObject({ responsible_bureau: 'LSB' })
+    expect(r.data).toMatchObject({ responsible_bureau: 'major_crimes' })
 
     const sub = await lsb.rpc('submit_legal_request_to_cid', { p_request: lsbRequestId })
     expect(sub.error).toBeNull()
-    expect(sub.data).toMatchObject({ review_status: 'cid_supervisor_review', responsible_bureau: 'LSB' })
+    expect(sub.data).toMatchObject({ review_status: 'cid_supervisor_review', responsible_bureau: 'major_crimes' })
 
-    // the LSB Bureau Lead's own-bureau authority is exactly what survived the narrowing
+    // the MCB Bureau Lead's own-bureau authority is exactly what survived the narrowing
     const ok = await lead.rpc('review_legal_request_as_cid', {
       p_request: lsbRequestId, p_decision: 'approve', p_signature: 'RLS Lead',
     })
@@ -249,7 +249,7 @@ describe.skipIf(!enabled)('v1.62 — JTF legal routing: responsible-bureau wall 
 
   /* ============ 7. unrelated-case protection ============ */
 
-  it('another bureau still cannot draft on a permanent LSB case it cannot access', async () => {
+  it('another bureau still cannot draft on a permanent MCB case it cannot access', async () => {
     const deny = await bcb.rpc('create_legal_request', {
       p_case: lsbCaseId, p_request_type: 'subpoena', p_subtype: 'document_production',
       p_title: '[rls-test] v162 cross-bureau draft', p_recipient_type: 'entity', p_recipient_name: 'Maze Bank',

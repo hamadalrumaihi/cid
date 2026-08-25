@@ -20,20 +20,20 @@
  *      capacity on every RPC), not login_denied, not removed;
  *    - justice_memberships rows, active=true, expires_at null:
  *        prosecutor  → agency 'doj', justice_role 'prosecutor',
- *                      prosecutor_bureau 'LSB'   (home bureau — 20260818120000)
+ *                      prosecutor_bureau 'major_crimes'   (home bureau — 20260818120000)
  *        prosecutor2 → agency 'doj', justice_role 'prosecutor',
- *                      prosecutor_bureau 'BCB'   (home bureau — 20260818120000)
+ *                      prosecutor_bureau 'street_crimes'   (home bureau — 20260818120000)
  *        judge       → agency 'judiciary', justice_role 'judge'
  *        ag          → agency 'doj',       justice_role 'attorney_general'
  *  beforeAll verifies this shape live and fails with a provisioning message on
  *  drift, so a half-seeded project can never produce misleading green/red.
  *
  *  BUREAU QUEUES (migration 20260818120000): prosecutors work their home
- *  bureau's queue only. This suite's requests ride an LSB case, so the
- *  two-prosecutor race and the AG-assignment legs need prosecutor2 (home BCB)
- *  to COVER LSB. beforeAll ensures exactly one live, non-expiring
+ *  bureau's queue only. This suite's requests ride an MCB case, so the
+ *  two-prosecutor race and the AG-assignment legs need prosecutor2 (home SCB)
+ *  to COVER MCB. beforeAll ensures exactly one live, non-expiring
  *  prosecutor_coverage row (AG-granted, reason-tagged) exists for
- *  prosecutor2→LSB and grants it once if absent — the row is deliberately
+ *  prosecutor2→MCB and grants it once if absent — the row is deliberately
  *  KEPT LIVE as part of the fixture bench (idempotent across runs; ending it
  *  each run would accumulate one dead history row per run instead). The
  *  bureau wall itself (outside-bureau claim refused, visibility narrowed) is
@@ -164,29 +164,29 @@ describe.skipIf(!enabled)('v1.63 — minimal-DOJ pipeline: prosecutor queue + ju
       ids[key] = await signInWithRetry(client, email, pw!)
     }
     // The suite's meaning depends on the exact DOJ shape — verify it first.
-    await assertJusticeShape(p1, 'prosecutor', 'doj', 'prosecutor', 'LSB')
-    await assertJusticeShape(p2, 'prosecutor2', 'doj', 'prosecutor', 'BCB')
+    await assertJusticeShape(p1, 'prosecutor', 'doj', 'prosecutor', 'major_crimes')
+    await assertJusticeShape(p2, 'prosecutor2', 'doj', 'prosecutor', 'street_crimes')
     await assertJusticeShape(judge, 'judge', 'judiciary', 'judge')
     await assertJusticeShape(ag, 'ag', 'doj', 'attorney_general')
-    // Bureau queues (20260818120000): prosecutor2's home is BCB, but this
-    // suite's requests ride an LSB case — ensure the fixture-bench coverage
-    // row (prosecutor2 covering LSB, live, non-expiring) exists, granting it
+    // Bureau queues (20260818120000): prosecutor2's home is SCB, but this
+    // suite's requests ride an MCB case — ensure the fixture-bench coverage
+    // row (prosecutor2 covering MCB, live, non-expiring) exists, granting it
     // exactly once. See the header for why it is kept live across runs.
     const cov = await p2.from('prosecutor_coverage')
-      .select('id,expires_at').eq('prosecutor_id', ids.prosecutor2).eq('bureau', 'LSB').is('ended_at', null)
+      .select('id,expires_at').eq('prosecutor_id', ids.prosecutor2).eq('bureau', 'major_crimes').is('ended_at', null)
     if (cov.error) throw new Error(`v163 coverage check: ${cov.error.message}`)
     const live = (cov.data ?? []).some((r) => !r.expires_at || new Date(r.expires_at as string) > new Date())
     if (!live) {
       const grant = await ag.rpc('justice_set_coverage', {
-        p_user: ids.prosecutor2, p_bureau: 'LSB',
-        p_reason: '[rls-test] v163 fixture-bench coverage — prosecutor2 works the LSB queue for the shared-bench race (kept live; see tests/rls/v163.test.ts header)',
+        p_user: ids.prosecutor2, p_bureau: 'major_crimes',
+        p_reason: '[rls-test] v163 fixture-bench coverage — prosecutor2 works the MCB queue for the shared-bench race (kept live; see tests/rls/v163.test.ts header)',
       })
       if (grant.error) throw new Error(`v163 coverage grant failed: ${grant.error.message}`)
     }
     // Purge leftovers from any crashed prior run FIRST.
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
-    const c = await lsb.from('cases').insert({ case_number: `V163-${tag}`, title: '[rls-test] v163 DOJ pipeline case', bureau: 'LSB' }).select('id')
+    const c = await lsb.from('cases').insert({ case_number: `V163-${tag}`, title: '[rls-test] v163 DOJ pipeline case', bureau: 'major_crimes' }).select('id')
     if (c.error) throw new Error(c.error.message)
     caseId = c.data![0].id
     reqA = await mkSubmitted('V163 Pipeline Subpoena')

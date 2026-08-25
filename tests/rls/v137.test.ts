@@ -28,12 +28,12 @@
  *   - a classified DRAFT (not submitted) is invisible to the supervisor —
  *     the branch is scoped to the one status.
  *
- *  Fixtures (tests/rls/README.md): lsb (creator detective), lead (LSB
+ *  Fixtures (tests/rls/README.md): lsb (creator detective), lead (MCB
  *  bureau_lead — case access via is_command), bcb (other-bureau detective),
- *  target (throwaway — temporarily senior_detective/BCB, restored to
- *  detective/LSB in teardown via rls_test_reset_member), director (performs
+ *  target (throwaway — temporarily senior_detective/SCB, restored to
+ *  detective/MCB in teardown via rls_test_reset_member), director (performs
  *  the resets), judge. All requests are [rls-test] v137 search warrants on a
- *  per-run LSB case; rls_test_cleanup() runs at start AND teardown.
+ *  per-run MCB case; rls_test_cleanup() runs at start AND teardown.
  *  legal_notify suppresses test-actor → real-target pings, so submit/approve
  *  never notify real members. Requires migration 20260806040000 applied. */
 
@@ -62,7 +62,7 @@ describe.skipIf(!enabled)('v1.37 — pending CID reviewer visibility (live)', ()
   let leadId = ''
   let targetId = ''
   const tag = Math.random().toString(36).slice(2, 8).toUpperCase()
-  let caseId = ''       // LSB fixture case (lsb-created)
+  let caseId = ''       // MCB fixture case (lsb-created)
   let classifiedId = '' // classified (by DEFAULT) warrant, submitted → cid_supervisor_review
   let sealedId = ''     // sealed warrant, submitted → cid_supervisor_review (stays pending)
   let draftId = ''      // classified warrant, NEVER submitted — status-scoping pin
@@ -101,14 +101,14 @@ describe.skipIf(!enabled)('v1.37 — pending CID reviewer visibility (live)', ()
       if (key === 'target') targetId = id
     }
     // Purge leftovers from any crashed prior run FIRST, and baseline the
-    // throwaway target (a crashed run could have left it senior/BCB).
+    // throwaway target (a crashed run could have left it senior/SCB).
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
-    const base = await resetTarget('detective', 'LSB')
+    const base = await resetTarget('detective', 'major_crimes')
     if (base.error) throw new Error(`target baseline failed: ${base.error.message}`)
 
     const c = await lsb.from('cases')
-      .insert({ case_number: `V137-${tag}`, title: '[rls-test] v137 reviewer visibility', bureau: 'LSB' })
+      .insert({ case_number: `V137-${tag}`, title: '[rls-test] v137 reviewer visibility', bureau: 'major_crimes' })
       .select('id')
     if (c.error) throw new Error(`fixture case: ${c.error.message}`)
     caseId = c.data![0].id
@@ -131,7 +131,7 @@ describe.skipIf(!enabled)('v1.37 — pending CID reviewer visibility (live)', ()
     // Restore the throwaway target to its durable baseline, then let the
     // cleanup RPC sweep every rls-test case + legal request (+versions/
     // actions/participants) across all fixture accounts.
-    if (director && targetId) await resetTarget('detective', 'LSB')
+    if (director && targetId) await resetTarget('detective', 'major_crimes')
     const { data, error } = await lsb.rpc('rls_test_cleanup')
     if (error) throw new Error(`rls_test_cleanup failed: ${error.message}`)
     console.info('[rls:v137] cleanup:', JSON.stringify(data))
@@ -168,7 +168,7 @@ describe.skipIf(!enabled)('v1.37 — pending CID reviewer visibility (live)', ()
   /* ── 3. review authority, not mere case access ── */
 
   it('a non-supervisor same-bureau detective sees NOTHING; the creator keeps the creator branch', async () => {
-    // target is at its baseline: detective/LSB — can_access_case passes via
+    // target is at its baseline: detective/MCB — can_access_case passes via
     // the division clause, but the rank check in can_review_as_cid fails.
     const t = await target.from('legal_requests').select('id').eq('id', classifiedId)
     expect(t.error).toBeNull()
@@ -186,7 +186,7 @@ describe.skipIf(!enabled)('v1.37 — pending CID reviewer visibility (live)', ()
     // access via is_command, so the only "supervisor without case access" is
     // a senior_detective outside the case bureau — repurpose the throwaway
     // target for exactly that (restored in test 3's shape by afterAll).
-    const up = await resetTarget('senior_detective', 'BCB')
+    const up = await resetTarget('senior_detective', 'street_crimes')
     expect(up.error).toBeNull()
     const t = await target.from('legal_requests').select('id').eq('id', classifiedId)
     expect(t.error).toBeNull()
@@ -205,7 +205,7 @@ describe.skipIf(!enabled)('v1.37 — pending CID reviewer visibility (live)', ()
       p_signature: 'RLS Lead', p_override_reason: '[rls-test] v137 no packet needed',
     })
     expect(ap.error).toBeNull()
-    // routing is environment-dependent: ada_review when LSB has a routing
+    // routing is environment-dependent: ada_review when MCB has a routing
     // ADA, otherwise parked at submitted_to_doj — both are past the CID gate
     expect(['submitted_to_doj', 'ada_review']).toContain(ap.data!.review_status)
 
@@ -235,7 +235,7 @@ describe.skipIf(!enabled)('v1.37 — pending CID reviewer visibility (live)', ()
     expect(l.data![0]).toMatchObject({
       classification: 'sealed', review_status: 'cid_supervisor_review',
     })
-    // target is still senior_detective/BCB from test 4 — senior rank, no access
+    // target is still senior_detective/SCB from test 4 — senior rank, no access
     const t = await target.from('legal_requests').select('id').eq('id', sealedId)
     expect(t.error).toBeNull()
     expect(t.data ?? []).toHaveLength(0)

@@ -51,7 +51,7 @@ specific account password is absent.
 - **Applicant flow**: the inactive `rls-test-applicant` lands on the Gate
   (UI-asserted: no shell, no Command Center) and submits a membership
   request through the real Gate form; a director approves it **with
-  changes** (BCB / Senior Detective) from a second browser context, fully
+  changes** (Street Crimes / Senior Detective) from a second browser context, fully
   in the UI. Teardown deactivates the disposable fixture via
   `assign_member` and purges the request via `rls_test_cleanup()` —
   mirroring the RLS suite's approval block. (This spec's first live run

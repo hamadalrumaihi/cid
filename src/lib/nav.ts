@@ -53,7 +53,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   accounts:   { title: 'Account Registry', sub: 'Social-media & online accounts, handle history & ownership' },
   guide:      { title: 'User Guide', sub: 'How to sign in, navigate & work a case — new member orientation' },
   calendar:   { title: 'Division Calendar', sub: 'Follow-ups, task deadlines & shift weeks at a glance' },
-  // Special Investigation Unit — a SEPARATE investigative authority, not a CID
+  // Special Investigations Bureau — a SEPARATE investigative authority, not a CID
   // category. It is deliberately absent from NAV_CATEGORIES: the sidebar
   // renders it as a standalone leaf only for accounts with SIU standing
   // (useSiu()), and the view itself renders the ordinary nothing-here surface
@@ -85,7 +85,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
   { id: 'oversight', label: 'Oversight',    tabs: ['calendar', 'shifts', 'audit'] },
 ]
 
-/** ── Special Investigation Unit navigation ────────────────────────────────
+/** ── Special Investigations Bureau navigation ─────────────────────────────
  *  SIU is a separate DEPARTMENT, so it gets its own navigation rather than a
  *  button inside the CID sidebar. It deliberately reuses the shared registry
  *  routes (persons, vehicles, gangs, places, network, media, legal …) — those

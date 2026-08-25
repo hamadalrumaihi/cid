@@ -19,7 +19,7 @@
  *   - an outsider (anon) can neither read nor write, and the table stays
  *     SELECT-only (a direct client INSERT is refused).
  *
- *  Fixtures: lsb (active detective, case creator = the fulfiller), lead (LSB
+ *  Fixtures: lsb (active detective, case creator = the fulfiller), lead (MCB
  *  bureau_lead = the Lead+ approver), owner (oversight/teardown), anon (denied).
  *  Post-Phase-1 the seized-item read policy (private.can_view_legal_request) no
  *  longer admits a packet-only ADA — warrants never reach DOJ and justice
@@ -65,17 +65,17 @@ describe.skipIf(!enabled)('v1.54 — warrant execution + seized-items completion
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
 
-    const c = await lsb.from('cases').insert({ case_number: `V154-${tag}`, title: `[rls-test] v154 execution case ${tag}`, bureau: 'LSB' }).select('id')
+    const c = await lsb.from('cases').insert({ case_number: `V154-${tag}`, title: `[rls-test] v154 execution case ${tag}`, bureau: 'major_crimes' }).select('id')
     if (c.error) throw new Error(c.error.message)
     caseId = c.data![0].id as string
     const p = await lsb.from('persons').insert({ name: `RLS Test V154 Suspect ${tag}` }).select('id')
     if (p.error) throw new Error(p.error.message)
     personId = p.data![0].id as string
 
-    // A SECOND LSB case + report, used to prove a cross-case custody link is
+    // A SECOND MCB case + report, used to prove a cross-case custody link is
     // refused. lsb can fulfil the warrant AND access this other case, so only
     // the case-scope guard (not the fulfil gate) can reject the link.
-    const oc = await lsb.from('cases').insert({ case_number: `V154X-${tag}`, title: `[rls-test] v154 other case ${tag}`, bureau: 'LSB' }).select('id')
+    const oc = await lsb.from('cases').insert({ case_number: `V154X-${tag}`, title: `[rls-test] v154 other case ${tag}`, bureau: 'major_crimes' }).select('id')
     if (oc.error) throw new Error(oc.error.message)
     const orep = await lsb.from('reports').insert({ case_id: oc.data![0].id as string, template: 'note' }).select('id')
     if (orep.error) throw new Error(orep.error.message)

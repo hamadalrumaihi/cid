@@ -12,6 +12,7 @@
  *     the legacy manual joint-case flag). Survives case closure, operation
  *     resolution, unlinking and reverting. */
 import type { Tables } from './database.types'
+import { bureauShort } from './roles'
 
 export type OperationRow = Tables<'operations'>
 export type OpBureauRow = Tables<'operation_bureaus'>
@@ -192,8 +193,8 @@ export function operationTimeline(
     })
   }
   for (const b of bureaus) {
-    out.push({ at: b.joined_at, label: `Bureau joined — ${b.bureau}` })
-    if (b.left_at) out.push({ at: b.left_at, label: `Bureau left — ${b.bureau}` })
+    out.push({ at: b.joined_at, label: `Bureau joined — ${bureauShort(b.bureau)}` })
+    if (b.left_at) out.push({ at: b.left_at, label: `Bureau left — ${bureauShort(b.bureau)}` })
   }
   for (const l of links) {
     out.push({ at: l.added_at, label: `Case linked${l.caseNumber ? ` — ${l.caseNumber}` : ''}` })

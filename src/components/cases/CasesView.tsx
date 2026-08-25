@@ -147,7 +147,7 @@ function CasesViewInner() {
         title="Case Files"
         eyebrow={siu.inSiu ? 'SIB + Division cases' : 'Live Cases'}
         subtitle={siu.inSiu
-          ? 'Your unit\u2019s investigations and every Division case, in one list. Division cases are read-only under SIU authority.'
+          ? 'Your bureau\u2019s investigations and every Division case, in one list. Division cases are read-only under SIB authority.'
           : undefined}
         actions={
           <>
@@ -227,9 +227,9 @@ function CaseTable({ items, canDelete, showDept, selected, onSelect, onOpen }: {
     },
     ...(showDept ? [{
       key: 'dept', label: 'Authority',
-      value: (c: CaseRow) => caseDepartment(c) === 'siu' ? 'SIU' : 'CID',
+      value: (c: CaseRow) => caseDepartment(c) === 'siu' ? 'SIB' : 'CID',
       render: (c: CaseRow) => caseDepartment(c) === 'siu'
-        ? <span className="rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide bg-violet-500/15 text-violet-300">SIU</span>
+        ? <span className="rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide bg-violet-500/15 text-violet-300">SIB</span>
         : <span className="rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide bg-white/5 text-slate-400">CID</span>,
       className: 'px-3 py-1.5 whitespace-nowrap',
     } satisfies DataColumn<CaseRow>] : []),

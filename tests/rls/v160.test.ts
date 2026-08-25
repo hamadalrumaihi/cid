@@ -25,7 +25,7 @@
  *  The 67 FK covering indexes are not client-observable through PostgREST —
  *  they are verified by re-running the advisor after apply, not here.
  *
- *  Fixtures: lsb (LSB detective — the plain member), lead (bureau_lead =
+ *  Fixtures: lsb (MCB detective — the plain member), lead (bureau_lead =
  *  command), owner (owner-gated probes + client_errors teardown), anon.
  *  bcb is signed in only to keep the shared fixture-password contract
  *  (unused otherwise). CLEANUP: client_errors rows are tag-deleted by the
@@ -66,7 +66,7 @@ const REVOKED_RPCS: ReadonlyArray<readonly [string, Record<string, unknown>]> = 
   ['approve_transfer_target', { p_id: NIL }],
   ['assign_member', { target: NIL, set_active: false }],
   ['cancel_transfer', { p_id: NIL }],
-  ['case_reassign_bureau', { p_case: NIL, p_to_bureau: 'BCB', p_reason: 'v160 anon probe' }],
+  ['case_reassign_bureau', { p_case: NIL, p_to_bureau: 'street_crimes', p_reason: 'v160 anon probe' }],
   ['change_member_role', { p_target: NIL, p_new_role: 'detective', p_reason: 'v160 anon probe' }],
   ['close_legal_request', { p_request: NIL }],
   ['complete_transfer', { p_id: NIL }],
@@ -102,11 +102,11 @@ const REVOKED_RPCS: ReadonlyArray<readonly [string, Record<string, unknown>]> = 
   ['reject_transfer', { p_id: NIL }],
   ['remove_legal_exhibit', { p_exhibit: NIL }],
   ['report_reopen', { p_report: NIL }],
-  ['resolve_case_originating_bureau', { p_case: NIL, p_bureau: 'LSB' }],
+  ['resolve_case_originating_bureau', { p_case: NIL, p_bureau: 'major_crimes' }],
   ['restore_member_login', { p_target: NIL }],
   ['review_membership_request', { p_request: NIL, p_decision: 'reject' }],
   ['rls_test_cleanup', {}],
-  ['rls_test_reset_member', { p_target: NIL, p_role: 'detective', p_division: 'LSB', p_active: false }],
+  ['rls_test_reset_member', { p_target: NIL, p_role: 'detective', p_division: 'major_crimes', p_active: false }],
   ['rls_test_spawn_disposable', { p_suffix: 'v160' }],
   ['security_test_report', { p_suite: 'v160-anon-probe', p_passed: 0, p_failed: 0, p_skipped: 0 }],
   ['set_profile_test_flag', { p_target: NIL, p_is_test: true }],
@@ -190,10 +190,10 @@ describe.skipIf(!enabled)('v1.60 — advisor hardening (live)', () => {
   /* ================= 3) search_path pin on private.case_number_base ================= */
 
   it('next_case_number still mints in the bureau block (pinned callee resolves)', async () => {
-    const r = await lsb.rpc('next_case_number', { p_bureau: 'LSB' })
+    const r = await lsb.rpc('next_case_number', { p_bureau: 'major_crimes' })
     expect(r.error, r.error?.message).toBeNull()
-    // LSB block base is 1,000,000 — the next number is always 7 digits.
-    expect(r.data).toMatch(/^LSB-1\d{6}$/)
+    // MCB block base is 4,000,000 — the next number is always 7 digits.
+    expect(r.data).toMatch(/^MCB-4\d{6}$/)
   })
 
   /* ================= 4) client_errors_ins attribution binding ================= */

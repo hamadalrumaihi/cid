@@ -7953,6 +7953,136 @@ begin
   return v_case;
 end $$;
 
+
+create or replace function public.field_submission_link_case(
+  p_submission uuid, p_case uuid, p_note text default null)
+returns uuid language plpgsql security definer set search_path to '';
+
+create or replace function public.field_submission_unlink_case(
+  p_link uuid, p_reason text)
+returns void language plpgsql security definer set search_path to '';
+
+-- An observation belongs to a case, so both of these require the record to be
+-- linked to that case already -- otherwise they would be a third, invisible way
+-- for intelligence to reach a case. The observation keeps a back-link to the
+-- record that put it on the board.
+create or replace function public.field_submission_create_observation(
+  p_submission uuid, p_case uuid, p_activity text,
+  p_observed_at timestamptz default null, p_location text default null,
+  p_confidence text default null)
+returns uuid language plpgsql security definer set search_path to '';
+
+create or replace function public.field_submission_link_observation(
+  p_submission uuid, p_observation uuid)
+returns void language plpgsql security definer set search_path to '';
+
+-- Registering a confidential source stores the identity in the unreadable
+-- field_submission_sources table and, only then, lets the record call itself
+-- confidential -- the before-update trigger checks for the source row, so the
+-- option and the protection cannot be separated. Revealing the identity admits
+-- the handler and the Owner, and writes an audit row saying who looked.
+create or replace function public.field_submission_set_source(
+  p_submission uuid, p_codename text, p_name text default null,
+  p_contact text default null, p_notes text default null,
+  p_handler uuid default null)
+returns void language plpgsql security definer set search_path to '';
+
+create or replace function public.field_submission_source_reveal(p_submission uuid)
+returns jsonb language plpgsql security definer set search_path to '';
+
+-- One search over the record, its six claim tables and the officer thread --
+-- most of the searchable text is NOT on the record, so a client-side filter
+-- over the queue would miss almost every name somebody looks for. Definer so it
+-- can reach the children; every hit is passed back through
+-- field_submission_readable(), so a search can never reach further than the
+-- queue. ARCHIVED RECORDS ARE INCLUDED: archiving means "not being worked", and
+-- a search that skipped them would break the promise that archiving keeps
+-- everything findable.
+create or replace function public.field_submission_search(
+  p_query text, p_limit int default 100)
+returns table (submission_id uuid, matched text[])
+language sql stable security definer set search_path to '';
+
+-- Have we heard this before: one row per person, plate or organisation this
+-- record names that also appears on another readable record. 'named' is the
+-- same text written twice; 'linked' means a reviewer matched both records to
+-- the SAME registry entry, which is much stronger. Returns the other record
+-- numbers, so the answer is not a count somebody then has to go hunting for.
+create or replace function public.field_submission_repeats(p_submission uuid)
+returns table (kind text, label text, basis text, others int, records text[])
+language plpgsql stable security definer set search_path to '';
+
+create or replace function public.field_access_roster()
+returns table (
+  user_id uuid, display_name text, email text, agency text, callsign text,
+  officer_rank text, unit text, standing_active boolean, self_served boolean,
+  appointed_by uuid, appointed_at timestamptz, ended_at timestamptz,
+  end_reason text, removed_at timestamptz, login_denied boolean,
+  first_seen timestamptz, last_seen timestamptz, submissions integer,
+  last_submission_at timestamptz)
+language plpgsql stable security definer set search_path to '';
+
+create or replace function public.justice_migration_review()
+returns jsonb language sql stable security definer set search_path to '' as $$
+  select case
+    when not (private.owner_flag((select auth.uid()))
+              or coalesce(private.justice_role_effective((select auth.uid())) = 'attorney_general', false))
+    then jsonb_build_object('error', 'owner or attorney general only')
+    else jsonb_build_object(
+      'legacy_roles', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'user_id', m.user_id, 'name', p.display_name, 'role', m.justice_role,
+          'active', m.active, 'effective', case m.justice_role
+            when 'assistant_district_attorney' then 'prosecutor'
+            when 'district_attorney' then 'prosecutor' else m.justice_role end)), '[]')
+        from public.justice_memberships m
+        left join public.profiles p on p.id = m.user_id
+        where m.justice_role in ('assistant_district_attorney', 'district_attorney')),
+      'prosecutors_without_bureau', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'user_id', m.user_id, 'name', p.display_name, 'role', m.justice_role)), '[]')
+        from public.justice_memberships m
+        left join public.profiles p on p.id = m.user_id
+        where m.active and m.prosecutor_bureau is null
+          and m.justice_role in ('prosecutor', 'assistant_district_attorney', 'district_attorney')),
+      'dual_identity', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'user_id', m.user_id, 'name', p.display_name,
+          'justice_role', m.justice_role, 'cid_role', p.role, 'cid_active', p.active)), '[]')
+        from public.justice_memberships m
+        join public.profiles p on p.id = m.user_id
+        where m.active and coalesce(p.active, false)),
+      'requests_in_retired_states', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'id', r.id, 'number', r.request_number, 'status', r.review_status)), '[]')
+        from public.legal_requests r
+        where r.review_status in ('submitted_to_doj', 'ada_review', 'da_review', 'ag_review')),
+      'requests_assigned_to_inactive', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'id', r.id, 'number', r.request_number, 'status', r.review_status)), '[]')
+        from public.legal_requests r
+        where (r.assigned_prosecutor_id is not null
+               and not private.is_justice_active(r.assigned_prosecutor_id)
+               and r.review_status = 'prosecutor_review')
+           or (r.assigned_judge_id is not null
+               and not private.is_justice_active(r.assigned_judge_id)
+               and r.review_status = 'judicial_review')),
+      'cases_missing_responsible_bureau', (
+        select coalesce(jsonb_agg(jsonb_build_object('id', c.id, 'number', c.case_number)), '[]')
+        from public.cases c
+        where c.bureau = 'JTF' and c.originating_bureau is null),
+      'self_review_conflicts', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'id', r.id, 'number', r.request_number,
+          'holder', coalesce(r.assigned_prosecutor_id, r.assigned_judge_id))), '[]')
+        from public.legal_requests r
+        where (r.assigned_prosecutor_id is not null
+               and private.legal_is_conflicted(r.id, r.assigned_prosecutor_id))
+           or (r.assigned_judge_id is not null
+               and private.legal_is_conflicted(r.id, r.assigned_judge_id))))
+  end
+$$;
+
 -- ============================================================
 -- Triggers (non-internal)
 -- ============================================================

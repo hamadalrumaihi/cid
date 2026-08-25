@@ -19,7 +19,7 @@
  *   - invalid kind / invalid risk / missing-target are rejected by the RPC;
  *   - anon cannot select mdt_exports; a direct client insert is denied.
  *
- *  Fixtures: lsb (active detective — proposes), lead (LSB bureau_lead = command
+ *  Fixtures: lsb (active detective — proposes), lead (MCB bureau_lead = command
  *  — approves/clears), owner (oversight read), anon (denied). The person and
  *  vehicle are created by lsb, tagged '[rls-test] v149'.
  *

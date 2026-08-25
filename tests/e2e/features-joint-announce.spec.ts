@@ -18,7 +18,7 @@
  *      queue may legitimately hold real requests).
  *   5. Applicant flow — the inactive rls-test-applicant lands on the Gate
  *      and submits a membership request through the real form; a director
- *      approves it WITH CHANGES (BCB / Senior Detective) from a second
+ *      approves it WITH CHANGES (Street Crimes / Senior Detective) from a second
  *      browser context, fully in the UI. Teardown deactivates the disposable
  *      fixture and purges the request (mirrors the RLS suite's approval
  *      block).
@@ -188,7 +188,7 @@ test.describe('v1.11 features — announcements, joint cases, approvals (live fi
 
       // Keyboard/a11y smoke: typing opens the role=listbox; ArrowDown+Enter
       // selects the highlighted option. RLS Test BCB proves the
-      // cross-department story (the lead is LSB).
+      // cross-department story (the lead is major_crimes).
       const member = LIVE.bcb.name
       const search = dlg.getByLabel('Search members')
       await search.fill(member)
@@ -285,7 +285,7 @@ test.describe('v1.11 features — announcements, joint cases, approvals (live fi
       const clean = await callRpc(app, 'rls_test_cleanup')
       if (!clean.ok()) throw new Error(`rls_test_cleanup (setup) failed: ${clean.status()} ${await clean.text()}`)
       const reset = await callRpc(dir, 'rls_test_reset_member',
-        { p_target: applicantId, p_role: 'detective', p_division: 'LSB', p_active: false })
+        { p_target: applicantId, p_role: 'detective', p_division: 'major_crimes', p_active: false })
       if (!reset.ok()) throw new Error(`rls_test_reset_member reset failed: ${reset.status()} ${await reset.text()}`)
 
       // Inactive applicant lands on the Gate (never the shell) with the
@@ -304,10 +304,10 @@ test.describe('v1.11 features — announcements, joint cases, approvals (live fi
       if (await cidChoice.isVisible().catch(() => false)) await cidChoice.click()
       await expect(deptForm).toBeVisible({ timeout: 20_000 })
 
-      // Fill and submit the Gate form: name + reason; keep the LSB /
+      // Fill and submit the Gate form: name + reason; keep the Major Crimes /
       // Detective defaults (the director changes both on approval below).
       await page.getByLabel('Display Name').fill(LIVE.applicant.name)
-      await expect(page.getByLabel('Requested Department')).toHaveValue('LSB')
+      await expect(page.getByLabel('Requested Department')).toHaveValue('major_crimes')
       await expect(page.getByLabel('Requested CID Role')).toHaveValue('detective')
       await page.getByLabel('Reason / Current Assignment Note').fill('[e2e] applicant flow')
       await page.getByRole('button', { name: 'Submit Request' }).click()
@@ -331,7 +331,7 @@ test.describe('v1.11 features — announcements, joint cases, approvals (live fi
       // Decision modal: change the final assignment, verify the summary.
       const modal = dirPage.getByRole('dialog')
       await expect(modal.getByRole('heading', { name: 'Approve with Changes' })).toBeVisible()
-      await modal.getByLabel('Final Department').selectOption('BCB')
+      await modal.getByLabel('Final Department').selectOption('street_crimes')
       await modal.getByLabel('Final Role').selectOption('senior_detective')
       await expect(modal.getByText('Requested', { exact: true })).toBeVisible()
       await expect(modal.getByText('Final Assignment', { exact: true })).toBeVisible()
@@ -346,7 +346,7 @@ test.describe('v1.11 features — announcements, joint cases, approvals (live fi
       // Teardown (warn-not-fail, like smoke.spec): never leave the disposable
       // applicant active; purge the request/notifications/role_events.
       const back = await callRpc(dir, 'rls_test_reset_member',
-        { p_target: applicantId, p_role: 'detective', p_division: 'LSB', p_active: false })
+        { p_target: applicantId, p_role: 'detective', p_division: 'major_crimes', p_active: false })
       if (!back.ok()) console.warn('applicant deactivate failed:', back.status(), await back.text())
       const purge = await callRpc(app, 'rls_test_cleanup')
       if (!purge.ok()) console.warn('rls_test_cleanup failed:', purge.status(), await purge.text())

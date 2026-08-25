@@ -10,8 +10,8 @@
  *   - admin_remove_member / admin_restore_member now write a role_events row
  *     (source=admin_remove_member / admin_restore_member) and an audit_log row.
  *
- *  Fixtures: lsb (LSB detective), director (command), owner (audit_log reader —
- *  owner-only), da (sets ADA coverage), adaLsb (LSB primary ADA, justice-active,
+ *  Fixtures: lsb (MCB detective), director (command), owner (audit_log reader —
+ *  owner-only), da (sets ADA coverage), adaLsb (MCB primary ADA, justice-active,
  *  CID-inactive by default), target (disposable removal subject). Same
  *  conventions as the sibling suites. Requires migration 20260723010000. */
 
@@ -36,7 +36,7 @@ const mk = () => createClient(URL, ANON, { auth: { persistSession: false, autoRe
 type C = SupabaseClient
 interface CoverageRow { bureau: string; primary_ada_id: string | null }
 const lsbPrimary = (rows: unknown): string | null =>
-  ((rows ?? []) as CoverageRow[]).find((r) => r.bureau === 'LSB')?.primary_ada_id ?? null
+  ((rows ?? []) as CoverageRow[]).find((r) => r.bureau === 'major_crimes')?.primary_ada_id ?? null
 
 describe.skipIf(!enabled)('v1.21 — justice denial, orphan case_files, removal audit (live)', () => {
   let lsb: C, director: C, owner: C, da: C, adaLsb: C, target: C
@@ -60,11 +60,11 @@ describe.skipIf(!enabled)('v1.21 — justice denial, orphan case_files, removal 
     }
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
-    // Ensure adaLsb is the LSB primary ADA so it appears in coverage.
-    const cov = await da.rpc('set_primary_ada', { p_prosecutor: ids.adaLsb, p_bureau: 'LSB' })
+    // Ensure adaLsb is the MCB primary ADA so it appears in coverage.
+    const cov = await da.rpc('set_primary_ada', { p_prosecutor: ids.adaLsb, p_bureau: 'major_crimes' })
     if (cov.error) throw new Error(`ADA coverage setup failed: ${cov.error.message}`)
-    // A real, accessible LSB case for the case_files regression check.
-    const c = await lsb.from('cases').insert({ case_number: `V121-${tag}`, title: 'v1.21 case_files case (LSB)', bureau: 'LSB' }).select('case_number')
+    // A real, accessible MCB case for the case_files regression check.
+    const c = await lsb.from('cases').insert({ case_number: `V121-${tag}`, title: 'v1.21 case_files case (MCB)', bureau: 'major_crimes' }).select('case_number')
     if (c.error) throw new Error(c.error.message)
     realCaseNum = c.data![0].case_number as string
   })
@@ -74,9 +74,9 @@ describe.skipIf(!enabled)('v1.21 — justice denial, orphan case_files, removal 
     // Best-effort restore (these resolve with {error}; they never reject).
     // Make sure adaLsb's login block is cleared no matter where a test failed.
     await director.rpc('restore_member_login', { p_target: ids.adaLsb })
-    // Restore the removal subject to its default (detective/LSB/active); clear removed_at.
+    // Restore the removal subject to its default (detective/MCB/active); clear removed_at.
     await director.rpc('admin_restore_member', { p_target: ids.target })
-    await lsb.rpc('rls_test_reset_member', { p_target: ids.target, p_role: 'detective', p_division: 'LSB', p_active: true })
+    await lsb.rpc('rls_test_reset_member', { p_target: ids.target, p_role: 'detective', p_division: 'major_crimes', p_active: true })
     // Remove the command-inserted orphan case_files rows.
     if (cfIds.length) await director.from('case_files').delete().in('id', cfIds)
     await director.from('case_files').delete().eq('case_number', realCaseNum)
@@ -86,7 +86,7 @@ describe.skipIf(!enabled)('v1.21 — justice denial, orphan case_files, removal 
   })
 
   // ── 4.6 justice access respects login denial ───────────────────────────────
-  it('baseline: the LSB primary ADA appears in DOJ bureau coverage', async () => {
+  it('baseline: the MCB primary ADA appears in DOJ bureau coverage', async () => {
     const cov = await director.rpc('doj_bureau_coverage')
     expect(cov.error).toBeNull()
     expect(lsbPrimary(cov.data)).toBe(ids.adaLsb)

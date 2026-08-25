@@ -1,4 +1,4 @@
-/** Special Investigation Unit — the client mirror of the server authority
+/** Special Investigations Bureau — the client mirror of the server authority
  *  model in `20260820120000_siu_phase1.sql`.
  *
  *  SIU is a SEPARATE investigative authority, not a CID rank and not a badge:

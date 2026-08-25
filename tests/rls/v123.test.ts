@@ -13,9 +13,9 @@
  *   - Related records follow the case (child tables key off can_access_case),
  *     and the creator keeps access after the move via the creator clause.
  *
- *  Fixtures (tests/rls/README.md): lsb (LSB detective, case creator + lead),
- *  bcb (BCB detective — bureau isolation before, visibility after), lead
- *  (LSB bureau_lead — must be denied), director (SAB director — authorized),
+ *  Fixtures (tests/rls/README.md): lsb (MCB detective, case creator + lead),
+ *  bcb (SCB detective — bureau isolation before, visibility after), lead
+ *  (MCB bureau_lead — must be denied), director (major_crimes director — authorized),
  *  owner (audit_log reader). Same conventions as the sibling suites;
  *  rls_test_cleanup at start + teardown. Requires migration 20260725010000. */
 
@@ -60,11 +60,11 @@ describe.skipIf(!enabled)('v1.23 — case bureau reassignment: freeze + authoriz
     }
     const pre = await lsb.rpc('rls_test_cleanup')
     if (pre.error) throw new Error(`pre-run cleanup failed: ${pre.error.message}`)
-    // The case under test: LSB, created and led by the LSB detective. A child
+    // The case under test: MCB, created and led by the MCB detective. A child
     // row (case_tasks) is created BEFORE reassignment to prove related records
     // stay correctly accessible after the move.
     const c = await lsb.from('cases')
-      .insert({ case_number: `V123-${tag}`, title: 'v1.23 bureau reassignment case', bureau: 'LSB', lead_detective_id: ids.lsb })
+      .insert({ case_number: `V123-${tag}`, title: 'v1.23 bureau reassignment case', bureau: 'major_crimes', lead_detective_id: ids.lsb })
       .select('id, case_number')
     if (c.error) throw new Error(c.error.message)
     caseId = c.data![0].id as string
@@ -89,41 +89,41 @@ describe.skipIf(!enabled)('v1.23 — case bureau reassignment: freeze + authoriz
   })
 
   // ── the freeze: no direct client mutation, not even by the creator/lead ────
-  it('baseline: the BCB detective cannot see the LSB case', async () => {
+  it('baseline: the SCB detective cannot see the MCB case', async () => {
     const res = await bcb.from('cases').select('id').eq('id', caseId)
     expect(res.data ?? []).toHaveLength(0)
   })
 
   it('the creator/lead can NOT change cases.bureau directly (trigger raises)', async () => {
-    const res = await lsb.from('cases').update({ bureau: 'BCB' }).eq('id', caseId).select('id')
+    const res = await lsb.from('cases').update({ bureau: 'street_crimes' }).eq('id', caseId).select('id')
     expect(res.error).not.toBeNull()
     expect(res.error!.message).toMatch(/case_reassign_bureau/)
     const check = await lsb.from('cases').select('bureau').eq('id', caseId)
-    expect(check.data?.[0]?.bureau).toBe('LSB')
+    expect(check.data?.[0]?.bureau).toBe('major_crimes')
   })
 
   it('the creator/lead can NOT change originating_bureau directly either', async () => {
-    const res = await lsb.from('cases').update({ originating_bureau: 'BCB' }).eq('id', caseId).select('id')
+    const res = await lsb.from('cases').update({ originating_bureau: 'street_crimes' }).eq('id', caseId).select('id')
     expect(res.error).not.toBeNull()
     expect(res.error!.message).toMatch(/case_reassign_bureau/)
   })
 
   // ── RPC authorization: DD+/Owner only ───────────────────────────────────────
   it('case_reassign_bureau as a detective (the creator) is denied', async () => {
-    const res = await lsb.rpc('case_reassign_bureau', { p_case: caseId, p_to_bureau: 'BCB', p_reason: reason })
+    const res = await lsb.rpc('case_reassign_bureau', { p_case: caseId, p_to_bureau: 'street_crimes', p_reason: reason })
     expect(res.error).not.toBeNull()
     expect(res.error!.message).toMatch(/Deputy Director or higher/i)
   })
 
   it('case_reassign_bureau as a bureau_lead is denied (DD+ only)', async () => {
-    const res = await lead.rpc('case_reassign_bureau', { p_case: caseId, p_to_bureau: 'BCB', p_reason: reason })
+    const res = await lead.rpc('case_reassign_bureau', { p_case: caseId, p_to_bureau: 'street_crimes', p_reason: reason })
     expect(res.error).not.toBeNull()
     expect(res.error!.message).toMatch(/Deputy Director or higher/i)
   })
 
   // ── validation ──────────────────────────────────────────────────────────────
   it('a blank reason is rejected', async () => {
-    const res = await director.rpc('case_reassign_bureau', { p_case: caseId, p_to_bureau: 'BCB', p_reason: '   ' })
+    const res = await director.rpc('case_reassign_bureau', { p_case: caseId, p_to_bureau: 'street_crimes', p_reason: '   ' })
     expect(res.error).not.toBeNull()
     expect(res.error!.message).toMatch(/reason is required/i)
   })
@@ -133,23 +133,23 @@ describe.skipIf(!enabled)('v1.23 — case bureau reassignment: freeze + authoriz
     expect(res.error).not.toBeNull()
     expect(res.error!.message).toMatch(/JTF/)
     const check = await director.from('cases').select('bureau').eq('id', caseId)
-    expect(check.data?.[0]?.bureau).toBe('LSB')
+    expect(check.data?.[0]?.bureau).toBe('major_crimes')
   })
 
   // ── the authorized path ─────────────────────────────────────────────────────
-  it('a director with a reason reassigns the case LSB → BCB', async () => {
-    const res = await director.rpc('case_reassign_bureau', { p_case: caseId, p_to_bureau: 'BCB', p_reason: reason })
+  it('a director with a reason reassigns the case MCB → SCB', async () => {
+    const res = await director.rpc('case_reassign_bureau', { p_case: caseId, p_to_bureau: 'street_crimes', p_reason: reason })
     expect(res.error).toBeNull()
     const row = (Array.isArray(res.data) ? res.data[0] : res.data) as { bureau: string; originating_bureau: string | null }
-    expect(row.bureau).toBe('BCB')
+    expect(row.bureau).toBe('street_crimes')
     // Provenance is preserved by default (p_update_originating not passed).
     expect(row.originating_bureau).toBeNull()
   })
 
   it('a same-bureau reassignment is rejected', async () => {
-    const res = await director.rpc('case_reassign_bureau', { p_case: caseId, p_to_bureau: 'BCB', p_reason: reason })
+    const res = await director.rpc('case_reassign_bureau', { p_case: caseId, p_to_bureau: 'street_crimes', p_reason: reason })
     expect(res.error).not.toBeNull()
-    expect(res.error!.message).toMatch(/already in BCB/i)
+    expect(res.error!.message).toMatch(/already in Street Crimes/i)
   })
 
   // ── audit, notification, and post-move access ──────────────────────────────
@@ -160,8 +160,8 @@ describe.skipIf(!enabled)('v1.23 — case bureau reassignment: freeze + authoriz
     expect((al.data ?? []).length).toBeGreaterThanOrEqual(1)
     const row = al.data![0] as { actor_id: string; detail: { from: string; to: string; reason: string } }
     expect(row.actor_id).toBe(ids.director)
-    expect(row.detail.from).toBe('LSB')
-    expect(row.detail.to).toBe('BCB')
+    expect(row.detail.from).toBe('major_crimes')
+    expect(row.detail.to).toBe('street_crimes')
     expect(row.detail.reason).toContain(`v123 jurisdiction correction ${tag}`)
   })
 
@@ -171,7 +171,7 @@ describe.skipIf(!enabled)('v1.23 — case bureau reassignment: freeze + authoriz
       .eq('user_id', ids.lsb).eq('type', 'case_reassigned')
     const mine = (res.data ?? []).filter((n) => (n.payload as { case_id?: string }).case_id === caseId)
     expect(mine.length).toBeGreaterThanOrEqual(1)
-    expect(mine[0].payload as object).toMatchObject({ from: 'LSB', to: 'BCB', case_number: caseNum })
+    expect(mine[0].payload as object).toMatchObject({ from: 'major_crimes', to: 'street_crimes', case_number: caseNum })
   })
 
   it('related records follow the case: the pre-move task is still readable', async () => {

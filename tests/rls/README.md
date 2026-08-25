@@ -3,6 +3,12 @@
 Integration tests that hit the **live Supabase project** as several dedicated,
 low-privilege test accounts and assert that the security wall holds:
 
+> **Fixture accounts are not currently provisioned.** The
+> `rls-test-*@cidportal.test` accounts were removed from the live project on
+> 2026-08-25 (owner request, alongside the bureau restructure). Re-provision
+> the roster below (matching the divisions it lists) before running this
+> suite; `owner_security_overview()` reports the expected fixture state.
+
 > **These run against PRODUCTION.** That is safe only while every write stays
 > inside the `rls-test-*@cidportal.test` namespace. Before adding a test:
 >

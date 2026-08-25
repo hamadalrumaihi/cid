@@ -42,7 +42,7 @@ test.describe('v1.14 — packet preview & owner security dashboard', () => {
     try {
       // Fixture data through the same paths the app uses (cleaned in finally).
       const kase = await insertRow<{ id: string }>(live, 'cases',
-        { case_number: `V114-E2E-${tag}`, title: 'v1.14 packet preview case', bureau: 'LSB' })
+        { case_number: `V114-E2E-${tag}`, title: 'v1.14 packet preview case', bureau: 'major_crimes' })
       const req = await json<{ id: string; request_number: string }>(
         await callRpc(live, 'create_legal_request', {
           p_case: kase.id, p_request_type: 'subpoena', p_subtype: 'document_production',
