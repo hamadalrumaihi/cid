@@ -52,6 +52,12 @@ export type ActionSourceType =
   /** Wave-3 queue sections: my server-saved drafts (user_drafts), unclaimed
    *  review-active field intelligence, and BOLO windows closing/lapsed. */
   | 'draft' | 'unassigned_intel' | 'bolo_expiring'
+  /** SIB work — emitted ONLY when the loader resolved SIB standing (see
+   *  ActionSources.sibStanding); every source row is read under the caller's
+   *  own siu_case_access RLS. Distinct types on purpose: reusing
+   *  'access_request'/'other' would hand these rows the CID inline actions
+   *  (grant-case modal, mark-read on a non-notification id). */
+  | 'sib_access_request' | 'sib_referral' | 'sib_disclosure'
   | 'other'
 
 export type ActionPriority = 'critical' | 'high' | 'normal' | 'low'
@@ -153,6 +159,17 @@ export type AcFieldSubmission = Pick<Tables<'field_submissions'>,
  *  canEdit gate the BOLO board's maintenance controls use). */
 export type AcBoloPerson = Pick<Tables<'persons'>,
   'id' | 'name' | 'bolo' | 'bolo_expires_at' | 'bolo_risk' | 'updated_at'>
+/** SIB (Special Investigations Bureau) work — slim projections of the SIU
+ *  tables. RLS already scopes every read (siu_access_requests: the requester
+ *  or SIB command; siu_referrals: field agents only; siu_disclosures: cleared
+ *  investigations only), and the loader fetches them ONLY for the standing
+ *  that can act — a non-SIB viewer issues no SIB query at all. */
+export type AcSiuAccessRequest = Pick<Tables<'siu_access_requests'>,
+  'id' | 'case_number_requested' | 'reason' | 'status' | 'requested_at' | 'updated_at'>
+export type AcSiuReferral = Pick<Tables<'siu_referrals'>,
+  'id' | 'category' | 'summary' | 'status' | 'submitted_at' | 'updated_at'>
+export type AcSiuDisclosure = Pick<Tables<'siu_disclosures'>,
+  'id' | 'title' | 'audience' | 'released_at' | 'acknowledged_at' | 'revoked_at'>
 /** All notifications columns — notifText helpers take the full row. */
 export type AcNotif = Pick<Tables<'notifications'>,
   'id' | 'user_id' | 'type' | 'payload' | 'read' | 'created_at'>
@@ -268,6 +285,19 @@ export interface ActionSources {
   /** Additive (defaults false): mirrors useAuth().canEdit — gates the
    *  BOLO-expiry items exactly like the board's maintenance controls. */
   canManageBolos?: boolean
+  /** Additive (defaults null): the viewer's SIB standing (the useSiu mirror).
+   *  null means the SIB branch emits nothing AND the loader fetched none of
+   *  the SIB sources — an unauthorized viewer sees ordinary empty states,
+   *  never a hint that SIB work (or SIB itself) exists. */
+  sibStanding?: { isAgent: boolean; isCommand: boolean } | null
+  /** Additive (defaults []): pending Director access requests — fetched for
+   *  SIB command only (X-1 decides them). */
+  sibAccessRequests?: AcSiuAccessRequest[]
+  /** Additive (defaults []): open intake referrals — SIB field agents only. */
+  sibReferrals?: AcSiuReferral[]
+  /** Additive (defaults []): releases to CID not yet acknowledged — SIB
+   *  field agents only (RLS trims to investigations the viewer can read). */
+  sibDisclosures?: AcSiuDisclosure[]
   notifications: AcNotif[]     // my UNREAD notifications (read = false)
   /** Additive (defaults []): library governance items, pre-derived. */
   documents?: AcDoc[]
@@ -309,6 +339,10 @@ const COMMAND_ROLES = new Set(['bureau_lead', 'deputy_director', 'director'])
 /** Same values as fieldReview's OPEN_STATUSES (review-active lane) —
  *  redeclared so this module never imports the db-touching fieldReview lib. */
 const INTEL_REVIEW_ACTIVE = new Set(['new', 'reviewing', 'needs_info'])
+/** Same values as SiuIntake's OPEN_STATUSES (referrals still needing an
+ *  intake decision) — redeclared so this module never imports the
+ *  db-touching siu lib. */
+const SIB_REFERRAL_OPEN = new Set(['submitted', 'under_review', 'info_requested'])
 
 /* ---- draft-key vocabulary --------------------------------------------------
  * Human description of a user_drafts KEY — never its payload. The vocabulary
@@ -1151,6 +1185,69 @@ export function buildActionItems(s: ActionSources): ActionQueue {
       sourceMetadata: { draft_key: d.key },
       dedupeKey: `draft:${d.key}`,
     })
+  }
+
+  /* 9j · SIB — emitted ONLY when the loader resolved SIB standing
+   *      (sibStanding non-null): a non-SIB viewer fetched none of these
+   *      sources and gets nothing here, not even an empty section. Every
+   *      input row was read under the caller's own RLS (siu_case_access
+   *      compartmentalization), so no item can reference an investigation
+   *      the viewer is walled out of. SIB cases RETURNED to the viewer need
+   *      no branch: SIB investigations are `cases` rows, so branches 1–3
+   *      already cover their tasks, sign-offs and returns. */
+  const sib = s.sibStanding ?? null
+  if (sib?.isCommand) {
+    for (const r of s.sibAccessRequests ?? []) {
+      if (r.status !== 'pending') continue
+      add({
+        id: `sib_access:${r.id}`, sourceType: 'sib_access_request', sourceId: r.id,
+        title: `SIB access request — ${r.case_number_requested}`,
+        summary: r.reason,
+        reason: 'The Director of CID is asking to read one investigation — X-1 decides',
+        status: 'needs_action',
+        createdAt: r.requested_at, updatedAt: r.updated_at, waitingSince: r.requested_at,
+        ownerId: s.me,
+        deepLink: '/siu?s=intake',
+        isCommandItem: true, isWaitingOnCurrentUser: true,
+        dedupeKey: `sib_access:${r.id}`,
+      })
+    }
+  }
+  if (sib?.isAgent) {
+    /* Open intake referrals are shared-queue work for every field agent —
+     * the same audience the intake screen itself admits (siu_is_agent). */
+    for (const r of s.sibReferrals ?? []) {
+      if (!SIB_REFERRAL_OPEN.has(r.status)) continue
+      add({
+        id: `sib_referral:${r.id}`, sourceType: 'sib_referral', sourceId: r.id,
+        title: `Intake referral — ${humanize(r.category || 'concern')}`,
+        summary: r.summary,
+        reason: r.status === 'info_requested'
+          ? 'More information was requested — the referral is still open'
+          : 'Awaiting an SIB intake decision',
+        status: 'needs_action',
+        createdAt: r.submitted_at, updatedAt: r.updated_at, waitingSince: r.submitted_at,
+        deepLink: '/siu?s=intake',
+        isWaitingOnCurrentUser: true,
+        dedupeKey: `sib_referral:${r.id}`,
+      })
+    }
+    /* A live release CID has not acknowledged is a waiting fact, not a task —
+     * chase the acknowledgement or revoke the release. */
+    for (const d of s.sibDisclosures ?? []) {
+      if (d.acknowledged_at || d.revoked_at) continue
+      add({
+        id: `sib_disclosure:${d.id}`, sourceType: 'sib_disclosure', sourceId: d.id,
+        title: `Release to CID — ${d.title}`,
+        summary: humanize(d.audience || 'release'),
+        reason: 'Released and not yet acknowledged by CID',
+        status: 'waiting',
+        createdAt: d.released_at, updatedAt: d.released_at, waitingSince: d.released_at,
+        deepLink: '/siu?s=disclosure',
+        isPersonalItem: true,
+        dedupeKey: `sib_disclosure:${d.id}`,
+      })
+    }
   }
 
   /* 10 · notifications — suppressed when a structural item covers the same

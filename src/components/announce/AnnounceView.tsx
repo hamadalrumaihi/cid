@@ -103,7 +103,9 @@ export function AnnounceView() {
   }
 
   return (
-    <section className="view-in space-y-4">
+    // Long-form reading surface: capped at the GuideView measure (max-w-4xl)
+    // so notice text never spans the full 100rem shell.
+    <section className="view-in mx-auto w-full max-w-4xl space-y-4">
       <Card pad="lg">
         <PageHeader
           title="📣 Announcements"

@@ -32,7 +32,7 @@ import {
   WEIGHT_UNITS, addPart, createDraft, discardDraft, loadSubmissionParts,
   fieldStatusMeaning,
   normalizedGrams, removePart, saveDraft, submitDraft, submitProblem, weightProblem,
-  type SubmissionParts,
+  type FieldSubmissionRow, type SubmissionParts,
 } from '@/lib/fieldSubmissions'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -62,6 +62,15 @@ const NO_PARTS: SubmissionParts = { persons: [], vehicles: [], orgs: [], locatio
 /** A datetime-local value -> an ISO string the database will accept, or null. */
 const iso = (v: string): string | null => (v ? new Date(v).toISOString() : null)
 
+/** The reverse: a stored ISO string -> the datetime-local value for the same
+ *  moment, in the officer's own timezone. Used when a draft is resumed. */
+const fromIso = (v: string | null): string => {
+  if (!v) return ''
+  const d = new Date(v)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 /** The structured intelligence form.
  *
  *  One form for both authors. A patrol officer reaches it from their portal; an
@@ -73,10 +82,15 @@ const iso = (v: string): string | null => (v ? new Date(v).toISOString() : null)
  *
  *  `asInvestigator` only adds the source picker. A patrol officer is not shown
  *  it because their record is a patrol record by definition -- the database
- *  stamps it whatever the client sends. */
-export function FieldSubmitForm({ onDone, asInvestigator = false }: {
+ *  stamps it whatever the client sends.
+ *
+ *  `resume` reopens an existing draft instead of starting a new one — same
+ *  form, same autosave, same rules; the only difference is which row it edits.
+ *  Callers key the component on the draft id so a switch remounts cleanly. */
+export function FieldSubmitForm({ onDone, asInvestigator = false, resume }: {
   onDone: () => void
   asInvestigator?: boolean
+  resume?: FieldSubmissionRow
 }) {
   const [id, setId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft>(EMPTY)
@@ -88,10 +102,27 @@ export function FieldSubmitForm({ onDone, asInvestigator = false }: {
 
   // The draft row exists before the officer types anything, so every "+ Add"
   // has a parent to hang off and nothing is held only in browser memory.
+  // Resuming skips creation: the row already exists, so it is read instead.
   useEffect(() => {
     let cancelled = false
     const t = window.setTimeout(() => {
       void (async () => {
+        if (resume) {
+          setId(resume.id)
+          setDraft({
+            summary: resume.summary ?? '',
+            details: resume.details ?? '',
+            observed_precision: resume.observed_precision ?? 'unknown',
+            observed_at: fromIso(resume.observed_at),
+            observed_to: fromIso(resume.observed_to),
+            mdt_reference: resume.mdt_reference ?? '',
+            jurisdiction: resume.jurisdiction ?? '',
+            source_type: resume.source_type ?? 'detective',
+          })
+          const p = await loadSubmissionParts(resume.id)
+          if (!cancelled) setParts(p)
+          return
+        }
         const { id: newId, error } = await createDraft()
         if (cancelled) return
         if (error || !newId) { toast(error || 'Could not start a report.', 'danger'); return }
@@ -99,7 +130,7 @@ export function FieldSubmitForm({ onDone, asInvestigator = false }: {
       })()
     }, 0)
     return () => { cancelled = true; window.clearTimeout(t) }
-  }, [])
+  }, [resume])
 
   const refreshParts = useCallback(async (sid: string) => {
     const p = await loadSubmissionParts(sid)
@@ -193,7 +224,9 @@ export function FieldSubmitForm({ onDone, asInvestigator = false }: {
     <div className="space-y-4">
       <Card>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-base font-semibold text-white">Submit field intelligence</h2>
+          <h2 className="text-base font-semibold text-white">
+            {resume ? 'Resume draft' : 'Submit field intelligence'}
+          </h2>
           <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
             {saving === 'saving' ? 'Saving…' : saving === 'saved' ? 'Draft saved' : 'Draft'}
             {/* Draft vs submitted, in the registry's own words (lib/
