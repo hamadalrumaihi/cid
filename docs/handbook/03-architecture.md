@@ -81,13 +81,22 @@ not hypotheticals.
   editing a delete's cascade config without checking the FK schema.
 
 ## Block 7 — Domain Libraries
-`src/lib/{signoff,forms,penal,packet,pdf,docx,search,notify,notifText,watchlist,operations,fivemanage}.ts`
+`src/lib/{signoff,status,forms,penal,packet,pdf,docx,search,notify,notifText,notifications,watchlist,pins,recents,userDrafts,savedViews,entityPreview,operations,fivemanage}.ts`
 - **Responsibility**: business logic shared across views — sign-off
-  vocabulary (read-only interpreter; the chain is SQL!), report schemas,
-  penal calculators, the export pipeline, search, notifications.
+  vocabulary (read-only interpreter; the chain is SQL!), the central status
+  registry (`status.ts` — label/tint/meaning/next-actor for every status
+  vocabulary, rendered via `ui/StatusBadge`), report schemas, penal
+  calculators, the export pipeline, search, notifications (shared
+  mark-read/unread-count/mute actions in `notifications.ts`), and the
+  per-user personalization layer: `pins.ts` (`user_pins`), `recents.ts`
+  (device-local ids-only trail), `userDrafts.ts` (`user_drafts` autosave),
+  `savedViews.ts` (`user_prefs`) — all ids-only where records are
+  referenced, titles re-resolved through the viewer's RLS at render.
 - **Risk: MEDIUM.** Mostly pure functions.
 - **Common mistakes**: renaming a `FORM_SCHEMAS` field key (orphans saved
-  report data); making `signoff.ts` *decide* anything.
+  report data); making `signoff.ts` *decide* anything; adding a status
+  vocabulary as ad-hoc chip classes instead of a `status.ts` domain;
+  storing titles/labels in pins, recents or any personalization row.
 
 ## Block 8 — UI Primitives
 `src/components/ui/*`, `src/lib/{toast,format,markdown,safeUrl,store,drafts}.ts`
@@ -103,6 +112,13 @@ not hypotheticals.
 RLS on every table, `private.*` helper predicates and trigger functions,
 all workflow writes through SECURITY DEFINER RPCs, realtime publication on
 most tables (live counts: `npm run check:schema` / the schema snapshot).
+Per-user personalization lives in three owner-only tables (`user_pins`,
+`user_drafts`, `user_prefs` — `20260826010000_ux_personalization.sql`):
+RLS admits only the owner, no audit triggers, no realtime, size-capped
+jsonb. The same migration added `private.audit_detail()` (old/new row
+snapshots into `audit_log.detail` on the relationship-link tables), the
+`case_intel_links` UPDATE policy, the `create_notification` 1-hour
+identical-unread dedupe guard, and the `search_all` bolo/task arms.
 - **Risk: HIGHEST.** Deployed bundles and open tabs keep querying the old
   shape — migrations must be **additive only**.
 - **Common mistakes**: forgetting to hand-update `database.types.ts`;

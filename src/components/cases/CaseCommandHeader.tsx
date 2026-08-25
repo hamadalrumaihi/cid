@@ -22,6 +22,7 @@ import { ActionMenu, type ActionItem } from '@/components/ui/ActionMenu'
 import { Modal, ModalHeader } from '@/components/ui/Modal'
 import { Field, Select, Textarea } from '@/components/ui/Field'
 import { DeadlineChip } from '@/components/ui/DeadlineChip'
+import { HelpTip } from '@/components/ui/HelpTip'
 import { uiConfirm, uiPrompt } from '@/components/ui/dialog'
 import { list, rpc, update } from '@/lib/db'
 import { copyText, slug, timeAgo, todayISO } from '@/lib/format'
@@ -33,6 +34,7 @@ import { bureauLabel, bureauShort } from '@/lib/roles'
 import { officerName } from '@/lib/profiles'
 import { useWatchlistStore } from '@/lib/watchlist'
 import { CASE_STATUSES, caseCourtHint } from '@/lib/signoff'
+import { statusMeta } from '@/lib/status'
 import { caseDepartment, siuClassificationLabel } from '@/lib/siu'
 import { isJtfAssigned, isRoutingBureau } from '@/lib/legalWorkflow'
 import type { CaseAssessment } from '@/lib/caseWorkflow'
@@ -328,8 +330,22 @@ export function CaseCommandHeader({
         {!canEdit && <span className="rounded-lg border border-white/10 px-2 py-0.5 text-[11px] text-slate-300">Read-only</span>}
         {/* Sign-off chip — registry label/tint (lib/status); the tooltip is
             the personalized whose-court-is-it hint when one applies (the
-            former line-3 banner, folded into the chip). */}
+            former line-3 banner, folded into the chip). The HelpTip makes the
+            same registry meaning + next-actor line discoverable on click. */}
         <StatusBadge domain="signoff" value={c.signoff_status} title={hint?.t} />
+        {(() => {
+          const s = c.signoff_status || 'none'
+          if (s === 'none') return null
+          const meta = statusMeta('signoff', s)
+          return (
+            <HelpTip label="Sign-off — who must approve next" guide="case">
+              <p className="font-semibold text-white">{meta.label}</p>
+              {meta.meaning && <p className="mt-1">{meta.meaning}</p>}
+              {meta.actor && <p className="mt-1 text-slate-400">Next: {meta.actor}</p>}
+              {hint && <p className="mt-1 text-badge-200">{hint.t}</p>}
+            </HelpTip>
+          )
+        })()}
         {c.follow_up_at && (canEdit ? (
           <button
             onClick={() => setFollowUpOpen(true)}

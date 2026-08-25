@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { listCaseHealth } from '@/lib/caseHealth'
 import { list, rpc, update, updateWhere, withRetry } from '@/lib/db'
 import { timeAgo } from '@/lib/format'
 import { useAuth } from '@/lib/auth'
@@ -414,11 +415,25 @@ function CaseTable({ items, canSelect, showDept, selected, onSelect, onOpen }: {
     {
       key: 'updated', label: 'Updated', value: (c) => timeAgo(c.updated_at),
       sortValue: (c) => c.updated_at,
-      render: (c) => (
-        <span className="whitespace-nowrap text-slate-400" title={c.updated_at}>
-          {timeAgo(c.updated_at)} <StaleBadge c={c} />
-        </span>
-      ),
+      render: (c) => {
+        // Advisory attention marker (lib/caseHealth, list-safe flags only) —
+        // a count chip whose tooltip names the flags; the "Needs attention"
+        // filter in the bar keys off the same set.
+        const flags = listCaseHealth(c)
+        return (
+          <span className="whitespace-nowrap text-slate-400" title={c.updated_at}>
+            {timeAgo(c.updated_at)} <StaleBadge c={c} />
+            {flags.length > 0 && (
+              <span
+                title={`Needs attention:\n${flags.map((f) => `• ${f.label}`).join('\n')}`}
+                className="ml-1 inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-amber-300"
+              >
+                {flags.length}
+              </span>
+            )}
+          </span>
+        )
+      },
     },
   ]
   return (

@@ -96,11 +96,22 @@ export function CaseFilterBar({ filters, scope, query, activeViewName, onFilters
           <option value="unassigned">Unassigned</option>
           {activeProfiles().map((p) => <option key={p.id} value={p.id}>{officerName(p.id) || p.display_name}</option>)}
         </select>
-        <select aria-label="Filter by case age" value={filters.stale} onChange={(e) => patch({ stale: e.target.value })} className="rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
-          <option value="">Any age</option>
-          <option value="stale">Stale (14d+)</option>
-          <option value="fresh">Fresh</option>
-        </select>
+        <div className="flex items-center gap-1.5">
+          <select aria-label="Filter by case age" value={filters.stale} onChange={(e) => patch({ stale: e.target.value })} className="w-full min-w-0 rounded-lg border border-white/10 bg-ink-950 px-3 py-2 text-sm text-white">
+            <option value="">Any age</option>
+            <option value="stale">Stale (14d+)</option>
+            <option value="fresh">Fresh</option>
+            {/* Command triage lens (lib/caseHealth's list-safe flags). Also kept
+                when a saved view / persisted filter already carries it, so the
+                select never shows a blank for an active value. */}
+            {(isCommand || filters.stale === 'attention') && <option value="attention">Needs attention</option>}
+          </select>
+          {isCommand && (
+            <HelpTip label="What counts as needs attention" align="right" className="shrink-0">
+              <p><span className="font-semibold text-white">Needs attention</span> shows open cases with at least one health flag a list row can see: no lead detective, no summary, quiet 14 days or more, or a follow-up date that has passed.</p>
+            </HelpTip>
+          )}
+        </div>
         <div className="flex gap-2">
           <Button className="flex-1" onClick={() => onFilters(EMPTY_FILTERS)}>
             Clear{count ? ` (${count})` : ''}

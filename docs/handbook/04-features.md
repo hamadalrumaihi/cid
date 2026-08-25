@@ -74,13 +74,23 @@ redirect there with their params intact ([Ch. 5](05-pages.md)).
 ## 4.4 Global search & commands (⌘K)
 
 `Header` shortcut → `SearchPalette` → debounced `runSearch` → `search_all`
-RPC (pg_trgm fuzzy, RLS-scoped, SECURITY INVOKER) + static penal-code
-hits + quick actions (New case, LOA, sign out, go-to-tab). A sequence
-guard drops out-of-order responses. Enter deep-links (`?case=`, `?q=`,
+RPC (pg_trgm fuzzy, RLS-scoped, SECURITY INVOKER) + client-side hits
+(static penal charges, cached-roster members — never email — and intel
+tips via `field_submission_search`). Kinds now also include `bolo` and
+`task` (server arms, `20260826010000`; a task hit carries its task id in
+`term` and deep-links the case Tasks tab). Results render grouped with
+per-kind tags (`SEARCH_KINDS`); record hits open as Investigative Tools
+record tabs and push the recents trail. A sequence guard drops
+out-of-order responses. Enter deep-links (`?case=`, `?q=`,
 and since v1.14 `/legal?request=` for legal-request hits). v1.14 added a
 `legal` kind to `search_all`: header fields only, and because the function
 is SECURITY INVOKER every hit passes the `legal_requests` SELECT policy —
-sealed requests never surface.
+sealed requests never surface. Commands are permission-gated: go-to
+entries exist only for tabs the viewer may open (owner/audit/devdocs/
+command-center/SIB are not disclosed to everyone), and the New-record set
+runs through the shared `CreateHost` provider (`useCreate()`), which
+lazy-loads the exact modals the registry views export. Below `lg` the
+palette is a full-screen sheet.
 
 ## 4.5 Command tools
 
@@ -112,10 +122,21 @@ in Ch. 8.
 
 ## 4.6 Personal tools
 
-My Desk (ten derived panels over eight live tables), watchlist (follow +
-"updated" chips via localStorage seen-stamps), calendar (follow-ups, task
-due dates, report weeks), shift reports (one per week enforced by unique
-key, auto-rollup), notifications bell.
+My Desk (ten derived panels over eight live tables), the Action Center
+(`useActionItems` slim fetches → the pure `buildActionItems` model;
+wave-3 lanes add Unassigned intel, Expiring BOLOs and Drafts — the drafts
+lane describes `user_drafts` KEYS, never payloads), watchlist (follow +
+"updated" chips via localStorage seen-stamps), pins & recents (the Command
+dashboard "Jump back in" strip — DB pins + device recents, both ids-only,
+titles RLS-resolved at render), saved views on the Cases/Persons/Legal/
+BOLO lists (`lib/savedViews` over `user_prefs`; re-applying a view only
+re-applies client filter state — RLS still decides what it matches),
+autosaved drafts (`lib/userDrafts` + the `ui/SaveState` chip on reports,
+case notes, chat, person/gang creation, intel summaries), calendar
+(follow-ups, task due dates, report weeks), shift reports (one per week
+enforced by unique key, auto-rollup), notifications bell (grouped
+clusters, exact unread count, mark-all, optional-stream mutes; the server
+suppresses identical unread duplicates inside an hour).
 
 ## 4.7 Reference & exports
 
